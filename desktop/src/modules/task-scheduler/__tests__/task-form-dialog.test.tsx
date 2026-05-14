@@ -87,15 +87,24 @@ vi.mock("@/components/ui/toggle-group", () => ({
   ToggleGroupItem: ({
     children,
     className,
+    disabled,
     id,
     value,
   }: {
     children: React.ReactNode
     className?: string
+    disabled?: boolean
     id?: string
     value: string
   }) => (
-    <button className={className} data-slot="toggle-group-item" data-value={value} id={id} type="button">
+    <button
+      className={className}
+      data-slot="toggle-group-item"
+      data-value={value}
+      disabled={disabled}
+      id={id}
+      type="button"
+    >
       {children}
     </button>
   ),
@@ -233,6 +242,64 @@ describe("TaskFormDialog", () => {
     expect(html).toContain("命令")
     expect(html).toContain("脚本")
     expect(html).toContain("HTTP 请求")
+  })
+
+  it("reuses the permission-mode dropdown for scheduled Agent tasks", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <TaskFormDialog
+          open
+          busy={false}
+          platform="darwin"
+          projects={[{ id: "project-1", name: "Project One", path: "/tmp/project-one" }]}
+          state={{
+            mode: "edit",
+            task: createTask({
+              scope: { type: "project", projectId: "project-1" },
+              action: {
+                type: "builtin.agent",
+                config: {
+                  projectId: "project-1",
+                  agentType: "claude-code",
+                  mode: "plan",
+                  prompt: "Run scheduled work",
+                  sessionPolicy: "fresh",
+                  timeoutMins: 30,
+                },
+              },
+            }),
+          }}
+          onCreate={async () => undefined}
+          onOpenChange={noop}
+          onUpdate={async () => undefined}
+        />,
+      )
+    })
+
+    const agentButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "Claude Code")
+    expect(agentButton).toBeTruthy()
+    expect(agentButton?.disabled).toBe(true)
+
+    const trigger = container.querySelector('button[aria-label="权限模式"]')
+    expect(trigger?.textContent).toContain("计划")
+
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    for (const mode of ["default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"]) {
+      expect(document.querySelector(`[data-mode="${mode}"]`)).toBeTruthy()
+    }
+
+    expect(container.textContent).not.toContain("执行模式")
+    expect(document.body.textContent).not.toContain("Bypass Permissions")
   })
 
   it("renders shell choices as single-value toggle groups", () => {

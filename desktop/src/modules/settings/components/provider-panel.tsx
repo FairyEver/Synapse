@@ -12,11 +12,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import {
   Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
 } from "@/components/ui/dialog"
 import {
   Field,
@@ -119,6 +121,7 @@ type ProviderPanelViewProps = {
   readonly error: string | null
   readonly onAdd: () => void
   readonly onImport: () => void
+  readonly onView: (provider: SynapseAgentProvider) => void
   readonly onEdit: (provider: SynapseAgentProvider) => void
   readonly onArchive: (provider: SynapseAgentProvider) => void
   readonly onSetActive: (provider: SynapseAgentProvider) => void
@@ -143,6 +146,7 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [editingProvider, setEditingProvider] = useState<SynapseAgentProvider | null>(null)
+  const [detailProvider, setDetailProvider] = useState<SynapseAgentProvider | null>(null)
   const [formOpen, setFormOpen] = useState(false)
   const [ccSwitchImportOpen, setCcSwitchImportOpen] = useState(false)
   const [providerPresets, setProviderPresets] = useState<SynapseAgentProviderPreset[]>([])
@@ -329,6 +333,7 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
         error={error}
         onAdd={openAddDialog}
         onImport={openCcSwitchImportDialog}
+        onView={setDetailProvider}
         onEdit={openEditDialog}
         onArchive={handleArchive}
         onSetActive={handleSetActive}
@@ -352,6 +357,12 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
         onOpenChange={setCcSwitchImportOpen}
         onImported={() => void refresh()}
       />
+      <ProviderDetailDialog
+        provider={detailProvider}
+        onOpenChange={(open) => {
+          if (!open) setDetailProvider(null)
+        }}
+      />
     </>
   )
 }
@@ -362,6 +373,7 @@ function ProviderPanelView({
   error,
   onAdd,
   onImport,
+  onView,
   onEdit,
   onArchive,
   onSetActive,
@@ -398,69 +410,50 @@ function ProviderPanelView({
             </Button>
           </div>
         ) : (
-          <Table>
+          <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead>名称</TableHead>
-                <TableHead>模型</TableHead>
-                <TableHead>Key 字段</TableHead>
-                <TableHead className="text-right">操作</TableHead>
+                <TableHead className="w-1/4">名称</TableHead>
+                <TableHead className="w-1/2">模型</TableHead>
+                <TableHead className="w-1/4 text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground">
+                  <TableCell colSpan={3} className="text-muted-foreground">
                     正在加载
                   </TableCell>
                 </TableRow>
               ) : visibleProviders.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground">
+                  <TableCell colSpan={3} className="text-muted-foreground">
                     暂无 Provider
                   </TableCell>
                 </TableRow>
               ) : visibleProviders.map((provider) => (
                 <TableRow key={provider.id}>
-                  <TableCell>
+                  <TableCell className="min-w-0">
                     <div className="flex min-w-0 items-center gap-2">
-                      <span className="truncate font-medium">{provider.name}</span>
-                      {provider.readonly ? <Badge variant="secondary">本机</Badge> : null}
-                      {provider.active ? <Badge variant="secondary">默认</Badge> : null}
+                      <button
+                        type="button"
+                        className="min-w-0 truncate text-left font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+                        onClick={() => onView(provider)}
+                      >
+                        {provider.name}
+                      </button>
                     </div>
                   </TableCell>
-                  <TableCell>{provider.model || "-"}</TableCell>
-                  <TableCell>{provider.apiKeyField}</TableCell>
-                  <TableCell>
-                    <div className="flex justify-end gap-2">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={Boolean(provider.readonly)}
-                        onClick={() => onEdit(provider)}
-                      >
-                        编辑
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        disabled={Boolean(provider.active)}
-                        onClick={() => onSetActive(provider)}
-                      >
-                        设为默认
-                      </Button>
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="sm"
-                        disabled={Boolean(provider.readonly)}
-                        onClick={() => onArchive(provider)}
-                      >
-                        归档
-                      </Button>
-                    </div>
+                  <TableCell className="min-w-0 whitespace-normal">
+                    <ProviderModelList provider={provider} />
+                  </TableCell>
+                  <TableCell className="whitespace-normal">
+                    <ProviderRowActions
+                      provider={provider}
+                      onEdit={onEdit}
+                      onArchive={onArchive}
+                      onSetActive={onSetActive}
+                    />
                   </TableCell>
                 </TableRow>
               ))}
@@ -470,6 +463,166 @@ function ProviderPanelView({
       </CardContent>
     </Card>
   )
+}
+
+function ProviderDetailDialog({
+  provider,
+  onOpenChange,
+}: {
+  readonly provider: SynapseAgentProvider | null
+  readonly onOpenChange: (open: boolean) => void
+}) {
+  const configJson = provider ? safeProviderConfigJson(provider) : ""
+
+  return (
+    <Dialog open={Boolean(provider)} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-2xl" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>{provider?.name ?? "Provider 配置"}</DialogTitle>
+        </DialogHeader>
+
+        {provider ? (
+          <div className="flex flex-col gap-4">
+            <div className="grid gap-3 text-sm sm:grid-cols-2">
+              <ProviderDetailItem label="ID" value={provider.id} />
+              <ProviderDetailItem label="类型" value={providerCategoryLabel(provider.category)} />
+              <ProviderDetailItem label="请求地址" value={provider.baseUrl} />
+              <ProviderDetailItem label="Key 字段" value={provider.apiKeyField} />
+              <ProviderDetailItem label="官网" value={provider.websiteUrl} />
+              <ProviderDetailItem label="配置路径" value={provider.configPath} />
+              <ProviderDetailItem label="备注" value={provider.note} />
+            </div>
+            <Textarea
+              aria-label="Provider 配置 JSON"
+              value={configJson}
+              readOnly
+              className="min-h-60 font-mono text-xs"
+            />
+          </div>
+        ) : null}
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function ProviderDetailItem({
+  label,
+  value,
+}: {
+  readonly label: string
+  readonly value?: string
+}) {
+  if (!value) return null
+
+  return (
+    <div className="min-w-0">
+      <div className="text-xs text-muted-foreground">{label}</div>
+      <div className="truncate">{value}</div>
+    </div>
+  )
+}
+
+function ProviderModelList({ provider }: { readonly provider: SynapseAgentProvider }) {
+  const models = providerModelRows(provider)
+  if (models.length === 0) {
+    return <span className="text-muted-foreground">-</span>
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      {models.map((model) => (
+        <div key={model.label} className="flex min-w-0 items-baseline gap-3">
+          <span className="w-14 shrink-0 text-xs text-muted-foreground">{model.label}</span>
+          <span className="min-w-0 truncate">{model.value}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function ProviderRowActions({
+  provider,
+  onEdit,
+  onArchive,
+  onSetActive,
+}: {
+  readonly provider: SynapseAgentProvider
+  readonly onEdit: (provider: SynapseAgentProvider) => void
+  readonly onArchive: (provider: SynapseAgentProvider) => void
+  readonly onSetActive: (provider: SynapseAgentProvider) => void
+}) {
+  if (provider.readonly) return null
+
+  return (
+    <div className="flex justify-end gap-4">
+      <ProviderTextAction onClick={() => onEdit(provider)}>编辑</ProviderTextAction>
+      {provider.active ? null : (
+        <ProviderTextAction onClick={() => onSetActive(provider)}>设为默认</ProviderTextAction>
+      )}
+      <ProviderTextAction onClick={() => onArchive(provider)}>归档</ProviderTextAction>
+    </div>
+  )
+}
+
+function ProviderTextAction({
+  children,
+  onClick,
+}: {
+  readonly children: ReactNode
+  readonly onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      className="text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  )
+}
+
+function providerModelRows(provider: SynapseAgentProvider): Array<{ label: string; value: string }> {
+  return [
+    { label: "主模型", value: provider.model },
+    { label: "Haiku", value: provider.haikuModel },
+    { label: "Sonnet", value: provider.sonnetModel },
+    { label: "Opus", value: provider.opusModel },
+  ].flatMap((item) => {
+    const value = optionalTrimmed(item.value)
+    return value ? [{ label: item.label, value }] : []
+  })
+}
+
+function providerCategoryLabel(category: SynapseAgentProviderCategory): string {
+  return PROVIDER_CATEGORIES.find((item) => item.value === category)?.label ?? category
+}
+
+function safeProviderConfigJson(provider: SynapseAgentProvider): string {
+  const config = JSON.parse(formFromProvider(provider).configJson)
+  return JSON.stringify(redactSensitiveValues(config), null, 2)
+}
+
+function redactSensitiveValues(value: unknown, key = ""): unknown {
+  if (Array.isArray(value)) {
+    return value.map((item) => redactSensitiveValues(item, key))
+  }
+  if (isRecord(value)) {
+    return Object.fromEntries(
+      Object.entries(value).map(([entryKey, entryValue]) => [
+        entryKey,
+        redactSensitiveValues(entryValue, entryKey),
+      ]),
+    )
+  }
+  if (typeof value === "string" && isSensitiveConfigKey(key)) {
+    return value ? "[redacted]" : value
+  }
+  return value
+}
+
+function isSensitiveConfigKey(key: string): boolean {
+  return /(?:api[-_]?key|auth[-_]?token|token|secret|password|credential|authorization)/i.test(key)
 }
 
 function ProviderFormDialog({
@@ -1181,8 +1334,8 @@ function applyTemplateValues(value: string | undefined, values: Record<string, s
   return value.replace(/\$\{([A-Z0-9_]+)\}/g, (_match, key: string) => values[key] ?? "")
 }
 
-function optionalTrimmed(value: string): string | undefined {
-  const trimmed = value.trim()
+function optionalTrimmed(value: string | null | undefined): string | undefined {
+  const trimmed = value?.trim() ?? ""
   return trimmed || undefined
 }
 

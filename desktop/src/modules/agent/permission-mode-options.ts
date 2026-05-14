@@ -1,13 +1,6 @@
-import type { SynapseAgentPermissionMode } from "@/types/agent"
+import { SYNAPSE_AGENT_PERMISSION_MODES, type SynapseAgentPermissionMode } from "../../types/agent"
 
-const permissionModes: readonly SynapseAgentPermissionMode[] = [
-  "default",
-  "acceptEdits",
-  "plan",
-  "auto",
-  "dontAsk",
-  "bypassPermissions",
-]
+const permissionModes = SYNAPSE_AGENT_PERMISSION_MODES
 
 const permissionModeLabels: Record<SynapseAgentPermissionMode, string> = {
   default: "默认",

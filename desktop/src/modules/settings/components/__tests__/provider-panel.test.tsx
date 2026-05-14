@@ -129,10 +129,24 @@ describe("ProviderPanel dialog editor", () => {
     expect(document.body.textContent).toContain("Custom Provider")
     expect(document.body.textContent).toContain("名称")
     expect(document.body.textContent).toContain("模型")
-    expect(document.body.textContent).toContain("Key 字段")
+    expect(document.body.textContent).not.toContain("Key 字段")
     expect(document.body.textContent).toContain("操作")
     expect(document.body.textContent).not.toContain("供应商名称")
     expect(document.body.textContent).not.toContain("配置 JSON")
+
+    await act(async () => {
+      clickByText(document.body, "Custom Provider")
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("Company account")
+    expect(textareaByLabel("Provider 配置 JSON").value).toContain("ENABLE_TOOL_SEARCH")
+    expect(textareaByLabel("Provider 配置 JSON").value).toContain("claude-sonnet-4-5")
+
+    await act(async () => {
+      buttonByText(document.body, "关闭").click()
+      await Promise.resolve()
+    })
 
     await act(async () => {
       buttonByText(document.body, "编辑").click()
@@ -166,6 +180,43 @@ describe("ProviderPanel dialog editor", () => {
     expect(document.body.textContent).not.toContain("获取模型列表")
     expect(document.body.textContent).not.toContain("模型测试配置")
     expect(document.body.textContent).not.toContain("计费配置")
+  })
+
+  it("redacts secrets in provider detail config", async () => {
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([customProvider({
+            env: {
+              ANTHROPIC_API_KEY: "sk-secret",
+              ENABLE_TOOL_SEARCH: "true",
+            },
+            settingsConfig: {
+              headers: { Authorization: "Bearer secret-token" },
+              hooks: {},
+              permissions: { allow: ["WebFetch"], deny: [] },
+            },
+          })]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    await act(async () => {
+      clickByText(document.body, "Custom Provider")
+      await Promise.resolve()
+    })
+
+    const detailConfig = textareaByLabel("Provider 配置 JSON").value
+    expect(detailConfig).toContain("[redacted]")
+    expect(detailConfig).toContain("ENABLE_TOOL_SEARCH")
+    expect(detailConfig).toContain("WebFetch")
+    expect(detailConfig).not.toContain("sk-secret")
+    expect(detailConfig).not.toContain("Bearer secret-token")
   })
 
   it("applies a selected preset to the create form and saves through createProvider", async () => {
@@ -550,7 +601,7 @@ describe("ProviderPanel dialog editor", () => {
     expect(toast).toHaveBeenCalledWith("配置 JSON 格式错误")
   })
 
-  it("keeps readonly local provider values visible in the table but disables row actions", async () => {
+  it("keeps readonly local provider values visible in the table and hides row actions", async () => {
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: {
@@ -566,8 +617,9 @@ describe("ProviderPanel dialog editor", () => {
 
     expect(document.body.textContent).toContain("Local Claude")
     expect(document.body.textContent).toContain("claude-sonnet-4-5")
-    expect(buttonByText(document.body, "编辑").disabled).toBe(true)
-    expect(buttonByText(document.body, "归档").disabled).toBe(true)
+    expect(document.body.textContent).not.toContain("编辑")
+    expect(document.body.textContent).not.toContain("设为默认")
+    expect(document.body.textContent).not.toContain("归档")
     expect(document.body.textContent).not.toContain("供应商名称")
   })
 
@@ -584,6 +636,9 @@ describe("ProviderPanel dialog editor", () => {
         baseUrl: "https://api.deepseek.com/anthropic",
         apiKeyField: "ANTHROPIC_AUTH_TOKEN",
         model: "deepseek-chat",
+        haikuModel: "deepseek-haiku",
+        sonnetModel: "deepseek-sonnet",
+        opusModel: "deepseek-opus",
         status: "ready",
         selectedByDefault: true,
       }],
@@ -616,6 +671,16 @@ describe("ProviderPanel dialog editor", () => {
 
     expect(document.body.textContent).toContain("从 CCS 导入")
     expect(document.body.textContent).toContain("DeepSeek")
+    expect(document.body.textContent).toContain("Key 字段")
+    expect(document.body.textContent).toContain("ANTHROPIC_AUTH_TOKEN")
+    expect(document.body.textContent).toContain("主模型")
+    expect(document.body.textContent).toContain("deepseek-chat")
+    expect(document.body.textContent).toContain("Haiku")
+    expect(document.body.textContent).toContain("deepseek-haiku")
+    expect(document.body.textContent).toContain("Sonnet")
+    expect(document.body.textContent).toContain("deepseek-sonnet")
+    expect(document.body.textContent).toContain("Opus")
+    expect(document.body.textContent).toContain("deepseek-opus")
 
     await act(async () => {
       buttonByText(document.body, "导入 1 个").click()

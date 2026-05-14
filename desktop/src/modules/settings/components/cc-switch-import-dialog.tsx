@@ -15,14 +15,6 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
   SynapseCcSwitchClaudeImportPreviewResult,
@@ -166,54 +158,25 @@ function CcSwitchImportDialog({
         ) : null}
 
         <ScrollArea className="max-h-96">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead className="w-10" />
-                <TableHead>名称</TableHead>
-                <TableHead>模型</TableHead>
-                <TableHead>状态</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {loading ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground">
-                    正在扫描
-                  </TableCell>
-                </TableRow>
-              ) : !preview || preview.items.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-muted-foreground">
-                    未找到 Claude 配置
-                  </TableCell>
-                </TableRow>
-              ) : preview.items.map((item) => (
-                <TableRow key={item.id}>
-                  <TableCell>
-                    <Checkbox
-                      aria-label={`导入 ${item.name}`}
-                      checked={selectedIds.has(item.id)}
-                      disabled={item.status !== "ready" || importing}
-                      onCheckedChange={(checked) => toggleItem(item, checked === true)}
-                    />
-                  </TableCell>
-                  <TableCell>
-                    <div className="min-w-0">
-                      <div className="truncate font-medium">{item.name}</div>
-                      {item.baseUrl ? (
-                        <div className="truncate text-xs text-muted-foreground">{item.baseUrl}</div>
-                      ) : null}
-                    </div>
-                  </TableCell>
-                  <TableCell>{item.model || "-"}</TableCell>
-                  <TableCell>
-                    <ImportStatusBadge item={item} />
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <div className="flex flex-col gap-2 pr-3">
+            {loading ? (
+              <div className="rounded-lg bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
+                正在扫描
+              </div>
+            ) : !preview || preview.items.length === 0 ? (
+              <div className="rounded-lg bg-muted/40 px-3 py-3 text-sm text-muted-foreground">
+                未找到 Claude 配置
+              </div>
+            ) : preview.items.map((item) => (
+              <CcSwitchProviderRow
+                key={item.id}
+                item={item}
+                checked={selectedIds.has(item.id)}
+                disabled={importing}
+                onCheckedChange={(checked) => toggleItem(item, checked)}
+              />
+            ))}
+          </div>
         </ScrollArea>
 
         <DialogFooter>
@@ -230,6 +193,76 @@ function CcSwitchImportDialog({
         </DialogFooter>
       </DialogContent>
     </Dialog>
+  )
+}
+
+function CcSwitchProviderRow({
+  item,
+  checked,
+  disabled,
+  onCheckedChange,
+}: {
+  readonly item: SynapseCcSwitchClaudeProviderPreviewItem
+  readonly checked: boolean
+  readonly disabled: boolean
+  readonly onCheckedChange: (checked: boolean) => void
+}) {
+  return (
+    <div className="flex gap-3 rounded-lg bg-muted/40 px-3 py-3">
+      <div className="flex pt-1">
+        <Checkbox
+          aria-label={`导入 ${item.name}`}
+          checked={checked}
+          disabled={item.status !== "ready" || disabled}
+          onCheckedChange={(nextChecked) => onCheckedChange(nextChecked === true)}
+        />
+      </div>
+
+      <div className="min-w-0 flex-1">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <div className="truncate font-medium">{item.name}</div>
+            <div className="truncate text-xs text-muted-foreground">{item.baseUrl || "-"}</div>
+          </div>
+          <ImportStatusBadge item={item} />
+        </div>
+
+        <div className="mt-3 grid gap-2 text-xs sm:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]">
+          <InfoLine label="Key 字段" value={item.apiKeyField} />
+          <ModelMap item={item} />
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function ModelMap({ item }: { readonly item: SynapseCcSwitchClaudeProviderPreviewItem }) {
+  const entries = [
+    ["主模型", item.model],
+    ["Haiku", item.haikuModel],
+    ["Sonnet", item.sonnetModel],
+    ["Opus", item.opusModel],
+  ] as const
+
+  return (
+    <div className="min-w-0">
+      <div className="mb-1 text-muted-foreground">模型映射</div>
+      <div className="grid gap-1 sm:grid-cols-2">
+        {entries.map(([label, value]) => (
+          <InfoLine key={label} label={label} value={value || "-"} />
+        ))}
+      </div>
+    </div>
+  )
+}
+
+function InfoLine({ label, value }: { readonly label: string; readonly value: string }) {
+  return (
+    <div className="min-w-0">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="mx-1 text-muted-foreground">·</span>
+      <span className="break-all font-medium">{value}</span>
+    </div>
   )
 }
 

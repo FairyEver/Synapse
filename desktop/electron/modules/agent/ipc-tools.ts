@@ -303,6 +303,7 @@ function publicProvider(provider: CCProvider): z.infer<typeof publicProviderSche
     sonnetModel: provider.sonnetModel,
     opusModel: provider.opusModel,
     env: provider.env,
+    settingsConfig: provider.settingsConfig,
     archived: provider.archived,
     sortIndex: provider.sortIndex,
     createdAt: provider.createdAt,

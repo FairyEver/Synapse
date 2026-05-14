@@ -11,15 +11,13 @@ const baseConfig = {
 } as const
 
 describe("agent action config schema", () => {
-  it("accepts unattended Claude SDK modes for background Agent tasks", () => {
-    for (const mode of ["auto", "bypassPermissions", "dontAsk"]) {
+  it("accepts Claude Code permission modes for scheduled Agent tasks", () => {
+    for (const mode of ["default", "acceptEdits", "plan", "auto", "bypassPermissions", "dontAsk"]) {
       expect(agentActionConfigSchema.safeParse({ ...baseConfig, mode }).success).toBe(true)
     }
   })
 
-  it("rejects interactive Claude SDK modes for background Agent tasks", () => {
-    for (const mode of ["default", "acceptEdits", "plan"]) {
-      expect(agentActionConfigSchema.safeParse({ ...baseConfig, mode }).success).toBe(false)
-    }
+  it("rejects unknown Claude Code permission modes", () => {
+    expect(agentActionConfigSchema.safeParse({ ...baseConfig, mode: "free-for-all" }).success).toBe(false)
   })
 })

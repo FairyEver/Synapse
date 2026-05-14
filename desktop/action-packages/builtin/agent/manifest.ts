@@ -1,5 +1,6 @@
 import type { ActionManifest } from "../../types"
 import { agentActionConfigSchema, type AgentActionConfig } from "./schema"
+import { SYNAPSE_AGENT_PERMISSION_MODES } from "../../../src/types/agent"
 
 export const agentActionManifest = {
   id: "builtin.agent",
@@ -30,9 +31,11 @@ export const agentActionManifest = {
     },
     {
       name: "mode",
-      kind: "string",
+      kind: "enum",
       required: true,
-      description: "Agent execution mode (must be unattended-capable).",
+      description: "Agent permission mode.",
+      choices: SYNAPSE_AGENT_PERMISSION_MODES,
+      defaultValue: "bypassPermissions",
     },
     {
       name: "prompt",

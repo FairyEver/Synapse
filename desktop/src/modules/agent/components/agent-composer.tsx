@@ -9,28 +9,12 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card"
 import { Textarea } from "@/components/ui/textarea"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
 import { getPermissionModeCapability } from "../permission-mode-capability"
-import {
-  permissionModeConfirmationText,
-  permissionModeDescriptions,
-  permissionModeLabels,
-  permissionModes,
-  providerAvailabilityNotes,
-} from "../permission-mode-options"
+import { permissionModeConfirmationText } from "../permission-mode-options"
 import type { PendingMessage } from "../pending-message-queue"
+import { AgentPermissionModeMenu } from "./permission-mode-menu"
 
 const SINGLE_LINE_HEIGHT = 28
 
@@ -75,6 +59,27 @@ function AgentComposer({
   const [pendingModeAction, setPendingModeAction] = useState<"switch" | "new-session">("switch")
   const visiblePendingMessages = pendingMessages.filter((message) => message.status !== "sending")
   const isNewSessionMode = pendingModeAction === "new-session"
+
+  const selectPermissionMode = (mode: SynapseAgentPermissionMode) => {
+    const capability = getPermissionModeCapability({
+      currentMode: permissionMode,
+      targetMode: mode,
+    })
+    if (capability === "current") {
+      return
+    }
+    if (capability === "requiresNewSession") {
+      setPendingMode(mode)
+      setPendingModeAction("new-session")
+      return
+    }
+    if (capability === "confirmable") {
+      setPendingMode(mode)
+      setPendingModeAction("switch")
+      return
+    }
+    void onPermissionModeChange(mode)
+  }
 
   useEffect(() => {
     const el = textareaRef.current
@@ -147,8 +152,10 @@ function AgentComposer({
               disabled={disabled}
               rows={1}
             />
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
+            <AgentPermissionModeMenu
+              selectedMode={permissionMode}
+              onSelect={selectPermissionMode}
+              trigger={(
                 <Button
                   type="button"
                   variant="ghost"
@@ -159,51 +166,8 @@ function AgentComposer({
                 >
                   <ShieldCheck size={14} />
                 </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" forceMount>
-                {permissionModes.map((mode) => (
-                  <HoverCard key={mode} openDelay={100} closeDelay={100}>
-                    <HoverCardTrigger asChild>
-                      <DropdownMenuItem
-                        data-mode={mode}
-                        onSelect={() => {
-                          const capability = getPermissionModeCapability({
-                            currentMode: permissionMode,
-                            targetMode: mode,
-                          })
-                          if (capability === "current") {
-                            return
-                          }
-                          if (capability === "requiresNewSession") {
-                            setPendingMode(mode)
-                            setPendingModeAction("new-session")
-                            return
-                          }
-                          if (capability === "confirmable") {
-                            setPendingMode(mode)
-                            setPendingModeAction("switch")
-                            return
-                          }
-                          void onPermissionModeChange(mode)
-                        }}
-                      >
-                        <span className="min-w-0 flex-1 truncate">{permissionModeLabels[mode]}</span>
-                        {mode === permissionMode ? (
-                          <span className="text-xs text-muted-foreground">当前</span>
-                        ) : null}
-                      </DropdownMenuItem>
-                    </HoverCardTrigger>
-                    <HoverCardContent side="left" align="center">
-                      <div className="font-medium">{mode}</div>
-                      <p className="mt-1 text-sm text-muted-foreground">{permissionModeDescriptions[mode]}</p>
-                      {providerAvailabilityNotes[mode] ? (
-                        <p className="mt-2 text-xs text-muted-foreground/70">{providerAvailabilityNotes[mode]}</p>
-                      ) : null}
-                    </HoverCardContent>
-                  </HoverCard>
-                ))}
-              </DropdownMenuContent>
-            </DropdownMenu>
+              )}
+            />
             {sending || cancelPhase === "cancel_pending" ? (
               <Button
                 type="button"

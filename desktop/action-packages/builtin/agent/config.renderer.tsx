@@ -1,4 +1,6 @@
-import { useMemo } from "react"
+import { ChevronDown } from "lucide-react"
+
+import { Button } from "../../../src/components/ui/button"
 import {
   Field,
   FieldContent,
@@ -9,6 +11,9 @@ import { Input } from "../../../src/components/ui/input"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
 import { agentBaseDefinition as claudeCodeDef } from "../../../src/definitions/agent/claude-code/agent-shared"
+import { AgentPermissionModeMenu } from "../../../src/modules/agent/components/permission-mode-menu"
+import { permissionModeLabels } from "../../../src/modules/agent/permission-mode-options"
+import type { SynapseAgentPermissionMode } from "../../../src/types/agent"
 import type { AgentActionConfig } from "./schema"
 
 const AGENT_DEFINITIONS = [claudeCodeDef] as const
@@ -20,64 +25,49 @@ export function AgentConfigForm({
   readonly value: AgentActionConfig
   readonly onChange: (value: AgentActionConfig) => void
 }) {
-  const selectedDef = AGENT_DEFINITIONS.find((d) => d.id === value.agentType)
-  const unattendedModes = useMemo(
-    () => selectedDef?.modes.filter((m) => "unattended" in m && m.unattended) ?? [],
-    [selectedDef],
-  )
-
   return (
     <FieldGroup>
-      <Field>
-        <FieldLabel htmlFor="task-action-agent-type">Agent</FieldLabel>
-        <FieldContent>
-          <ToggleGroup
-            aria-label="Agent type"
-            className="w-full"
-            type="single"
-            value={value.agentType}
-            variant="outline"
-            onValueChange={(agentType) => {
-              if (!agentType) return
-              const def = AGENT_DEFINITIONS.find((d) => d.id === agentType)
-              const firstUnattended = def?.modes.find((m) => "unattended" in m && m.unattended)
-              onChange({
-                ...value,
-                agentType: agentType as AgentActionConfig["agentType"],
-                mode: firstUnattended?.key ?? "",
-              })
-            }}
-          >
-            {AGENT_DEFINITIONS.map((def) => (
-              <ToggleGroupItem key={def.id} className="flex-1" value={def.id}>
-                {def.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </FieldContent>
-      </Field>
+      <div className="grid gap-3 md:grid-cols-2">
+        <Field data-disabled>
+          <FieldLabel htmlFor="task-action-agent-type">智能体</FieldLabel>
+          <FieldContent>
+            <Button
+              id="task-action-agent-type"
+              type="button"
+              variant="outline"
+              className="w-full"
+              disabled
+            >
+              {AGENT_DEFINITIONS[0].label}
+            </Button>
+          </FieldContent>
+        </Field>
 
-      <Field>
-        <FieldLabel htmlFor="task-action-agent-mode">执行模式</FieldLabel>
-        <FieldContent>
-          <ToggleGroup
-            aria-label="执行模式"
-            className="w-full"
-            type="single"
-            value={value.mode}
-            variant="outline"
-            onValueChange={(mode) => {
-              if (mode) onChange({ ...value, mode })
-            }}
-          >
-            {unattendedModes.map((mode) => (
-              <ToggleGroupItem key={mode.key} className="flex-1" value={mode.key}>
-                {mode.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-        </FieldContent>
-      </Field>
+        <Field>
+          <FieldLabel htmlFor="task-action-agent-mode">权限模式</FieldLabel>
+          <FieldContent>
+            <AgentPermissionModeMenu
+              selectedMode={value.mode}
+              contentClassName="w-56"
+              onSelect={(mode: SynapseAgentPermissionMode) => {
+                onChange({ ...value, agentType: "claude-code", mode })
+              }}
+              trigger={(
+                <Button
+                  id="task-action-agent-mode"
+                  type="button"
+                  variant="outline"
+                  className="w-full justify-between"
+                  aria-label="权限模式"
+                >
+                  <span className="truncate">{permissionModeLabels[value.mode]}</span>
+                  <ChevronDown className="size-4 text-muted-foreground" />
+                </Button>
+              )}
+            />
+          </FieldContent>
+        </Field>
+      </div>
 
       <Field>
         <FieldLabel htmlFor="task-action-agent-prompt">提示词</FieldLabel>

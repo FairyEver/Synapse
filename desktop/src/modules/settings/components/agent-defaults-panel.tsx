@@ -12,26 +12,11 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu"
-import {
-  HoverCard,
-  HoverCardContent,
-  HoverCardTrigger,
-} from "@/components/ui/hover-card"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import {
-  permissionModeDescriptions,
-  permissionModeLabels,
-  permissionModes,
-  providerAvailabilityNotes,
-} from "@/modules/agent/permission-mode-options"
+import { AgentPermissionModeMenu } from "@/modules/agent/components/permission-mode-menu"
+import { permissionModeLabels } from "@/modules/agent/permission-mode-options"
 import { SettingsFieldRow } from "@/modules/settings/components/settings-field-row"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
 
@@ -70,12 +55,14 @@ function AgentDefaultsContent() {
   return (
     <>
       <SettingsFieldRow
-        label="权限模式"
-        description="新建 Agent 对话使用此权限模式。"
+        label="默认权限模式"
         controlClassName="w-full md:w-[220px]"
       >
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
+        <AgentPermissionModeMenu
+          selectedMode={selectedMode}
+          contentClassName="w-56"
+          onSelect={selectPermissionMode}
+          trigger={(
             <Button
               type="button"
               variant="outline"
@@ -85,34 +72,8 @@ function AgentDefaultsContent() {
               <span className="truncate">{permissionModeLabels[selectedMode]}</span>
               <ChevronDown className="size-4 text-muted-foreground" />
             </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56" forceMount>
-            {permissionModes.map((mode) => (
-              <HoverCard key={mode} openDelay={100} closeDelay={100}>
-                <HoverCardTrigger asChild>
-                  <DropdownMenuItem
-                    data-mode={mode}
-                    onSelect={() => {
-                      selectPermissionMode(mode)
-                    }}
-                  >
-                    <span className="min-w-0 flex-1 truncate">{permissionModeLabels[mode]}</span>
-                    {mode === selectedMode ? (
-                      <span className="text-xs text-muted-foreground">当前</span>
-                    ) : null}
-                  </DropdownMenuItem>
-                </HoverCardTrigger>
-                <HoverCardContent side="left" align="center">
-                  <div className="font-medium">{mode}</div>
-                  <p className="mt-1 text-sm text-muted-foreground">{permissionModeDescriptions[mode]}</p>
-                  {providerAvailabilityNotes[mode] ? (
-                    <p className="mt-2 text-xs text-muted-foreground/70">{providerAvailabilityNotes[mode]}</p>
-                  ) : null}
-                </HoverCardContent>
-              </HoverCard>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
+          )}
+        />
       </SettingsFieldRow>
       <AlertDialog open={pendingMode !== null} onOpenChange={(open) => {
         if (!open) {
