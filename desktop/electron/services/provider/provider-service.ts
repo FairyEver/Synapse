@@ -78,6 +78,12 @@ export class ProviderService {
     const secretRef = input.apiKey === undefined
       ? undefined
       : await this.secretStore.setApiKey(input.id, input.apiKey, `${input.name} API key`)
+    const secretEnvRefs = await storeSecretEnv(
+      this.secretStore,
+      input.id,
+      input.name,
+      input.secretEnv,
+    )
     const provider = toProviderEntry({
       id: input.id,
       name: input.name,
@@ -91,6 +97,7 @@ export class ProviderService {
       opusModel: input.opusModel,
       env: input.env,
       secretRef,
+      secretEnvRefs,
       sortIndex: input.sortIndex,
       createdAt: now,
       updatedAt: now,
@@ -117,10 +124,22 @@ export class ProviderService {
     const secretRef = patch.apiKey === undefined
       ? existing.secretRef
       : await this.secretStore.setApiKey(id, patch.apiKey, `${patch.name ?? existing.name} API key`)
+    const nextSecretEnvRefs = { ...(existing.secretEnvRefs ?? {}) }
+    for (const envName of patch.clearSecretEnv ?? []) {
+      delete nextSecretEnvRefs[envName]
+    }
+    const storedSecretEnvRefs = await storeSecretEnv(
+      this.secretStore,
+      id,
+      patch.name ?? existing.name,
+      patch.secretEnv,
+    )
+    Object.assign(nextSecretEnvRefs, storedSecretEnvRefs)
     const updated: CCProvider = {
       ...existing,
       ...providerPatch(patch),
       secretRef,
+      secretEnvRefs: Object.keys(nextSecretEnvRefs).length ? nextSecretEnvRefs : undefined,
       updatedAt: this.isoNow(),
     }
     await this.providers.upsert(toProviderEntry(updated))
@@ -188,6 +207,7 @@ export class ProviderService {
     const secret = provider.secretRef
       ? await this.readSecretValue(provider, context)
       : undefined
+    const secretEnv = await this.readSecretEnvValues(provider, context)
     const env: Record<string, string | undefined> = {}
 
     if (provider.baseUrl) env.ANTHROPIC_BASE_URL = provider.baseUrl
@@ -205,6 +225,7 @@ export class ProviderService {
     return compactEnv({
       ...env,
       ...provider.env,
+      ...secretEnv,
     })
   }
 
@@ -214,7 +235,27 @@ export class ProviderService {
   ): Promise<string | undefined> {
     const secretRef = provider.secretRef
     if (!secretRef) return undefined
+    return this.readSecretRef(provider, secretRef, context)
+  }
 
+  private async readSecretEnvValues(
+    provider: CCProvider,
+    context: BuildProviderEnvContext,
+  ): Promise<Record<string, string>> {
+    const refs = provider.secretEnvRefs ?? {}
+    const result: Record<string, string> = {}
+    for (const [envName, secretRef] of Object.entries(refs)) {
+      const value = await this.readSecretRef(provider, secretRef, context)
+      if (value !== undefined) result[envName] = value
+    }
+    return result
+  }
+
+  private async readSecretRef(
+    provider: CCProvider,
+    secretRef: string,
+    context: BuildProviderEnvContext,
+  ): Promise<string | undefined> {
     const actor = context.actor ?? { kind: "user" }
     const metadata = removeUndefined({
       providerId: provider.id,
@@ -367,6 +408,7 @@ function toProviderEntry(provider: CCProvider): ProviderEntryV1 {
     display: provider.name,
     baseUrl: provider.baseUrl,
     secretRef: provider.secretRef ?? providerApiKeySecretId(provider.id),
+    secretEnvRefs: provider.secretEnvRefs,
     activeModel: provider.model,
     env: provider.env,
     category: provider.category,
@@ -396,6 +438,7 @@ function toProvider(entry: ProviderEntryV1): CCProvider {
     opusModel: stringValue(entry.opusModel),
     env: entry.env ?? {},
     secretRef: entry.secretRef,
+    secretEnvRefs: entry.secretEnvRefs,
     archived: booleanValue(entry.archived),
     sortIndex: numberValue(entry.sortIndex),
     createdAt: entry.createdAt ?? "",
@@ -407,6 +450,25 @@ function compactEnv(env: Record<string, string | undefined>): Record<string, str
   return Object.fromEntries(
     Object.entries(env).filter(([, value]) => value !== undefined),
   ) as Record<string, string>
+}
+
+async function storeSecretEnv(
+  secretStore: ProviderSecretStore,
+  providerId: string,
+  providerName: string,
+  input?: Record<string, string>,
+): Promise<Record<string, string> | undefined> {
+  if (!input || Object.keys(input).length === 0) return undefined
+  const refs: Record<string, string> = {}
+  for (const [envName, value] of Object.entries(input)) {
+    refs[envName] = await secretStore.setEnvSecret(
+      providerId,
+      envName,
+      value,
+      `${providerName} ${envName}`,
+    )
+  }
+  return refs
 }
 
 function providerPatch(input: UpdateProviderInput): Partial<CCProvider> {

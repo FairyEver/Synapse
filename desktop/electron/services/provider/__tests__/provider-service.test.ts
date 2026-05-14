@@ -129,6 +129,42 @@ describe("ProviderService", () => {
     })
   })
 
+  it("stores sensitive provider env values in encrypted secret refs", async () => {
+    const { service, providers, secrets } = makeProviderService()
+
+    await service.createProvider({
+      id: "bedrock-aksk",
+      name: "AWS Bedrock (AKSK)",
+      category: "cloud_provider",
+      baseUrl: "https://bedrock-runtime.us-west-2.amazonaws.com",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      env: {
+        AWS_REGION: "us-west-2",
+        AWS_ACCESS_KEY_ID: "AKIA_TEST",
+        CLAUDE_CODE_USE_BEDROCK: "1",
+      },
+      secretEnv: {
+        AWS_SECRET_ACCESS_KEY: "secret-access-key",
+      },
+    })
+
+    await expect(service.buildEnv("bedrock-aksk")).resolves.toMatchObject({
+      AWS_REGION: "us-west-2",
+      AWS_ACCESS_KEY_ID: "AKIA_TEST",
+      AWS_SECRET_ACCESS_KEY: "secret-access-key",
+      CLAUDE_CODE_USE_BEDROCK: "1",
+    })
+    await expect(providers.get("bedrock-aksk")).resolves.toMatchObject({
+      secretEnvRefs: {
+        AWS_SECRET_ACCESS_KEY: "provider:bedrock-aksk:env:AWS_SECRET_ACCESS_KEY",
+      },
+    })
+    await expect(secrets.get("provider:bedrock-aksk:env:AWS_SECRET_ACCESS_KEY")).resolves.toMatchObject({
+      kind: "generic",
+      value: "secret-access-key",
+    })
+  })
+
   it("uses ANTHROPIC_AUTH_TOKEN for baseUrl providers", async () => {
     const { service } = makeProviderService()
 

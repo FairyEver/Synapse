@@ -28,6 +28,7 @@ export interface CCProvider {
   opusModel?: string
   env: Record<string, string>
   secretRef?: string
+  secretEnvRefs?: Record<string, string>
   archived?: boolean
   sortIndex?: number
   createdAt: string
@@ -47,6 +48,7 @@ export interface CreateProviderInput {
   readonly sonnetModel?: string
   readonly opusModel?: string
   readonly env: Record<string, string>
+  readonly secretEnv?: Record<string, string>
   readonly sortIndex?: number
 }
 
@@ -62,6 +64,8 @@ export interface UpdateProviderInput {
   readonly sonnetModel?: string
   readonly opusModel?: string
   readonly env?: Record<string, string>
+  readonly secretEnv?: Record<string, string>
+  readonly clearSecretEnv?: readonly string[]
   readonly archived?: boolean
   readonly sortIndex?: number
 }

@@ -190,7 +190,7 @@ git commit -m "feat: add claude provider preset source"
 - Modify: `desktop/electron/services/provider/provider-service.ts`
 - Test: `desktop/electron/services/provider/__tests__/provider-service.test.ts`
 
-- [ ] **Step 1: Write the failing secret env test**
+- [x] **Step 1: Write the failing secret env test**
 
 Append this test inside the existing `describe("ProviderService", () => { ... })` in `desktop/electron/services/provider/__tests__/provider-service.test.ts`:
 
@@ -232,7 +232,7 @@ Append this test inside the existing `describe("ProviderService", () => { ... })
   })
 ```
 
-- [ ] **Step 2: Run the failing provider service test**
+- [x] **Step 2: Run the failing provider service test**
 
 Run:
 
@@ -242,7 +242,7 @@ pnpm --filter @synapse/desktop test -- desktop/electron/services/provider/__test
 
 Expected: FAIL because `secretEnv` is not accepted and `secretEnvRefs` is not resolved.
 
-- [ ] **Step 3: Extend provider schema and types**
+- [x] **Step 3: Extend provider schema and types**
 
 In `desktop/electron/runtime/data-repo/schemas/placeholders.ts`, add `secretEnvRefs` to `ProviderEntryV1`:
 
@@ -275,7 +275,7 @@ Add to `UpdateProviderInput`:
   readonly clearSecretEnv?: readonly string[]
 ```
 
-- [ ] **Step 4: Add secret env helpers**
+- [x] **Step 4: Add secret env helpers**
 
 In `desktop/electron/services/provider/provider-secret-store.ts`, add:
 
@@ -303,7 +303,7 @@ Inside `ProviderSecretStore`, add:
 
 Use the same `this.secrets` field name that `setApiKey()` already uses in the file.
 
-- [ ] **Step 5: Store and resolve secret env refs in ProviderService**
+- [x] **Step 5: Store and resolve secret env refs in ProviderService**
 
 In `desktop/electron/services/provider/provider-service.ts`, import `providerEnvSecretId` if needed and add this helper near `compactEnv()`:
 
@@ -396,7 +396,7 @@ Refactor the current `readSecretValue()` body into a reusable `readSecretRef(pro
 
 Update `toProviderEntry()`, `toProvider()`, and `providerPatch()` to carry `secretEnvRefs`.
 
-- [ ] **Step 6: Run provider service tests**
+- [x] **Step 6: Run provider service tests**
 
 Run:
 
@@ -406,7 +406,7 @@ pnpm --filter @synapse/desktop test -- desktop/electron/services/provider/__test
 
 Expected: PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 Run:
 

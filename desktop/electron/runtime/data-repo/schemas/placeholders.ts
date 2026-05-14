@@ -99,6 +99,7 @@ export interface ProviderEntryV1 extends Record<string, unknown> {
   agentType?: string
   agentTypes?: string[]
   env?: Record<string, string>
+  secretEnvRefs?: Record<string, string>
   thinking?: string
   options?: ProviderOptionsV1
   createdAt?: string
@@ -124,6 +125,7 @@ export const providersSchema: NamespaceSchema<ProviderEntryV1> = {
     && ((v as ProviderEntryV1).providerRefs === undefined || isStringArray((v as ProviderEntryV1).providerRefs))
     && ((v as ProviderEntryV1).agentTypes === undefined || isStringArray((v as ProviderEntryV1).agentTypes))
     && ((v as ProviderEntryV1).env === undefined || isStringRecord((v as ProviderEntryV1).env))
+    && ((v as ProviderEntryV1).secretEnvRefs === undefined || isStringRecord((v as ProviderEntryV1).secretEnvRefs))
     && isOptionalString((v as ProviderEntryV1).thinking)
     && ((v as ProviderEntryV1).options === undefined || isProviderOptions((v as ProviderEntryV1).options)),
 }

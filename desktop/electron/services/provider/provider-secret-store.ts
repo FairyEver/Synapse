@@ -19,6 +19,18 @@ export class ProviderSecretStore {
     return id
   }
 
+  async setEnvSecret(providerId: string, envName: string, value: string, description: string): Promise<string> {
+    const id = providerEnvSecretId(providerId, envName)
+    await this.secrets.upsert({
+      id,
+      schemaVersion: 1,
+      kind: "generic",
+      value,
+      description,
+    })
+    return id
+  }
+
   async getSecretValue(secretRef: string): Promise<string | undefined> {
     const secret = await this.secrets.get(secretRef)
     if (!secret) return undefined
@@ -28,6 +40,10 @@ export class ProviderSecretStore {
 
 export function providerApiKeySecretId(providerId: string): string {
   return `provider:${providerId}:api-key`
+}
+
+export function providerEnvSecretId(providerId: string, envName: string): string {
+  return `provider:${providerId}:env:${envName}`
 }
 
 function removeUndefined<T extends Record<string, unknown>>(input: T): T {
