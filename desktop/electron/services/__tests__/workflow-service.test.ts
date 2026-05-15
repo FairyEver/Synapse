@@ -169,6 +169,20 @@ describe("WorkflowService", () => {
     expect(logPayload).not.toContain("not a directory")
   })
 
+  it("create returns id and versionHash and is retrievable", async () => {
+    const dir = await tmpDir()
+    const svc = new WorkflowService(() => dir)
+    const result = await svc.create()
+    expect("id" in result && typeof result.id === "string").toBe(true)
+    expect("versionHash" in result && (result as { versionHash: string }).versionHash).toMatch(/^v_/)
+    const id = (result as { id: string }).id
+    const def = await svc.get(id)
+    expect(def).not.toBeNull()
+    expect(def!.name).toBe("新工作流")
+    expect(def!.nodes).toHaveLength(1)
+    expect(def!.nodes[0].type).toBe("end")
+  })
+
   it("logs workflow delete failures without raw filesystem error text", async () => {
     const repoPath = path.join(os.tmpdir(), "wf-svc-secret-delete-root", randomUUID())
     roots.push(repoPath)
