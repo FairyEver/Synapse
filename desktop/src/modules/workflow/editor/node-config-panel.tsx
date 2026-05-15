@@ -69,7 +69,8 @@ export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChan
                     key={`${node.id}-edit`}
                     onBlur={(e) => {
                       if (!nameCancelledRef.current) {
-                        onNameChange(node.id, e.target.value)
+                        const trimmed = e.target.value.trim()
+                        if (trimmed) onNameChange(node.id, trimmed)
                       }
                       nameCancelledRef.current = false
                       setIsEditingName(false)
