@@ -32,10 +32,10 @@ export function RunnerToolbar({ definition, runState, runError, viewMode, rerunn
 
   return (
     <div className="flex items-center gap-2 border-b px-3 py-2 bg-background">
-      <span className="text-sm font-medium truncate max-w-48">{definition.name}</span>
+      <span className="text-sm font-medium truncate max-w-48" title={definition.name}>{definition.name}</span>
       {badge && <Badge variant={badge.variant} className="text-xs">{badge.label}</Badge>}
       {runError && (
-        <span className="text-xs text-destructive truncate max-w-64">{runError}</span>
+        <span className="text-xs text-destructive truncate max-w-64" title={runError ?? undefined}>{runError}</span>
       )}
 
       <div className="ml-auto flex items-center gap-1.5">
