@@ -407,16 +407,11 @@ export const workflowIpcModule: IpcModule = {
           workflowId = memoryStatus.workflowId
           previousParams = memoryStatus.params
         } else {
-          const svc = ctx.resolve<WorkflowService>("core.workflow")
-          const allWorkflows = await svc.list()
-          for (const wf of allWorkflows) {
-            const snapshot = await snapshots.get(previousRunId, wf.id)
-            if (snapshot?.definition) {
-              def = snapshot.definition
-              workflowId = snapshot.workflowId
-              previousParams = snapshot.params
-              break
-            }
+          const snapshot = await snapshots.findByRunId(previousRunId)
+          if (snapshot?.definition) {
+            def = snapshot.definition
+            workflowId = snapshot.workflowId
+            previousParams = snapshot.params
           }
         }
 
@@ -528,12 +523,8 @@ export const workflowIpcModule: IpcModule = {
         // are still on disk (up to MAX = 20 snapshots per workflow). Without this, opening an
         // older run from the history dialog would render an empty runner (no definition,
         // no node results, stuck at "running"). Hydrate from the snapshot store instead.
-        const svc = ctx.resolve<WorkflowService>("core.workflow")
-        const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
-        const metas = await svc.list()
-        for (const meta of metas) {
-          const snap = await snapshots.get(runId, meta.id)
-          if (!snap) continue
+        const snap = await ctx.resolve<RunSnapshotService>("core.workflow.snapshots").findByRunId(runId)
+        if (snap) {
           // When the run failed, extract a workflow-level error from the first
           // failed node's result.  The original event-level error was not
           // persisted to the snapshot (WorkflowRunSnapshot has no error field),

@@ -91,6 +91,35 @@ export class RunSnapshotService {
     }
   }
 
+  /**
+   * Find a snapshot by runId alone, without knowing the workflowId.
+   * Scans all workflow directories under workflow-runs/ for the first matching
+   * <runId>.json file. Single pass through subdirectories — O(W) dirent checks
+   * vs the N+1 file reads of iterating workflows and calling get() for each.
+   */
+  async findByRunId(runId: string): Promise<WorkflowRunSnapshot | null> {
+    let wfDirs: string[]
+    try {
+      wfDirs = await readdir(path.join(this.dataDir, "workflow-runs"), { withFileTypes: true })
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return null
+      logger.warn("findByRunId readdir failed", { runId, ...snapshotErrorMetadata(err) })
+      return null
+    }
+    for (const dirent of wfDirs) {
+      if (!dirent.isDirectory()) continue
+      const file = path.join(this.dataDir, "workflow-runs", dirent.name, `${runId}.json`)
+      try {
+        return JSON.parse(await readFile(file, "utf-8")) as WorkflowRunSnapshot
+      } catch (err) {
+        if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
+          logger.warn("findByRunId readFile failed", { runId, workflowId: dirent.name, ...snapshotErrorMetadata(err) })
+        }
+      }
+    }
+    return null
+  }
+
   async get(runId: string, workflowId: string): Promise<WorkflowRunSnapshot | null> {
     try {
       return JSON.parse(await readFile(path.join(this.dir(workflowId), `${runId}.json`), "utf-8")) as WorkflowRunSnapshot
