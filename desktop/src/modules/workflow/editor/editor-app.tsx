@@ -107,6 +107,7 @@ export function WorkflowEditorApp() {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault()
         if (savingRef.current) return
+        if (!isDirtyRef.current) return
         const def = definitionRef.current
         if (def) void handleSave(def)
       }
