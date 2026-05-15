@@ -198,6 +198,10 @@ export class SlidingWindowRateLimiter {
     const now = this.now()
     const cutoff = now - this.windowMs
     const bucket = (this.buckets.get(key) ?? []).filter((timestamp) => timestamp > cutoff)
+    if (bucket.length === 0) {
+      this.buckets.delete(key)
+      return true
+    }
     if (bucket.length >= this.maxMessages) {
       this.buckets.set(key, bucket)
       return false
