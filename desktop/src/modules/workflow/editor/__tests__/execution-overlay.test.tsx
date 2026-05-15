@@ -76,6 +76,8 @@ describe("ExecutionOverlay", () => {
     document.body.appendChild(container)
     const root = createRoot(container)
     roots.push(root)
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
     const rawPrompt = "prompt with token=sk-secret"
     const rawOutput = "output from /Users/example/project/file.txt"
     const rawError = "authorization failed Bearer abc123"
@@ -124,6 +126,7 @@ describe("ExecutionOverlay", () => {
     expect(JSON.stringify(track.mock.calls)).not.toContain(rawPrompt)
     expect(JSON.stringify(track.mock.calls)).not.toContain(rawOutput)
     expect(JSON.stringify(track.mock.calls)).not.toContain(rawError)
+    expect(`${JSON.stringify(warnSpy.mock.calls)}${JSON.stringify(errorSpy.mock.calls)}`).not.toContain("Missing `Description`")
   })
 })
 

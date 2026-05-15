@@ -40,12 +40,15 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  vi.restoreAllMocks()
   vi.clearAllMocks()
   delete (window as Partial<Window>).synapse
 })
 
 describe("RunHistoryDialog", () => {
   it("shows the earliest node error in run history summaries", async () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => undefined)
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined)
     window.synapse = {
       workflow: {
         runHistory: vi.fn().mockResolvedValue([
@@ -85,6 +88,7 @@ describe("RunHistoryDialog", () => {
 
     expect(document.body.textContent).toContain("early error")
     expect(document.body.textContent).not.toContain("late error")
+    expect(`${JSON.stringify(warnSpy.mock.calls)}${JSON.stringify(errorSpy.mock.calls)}`).not.toContain("Missing `Description`")
   })
 
   it("tracks opening a workflow run without recording node output", async () => {
@@ -97,6 +101,7 @@ describe("RunHistoryDialog", () => {
               nodeSecret: {
                 nodeId: "nodeSecret",
                 status: "failed",
+                input: { variables: {} },
                 error: "secret prompt body",
               },
             },

@@ -3,7 +3,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, RefreshCw } from "lucide-react"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
 import type { WorkflowRunSnapshot } from "@/types/workflow"
@@ -98,7 +98,10 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
-        <DialogHeader><DialogTitle>运行历史</DialogTitle></DialogHeader>
+        <DialogHeader>
+          <DialogTitle>运行历史</DialogTitle>
+          <DialogDescription className="sr-only">查看该工作流的历史运行记录。</DialogDescription>
+        </DialogHeader>
         {loading ? (
           <p className="text-sm text-muted-foreground py-4">加载中…</p>
         ) : error ? (

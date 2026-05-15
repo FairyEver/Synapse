@@ -2,7 +2,7 @@ import { useState } from "react"
 import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
 import type { RunState } from "../hooks/use-workflow-run"
 import { Badge } from "@/components/ui/badge"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { track } from "@/lib/ui-tracking"
 
 const STATUS_LABEL: Record<string, string> = { running: "执行中", success: "完成", failed: "失败", skipped: "跳过", pending: "等待" }
@@ -102,6 +102,7 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
         <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-sm">{dialogTarget ? nameOf(dialogTarget.nodeId) : ""} — 执行详情</DialogTitle>
+            <DialogDescription className="sr-only">查看该节点的输入、输出和错误信息。</DialogDescription>
           </DialogHeader>
           {dialogTarget && (
             <div className="grid gap-3 text-xs overflow-auto max-h-[60vh]">
