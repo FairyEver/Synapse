@@ -102,12 +102,16 @@ export class ReactiveScheduler {
         await Promise.allSettled([...running.values()])
         break
       }
-      await Promise.race([
-        ...running.values(),
-        new Promise<void>((resolve) => {
-          abortSignal.addEventListener("abort", () => resolve(), { once: true })
-        }),
-      ])
+      let abortHandler!: () => void
+      const abortPromise = new Promise<void>((resolve) => {
+        abortHandler = resolve
+        abortSignal.addEventListener("abort", abortHandler, { once: true })
+      })
+      await Promise.race([...running.values(), abortPromise])
+      // Clean up the abort listener if Promise.race resolved because a task
+      // finished (not because abort fired). Without this, every loop iteration
+      // leaks a listener on the AbortSignal until the signal is GC'd.
+      abortSignal.removeEventListener("abort", abortHandler)
     }
     for (const id of nodes) {
       if (!results.has(id)) {
