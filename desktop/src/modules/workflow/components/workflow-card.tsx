@@ -20,7 +20,7 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onHistory
   const badge = runState ? RUN_STATE_BADGE[runState] : null
 
   return (
-    <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onDoubleClick={onOpen}>
+    <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={onOpen}>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <GitBranch className="h-4 w-4 text-muted-foreground" />
