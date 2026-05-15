@@ -82,7 +82,7 @@ SettingsFieldRow
 
 ### 清除默认值
 
-按钮旁不额外添加"清除"操作。用户如需取消默认，可在 `ProviderModelSelectDialog` 内不做选择直接关闭。如果需要明确清除，后续可迭代加入。
+已设置默认供应商后，按钮行右侧显示一个"清除"按钮（`variant=outline`, `size=sm`）。点击后将 `defaultProviderModel` 设为 `null` 并保存，按钮文字恢复为 "选择供应商 + 模型"。未设置时不显示清除按钮。
 
 ## §3 消费端：Agent 对话
 
@@ -116,7 +116,7 @@ SettingsFieldRow
 
 变更：
 - `defaultConfig` 需要接收默认 provider/model 参数
-- 方案：`onDrop` 回调中从 React context（`useAppConfig`）读取 `config.agent.defaultProviderModel`，将值传给 `defaultConfig(type, defaultProviderModel)`
+- 方案：`Canvas` 组件内使用 `useAppConfig()` 读取 config，`onDrop` 回调中取 `config.agent.defaultProviderModel` 传给 `defaultConfig(type, defaultProviderModel)`
 - `defaultConfig` 签名变为 `defaultConfig(type: string, providerModel?: { providerId: string; modelTier: ModelTier } | null)`
 - 如果有默认值且节点类型是 prompt/switch，config 中填入 `providerId` + `modelTier`
 - 如果无默认值，保持当前行为
