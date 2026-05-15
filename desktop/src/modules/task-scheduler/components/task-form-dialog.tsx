@@ -3,6 +3,7 @@ import { ChevronDown } from "lucide-react"
 
 import { FormDialog } from "@/components/form-dialog"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
+import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
   ModuleSidebar,
@@ -86,6 +87,7 @@ function TaskFormDialog({
   onCreate,
   onUpdate,
 }: TaskFormDialogProps) {
+  const { config: appConfig } = useAppConfig()
   const defaultProjectId = projects[0]?.id ?? ""
   const [form, setForm] = useState<TaskFormState>(() =>
     createTaskFormState(state.task, defaultProjectId, platform),
@@ -111,10 +113,15 @@ function TaskFormDialog({
   }
 
   const updateActionType = (actionType: string) => {
+    const baseConfig = rendererActionRegistry.getDefaultConfig(actionType)
+    const defaultPM = appConfig.agent.defaultProviderModel
+    const actionConfig = actionType === "builtin.agent" && defaultPM
+      ? { ...baseConfig, providerId: defaultPM.providerId, modelTier: defaultPM.modelTier }
+      : baseConfig
     setForm((current) => ({
       ...current,
       actionType,
-      actionConfig: rendererActionRegistry.getDefaultConfig(actionType),
+      actionConfig,
     }))
   }
 
