@@ -48,7 +48,7 @@ export function WorkflowModule() {
           {creating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Plus className="h-4 w-4 mr-1.5" />}新建
         </Button>
       </div>
-      <div className="flex-1 overflow-auto"><WorkflowList key={listKey} /></div>
+      <div className="flex-1 overflow-auto"><WorkflowList key={listKey} onCreate={handleCreate} /></div>
     </div>
   )
 }

@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { toast } from "sonner"
-import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
+import { AlertCircle, Loader2, Plus, RefreshCw } from "lucide-react"
 import { WorkflowCard } from "./workflow-card"
 import { RunParamsDialog } from "./run-params-dialog"
 import { RunHistoryDialog } from "./run-history-dialog"
@@ -14,7 +14,7 @@ import type { WorkflowDefinition } from "@/types/workflow"
 
 const logger = createRendererLogger("workflow.list")
 
-export function WorkflowList() {
+export function WorkflowList({ onCreate }: { onCreate: () => void }) {
   const { items, loading, error, refresh } = useWorkflowList()
   const [runTarget, setRunTarget] = useState<WorkflowDefinition | null>(null)
   const [historyWorkflowId, setHistoryWorkflowId] = useState<string | null>(null)
@@ -145,7 +145,14 @@ export function WorkflowList() {
       </Button>
     </div>
   )
-  if (items.length === 0) return <p className="text-sm text-muted-foreground p-4">还没有工作流。</p>
+  if (items.length === 0) return (
+    <div className="p-4 space-y-3 text-center">
+      <p className="text-sm text-muted-foreground">还没有工作流</p>
+      <Button size="sm" variant="outline" onClick={onCreate}>
+        <Plus className="h-3.5 w-3.5 mr-1" />创建第一个工作流
+      </Button>
+    </div>
+  )
 
   return (
     <>

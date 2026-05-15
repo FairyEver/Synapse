@@ -145,7 +145,7 @@ describe("WorkflowList", () => {
     roots.push(root)
 
     await act(async () => {
-      root.render(<WorkflowList />)
+      root.render(<WorkflowList onCreate={vi.fn()} />)
     })
 
     await act(async () => {
@@ -183,7 +183,7 @@ describe("WorkflowList", () => {
     roots.push(root)
 
     await act(async () => {
-      root.render(<WorkflowList />)
+      root.render(<WorkflowList onCreate={vi.fn()} />)
     })
 
     await act(async () => {
