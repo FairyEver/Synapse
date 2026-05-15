@@ -83,7 +83,7 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
           <div className="flex flex-col gap-1 pb-1.5 mb-0.5 border-b">
             <Badge variant={RUN_STATE_BADGE[runState]!.variant} className="text-xs w-fit">{RUN_STATE_BADGE[runState]!.label}</Badge>
             {runState === "failed" && runError && (
-              <p className="text-xs text-destructive break-words max-w-48">{runError}</p>
+              <p className="text-xs text-destructive break-words max-w-64" title={runError ?? undefined}>{runError}</p>
             )}
           </div>
         )}
@@ -94,7 +94,7 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
             onClick={() => handleResultOpen(r)}
           >
             <Badge variant={STATUS_VARIANT[r.status] ?? "outline"} className="text-xs shrink-0">{STATUS_LABEL[r.status] ?? r.status}</Badge>
-            <span className="text-xs text-muted-foreground truncate max-w-32">{nameOf(r.nodeId)}</span>
+            <span className="text-xs text-muted-foreground truncate max-w-32" title={nameOf(r.nodeId)}>{nameOf(r.nodeId)}</span>
           </div>
         ))}
       </div>
