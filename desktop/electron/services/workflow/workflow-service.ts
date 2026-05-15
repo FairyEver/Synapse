@@ -69,9 +69,10 @@ export class WorkflowService {
       return null
     }
     for (const versionFile of [...versions].reverse()) {
-      logger.info("workflow get: loaded", { id, versionFile })
       try {
-        return JSON.parse(await readFile(path.join(this.dir(id), versionFile), "utf-8")) as WorkflowDefinition
+        const parsed = JSON.parse(await readFile(path.join(this.dir(id), versionFile), "utf-8")) as WorkflowDefinition
+        logger.info("workflow get: loaded", { id, versionFile })
+        return parsed
       } catch (err) {
         logger.warn("workflow get failed", {
           boundary: "workflow-service.get",
