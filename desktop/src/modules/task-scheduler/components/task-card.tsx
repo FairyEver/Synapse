@@ -67,6 +67,19 @@ function formatLastRun(task: ScheduledTask): string {
   return `${date} · ${formatTaskStatus(task.lastStatus)}`
 }
 
+function getAgentDisplayInfo(task: ScheduledTask): { providerName: string; modelName: string } | null {
+  if (task.action.type !== "builtin.agent") return null
+  const config = task.action.config as Record<string, unknown>
+  const providerName = (typeof config.providerName === "string" && config.providerName)
+    || (typeof config.providerId === "string" && config.providerId)
+    || null
+  const modelName = (typeof config.modelName === "string" && config.modelName)
+    || (typeof config.modelTier === "string" && config.modelTier)
+    || null
+  if (!providerName && !modelName) return null
+  return { providerName: providerName ?? "—", modelName: modelName ?? "—" }
+}
+
 function TaskCard({
   task,
   projects,
@@ -84,6 +97,7 @@ function TaskCard({
   const nextRun = formatTaskNextRun(task)
   const lastRun = formatLastRun(task)
   const scope = formatTaskScope(task, projects)
+  const agentInfo = getAgentDisplayInfo(task)
 
   return (
     <div
@@ -122,11 +136,23 @@ function TaskCard({
       </div>
 
       <div className="mt-4 grid gap-1 text-xs">
-        <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-2">
+        {agentInfo && (
+          <>
+            <div className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2">
+              <span className="text-muted-foreground">供应商</span>
+              <span className="truncate">{agentInfo.providerName}</span>
+            </div>
+            <div className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2">
+              <span className="text-muted-foreground">模型</span>
+              <span className="truncate">{agentInfo.modelName}</span>
+            </div>
+          </>
+        )}
+        <div className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2">
           <span className="text-muted-foreground">上次</span>
           <span className="truncate">{lastRun}</span>
         </div>
-        <div className="grid grid-cols-[2.5rem_minmax(0,1fr)] gap-2">
+        <div className="grid grid-cols-[3rem_minmax(0,1fr)] gap-2">
           <span className="text-muted-foreground">范围</span>
           <span className="truncate">{scope}</span>
         </div>

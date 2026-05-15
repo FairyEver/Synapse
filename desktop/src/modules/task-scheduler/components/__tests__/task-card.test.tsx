@@ -125,6 +125,71 @@ describe("TaskCard", () => {
 
     expect(onRun).not.toHaveBeenCalled()
   })
+
+  it("renders provider and model for agent tasks", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TaskCard
+          busy={false}
+          projects={projects}
+          task={createTask({
+            action: {
+              type: "builtin.agent",
+              config: {
+                agentType: "claude-code",
+                projectId: "project-1",
+                providerId: "provider-1",
+                modelTier: "sonnet",
+                providerName: "My Provider",
+                modelName: "claude-sonnet-4-20250514",
+                prompt: "run",
+                sessionPolicy: "fresh",
+              },
+            },
+          })}
+          onDelete={vi.fn()}
+          onEdit={vi.fn()}
+          onHistory={vi.fn()}
+          onRun={vi.fn()}
+          onStop={vi.fn()}
+          onToggleEnabled={vi.fn()}
+        />
+      </TooltipProvider>,
+    )
+
+    expect(html).toContain("供应商")
+    expect(html).toContain("My Provider")
+    expect(html).toContain("模型")
+    expect(html).toContain("claude-sonnet-4-20250514")
+  })
+
+  it("does not render provider/model for non-agent tasks", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TaskCard
+          busy={false}
+          projects={projects}
+          task={createTask({
+            action: {
+              type: "builtin.command",
+              config: { command: "echo hello" },
+            },
+          })}
+          onDelete={vi.fn()}
+          onEdit={vi.fn()}
+          onHistory={vi.fn()}
+          onRun={vi.fn()}
+          onStop={vi.fn()}
+          onToggleEnabled={vi.fn()}
+        />
+      </TooltipProvider>,
+    )
+
+    expect(html).not.toContain("供应商")
+    expect(html).not.toContain("模型")
+    expect(html).toContain("上次")
+    expect(html).toContain("范围")
+  })
 })
 
 const projects: SynapseProjectConfig[] = [
