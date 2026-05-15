@@ -34,7 +34,13 @@ function resolveActiveBranchLabel(nodeId: string, branchId: string, definition: 
 
 export function ExecutionOverlay({ nodeResults, runState, runError, definition, viewingNodeId, onViewClose }: ExecutionOverlayProps) {
   const [selected, setSelected] = useState<NodeRunResult | null>(null)
-  const results = Object.values(nodeResults)
+  const nodeOrder = new Map(definition.nodes.map((node, index) => [node.id, index]))
+  const results = Object.values(nodeResults).sort((a, b) => {
+    if (a.startedAt != null && b.startedAt != null && a.startedAt !== b.startedAt) return a.startedAt - b.startedAt
+    if (a.startedAt != null && b.startedAt == null) return -1
+    if (a.startedAt == null && b.startedAt != null) return 1
+    return (nodeOrder.get(a.nodeId) ?? Number.MAX_SAFE_INTEGER) - (nodeOrder.get(b.nodeId) ?? Number.MAX_SAFE_INTEGER)
+  })
 
   if (runState === "idle" && results.length === 0) return null
 

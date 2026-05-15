@@ -34,6 +34,43 @@ afterEach(() => {
 })
 
 describe("ExecutionOverlay", () => {
+  it("renders node results in execution order instead of object insertion order", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <ExecutionOverlay
+          definition={definition([
+            { id: "node-1", name: "Start" },
+            { id: "node-2", name: "Transform" },
+          ])}
+          runState="completed"
+          nodeResults={{
+            "node-2": {
+              nodeId: "node-2",
+              status: "success",
+              input: { variables: {} },
+              startedAt: 200,
+            },
+            "node-1": {
+              nodeId: "node-1",
+              status: "success",
+              input: { variables: {} },
+              startedAt: 100,
+            },
+          }}
+        />,
+      )
+    })
+
+    const start = textElement(container, "Start")
+    const transform = textElement(container, "Transform")
+    expect(start.compareDocumentPosition(transform) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
   it("tracks node detail opens without logging prompt, output, or error text", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -90,7 +127,7 @@ describe("ExecutionOverlay", () => {
   })
 })
 
-function definition(): WorkflowDefinition {
+function definition(nodes: Array<{ id: string; name: string }> = [{ id: "node-1", name: "Transform" }]): WorkflowDefinition {
   return {
     id: "workflow-1",
     name: "Workflow",
@@ -98,15 +135,13 @@ function definition(): WorkflowDefinition {
     createdAt: 0,
     updatedAt: 0,
     params: [],
-    nodes: [
-      {
-        id: "node-1",
-        name: "Transform",
-        type: "prompt",
-        position: { x: 0, y: 0 },
-        config: {},
-      },
-    ],
+    nodes: nodes.map((node) => ({
+      id: node.id,
+      name: node.name,
+      type: "prompt",
+      position: { x: 0, y: 0 },
+      config: {},
+    })),
     edges: [],
   }
 }
