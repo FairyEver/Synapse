@@ -111,21 +111,6 @@ export class SessionManager {
       return input.state.liveSession
     }
 
-    if (input.state.liveSession) {
-      if (input.state.liveSession.alive() && (!providerMatches || !modeMatches)) {
-        this.deps.logger?.info("Recreating agent live session.", {
-          conversationId: input.conversation.id,
-          providerChanged: !providerMatches,
-          modeChanged: !modeMatches,
-          previousProviderId: input.state.providerId,
-          nextProviderId: providerId,
-          previousMode: input.state.modeOverride,
-          nextMode: modeOverride,
-        })
-      }
-      await this.closeLiveSession(input.state, input.conversation.id)
-    }
-
     const cwd = input.message.workspacePath ?? this.deps.workDir
     if (!cwd) {
       throw new Error("Project workspace path is required")
@@ -141,6 +126,22 @@ export class SessionManager {
         env.ANTHROPIC_MODEL = tierModel
       }
     }
+
+    if (input.state.liveSession) {
+      if (input.state.liveSession.alive() && (!providerMatches || !modeMatches)) {
+        this.deps.logger?.info("Recreating agent live session.", {
+          conversationId: input.conversation.id,
+          providerChanged: !providerMatches,
+          modeChanged: !modeMatches,
+          previousProviderId: input.state.providerId,
+          nextProviderId: providerId,
+          previousMode: input.state.modeOverride,
+          nextMode: modeOverride,
+        })
+      }
+      await this.closeLiveSession(input.state, input.conversation.id)
+    }
+
     const sdkSessionId = input.conversation.resumePolicy === "fresh"
       ? undefined
       : input.conversation.sdkSessionId
