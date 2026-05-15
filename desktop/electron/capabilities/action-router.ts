@@ -17,6 +17,7 @@ export type SynapseActionRouter = {
 export type SynapseActionRouterDeps = {
   readonly databaseDispatch: DomainDispatch
   readonly schedulerDispatch: DomainDispatch
+  readonly workflowDispatch: DomainDispatch
 }
 
 export function createSynapseActionRouter(deps: SynapseActionRouterDeps): SynapseActionRouter {
@@ -25,6 +26,7 @@ export function createSynapseActionRouter(deps: SynapseActionRouterDeps): Synaps
       const domainId = getActionDomainId(action)
       if (domainId === "database") return deps.databaseDispatch(action, params, context)
       if (domainId === "scheduler") return deps.schedulerDispatch(action, params, context)
+      if (domainId === "workflow") return deps.workflowDispatch(action, params, context)
       throw new Error(`Unknown action: ${action}`)
     },
   }

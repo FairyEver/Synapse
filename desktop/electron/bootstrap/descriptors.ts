@@ -25,10 +25,12 @@
 
 import { app, safeStorage } from "electron"
 import path from "node:path"
+import { randomUUID } from "node:crypto"
 
 import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter } from "../capabilities/action-router"
+import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
 import { logStore, createMainLogger } from "../services/log-store"
 import { initializeAppIcon } from "../services/app-icon-service"
@@ -93,8 +95,10 @@ import { collectOpsStatus } from "../modules/ops/status"
 import { WorkflowService } from "../services/workflow/workflow-service"
 import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
+import { validateWorkflow } from "../services/workflow/workflow-validator"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
 import type { WorkflowRunStatus } from "../../src/types/workflow"
+import { nodeTypeRegistry } from "../../workflow-nodes/registry"
 import "../../workflow-nodes/register.main"
 
 /**
@@ -190,14 +194,74 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
 export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = {
   id: "core.database",
   criticality: "degraded",
-  dependsOn: ["core.config", "core.event-bus", "core.task-scheduler", "core.action-runtime"],
+  dependsOn: [
+    "core.config",
+    "core.event-bus",
+    "core.task-scheduler",
+    "core.action-runtime",
+    "core.workflow",
+    "core.workflow.snapshots",
+    "core.workflow.run-aborts",
+    "core.workflow.run-statuses",
+    "core.workflow.engine",
+  ],
   async create(ctx) {
     const eventBus = ctx.registry.get<EventBus>("core.event-bus")
     const taskScheduler = ctx.registry.get<TaskSchedulerService>("core.task-scheduler")
     const actionRuntime = ctx.registry.get<MainActionRegistry>("core.action-runtime")
+
+    const workflowService = ctx.registry.get<WorkflowService>("core.workflow")
+    const snapshotService = ctx.registry.get<RunSnapshotService>("core.workflow.snapshots")
+    const runAborts = ctx.registry.get<Map<string, AbortController>>("core.workflow.run-aborts")
+    const runStatuses = ctx.registry.get<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
+    const workflowEngine = ctx.registry.get<WorkflowEngine>("core.workflow.engine")
+
+    const workflowDispatcher = createWorkflowDispatcher({
+      workflowService,
+      snapshotService,
+      nodeTypeRegistry,
+      eventBus,
+      runWorkflow: async (id: string, params: Record<string, unknown>) => {
+        const def = await workflowService.get(id)
+        if (!def) return { errors: [{ type: "invalid_config" as const, message: "Workflow not found" }] }
+        const validation = validateWorkflow(def)
+        if (!validation.valid) return { errors: validation.errors }
+        const runId = randomUUID()
+        const ac = new AbortController()
+        const startedAt = Date.now()
+        runAborts.set(runId, ac)
+        runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt, params, definition: def })
+        const appConfig = await configStore.load()
+        const activeRepo = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
+        const projectId = activeRepo?.uuid
+        workflowEngine.run(def, params, runId, (event) => {
+          const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
+          const nextNodeResults = { ...current.nodeResults }
+          if (event.type === "node:started") {
+            nextNodeResults[event.nodeId] = { ...(nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, input: { variables: {} } }), status: "running", startedAt: event.startedAt ?? Date.now() }
+          } else if (event.type === "node:completed" || event.type === "node:failed" || event.type === "node:skipped") {
+            nextNodeResults[event.nodeId] = event.result ?? nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: "failed", input: { variables: {} } }
+          }
+          runStatuses.set(runId, { ...current, nodeResults: nextNodeResults })
+          eventBus.emit({ domain: "workflow", type: event.type, payload: event, timestamp: new Date().toISOString() }, { backpressure: "block" })
+          if (event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled") {
+            runAborts.delete(runId)
+            const endedAt = Date.now()
+            const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
+            runStatuses.set(runId, { ...current, runId, workflowId: id, status, nodeResults: event.result?.nodeResults ?? nextNodeResults, startedAt, endedAt, durationMs: event.result?.durationMs ?? endedAt - startedAt, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
+            void snapshotService.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params, nodeResults: event.result?.nodeResults ?? nextNodeResults, definition: def })
+          }
+        }, ac.signal, projectId).catch(() => { runAborts.delete(runId) })
+        return { runId }
+      },
+      cancelRun: (runId: string) => { runAborts.get(runId)?.abort(); runAborts.delete(runId) },
+      getRunStatus: async (runId: string) => runStatuses.get(runId) ?? null,
+    })
+
     const actionRouter = createSynapseActionRouter({
       databaseDispatch: dispatchDatabaseAction,
       schedulerDispatch: (action, params) => dispatchSchedulerAction(taskScheduler, actionRuntime, action, params),
+      workflowDispatch: (action, params, context) => workflowDispatcher.dispatch(action, params, context),
     })
     await initDatabase(eventBus, actionRouter)
     return { initialized: true }

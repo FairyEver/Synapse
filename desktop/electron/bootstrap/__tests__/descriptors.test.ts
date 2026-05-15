@@ -114,6 +114,11 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.event-bus",
       "core.task-scheduler",
       "core.action-runtime",
+      "core.workflow",
+      "core.workflow.snapshots",
+      "core.workflow.run-aborts",
+      "core.workflow.run-statuses",
+      "core.workflow.engine",
     ])
     expect(coreDatabaseDescriptor.stop).toBeTypeOf("function")
   })

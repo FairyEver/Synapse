@@ -752,6 +752,11 @@ const synapseBridge: SynapseBridge = {
       subscribe("synapse:events:workflow")((domainEvent) => {
         listener((domainEvent as DomainEvent).payload as WorkflowEvent)
       }),
+    onDefinitionUpdated: createDomainEventPayloadSubscription<{ workflowId: string; source: string; versionHash: string }>(
+      subscribe,
+      "workflow",
+      "workflow:definition-updated",
+    ),
     onRunnerSwitchRun: createRawPayloadSubscription<{ runId: string }>(
       subscribe,
       "synapse:workflow:runner-switch-run",

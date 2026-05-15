@@ -92,6 +92,16 @@ export function WorkflowEditorApp() {
   }, [workflowId, loadDefinition])
 
   useEffect(() => {
+    const unsub = window.synapse?.workflow.onDefinitionUpdated((payload) => {
+      if (payload.workflowId !== workflowId) return
+      if (payload.source !== "mcp") return
+      loadDefinition()
+      toast.info("工作流已被外部更新", { duration: 2000 })
+    })
+    return unsub
+  }, [workflowId, loadDefinition])
+
+  useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (!isDirtyRef.current) return
       e.preventDefault()

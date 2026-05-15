@@ -765,6 +765,7 @@ export type SynapseBridge = {
     editorState: () => Promise<{ openEditors: string[] }>
     checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
     onEvent: (listener: (event: WorkflowEvent) => void) => () => void
+    onDefinitionUpdated: (listener: (payload: { workflowId: string; source: string; versionHash: string }) => void) => () => void
     onRunnerSwitchRun: (listener: (payload: { runId: string }) => void) => () => void
     onEditorRefocus: (listener: (payload: { runId?: string }) => void) => () => void
   }
