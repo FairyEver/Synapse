@@ -31,6 +31,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       const def = await window.synapse?.workflow.get(id)
       if (!def) {
         toast.error("工作流不存在，请刷新列表")
+        void refresh()
         return
       }
       if (def.params.length === 0) {
