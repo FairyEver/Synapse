@@ -69,6 +69,13 @@ describe("validateWorkflow", () => {
     const r = validateWorkflow({ ...base, nodes: [nodeA, nodeB, duplicate, nodeEnd] })
     expect(r.errors.some((e) => e.type === "invalid_config" && e.nodeId === "b")).toBe(true)
   })
+  it("errors on duplicate edge ids", () => {
+    const r = validateWorkflow({
+      ...base,
+      edges: [{ id: "e1", from: "a", to: "b" }, { id: "e1", from: "b", to: "end" }],
+    })
+    expect(r.errors.some((e) => e.type === "invalid_config" && e.edgeId === "e1")).toBe(true)
+  })
 
   // New: End Node enforcement
   it("errors when no end node exists", () => {
