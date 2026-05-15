@@ -1,6 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("electron", () => ({ app: { getPath: () => "/tmp", getAppPath: () => "/tmp" } }))
+const logger = vi.hoisted(() => ({
+  info: vi.fn(),
+}))
+vi.mock("../../electron/services/log-store", () => ({
+  createMainLogger: () => logger,
+}))
 
 import { endNodeExecutor } from "../end/executor.main"
 import type { NodeExecutionInput } from "../types"
@@ -42,5 +48,21 @@ describe("endNodeExecutor", () => {
   it("reports durationMs as 0", async () => {
     const result = await endNodeExecutor.execute(makeInput("test"))
     expect(result.durationMs).toBe(0)
+  })
+
+  it("logs template and output diagnostics without raw content", async () => {
+    const secret = "sk-secret-end-node-output"
+    await endNodeExecutor.execute(makeInput("Hello {{secret}}", { secret }))
+
+    const payload = JSON.stringify(logger.info.mock.calls)
+    expect(payload).not.toContain(secret)
+    expect(payload).not.toContain("Hello")
+    expect(logger.info).toHaveBeenCalledWith("end node executing", expect.objectContaining({
+      templateLength: "Hello {{secret}}".length,
+      variableCount: 1,
+    }))
+    expect(logger.info).toHaveBeenCalledWith("end node succeeded", expect.objectContaining({
+      outputLength: `Hello ${secret}`.length,
+    }))
   })
 })

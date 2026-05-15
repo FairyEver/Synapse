@@ -10,13 +10,13 @@ export const endNodeExecutor: NodeExecutor<EndNodeConfig> = {
     const { config, resolvedVariables, context } = input
     logger.info("end node executing", {
       runId: context.runId,
-      templatePreview: config.template.slice(0, 200),
+      templateLength: config.template.length,
       variableCount: Object.keys(resolvedVariables).length,
     })
     const output = interpolatePrompt(config.template, resolvedVariables)
     logger.info("end node succeeded", {
       runId: context.runId,
-      outputPreview: output.slice(0, 200),
+      outputLength: output.length,
     })
     return { status: "success", output, durationMs: 0 }
   },
