@@ -30,9 +30,7 @@ describe("resolveVariables", () => {
     const allNodeIds = new Set(["other_node"])
     expect(() => resolveVariables(b, {}, {}, undefined, allNodeIds)).toThrow("不存在")
   })
-  it("resolves to empty string when allNodeIds not provided (legacy behavior — no throw)", () => {
-    // Without allNodeIds, the function cannot distinguish skipped from nonexistent.
-    // For backward compat when allNodeIds is omitted, it still throws (broken ref).
+  it("throws on missing node when allNodeIds is not provided", () => {
     const b: VariableBinding[] = [{ name: "x", source: { type: "node_output", node: "missing" } }]
     expect(() => resolveVariables(b, {}, {})).toThrow("不存在")
   })

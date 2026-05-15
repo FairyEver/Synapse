@@ -63,19 +63,6 @@ export function resolveVariables(
   return { resolved, skippedReferences }
 }
 
-/**
- * Legacy wrapper that returns only the resolved map (for backward compat with
- * callers that don't need skipped-reference info). Throws on broken references.
- */
-export function resolveVariablesSimple(
-  bindings: VariableBinding[],
-  paramValues: Record<string, unknown>,
-  nodeOutputs: Record<string, string>,
-  nodeNames?: Record<string, string>,
-): Record<string, string> {
-  const { resolved } = resolveVariables(bindings, paramValues, nodeOutputs, nodeNames)
-  return resolved
-}
 
 export function interpolatePrompt(template: string, vars: Record<string, string>): string {
   // Supports both {{varName}} and {{$varName}} syntax (design spec uses $-prefix)
