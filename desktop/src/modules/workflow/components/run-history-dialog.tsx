@@ -133,7 +133,7 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-muted-foreground truncate">{formatTime(s.startedAt)}</p>
                   {firstError && (
-                    <p className="text-xs text-destructive truncate mt-0.5">{firstError}</p>
+                    <p className="text-xs text-destructive truncate mt-0.5" title={firstError}>{firstError}</p>
                   )}
                 </div>
                 {duration && (

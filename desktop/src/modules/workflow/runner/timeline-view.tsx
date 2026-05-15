@@ -74,7 +74,7 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
             <Badge variant={STATUS_VARIANT[r.status] ?? "outline"} className="text-xs shrink-0">
               {STATUS_LABEL[r.status] ?? r.status}
             </Badge>
-            <span className="text-sm truncate">{nameOf(r.nodeId)}</span>
+            <span className="text-sm truncate" title={nameOf(r.nodeId)}>{nameOf(r.nodeId)}</span>
             {r.status === "running" && r.startedAt && (
               <span className="text-xs text-muted-foreground ml-auto">
                 已运行 {Math.round((Date.now() - r.startedAt) / 1000)}s
@@ -86,7 +86,7 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
               </span>
             )}
             {r.status === "failed" && (r.durationMs != null || r.error) && (
-              <span className="text-xs truncate ml-auto max-w-48">
+              <span className="text-xs truncate ml-auto max-w-48" title={r.error ?? undefined}>
                 {r.durationMs != null && <span className="text-muted-foreground">{r.durationMs < 1000 ? `${r.durationMs}ms` : `${(r.durationMs / 1000).toFixed(1)}s`}</span>}
                 {r.durationMs != null && r.error && <span className="text-muted-foreground mx-1">·</span>}
                 {r.error && <span className="text-destructive">{r.error}</span>}
