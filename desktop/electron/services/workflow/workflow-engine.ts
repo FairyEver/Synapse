@@ -168,10 +168,11 @@ export class WorkflowEngine {
           if (effectiveAbortSignal.aborted) {
             return { nodeId, status: "failed", error: "运行被取消" }
           }
-          const visibleError = err instanceof Error ? err.message : String(err)
+          const diagnostic = errorDiagnostic(err)
+          const visibleError = visibleNodeExceptionError(diagnostic)
           logger.warn("node threw exception", {
             runId, nodeId, nodeName: node.name, nodeType: node.type,
-            ...errorDiagnostic(err),
+            ...diagnostic,
           })
           return { nodeId, status: "failed", error: visibleError }
         }
@@ -305,4 +306,7 @@ export class WorkflowEngine {
     }
     return result
   }
+}
+function visibleNodeExceptionError(diagnostic: { readonly errorLength: number }): string {
+  return `节点执行异常（错误 ${diagnostic.errorLength} 字）`
 }

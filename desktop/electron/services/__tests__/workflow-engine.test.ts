@@ -189,7 +189,7 @@ describe("WorkflowEngine", () => {
     }))
   })
 
-  it("summarizes executor exceptions before emitting workflow failure results", async () => {
+  it("summarizes executor exceptions before storing and emitting workflow failure results", async () => {
     const rawError = "SDK error authorization=Bearer-secret prompt=raw-user-prompt"
     nodeTypeRegistry.register(
       { ...promptNodeManifest, type: "throwing-prompt" },
@@ -216,11 +216,14 @@ describe("WorkflowEngine", () => {
       .run(def, {}, "run-throw", (event) => events.push(event))
 
     const failedEvent = events.find((event) => event.type === "node:failed")
-    expect(result.nodeResults.throwing?.error).toBe(rawError)
+    const summarizedError = `节点执行异常（错误 ${rawError.length} 字）`
+    expect(result.nodeResults.throwing?.error).toBe(summarizedError)
     expect(failedEvent).toEqual(expect.objectContaining({
       type: "node:failed",
-      error: rawError,
+      error: summarizedError,
     }))
+    expect(JSON.stringify(result)).not.toContain(rawError)
+    expect(JSON.stringify(events)).not.toContain(rawError)
     expect(logger.warn).toHaveBeenCalledWith("node threw exception", expect.objectContaining({
       errorName: "Error",
       errorLength: rawError.length,
