@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { createHash, randomUUID } from "node:crypto"
 import type { WorkflowDefinition, WorkflowMeta, ValidationError } from "../../../src/types/workflow"
@@ -94,7 +94,10 @@ export class WorkflowService {
     const versioned: WorkflowDefinition = { ...def, version: versionHash, updatedAt: Date.now() }
     try {
       await mkdir(this.dir(def.id), { recursive: true })
-      await writeFile(path.join(this.dir(def.id), `${versionHash}.json`), JSON.stringify(versioned, null, 2), "utf-8")
+      const target = path.join(this.dir(def.id), `${versionHash}.json`)
+      const tmp = `${target}.tmp`
+      await writeFile(tmp, JSON.stringify(versioned, null, 2), "utf-8")
+      await rename(tmp, target)
     } catch (err) {
       logger.error("workflow save failed — disk write error", {
         boundary: "workflow-service.save",
