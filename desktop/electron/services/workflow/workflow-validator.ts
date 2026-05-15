@@ -137,15 +137,16 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
     }
   }
 
+  const edgeIdsSeen = new Set<string>()
   for (const edge of def.edges) {
     const from = byId.get(edge.from)
     const to = byId.get(edge.to)
-    const duplicateEdgeId = def.edges.some((other) => other !== edge && other.id === edge.id)
-    if (duplicateEdgeId) {
+    if (edgeIdsSeen.has(edge.id)) {
       errors.push({ type: "invalid_config", edgeId: edge.id, message: `连线 ID「${edge.id}」重复，请重新连线后重试` })
       logger.warn("duplicate edge id detected", { workflowId: def.id, edgeId: edge.id })
       break
     }
+    edgeIdsSeen.add(edge.id)
     if (!from || !to) {
       errors.push({ type: "invalid_config", edgeId: edge.id, message: `连线 "${edge.id}" 引用了不存在的节点` })
       continue
