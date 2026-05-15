@@ -397,9 +397,12 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
       requestedNodeIds: nodeIds,
       deletedNodeIds: deletableIds,
     })
+    // Remove edges connected to deleted nodes first so the definition stays
+    // consistent — orphan edges would otherwise trigger validation errors on save.
+    disconnectNodes(deletableIds)
     const changes: NodeChange<WorkflowFlowNode>[] = deletableIds.map((id) => ({ type: "remove", id }))
     handleNodesChange(changes)
-  }, [handleNodesChange])
+  }, [handleNodesChange, disconnectNodes])
 
   const requestRename = useCallback((nodeId: string) => {
     onNodeSelect?.(nodeId)
