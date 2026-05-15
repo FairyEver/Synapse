@@ -2,14 +2,17 @@ import { useRef, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2 } from "lucide-react"
-import { agentDefinitions } from "@/definitions/generated/renderer-registry"
+import { ChevronDown, Plus, Trash2 } from "lucide-react"
+import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
+import type { ModelTier } from "@/types/provider-model"
 import type { WorkflowParam } from "@/types/workflow"
 import type { SwitchNodeConfig, SwitchBranch } from "./schema"
 import { VariableBindingEditor } from "../variable-binding-editor"
 import { PromptEditor } from "../prompt-editor"
 import { CollapsibleSection } from "../collapsible-section"
-import { AgentIcon, getAgentLabel } from "../agent-icon"
+import { useProviderLookup } from "../provider-lookup-context"
+
+const TIER_LABELS: Record<ModelTier, string> = { default: "主模型", haiku: "Haiku", sonnet: "Sonnet", opus: "Opus" }
 
 const NO_DEFAULT = "__none__"
 
@@ -24,7 +27,9 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
   const [prompt, setPrompt] = useState(config.prompt)
   const [branches, setBranches] = useState<SwitchBranch[]>(config.branches)
   const [defaultBranch, setDefaultBranch] = useState<string>(config.defaultBranch ?? NO_DEFAULT)
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false)
   const lastCommittedRef = useRef<SwitchNodeConfig>(config)
+  const { getProviderName, getModelName } = useProviderLookup()
 
   const commit = (overrides?: Partial<SwitchNodeConfig>) => {
     const next: SwitchNodeConfig = {
@@ -67,28 +72,20 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
   return (
     <div className="grid gap-2">
       <CollapsibleSection title="执行配置">
-        <Select value={config.agent} onValueChange={(agent) => commit({ agent })}>
-          <SelectTrigger className="h-7 text-xs">
-            <SelectValue placeholder="选择 Agent">
-              {config.agent ? (
-                <span className="flex items-center gap-2">
-                  <AgentIcon agentId={config.agent} />
-                  {getAgentLabel(config.agent)}
-                </span>
-              ) : null}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {agentDefinitions.map((def) => (
-              <SelectItem key={def.id} value={def.id} className="text-xs">
-                <span className="flex items-center gap-2">
-                  <AgentIcon agentId={def.id} />
-                  {def.label}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Button variant="outline" className="w-full justify-between h-7 text-xs" onClick={() => setProviderDialogOpen(true)}>
+          <span className="truncate">
+            {config.providerId
+              ? `${getProviderName(config.providerId) ?? config.providerId} · ${getModelName(config.providerId, config.modelTier) ?? TIER_LABELS[config.modelTier] ?? config.modelTier}`
+              : "选择供应商 + 模型"}
+          </span>
+          <ChevronDown className="size-3.5 text-muted-foreground" />
+        </Button>
+        <ProviderModelSelectDialog
+          open={providerDialogOpen}
+          onOpenChange={setProviderDialogOpen}
+          defaultSelection={config.providerId ? { providerId: config.providerId, modelTier: config.modelTier } : undefined}
+          onSelect={(s) => commit({ providerId: s.providerId, modelTier: s.modelTier })}
+        />
       </CollapsibleSection>
 
       <CollapsibleSection title="输入映射" summary={varSummary}>
