@@ -159,11 +159,9 @@ export function WorkflowEditorApp() {
     isDirtyRef.current = true
     setDirty(true)
     setRunErrors([])
+    canvasRef.current?.updateNodeName(nodeId, name)
     setDefinition((def) => {
       if (!def) return def
-      const node = def.nodes.find((n) => n.id === nodeId)
-      if (!node) return def
-      canvasRef.current?.updateNodeConfig(nodeId, { ...node.config, name })
       return { ...def, nodes: def.nodes.map((n) => n.id === nodeId ? { ...n, name } : n) }
     })
   }, [])

@@ -37,6 +37,7 @@ type WorkflowFlowEdge = Edge<{ label?: string }, string>
 
 export interface WorkflowCanvasHandle {
   updateNodeConfig: (nodeId: string, config: Record<string, unknown>) => void
+  updateNodeName: (nodeId: string, name: string) => void
   removeEdgesByIds: (edgeIds: string[]) => void
   updateEdgeLabels: (sourceNodeId: string, branches: Array<{ id: string; label: string }>) => void
   deleteNodes: (nodeIds: string[]) => void
@@ -124,6 +125,11 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
         const nextName = (config as { name?: unknown }).name ?? previousName
         return { ...n, data: { ...config, ...(typeof nextName === "string" ? { name: nextName } : {}) } }
       }))
+    },
+    updateNodeName: (nodeId, name) => {
+      setNodes((nds) => nds.map((n) =>
+        n.id !== nodeId ? n : { ...n, data: { ...n.data, name } },
+      ))
     },
     removeEdgesByIds: (edgeIds) => {
       if (edgeIds.length === 0) return
