@@ -152,7 +152,7 @@ export function WorkflowList() {
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4">
         {items.map((meta) => (
           <WorkflowCard key={meta.id} meta={meta}
-            running={runningId === meta.id}
+            running={runningId !== null}
             onOpen={() => void window.synapse?.workflow.openEditor(meta.id)}
             onRun={() => void handleRun(meta.id)}
             onHistory={() => setHistoryWorkflowId(meta.id)}
