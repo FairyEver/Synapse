@@ -23,8 +23,7 @@ function topoSort(def: WorkflowDefinition): { order: string[]; hasCycle: boolean
   return { order, hasCycle: order.length !== def.nodes.length }
 }
 
-function ancestors(nodeId: string, def: WorkflowDefinition): Set<string> {
-  const rev = buildReverseAdj(def)
+function ancestors(nodeId: string, rev: Map<string, string[]>): Set<string> {
   const visited = new Set<string>(); const stack = [nodeId]
   while (stack.length) { for (const p of rev.get(stack.pop()!) ?? []) { if (!visited.has(p)) { visited.add(p); stack.push(p) } } }
   return visited
@@ -35,16 +34,14 @@ function ancestors(nodeId: string, def: WorkflowDefinition): Set<string> {
  * Uses a reverse BFS from the End node (following edges backwards).
  * Used to validate that every Switch branch path eventually reaches End.
  */
-function computeEndReachable(def: WorkflowDefinition): Set<string> {
+function computeEndReachable(def: WorkflowDefinition, rev: Map<string, string[]>): Set<string> {
   const endNode = def.nodes.find((n) => n.type === "end")
   if (!endNode) return new Set()
   const reachable = new Set<string>([endNode.id])
-  const revAdj = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
-  for (const e of def.edges) revAdj.get(e.to)?.push(e.from)
   const queue = [endNode.id]
   while (queue.length) {
     const cur = queue.shift()!
-    for (const prev of revAdj.get(cur) ?? []) {
+    for (const prev of rev.get(cur) ?? []) {
       if (!reachable.has(prev)) { reachable.add(prev); queue.push(prev) }
     }
   }
@@ -77,6 +74,7 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
   if (hasCycle) errors.push({ type: "cycle", message: "工作流包含循环依赖" })
 
   const byId = new Map(def.nodes.map((n) => [n.id, n]))
+  const revAdj = buildReverseAdj(def)
   if (def.nodes.filter((n) => n.type !== "end" && !def.edges.some((e) => e.to === n.id)).length > 1)
     warnings.push({ type: "multiple_start_nodes", message: "存在多个起始节点" })
 
@@ -111,7 +109,7 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
     }
 
     if (!hasCycle) {
-      const anc = ancestors(node.id, def)
+      const anc = ancestors(node.id, revAdj)
       const vars = (node.config as Record<string, unknown>)["variables"]
       for (const v of (Array.isArray(vars) ? vars : []) as Array<Record<string, unknown>>) {
         const src = v["source"] as Record<string, unknown> | undefined
@@ -152,7 +150,7 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
   // Also validate that each Switch branch's outgoing edge(s) eventually reach
   // the End node. A branch that connects to a dead-end subgraph passes the
   // edge-existence check but will fail at runtime with "结束节点未被执行".
-  const endReachable = computeEndReachable(def)
+  const endReachable = computeEndReachable(def, revAdj)
   for (const node of def.nodes) {
     if (node.type !== "switch") continue
     const branches = (node.config as Record<string, unknown>)["branches"]
