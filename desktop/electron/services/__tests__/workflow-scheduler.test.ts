@@ -98,7 +98,7 @@ describe("ReactiveScheduler", () => {
       cb, new AbortController().signal,
     )
     expect(cb.readyOrder).not.toContain("c")
-    expect(results.get("c")?.error).toContain("skipped")
+    expect(results.get("c")?.error).toContain("upstream failed")
   })
 
   it("lets running nodes finish when one fails (no cancel)", async () => {

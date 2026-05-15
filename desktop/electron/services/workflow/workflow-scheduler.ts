@@ -115,7 +115,7 @@ export class ReactiveScheduler {
     }
     for (const id of nodes) {
       if (!results.has(id)) {
-        results.set(id, { nodeId: id, status: "skipped" })
+        results.set(id, { nodeId: id, status: "skipped", ...(failed ? { error: "upstream failed" } : {}) })
       }
     }
     return results
