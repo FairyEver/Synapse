@@ -10,6 +10,7 @@ import { NodeResultPanel } from "./node-result-panel"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { Button } from "@/components/ui/button"
 import { RefreshCw } from "lucide-react"
+import { ProviderLookupProvider } from "../../../../workflow-nodes/provider-lookup-context"
 
 const logger = createRendererLogger("workflow.runner")
 
@@ -268,6 +269,7 @@ export function WorkflowRunnerApp() {
   }
 
   return (
+    <ProviderLookupProvider>
     <div className="flex flex-col h-screen">
       <RunnerToolbar
         definition={definition}
@@ -325,6 +327,7 @@ export function WorkflowRunnerApp() {
         )}
       </ResizablePanelGroup>
     </div>
+    </ProviderLookupProvider>
   )
 }
 

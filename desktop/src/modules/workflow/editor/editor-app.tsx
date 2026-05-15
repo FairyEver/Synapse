@@ -16,6 +16,7 @@ import { WorkflowCanvas, type WorkflowCanvasHandle } from "./canvas"
 import { NodePalette } from "./node-palette"
 import { NodeConfigPanel } from "./node-config-panel"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+import { ProviderLookupProvider } from "../../../../workflow-nodes/provider-lookup-context"
 
 const logger = createRendererLogger("workflow.editor")
 
@@ -320,7 +321,7 @@ export function WorkflowEditorApp() {
   }
 
   return (
-    <>
+    <ProviderLookupProvider>
     <div className="flex flex-col h-screen">
       <WorkflowToolbar definition={definition} saving={saving} running={running} dirty={dirty} onSave={handleSave} onRun={handleRun} onChange={handleDefinitionChange} />
       {runErrors.length > 0 && (
@@ -398,7 +399,7 @@ export function WorkflowEditorApp() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-    </>
+    </ProviderLookupProvider>
   )
 }
 
