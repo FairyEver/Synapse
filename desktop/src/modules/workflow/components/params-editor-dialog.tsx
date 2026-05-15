@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react"
 import type { WorkflowParam } from "@/types/workflow"
 
 type DraftParam = WorkflowParam & { _key: string }
@@ -23,25 +23,50 @@ function fromDraft(d: DraftParam): WorkflowParam {
 interface WorkflowParamCardProps {
   param: WorkflowParam
   index: number
+  total: number
   isDuplicate?: boolean
   onChange: (patch: Partial<WorkflowParam>) => void
   onDelete: () => void
+  onMoveUp: () => void
+  onMoveDown: () => void
 }
 
-function WorkflowParamCard({ param, index, isDuplicate, onChange, onDelete }: WorkflowParamCardProps) {
+function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelete, onMoveUp, onMoveDown }: WorkflowParamCardProps) {
   return (
     <div className={`rounded-lg bg-muted/50 p-3 grid gap-3 ${isDuplicate ? "ring-1 ring-destructive" : ""}`}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">参数 {index + 1}</span>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="h-6 w-6 text-muted-foreground hover:text-destructive"
-          onClick={onDelete}
-        >
-          <Trash2 className="size-3" />
-        </Button>
+        <div className="flex items-center gap-0.5">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 text-muted-foreground"
+            disabled={index === 0}
+            onClick={onMoveUp}
+          >
+            <ChevronUp className="size-3" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 text-muted-foreground"
+            disabled={index === total - 1}
+            onClick={onMoveDown}
+          >
+            <ChevronDown className="size-3" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+            onClick={onDelete}
+          >
+            <Trash2 className="size-3" />
+          </Button>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-1.5">
@@ -160,6 +185,15 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
     setDraft((d) => d.map((p, j) => j === i ? { ...p, ...patch } : p))
   }
 
+  const moveParam = (from: number, to: number) => {
+    setDraft((d) => {
+      const next = [...d]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next
+    })
+  }
+
   const handleSave = () => {
     onChange(draft
       .map((p) => ({ ...fromDraft(p), name: p.name.trim() }))
@@ -181,9 +215,12 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
               key={p._key}
               param={p}
               index={i}
+              total={draft.length}
               isDuplicate={!!p.name.trim() && duplicateNames.has(p.name.trim())}
               onChange={(patch) => updateParam(i, patch)}
               onDelete={() => removeParam(i)}
+              onMoveUp={() => moveParam(i, i - 1)}
+              onMoveDown={() => moveParam(i, i + 1)}
             />
           ))}
           <Button
