@@ -10,7 +10,7 @@ import {
   type Edge,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import type { WorkflowDefinition, NodeRunResult, WorkflowRunStatus } from "@/types/workflow"
+import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
 import { RunnerNodeResultsContext, runnerNodeTypes } from "./runner-node-wrappers"
 import { RunnerEdge } from "./runner-edge"
 
@@ -19,7 +19,6 @@ const edgeTypes = { default: RunnerEdge, branch: RunnerEdge }
 interface DagViewProps {
   definition: WorkflowDefinition
   nodeResults: Record<string, NodeRunResult>
-  runState: WorkflowRunStatus["status"]
   selectedNodeId?: string | null
   onNodeSelect: (nodeId: string | null) => void
 }

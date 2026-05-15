@@ -294,7 +294,6 @@ export function WorkflowRunnerApp() {
             <DagView
               definition={definition}
               nodeResults={nodeResults}
-              runState={runState}
               selectedNodeId={selectedNodeId}
               onNodeSelect={setSelectedNodeId}
             />
