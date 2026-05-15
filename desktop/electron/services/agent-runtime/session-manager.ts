@@ -271,6 +271,7 @@ export class SessionManager {
       const mode = state.modeOverride
       const sdkSessionId = state.liveSession.currentSessionId()
       await this.closeCurrentTurn(conversationId)
+      this.deps.states.delete(conversationId)
       this.deps.logger?.info("Reclaimed idle agent session.", {
         boundary: "agent-runtime.live-session.idle-reclaim",
         conversationId,
