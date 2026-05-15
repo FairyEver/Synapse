@@ -1,5 +1,5 @@
 import { useRef, useState } from "react"
-import { ChevronDown } from "lucide-react"
+import { AlertTriangle, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
 import type { ModelTier } from "@/types/provider-model"
@@ -23,7 +23,8 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
   const [prompt, setPrompt] = useState(config.prompt)
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
   const lastCommittedRef = useRef<PromptNodeConfig>(config)
-  const { getProviderName, getModelName } = useProviderLookup()
+  const { getProviderName, getModelName, isProviderAvailable } = useProviderLookup()
+  const providerUnavailable = Boolean(config.providerId && !isProviderAvailable(config.providerId))
 
   const commit = (overrides?: Partial<PromptNodeConfig>) => {
     const next: PromptNodeConfig = { ...lastCommittedRef.current, prompt, ...overrides }
@@ -37,14 +38,16 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
   return (
     <div className="grid gap-2">
       <CollapsibleSection title="执行配置">
-        <Button variant="outline" className="w-full justify-between h-7 text-xs" onClick={() => setProviderDialogOpen(true)}>
-          <span className="truncate">
+        <Button variant="outline" className={`w-full justify-between h-7 text-xs${providerUnavailable ? " border-destructive" : ""}`} onClick={() => setProviderDialogOpen(true)}>
+          <span className="flex min-w-0 items-center gap-1 truncate">
+            {providerUnavailable && <AlertTriangle className="size-3 shrink-0 text-destructive" />}
             {config.providerId
               ? `${getProviderName(config.providerId) ?? config.providerId} · ${getModelName(config.providerId, config.modelTier) ?? TIER_LABELS[config.modelTier] ?? config.modelTier}`
               : "选择供应商 + 模型"}
           </span>
           <ChevronDown className="size-3.5 text-muted-foreground" />
         </Button>
+        {providerUnavailable && <p className="text-[11px] text-destructive">供应商不可用，请重新选择</p>}
         <ProviderModelSelectDialog
           open={providerDialogOpen}
           onOpenChange={setProviderDialogOpen}

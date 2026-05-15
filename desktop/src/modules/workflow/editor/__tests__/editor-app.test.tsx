@@ -86,6 +86,7 @@ describe("WorkflowEditorApp", () => {
       openRunner: vi.fn(),
       runDefinition: vi.fn(),
       save: vi.fn(),
+      onEditorRefocus: vi.fn(() => vi.fn()),
     }
     Object.defineProperty(window, "synapse", {
       configurable: true,
@@ -126,6 +127,7 @@ describe("WorkflowEditorApp", () => {
       openRunner: vi.fn(),
       runDefinition: vi.fn().mockRejectedValue(new Error(rawError)),
       save: vi.fn().mockResolvedValue({ versionHash: "v2" }),
+      onEditorRefocus: vi.fn(() => vi.fn()),
     }
     Object.defineProperty(window, "synapse", {
       configurable: true,
@@ -173,6 +175,7 @@ describe("WorkflowEditorApp", () => {
         .mockResolvedValueOnce({ conflict: true })
         .mockRejectedValueOnce(new Error(rawError)),
       save: vi.fn().mockResolvedValue({ versionHash: "v2" }),
+      onEditorRefocus: vi.fn(() => vi.fn()),
     }
     Object.defineProperty(window, "synapse", {
       configurable: true,

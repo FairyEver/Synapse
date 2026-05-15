@@ -47,6 +47,7 @@ import {
 import { Textarea } from "@/components/ui/textarea"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { CcSwitchImportDialog } from "./cc-switch-import-dialog"
+import { ProviderDeleteDialog } from "./provider-delete-dialog"
 import { ProviderPresetPickerDialog, type ProviderPresetOption } from "./provider-preset-picker-dialog"
 import type {
   SynapseAgentProvider,
@@ -124,6 +125,7 @@ type ProviderPanelViewProps = {
   readonly onView: (provider: SynapseAgentProvider) => void
   readonly onEdit: (provider: SynapseAgentProvider) => void
   readonly onArchive: (provider: SynapseAgentProvider) => void
+  readonly onDelete: (provider: SynapseAgentProvider) => void
   readonly onSetActive: (provider: SynapseAgentProvider) => void
   readonly onRetry: () => void
 }
@@ -152,6 +154,8 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
   const [providerPresets, setProviderPresets] = useState<SynapseAgentProviderPreset[]>([])
   const [providerPresetsLoading, setProviderPresetsLoading] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [deletingProvider, setDeletingProvider] = useState<SynapseAgentProvider | null>(null)
+  const [archiveConfirm, setArchiveConfirm] = useState<{ provider: SynapseAgentProvider; taskCount: number; workflowNodeCount: number } | null>(null)
   const [formValues, setFormValues] = useState<ProviderFormValues>(() => emptyProviderForm())
   const requestIdRef = useRef(0)
   const loadingRequestIdRef = useRef(0)
@@ -291,9 +295,13 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
 
   const handleArchive = useCallback(async (provider: SynapseAgentProvider) => {
     try {
-      await requireSynapseBridge().agent.archiveProvider({
-        providerId: provider.id,
-      })
+      const scan = await requireSynapseBridge().agent.scanProviderReferences({ providerId: provider.id })
+      const total = scan.taskCount + scan.workflowNodeCount
+      if (total > 0) {
+        setArchiveConfirm({ provider, taskCount: scan.taskCount, workflowNodeCount: scan.workflowNodeCount })
+        return
+      }
+      await requireSynapseBridge().agent.archiveProvider({ providerId: provider.id })
       await refresh()
       toast("Provider 已归档")
     } catch (rawError) {
@@ -306,6 +314,25 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
       toast("归档失败")
     }
   }, [refresh])
+
+  const confirmArchive = useCallback(async () => {
+    if (!archiveConfirm) return
+    try {
+      await requireSynapseBridge().agent.archiveProvider({ providerId: archiveConfirm.provider.id })
+      await refresh()
+      toast("Provider 已归档")
+    } catch (rawError) {
+      logger.error("Provider archive failed.", {
+        boundary: "settings.providers.archive",
+        action: "archiveProvider",
+        providerId: archiveConfirm.provider.id,
+        ...providerErrorDiagnostic(rawError),
+      })
+      toast("归档失败")
+    } finally {
+      setArchiveConfirm(null)
+    }
+  }, [archiveConfirm, refresh])
 
   const handleSetActive = useCallback(async (provider: SynapseAgentProvider) => {
     try {
@@ -336,6 +363,7 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
         onView={setDetailProvider}
         onEdit={openEditDialog}
         onArchive={handleArchive}
+        onDelete={setDeletingProvider}
         onSetActive={handleSetActive}
         onRetry={refresh}
       />
@@ -363,6 +391,25 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
           if (!open) setDetailProvider(null)
         }}
       />
+      <ProviderDeleteDialog
+        provider={deletingProvider}
+        onOpenChange={(open) => { if (!open) setDeletingProvider(null) }}
+        onDeleted={() => void refresh()}
+      />
+      <AlertDialog open={Boolean(archiveConfirm)} onOpenChange={(open) => { if (!open) setArchiveConfirm(null) }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>归档供应商 &ldquo;{archiveConfirm?.provider.name}&rdquo;</AlertDialogTitle>
+            <AlertDialogDescription>
+              该供应商被 {archiveConfirm?.taskCount ?? 0} 个定时任务和 {archiveConfirm?.workflowNodeCount ?? 0} 个工作流节点引用。归档后这些内容仍可正常执行，但无法在选择列表中看到该供应商。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={() => void confirmArchive()}>确认归档</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </>
   )
 }
@@ -376,6 +423,7 @@ function ProviderPanelView({
   onView,
   onEdit,
   onArchive,
+  onDelete,
   onSetActive,
   onRetry,
 }: ProviderPanelViewProps) {
@@ -452,6 +500,7 @@ function ProviderPanelView({
                       provider={provider}
                       onEdit={onEdit}
                       onArchive={onArchive}
+                      onDelete={onDelete}
                       onSetActive={onSetActive}
                     />
                   </TableCell>
@@ -544,11 +593,13 @@ function ProviderRowActions({
   provider,
   onEdit,
   onArchive,
+  onDelete,
   onSetActive,
 }: {
   readonly provider: SynapseAgentProvider
   readonly onEdit: (provider: SynapseAgentProvider) => void
   readonly onArchive: (provider: SynapseAgentProvider) => void
+  readonly onDelete: (provider: SynapseAgentProvider) => void
   readonly onSetActive: (provider: SynapseAgentProvider) => void
 }) {
   if (provider.readonly) return null
@@ -560,6 +611,7 @@ function ProviderRowActions({
         <ProviderTextAction onClick={() => onSetActive(provider)}>设为默认</ProviderTextAction>
       )}
       <ProviderTextAction onClick={() => onArchive(provider)}>归档</ProviderTextAction>
+      <ProviderTextAction onClick={() => onDelete(provider)}>删除</ProviderTextAction>
     </div>
   )
 }

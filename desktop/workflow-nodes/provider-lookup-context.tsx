@@ -5,11 +5,13 @@ import type { ModelTier } from "@/types/provider-model"
 type ProviderLookup = {
   getProviderName: (providerId: string) => string | undefined
   getModelName: (providerId: string, modelTier: ModelTier) => string | undefined
+  isProviderAvailable: (providerId: string) => boolean
 }
 
 const defaultLookup: ProviderLookup = {
   getProviderName: () => undefined,
   getModelName: () => undefined,
+  isProviderAvailable: () => true,
 }
 
 const ProviderLookupContext = createContext<ProviderLookup>(defaultLookup)
@@ -45,6 +47,10 @@ function ProviderLookupProvider({ children }: { children: ReactNode }) {
     getModelName: (providerId, modelTier) => {
       const provider = providers.find((p) => p.id === providerId)
       return provider ? tierModelValue(provider, modelTier) : undefined
+    },
+    isProviderAvailable: (providerId) => {
+      const provider = providers.find((p) => p.id === providerId)
+      return provider != null && !provider.archived
     },
   }
 

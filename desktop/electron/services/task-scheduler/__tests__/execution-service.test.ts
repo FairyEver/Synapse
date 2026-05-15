@@ -239,6 +239,22 @@ describe("TaskSchedulerExecutionService", () => {
     expect(JSON.stringify(run)).not.toContain("prompt")
   })
 
+  it("passes task configVersion through action context", async () => {
+    let observedContext: { configVersion?: number } | undefined
+    const spyAction: MainActionDefinition<TestActionConfig> = {
+      ...testAction,
+      execute: async ({ context }) => {
+        observedContext = context
+        return { status: "success", summary: "ok" }
+      },
+    }
+    const harness = await createExecutionHarness({ action: spyAction })
+
+    await harness.service.runTask(harness.task, "manual")
+
+    expect(observedContext?.configVersion).toBe(0)
+  })
+
   it("keeps stopped runs cancelled when an action resolves successfully after abort", async () => {
     const logger = { info: vi.fn(), warn: vi.fn() }
     let releaseAction: (() => void) | undefined

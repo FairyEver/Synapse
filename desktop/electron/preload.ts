@@ -137,6 +137,10 @@ const IPC_CHANNELS = {
     "chooseCcSwitchClaudeImportSource": "synapse:agent:choose-cc-switch-claude-import-source",
     "updateProvider": "synapse:agent:update-provider",
     "archiveProvider": "synapse:agent:archive-provider",
+    "deleteProvider": "synapse:agent:delete-provider",
+    "listAllProviders": "synapse:agent:list-all-providers",
+    "scanProviderReferences": "synapse:agent:scan-provider-references",
+    "migrateProviderReferences": "synapse:agent:migrate-provider-references",
     "setActiveProvider": "synapse:agent:set-active-provider",
     "getRuntimeStatus": "synapse:agent:get-runtime-status",
     "listCommands": "synapse:agent:list-commands",
@@ -660,6 +664,10 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS.agent.chooseCcSwitchClaudeImportSource)({}),
     updateProvider: (args) => invoke(IPC_CHANNELS.agent.updateProvider)(args),
     archiveProvider: (args) => invoke(IPC_CHANNELS.agent.archiveProvider)(args),
+    deleteProvider: (args) => invoke(IPC_CHANNELS.agent.deleteProvider)(args),
+    listAllProviders: () => invoke(IPC_CHANNELS.agent.listAllProviders)({}),
+    scanProviderReferences: (args) => invoke(IPC_CHANNELS.agent.scanProviderReferences)(args),
+    migrateProviderReferences: (args) => invoke(IPC_CHANNELS.agent.migrateProviderReferences)(args),
     setActiveProvider: (args) => invoke(IPC_CHANNELS.agent.setActiveProvider)(args),
     getRuntimeStatus: invoke(IPC_CHANNELS.agent.getRuntimeStatus),
     listCommands: (projectId) => invoke(IPC_CHANNELS.agent.listCommands)({ projectId }),
@@ -747,6 +755,10 @@ const synapseBridge: SynapseBridge = {
     onRunnerSwitchRun: createRawPayloadSubscription<{ runId: string }>(
       subscribe,
       "synapse:workflow:runner-switch-run",
+    ),
+    onEditorRefocus: createRawPayloadSubscription<{ runId?: string }>(
+      subscribe,
+      "synapse:workflow:editor-refocus",
     ),
   },
   tokenUsage: {

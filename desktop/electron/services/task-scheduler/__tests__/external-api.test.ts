@@ -25,6 +25,7 @@ const baseTask: ScheduledTaskEntry = {
   updatedAt: "2026-05-02T00:00:00.000Z",
   nextRunAt: "2026-05-02T00:30:00.000Z",
   runCount: 0,
+  configVersion: 0,
 }
 
 const baseRun: ScheduledTaskRunEntry = {

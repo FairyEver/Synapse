@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -33,15 +33,16 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const loadGenRef = useRef(0)
   const load = useCallback(() => {
     if (!workflowId) return
-    let cancelled = false
+    const gen = ++loadGenRef.current
     setLoading(true)
     setError(null)
     void (async () => {
       try {
         const data = await window.synapse?.workflow.runHistory(workflowId)
-        if (cancelled) return
+        if (gen !== loadGenRef.current) return
         if (!data) {
           // IPC bridge unavailable — treat as error, not empty
           setError("无法连接到主进程，请稍后重试")
@@ -49,7 +50,7 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
         }
         setSnapshots(data)
       } catch (err) {
-        if (cancelled) return
+        if (gen !== loadGenRef.current) return
         logger.warn("Workflow run history load failed.", {
           boundary: "renderer.workflow.run-history.load",
           workflowId,
@@ -57,15 +58,15 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
         })
         setError("加载失败，请重试")
       } finally {
-        if (!cancelled) setLoading(false)
+        if (gen === loadGenRef.current) setLoading(false)
       }
     })()
-    return () => { cancelled = true }
   }, [workflowId])
 
   useEffect(() => {
     if (!open || !workflowId) return
-    return load()
+    load()
+    return () => { loadGenRef.current++ }
   }, [open, workflowId, load])
 
   const formatTime = (ts: number) => {
@@ -115,7 +116,10 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
           <p className="text-sm text-muted-foreground py-4">暂无运行记录。</p>
         ) : (
           <div className="space-y-2 max-h-[60vh] overflow-auto">
-            {snapshots.map((s) => (
+            {snapshots.map((s) => {
+              const firstError = getFirstError(s)
+              const duration = formatDuration(s.startedAt, s.endedAt)
+              return (
               <div
                 key={s.runId}
                 className="flex items-center gap-3 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors"
@@ -126,13 +130,13 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
                 </Badge>
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-muted-foreground truncate">{formatTime(s.startedAt)}</p>
-                  {getFirstError(s) && (
-                    <p className="text-xs text-destructive truncate mt-0.5">{getFirstError(s)}</p>
+                  {firstError && (
+                    <p className="text-xs text-destructive truncate mt-0.5">{firstError}</p>
                   )}
                 </div>
-                {formatDuration(s.startedAt, s.endedAt) && (
+                {duration && (
                   <span className="text-xs text-muted-foreground shrink-0">
-                    {formatDuration(s.startedAt, s.endedAt)}
+                    {duration}
                   </span>
                 )}
                 <span className="text-xs text-muted-foreground shrink-0">
@@ -142,7 +146,8 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
                   查看
                 </Button>
               </div>
-            ))}
+              )
+            })}
           </div>
         )}
       </DialogContent>

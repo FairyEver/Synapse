@@ -6,7 +6,7 @@ import { z } from "zod"
 
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
-import type { DataRepository } from "../../runtime/data-repo"
+import type { DataRepository, ConversationEntryV1 } from "../../runtime/data-repo"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { resolveLocalReference } from "../../services/agent-runtime/references"
 import type {
@@ -21,6 +21,11 @@ import type {
   UpdateProviderInput,
 } from "../../services/provider"
 import { createProviderServiceFromDataRepository, PROVIDER_SERVICE_ID } from "../../services/provider"
+import { ProviderReferenceScanner } from "../../services/provider/provider-reference-scanner"
+import type { ProviderReferenceScannerDeps } from "../../services/provider/provider-reference-scanner"
+import type { TaskSchedulerService } from "../../services/task-scheduler/task-scheduler-service"
+import type { WorkflowService } from "../../services/workflow/workflow-service"
+import type { WorkflowDefinition } from "../../../src/types/workflow"
 import { createMainLogger } from "../../services/log-store"
 import { resolveProjectAgent } from "./ipc-shared"
 
@@ -480,6 +485,80 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
       return { ok: true }
     },
   },
+  deleteProvider: {
+    kind: "invoke",
+    channel: "synapse:agent:delete-provider",
+    request: providerIdRequestSchema,
+    response: okResultSchema,
+    handler: async (ctx, request: ProviderIdRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      await providerService.deleteProvider(request.providerId)
+      return { ok: true }
+    },
+  },
+  listAllProviders: {
+    kind: "invoke",
+    channel: "synapse:agent:list-all-providers",
+    request: providerRequestSchema,
+    response: z.array(publicProviderSchema),
+    handler: async (ctx, _request: ProviderRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      return (await providerService.listAllProviders()).map(publicProvider)
+    },
+  },
+  scanProviderReferences: {
+    kind: "invoke",
+    channel: "synapse:agent:scan-provider-references",
+    request: providerIdRequestSchema,
+    response: z.object({
+      providerId: z.string(),
+      references: z.array(z.object({
+        kind: z.enum(["scheduled-task", "workflow-node", "conversation"]),
+        entityId: z.string(),
+        entityName: z.string(),
+        nodeId: z.string().optional(),
+        nodeName: z.string().optional(),
+        providerId: z.string(),
+        modelTier: z.string(),
+      })),
+      taskCount: z.number(),
+      workflowNodeCount: z.number(),
+      conversationCount: z.number(),
+    }),
+    handler: async (ctx, request: ProviderIdRequest) => {
+      const scanner = new ProviderReferenceScanner(buildScannerDeps(ctx.resolve))
+      return scanner.scan(request.providerId)
+    },
+  },
+  migrateProviderReferences: {
+    kind: "invoke",
+    channel: "synapse:agent:migrate-provider-references",
+    request: z.object({
+      sourceProviderId: z.string().min(1),
+      targetProviderId: z.string().min(1),
+      targetModelTier: z.string().min(1),
+      scope: z.array(z.enum(["scheduled-task", "workflow-node"])),
+    }),
+    response: z.object({
+      migratedTasks: z.number(),
+      migratedWorkflowNodes: z.number(),
+      errors: z.array(z.object({ entityId: z.string(), error: z.string() })),
+    }),
+    handler: async (ctx, request: {
+      sourceProviderId: string
+      targetProviderId: string
+      targetModelTier: string
+      scope: ("scheduled-task" | "workflow-node")[]
+    }) => {
+      const scanner = new ProviderReferenceScanner(buildScannerDeps(ctx.resolve))
+      return scanner.migrate({
+        sourceProviderId: request.sourceProviderId,
+        targetProviderId: request.targetProviderId,
+        targetModelTier: request.targetModelTier as "default" | "haiku" | "sonnet" | "opus",
+        scope: request.scope,
+      })
+    },
+  },
   setActiveProvider: {
     kind: "invoke",
     channel: "synapse:agent:set-active-provider",
@@ -646,5 +725,66 @@ function shellOpenErrorMetadata(error: unknown): { readonly errorName: string; r
   return {
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
+  }
+}
+
+function buildScannerDeps(resolve: <T>(id: string) => T): ProviderReferenceScannerDeps {
+  return {
+    listTasks: async () => {
+      const scheduler = resolve<TaskSchedulerService>("core.task-scheduler")
+      const tasks = await scheduler.schedulerTaskList()
+      return tasks.map((t) => ({ id: t.id, name: t.name, action: t.action }))
+    },
+    updateTaskAction: async (id, action) => {
+      const scheduler = resolve<TaskSchedulerService>("core.task-scheduler")
+      await scheduler.schedulerTaskUpdate(id, { action })
+    },
+    listWorkflowNodes: async () => {
+      const workflowService = resolve<WorkflowService>("core.workflow")
+      const metas = await workflowService.list()
+      const nodes: Array<{
+        workflowId: string; workflowName: string
+        nodeId: string; nodeName: string
+        providerId: string; modelTier: string
+      }> = []
+      for (const meta of metas) {
+        const def = await workflowService.get(meta.id) as WorkflowDefinition | null
+        if (!def) continue
+        for (const node of def.nodes) {
+          const config = node.config as Record<string, unknown>
+          if (typeof config.providerId === "string" && config.providerId) {
+            nodes.push({
+              workflowId: def.id,
+              workflowName: def.name,
+              nodeId: node.id,
+              nodeName: node.name,
+              providerId: config.providerId,
+              modelTier: typeof config.modelTier === "string" ? config.modelTier : "default",
+            })
+          }
+        }
+      }
+      return nodes
+    },
+    updateWorkflowNodeProvider: async (workflowId, nodeId, providerId, modelTier) => {
+      const workflowService = resolve<WorkflowService>("core.workflow")
+      const def = await workflowService.get(workflowId) as WorkflowDefinition | null
+      if (!def) throw new Error(`Workflow not found: ${workflowId}`)
+      const updatedNodes = def.nodes.map((node) => {
+        if (node.id !== nodeId) return node
+        return { ...node, config: { ...node.config, providerId, modelTier } }
+      })
+      await workflowService.save({ ...def, nodes: updatedNodes })
+    },
+    listConversations: async () => {
+      const dataRepo = resolve<DataRepository>("core.data-repository")
+      const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
+      const all = await conversations.list()
+      return all.map((c) => ({
+        id: c.id,
+        name: c.name ?? c.id,
+        providerId: c.providerId,
+      }))
+    },
   }
 }

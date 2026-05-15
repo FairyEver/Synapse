@@ -28,6 +28,7 @@ const createSessionRequestSchema = projectRequestSchema.extend({
   agentType: z.string().default("claude-code"),
   providerId: z.string().min(1).optional(),
   mode: permissionModeSchema.optional(),
+  modelTier: z.string().optional(),
 })
 
 const switchSessionRequestSchema = projectRequestSchema.extend({
@@ -137,6 +138,7 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
         name: request.name?.trim() || undefined,
         agentType,
         providerId: request.providerId,
+        modelTier: request.modelTier,
         ...(mode ? { mode } : undefined),
       }
       try {

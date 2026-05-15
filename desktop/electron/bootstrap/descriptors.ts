@@ -884,7 +884,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
   create(ctx) {
     const registry = ctx.registry
     const engineLogger = createMainLogger("service.workflow.engine.agent-deps")
-    const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({ agent, prompt, abortSignal }) => {
+    const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({ providerId, modelTier, prompt, abortSignal }) => {
       try {
         const config = await configStore.load()
         const activeRepo = config.repositories.find((r) => r.uuid === config.activeRepoUuid) ?? config.repositories[0]
@@ -893,7 +893,8 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
         const container = await containers.open(projectId, { name: "", workspacePath: activeRepo?.localPath ?? "" })
         const agentRuntime = container.get<import("../services/agent-runtime").AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
         const result = await agentRuntime.sendScheduled({
-          projectId, agentType: agent, mode: "default", prompt,
+          projectId, agentType: "claude-code", mode: "default", prompt,
+          providerId, modelTier,
           sessionPolicy: "fresh", timeoutMs: 120_000, abortSignal,
         })
         return { status: result.status === "success" ? "success" : "failed", response: result.summary ?? "", error: result.error, durationMs: result.durationMs }
@@ -901,7 +902,8 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
         const diagnostic = workflowAgentErrorDiagnostic(err)
         engineLogger.error("engine agent call failed (infrastructure)", {
           boundary: "workflow-engine.agent-deps",
-          agent,
+          providerId,
+          modelTier,
           ...diagnostic,
         })
         return { status: "failed", response: "", error: workflowAgentFailureMessage(diagnostic), durationMs: 0 }

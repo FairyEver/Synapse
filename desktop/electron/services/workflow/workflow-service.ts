@@ -7,6 +7,8 @@ import { createMainLogger } from "../log-store"
 
 const logger = createMainLogger("service.workflow")
 
+const MAX_VERSIONS = 10
+
 export interface WorkflowSaveResult { versionHash: string }
 export interface WorkflowSaveError { errors: ValidationError[] }
 
@@ -40,9 +42,9 @@ export class WorkflowService {
       })
       return []
     }
+    const defs = await Promise.all(ids.map((id) => this.get(id)))
     const metas: WorkflowMeta[] = []
-    for (const id of ids) {
-      const def = await this.get(id)
+    for (const def of defs) {
       if (def) metas.push({ id: def.id, name: def.name, description: def.description, version: def.version, nodeCount: def.nodes.length, createdAt: def.createdAt, updatedAt: def.updatedAt })
     }
     logger.info("workflow list loaded", { count: metas.length })
@@ -102,6 +104,21 @@ export class WorkflowService {
       return { errors: [{ type: "invalid_config", message: "保存失败：磁盘空间不足或权限不足，请检查后重试" }] }
     }
     logger.info("workflow saved", { id: def.id, name: def.name, nodeCount: def.nodes.length, versionHash })
+    // Prune old version files to prevent unbounded disk growth
+    try {
+      const allFiles = await readdir(this.dir(def.id))
+      const versionFiles = allFiles.filter((f) => f.startsWith("v_") && f.endsWith(".json")).sort()
+      if (versionFiles.length > MAX_VERSIONS) {
+        const stale = versionFiles.slice(0, versionFiles.length - MAX_VERSIONS)
+        await Promise.all(stale.map((f) => rm(path.join(this.dir(def.id), f), { force: true })))
+        logger.info("workflow version files pruned", { id: def.id, pruned: stale.length, remaining: MAX_VERSIONS })
+      }
+    } catch (err) {
+      logger.warn("workflow version pruning failed (non-critical)", {
+        id: def.id,
+        ...errorLogMeta(err),
+      })
+    }
     return { versionHash }
   }
 

@@ -96,6 +96,17 @@ export class ProviderService {
     ]
   }
 
+  async listAllProviders(): Promise<readonly CCProvider[]> {
+    const providers = (await this.providers.list({ scope: "global", kind: PROVIDER_KIND } as Partial<ProviderEntryV1>))
+      .map(toProvider)
+      .sort((a, b) => (a.sortIndex ?? 0) - (b.sortIndex ?? 0))
+    const hasActiveUserProvider = providers.some((p) => p.active && !p.archived)
+    return [
+      await this.localClaudeCodeProvider(!hasActiveUserProvider),
+      ...providers,
+    ]
+  }
+
   async listProviderPresets(): Promise<readonly CCProviderPreset[]> {
     return listClaudeProviderPresets().map(publicPreset)
   }
@@ -259,6 +270,25 @@ export class ProviderService {
     return updated
   }
 
+  async deleteProvider(id: string): Promise<void> {
+    if (id === LOCAL_PROVIDER_ID) {
+      throw new Error("The local Claude Code provider cannot be deleted.")
+    }
+    const provider = await this.getProvider(id)
+    if (provider.active) {
+      await this.clearActiveUserProvider()
+    }
+    if (provider.secretRef) {
+      await this.secretStore.deleteSecret(provider.secretRef)
+    }
+    if (provider.secretEnvRefs) {
+      for (const secretRef of Object.values(provider.secretEnvRefs)) {
+        await this.secretStore.deleteSecret(secretRef)
+      }
+    }
+    await this.providers.remove(id)
+  }
+
   async archiveProvider(id: string): Promise<void> {
     if (id === LOCAL_PROVIDER_ID) {
       throw new Error("The local Claude Code provider cannot be archived.")
@@ -336,6 +366,25 @@ export class ProviderService {
       ...provider.env,
       ...secretEnv,
     })
+  }
+
+  async buildEnvSafe(
+    providerId: string,
+    context: BuildProviderEnvContext = {},
+  ): Promise<
+    | { ok: true; env: Record<string, string> }
+    | { ok: false; reason: "not_found" | "secret_error"; message: string }
+  > {
+    try {
+      const env = await this.buildEnv(providerId, context)
+      return { ok: true, env }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (message.includes("not found")) {
+        return { ok: false, reason: "not_found", message: "供应商已删除或不可用" }
+      }
+      return { ok: false, reason: "secret_error", message: "供应商密钥读取失败" }
+    }
   }
 
   private async readSecretValue(

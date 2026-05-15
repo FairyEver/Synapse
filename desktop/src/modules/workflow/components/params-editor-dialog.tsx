@@ -9,6 +9,15 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Trash2 } from "lucide-react"
 import type { WorkflowParam } from "@/types/workflow"
 
+type DraftParam = WorkflowParam & { _key: string }
+function toDraft(p: WorkflowParam): DraftParam {
+  return { ...p, _key: crypto.randomUUID() }
+}
+function fromDraft(d: DraftParam): WorkflowParam {
+  const { _key, ...rest } = d
+  return rest
+}
+
 // ─── WorkflowParamCard ────────────────────────────────────────────────────────
 
 interface WorkflowParamCardProps {
@@ -103,14 +112,14 @@ function paramsEqual(a: WorkflowParam[], b: WorkflowParam[]): boolean {
 }
 
 export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEditorDialogProps) {
-  const [draft, setDraft] = useState<WorkflowParam[]>(params)
+  const [draft, setDraft] = useState<DraftParam[]>(() => params.map(toDraft))
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
 
   useEffect(() => {
-    if (open) setDraft(params)
+    if (open) setDraft(params.map(toDraft))
   }, [open, params])
 
-  const isDirty = useMemo(() => !paramsEqual(draft, params), [draft, params])
+  const isDirty = useMemo(() => !paramsEqual(draft.map(fromDraft), params), [draft, params])
 
   // Compute duplicate param names for real-time feedback
   const duplicateNames = useMemo(() => {
@@ -140,7 +149,7 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
   }
 
   const addParam = () => {
-    setDraft((d) => [...d, { name: "", type: "text", default: null }])
+    setDraft((d) => [...d, toDraft({ name: "", type: "text", default: null })])
   }
 
   const removeParam = (i: number) => {
@@ -153,7 +162,7 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
 
   const handleSave = () => {
     onChange(draft
-      .map((p) => ({ ...p, name: p.name.trim() }))
+      .map((p) => ({ ...fromDraft(p), name: p.name.trim() }))
       .filter((p) => p.name !== ""))
     onClose()
   }
@@ -169,7 +178,7 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
           )}
           {draft.map((p, i) => (
             <WorkflowParamCard
-              key={i}
+              key={p._key}
               param={p}
               index={i}
               isDuplicate={!!p.name.trim() && duplicateNames.has(p.name.trim())}

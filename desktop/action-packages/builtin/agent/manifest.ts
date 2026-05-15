@@ -9,6 +9,8 @@ export const agentActionManifest = {
   defaultConfig: {
     projectId: "",
     agentType: "claude-code",
+    providerId: "",
+    modelTier: "sonnet",
     mode: "bypassPermissions",
     prompt: "",
     sessionPolicy: "fresh",
@@ -28,6 +30,20 @@ export const agentActionManifest = {
       description: "Agent type to use.",
       choices: ["claude-code"],
       defaultValue: "claude-code",
+    },
+    {
+      name: "providerId",
+      kind: "string",
+      required: true,
+      description: "Provider ID.",
+    },
+    {
+      name: "modelTier",
+      kind: "enum",
+      required: true,
+      description: "Model tier.",
+      choices: ["default", "haiku", "sonnet", "opus"],
+      defaultValue: "sonnet",
     },
     {
       name: "mode",

@@ -44,6 +44,7 @@ type UseAgentChatState = {
     projectId: string,
     providerId?: string,
     mode?: SynapseAgentPermissionMode,
+    modelTier?: string,
   ) => Promise<void>
   selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
   deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>

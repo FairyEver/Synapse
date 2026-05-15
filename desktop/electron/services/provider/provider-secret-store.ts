@@ -36,6 +36,10 @@ export class ProviderSecretStore {
     if (!secret) return undefined
     return typeof secret.value === "string" ? secret.value : undefined
   }
+
+  async deleteSecret(secretRef: string): Promise<void> {
+    await this.secrets.remove(secretRef)
+  }
 }
 
 export function providerApiKeySecretId(providerId: string): string {

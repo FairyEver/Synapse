@@ -38,7 +38,7 @@ export function useWorkflowRun(workflowId: string, initialRunId?: string | null)
       }
     })()
     return () => { cancelled = true }
-  }, [initialRunId])
+  }, [initialRunId, workflowId])
 
   const attachRun = useCallback((nextRunId: string) => {
     logger.info("attaching to run", { workflowId, runId: nextRunId })

@@ -568,6 +568,7 @@ export type SynapseBridge = {
         agentType?: string
         providerId?: string
         mode?: SynapseAgentPermissionMode
+        modelTier?: string
       },
     ) => Promise<SynapseAgentSessionSummary>
     switchSession: (
@@ -628,6 +629,39 @@ export type SynapseBridge = {
     archiveProvider: (
       args: { providerId: string },
     ) => Promise<{ ok: true }>
+    deleteProvider: (
+      args: { providerId: string },
+    ) => Promise<{ ok: true }>
+    listAllProviders: () => Promise<SynapseAgentProvider[]>
+    scanProviderReferences: (
+      args: { providerId: string },
+    ) => Promise<{
+      providerId: string
+      references: Array<{
+        kind: "scheduled-task" | "workflow-node" | "conversation"
+        entityId: string
+        entityName: string
+        nodeId?: string
+        nodeName?: string
+        providerId: string
+        modelTier: string
+      }>
+      taskCount: number
+      workflowNodeCount: number
+      conversationCount: number
+    }>
+    migrateProviderReferences: (
+      args: {
+        sourceProviderId: string
+        targetProviderId: string
+        targetModelTier: string
+        scope: ("scheduled-task" | "workflow-node")[]
+      },
+    ) => Promise<{
+      migratedTasks: number
+      migratedWorkflowNodes: number
+      errors: Array<{ entityId: string; error: string }>
+    }>
     setActiveProvider: (
       args: { providerId: string },
     ) => Promise<{ ok: true }>
@@ -732,6 +766,7 @@ export type SynapseBridge = {
     checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
     onEvent: (listener: (event: WorkflowEvent) => void) => () => void
     onRunnerSwitchRun: (listener: (payload: { runId: string }) => void) => () => void
+    onEditorRefocus: (listener: (payload: { runId?: string }) => void) => () => void
   }
   tokenUsage: {
     scan: () => Promise<{

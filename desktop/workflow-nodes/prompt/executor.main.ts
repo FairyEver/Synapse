@@ -13,17 +13,17 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
 
     input.onProgress?.("calling_model", "调用模型…")
     logger.info("prompt node executing", {
-      projectId: input.context.projectId, runId: input.context.runId, agent: input.config.agent,
+      projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
       promptLength: prompt.length,
     })
 
     input.onProgress?.("awaiting_response", "等待响应…")
-    const result = await input.agentDeps.sendToAgent({ agent: input.config.agent, prompt, abortSignal: input.context.abortSignal })
+    const result = await input.agentDeps.sendToAgent({ providerId: input.config.providerId, modelTier: input.config.modelTier, prompt, abortSignal: input.context.abortSignal })
     const durationMs = Date.now() - start
 
     if (result.status === "failed") {
       logger.warn("prompt node agent call failed", {
-        projectId: input.context.projectId, runId: input.context.runId, agent: input.config.agent,
+        projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
         ...agentErrorDiagnostic(result.error),
         durationMs,
       })
@@ -32,7 +32,7 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
 
     input.onProgress?.("processing_output", "处理输出…")
     logger.info("prompt node succeeded", {
-      projectId: input.context.projectId, runId: input.context.runId, agent: input.config.agent,
+      projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
       outputLength: result.response.length, durationMs,
     })
     return { status: "success", output: result.response, durationMs }
@@ -47,5 +47,5 @@ function agentErrorDiagnostic(error: string | undefined): { readonly errorName: 
 }
 
 function agentFailureMessage(error: string | undefined): string {
-  return `Agent 调用失败（错误 ${error?.length ?? 0} 字）`
+  return error || "Agent 调用失败"
 }

@@ -314,6 +314,7 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
   agentConfig?: {
     model?: string
     mode?: string
+    modelTier?: string
     env?: Record<string, string>
   }
   resumePolicy?: ConversationResumePolicyV1

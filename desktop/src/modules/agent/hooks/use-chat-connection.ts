@@ -52,6 +52,7 @@ type ChatConnectionResult = {
     projectId: string,
     providerId?: string,
     mode?: SynapseAgentPermissionMode,
+    modelTier?: string,
   ) => Promise<void>
   readonly selectSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly sendMessage: (content: string, target?: SendMessageTarget) => Promise<boolean>
@@ -341,6 +342,7 @@ function useChatConnection(
     projectId: string,
     providerId?: string,
     mode?: SynapseAgentPermissionMode,
+    modelTier?: string,
   ) => {
     if (!projectId) return
     const requestId = selectRequestIdRef.current + 1
@@ -355,6 +357,7 @@ function useChatConnection(
         agentType: "claude-code",
         providerId,
         mode,
+        modelTier,
       })
       const session = normalizeSessionProject(created, projectId)
       if (requestId !== selectRequestIdRef.current) {

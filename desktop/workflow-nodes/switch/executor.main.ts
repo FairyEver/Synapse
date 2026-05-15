@@ -69,7 +69,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
 
     input.onProgress?.("calling_model", "调用模型…")
     logger.info("switch node executing", {
-      projectId: context.projectId, runId: context.runId, agent: config.agent,
+      projectId: context.projectId, runId: context.runId, providerId: config.providerId, modelTier: config.modelTier,
       branchIds: ids,
       branchCount: config.branches.length,
       branchLabelLengths: config.branches.map((b) => b.label.length),
@@ -77,7 +77,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
     })
 
     input.onProgress?.("awaiting_response", "等待响应…")
-    const agentResult = await agentDeps.sendToAgent({ agent: config.agent, prompt, abortSignal: context.abortSignal })
+    const agentResult = await agentDeps.sendToAgent({ providerId: config.providerId, modelTier: config.modelTier, prompt, abortSignal: context.abortSignal })
     const durationMs = Date.now() - start
 
     if (agentResult.status === "failed") {

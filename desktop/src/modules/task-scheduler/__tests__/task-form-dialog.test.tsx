@@ -244,13 +244,19 @@ describe("TaskFormDialog", () => {
     expect(html).toContain("HTTP 请求")
   })
 
-  it("keeps the action field as a select for registry-backed actions", () => {
+  it("renders action type as a toggle group for registry-backed actions", () => {
     const html = renderDialog()
 
-    expect(html).toContain('id="task-form-action-type"')
+    expect(html).toContain('aria-label="动作"')
+    expect(html).toContain('data-slot="toggle-group"')
+    expect(html).toContain('id="task-form-action-type-builtin.command"')
+    expect(html).toContain('id="task-form-action-type-builtin.script"')
+    expect(html).toContain('id="task-form-action-type-builtin.http-request"')
+    expect(html).toContain('id="task-form-action-type-builtin.agent"')
     expect(html).toContain("命令")
     expect(html).toContain("脚本")
     expect(html).toContain("HTTP 请求")
+    expect(html).toContain("Agent")
   })
 
   it("reuses the permission-mode dropdown for scheduled Agent tasks", async () => {
@@ -290,10 +296,9 @@ describe("TaskFormDialog", () => {
       )
     })
 
-    const agentButton = Array.from(container.querySelectorAll("button"))
-      .find((button) => button.textContent === "Claude Code")
-    expect(agentButton).toBeTruthy()
-    expect(agentButton?.disabled).toBe(true)
+    const agentToggleItem = container.querySelector('[data-slot="toggle-group-item"][data-value="builtin.agent"]')
+    expect(agentToggleItem).toBeTruthy()
+    expect(agentToggleItem?.textContent).toBe("Agent")
 
     const trigger = container.querySelector('button[aria-label="权限模式"]')
     expect(trigger?.textContent).toContain("计划")

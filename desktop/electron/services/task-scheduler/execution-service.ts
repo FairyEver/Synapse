@@ -53,6 +53,7 @@ export class TaskSchedulerExecutionService {
         cwd: resolveCwd(task, this.deps.defaultCwd),
         actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" } as const,
         abortSignal: controller.signal,
+        configVersion: task.configVersion ?? 0,
       }
       permissionRequest = action.buildPermissionRequest({ config, context })
       const permission = await this.deps.permissionGuard.check(permissionRequest)

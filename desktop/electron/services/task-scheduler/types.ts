@@ -51,6 +51,7 @@ export interface ScheduledTaskEntryV2 extends Record<string, unknown> {
   readonly lastStatus?: ScheduledTaskStatus
   readonly activeRun?: ScheduledTaskActiveRun
   readonly runCount: number
+  readonly configVersion: number
 }
 
 export type ScheduledTaskEntry = ScheduledTaskEntryV2

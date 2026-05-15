@@ -80,6 +80,18 @@ export function WorkflowEditorApp() {
   }, [loadDefinition])
 
   useEffect(() => {
+    const unsub = window.synapse?.workflow.onEditorRefocus(() => {
+      if (isDirtyRef.current) {
+        logger.info("editor-refocus received but has unsaved changes, skipping reload", { workflowId })
+        return
+      }
+      logger.info("editor-refocus received, reloading definition", { workflowId })
+      loadDefinition()
+    })
+    return unsub
+  }, [workflowId, loadDefinition])
+
+  useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (!isDirtyRef.current) return
       e.preventDefault()

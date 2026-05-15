@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import {
   Download,
   LoaderCircle,
@@ -11,7 +11,9 @@ import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { cancelWatchNextAgentSession, requestWatchNextAgentSession } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
+import type { SynapseAgentProvider } from "@/types/bridge"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -86,6 +88,21 @@ function TaskSchedulerModule() {
   const platform = getRendererPlatform()
   const { tasks, loading, error, refresh } = useTaskSchedulerTasks()
   const { notify, promise } = useAppNotifications()
+  const [providers, setProviders] = useState<readonly SynapseAgentProvider[]>([])
+  const providerRequestRef = useRef(0)
+  const loadProviders = useCallback(async () => {
+    const requestId = ++providerRequestRef.current
+    try {
+      const list = await requireSynapseBridge().agent.listProviders()
+      if (requestId === providerRequestRef.current) setProviders(list)
+    } catch (err) {
+      logger.warn("Provider list failed.", {
+        boundary: "renderer.task-scheduler.providers",
+        ...errorLogMeta(err),
+      })
+    }
+  }, [])
+  useEffect(() => { void loadProviders() }, [loadProviders])
   const [formState, setFormState] = useState<TaskFormDialogState>({ mode: "create" })
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [historyTask, setHistoryTask] = useState<ScheduledTask | null>(null)
@@ -345,6 +362,7 @@ function TaskSchedulerModule() {
             <TaskCardGrid
               busy={busy}
               projects={config.global.projects}
+              providers={providers}
               tasks={tasks}
               onCreateNew={() => {
                 setFormState({ mode: "create" })

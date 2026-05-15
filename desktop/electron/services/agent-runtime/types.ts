@@ -30,6 +30,7 @@ export interface AgentMessage {
   readonly modeOverride?: string
   readonly agentType?: string
   readonly providerId?: string
+  readonly modelTier?: string
 }
 
 interface AgentEventBase {
@@ -252,6 +253,8 @@ export type ScheduledAgentSendInput = {
   readonly timeoutMs: number
   readonly lastConversationId?: string
   readonly abortSignal?: AbortSignal
+  readonly providerId?: string
+  readonly modelTier?: string
 }
 
 export type CancelTurnResult = {

@@ -303,6 +303,75 @@ query({
 - 已有对话不可切换 provider（避免 session 混乱）
 - 新对话默认使用"活跃 provider"（用户可在创建时选择其他）
 
+#### 运行时模型解析
+
+Synapse Agent 使用 `settingSources: []` 完全隔离，所有配置由程序化传入。SDK 通过 `env.ANTHROPIC_MODEL` 确定主模型，通过 `queryOptions.model` 覆盖。Provider 的 env（`ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_MODEL` 等）由 Synapse 构建并注入。
+
+**数据模型中存 `modelTier` 而非实际模型名。** Provider 配置可能随时更新模型名（如 `claude-sonnet-4-20250514` → `claude-sonnet-4-20250601`），存档位（tier）可以动态解析到最新值。
+
+`ModelTier` 定义：
+
+```typescript
+type ModelTier = "default" | "haiku" | "sonnet" | "opus"
+```
+
+**解析规则：**
+
+| modelTier | 解析字段 | 对应 env |
+|-----------|----------|----------|
+| `"default"` 或 undefined | `provider.model` | `ANTHROPIC_MODEL` |
+| `"haiku"` | `provider.haikuModel` | `ANTHROPIC_MODEL`（覆盖为 haiku 值） |
+| `"sonnet"` | `provider.sonnetModel` | `ANTHROPIC_MODEL`（覆盖为 sonnet 值） |
+| `"opus"` | `provider.opusModel` | `ANTHROPIC_MODEL`（覆盖为 opus 值） |
+
+如果 tier 对应字段为空，fallback 到 `provider.model`（即 default tier）。
+
+**调用点：**
+
+1. **定时任务场景** — `AgentActionConfig` 新增可选 `providerId` 和 `modelTier` 字段。`executor.main.ts` 执行时将 `modelTier` 传入 `sendScheduled`，`ConversationRouter` 在 `buildEnv` 后根据 tier 覆盖 `ANTHROPIC_MODEL`。
+2. **Agent 对话新建场景** — `SessionManager.getOrCreateSession` 中 `buildEnv(providerId)` 返回的 env 已包含 `ANTHROPIC_MODEL`（provider 的 default model）。如果消息携带 `modelTier`，在传给 `ClaudeSDKSession` 前覆盖 `env.ANTHROPIC_MODEL` 为对应 tier 的值。
+3. **ProviderService.buildEnv 扩展** — `buildEnv` 新增可选第二参数 `modelTier?: ModelTier`。当 tier 非 default 时，从 provider 对应字段取值覆盖 `ANTHROPIC_MODEL`：
+
+```typescript
+async buildEnv(
+  providerId: string,
+  context: BuildProviderEnvContext & { modelTier?: ModelTier } = {},
+): Promise<Record<string, string>> {
+  // ... existing logic ...
+  if (context.modelTier && context.modelTier !== "default") {
+    const tierModel = resolveTierModel(provider, context.modelTier)
+    if (tierModel) env.ANTHROPIC_MODEL = tierModel
+  }
+  return compactEnv({ ...env, ...provider.env, ...secretEnv })
+}
+
+function resolveTierModel(provider: CCProvider, tier: ModelTier): string | undefined {
+  switch (tier) {
+    case "haiku": return provider.haikuModel
+    case "sonnet": return provider.sonnetModel
+    case "opus": return provider.opusModel
+    default: return provider.model
+  }
+}
+```
+
+4. **AgentActionConfig 扩展** — schema 新增：
+
+```typescript
+export type AgentActionConfig = {
+  projectId: string
+  agentType: "claude-code"
+  mode: SynapseAgentPermissionMode
+  prompt: string
+  sessionPolicy: "fresh" | "resume"
+  timeoutMins?: number | null
+  providerId?: string    // 指定 provider，空则用 active
+  modelTier?: ModelTier  // 指定模型档位，空则用 provider default
+}
+```
+
+5. **AgentMessage 扩展** — `AgentMessage` 新增可选 `modelTier` 字段，`sendScheduled` 和 `sendNewSession` 透传到 `SessionManager`。
+
 #### Conversation 数据模型
 
 Phase 2 不新建平行主 conversation 表。现有 `conversations` namespace 已是 SQLite-backed DataRepository，且被 Agent UI、Feishu、bridge adapter、relay、scheduler、prompt-run 共同消费。直接换表会让这些入口断开。

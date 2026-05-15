@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
-import { Clock, Command as CommandIcon, Copy, ShieldAlert } from "lucide-react"
+import { AlertTriangle, Clock, Command as CommandIcon, Copy, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
@@ -278,6 +278,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const selectedProvider = selectedSession?.providerId
     ? chat.providers?.providers.find((provider) => provider.id === selectedSession.providerId)
     : undefined
+  const providerMissing = Boolean(selectedSession?.providerId && !selectedProvider)
   const headerProvider = selectedProvider ?? activeProvider
   const selectedAgentDefinition = agentDefinitions.find((definition) =>
     definition.id === selectedSession?.agentType)
@@ -324,7 +325,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       selectedConversationId={chat.selectedConversationId}
       followFeishu={chat.followFeishu}
       unreadByConversationId={chat.unreadByConversationId}
-      onCreateSession={(projectId, providerId) => void chat.createSession(projectId, providerId)}
+      onCreateSession={(projectId, selection) => void chat.createSession(projectId, selection.providerId, undefined, selection.modelTier)}
       onSelect={(session) => void chat.selectSession(session)}
       onDelete={(session) => void chat.deleteSession(session)}
       onDeleteOthers={(keep) => {
@@ -360,7 +361,17 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
 
             {/* 右区：模型信息 · 权限 · 复制 · 命令 */}
             <div className="flex shrink-0 items-center gap-2">
-              {chat.currentConversationModel ? (
+              {providerMissing ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 text-xs text-destructive">
+                      <AlertTriangle className="size-3" />
+                      供应商不可用
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>该会话的供应商已删除或归档</TooltipContent>
+                </Tooltip>
+              ) : chat.currentConversationModel ? (
                 <span className="text-xs text-muted-foreground">
                   {chat.currentConversationModel}
                   {headerProvider ? ` · ${headerProvider.display ?? headerProvider.id}` : ""}

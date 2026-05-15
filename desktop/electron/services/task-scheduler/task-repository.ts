@@ -47,6 +47,7 @@ export class ScheduledTaskRepository {
       createdAt: now,
       updatedAt: now,
       runCount: 0,
+      configVersion: 0,
     }
     validateTask(task)
     const next = {
@@ -75,6 +76,7 @@ export class ScheduledTaskRepository {
         enabled: patch.enabled,
       }),
       action: patch.action === undefined ? existing.action : patch.action,
+      configVersion: (existing.configVersion ?? 0) + 1,
       updatedAt: this.isoNow(),
     }
     validateTask(candidate)
@@ -104,7 +106,18 @@ export class ScheduledTaskRepository {
   }
 
   async setEnabled(id: string, enabled: boolean): Promise<ScheduledTaskEntry> {
-    return this.update(id, { enabled })
+    const existing = await this.require(id)
+    const trigger = normalizeTrigger(existing.trigger)
+    const next: ScheduledTaskEntry = {
+      ...existing,
+      enabled,
+      updatedAt: this.isoNow(),
+      nextRunAt: enabled
+        ? computeNextRunAt({ trigger, from: this.now(), createdAt: existing.createdAt }).toISOString()
+        : undefined,
+    }
+    await this.tasks.upsert(next)
+    return next
   }
 
   async markScheduled(id: string, nextRunAt: string | undefined): Promise<ScheduledTaskEntry | null> {

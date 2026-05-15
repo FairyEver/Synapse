@@ -84,6 +84,7 @@ describe("AgentSessionSidebar", () => {
               apiKeyField: "ANTHROPIC_API_KEY",
               active: false,
               model: "claude-sonnet-4-5",
+              sonnetModel: "claude-sonnet-4-5",
               createdAt: "2026-05-13T00:00:00.000Z",
               updatedAt: "2026-05-13T00:00:00.000Z",
             },
@@ -94,6 +95,7 @@ describe("AgentSessionSidebar", () => {
               apiKeyField: "ANTHROPIC_AUTH_TOKEN",
               active: true,
               model: "claude-opus-4",
+              sonnetModel: "claude-sonnet-4-5",
               createdAt: "2026-05-13T00:00:00.000Z",
               updatedAt: "2026-05-13T00:00:00.000Z",
             },
@@ -132,31 +134,32 @@ describe("AgentSessionSidebar", () => {
     })
 
     expect(onCreateSession).not.toHaveBeenCalled()
-    expect(document.body.textContent).toContain("选择 Provider")
+    expect(document.body.textContent).toContain("选择供应商 + 模型")
     expect(document.body.textContent).toContain("OpenRouter")
 
-    const anthropicButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.includes("Anthropic"))
-    expect(anthropicButton).toBeDefined()
+    // Click the Anthropic row to select it
+    const anthropicRow = [...document.querySelectorAll("tr")]
+      .find((row) => row.textContent?.includes("Anthropic"))
+    expect(anthropicRow).toBeDefined()
 
     await act(async () => {
-      anthropicButton?.click()
+      anthropicRow?.click()
     })
 
     expect(onCreateSession).not.toHaveBeenCalled()
 
-    const createButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent === "创建")
-    expect(createButton).toBeDefined()
+    const confirmButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "确认")
+    expect(confirmButton).toBeDefined()
 
     await act(async () => {
-      createButton?.click()
+      confirmButton?.click()
     })
 
-    expect(onCreateSession).toHaveBeenCalledWith("project-1", "anthropic")
+    expect(onCreateSession).toHaveBeenCalledWith("project-1", { providerId: "anthropic", modelTier: "sonnet" })
   })
 
-  it("creates a session directly when only one provider is available", async () => {
+  it("shows the dialog even when only one provider is available", async () => {
     const onCreateSession = vi.fn()
     Object.defineProperty(window, "synapse", {
       configurable: true,
@@ -171,6 +174,7 @@ describe("AgentSessionSidebar", () => {
               active: true,
               readonly: true,
               model: "claude-sonnet-4-5",
+              sonnetModel: "claude-sonnet-4-5",
               createdAt: "2026-05-13T00:00:00.000Z",
               updatedAt: "2026-05-13T00:00:00.000Z",
             },
@@ -208,8 +212,17 @@ describe("AgentSessionSidebar", () => {
       document.querySelector<HTMLButtonElement>("button[title='新建会话']")?.click()
     })
 
-    expect(onCreateSession).toHaveBeenCalledWith("project-1", "anthropic")
-    expect(document.body.textContent).not.toContain("选择 Provider")
+    expect(onCreateSession).not.toHaveBeenCalled()
+    expect(document.body.textContent).toContain("选择供应商 + 模型")
+
+    const confirmButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent === "确认")
+
+    await act(async () => {
+      confirmButton?.click()
+    })
+
+    expect(onCreateSession).toHaveBeenCalledWith("project-1", { providerId: "anthropic", modelTier: "sonnet" })
   })
 
   it("logs provider list failures without exposing the raw error message", async () => {
@@ -254,11 +267,9 @@ describe("AgentSessionSidebar", () => {
     })
 
     expect(rendererLogger.warn).toHaveBeenCalledWith("Agent provider list failed.", {
-      boundary: "renderer.provider-select",
+      boundary: "renderer.provider-model-select",
       errorLength: "secret provider backend failed".length,
       errorName: "Error",
-      hasProjectName: true,
-      projectId: "project-1",
     })
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("secret provider backend failed")
   })
@@ -274,6 +285,7 @@ describe("AgentSessionSidebar", () => {
           apiKeyField: "ANTHROPIC_API_KEY",
           active: true,
           model: "claude-sonnet-4-5",
+          sonnetModel: "claude-sonnet-4-5",
           createdAt: "2026-05-13T00:00:00.000Z",
           updatedAt: "2026-05-13T00:00:00.000Z",
         },
@@ -284,6 +296,7 @@ describe("AgentSessionSidebar", () => {
           apiKeyField: "ANTHROPIC_AUTH_TOKEN",
           active: false,
           model: "claude-opus-4",
+          sonnetModel: "claude-sonnet-4-5",
           createdAt: "2026-05-13T00:00:00.000Z",
           updatedAt: "2026-05-13T00:00:00.000Z",
         },
@@ -342,15 +355,7 @@ describe("AgentSessionSidebar", () => {
       await Promise.resolve()
     })
 
-    const createButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent === "创建")
-    expect(createButton).toBeDefined()
-    expect(createButton?.disabled).toBe(true)
-
-    await act(async () => {
-      createButton?.click()
-    })
-
+    expect(document.body.textContent).toContain("读取 Provider 失败")
     expect(onCreateSession).not.toHaveBeenCalled()
   })
 })

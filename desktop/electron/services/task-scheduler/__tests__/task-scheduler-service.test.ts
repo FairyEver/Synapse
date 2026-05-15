@@ -236,6 +236,7 @@ function createTask(overrides: Partial<ScheduledTaskEntry> = {}): ScheduledTaskE
     createdAt: "2026-04-29T10:00:00.000Z",
     updatedAt: "2026-04-29T10:00:00.000Z",
     runCount: 0,
+    configVersion: 0,
     ...overrides,
   }
 }

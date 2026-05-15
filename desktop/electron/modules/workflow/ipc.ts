@@ -143,18 +143,23 @@ export const workflowIpcModule: IpcModule = {
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
         const abortMap = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts")
         let abortedCount = 0
+        let prunedCount = 0
         for (const [runId, status] of runStatuses) {
-          if (status.workflowId === id && status.status === "running") {
+          if (status.workflowId !== id) continue
+          if (status.status === "running") {
             abortMap.get(runId)?.abort()
-            runStatuses.delete(runId)
             abortMap.delete(runId)
             abortedCount++
+          } else {
+            prunedCount++
           }
+          runStatuses.delete(runId)
         }
-        if (abortedCount > 0) {
-          logger.info("workflow:delete aborted running runs", { workflowId: id, abortedCount })
+        if (abortedCount > 0 || prunedCount > 0) {
+          logger.info("workflow:delete cleaned up run statuses", { workflowId: id, abortedCount, prunedCount })
         }
         await ctx.resolve<WorkflowService>("core.workflow").delete(id)
+        await ctx.resolve<RunSnapshotService>("core.workflow.snapshots").deleteWorkflow(id)
         ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").forceCloseAll(id)
         logger.info("workflow:delete done", { id })
       },

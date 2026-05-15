@@ -20,6 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import type { SynapseAgentProvider } from "@/types/bridge"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { ScheduledTask } from "@/types/task-scheduler"
 import {
@@ -33,6 +34,7 @@ import {
 type TaskCardProps = {
   task: ScheduledTask
   projects: readonly SynapseProjectConfig[]
+  providers: readonly SynapseAgentProvider[]
   busy: boolean
   onRun: () => void
   onStop: () => void
@@ -67,22 +69,41 @@ function formatLastRun(task: ScheduledTask): string {
   return `${date} · ${formatTaskStatus(task.lastStatus)}`
 }
 
-function getAgentDisplayInfo(task: ScheduledTask): { providerName: string; modelName: string } | null {
+function tierModelValue(
+  provider: SynapseAgentProvider,
+  tier: string,
+): string | undefined {
+  const raw = tier === "default" ? provider.model
+    : tier === "haiku" ? provider.haikuModel
+    : tier === "sonnet" ? provider.sonnetModel
+    : tier === "opus" ? provider.opusModel
+    : undefined
+  return raw?.trim() || undefined
+}
+
+function getAgentDisplayInfo(
+  task: ScheduledTask,
+  providers: readonly SynapseAgentProvider[],
+): { providerName: string; modelName: string } | null {
   if (task.action.type !== "builtin.agent") return null
   const config = task.action.config as Record<string, unknown>
-  const providerName = (typeof config.providerName === "string" && config.providerName)
-    || (typeof config.providerId === "string" && config.providerId)
+  const storedProviderName = typeof config.providerName === "string" ? config.providerName : null
+  const providerId = typeof config.providerId === "string" ? config.providerId : null
+  const provider = providerId ? providers.find((p) => p.id === providerId) : undefined
+  const resolvedProviderName = storedProviderName || provider?.name || null
+  const modelTier = typeof config.modelTier === "string" ? config.modelTier : null
+  const resolvedModelName = (typeof config.modelName === "string" && config.modelName)
+    || (provider && modelTier ? tierModelValue(provider, modelTier) : null)
+    || modelTier
     || null
-  const modelName = (typeof config.modelName === "string" && config.modelName)
-    || (typeof config.modelTier === "string" && config.modelTier)
-    || null
-  if (!providerName && !modelName) return null
-  return { providerName: providerName ?? "—", modelName: modelName ?? "—" }
+  if (!resolvedProviderName && !resolvedModelName) return null
+  return { providerName: resolvedProviderName ?? "—", modelName: resolvedModelName ?? "—" }
 }
 
 function TaskCard({
   task,
   projects,
+  providers,
   busy,
   onRun,
   onToggleEnabled,
@@ -97,7 +118,7 @@ function TaskCard({
   const nextRun = formatTaskNextRun(task)
   const lastRun = formatLastRun(task)
   const scope = formatTaskScope(task, projects)
-  const agentInfo = getAgentDisplayInfo(task)
+  const agentInfo = getAgentDisplayInfo(task, providers)
 
   return (
     <div

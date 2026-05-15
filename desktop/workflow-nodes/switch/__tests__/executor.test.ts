@@ -13,7 +13,7 @@ import { switchNodeExecutor } from "../executor.main"
 
 const ctx = { projectId: "p1", runId: "r1", abortSignal: new AbortController().signal }
 const config = {
-  agent: "claude-code", variables: [], prompt: "Which?",
+  providerId: "test-provider", modelTier: "sonnet" as const, variables: [], prompt: "Which?",
   branches: [{ id: "yes", label: "Yes" }, { id: "no", label: "No" }],
 }
 
@@ -69,7 +69,8 @@ describe("switchNodeExecutor", () => {
     expect(logger.info).toHaveBeenCalledWith("switch node executing", expect.objectContaining({
       projectId: "p1",
       runId: "r1",
-      agent: "claude-code",
+      providerId: "test-provider",
+      modelTier: "sonnet",
       branchIds: ["yes", "no"],
       branchCount: 2,
       branchLabelLengths: [sensitiveLabel.length, "No".length],

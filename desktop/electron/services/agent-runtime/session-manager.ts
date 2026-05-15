@@ -21,6 +21,7 @@ export interface CreateAgentLiveSessionInput {
   readonly cwd: string
   readonly sdkSessionId?: string
   readonly env: Record<string, string>
+  readonly model?: string
   readonly mode?: string
   readonly abortSignal?: AbortSignal
 }
@@ -57,6 +58,7 @@ export class SessionManager {
         cwd: input.cwd,
         sdkSessionId: input.sdkSessionId,
         env: input.env,
+        model: input.model,
         mode: input.mode,
         abortSignal: input.abortSignal,
         logger: deps.logger,
@@ -132,6 +134,13 @@ export class SessionManager {
       actor: { kind: "user", id: input.message.userId },
       projectId: this.deps.projectId,
     })
+    const effectiveTier = input.message.modelTier ?? input.conversation.agentConfig?.modelTier
+    if (effectiveTier) {
+      const tierModel = resolveTierFromEnv(env, effectiveTier)
+      if (tierModel) {
+        env.ANTHROPIC_MODEL = tierModel
+      }
+    }
     const sdkSessionId = input.conversation.resumePolicy === "fresh"
       ? undefined
       : input.conversation.sdkSessionId
@@ -142,6 +151,7 @@ export class SessionManager {
       cwd,
       sdkSessionId,
       env,
+      model: env.ANTHROPIC_MODEL,
       mode: modeOverride,
       abortSignal: input.abortSignal,
     })
@@ -301,6 +311,16 @@ function cancelledTurnResult(conversationId: string): AgentRuntimeTurnResult {
     events: [event],
     resultText: "",
     error: "cancelled",
+  }
+}
+
+function resolveTierFromEnv(env: Record<string, string>, tier: string): string | undefined {
+  switch (tier) {
+    case "default": return env.ANTHROPIC_MODEL
+    case "haiku":   return env.ANTHROPIC_DEFAULT_HAIKU_MODEL
+    case "sonnet":  return env.ANTHROPIC_DEFAULT_SONNET_MODEL
+    case "opus":    return env.ANTHROPIC_DEFAULT_OPUS_MODEL
+    default: return undefined
   }
 }
 

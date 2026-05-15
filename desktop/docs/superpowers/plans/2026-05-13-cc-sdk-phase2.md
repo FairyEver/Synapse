@@ -311,10 +311,10 @@ updateProvider(id: string, patch: UpdateProviderInput): Promise<CCProvider>
 archiveProvider(id: string): Promise<void>
 setActiveProvider(id: string): Promise<void>
 getActiveProvider(): Promise<CCProvider | null>
-buildEnv(providerId: string): Promise<Record<string, string>>
+buildEnv(providerId: string, context?: BuildProviderEnvContext & { modelTier?: ModelTier }): Promise<Record<string, string>>
 ```
 
-`buildEnv()` must include model vars and `provider.env`, and must never return `undefined` values.
+`buildEnv()` must include model vars and `provider.env`, and must never return `undefined` values. When `context.modelTier` is provided and not `"default"`, resolve the actual model name from the provider's tier-specific field (`haikuModel` / `sonnetModel` / `opusModel`) and override `ANTHROPIC_MODEL`. Fallback to `provider.model` if the tier field is empty.
 
 - [ ] **Step 5: Register provider project service**
 
@@ -639,6 +639,7 @@ Responsibilities:
 - close idle sessions.
 - close/delete state on session delete.
 - provide `interrupt()` and `forceClose()`.
+- pass `modelTier` from `AgentMessage` to `buildEnv()` so the correct model is resolved at session creation time.
 
 - [ ] **Step 5: Implement ConversationRouter**
 
@@ -652,6 +653,7 @@ Responsibilities:
 - event dispatch to EventBus/outbox/replyTargets.
 - history and `agent.events` persistence.
 - scheduled/relay timeout handling with AbortController.
+- pass `modelTier` from `AgentMessage` through to `SessionManager.getOrCreateSession`.
 
 - [ ] **Step 6: Replace AgentRuntimeService wiring**
 
@@ -883,6 +885,114 @@ Expected: pass.
 ```bash
 git add desktop/src/modules/settings desktop/src/modules/agent desktop/src/types/bridge.ts
 git commit -m "feat: add provider management ui"
+```
+
+---
+
+### Task 10.5: Extend AgentActionConfig With Provider And ModelTier
+
+**Files:**
+- Modify: `desktop/action-packages/builtin/agent/schema.ts`
+- Modify: `desktop/action-packages/builtin/agent/executor.main.ts`
+- Modify: `desktop/action-packages/builtin/agent/config.renderer.tsx`
+- Modify: `desktop/electron/services/agent-runtime/types.ts` (AgentMessage)
+- Modify: `desktop/electron/services/agent-runtime/agent-runtime-service.ts` (sendScheduled)
+- Modify: `desktop/electron/services/agent-runtime/session-manager.ts` (pass modelTier to buildEnv)
+- Modify: `desktop/electron/services/provider/provider-service.ts` (buildEnv modelTier param)
+- Test: `desktop/action-packages/builtin/agent/__tests__/schema.test.ts`
+
+- [ ] **Step 1: Define ModelTier type**
+
+Add to `desktop/electron/services/provider/types.ts`:
+
+```typescript
+export type ModelTier = "default" | "haiku" | "sonnet" | "opus"
+```
+
+Export from `desktop/electron/services/provider/index.ts`.
+
+- [ ] **Step 2: Extend ProviderService.buildEnv with modelTier**
+
+Add `modelTier?: ModelTier` to `BuildProviderEnvContext`. When tier is provided and not `"default"`, resolve from provider's tier field and override `ANTHROPIC_MODEL`:
+
+```typescript
+if (context.modelTier && context.modelTier !== "default") {
+  const tierModel = resolveTierModel(provider, context.modelTier)
+  if (tierModel) env.ANTHROPIC_MODEL = tierModel
+}
+```
+
+- [ ] **Step 3: Extend AgentMessage with modelTier**
+
+Add optional `modelTier?: ModelTier` to `AgentMessage` in `types.ts`.
+
+- [ ] **Step 4: Pass modelTier through SessionManager**
+
+In `SessionManager.getOrCreateSession`, pass `message.modelTier` to `buildEnv`:
+
+```typescript
+const env = await this.deps.providerService.buildEnv(providerId, {
+  actor: { kind: "user", id: input.message.userId },
+  projectId: this.deps.projectId,
+  modelTier: input.message.modelTier,
+})
+```
+
+- [ ] **Step 5: Extend AgentActionConfig schema**
+
+Add optional fields:
+
+```typescript
+export type AgentActionConfig = {
+  projectId: string
+  agentType: "claude-code"
+  mode: SynapseAgentPermissionMode
+  prompt: string
+  sessionPolicy: "fresh" | "resume"
+  timeoutMins?: number | null
+  providerId?: string
+  modelTier?: ModelTier
+}
+```
+
+Update Zod schema accordingly.
+
+- [ ] **Step 6: Pass providerId and modelTier in executor**
+
+In `executor.main.ts`, pass `config.providerId` and `config.modelTier` into the `AgentMessage` constructed for `sendScheduled`:
+
+```typescript
+const message: AgentMessage = {
+  projectId: input.config.projectId,
+  sessionKey,
+  platform: "scheduled",
+  content: input.config.prompt,
+  modeOverride: input.config.mode,
+  agentType: input.config.agentType,
+  providerId: input.config.providerId,
+  modelTier: input.config.modelTier,
+}
+```
+
+- [ ] **Step 7: Add provider/model selectors to AgentConfigForm**
+
+In `config.renderer.tsx`, add optional Provider select and ModelTier toggle. Provider defaults to active (empty = use active). ModelTier defaults to "default".
+
+- [ ] **Step 8: Run tests**
+
+```bash
+pnpm --filter @synapse/desktop exec vitest run action-packages/builtin/agent/__tests__/schema.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/services/provider/__tests__/provider-service.test.ts
+pnpm --filter @synapse/desktop run typecheck
+```
+
+Expected: pass.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add desktop/action-packages/builtin/agent desktop/electron/services/agent-runtime/types.ts desktop/electron/services/agent-runtime/agent-runtime-service.ts desktop/electron/services/agent-runtime/session-manager.ts desktop/electron/services/provider/types.ts desktop/electron/services/provider/provider-service.ts desktop/electron/services/provider/index.ts
+git commit -m "feat: support providerId and modelTier in agent action config"
 ```
 
 ---

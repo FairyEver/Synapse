@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { ChevronDown } from "lucide-react"
 
 import { FormDialog } from "@/components/form-dialog"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
@@ -8,6 +9,7 @@ import {
   ModuleSidebarItem,
   ModuleSidebarList,
 } from "@/components/module-sidebar"
+import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import {
@@ -33,11 +35,17 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { ScheduledTaskCreateInput, ScheduledTaskUpdateInput } from "@/types/task-scheduler"
+import { AgentPermissionModeMenu } from "@/modules/agent/components/permission-mode-menu"
+import { permissionModeLabels } from "@/modules/agent/permission-mode-options"
+import type { SynapseAgentPermissionMode } from "@/types/agent"
+import type { AgentActionConfig } from "../../../../action-packages/builtin/agent/schema"
 import type { TaskFormDialogState, TaskFormState } from "../types"
 import {
   buildTaskCreateInput,
@@ -351,53 +359,39 @@ function TaskFormDialog({
                 sectionRef={setSectionRef("task-form-section-action")}
                 title="执行内容"
               >
-                <div className="grid gap-3 md:grid-cols-2">
-                  <TaskField label="动作" htmlFor="task-form-action-type">
-                    <Select
-                      value={form.actionType}
-                      onValueChange={updateActionType}
-                    >
-                      <SelectTrigger id="task-form-action-type" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {rendererActionRegistry.list().map((action) => (
-                            <SelectItem key={action.manifest.id} value={action.manifest.id}>
-                              {action.manifest.title}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </TaskField>
-                  {form.actionType === "builtin.agent" ? (
-                    <TaskField label="项目" htmlFor="task-form-agent-project">
-                      <Select
-                        value={(form.actionConfig as Record<string, unknown>).projectId as string ?? ""}
-                        onValueChange={(projectId) => {
-                          const project = projects.find((p) => p.id === projectId)
-                          const currentConfig = form.actionConfig as Record<string, unknown>
-                          const patch: Record<string, unknown> = { ...currentConfig, projectId }
-                          patch.agentType = "claude-code"
-                          updateField("actionConfig", patch)
-                        }}
+                <TaskField label="动作" htmlFor="task-form-action-type-builtin.command">
+                  <ToggleGroup
+                    aria-label="动作"
+                    className="w-full"
+                    data-track="task-form-action-type"
+                    type="single"
+                    value={form.actionType}
+                    variant="outline"
+                    onValueChange={(value) => {
+                      if (value) updateActionType(value)
+                    }}
+                  >
+                    {rendererActionRegistry.list().map((action) => (
+                      <ToggleGroupItem
+                        key={action.manifest.id}
+                        id={`task-form-action-type-${action.manifest.id}`}
+                        className="flex-1"
+                        value={action.manifest.id}
                       >
-                        <SelectTrigger id="task-form-agent-project" className="w-full">
-                          <SelectValue placeholder="选择项目" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            {projects.map((project) => (
-                              <SelectItem key={project.id} value={project.id}>
-                                {project.name}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </TaskField>
-                  ) : (
+                        {action.manifest.title}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </TaskField>
+
+                {form.actionType === "builtin.agent" ? (
+                  <AgentActionFields
+                    config={form.actionConfig as AgentActionConfig}
+                    projects={projects}
+                    onConfigChange={(actionConfig) => updateField("actionConfig", actionConfig)}
+                  />
+                ) : (
+                  <>
                     <TaskField label="工作目录" htmlFor="task-form-cwd">
                       <InputGroup>
                         <InputGroupInput
@@ -416,15 +410,14 @@ function TaskFormDialog({
                         </InputGroupAddon>
                       </InputGroup>
                     </TaskField>
-                  )}
-                </div>
-
-                {ActionConfigForm ? (
-                  <ActionConfigForm
-                    value={form.actionConfig}
-                    onChange={(actionConfig) => updateField("actionConfig", actionConfig)}
-                  />
-                ) : null}
+                    {ActionConfigForm ? (
+                      <ActionConfigForm
+                        value={form.actionConfig}
+                        onChange={(actionConfig) => updateField("actionConfig", actionConfig)}
+                      />
+                    ) : null}
+                  </>
+                )}
               </TaskFormSection>
 
               <TaskFormSection
@@ -526,6 +519,176 @@ function TaskField({
       <FieldLabel htmlFor={htmlFor}>{label}</FieldLabel>
       <FieldContent>{children}</FieldContent>
     </Field>
+  )
+}
+
+function AgentActionFields({
+  config,
+  projects,
+  onConfigChange,
+}: {
+  config: AgentActionConfig
+  projects: readonly SynapseProjectConfig[]
+  onConfigChange: (config: AgentActionConfig) => void
+}) {
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false)
+  const [resolvedProviderLabel, setResolvedProviderLabel] = useState("")
+
+  useEffect(() => {
+    if (!config.providerId) {
+      setResolvedProviderLabel("")
+      return
+    }
+    if (config.providerName) {
+      setResolvedProviderLabel(`${config.providerName} ${config.modelName ?? config.modelTier}`)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const providers = await requireSynapseBridge().agent.listProviders()
+        if (cancelled) return
+        const provider = providers.find((p) => p.id === config.providerId)
+        if (provider) {
+          const tierField = config.modelTier === "default" ? provider.model
+            : config.modelTier === "haiku" ? provider.haikuModel
+            : config.modelTier === "sonnet" ? provider.sonnetModel
+            : provider.opusModel
+          setResolvedProviderLabel(`${provider.name} ${tierField?.trim() || config.modelTier}`)
+        } else {
+          setResolvedProviderLabel(config.providerId)
+        }
+      } catch {
+        setResolvedProviderLabel(config.providerId)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [config.providerId, config.providerName, config.modelName, config.modelTier])
+
+  return (
+    <>
+      <div className="grid gap-3 md:grid-cols-2">
+        <TaskField label="项目" htmlFor="task-form-agent-project">
+          <Select
+            value={config.projectId ?? ""}
+            onValueChange={(projectId) => {
+              onConfigChange({ ...config, agentType: "claude-code", projectId })
+            }}
+          >
+            <SelectTrigger id="task-form-agent-project" className="w-full">
+              <SelectValue placeholder="选择项目" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </TaskField>
+
+        <TaskField label="权限模式" htmlFor="task-action-agent-mode">
+          <AgentPermissionModeMenu
+            selectedMode={config.mode}
+            contentClassName="w-56"
+            onSelect={(mode: SynapseAgentPermissionMode) => {
+              onConfigChange({ ...config, agentType: "claude-code", mode })
+            }}
+            trigger={(
+              <Button
+                id="task-action-agent-mode"
+                type="button"
+                variant="outline"
+                className="w-full justify-between"
+                aria-label="权限模式"
+              >
+                <span className="truncate">{permissionModeLabels[config.mode]}</span>
+                <ChevronDown className="size-4 text-muted-foreground" />
+              </Button>
+            )}
+          />
+        </TaskField>
+      </div>
+
+      <TaskField label="供应商 + 模型" htmlFor="task-action-agent-provider">
+        <Button
+          id="task-action-agent-provider"
+          type="button"
+          variant="outline"
+          className="w-full justify-between"
+          onClick={() => setProviderDialogOpen(true)}
+        >
+          <span className="truncate">
+            {resolvedProviderLabel || "选择供应商 + 模型"}
+          </span>
+          <ChevronDown className="size-4 text-muted-foreground" />
+        </Button>
+        <ProviderModelSelectDialog
+          open={providerDialogOpen}
+          onOpenChange={setProviderDialogOpen}
+          defaultSelection={config.providerId ? { providerId: config.providerId, modelTier: config.modelTier } : undefined}
+          onSelect={(s) => onConfigChange({
+            ...config,
+            agentType: "claude-code",
+            providerId: s.providerId,
+            modelTier: s.modelTier,
+            providerName: s.providerName,
+            modelName: s.modelName,
+          })}
+        />
+      </TaskField>
+
+      <TaskField label="提示词" htmlFor="task-action-agent-prompt">
+        <Textarea
+          id="task-action-agent-prompt"
+          rows={5}
+          placeholder="输入要发送给 Agent 的提示词..."
+          value={config.prompt}
+          onChange={(e) => onConfigChange({ ...config, prompt: e.target.value })}
+        />
+      </TaskField>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <TaskField label="会话策略" htmlFor="task-action-agent-session-fresh">
+          <ToggleGroup
+            aria-label="Session policy"
+            className="w-full"
+            type="single"
+            value={config.sessionPolicy}
+            variant="outline"
+            onValueChange={(policy) => {
+              if (policy) onConfigChange({ ...config, sessionPolicy: policy as "fresh" | "resume" })
+            }}
+          >
+            <ToggleGroupItem id="task-action-agent-session-fresh" className="flex-1" value="fresh">
+              每次新建
+            </ToggleGroupItem>
+            <ToggleGroupItem id="task-action-agent-session-resume" className="flex-1" value="resume">
+              复用上次
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </TaskField>
+
+        <TaskField label="超时分钟" htmlFor="task-action-agent-timeout">
+          <Input
+            id="task-action-agent-timeout"
+            type="number"
+            min={1}
+            max={120}
+            value={config.timeoutMins ?? ""}
+            onChange={(e) =>
+              onConfigChange({
+                ...config,
+                timeoutMins: e.target.value ? Number(e.target.value) : null,
+              })
+            }
+          />
+        </TaskField>
+      </div>
+    </>
   )
 }
 

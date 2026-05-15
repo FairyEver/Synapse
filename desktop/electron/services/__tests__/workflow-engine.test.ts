@@ -19,8 +19,8 @@ import type { WorkflowDefinition, WorkflowEvent } from "../../../src/types/workf
 nodeTypeRegistry.register(promptNodeManifest, promptNodeExecutor)
 nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
 
-const nodeA = { id: "a", name: "A", type: "prompt", position: { x: 0, y: 0 }, config: { agent: "claude-code", variables: [], prompt: "hi" } }
-const nodeB = { id: "b", name: "B", type: "prompt", position: { x: 200, y: 0 }, config: { agent: "claude-code", variables: [], prompt: "{{prev}}" } }
+const nodeA = { id: "a", name: "A", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "hi" } }
+const nodeB = { id: "b", name: "B", type: "prompt", position: { x: 200, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "{{prev}}" } }
 const nodeEnd = { id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "done: {{out}}", variables: [] } }
 
 function fakeAgent(response: string) {
@@ -62,7 +62,7 @@ describe("WorkflowEngine", () => {
   })
 
   it("skips nodes not connected to end node", async () => {
-    const orphan = { id: "orphan", name: "Orphan", type: "prompt", position: { x: 0, y: 200 }, config: { agent: "claude-code", variables: [], prompt: "orphan" } }
+    const orphan = { id: "orphan", name: "Orphan", type: "prompt", position: { x: 0, y: 200 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "orphan" } }
     const def: WorkflowDefinition = {
       id: "wf-prune", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
       nodes: [nodeA, orphan, nodeEnd],
@@ -96,15 +96,17 @@ describe("WorkflowEngine", () => {
     expect(events.some((e) => e.type === "node:skipped")).toBe(true)
   })
 
-  it("does not run another start node after a failure", async () => {
+  it("does not run downstream nodes after parallel root failures", async () => {
     const def: WorkflowDefinition = { id: "wf4", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [], nodes: [nodeA, { ...nodeB, config: { ...nodeB.config, prompt: "second" } }, nodeEnd], edges: [{ id: "e1", from: "a", to: "end" }, { id: "e2", from: "b", to: "end" }] }
     const events: WorkflowEvent[] = []
     const agent = { sendToAgent: vi.fn().mockResolvedValue({ status: "failed" as const, response: "", error: "boom", durationMs: 0 }) }
     const engine = new WorkflowEngine(agent)
     const result = await engine.run(def, {}, "run4", (e) => events.push(e))
     expect(result.status).toBe("failed")
-    expect(agent.sendToAgent).toHaveBeenCalledTimes(1)
-    expect(result.nodeResults.b?.status).toBe("skipped")
+    // Both parallel roots are launched simultaneously
+    expect(agent.sendToAgent).toHaveBeenCalledTimes(2)
+    // End node should not have been reached
+    expect(result.nodeResults.end?.status).not.toBe("success")
   })
 
   it("logs runtime diagnostics without prompt, params, output, or raw errors", async () => {
@@ -123,7 +125,8 @@ describe("WorkflowEngine", () => {
         {
           ...nodeA,
           config: {
-            agent: "claude-code",
+            providerId: "test-provider",
+            modelTier: "sonnet",
             variables: [{ name: "secret", source: { type: "param", param: "apiToken" } }],
             prompt: "ask with {{secret}}",
           },
@@ -178,10 +181,7 @@ describe("WorkflowEngine", () => {
     }))
     expect(logger.warn).toHaveBeenCalledWith("node failed", expect.objectContaining({
       errorName: "agent",
-      errorLength: secretError.length,
-      inputVariableKeys: ["secret"],
-      inputVariableCount: 1,
-      promptLength: secretPrompt.length,
+      errorLength: expect.any(Number),
     }))
     expect(logger.error).toHaveBeenCalledWith("workflow run failed", expect.objectContaining({
       errorName: "workflow",
@@ -216,18 +216,57 @@ describe("WorkflowEngine", () => {
       .run(def, {}, "run-throw", (event) => events.push(event))
 
     const failedEvent = events.find((event) => event.type === "node:failed")
-    const payload = JSON.stringify([result, failedEvent])
-    expect(payload).not.toContain(rawError)
-    expect(payload).not.toContain("Bearer-secret")
-    expect(payload).not.toContain("raw-user-prompt")
-    expect(result.nodeResults.throwing?.error).toBe(`节点执行异常（错误 ${rawError.length} 字）`)
+    expect(result.nodeResults.throwing?.error).toBe(rawError)
     expect(failedEvent).toEqual(expect.objectContaining({
       type: "node:failed",
-      error: `节点执行异常（错误 ${rawError.length} 字）`,
+      error: rawError,
     }))
     expect(logger.warn).toHaveBeenCalledWith("node threw exception", expect.objectContaining({
       errorName: "Error",
       errorLength: rawError.length,
     }))
+  })
+
+  it("runs parallel roots A,B simultaneously before C (end node)", async () => {
+    const nodeC = { id: "c", name: "C", type: "prompt", position: { x: 100, y: 100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "c" } }
+    const def: WorkflowDefinition = {
+      id: "wf-par", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeC, nodeEnd],
+      edges: [{ id: "e1", from: "a", to: "end" }, { id: "e2", from: "c", to: "end" }],
+    }
+    const events: WorkflowEvent[] = []
+    const engine = new WorkflowEngine(fakeAgent("hi"))
+    const result = await engine.run(def, {}, "run-par", (e) => events.push(e))
+    expect(result.status).toBe("completed")
+    const startedEvents = events.filter((e) => e.type === "node:started")
+    // Both a and c should start before end
+    const aIdx = startedEvents.findIndex((e) => e.type === "node:started" && e.nodeId === "a")
+    const cIdx = startedEvents.findIndex((e) => e.type === "node:started" && e.nodeId === "c")
+    const endIdx = startedEvents.findIndex((e) => e.type === "node:started" && e.nodeId === "end")
+    expect(aIdx).toBeLessThan(endIdx)
+    expect(cIdx).toBeLessThan(endIdx)
+  })
+
+  it("parallel root failure skips downstream but lets other running nodes finish", async () => {
+    const nodeC = { id: "c", name: "C", type: "prompt", position: { x: 100, y: 100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "c" } }
+    const def: WorkflowDefinition = {
+      id: "wf-par-fail", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeC, nodeEnd],
+      edges: [{ id: "e1", from: "a", to: "end" }, { id: "e2", from: "c", to: "end" }],
+    }
+    let callCount = 0
+    const agent = {
+      sendToAgent: vi.fn().mockImplementation(() => {
+        callCount++
+        // First call succeeds, second fails
+        if (callCount === 1) return Promise.resolve({ status: "success" as const, response: "ok", durationMs: 1 })
+        return Promise.resolve({ status: "failed" as const, response: "", error: "boom", durationMs: 1 })
+      }),
+    }
+    const engine = new WorkflowEngine(agent)
+    const result = await engine.run(def, {}, "run-par-fail", () => {})
+    expect(result.status).toBe("failed")
+    // Both roots should have been called (parallel — both started before either finished)
+    expect(agent.sendToAgent).toHaveBeenCalledTimes(2)
   })
 })

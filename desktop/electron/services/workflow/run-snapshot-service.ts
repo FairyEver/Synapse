@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type { WorkflowRunSnapshot } from "../../../src/types/workflow"
 import { createMainLogger } from "../log-store"
@@ -43,7 +43,10 @@ export class RunSnapshotService {
     try {
       const dir = this.dir(s.workflowId)
       await mkdir(dir, { recursive: true })
-      await writeFile(path.join(dir, `${s.runId}.json`), JSON.stringify(s, null, 2), "utf-8")
+      const target = path.join(dir, `${s.runId}.json`)
+      const tmp = `${target}.tmp`
+      await writeFile(tmp, JSON.stringify(s, null, 2), "utf-8")
+      await rename(tmp, target)
       const snapshots = await this.readSnapshotFiles(s.workflowId)
       const stale = snapshots
         .sort((a, b) => this.snapshotTime(a.snapshot) - this.snapshotTime(b.snapshot))
@@ -69,6 +72,22 @@ export class RunSnapshotService {
         ...snapshotErrorMetadata(err),
       })
       return []
+    }
+  }
+
+  async deleteWorkflow(workflowId: string): Promise<void> {
+    const dir = this.dir(workflowId)
+    try {
+      await rm(dir, { recursive: true, force: true })
+      logger.info("run snapshots deleted for workflow", { workflowId })
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code
+      if (code !== "ENOENT") {
+        logger.warn("run snapshot deleteWorkflow failed", {
+          workflowId,
+          ...snapshotErrorMetadata(err),
+        })
+      }
     }
   }
 

@@ -7,9 +7,10 @@ export const switchNodeManifest: NodeManifest<SwitchNodeConfig> = {
   type: "switch", title: "Switch", icon: GitBranch, color: "bg-secondary",
   ports: { inputs: [{ id: "in", label: "输入" }], outputs: "dynamic" },
   resolveDynamicPorts: (c) => c.branches.map((b) => ({ id: b.id, label: b.label })),
-  cardSummary: (c) => ({ title: c.agent || "未选择 Agent", subtitle: `${c.branches.length} 个分支` }),
+  cardSummary: (c) => ({ title: c.providerId ? `${c.providerId} · ${c.modelTier}` : "未选择供应商", subtitle: `${c.branches.length} 个分支` }),
   configFields: [
-    { name: "agent", kind: "select", label: "Agent" },
+    { name: "providerId", kind: "text", label: "供应商" },
+    { name: "modelTier", kind: "select", label: "模型" },
     { name: "variables", kind: "variable-binding-list", label: "变量绑定" },
     { name: "prompt", kind: "text", label: "判断 Prompt" },
     { name: "branches", kind: "branch-list", label: "分支" },

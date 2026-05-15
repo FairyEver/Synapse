@@ -2,7 +2,7 @@ import { useRef, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { ChevronDown, Plus, Trash2 } from "lucide-react"
+import { AlertTriangle, ChevronDown, Plus, Trash2 } from "lucide-react"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
 import type { ModelTier } from "@/types/provider-model"
 import type { WorkflowParam } from "@/types/workflow"
@@ -29,7 +29,8 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
   const [defaultBranch, setDefaultBranch] = useState<string>(config.defaultBranch ?? NO_DEFAULT)
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
   const lastCommittedRef = useRef<SwitchNodeConfig>(config)
-  const { getProviderName, getModelName } = useProviderLookup()
+  const { getProviderName, getModelName, isProviderAvailable } = useProviderLookup()
+  const providerUnavailable = Boolean(config.providerId && !isProviderAvailable(config.providerId))
 
   const commit = (overrides?: Partial<SwitchNodeConfig>) => {
     const next: SwitchNodeConfig = {
@@ -72,14 +73,16 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
   return (
     <div className="grid gap-2">
       <CollapsibleSection title="执行配置">
-        <Button variant="outline" className="w-full justify-between h-7 text-xs" onClick={() => setProviderDialogOpen(true)}>
-          <span className="truncate">
+        <Button variant="outline" className={`w-full justify-between h-7 text-xs${providerUnavailable ? " border-destructive" : ""}`} onClick={() => setProviderDialogOpen(true)}>
+          <span className="flex min-w-0 items-center gap-1 truncate">
+            {providerUnavailable && <AlertTriangle className="size-3 shrink-0 text-destructive" />}
             {config.providerId
               ? `${getProviderName(config.providerId) ?? config.providerId} · ${getModelName(config.providerId, config.modelTier) ?? TIER_LABELS[config.modelTier] ?? config.modelTier}`
               : "选择供应商 + 模型"}
           </span>
           <ChevronDown className="size-3.5 text-muted-foreground" />
         </Button>
+        {providerUnavailable && <p className="text-[11px] text-destructive">供应商不可用，请重新选择</p>}
         <ProviderModelSelectDialog
           open={providerDialogOpen}
           onOpenChange={setProviderDialogOpen}

@@ -6,6 +6,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import type { SynapseAgentProvider } from "@/types/bridge"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { ScheduledTask } from "@/types/task-scheduler"
 import { TooltipProvider } from "@/components/ui/tooltip"
@@ -32,6 +33,7 @@ describe("TaskCard", () => {
         <TaskCard
           busy
           projects={projects}
+          providers={providers}
           task={createTask()}
           onDelete={vi.fn()}
           onEdit={vi.fn()}
@@ -61,6 +63,7 @@ describe("TaskCard", () => {
           <TaskCard
             busy
             projects={projects}
+            providers={providers}
             task={createTask()}
             onDelete={vi.fn()}
             onEdit={vi.fn()}
@@ -101,6 +104,7 @@ describe("TaskCard", () => {
           <TaskCard
             busy={false}
             projects={projects}
+            providers={providers}
             task={createTask({ activeRun: { status: "running" } })}
             onDelete={vi.fn()}
             onEdit={vi.fn()}
@@ -132,6 +136,7 @@ describe("TaskCard", () => {
         <TaskCard
           busy={false}
           projects={projects}
+          providers={providers}
           task={createTask({
             action: {
               type: "builtin.agent",
@@ -163,12 +168,50 @@ describe("TaskCard", () => {
     expect(html).toContain("claude-sonnet-4-20250514")
   })
 
+  it("resolves provider name from providers list when providerName is missing", () => {
+    const html = renderToStaticMarkup(
+      <TooltipProvider>
+        <TaskCard
+          busy={false}
+          projects={projects}
+          providers={providers}
+          task={createTask({
+            action: {
+              type: "builtin.agent",
+              config: {
+                agentType: "claude-code",
+                projectId: "project-1",
+                providerId: "provider-1",
+                modelTier: "haiku",
+                prompt: "run",
+                sessionPolicy: "fresh",
+              },
+            },
+          })}
+          onDelete={vi.fn()}
+          onEdit={vi.fn()}
+          onHistory={vi.fn()}
+          onRun={vi.fn()}
+          onStop={vi.fn()}
+          onToggleEnabled={vi.fn()}
+        />
+      </TooltipProvider>,
+    )
+
+    expect(html).toContain("供应商")
+    expect(html).toContain("Test Provider")
+    expect(html).not.toContain("provider-1")
+    expect(html).toContain("claude-3-5-haiku-20241022")
+    expect(html).not.toContain(">haiku<")
+  })
+
   it("does not render provider/model for non-agent tasks", () => {
     const html = renderToStaticMarkup(
       <TooltipProvider>
         <TaskCard
           busy={false}
           projects={projects}
+          providers={providers}
           task={createTask({
             action: {
               type: "builtin.command",
@@ -197,6 +240,19 @@ const projects: SynapseProjectConfig[] = [
     id: "project-1",
     name: "Synapse",
     path: "/Users/liyang/Documents/code/github/Synapse",
+  },
+]
+
+const providers: SynapseAgentProvider[] = [
+  {
+    id: "provider-1",
+    name: "Test Provider",
+    category: "custom",
+    apiKeyField: "ANTHROPIC_API_KEY",
+    haikuModel: "claude-3-5-haiku-20241022",
+    sonnetModel: "claude-sonnet-4-20250514",
+    createdAt: "2026-01-01T00:00:00.000Z",
+    updatedAt: "2026-01-01T00:00:00.000Z",
   },
 ]
 

@@ -72,6 +72,7 @@ export class SessionLifecycleManager {
     readonly workspacePath?: string
     readonly providerId?: string
     readonly mode?: string
+    readonly modelTier?: string
   }): Promise<ConversationEntryV1> {
     return this.deps.repository.createSession({
       sessionKey: input.sessionKey,
@@ -82,6 +83,7 @@ export class SessionLifecycleManager {
       workspacePath: input.workspacePath,
       providerId: input.providerId,
       mode: input.mode,
+      modelTier: input.modelTier,
       resumePolicy: "resume",
     })
   }

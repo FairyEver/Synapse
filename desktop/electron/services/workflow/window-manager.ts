@@ -17,6 +17,7 @@ export class WorkflowWindowManager {
     const existing = this.editorWindows.get(workflowId)
     if (existing && !existing.isDestroyed()) {
       logger.info("workflow editor window reused", { workflowId, runId })
+      existing.webContents.send("synapse:workflow:editor-refocus", { runId })
       existing.focus()
       return existing
     }

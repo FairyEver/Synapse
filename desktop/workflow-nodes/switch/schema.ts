@@ -8,7 +8,8 @@ export const switchBranchSchema = z.object({
   label: z.string().min(1),
 })
 export const switchNodeConfigSchema = z.object({
-  agent: z.string().min(1),
+  providerId: z.string().min(1),
+  modelTier: z.enum(["default", "haiku", "sonnet", "opus"]),
   variables: z.array(variableBindingSchema),
   prompt: z.string(),
   branches: z.array(switchBranchSchema).min(1),

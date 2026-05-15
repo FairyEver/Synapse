@@ -221,6 +221,8 @@ export class AgentRuntimeService {
       content: input.prompt,
       modeOverride: input.mode,
       agentType: input.agentType,
+      providerId: input.providerId,
+      modelTier: input.modelTier,
     }
 
     const ac = new AbortController()
@@ -632,6 +634,7 @@ export class AgentRuntimeService {
       readonly workspacePath?: string
       readonly providerId?: string
       readonly mode?: string
+      readonly modelTier?: string
     },
   ): Promise<ConversationEntryV1> {
     return this.sessionLifecycle.createSession(input)
