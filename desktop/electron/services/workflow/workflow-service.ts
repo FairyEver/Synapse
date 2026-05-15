@@ -68,19 +68,20 @@ export class WorkflowService {
       logger.info("workflow get: no versions", { id })
       return null
     }
-    const versionFile = versions[versions.length - 1]
-    logger.info("workflow get: loaded", { id, versionFile })
-    try {
-      return JSON.parse(await readFile(path.join(this.dir(id), versionFile), "utf-8")) as WorkflowDefinition
-    } catch (err) {
-      logger.warn("workflow get failed", {
-        boundary: "workflow-service.get",
-        id,
-        versionFile,
-        ...errorLogMeta(err),
-      })
-      return null
+    for (const versionFile of [...versions].reverse()) {
+      logger.info("workflow get: loaded", { id, versionFile })
+      try {
+        return JSON.parse(await readFile(path.join(this.dir(id), versionFile), "utf-8")) as WorkflowDefinition
+      } catch (err) {
+        logger.warn("workflow get failed", {
+          boundary: "workflow-service.get",
+          id,
+          versionFile,
+          ...errorLogMeta(err),
+        })
+      }
     }
+    return null
   }
 
   async save(def: WorkflowDefinition): Promise<WorkflowSaveResult | WorkflowSaveError> {

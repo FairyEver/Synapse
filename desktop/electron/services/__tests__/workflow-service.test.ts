@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, rm, writeFile } from "node:fs/promises"
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -56,6 +56,18 @@ describe("WorkflowService", () => {
     await svc.save(def)
     await svc.save({ ...def, name: "Updated" })
     expect((await svc.get(def.id))?.name).toBe("Updated")
+  })
+  it("falls back to the previous valid version when the latest version is corrupted", async () => {
+    const dir = await tmpDir()
+    const svc = new WorkflowService(() => dir)
+    const def = makeDef()
+    await svc.save(def)
+    await svc.save({ ...def, name: "Updated" })
+    const workflowDir = path.join(dir, "workflows", def.id)
+    const versions = (await readdir(workflowDir)).filter((f) => f.endsWith(".json")).sort()
+    await writeFile(path.join(workflowDir, versions[versions.length - 1]!), "{not json", "utf-8")
+
+    expect((await svc.get(def.id))?.name).toBe("WF")
   })
   it("delete removes workflow", async () => {
     const dir = await tmpDir()
