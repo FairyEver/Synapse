@@ -200,6 +200,9 @@ export function WorkflowEditorApp() {
   }
 
   const handleSave = async (def: WorkflowDefinition, silent?: boolean) => {
+    // Short-circuit when nothing changed — avoid a pointless IPC round-trip
+    // and give clear feedback that no save is needed (no spinner, no toast).
+    if (!isDirtyRef.current) return { versionHash: def.version }
     savingRef.current = true
     setSaving(true)
     try {
