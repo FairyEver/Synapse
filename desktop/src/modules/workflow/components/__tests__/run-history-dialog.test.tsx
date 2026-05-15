@@ -45,6 +45,48 @@ afterEach(() => {
 })
 
 describe("RunHistoryDialog", () => {
+  it("shows the earliest node error in run history summaries", async () => {
+    window.synapse = {
+      workflow: {
+        runHistory: vi.fn().mockResolvedValue([
+          createSnapshot({
+            nodeResults: {
+              late: {
+                nodeId: "late",
+                status: "failed",
+                input: { variables: {} },
+                startedAt: 200,
+                error: "late error",
+              },
+              early: {
+                nodeId: "early",
+                status: "failed",
+                input: { variables: {} },
+                startedAt: 100,
+                error: "early error",
+              },
+            },
+          }),
+        ]),
+      },
+    } as unknown as Window["synapse"]
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<RunHistoryDialog open workflowId="workflow-1" onClose={vi.fn()} />)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("early error")
+    expect(document.body.textContent).not.toContain("late error")
+  })
+
   it("tracks opening a workflow run without recording node output", async () => {
     const openRunner = vi.fn()
     window.synapse = {
