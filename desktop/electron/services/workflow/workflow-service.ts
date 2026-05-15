@@ -33,7 +33,8 @@ export class WorkflowService {
     logger.info("workflow list: resolving from repo", repoPathMeta)
     let ids: string[]
     try {
-      ids = await readdir(path.join(resolvedPath, "workflows"))
+      const entries = await readdir(path.join(resolvedPath, "workflows"), { withFileTypes: true })
+      ids = entries.filter((e) => e.isDirectory()).map((e) => e.name)
     } catch (err) {
       logger.warn("workflow list failed", {
         boundary: "workflow-service.list",
