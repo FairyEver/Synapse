@@ -246,6 +246,10 @@ export class ProviderService {
       : await this.secretStore.setApiKey(id, patch.apiKey, `${patch.name ?? existing.name} API key`)
     const nextSecretEnvRefs = { ...(existing.secretEnvRefs ?? {}) }
     for (const envName of patch.clearSecretEnv ?? []) {
+      const ref = nextSecretEnvRefs[envName]
+      if (ref) {
+        await this.secretStore.deleteSecret(ref)
+      }
       delete nextSecretEnvRefs[envName]
     }
     const storedSecretEnvRefs = await storeSecretEnv(
