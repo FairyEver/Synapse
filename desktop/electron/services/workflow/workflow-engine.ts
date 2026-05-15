@@ -238,8 +238,8 @@ export class WorkflowEngine {
     for (const [nodeId, outcome] of schedulerResults) {
       if (!(nodeId in nodeResults)) {
         const node = def.nodes.find((n) => n.id === nodeId)
-        logger.info("node skipped", { runId, nodeId, nodeName: node?.name, nodeType: node?.type, reason: "scheduler-skipped" })
-        const res: NodeRunResult = { nodeId, status: "skipped", input: { variables: {} } }
+        logger.info("node skipped", { runId, nodeId, nodeName: node?.name, nodeType: node?.type, reason: "scheduler-skipped", error: outcome.error })
+        const res: NodeRunResult = { nodeId, status: "skipped", input: { variables: {} }, ...(outcome.error ? { error: outcome.error } : {}) }
         nodeResults[nodeId] = res
         emit({ type: "node:skipped", runId, nodeId, result: res })
       }
