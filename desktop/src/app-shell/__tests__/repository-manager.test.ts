@@ -62,6 +62,7 @@ const config: SynapseConfig = {
   },
   agent: {
     defaultPermissionMode: "default",
+    defaultProviderModel: null,
   },
 }
 

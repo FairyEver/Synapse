@@ -15,6 +15,7 @@ import {
   ModuleSidebar,
   ModuleSidebarList,
 } from "@/components/module-sidebar"
+import { useAppConfig } from "@/app-shell/config"
 import { requestOpenSettingsTab } from "@/app-shell/navigation"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
 import { ArchivedGroup } from "./archived-group"
@@ -59,6 +60,7 @@ function AgentSessionSidebar({
   onRename,
   onFollowFeishuChange,
 }: AgentSessionSidebarProps) {
+  const { config } = useAppConfig()
   const sessionsByProject = groupSessionsByProject(sessions)
   const [createProject, setCreateProject] = useState<ProjectOption | null>(null)
 
@@ -127,6 +129,7 @@ function AgentSessionSidebar({
       <ProviderModelSelectDialog
         open={createProject !== null}
         onOpenChange={(open) => { if (!open) setCreateProject(null) }}
+        defaultSelection={config.agent.defaultProviderModel ?? undefined}
         onSelect={(selection) => {
           if (createProject) onCreateSession(createProject.id, selection)
           setCreateProject(null)
