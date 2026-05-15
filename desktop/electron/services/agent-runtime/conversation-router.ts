@@ -39,9 +39,11 @@ export interface ConversationRouterDeps {
   }
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
   readonly now?: () => Date
+  readonly permissionTimeoutMs?: number
 }
 
 const DEFAULT_PENDING_QUEUE_LIMIT = 5
+const DEFAULT_PERMISSION_TIMEOUT_MS = 5 * 60 * 1000
 const MAX_EVENT_PAYLOAD_BYTES = 8192
 const MAX_SUMMARY_LENGTH = 1000
 const SENSITIVE_ERROR_ASSIGNMENT_PATTERN = /\b(secret|token|api[-_]?key|authorization|cookie|password|credential)\b\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)/gi
@@ -55,6 +57,7 @@ export class ConversationRouter {
   private readonly sessionManager: SessionManager
   private readonly commandRouter: AgentCommandRouter | undefined
   private readonly pendingPermissions: Map<string, PendingPermissionState>
+  private readonly permissionTimeoutMs: number
 
   constructor(input: {
     readonly deps: ConversationRouterDeps
@@ -68,6 +71,7 @@ export class ConversationRouter {
     this.sessionManager = input.sessionManager
     this.commandRouter = input.commandRouter
     this.pendingPermissions = input.pendingPermissions
+    this.permissionTimeoutMs = input.deps.permissionTimeoutMs ?? DEFAULT_PERMISSION_TIMEOUT_MS
   }
 
   async send(
@@ -586,6 +590,7 @@ export class ConversationRouter {
     liveSession: AgentLiveSession,
     abortSignal?: AbortSignal,
   ): Promise<void> {
+    let timeout: ReturnType<typeof setTimeout> | undefined
     await new Promise<void>((resolve) => {
       let settled = false
       let pending: PendingPermissionState
@@ -595,6 +600,7 @@ export class ConversationRouter {
       const settle = (): void => {
         if (settled) return
         settled = true
+        if (timeout) clearTimeout(timeout)
         abortSignal?.removeEventListener("abort", abort)
         resolve()
       }
@@ -616,7 +622,25 @@ export class ConversationRouter {
       state.pending = pending
       this.pendingPermissions.set(event.requestId, pending)
       abortSignal?.addEventListener("abort", abort, { once: true })
-      if (abortSignal?.aborted) abort()
+      if (abortSignal?.aborted) {
+        abort()
+        return
+      }
+      timeout = setTimeout(() => {
+        void liveSession.respondPermission(event.requestId, {
+          behavior: "deny",
+          message: "Permission request timed out waiting for user response.",
+        }).catch((error) => {
+          this.deps.logger?.warn("Permission timeout auto-deny failed.", {
+            boundary: "agent-runtime.permission-timeout",
+            conversationId,
+            requestId: event.requestId,
+            toolName: event.toolName,
+            ...errorSummary(error),
+          })
+        })
+        this.sessionManager.settlePendingPermission(pending)
+      }, this.permissionTimeoutMs)
     })
   }
 
@@ -979,6 +1003,17 @@ function sanitizeValue(value: unknown): unknown {
     output[key] = sanitizeValue(entry)
   }
   return output
+}
+
+function errorSummary(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+} {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }
 
 function queuedTurnFailureMetadata(error: unknown): {

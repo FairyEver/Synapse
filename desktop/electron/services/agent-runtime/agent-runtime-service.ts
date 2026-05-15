@@ -75,6 +75,7 @@ export interface AgentRuntimeServiceDeps {
   readonly logger?: StructuredLogger
   readonly now?: () => Date
   readonly pendingQueueLimit?: number
+  readonly permissionTimeoutMs?: number
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
   readonly outbox?: ReplyOutboxService
@@ -173,6 +174,7 @@ export class AgentRuntimeService {
         logger: deps.logger,
         governance: deps.governance,
         pendingQueueLimit: deps.pendingQueueLimit,
+        permissionTimeoutMs: deps.permissionTimeoutMs,
         outbox: deps.outbox,
         replyTargets: deps.replyTargets,
         agentEvents: deps.agentEvents,
