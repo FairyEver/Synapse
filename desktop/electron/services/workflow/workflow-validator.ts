@@ -13,7 +13,10 @@ function buildReverseAdj(def: WorkflowDefinition): Map<string, string[]> {
 function topoSort(def: WorkflowDefinition): { order: string[]; hasCycle: boolean } {
   const inDeg = new Map(def.nodes.map((n) => [n.id, 0]))
   const adj = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
-  for (const e of def.edges) { adj.get(e.from)?.push(e.to); inDeg.set(e.to, (inDeg.get(e.to) ?? 0) + 1) }
+  for (const e of def.edges) {
+    if (!adj.has(e.from) || !inDeg.has(e.to)) continue
+    adj.get(e.from)?.push(e.to); inDeg.set(e.to, (inDeg.get(e.to) ?? 0) + 1)
+  }
   const queue = def.nodes.filter((n) => inDeg.get(n.id) === 0).map((n) => n.id)
   const order: string[] = []
   while (queue.length) {
