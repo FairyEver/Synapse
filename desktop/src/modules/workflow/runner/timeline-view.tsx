@@ -3,9 +3,9 @@ import { Badge } from "@/components/ui/badge"
 import { track } from "@/lib/ui-tracking"
 import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
 
-const STATUS_LABEL: Record<string, string> = { running: "执行中", success: "完成", failed: "失败", skipped: "跳过", pending: "等待" }
+const STATUS_LABEL: Record<string, string> = { running: "执行中", success: "完成", failed: "失败", cancelled: "已取消", skipped: "跳过", pending: "等待" }
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  running: "default", success: "secondary", failed: "destructive", skipped: "outline", pending: "outline",
+  running: "default", success: "secondary", failed: "destructive", cancelled: "secondary", skipped: "outline", pending: "outline",
 }
 
 interface TimelineViewProps {
@@ -90,6 +90,13 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
                 {r.durationMs != null && <span className="text-muted-foreground">{r.durationMs < 1000 ? `${r.durationMs}ms` : `${(r.durationMs / 1000).toFixed(1)}s`}</span>}
                 {r.durationMs != null && r.error && <span className="text-muted-foreground mx-1">·</span>}
                 {r.error && <span className="text-destructive">{r.error}</span>}
+              </span>
+            )}
+            {r.status === "cancelled" && (
+              <span className="text-xs truncate ml-auto max-w-48 text-muted-foreground">
+                {r.durationMs != null && <span>{r.durationMs < 1000 ? `${r.durationMs}ms` : `${(r.durationMs / 1000).toFixed(1)}s`}</span>}
+                {r.durationMs != null && r.error && <span className="mx-1">·</span>}
+                {r.error && <span>{r.error}</span>}
               </span>
             )}
           </div>

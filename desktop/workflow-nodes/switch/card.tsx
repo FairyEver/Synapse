@@ -14,6 +14,7 @@ function statusClass(status?: NodeStatus): string {
     case "running": return "border-primary"
     case "success": return "border-primary"
     case "failed": return "border-destructive"
+    case "cancelled": return "opacity-60 border-muted-foreground"
     case "skipped": return "opacity-40 border-dashed"
     default: return ""
   }

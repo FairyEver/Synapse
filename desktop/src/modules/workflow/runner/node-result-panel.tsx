@@ -4,9 +4,9 @@ import { X } from "lucide-react"
 import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
 import { track } from "@/lib/ui-tracking"
 
-const STATUS_LABEL: Record<string, string> = { pending: "等待", running: "执行中", success: "完成", failed: "失败", skipped: "跳过" }
+const STATUS_LABEL: Record<string, string> = { pending: "等待", running: "执行中", success: "完成", failed: "失败", cancelled: "已取消", skipped: "跳过" }
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  pending: "outline", running: "default", success: "secondary", failed: "destructive", skipped: "outline",
+  pending: "outline", running: "default", success: "secondary", failed: "destructive", cancelled: "secondary", skipped: "outline",
 }
 
 interface NodeResultPanelProps {
@@ -96,8 +96,8 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
         )}
         {result.error && (
           <div className="grid gap-1">
-            <p className="font-medium text-destructive">错误</p>
-            <pre className="bg-muted rounded p-2 whitespace-pre-wrap break-all text-destructive">{result.error}</pre>
+            <p className={`font-medium ${result.status === "cancelled" ? "text-muted-foreground" : "text-destructive"}`}>错误</p>
+            <pre className={`bg-muted rounded p-2 whitespace-pre-wrap break-all ${result.status === "cancelled" ? "text-muted-foreground" : "text-destructive"}`}>{result.error}</pre>
           </div>
         )}
         {activeBranchLabel && (
@@ -108,7 +108,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
         )}
         {!result.input.prompt && !result.error && !activeBranchLabel && (result.output == null || result.output === "") && (
           <p className="text-muted-foreground">
-            {result.status === "skipped" ? "节点因工作流分支逻辑被跳过，未执行" : result.status === "pending" ? "节点等待执行" : result.status === "running" ? "节点正在执行…" : "（无可展示的输出）"}
+            {result.status === "skipped" ? "节点因工作流分支逻辑被跳过，未执行" : result.status === "pending" ? "节点等待执行" : result.status === "running" ? "节点正在执行…" : result.status === "cancelled" ? "节点执行被取消" : "（无可展示的输出）"}
           </p>
         )}
       </div>

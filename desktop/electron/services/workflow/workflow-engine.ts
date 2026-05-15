@@ -156,7 +156,7 @@ export class WorkflowEngine {
           })
 
           if (effectiveAbortSignal.aborted) {
-            return { nodeId, status: "failed", error: "运行被取消", durationMs: execResult.durationMs }
+            return { nodeId, status: "cancelled", error: "运行被取消", durationMs: execResult.durationMs }
           }
 
           return {
@@ -166,7 +166,7 @@ export class WorkflowEngine {
           }
         } catch (err) {
           if (effectiveAbortSignal.aborted) {
-            return { nodeId, status: "failed", error: "运行被取消" }
+            return { nodeId, status: "cancelled", error: "运行被取消" }
           }
           const diagnostic = errorDiagnostic(err)
           const visibleError = visibleNodeExceptionError(diagnostic)
@@ -206,6 +206,8 @@ export class WorkflowEngine {
           })
           if (outcome.output !== undefined) nodeOutputs[outcome.nodeId] = outcome.output
           emit({ type: "node:completed", runId, nodeId: outcome.nodeId, output: outcome.output, result: { ...nr } })
+        } else if (outcome.status === "cancelled") {
+          logger.info("node cancelled", { runId, nodeId: outcome.nodeId, nodeName: nodeNames[outcome.nodeId] })
         } else {
           const node = def.nodes.find((n) => n.id === outcome.nodeId)
           logger.warn("node failed", {
@@ -256,7 +258,7 @@ export class WorkflowEngine {
       // Mark any still-running nodes
       for (const nr of Object.values(nodeResults)) {
         if (nr.status === "running") {
-          nr.status = "failed"; nr.error = "运行被取消"
+          nr.status = "cancelled"; nr.error = "运行被取消"
           nr.endedAt = Date.now()
           nr.durationMs = nr.startedAt ? nr.endedAt - nr.startedAt : undefined
         }

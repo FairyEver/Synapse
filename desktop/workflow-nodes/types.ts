@@ -45,7 +45,7 @@ export interface NodeExecutionInput<TConfig> {
 }
 
 export interface NodeExecutionResult {
-  status: "success" | "failed"
+  status: "success" | "failed" | "cancelled"
   output: string
   outputs?: Record<string, unknown>
   activeBranch?: string

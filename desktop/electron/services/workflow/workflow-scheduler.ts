@@ -4,7 +4,7 @@ const logger = createMainLogger("service.workflow.scheduler")
 
 export interface NodeExecOutcome {
   nodeId: string
-  status: "success" | "failed" | "skipped"
+  status: "success" | "failed" | "cancelled" | "skipped"
   output?: string
   outputs?: Record<string, unknown>
   activeBranch?: string

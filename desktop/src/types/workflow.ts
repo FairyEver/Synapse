@@ -16,7 +16,7 @@ export interface WorkflowMeta {
 }
 export interface NodeRunResult {
   nodeId: string
-  status: "pending" | "running" | "success" | "failed" | "skipped"
+  status: "pending" | "running" | "success" | "failed" | "cancelled" | "skipped"
   input: { variables: Record<string, string>; prompt?: string }
   output?: string; outputs?: Record<string, unknown>; activeBranch?: string; error?: string
   startedAt?: number; endedAt?: number; durationMs?: number

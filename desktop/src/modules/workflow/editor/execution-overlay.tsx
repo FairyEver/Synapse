@@ -5,9 +5,9 @@ import { Badge } from "@/components/ui/badge"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { track } from "@/lib/ui-tracking"
 
-const STATUS_LABEL: Record<string, string> = { running: "执行中", success: "完成", failed: "失败", skipped: "跳过", pending: "等待" }
+const STATUS_LABEL: Record<string, string> = { running: "执行中", success: "完成", failed: "失败", cancelled: "已取消", skipped: "跳过", pending: "等待" }
 const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  running: "default", success: "secondary", failed: "destructive", skipped: "outline", pending: "outline",
+  running: "default", success: "secondary", failed: "destructive", cancelled: "secondary", skipped: "outline", pending: "outline",
 }
 const RUN_STATE_BADGE: Record<string, { label: string; variant: "default" | "secondary" | "destructive" | "outline" } | null> = {
   running: { label: "执行中", variant: "default" },
@@ -54,7 +54,7 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
     else onViewClose?.()
   }
   const handleResultOpen = (result: NodeRunResult) => {
-    if (result.status !== "success" && result.status !== "failed" && result.status !== "skipped") return
+    if (result.status !== "success" && result.status !== "failed" && result.status !== "cancelled" && result.status !== "skipped") return
     track({
       component: "workflow.editor",
       name: "workflow-editor-execution-node-detail-open",
@@ -90,7 +90,7 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
         {results.map((r) => (
           <div
             key={r.nodeId}
-            className={`flex items-center gap-2 ${r.status === "success" || r.status === "failed" || r.status === "skipped" ? "cursor-pointer hover:opacity-75" : ""}`}
+            className={`flex items-center gap-2 ${r.status === "success" || r.status === "failed" || r.status === "cancelled" || r.status === "skipped" ? "cursor-pointer hover:opacity-75" : ""}`}
             onClick={() => handleResultOpen(r)}
           >
             <Badge variant={STATUS_VARIANT[r.status] ?? "outline"} className="text-xs shrink-0">{STATUS_LABEL[r.status] ?? r.status}</Badge>
