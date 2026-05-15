@@ -351,6 +351,10 @@ function resolveGlobalProviderService(resolve: <T>(serviceId: string) => T) {
     dataRepository: resolve<DataRepository>("core.data-repository"),
     permissionGuard: resolve<PermissionGuard>("core.permission-guard"),
     auditSink: resolve<AuditSink>("core.audit-sink"),
+    scanReferences: async (providerId) => {
+      const scanner = new ProviderReferenceScanner(buildScannerDeps(resolve))
+      return scanner.scan(providerId)
+    },
   })
 }
 

@@ -48,6 +48,8 @@ import {
   PROVIDER_SERVICE_ID,
   type ProviderService,
 } from "../services/provider"
+import { ProviderReferenceScanner } from "../services/provider/provider-reference-scanner"
+import type { ConversationEntryV1 } from "../runtime/data-repo"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { FeishuConnectorService } from "../services/connectors"
 import { SideChannelService } from "../services/side-channel"
@@ -398,12 +400,65 @@ export const providerServiceDescriptor: ServiceDescriptor<ProviderService> = {
     "core.data-repository",
     "core.permission-guard",
     "core.audit-sink",
+    "core.task-scheduler",
+    "core.workflow",
   ],
   create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
     return createProviderServiceFromDataRepository({
-      dataRepository: ctx.registry.get<DataRepository>("core.data-repository"),
+      dataRepository,
       permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      scanReferences: async (providerId) => {
+        const taskScheduler = ctx.registry.get<TaskSchedulerService>("core.task-scheduler")
+        const workflowService = ctx.registry.get<WorkflowService>("core.workflow")
+        const scanner = new ProviderReferenceScanner({
+          listTasks: async () => {
+            const tasks = await taskScheduler.schedulerTaskList()
+            return tasks.map((t) => ({ id: t.id, name: t.name, action: t.action }))
+          },
+          updateTaskAction: async () => {},
+          listWorkflowNodes: async () => {
+            const metas = await workflowService.list()
+            const nodes: Array<{
+              workflowId: string; workflowName: string
+              nodeId: string; nodeName: string
+              providerId: string; modelTier: string
+            }> = []
+            for (const meta of metas) {
+              const def = await workflowService.get(meta.id) as Record<string, unknown> | null
+              if (!def) continue
+              const defNodes = (def as { nodes?: Array<{ id: string; name: string; config: Record<string, unknown> }> }).nodes
+              if (!defNodes) continue
+              for (const node of defNodes) {
+                const config = node.config
+                if (typeof config.providerId === "string" && config.providerId) {
+                  nodes.push({
+                    workflowId: (def as { id: string }).id,
+                    workflowName: (def as { name: string }).name,
+                    nodeId: node.id,
+                    nodeName: node.name,
+                    providerId: config.providerId,
+                    modelTier: typeof config.modelTier === "string" ? config.modelTier : "default",
+                  })
+                }
+              }
+            }
+            return nodes
+          },
+          updateWorkflowNodeProvider: async () => {},
+          listConversations: async () => {
+            const conversations = dataRepository.namespace<ConversationEntryV1>("conversations")
+            const all = await conversations.list()
+            return all.map((c) => ({
+              id: c.id,
+              name: c.name ?? c.id,
+              providerId: c.providerId,
+            }))
+          },
+        })
+        return scanner.scan(providerId)
+      },
     })
   },
 }

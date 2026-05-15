@@ -6,6 +6,7 @@ import type {
 import type { ProjectScopedService } from "../../runtime/project-container"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { ProviderService } from "./provider-service"
+import type { ProviderReferenceScanResult } from "./provider-reference-scanner"
 import { PROVIDER_SERVICE_ID } from "./types"
 
 export { PROVIDER_PRESETS } from "./provider-presets"
@@ -72,11 +73,13 @@ export function createProviderServiceFromDataRepository(deps: {
   readonly dataRepository: DataRepository
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
+  readonly scanReferences?: (providerId: string) => Promise<ProviderReferenceScanResult>
 }): ProviderService {
   return new ProviderService({
     providers: deps.dataRepository.namespace<ProviderEntryV1>("providers"),
     secrets: deps.dataRepository.namespace<SecretEntryV1>("secrets"),
     permissionGuard: deps.permissionGuard,
     auditSink: deps.auditSink,
+    scanReferences: deps.scanReferences,
   })
 }

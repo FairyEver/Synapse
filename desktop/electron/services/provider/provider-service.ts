@@ -13,6 +13,7 @@ import type {
   PermissionGuard,
 } from "../../runtime/security"
 import { ProviderSecretStore, providerApiKeySecretId } from "./provider-secret-store"
+import type { ProviderReferenceScanResult } from "./provider-reference-scanner"
 import type {
   CCProvider,
   CCProviderPreset,
@@ -52,6 +53,7 @@ export interface ProviderServiceDeps {
   readonly readTextFile?: (filePath: string) => Promise<string>
   readonly ccSwitchImportSources?: () => readonly CcSwitchImportSource[]
   readonly readCcSwitchClaudeProviders?: (source: CcSwitchImportSource) => Promise<ReadCcSwitchSourceResult>
+  readonly scanReferences?: (providerId: string) => Promise<ProviderReferenceScanResult>
 }
 
 export interface BuildProviderEnvContext {
@@ -71,6 +73,7 @@ export class ProviderService {
   private readonly readTextFile: (filePath: string) => Promise<string>
   private readonly ccSwitchImportSources: () => readonly CcSwitchImportSource[]
   private readonly readCcSwitchClaudeProviders: (source: CcSwitchImportSource) => Promise<ReadCcSwitchSourceResult>
+  private readonly scanReferences?: (providerId: string) => Promise<ProviderReferenceScanResult>
 
   constructor(deps: ProviderServiceDeps) {
     this.providers = deps.providers
@@ -82,6 +85,7 @@ export class ProviderService {
     this.readTextFile = deps.readTextFile ?? ((filePath) => fs.readFile(filePath, "utf8"))
     this.ccSwitchImportSources = deps.ccSwitchImportSources ?? resolveCcSwitchCandidateSources
     this.readCcSwitchClaudeProviders = deps.readCcSwitchClaudeProviders ?? readCcSwitchClaudeProvidersFromSourceAsync
+    this.scanReferences = deps.scanReferences
   }
 
   async listProviders(): Promise<readonly CCProvider[]> {
@@ -277,6 +281,21 @@ export class ProviderService {
   async deleteProvider(id: string): Promise<void> {
     if (id === LOCAL_PROVIDER_ID) {
       throw new Error("The local Claude Code provider cannot be deleted.")
+    }
+    if (this.scanReferences) {
+      const result = await this.scanReferences(id)
+      if (result.references.length > 0) {
+        const byKind = {
+          task: result.references.filter((r) => r.kind === "scheduled-task").map((r) => r.entityName),
+          workflow: result.references.filter((r) => r.kind === "workflow-node").map((r) => r.entityName),
+          conversation: result.references.filter((r) => r.kind === "conversation").map((r) => r.entityName),
+        }
+        const parts: string[] = []
+        if (byKind.task.length) parts.push(`${byKind.task.length} 个定时任务（${byKind.task.join("、")}）`)
+        if (byKind.workflow.length) parts.push(`${byKind.workflow.length} 个工作流（${byKind.workflow.join("、")}）`)
+        if (byKind.conversation.length) parts.push(`${byKind.conversation.length} 个会话（${byKind.conversation.join("、")}）`)
+        throw new Error(`无法删除：该供应商正在被 ${parts.join("、")} 使用，请先迁移引用后再删除。`)
+      }
     }
     const provider = await this.getProvider(id)
     if (provider.active) {

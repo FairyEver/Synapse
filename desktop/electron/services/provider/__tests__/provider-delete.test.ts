@@ -36,6 +36,31 @@ describe("ProviderService.deleteProvider", () => {
       .rejects.toThrow("cannot be deleted")
   })
 
+  it("rejects deleting provider that has active references", async () => {
+    const { service } = makeProviderService({
+      scanReferences: async () => ({
+        providerId: "in-use",
+        references: [
+          { kind: "scheduled-task", entityId: "t1", entityName: "日报推送", providerId: "in-use", modelTier: "default" },
+          { kind: "workflow-node", entityId: "wf1", entityName: "代码审查", nodeId: "n1", nodeName: "AI Review", providerId: "in-use", modelTier: "sonnet" },
+        ],
+        taskCount: 1,
+        workflowNodeCount: 1,
+        conversationCount: 0,
+      }),
+    })
+    await service.createProvider({
+      id: "in-use",
+      name: "In Use",
+      category: "custom",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      apiKey: "sk-key",
+      env: {},
+    })
+    await expect(service.deleteProvider("in-use"))
+      .rejects.toThrow("无法删除：该供应商正在被 1 个定时任务（日报推送）、1 个工作流（代码审查） 使用")
+  })
+
   it("switches active to local-claude-code before deleting active provider", async () => {
     const { service } = makeProviderService()
     await service.createProvider({
@@ -115,13 +140,14 @@ describe("ProviderService.buildEnvSafe", () => {
 
 // ─── Test helpers (same pattern as provider-service.test.ts) ─────────────────
 
-function makeProviderService() {
+function makeProviderService(overrides?: Partial<Parameters<typeof ProviderService extends new (deps: infer D) => any ? (deps: D) => void : never>[0]>) {
   const providers = new MemoryNamespace<ProviderEntryV1>("providers")
   const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
   const service = new ProviderService({
     providers,
     secrets,
     now: () => new Date("2026-05-15T00:00:00.000Z"),
+    ...overrides,
   })
   return { service, providers, secrets }
 }
