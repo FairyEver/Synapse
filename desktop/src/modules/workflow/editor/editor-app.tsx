@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { AlertCircle, RefreshCw, X } from "lucide-react"
+import { AlertCircle, Loader2, RefreshCw, X } from "lucide-react"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import type { WorkflowDefinition, ValidationError } from "@/types/workflow"
 import { Alert, AlertDescription, AlertTitle, AlertAction } from "@/components/ui/alert"
@@ -329,7 +329,7 @@ export function WorkflowEditorApp() {
         </div>
       )
     }
-    return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">加载中…</div>
+    return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground gap-2"><Loader2 className="h-4 w-4 animate-spin" />加载中…</div>
   }
 
   return (

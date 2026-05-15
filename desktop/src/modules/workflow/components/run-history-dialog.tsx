@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { AlertCircle, RefreshCw } from "lucide-react"
+import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
@@ -103,7 +103,7 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
           <DialogDescription className="sr-only">查看该工作流的历史运行记录。</DialogDescription>
         </DialogHeader>
         {loading ? (
-          <p className="text-sm text-muted-foreground py-4">加载中…</p>
+          <p className="text-sm text-muted-foreground py-4 flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />加载中…</p>
         ) : error ? (
           <div className="py-4 space-y-3">
             <Alert variant="destructive">

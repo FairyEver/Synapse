@@ -1,6 +1,6 @@
 import { useState } from "react"
 import { toast } from "sonner"
-import { AlertCircle, RefreshCw } from "lucide-react"
+import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
 import { WorkflowCard } from "./workflow-card"
 import { RunParamsDialog } from "./run-params-dialog"
 import { RunHistoryDialog } from "./run-history-dialog"
@@ -133,7 +133,7 @@ export function WorkflowList() {
     }
   }
 
-  if (loading) return <p className="text-sm text-muted-foreground p-4">加载中…</p>
+  if (loading) return <p className="text-sm text-muted-foreground p-4 flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />加载中…</p>
   if (error) return (
     <div className="p-4 space-y-3">
       <Alert variant="destructive">
