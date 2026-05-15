@@ -8,8 +8,9 @@ import { DagView } from "./dag-view"
 import { TimelineView } from "./timeline-view"
 import { NodeResultPanel } from "./node-result-panel"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { RefreshCw } from "lucide-react"
+import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
 import { ProviderLookupProvider } from "../../../../workflow-nodes/provider-lookup-context"
 
 const logger = createRendererLogger("workflow.runner")
@@ -254,10 +255,11 @@ export function WorkflowRunnerApp() {
       return (
         <div className="flex items-center justify-center h-screen">
           <div className="text-center space-y-3 max-w-sm">
-            <div className="rounded-lg border bg-card p-4 space-y-2 text-left">
-              <p className="text-xs font-medium text-muted-foreground">无法加载运行结果</p>
-              <p className="text-xs text-muted-foreground">{loadError}</p>
-            </div>
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle className="text-xs font-medium">无法加载运行结果</AlertTitle>
+              <AlertDescription className="text-xs">{loadError}</AlertDescription>
+            </Alert>
             <Button size="sm" variant="outline" onClick={handleRetry}>
               <RefreshCw className="h-3.5 w-3.5 mr-1" />重试
             </Button>
@@ -265,7 +267,7 @@ export function WorkflowRunnerApp() {
         </div>
       )
     }
-    return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">加载中…</div>
+    return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground gap-2"><Loader2 className="h-4 w-4 animate-spin" />加载中…</div>
   }
 
   return (
