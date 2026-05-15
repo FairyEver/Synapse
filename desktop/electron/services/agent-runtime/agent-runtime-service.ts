@@ -572,9 +572,9 @@ export class AgentRuntimeService {
         ...summarizePermissionResponseError(error),
       })
       throw error
+    } finally {
+      this.sessionManager.settlePendingPermission(pending)
     }
-
-    this.sessionManager.settlePendingPermission(pending)
   }
 
   async setPermissionMode(input: {
