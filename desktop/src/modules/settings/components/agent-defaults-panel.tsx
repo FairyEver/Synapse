@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { ChevronDown } from "lucide-react"
 import {
   AlertDialog,
@@ -15,10 +15,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
+import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { AgentPermissionModeMenu } from "@/modules/agent/components/permission-mode-menu"
 import { permissionModeLabels } from "@/modules/agent/permission-mode-options"
 import { SettingsFieldRow } from "@/modules/settings/components/settings-field-row"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
+import type { ProviderModelSelection } from "@/types/provider-model"
 
 const logger = createRendererLogger("settings.agent-defaults")
 
@@ -26,7 +29,10 @@ function AgentDefaultsContent() {
   const { config, updateConfig } = useAppConfig()
   const { promise } = useAppNotifications()
   const [pendingMode, setPendingMode] = useState<SynapseAgentPermissionMode | null>(null)
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false)
+  const [resolvedLabel, setResolvedLabel] = useState("")
   const selectedMode = config.agent.defaultPermissionMode
+  const defaultPM = config.agent.defaultProviderModel
 
   const saveDefaultPermissionMode = async (nextMode: SynapseAgentPermissionMode) => {
     try {
@@ -42,6 +48,49 @@ function AgentDefaultsContent() {
       logger.error("Agent default permission setting save failed.", error)
     }
   }
+
+  useEffect(() => {
+    if (!defaultPM) {
+      setResolvedLabel("")
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const providers = await requireSynapseBridge().agent.listProviders()
+        if (cancelled) return
+        const provider = providers.find((p) => p.id === defaultPM.providerId)
+        if (provider) {
+          const tierField = defaultPM.modelTier === "default" ? provider.model
+            : defaultPM.modelTier === "haiku" ? provider.haikuModel
+            : defaultPM.modelTier === "sonnet" ? provider.sonnetModel
+            : provider.opusModel
+          setResolvedLabel(`${provider.name} ${tierField?.trim() || defaultPM.modelTier}`)
+        } else {
+          setResolvedLabel(defaultPM.providerId)
+        }
+      } catch {
+        setResolvedLabel(defaultPM.providerId)
+      }
+    })()
+    return () => { cancelled = true }
+  }, [defaultPM?.providerId, defaultPM?.modelTier])
+
+  const saveDefaultProviderModel = useCallback(async (selection: ProviderModelSelection | null) => {
+    const value = selection ? { providerId: selection.providerId, modelTier: selection.modelTier } : null
+    try {
+      await promise(
+        () => updateConfig({ agent: { defaultProviderModel: value } }),
+        {
+          loading: "正在保存设置...",
+          success: () => "设置已保存。",
+          error: (error) => error instanceof Error ? error.message : "保存设置失败。",
+        },
+      )
+    } catch (error) {
+      logger.error("Agent default provider model save failed.", error)
+    }
+  }, [promise, updateConfig])
 
   const selectPermissionMode = (mode: SynapseAgentPermissionMode) => {
     if (mode === selectedMode) return
@@ -73,6 +122,43 @@ function AgentDefaultsContent() {
               <ChevronDown className="size-4 text-muted-foreground" />
             </Button>
           )}
+        />
+      </SettingsFieldRow>
+      <SettingsFieldRow
+        label="默认供应商和模型"
+        description="新建 Agent 对话、定时任务和工作流节点将默认使用此供应商和模型。"
+        controlClassName="w-full md:w-[220px]"
+      >
+        <div className="flex items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            className="w-full justify-between"
+            aria-label="默认供应商"
+            onClick={() => setProviderDialogOpen(true)}
+          >
+            <span className="truncate text-muted-foreground">
+              {defaultPM ? resolvedLabel || "..." : "选择供应商 + 模型"}
+            </span>
+            <ChevronDown className="size-4 text-muted-foreground" />
+          </Button>
+          {defaultPM ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              aria-label="清除默认供应商"
+              onClick={() => void saveDefaultProviderModel(null)}
+            >
+              清除
+            </Button>
+          ) : null}
+        </div>
+        <ProviderModelSelectDialog
+          open={providerDialogOpen}
+          onOpenChange={setProviderDialogOpen}
+          defaultSelection={defaultPM ?? undefined}
+          onSelect={(selection) => void saveDefaultProviderModel(selection)}
         />
       </SettingsFieldRow>
       <AlertDialog open={pendingMode !== null} onOpenChange={(open) => {
@@ -111,7 +197,7 @@ function AgentDefaultsPanel() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">默认权限</CardTitle>
+        <CardTitle className="text-base">智能体默认设置</CardTitle>
       </CardHeader>
       <CardContent>
         <AgentDefaultsContent />
