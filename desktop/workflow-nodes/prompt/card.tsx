@@ -1,9 +1,9 @@
 import { cn } from "@/lib/utils"
 import { promptNodeManifest } from "./manifest"
-import { AgentIcon, getAgentLabel } from "../agent-icon"
 import type { PromptNodeConfig } from "./schema"
 import type { NodeRunResult } from "@/types/workflow"
 import { NodeProgressBar, useRunningTimer } from "@/modules/workflow/runner/node-progress-bar"
+import { useProviderLookup } from "../provider-lookup-context"
 
 type NodeStatus = NodeRunResult["status"]
 
@@ -24,6 +24,9 @@ export function PromptNodeCard({ config, name, selected, status, progressLabel, 
 }) {
   const Icon = promptNodeManifest.icon
   const timer = useRunningTimer(startedAt, status === "running")
+  const { getProviderName, getModelName } = useProviderLookup()
+  const providerDisplay = config.providerId ? (getProviderName(config.providerId) ?? config.providerId) : undefined
+  const modelDisplay = config.providerId ? (getModelName(config.providerId, config.modelTier) ?? config.modelTier) : undefined
   return (
     <div className={cn("relative rounded-lg border bg-card px-3 py-2 w-56 shadow-sm", status === "running" && "pb-4", selected && "ring-2 ring-primary", statusClass(status))}>
       <div className="flex items-center gap-2 mb-1.5">
@@ -35,17 +38,22 @@ export function PromptNodeCard({ config, name, selected, status, progressLabel, 
       </div>
       {status === "running" && progressLabel ? (
         <p className="text-[11px] text-muted-foreground truncate">{progressLabel}</p>
+      ) : config.providerId ? (
+        <>
+          <div className="grid grid-cols-[3rem_minmax(0,1fr)] gap-1 text-[11px] text-muted-foreground mb-1">
+            <span>供应商</span>
+            <span className="truncate">{providerDisplay}</span>
+            <span>模型</span>
+            <span className="truncate">{modelDisplay}</span>
+          </div>
+          <p className="text-[11px] text-muted-foreground truncate opacity-70">
+            {config.prompt || "无 Prompt"}
+          </p>
+        </>
       ) : (
         <>
           <div className="flex items-center gap-1.5 mb-1">
-            {config.agent ? (
-              <>
-                <AgentIcon agentId={config.agent} />
-                <span className="text-[11px] text-muted-foreground truncate">{getAgentLabel(config.agent)}</span>
-              </>
-            ) : (
-              <span className="text-[11px] text-muted-foreground">未选择 Agent</span>
-            )}
+            <span className="text-[11px] text-muted-foreground truncate">未选择供应商</span>
           </div>
           <p className="text-[11px] text-muted-foreground truncate opacity-70">
             {config.prompt || "无 Prompt"}
