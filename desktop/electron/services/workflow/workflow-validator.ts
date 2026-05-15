@@ -72,6 +72,15 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
     errors.push({ type: "missing_end_node", message: "工作流必须包含一个结束节点" })
   if (endNodes.length > 1)
     errors.push({ type: "multiple_end_nodes", message: "结束节点只能有一个" })
+  const nodeIdsSeen = new Set<string>()
+  for (const node of def.nodes) {
+    if (nodeIdsSeen.has(node.id)) {
+      errors.push({ type: "invalid_config", nodeId: node.id, message: `节点 ID「${node.id}」重复，请删除重复节点后重试` })
+      logger.warn("duplicate node id detected", { workflowId: def.id, nodeId: node.id })
+      break
+    }
+    nodeIdsSeen.add(node.id)
+  }
 
   const { hasCycle } = topoSort(def)
   if (hasCycle) errors.push({ type: "cycle", message: "工作流包含循环依赖" })

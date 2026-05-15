@@ -64,6 +64,11 @@ describe("validateWorkflow", () => {
     const r = validateWorkflow({ ...base, edges: [{ id: "missing", from: "a", to: "nope" }, { id: "e2", from: "a", to: "end" }] })
     expect(r.errors.some((e) => e.type === "cycle")).toBe(false)
   })
+  it("errors on duplicate node ids", () => {
+    const duplicate = { ...nodeB, name: "Duplicate B" }
+    const r = validateWorkflow({ ...base, nodes: [nodeA, nodeB, duplicate, nodeEnd] })
+    expect(r.errors.some((e) => e.type === "invalid_config" && e.nodeId === "b")).toBe(true)
+  })
 
   // New: End Node enforcement
   it("errors when no end node exists", () => {
