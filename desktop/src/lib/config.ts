@@ -14,6 +14,8 @@ import {
 } from "../config/content-types"
 import { SYNAPSE_CONTENT_SORT_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../types/config"
 import { SYNAPSE_AGENT_PERMISSION_MODES } from "../types/agent"
+import { MODEL_TIERS } from "../types/provider-model"
+import type { ModelTier } from "../types/provider-model"
 import type { SynapseContentType } from "../types/content"
 import type {
   SynapseAgentGlobalConfig,
@@ -417,8 +419,19 @@ function normalizeAgentGlobalConfig(value: unknown): SynapseAgentGlobalConfig {
       ? "bypassPermissions"
       : DEFAULT_AGENT_GLOBAL_CONFIG.defaultPermissionMode
 
+  const defaultProviderModel = isRecord(value.defaultProviderModel)
+    && isNonEmptyString(value.defaultProviderModel.providerId)
+    && typeof value.defaultProviderModel.modelTier === "string"
+    && (MODEL_TIERS as readonly string[]).includes(value.defaultProviderModel.modelTier)
+    ? {
+        providerId: value.defaultProviderModel.providerId.trim(),
+        modelTier: value.defaultProviderModel.modelTier as ModelTier,
+      }
+    : null
+
   return {
     defaultPermissionMode,
+    defaultProviderModel,
   }
 }
 

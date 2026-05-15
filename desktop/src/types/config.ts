@@ -1,5 +1,6 @@
 import type { SynapseContentType } from "./content"
 import type { SynapseAgentPermissionMode } from "./agent"
+import type { ModelTier } from "./provider-model"
 
 export const SYNAPSE_CONTENT_SORT_OPTIONS = [
   "modified-desc",
@@ -58,6 +59,7 @@ export type SynapseGlobalConfig = {
 
 export type SynapseAgentGlobalConfig = {
   defaultPermissionMode: SynapseAgentPermissionMode
+  defaultProviderModel: { providerId: string; modelTier: ModelTier } | null
 }
 
 export type SynapseConfig = {

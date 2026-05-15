@@ -58,4 +58,61 @@ describe("Synapse config Agent defaults", () => {
     expect(next.agent.defaultPermissionMode).toBe("bypassPermissions")
     expect(next.global.themeMode).toBe(current.global.themeMode)
   })
+
+  it("defaults defaultProviderModel to null", () => {
+    expect(createDefaultConfig().agent.defaultProviderModel).toBeNull()
+  })
+
+  it("normalizes valid defaultProviderModel", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: { themeMode: "light", projects: [] },
+      agent: { defaultPermissionMode: "default", defaultProviderModel: { providerId: "abc", modelTier: "sonnet" } },
+    })
+    expect(config.agent.defaultProviderModel).toEqual({ providerId: "abc", modelTier: "sonnet" })
+  })
+
+  it("normalizes invalid defaultProviderModel to null", () => {
+    const empty = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: { themeMode: "light", projects: [] },
+      agent: { defaultPermissionMode: "default", defaultProviderModel: { providerId: "", modelTier: "sonnet" } },
+    })
+    const badTier = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: { themeMode: "light", projects: [] },
+      agent: { defaultPermissionMode: "default", defaultProviderModel: { providerId: "abc", modelTier: "turbo" } },
+    })
+    const notObj = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: { themeMode: "light", projects: [] },
+      agent: { defaultPermissionMode: "default", defaultProviderModel: "hello" },
+    })
+    expect(empty.agent.defaultProviderModel).toBeNull()
+    expect(badTier.agent.defaultProviderModel).toBeNull()
+    expect(notObj.agent.defaultProviderModel).toBeNull()
+  })
+
+  it("applies defaultProviderModel patch", () => {
+    const current = createDefaultConfig()
+    const next = applySynapseConfigPatch(current, {
+      agent: { defaultProviderModel: { providerId: "p1", modelTier: "opus" } },
+    })
+    expect(next.agent.defaultProviderModel).toEqual({ providerId: "p1", modelTier: "opus" })
+    expect(next.agent.defaultPermissionMode).toBe("default")
+  })
+
+  it("clears defaultProviderModel with null patch", () => {
+    const current = applySynapseConfigPatch(createDefaultConfig(), {
+      agent: { defaultProviderModel: { providerId: "p1", modelTier: "opus" } },
+    })
+    const cleared = applySynapseConfigPatch(current, {
+      agent: { defaultProviderModel: null },
+    })
+    expect(cleared.agent.defaultProviderModel).toBeNull()
+  })
 })
