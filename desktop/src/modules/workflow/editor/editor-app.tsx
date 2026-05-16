@@ -353,7 +353,6 @@ export function WorkflowEditorApp() {
   return (
     <ProviderLookupProvider>
     <div className="flex flex-col h-screen">
-      <div className="h-8 shrink-0 [-webkit-app-region:drag]" />
       {runErrors.length > 0 && (
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
           <AlertCircle className="h-4 w-4" />
