@@ -12,6 +12,7 @@ export const switchNodeConfigSchema = z.object({
   modelTier: z.enum(["default", "haiku", "sonnet", "opus"]),
   variables: z.array(variableBindingSchema),
   prompt: z.string(),
+  projectId: z.string().optional(),
   branches: z.array(switchBranchSchema).min(1),
   defaultBranch: z.string().optional(),
 }).superRefine((config, ctx) => {

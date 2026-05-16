@@ -6,5 +6,6 @@ export const promptNodeConfigSchema = z.object({
   modelTier: z.enum(["default", "haiku", "sonnet", "opus"]),
   variables: z.array(variableBindingSchema),
   prompt: z.string(),
+  projectId: z.string().optional(),
 })
 export type PromptNodeConfig = z.infer<typeof promptNodeConfigSchema>
