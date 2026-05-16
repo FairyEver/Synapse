@@ -57,7 +57,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     },
     {
       name: "workflow_node_type_describe",
-      description: "Return the full manifest for a node type including config JSON Schema, port definitions, and field descriptors.",
+      description: "Return the full manifest for a node type including config JSON Schema, port definitions, and field descriptors. For prompt and switch nodes, also returns `availableProviders` — a list of configured providers with their model names per tier.",
       inputSchema: {
         type: "object",
         properties: { nodeType: { type: "string", description: "Node type identifier (e.g. \"prompt\", \"switch\", \"end\")." } },

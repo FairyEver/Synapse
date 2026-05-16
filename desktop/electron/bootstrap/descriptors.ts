@@ -205,6 +205,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     "core.workflow.run-aborts",
     "core.workflow.run-statuses",
     "core.workflow.engine",
+    PROVIDER_SERVICE_ID,
   ],
   async create(ctx) {
     const eventBus = ctx.registry.get<EventBus>("core.event-bus")
@@ -216,6 +217,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const runAborts = ctx.registry.get<Map<string, AbortController>>("core.workflow.run-aborts")
     const runStatuses = ctx.registry.get<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
     const workflowEngine = ctx.registry.get<WorkflowEngine>("core.workflow.engine")
+    const providerService = ctx.registry.get<ProviderService>(PROVIDER_SERVICE_ID)
 
     const workflowDispatcher = createWorkflowDispatcher({
       workflowService,
@@ -267,6 +269,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
         }
       },
       getRunStatus: async (runId: string) => runStatuses.get(runId) ?? null,
+      listProviders: () => providerService.listProviders(),
     })
 
     const actionRouter = createSynapseActionRouter({

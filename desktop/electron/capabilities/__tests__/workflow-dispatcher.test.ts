@@ -204,6 +204,39 @@ describe("createWorkflowDispatcher", () => {
     expect((result.data as Record<string, unknown>).removedEdgeCount).toBe(1)
   })
 
+  it("workflow.node_type.describe returns availableProviders for prompt", async () => {
+    const listProviders = vi.fn(async () => [
+      { id: "p1", name: "Provider 1", model: "m-default", haikuModel: "m-haiku", sonnetModel: "m-sonnet", opusModel: "m-opus" },
+      { id: "p2", name: "Provider 2", model: "m2-default", haikuModel: undefined, sonnetModel: "m2-sonnet", opusModel: undefined },
+    ])
+    const deps = makeDeps({ listProviders })
+    const dispatcher = createWorkflowDispatcher(deps)
+    const result = await dispatcher.dispatch("workflow.node_type.describe", { nodeType: "prompt" }, { source: "api" })
+    expect(result.ok).toBe(true)
+    const data = result.data as Record<string, unknown>
+    expect(data).toHaveProperty("availableProviders")
+    const providers = data.availableProviders as Array<Record<string, unknown>>
+    expect(providers).toHaveLength(2)
+    expect(providers[0]).toEqual({
+      id: "p1", name: "Provider 1",
+      models: { default: "m-default", haiku: "m-haiku", sonnet: "m-sonnet", opus: "m-opus" },
+    })
+    expect(providers[1]).toEqual({
+      id: "p2", name: "Provider 2",
+      models: { default: "m2-default", haiku: undefined, sonnet: "m2-sonnet", opus: undefined },
+    })
+  })
+
+  it("workflow.node_type.describe omits availableProviders for end node", async () => {
+    const listProviders = vi.fn(async () => [{ id: "p1", name: "P1", model: "m", haikuModel: "h", sonnetModel: "s", opusModel: "o" }])
+    const deps = makeDeps({ listProviders })
+    const dispatcher = createWorkflowDispatcher(deps)
+    const result = await dispatcher.dispatch("workflow.node_type.describe", { nodeType: "end" }, { source: "api" })
+    expect(result.ok).toBe(true)
+    const data = result.data as Record<string, unknown>
+    expect(data).not.toHaveProperty("availableProviders")
+  })
+
   it("throws on unknown action", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)

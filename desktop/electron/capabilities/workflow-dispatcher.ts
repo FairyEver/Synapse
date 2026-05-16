@@ -17,6 +17,7 @@ export type WorkflowDispatchDeps = {
   cancelRun: (runId: string) => void
   cancelRunsForWorkflow: (workflowId: string) => void
   getRunStatus: (runId: string) => Promise<WorkflowRunStatus | null>
+  listProviders?: () => Promise<readonly { id: string; name: string; model?: string; haikuModel?: string; sonnetModel?: string; opusModel?: string }[]>
 }
 
 function requireString(params: Record<string, unknown>, key: string): string {
@@ -91,17 +92,23 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     const nodeType = requireString(params, "nodeType")
     const manifest = deps.nodeTypeRegistry.getManifest(nodeType)
     const configSchema = zodToJsonSchema(manifest.configSchema as unknown as Parameters<typeof zodToJsonSchema>[0])
-    return {
-      ok: true,
-      data: {
-        type: manifest.type,
-        title: manifest.title,
-        color: manifest.color,
-        ports: manifest.ports,
-        configFields: manifest.configFields,
-        configSchema,
-      },
+    const data: Record<string, unknown> = {
+      type: manifest.type,
+      title: manifest.title,
+      color: manifest.color,
+      ports: manifest.ports,
+      configFields: manifest.configFields,
+      configSchema,
     }
+    if ((nodeType === "prompt" || nodeType === "switch") && deps.listProviders) {
+      const providers = await deps.listProviders()
+      data.availableProviders = providers.map((p) => ({
+        id: p.id,
+        name: p.name,
+        models: { default: p.model, haiku: p.haikuModel, sonnet: p.sonnetModel, opus: p.opusModel },
+      }))
+    }
+    return { ok: true, data }
   },
 
   "workflow.definition.list": async (_params, deps) => {
