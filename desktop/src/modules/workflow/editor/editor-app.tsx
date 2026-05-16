@@ -17,6 +17,8 @@ import { WorkflowCanvas, type WorkflowCanvasHandle } from "./canvas"
 import { NodePalette } from "./node-palette"
 import { NodeConfigPanel } from "./node-config-panel"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+import { type PanelImperativeHandle } from "react-resizable-panels"
+import { PanelCollapseButton } from "./panel-collapse-button"
 import { ProviderLookupProvider } from "../../../../workflow-nodes/provider-lookup-context"
 
 const logger = createRendererLogger("workflow.editor")
@@ -36,6 +38,10 @@ export function WorkflowEditorApp() {
   const setShowCloseDialogRef = useRef(setShowCloseDialog)
   setShowCloseDialogRef.current = setShowCloseDialog
   const canvasRef = useRef<WorkflowCanvasHandle>(null)
+  const leftPanelRef = useRef<PanelImperativeHandle>(null)
+  const rightPanelRef = useRef<PanelImperativeHandle>(null)
+  const [leftCollapsed, setLeftCollapsed] = useState(false)
+  const [rightCollapsed, setRightCollapsed] = useState(false)
   const [renameSignal, setRenameSignal] = useState(0)
   const { config: appConfig } = useAppConfig()
   const projects = appConfig.global.projects
@@ -377,37 +383,82 @@ export function WorkflowEditorApp() {
           </AlertAction>
         </Alert>
       )}
-      <div className="flex-1 flex min-h-0">
-        <NodePalette />
-        <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
-          <ResizablePanel>
-            <div className="relative h-full">
-              <WorkflowCanvas ref={canvasRef} definition={definition} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} onRequestRename={handleRequestRename} />
-              <CanvasFloatingToolbar definition={definition} saving={saving} running={running} dirty={dirty} onSave={handleSave} onRun={handleRun} />
-            </div>
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel
-            defaultSize={400}
-            minSize={300}
-            maxSize={600}
-            groupResizeBehavior="preserve-pixel-size"
-          >
-            <NodeConfigPanel
-              nodeId={selectedNodeId}
-              definition={definition}
-              onConfigChange={handleConfigChange}
-              onNameChange={handleNameChange}
-              onDeleteNode={(id) => { canvasRef.current?.deleteNodes([id]); setSelectedNodeId(null) }}
-              onCopyNode={(id) => canvasRef.current?.copyNodes([id])}
-              renameSignal={renameSignal}
-              projects={projects}
-              defaultProjectName={defaultProjectName}
-              onDefinitionChange={handleDefinitionChange}
-            />
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </div>
+      <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
+        <ResizablePanel
+          id="node-palette"
+          panelRef={leftPanelRef}
+          defaultSize={176}
+          minSize={176}
+          maxSize={220}
+          collapsedSize={32}
+          collapsible
+          groupResizeBehavior="preserve-pixel-size"
+          onResize={(size) => {
+            setLeftCollapsed(size.inPixels <= 32)
+          }}
+        >
+          <NodePalette collapsed={leftCollapsed} />
+        </ResizablePanel>
+        <ResizableHandle withHandle className="relative">
+          <PanelCollapseButton
+            side="left"
+            collapsed={leftCollapsed}
+            onToggle={() => {
+              if (leftCollapsed) {
+                leftPanelRef.current?.expand()
+              } else {
+                leftPanelRef.current?.collapse()
+              }
+            }}
+          />
+        </ResizableHandle>
+        <ResizablePanel>
+          <div className="relative h-full">
+            <WorkflowCanvas ref={canvasRef} definition={definition} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} onRequestRename={handleRequestRename} />
+            <CanvasFloatingToolbar definition={definition} saving={saving} running={running} dirty={dirty} onSave={handleSave} onRun={handleRun} />
+          </div>
+        </ResizablePanel>
+        <ResizableHandle withHandle className="relative">
+          <PanelCollapseButton
+            side="right"
+            collapsed={rightCollapsed}
+            onToggle={() => {
+              if (rightCollapsed) {
+                rightPanelRef.current?.expand()
+              } else {
+                rightPanelRef.current?.collapse()
+              }
+            }}
+          />
+        </ResizableHandle>
+        <ResizablePanel
+          id="node-config"
+          panelRef={rightPanelRef}
+          defaultSize={400}
+          minSize={300}
+          maxSize={600}
+          collapsedSize={32}
+          collapsible
+          groupResizeBehavior="preserve-pixel-size"
+          onResize={(size) => {
+            setRightCollapsed(size.inPixels <= 32)
+          }}
+        >
+          <NodeConfigPanel
+            collapsed={rightCollapsed}
+            nodeId={selectedNodeId}
+            definition={definition}
+            onConfigChange={handleConfigChange}
+            onNameChange={handleNameChange}
+            onDeleteNode={(id) => { canvasRef.current?.deleteNodes([id]); setSelectedNodeId(null) }}
+            onCopyNode={(id) => canvasRef.current?.copyNodes([id])}
+            renameSignal={renameSignal}
+            projects={projects}
+            defaultProjectName={defaultProjectName}
+            onDefinitionChange={handleDefinitionChange}
+          />
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
     <AlertDialog open={showCloseDialog} onOpenChange={setShowCloseDialog}>
       <AlertDialogContent>
