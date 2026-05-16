@@ -149,6 +149,81 @@ describe("ScheduledTaskRepository", () => {
 
     expect(task.configVersion).toBe(0)
   })
+
+  it("hydrates activeDays to all-days when missing from stored data", async () => {
+    const tasks = new MemoryNamespace<ScheduledTaskEntry>("task-scheduler.tasks")
+    const repo = new ScheduledTaskRepository({
+      tasks,
+      now: () => new Date("2026-04-29T00:00:00.000Z"),
+      idFactory: () => "task:legacy-hydrate",
+    })
+    // Directly upsert a legacy task without activeDays via the namespace
+    const legacyTask = {
+      id: "task:legacy-hydrate",
+      schemaVersion: 2,
+      name: "Legacy",
+      scope: { type: "global" },
+      trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
+      action: { type: "builtin.command", config: { command: "echo hi" } },
+      enabled: true,
+      activeDays: undefined,
+      missedRunPolicy: "skip",
+      overlapPolicy: "skip",
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      runCount: 0,
+      configVersion: 0,
+    }
+    await tasks.upsert(legacyTask as never)
+    const result = await repo.get("task:legacy-hydrate")
+    expect(result!.activeDays).toEqual([0, 1, 2, 3, 4, 5, 6])
+  })
+
+  it("preserves activeDays when creating a task with specific days", async () => {
+    const repo = new ScheduledTaskRepository({
+      tasks: new MemoryNamespace<ScheduledTaskEntry>("task-scheduler.tasks"),
+      now: () => new Date("2026-04-29T00:00:00.000Z"),
+      idFactory: () => "task:1",
+    })
+    const task = await repo.create({
+      name: "Weekday only",
+      scope: { type: "global" },
+      trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
+      action: { type: "builtin.command", config: { command: "echo hi" } },
+      activeDays: [1, 2, 3, 4, 5],
+    })
+    expect(task.activeDays).toEqual([1, 2, 3, 4, 5])
+  })
+
+  it("defaults activeDays to all days when not provided on create", async () => {
+    const repo = new ScheduledTaskRepository({
+      tasks: new MemoryNamespace<ScheduledTaskEntry>("task-scheduler.tasks"),
+      now: () => new Date("2026-04-29T00:00:00.000Z"),
+      idFactory: () => "task:1",
+    })
+    const task = await repo.create({
+      name: "Default days",
+      scope: { type: "global" },
+      trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
+      action: { type: "builtin.command", config: { command: "echo hi" } },
+    })
+    expect(task.activeDays).toEqual([0, 1, 2, 3, 4, 5, 6])
+  })
+
+  it("rejects empty activeDays on create", async () => {
+    const repo = new ScheduledTaskRepository({
+      tasks: new MemoryNamespace<ScheduledTaskEntry>("task-scheduler.tasks"),
+      now: () => new Date("2026-04-29T00:00:00.000Z"),
+      idFactory: () => "task:1",
+    })
+    await expect(repo.create({
+      name: "No days",
+      scope: { type: "global" },
+      trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
+      action: { type: "builtin.command", config: { command: "echo hi" } },
+      activeDays: [],
+    })).rejects.toThrow(/activeDays/)
+  })
 })
 
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
