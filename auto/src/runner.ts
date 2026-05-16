@@ -182,26 +182,56 @@ export function createClaudeCodeEventAccumulator(): { read(event: unknown): stri
         if (isRecord(message)) {
           const content = message.content
           if (Array.isArray(content)) {
-            const textBlock = content.find((b: unknown) => isRecord(b) && b.type === 'text')
-            if (isRecord(textBlock)) {
-              const text = String(textBlock.text ?? '')
-              return text.length > 120 ? text.slice(0, 117) + '…' : text
+            const parts: string[] = []
+            for (const block of content) {
+              if (!isRecord(block)) continue
+              if (block.type === 'text' && typeof block.text === 'string') {
+                parts.push(block.text)
+              } else if (block.type === 'tool_use') {
+                parts.push(`[工具: ${stringField(block, ['name']) || '?'}]`)
+              }
             }
+            if (parts.length) return parts.join('\n')
           }
         }
         return '助手回复'
       }
 
-      if (type === 'tool_use') {
-        const name = stringField(event as Record<string, unknown>, ['name', 'tool'])
-        return name ? `工具调用: ${name}` : '工具调用'
+      if (type === 'content_block_delta') {
+        const delta = event.delta
+        if (isRecord(delta) && typeof delta.text === 'string') {
+          return delta.text
+        }
+        return ''
       }
 
-      if (type === 'tool_result') return '工具结果'
-      if (type === 'result') return '执行完成'
+      if (type === 'tool_use') {
+        const name = stringField(event as Record<string, unknown>, ['name', 'tool'])
+        return name ? `[工具: ${name}]` : '[工具调用]'
+      }
+
+      if (type === 'tool_result') {
+        const content = event.content
+        if (typeof content === 'string' && content.length > 0) {
+          return content.length > 200 ? content.slice(0, 197) + '…' : content
+        }
+        return ''
+      }
+      if (type === 'result') {
+        const result = event.result
+        if (typeof result === 'string') return result
+        if (isRecord(result) && typeof result.text === 'string') return result.text
+        return '执行完成'
+      }
       if (type === 'error') {
         const msg = stringField(event, ['error', 'message'])
         return msg ? `错误: ${msg}` : '错误'
+      }
+
+      if (type === 'system' || type === 'message_start' || type === 'message_stop'
+        || type === 'content_block_start' || type === 'content_block_stop'
+        || type === 'message_delta' || type === 'ping') {
+        return ''
       }
 
       return type || ''
@@ -274,8 +304,11 @@ export async function runWorker(
       const event = parseJsonLine(line)
       if (event) {
         logger.writeEvent(event)
-        lastMessage = eventAccumulator.read(event) || lastMessage
-        onOutput?.({ workerId, stream: 'event', text: line, ts: Date.now() })
+        const readable = eventAccumulator.read(event)
+        lastMessage = readable || lastMessage
+        if (readable) {
+          onOutput?.({ workerId, stream: 'event', text: readable, ts: Date.now() })
+        }
       } else {
         lastMessage = line
         onOutput?.({ workerId, stream: 'stdout', text: line, ts: Date.now() })

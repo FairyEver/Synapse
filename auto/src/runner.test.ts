@@ -274,7 +274,7 @@ test('createClaudeCodeEventAccumulator parses assistant messages', () => {
 
 test('createClaudeCodeEventAccumulator parses tool_use events', () => {
   const acc = createClaudeCodeEventAccumulator()
-  assert.equal(acc.read({ type: 'tool_use', name: 'Read' }), '工具调用: Read')
+  assert.equal(acc.read({ type: 'tool_use', name: 'Read' }), '[工具: Read]')
 })
 
 test('createClaudeCodeEventAccumulator parses result events', () => {
