@@ -4,8 +4,9 @@ import { chmod, mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { BatchLogger } from './logger.js'
-import { buildCodexArgs, buildWorkerPrompt, classifyBatchStatus, createCodexEventAccumulator, runWorker } from './runner.js'
+import { buildClaudeCodeArgs, buildCodexArgs, buildWorkerPrompt, classifyBatchStatus, createClaudeCodeEventAccumulator, createCodexEventAccumulator, runWorker, type OutputLine } from './runner.js'
 import type { UiConfig } from './config.js'
+import { DEFAULT_UI_CONFIG } from './config.js'
 
 test('buildWorkerPrompt prepends worker identity and git commit constraint', () => {
   const prompt = buildWorkerPrompt('原始任务', 2, 5)
@@ -73,6 +74,43 @@ test('buildCodexArgs disables global MCP servers by default', () => {
   ])
 })
 
+test('buildClaudeCodeArgs builds correct args with all options', () => {
+  const args = buildClaudeCodeArgs({
+    command: 'claude',
+    model: 'opus',
+    dangerouslySkipPermissions: true,
+    outputFormat: 'stream-json',
+    maxTurns: 30,
+    systemPrompt: 'be concise',
+  }, '/tmp/work', 'fix the bug')
+
+  assert.deepEqual(args, [
+    '--print',
+    '--output-format', 'stream-json',
+    '--max-turns', '30',
+    '--cwd', '/tmp/work',
+    '--model', 'opus',
+    '--dangerously-skip-permissions',
+    '--system-prompt', 'be concise',
+    'fix the bug',
+  ])
+})
+
+test('buildClaudeCodeArgs omits optional flags when disabled', () => {
+  const args = buildClaudeCodeArgs({
+    command: 'claude',
+    model: 'sonnet',
+    dangerouslySkipPermissions: false,
+    outputFormat: 'json',
+    maxTurns: 10,
+    systemPrompt: '',
+  }, '/tmp/work', 'hello')
+
+  assert.ok(!args.includes('--dangerously-skip-permissions'))
+  assert.ok(!args.includes('--system-prompt'))
+  assert.ok(args.includes('hello'))
+})
+
 test('classifyBatchStatus distinguishes success partial and error', () => {
   assert.equal(classifyBatchStatus([{ status: 'success' }]), 'success')
   assert.equal(classifyBatchStatus([{ status: 'success' }, { status: 'error' }]), 'partial')
@@ -129,20 +167,17 @@ test('runWorker returns stderr as lastMessage when command fails', async () => {
     await chmod(command, 0o755)
 
     const config: UiConfig = {
+      ...DEFAULT_UI_CONFIG,
       prompt: 'hello',
-      activePromptName: 'default',
-      prompts: ['default'],
       workingDirectory: dir,
-      concurrency: 1,
-      intervalMinutes: 1,
-      timeoutMinutes: 1,
-      maxLogs: 10,
+      provider: 'codex',
       codex: {
         command,
         model: '',
         sandbox: 'danger-full-access',
         approvalPolicy: 'never',
         json: true,
+        disableMcp: true,
       },
     }
     const logger = new BatchLogger(new Date('2026-05-13T12:00:00Z'), dir)
@@ -164,20 +199,17 @@ test('runWorker reports stdout progress while command is running', async () => {
     await chmod(command, 0o755)
 
     const config: UiConfig = {
+      ...DEFAULT_UI_CONFIG,
       prompt: 'hello',
-      activePromptName: 'default',
-      prompts: ['default'],
       workingDirectory: dir,
-      concurrency: 1,
-      intervalMinutes: 1,
-      timeoutMinutes: 1,
-      maxLogs: 10,
+      provider: 'codex',
       codex: {
         command,
         model: '',
         sandbox: 'danger-full-access',
         approvalPolicy: 'never',
         json: true,
+        disableMcp: true,
       },
     }
     const logger = new BatchLogger(new Date('2026-05-13T12:00:00Z'), dir)
@@ -189,6 +221,92 @@ test('runWorker reports stdout progress while command is running', async () => {
     assert.equal(result.status, 'success')
     assert.ok(updates.includes('first line'))
     assert.ok(updates.includes('second line'))
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('runWorker uses claude-code provider when configured', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-runner-claude-'))
+  try {
+    const command = join(dir, 'claude.sh')
+    await writeFile(command, '#!/bin/sh\necho \'{"type":"result","result":"done"}\'\n', 'utf-8')
+    await chmod(command, 0o755)
+
+    const config: UiConfig = {
+      ...DEFAULT_UI_CONFIG,
+      prompt: 'hello',
+      workingDirectory: dir,
+      provider: 'claude-code',
+      claudeCode: {
+        command,
+        model: 'sonnet',
+        dangerouslySkipPermissions: true,
+        outputFormat: 'stream-json',
+        maxTurns: 10,
+        systemPrompt: '',
+      },
+    }
+    const logger = new BatchLogger(new Date('2026-05-13T12:00:00Z'), dir)
+    const result = await runWorker(config, 1, logger.createWorkerLogger(1))
+
+    assert.equal(result.status, 'success')
+    assert.equal(result.exitCode, 0)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('createClaudeCodeEventAccumulator parses assistant messages', () => {
+  const acc = createClaudeCodeEventAccumulator()
+  assert.equal(acc.read({
+    type: 'assistant',
+    message: { content: [{ type: 'text', text: 'hello world' }] },
+  }), 'hello world')
+})
+
+test('createClaudeCodeEventAccumulator parses tool_use events', () => {
+  const acc = createClaudeCodeEventAccumulator()
+  assert.equal(acc.read({ type: 'tool_use', name: 'Read' }), '工具调用: Read')
+})
+
+test('createClaudeCodeEventAccumulator parses result events', () => {
+  const acc = createClaudeCodeEventAccumulator()
+  assert.equal(acc.read({ type: 'result' }), '执行完成')
+})
+
+test('runWorker calls onOutput for each stdout line', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-runner-output-'))
+  try {
+    const command = join(dir, 'output.sh')
+    await writeFile(command, '#!/bin/sh\necho "line one"\necho "line two"\n', 'utf-8')
+    await chmod(command, 0o755)
+
+    const config: UiConfig = {
+      ...DEFAULT_UI_CONFIG,
+      prompt: 'hello',
+      workingDirectory: dir,
+      provider: 'codex',
+      codex: {
+        command,
+        model: '',
+        sandbox: 'danger-full-access',
+        approvalPolicy: 'never',
+        json: true,
+        disableMcp: true,
+      },
+    }
+    const logger = new BatchLogger(new Date('2026-05-13T12:00:00Z'), dir)
+    const outputLines: OutputLine[] = []
+    await runWorker(config, 1, logger.createWorkerLogger(1), undefined, line => {
+      outputLines.push(line)
+    })
+
+    assert.ok(outputLines.length >= 2)
+    assert.ok(outputLines.some(l => l.stream === 'stdout' && l.text === 'line one'))
+    assert.ok(outputLines.some(l => l.stream === 'stdout' && l.text === 'line two'))
+    assert.ok(outputLines.every(l => l.workerId === 1))
+    assert.ok(outputLines.every(l => typeof l.ts === 'number'))
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

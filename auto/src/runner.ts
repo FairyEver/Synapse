@@ -1,5 +1,5 @@
 import { spawn } from 'child_process'
-import type { CodexConfig, UiConfig } from './config.js'
+import type { ClaudeCodeConfig, CodexConfig, UiConfig } from './config.js'
 import { BatchLogger, pruneOldBatchLogs, type WorkerLogger, type SummaryWorker } from './logger.js'
 
 export type WorkerStatus = 'pending' | 'running' | 'success' | 'error' | 'timeout'
@@ -33,9 +33,19 @@ export type BatchResult = BatchSnapshot & {
 export type BatchUpdate = (snapshot: BatchSnapshot) => void
 export type WorkerUpdate = (worker: WorkerResult) => void
 
+export type OutputLine = {
+  workerId: number
+  stream: 'stdout' | 'stderr' | 'event'
+  text: string
+  ts: number
+}
+
+export type WorkerOutputCallback = (line: OutputLine) => void
+
 export function buildWorkerPrompt(prompt: string, workerId: number, totalWorkers: number): string {
+  const agentLabel = `并行 worker ${workerId}/${totalWorkers}`
   return [
-    `你是 Codex 并行 worker ${workerId}/${totalWorkers}。`,
+    `你是${agentLabel}。`,
     '',
     '运行约束：',
     '- 你和其他 worker 正在同一个工作目录中并行执行同一个任务。',
@@ -64,6 +74,20 @@ export function buildCodexArgs(config: CodexConfig, workingDirectory: string): s
   }
   if (config.json) args.push('--json')
   args.push('-')
+  return args
+}
+
+export function buildClaudeCodeArgs(config: ClaudeCodeConfig, workingDirectory: string, prompt: string): string[] {
+  const args = [
+    '--print',
+    '--output-format', config.outputFormat,
+    '--max-turns', String(config.maxTurns),
+    '--cwd', workingDirectory,
+  ]
+  if (config.model) args.push('--model', config.model)
+  if (config.dangerouslySkipPermissions) args.push('--dangerously-skip-permissions')
+  if (config.systemPrompt) args.push('--system-prompt', config.systemPrompt)
+  args.push(prompt)
   return args
 }
 
@@ -147,6 +171,44 @@ export function createCodexEventAccumulator(): { read(event: unknown): string } 
   }
 }
 
+export function createClaudeCodeEventAccumulator(): { read(event: unknown): string } {
+  return {
+    read(event: unknown): string {
+      if (!isRecord(event)) return ''
+      const type = stringField(event, ['type'])
+
+      if (type === 'assistant') {
+        const message = event.message
+        if (isRecord(message)) {
+          const content = message.content
+          if (Array.isArray(content)) {
+            const textBlock = content.find((b: unknown) => isRecord(b) && b.type === 'text')
+            if (isRecord(textBlock)) {
+              const text = String(textBlock.text ?? '')
+              return text.length > 120 ? text.slice(0, 117) + '…' : text
+            }
+          }
+        }
+        return '助手回复'
+      }
+
+      if (type === 'tool_use') {
+        const name = stringField(event as Record<string, unknown>, ['name', 'tool'])
+        return name ? `工具调用: ${name}` : '工具调用'
+      }
+
+      if (type === 'tool_result') return '工具结果'
+      if (type === 'result') return '执行完成'
+      if (type === 'error') {
+        const msg = stringField(event, ['error', 'message'])
+        return msg ? `错误: ${msg}` : '错误'
+      }
+
+      return type || ''
+    },
+  }
+}
+
 function runningWorker(workerId: number, logger: WorkerLogger, startedAt: number, lastMessage: string): WorkerResult {
   return {
     id: workerId,
@@ -162,11 +224,19 @@ export async function runWorker(
   config: UiConfig,
   workerId: number,
   logger: WorkerLogger,
-  onUpdate?: WorkerUpdate
+  onUpdate?: WorkerUpdate,
+  onOutput?: WorkerOutputCallback
 ): Promise<WorkerResult> {
   const startedAt = Date.now()
-  const args = buildCodexArgs(config.codex, config.workingDirectory)
-  const child = spawn(config.codex.command, args, {
+  const workerPrompt = buildWorkerPrompt(config.prompt, workerId, config.concurrency)
+
+  const isClaudeCode = config.provider === 'claude-code'
+  const command = isClaudeCode ? config.claudeCode.command : config.codex.command
+  const args = isClaudeCode
+    ? buildClaudeCodeArgs(config.claudeCode, config.workingDirectory, workerPrompt)
+    : buildCodexArgs(config.codex, config.workingDirectory)
+
+  const child = spawn(command, args, {
     cwd: config.workingDirectory,
     stdio: ['pipe', 'pipe', 'pipe'],
   })
@@ -175,7 +245,9 @@ export async function runWorker(
   let lastMessage = ''
   let stdoutBuffer = ''
   let stderrBuffer = ''
-  const eventAccumulator = createCodexEventAccumulator()
+  const eventAccumulator = isClaudeCode
+    ? createClaudeCodeEventAccumulator()
+    : createCodexEventAccumulator()
 
   const emitProgress = (): void => {
     onUpdate?.(runningWorker(workerId, logger, startedAt, lastMessage))
@@ -186,7 +258,9 @@ export async function runWorker(
     child.kill('SIGTERM')
   }, config.timeoutMinutes * 60_000)
 
-  child.stdin.write(buildWorkerPrompt(config.prompt, workerId, config.concurrency))
+  if (!isClaudeCode) {
+    child.stdin.write(workerPrompt)
+  }
   child.stdin.end()
 
   child.stdout.on('data', (chunk: Buffer) => {
@@ -201,8 +275,10 @@ export async function runWorker(
       if (event) {
         logger.writeEvent(event)
         lastMessage = eventAccumulator.read(event) || lastMessage
+        onOutput?.({ workerId, stream: 'event', text: line, ts: Date.now() })
       } else {
         lastMessage = line
+        onOutput?.({ workerId, stream: 'stdout', text: line, ts: Date.now() })
       }
       emitProgress()
     }
@@ -215,7 +291,10 @@ export async function runWorker(
     const lines = stderrBuffer.split(/\r?\n/)
     stderrBuffer = lines.pop() ?? ''
     for (const line of lines) {
-      if (line.trim()) lastMessage = line
+      if (line.trim()) {
+        lastMessage = line
+        onOutput?.({ workerId, stream: 'stderr', text: line, ts: Date.now() })
+      }
       emitProgress()
     }
   })
@@ -258,7 +337,7 @@ function pendingWorker(id: number): WorkerResult {
   }
 }
 
-export async function runBatch(config: UiConfig, onUpdate?: BatchUpdate): Promise<BatchResult> {
+export async function runBatch(config: UiConfig, onUpdate?: BatchUpdate, onOutput?: WorkerOutputCallback): Promise<BatchResult> {
   const started = new Date()
   const batchLogger = new BatchLogger(started)
   const workers = Array.from({ length: config.concurrency }, (_, index) => pendingWorker(index + 1))
@@ -285,7 +364,7 @@ export async function runBatch(config: UiConfig, onUpdate?: BatchUpdate): Promis
     const result = await runWorker(config, worker.id, workerLogger, update => {
       workers[index] = update
       onUpdate?.(snapshot())
-    })
+    }, onOutput)
     workers[index] = result
     onUpdate?.(snapshot())
   }))
