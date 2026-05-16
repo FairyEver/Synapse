@@ -227,11 +227,15 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     const from = requireString(params, "from")
     const to = requireString(params, "to")
     const branch = typeof params.branch === "string" ? params.branch : undefined
-    return atomicMutate(deps, workflowId, (def) => {
-      const edge: { id: string; from: string; to: string; branch?: string } = { id: randomUUID(), from, to }
+    let edgeId: string
+    const result = await atomicMutate(deps, workflowId, (def) => {
+      const id = randomUUID()
+      edgeId = id
+      const edge: { id: string; from: string; to: string; branch?: string } = { id, from, to }
       if (branch) edge.branch = branch
       def.edges.push(edge)
     })
+    return { ...result, data: { edgeId: edgeId!, ...result.data as Record<string, unknown> } }
   },
 
   "workflow.edge.delete": async (params, deps) => {

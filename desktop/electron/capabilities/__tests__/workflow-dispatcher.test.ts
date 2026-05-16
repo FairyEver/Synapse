@@ -140,6 +140,34 @@ describe("createWorkflowDispatcher", () => {
     expect(deps.snapshotService.deleteWorkflow).toHaveBeenCalledWith("wf-1")
   })
 
+  it("workflow.edge.create returns edgeId", async () => {
+    const deps = makeDeps({
+      workflowService: {
+        ...makeDeps().workflowService,
+        get: vi.fn(async () => ({
+          id: "wf-1", name: "Test", description: "", version: "v1",
+          createdAt: 1, updatedAt: 2, params: [],
+          nodes: [
+            { id: "n1", name: "Prompt", type: "prompt", position: { x: 200, y: 200 }, config: {} },
+            { id: "n2", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} },
+          ],
+          edges: [],
+        })),
+        save: vi.fn(async () => ({ versionHash: "v_456" })),
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+    const result = await dispatcher.dispatch(
+      "workflow.edge.create",
+      { workflowId: "wf-1", from: "n1", to: "n2" },
+      { source: "api" },
+    )
+    expect(result.ok).toBe(true)
+    expect(result.data).toHaveProperty("edgeId")
+    expect(typeof (result.data as Record<string, unknown>).edgeId).toBe("string")
+    expect((result.data as Record<string, unknown>).edgeId).toHaveLength(36)
+  })
+
   it("throws on unknown action", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
