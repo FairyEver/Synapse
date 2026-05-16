@@ -11,6 +11,7 @@ export const PROMPT_PATH = resolve(PACKAGE_ROOT, 'prompt.md')
 
 export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
 export type ApprovalPolicy = 'untrusted' | 'on-failure' | 'on-request' | 'never'
+export type Provider = 'codex' | 'claude-code'
 
 export interface CodexConfig {
   command: string
@@ -19,6 +20,15 @@ export interface CodexConfig {
   approvalPolicy: ApprovalPolicy
   json: boolean
   disableMcp?: boolean
+}
+
+export interface ClaudeCodeConfig {
+  command: string
+  model: string
+  dangerouslySkipPermissions: boolean
+  outputFormat: 'json' | 'stream-json' | 'text'
+  maxTurns: number
+  systemPrompt: string
 }
 
 export interface UiConfig {
@@ -30,7 +40,9 @@ export interface UiConfig {
   intervalMinutes: number
   timeoutMinutes: number
   maxLogs: number
+  provider: Provider
   codex: CodexConfig
+  claudeCode: ClaudeCodeConfig
 }
 
 export const DEFAULT_UI_CONFIG: UiConfig = {
@@ -42,6 +54,7 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
   intervalMinutes: 30,
   timeoutMinutes: 30,
   maxLogs: 50,
+  provider: 'codex',
   codex: {
     command: 'codex',
     model: 'gpt-5.5',
@@ -49,6 +62,14 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
     approvalPolicy: 'never',
     json: true,
     disableMcp: true,
+  },
+  claudeCode: {
+    command: 'claude',
+    model: 'sonnet',
+    dangerouslySkipPermissions: true,
+    outputFormat: 'stream-json',
+    maxTurns: 30,
+    systemPrompt: '',
   },
 }
 
@@ -91,15 +112,30 @@ function resolveFromPackageRoot(pathValue: string): string {
   return resolve(PACKAGE_ROOT, pathValue)
 }
 
+function providerValue(value: unknown): Provider {
+  if (value === 'codex' || value === 'claude-code') return value
+  return 'codex'
+}
+
+function outputFormatValue(value: unknown): ClaudeCodeConfig['outputFormat'] {
+  if (value === 'json' || value === 'stream-json' || value === 'text') return value
+  return 'stream-json'
+}
+
 export function validateUiConfig(raw: unknown): UiConfig {
   if (!isRecord(raw)) throw new Error('config must be an object')
   const codexRaw = isRecord(raw.codex) ? raw.codex : {}
+  const claudeCodeRaw = isRecord(raw.claudeCode) ? raw.claudeCode : {}
   const merged = {
     ...DEFAULT_UI_CONFIG,
     ...raw,
     codex: {
       ...DEFAULT_UI_CONFIG.codex,
       ...codexRaw,
+    },
+    claudeCode: {
+      ...DEFAULT_UI_CONFIG.claudeCode,
+      ...claudeCodeRaw,
     },
   }
 
@@ -109,8 +145,11 @@ export function validateUiConfig(raw: unknown): UiConfig {
     ? merged.prompts.filter((name): name is string => typeof name === 'string')
     : []
   const workingDirectory = stringValue(merged.workingDirectory, 'workingDirectory')
-  const command = stringValue(merged.codex.command, 'codex.command').trim()
-  if (!command) throw new Error('codex.command is required')
+  const provider = providerValue(merged.provider)
+  const codexCommand = stringValue(merged.codex.command, 'codex.command').trim()
+  if (!codexCommand) throw new Error('codex.command is required')
+  const claudeCommand = stringValue(merged.claudeCode.command, 'claudeCode.command').trim()
+  if (!claudeCommand) throw new Error('claudeCode.command is required')
 
   return {
     prompt,
@@ -121,13 +160,28 @@ export function validateUiConfig(raw: unknown): UiConfig {
     intervalMinutes: positiveInteger(merged.intervalMinutes, 'intervalMinutes'),
     timeoutMinutes: positiveInteger(merged.timeoutMinutes, 'timeoutMinutes'),
     maxLogs: positiveInteger(merged.maxLogs, 'maxLogs'),
+    provider,
     codex: {
-      command,
+      command: codexCommand,
       model: stringValue(merged.codex.model, 'codex.model').trim() || DEFAULT_UI_CONFIG.codex.model,
       sandbox: sandboxValue(merged.codex.sandbox),
       approvalPolicy: approvalValue(merged.codex.approvalPolicy),
       json: booleanValue(merged.codex.json, 'codex.json'),
       disableMcp: booleanValue(merged.codex.disableMcp, 'codex.disableMcp'),
+    },
+    claudeCode: {
+      command: claudeCommand,
+      model: stringValue(merged.claudeCode.model, 'claudeCode.model').trim() || DEFAULT_UI_CONFIG.claudeCode.model,
+      dangerouslySkipPermissions: typeof merged.claudeCode.dangerouslySkipPermissions === 'boolean'
+        ? merged.claudeCode.dangerouslySkipPermissions
+        : DEFAULT_UI_CONFIG.claudeCode.dangerouslySkipPermissions,
+      outputFormat: outputFormatValue(merged.claudeCode.outputFormat),
+      maxTurns: typeof merged.claudeCode.maxTurns === 'number' && merged.claudeCode.maxTurns >= 1
+        ? merged.claudeCode.maxTurns
+        : DEFAULT_UI_CONFIG.claudeCode.maxTurns,
+      systemPrompt: typeof merged.claudeCode.systemPrompt === 'string'
+        ? merged.claudeCode.systemPrompt
+        : DEFAULT_UI_CONFIG.claudeCode.systemPrompt,
     },
   }
 }
@@ -140,7 +194,9 @@ function uiConfigFile(config: UiConfig): Omit<UiConfig, 'prompt' | 'prompts'> {
     intervalMinutes: config.intervalMinutes,
     timeoutMinutes: config.timeoutMinutes,
     maxLogs: config.maxLogs,
+    provider: config.provider,
     codex: config.codex,
+    claudeCode: config.claudeCode,
   }
 }
 
