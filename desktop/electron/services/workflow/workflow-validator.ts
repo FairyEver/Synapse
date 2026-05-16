@@ -103,6 +103,19 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
       errors.push({ type: "invalid_config", nodeId: node.id, message: `节点 "${node.name}" 类型无效：${message}` })
     }
 
+    // Provider resolution: prompt/switch nodes must have provider either on node or workflow default
+    if (node.type === "prompt" || node.type === "switch") {
+      const cfg = node.config as Record<string, unknown>
+      const hasProviderId = typeof cfg.providerId === "string" && cfg.providerId.length > 0
+      const hasModelTier = typeof cfg.modelTier === "string" && cfg.modelTier.length > 0
+      if (!hasProviderId && !def.defaultProviderId) {
+        errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」未配置供应商，且工作流未设置默认供应商` })
+      }
+      if (!hasModelTier && !def.defaultModelTier) {
+        errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」未配置模型层级，且工作流未设置默认模型` })
+      }
+    }
+
     // Switch node: validate branch ID uniqueness
     if (node.type === "switch") {
       const branches = (node.config as Record<string, unknown>)["branches"]

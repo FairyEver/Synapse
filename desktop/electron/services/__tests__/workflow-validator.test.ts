@@ -89,4 +89,33 @@ describe("validateWorkflow", () => {
     expect(r.valid).toBe(false)
     expect(r.errors.some((e) => e.type === "multiple_end_nodes")).toBe(true)
   })
+
+  // Provider resolution validation
+  it("errors when prompt node has no providerId and workflow has no default", () => {
+    const nodeNoProvider = { id: "np", name: "NP", type: "prompt", position: { x: 0, y: 0 }, config: { variables: [], prompt: "hi" } }
+    const r = validateWorkflow({ ...base, nodes: [nodeNoProvider, nodeEnd], edges: [{ id: "e1", from: "np", to: "end" }] })
+    expect(r.valid).toBe(false)
+    expect(r.errors.some((e) => e.type === "invalid_config" && e.nodeId === "np" && e.message.includes("供应商"))).toBe(true)
+  })
+
+  it("errors when prompt node has no modelTier and workflow has no default", () => {
+    const nodeNoTier = { id: "nt", name: "NT", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "test-provider", variables: [], prompt: "hi" } }
+    const r = validateWorkflow({ ...base, nodes: [nodeNoTier, nodeEnd], edges: [{ id: "e1", from: "nt", to: "end" }] })
+    expect(r.valid).toBe(false)
+    expect(r.errors.some((e) => e.type === "invalid_config" && e.nodeId === "nt" && e.message.includes("模型"))).toBe(true)
+  })
+
+  it("passes when node omits provider but workflow has defaultProviderId + defaultModelTier", () => {
+    const nodeNoProvider = { id: "np", name: "NP", type: "prompt", position: { x: 0, y: 0 }, config: { variables: [], prompt: "hi" } }
+    const defWithDefault = { ...base, defaultProviderId: "test-provider", defaultModelTier: "sonnet" as const, nodes: [nodeNoProvider, nodeEnd], edges: [{ id: "e1", from: "np", to: "end" }] }
+    const r = validateWorkflow(defWithDefault)
+    expect(r.valid).toBe(true)
+  })
+
+  it("passes when switch node omits provider but workflow has defaults", () => {
+    const sw = { id: "sw", name: "S", type: "switch", position: { x: 0, y: 0 }, config: { variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }] } }
+    const defWithDefault = { ...base, defaultProviderId: "test-provider", defaultModelTier: "sonnet" as const, nodes: [sw, nodeB, nodeEnd], edges: [{ id: "e1", from: "sw", to: "b", branch: "yes" }, { id: "e2", from: "b", to: "end" }] }
+    const r = validateWorkflow(defWithDefault)
+    expect(r.valid).toBe(true)
+  })
 })
