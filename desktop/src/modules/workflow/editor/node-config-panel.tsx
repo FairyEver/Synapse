@@ -18,6 +18,7 @@ import { useUpstreamNodes } from "../hooks/use-upstream-nodes"
 import { ParamsEditorDialog } from "../components/params-editor-dialog"
 
 interface NodeConfigPanelProps {
+  collapsed?: boolean
   nodeId: string | null
   definition: WorkflowDefinition
   onConfigChange: (nodeId: string, config: Record<string, unknown>) => void
@@ -30,7 +31,11 @@ interface NodeConfigPanelProps {
   onDefinitionChange?: (def: WorkflowDefinition) => void
 }
 
-export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChange, onDeleteNode, onCopyNode, renameSignal, projects, defaultProjectName, onDefinitionChange }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange, onNameChange, onDeleteNode, onCopyNode, renameSignal, projects, defaultProjectName, onDefinitionChange }: NodeConfigPanelProps) {
+  if (collapsed) {
+    return <div className="h-full bg-muted" />
+  }
+
   const node = nodeId ? definition.nodes.find((n) => n.id === nodeId) : null
   const upstreamNodes = useUpstreamNodes(nodeId ?? "", definition)
   const nameInputRef = useRef<HTMLInputElement>(null)
