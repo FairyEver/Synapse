@@ -1,22 +1,27 @@
 import { useState } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Save, Play, SlidersHorizontal, Loader2 } from "lucide-react"
+import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowDefinition } from "@/types/workflow"
 import { ParamsEditorDialog } from "../components/params-editor-dialog"
 import { RunParamsDialog } from "../components/run-params-dialog"
+
+const NO_PROJECT_VALUE = "__none__"
 
 interface WorkflowToolbarProps {
   definition: WorkflowDefinition
   saving?: boolean
   running?: boolean
   dirty?: boolean
+  projects: readonly SynapseProjectConfig[]
   onSave: (def: WorkflowDefinition, silent?: boolean) => Promise<unknown>
   onRun: (params: Record<string, unknown>) => Promise<string | null>
   onChange: (def: WorkflowDefinition) => void
 }
 
-export function WorkflowToolbar({ definition, saving, running, dirty, onSave, onRun, onChange }: WorkflowToolbarProps) {
+export function WorkflowToolbar({ definition, saving, running, dirty, projects, onSave, onRun, onChange }: WorkflowToolbarProps) {
   const [paramsOpen, setParamsOpen] = useState(false)
   const [runParamsOpen, setRunParamsOpen] = useState(false)
   // Remember the last-submitted param values so the dialog pre-fills them on
@@ -36,6 +41,24 @@ export function WorkflowToolbar({ definition, saving, running, dirty, onSave, on
         onChange={(e) => onChange({ ...definition, description: e.target.value || undefined })}
         placeholder="描述（可选）"
       />
+      <Select
+        value={definition.defaultProjectId ?? NO_PROJECT_VALUE}
+        onValueChange={(v) => onChange({ ...definition, defaultProjectId: v === NO_PROJECT_VALUE ? undefined : v })}
+      >
+        <SelectTrigger className="h-7 w-40 text-xs">
+          <SelectValue placeholder="默认项目（可选）" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectGroup>
+            <SelectItem value={NO_PROJECT_VALUE}>无默认项目</SelectItem>
+            {projects.map((project) => (
+              <SelectItem key={project.id} value={project.id}>
+                {project.name}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        </SelectContent>
+      </Select>
       <div className="ml-auto flex items-center gap-1.5">
         <Button size="sm" variant="ghost" data-track="workflow-editor-params" onClick={() => setParamsOpen(true)} disabled={busy}>
           <SlidersHorizontal className="h-3.5 w-3.5 mr-1" />参数

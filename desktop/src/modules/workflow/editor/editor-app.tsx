@@ -353,7 +353,7 @@ export function WorkflowEditorApp() {
   return (
     <ProviderLookupProvider>
     <div className="flex flex-col h-screen">
-      <WorkflowToolbar definition={definition} saving={saving} running={running} dirty={dirty} onSave={handleSave} onRun={handleRun} onChange={handleDefinitionChange} />
+      <WorkflowToolbar definition={definition} saving={saving} running={running} dirty={dirty} projects={projects} onSave={handleSave} onRun={handleRun} onChange={handleDefinitionChange} />
       {runErrors.length > 0 && (
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
           <AlertCircle className="h-4 w-4" />
