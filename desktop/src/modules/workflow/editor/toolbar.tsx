@@ -45,7 +45,7 @@ export function WorkflowToolbar({ definition, saving, running, dirty, projects, 
         value={definition.defaultProjectId ?? NO_PROJECT_VALUE}
         onValueChange={(v) => onChange({ ...definition, defaultProjectId: v === NO_PROJECT_VALUE ? undefined : v })}
       >
-        <SelectTrigger className="h-7 w-40 text-xs">
+        <SelectTrigger size="sm" className="w-40 text-xs">
           <SelectValue placeholder="默认项目（可选）" />
         </SelectTrigger>
         <SelectContent>
