@@ -170,7 +170,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     const { coreWorkflowEngineDescriptor } = await importBootstrap()
     const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
       agentDeps: {
-        sendToAgent(input: { agent: string; prompt: string; abortSignal: AbortSignal }): Promise<{
+        sendToAgent(input: { providerId?: string; modelTier?: string; prompt: string; abortSignal: AbortSignal }): Promise<{
           status: "success" | "failed"
           response: string
           error?: string
@@ -180,7 +180,8 @@ describe("bootstrap descriptors (T1.5)", () => {
     }
 
     const result = await engine.agentDeps.sendToAgent({
-      agent: "claude-code",
+      providerId: "test-provider",
+      modelTier: "fast",
       prompt: "secret prompt",
       abortSignal: new AbortController().signal,
     })
@@ -194,10 +195,12 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(logger.error).toHaveBeenCalledWith(
       "engine agent call failed (infrastructure)",
       expect.objectContaining({
-        agent: "claude-code",
+        boundary: "workflow-engine.agent-deps",
+        providerId: "test-provider",
+        modelTier: "fast",
         errorName: "Error",
         errorLength: rawError.message.length,
-        stackLength: rawError.stack.length,
+        stackLength: rawError.stack!.length,
       }),
     )
     const serialized = JSON.stringify([result, logger.error.mock.calls])
@@ -224,6 +227,8 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.data-repository",
       "core.permission-guard",
       "core.audit-sink",
+      "core.task-scheduler",
+      "core.workflow",
     ])
   })
 
