@@ -3,12 +3,14 @@ import { AlertTriangle, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
 import type { ModelTier } from "@/types/provider-model"
+import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowParam } from "@/types/workflow"
 import type { PromptNodeConfig } from "./schema"
 import { VariableBindingEditor } from "../variable-binding-editor"
 import { PromptEditor } from "../prompt-editor"
 import { CollapsibleSection } from "../collapsible-section"
 import { useProviderLookup } from "../provider-lookup-context"
+import { ProjectSelect } from "../project-select"
 
 const TIER_LABELS: Record<ModelTier, string> = { default: "主模型", haiku: "Haiku", sonnet: "Sonnet", opus: "Opus" }
 
@@ -17,9 +19,11 @@ export interface PromptNodePanelProps {
   onChange: (config: PromptNodeConfig) => void
   upstreamNodes: { id: string; name: string }[]
   workflowParams: WorkflowParam[]
+  projects: readonly SynapseProjectConfig[]
+  defaultProjectName?: string
 }
 
-export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParams }: PromptNodePanelProps) {
+export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParams, projects, defaultProjectName }: PromptNodePanelProps) {
   const [prompt, setPrompt] = useState(config.prompt)
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
   const lastCommittedRef = useRef<PromptNodeConfig>(config)
@@ -62,6 +66,15 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
           onChange={(variables) => commit({ variables })}
           upstreamNodes={upstreamNodes}
           workflowParams={workflowParams}
+        />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="项目">
+        <ProjectSelect
+          value={config.projectId}
+          onChange={(projectId) => commit({ projectId })}
+          projects={projects}
+          placeholder={defaultProjectName ? `继承: ${defaultProjectName}` : "继承默认"}
         />
       </CollapsibleSection>
 
