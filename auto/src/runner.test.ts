@@ -274,12 +274,15 @@ test('createClaudeCodeEventAccumulator parses assistant messages', () => {
 
 test('createClaudeCodeEventAccumulator parses tool_use events', () => {
   const acc = createClaudeCodeEventAccumulator()
-  assert.equal(acc.read({ type: 'tool_use', name: 'Read' }), '[工具: Read]')
+  assert.equal(acc.read({ type: 'tool_use', name: 'Bash', input: { command: 'date' } }), '$ date')
+  assert.equal(acc.read({ type: 'tool_use', name: 'Read', input: { file_path: '/tmp/a.ts' } }), '[读取: /tmp/a.ts]')
 })
 
-test('createClaudeCodeEventAccumulator parses result events', () => {
+test('createClaudeCodeEventAccumulator deduplicates result with last tool_result', () => {
   const acc = createClaudeCodeEventAccumulator()
-  assert.equal(acc.read({ type: 'result' }), '执行完成')
+  assert.equal(acc.read({ type: 'tool_result', content: 'hello' }), 'hello')
+  assert.equal(acc.read({ type: 'result', result: 'hello' }), '')
+  assert.equal(acc.read({ type: 'result', result: 'different' }), 'different')
 })
 
 test('runWorker calls onOutput for each stdout line', async () => {

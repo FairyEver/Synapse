@@ -172,6 +172,7 @@ export function createCodexEventAccumulator(): { read(event: unknown): string } 
 }
 
 export function createClaudeCodeEventAccumulator(): { read(event: unknown): string } {
+  let lastToolResult = ''
   return {
     read(event: unknown): string {
       if (!isRecord(event)) return ''
@@ -188,13 +189,15 @@ export function createClaudeCodeEventAccumulator(): { read(event: unknown): stri
               if (block.type === 'text' && typeof block.text === 'string') {
                 parts.push(block.text)
               } else if (block.type === 'tool_use') {
-                parts.push(`[工具: ${stringField(block, ['name']) || '?'}]`)
+                const name = stringField(block, ['name']) || '?'
+                const input = block.input
+                parts.push(formatToolCall(name, input))
               }
             }
             if (parts.length) return parts.join('\n')
           }
         }
-        return '助手回复'
+        return ''
       }
 
       if (type === 'content_block_delta') {
@@ -207,36 +210,64 @@ export function createClaudeCodeEventAccumulator(): { read(event: unknown): stri
 
       if (type === 'tool_use') {
         const name = stringField(event as Record<string, unknown>, ['name', 'tool'])
-        return name ? `[工具: ${name}]` : '[工具调用]'
+        const input = (event as Record<string, unknown>).input
+        return formatToolCall(name || '?', input)
       }
 
       if (type === 'tool_result') {
         const content = event.content
-        if (typeof content === 'string' && content.length > 0) {
-          return content.length > 200 ? content.slice(0, 197) + '…' : content
+        if (typeof content === 'string' && content.trim().length > 0) {
+          lastToolResult = content.trim()
+          return content.trim()
         }
         return ''
       }
+
       if (type === 'result') {
-        const result = event.result
-        if (typeof result === 'string') return result
-        if (isRecord(result) && typeof result.text === 'string') return result.text
-        return '执行完成'
+        const text = extractResultText(event)
+        if (text && text !== lastToolResult) return text
+        return ''
       }
+
       if (type === 'error') {
         const msg = stringField(event, ['error', 'message'])
         return msg ? `错误: ${msg}` : '错误'
       }
 
-      if (type === 'system' || type === 'message_start' || type === 'message_stop'
-        || type === 'content_block_start' || type === 'content_block_stop'
-        || type === 'message_delta' || type === 'ping') {
-        return ''
-      }
-
-      return type || ''
+      return ''
     },
   }
+}
+
+function formatToolCall(name: string, input: unknown): string {
+  if (isRecord(input)) {
+    if (name === 'Bash' || name === 'bash') {
+      const cmd = typeof input.command === 'string' ? input.command : ''
+      return cmd ? `$ ${cmd}` : `[工具: ${name}]`
+    }
+    if (name === 'Read' || name === 'read_file') {
+      const path = typeof input.file_path === 'string' ? input.file_path
+        : typeof input.path === 'string' ? input.path : ''
+      return path ? `[读取: ${path}]` : `[工具: ${name}]`
+    }
+    if (name === 'Write' || name === 'write_to_file' || name === 'Edit' || name === 'edit') {
+      const path = typeof input.file_path === 'string' ? input.file_path
+        : typeof input.path === 'string' ? input.path : ''
+      return path ? `[编辑: ${path}]` : `[工具: ${name}]`
+    }
+    if (name === 'MultiEdit' || name === 'multi_edit') {
+      const path = typeof input.file_path === 'string' ? input.file_path : ''
+      return path ? `[多处编辑: ${path}]` : `[工具: ${name}]`
+    }
+  }
+  return `[工具: ${name}]`
+}
+
+function extractResultText(event: Record<string, unknown>): string {
+  const result = event.result
+  if (typeof result === 'string') return result.trim()
+  if (isRecord(result) && typeof result.text === 'string') return result.text.trim()
+  return ''
 }
 
 function runningWorker(workerId: number, logger: WorkerLogger, startedAt: number, lastMessage: string): WorkerResult {
