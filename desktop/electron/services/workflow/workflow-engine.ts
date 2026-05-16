@@ -146,9 +146,12 @@ export class WorkflowEngine {
             ...(resolvedPrompt !== undefined ? { promptLength: resolvedPrompt.length } : {}),
           })
 
+          const nodeProjectId = (cfg as Record<string, unknown>)["projectId"] as string | undefined
+          const effectiveProjectId = nodeProjectId ?? projectId ?? def.id
+
           const execResult = await executor.execute({
             config: cfg, resolvedVariables: resolved,
-            context: { projectId: projectId ?? def.id, runId, abortSignal: effectiveAbortSignal },
+            context: { projectId: effectiveProjectId, runId, abortSignal: effectiveAbortSignal },
             agentDeps: this.agentDeps,
             onProgress: (phase, label) => {
               emit({ type: "node:progress", runId, nodeId, phase, label })

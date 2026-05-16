@@ -18,7 +18,7 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
     })
 
     input.onProgress?.("awaiting_response", "等待响应…")
-    const result = await input.agentDeps.sendToAgent({ providerId: input.config.providerId, modelTier: input.config.modelTier, prompt, abortSignal: input.context.abortSignal })
+    const result = await input.agentDeps.sendToAgent({ providerId: input.config.providerId, modelTier: input.config.modelTier, prompt, projectId: input.context.projectId, abortSignal: input.context.abortSignal })
     const durationMs = Date.now() - start
 
     if (result.status === "failed") {

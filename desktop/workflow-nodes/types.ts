@@ -28,7 +28,7 @@ export interface WorkflowRuntimeContext {
 }
 
 export interface AgentSendDeps {
-  sendToAgent: (input: { providerId: string; modelTier: string; prompt: string; abortSignal: AbortSignal }) => Promise<{
+  sendToAgent: (input: { providerId: string; modelTier: string; prompt: string; projectId: string; abortSignal: AbortSignal }) => Promise<{
     status: "success" | "failed"
     response: string
     error?: string

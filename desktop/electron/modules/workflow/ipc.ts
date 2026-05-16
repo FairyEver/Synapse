@@ -217,9 +217,12 @@ export const workflowIpcModule: IpcModule = {
         abortMap.set(runId, ac)
         runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt, params, definition: def })
 
-        // Resolve the active project ID for the runtime context
+        // Resolve the project ID for the runtime context
         const appConfig = await configStore.load()
-        const activeRepo = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
+        const defaultProject = def.defaultProjectId
+          ? appConfig.repositories.find((r) => r.uuid === def.defaultProjectId)
+          : undefined
+        const activeRepo = defaultProject ?? appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
         const projectId = activeRepo?.uuid ?? ""
 
         logger.info("workflow:run started", { workflowId: id, runId, workflowName: def.name, nodeCount: def.nodes.length, projectId })
@@ -342,7 +345,10 @@ export const workflowIpcModule: IpcModule = {
         runStatuses.set(runId, { runId, workflowId: def.id, status: "running", nodeResults: {}, startedAt, params, definition: def })
 
         const appConfig = await configStore.load()
-        const activeRepo = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
+        const defaultProject = def.defaultProjectId
+          ? appConfig.repositories.find((r) => r.uuid === def.defaultProjectId)
+          : undefined
+        const activeRepo = defaultProject ?? appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
         const projectId = activeRepo?.uuid ?? ""
 
         logger.info("workflow:runDefinition started", { workflowId: def.id, runId, nodeCount: def.nodes.length })
@@ -454,7 +460,10 @@ export const workflowIpcModule: IpcModule = {
         runStatuses.set(runId, { runId, workflowId, status: "running", nodeResults: {}, startedAt, params: effectiveParams, definition: def })
 
         const appConfig = await configStore.load()
-        const activeRepo = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
+        const defaultProject = def.defaultProjectId
+          ? appConfig.repositories.find((r) => r.uuid === def.defaultProjectId)
+          : undefined
+        const activeRepo = defaultProject ?? appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
         const projectId = activeRepo?.uuid ?? ""
 
         engine.run(def, effectiveParams, runId, (event) => {

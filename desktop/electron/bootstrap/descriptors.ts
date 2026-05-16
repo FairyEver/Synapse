@@ -95,7 +95,7 @@ import { collectOpsStatus } from "../modules/ops/status"
 import { WorkflowService } from "../services/workflow/workflow-service"
 import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
-import { validateWorkflow } from "../services/workflow/workflow-validator"
+import { validateWorkflow, validateRunParams } from "../services/workflow/workflow-validator"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
 import type { WorkflowRunStatus } from "../../src/types/workflow"
 import { nodeTypeRegistry } from "../../workflow-nodes/registry"
@@ -226,6 +226,8 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
         if (!def) return { errors: [{ type: "invalid_config" as const, message: "Workflow not found" }] }
         const validation = validateWorkflow(def)
         if (!validation.valid) return { errors: validation.errors }
+        const paramErrors = validateRunParams(def, params)
+        if (paramErrors.length > 0) return { errors: paramErrors }
         const runId = randomUUID()
         const ac = new AbortController()
         const startedAt = Date.now()
@@ -1011,16 +1013,18 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
   create(ctx) {
     const registry = ctx.registry
     const engineLogger = createMainLogger("service.workflow.engine.agent-deps")
-    const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({ providerId, modelTier, prompt, abortSignal }) => {
+    const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({ providerId, modelTier, prompt, projectId, abortSignal }) => {
       try {
         const config = await configStore.load()
-        const activeRepo = config.repositories.find((r) => r.uuid === config.activeRepoUuid) ?? config.repositories[0]
-        const projectId = activeRepo?.uuid ?? ""
+        const repo = projectId
+          ? config.repositories.find((r) => r.uuid === projectId)
+          : (config.repositories.find((r) => r.uuid === config.activeRepoUuid) ?? config.repositories[0])
+        const effectiveProjectId = repo?.uuid ?? ""
         const containers = registry.get<ProjectContainerRegistry>("core.project-containers")
-        const container = await containers.open(projectId, { name: "", workspacePath: activeRepo?.localPath ?? "" })
+        const container = await containers.open(effectiveProjectId, { name: "", workspacePath: repo?.localPath ?? "" })
         const agentRuntime = container.get<import("../services/agent-runtime").AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
         const result = await agentRuntime.sendScheduled({
-          projectId, agentType: "claude-code", mode: "default", prompt,
+          projectId: effectiveProjectId, agentType: "claude-code", mode: "bypassPermissions", prompt,
           providerId, modelTier,
           sessionPolicy: "fresh", timeoutMs: 120_000, abortSignal,
         })
@@ -1029,8 +1033,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
         const diagnostic = workflowAgentErrorDiagnostic(err)
         engineLogger.error("engine agent call failed (infrastructure)", {
           boundary: "workflow-engine.agent-deps",
-          providerId,
-          modelTier,
+          providerId, modelTier, projectId,
           ...diagnostic,
         })
         return { status: "failed", response: "", error: workflowAgentFailureMessage(diagnostic), durationMs: 0 }
