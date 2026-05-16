@@ -42,6 +42,7 @@ export interface ScheduledTaskEntryV2 extends Record<string, unknown> {
   readonly trigger: TaskTrigger
   readonly action: TaskActionRef
   readonly enabled: boolean
+  readonly activeDays: readonly number[]
   readonly missedRunPolicy: "skip" | "run_once"
   readonly overlapPolicy: "skip"
   readonly createdAt: string
@@ -64,6 +65,7 @@ export interface ScheduledTaskCreateInput {
   readonly trigger: TaskTrigger
   readonly action: TaskActionRef
   readonly enabled?: boolean
+  readonly activeDays?: readonly number[]
   readonly missedRunPolicy?: "skip" | "run_once"
 }
 
@@ -75,6 +77,7 @@ export interface ScheduledTaskUpdateInput {
   readonly trigger?: TaskTrigger
   readonly action?: TaskActionRef
   readonly enabled?: boolean
+  readonly activeDays?: readonly number[]
   readonly missedRunPolicy?: "skip" | "run_once"
 }
 

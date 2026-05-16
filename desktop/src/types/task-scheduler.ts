@@ -28,6 +28,7 @@ export type ScheduledTask = {
   trigger: ScheduledTaskTrigger
   action: ScheduledTaskActionRef
   enabled: boolean
+  activeDays: number[]
   missedRunPolicy: "skip" | "run_once"
   overlapPolicy: "skip"
   createdAt: string
@@ -47,6 +48,7 @@ export type ScheduledTaskCreateInput = {
   trigger: ScheduledTaskTrigger
   action: ScheduledTaskActionRef
   enabled?: boolean
+  activeDays?: number[]
   missedRunPolicy?: "skip" | "run_once"
 }
 
@@ -58,6 +60,7 @@ export type ScheduledTaskUpdateInput = {
   trigger?: ScheduledTaskTrigger
   action?: ScheduledTaskActionRef
   enabled?: boolean
+  activeDays?: number[]
   missedRunPolicy?: "skip" | "run_once"
 }
 
