@@ -93,6 +93,13 @@ test('buildClaudeCodeArgs builds correct args with all options', () => {
     '--system-prompt', 'be concise',
     'fix the bug',
   ])
+  // always stream-json regardless of config.outputFormat
+  const textArgs = buildClaudeCodeArgs({
+    command: 'claude', model: 'opus', dangerouslySkipPermissions: false,
+    outputFormat: 'text', maxTurns: 10, systemPrompt: '',
+  }, '/tmp/work', 'test')
+  assert.ok(textArgs.includes('stream-json'))
+  assert.ok(!textArgs.includes('text'))
 })
 
 test('buildClaudeCodeArgs omits optional flags when disabled', () => {

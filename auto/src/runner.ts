@@ -80,7 +80,7 @@ export function buildCodexArgs(config: CodexConfig, workingDirectory: string): s
 export function buildClaudeCodeArgs(config: ClaudeCodeConfig, workingDirectory: string, prompt: string): string[] {
   const args = [
     '--print',
-    '--output-format', config.outputFormat,
+    '--output-format', 'stream-json',
     '--max-turns', String(config.maxTurns),
   ]
   if (config.model) args.push('--model', config.model)

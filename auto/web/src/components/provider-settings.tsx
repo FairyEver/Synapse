@@ -96,17 +96,6 @@ export function ProviderSettings({ config, onChange }: ProviderSettingsProps) {
           {CLAUDE_MODELS.map(m => <option key={m} value={m}>{m}</option>)}
         </select>
       </Field>
-      <Field label="输出格式">
-        <select
-          value={cc.outputFormat}
-          onChange={e => update('outputFormat', e.target.value as ClaudeCodeConfig['outputFormat'])}
-          className="select-field"
-        >
-          <option value="stream-json">stream-json</option>
-          <option value="json">json</option>
-          <option value="text">text</option>
-        </select>
-      </Field>
       <Field label="最大轮次">
         <select
           value={cc.maxTurns}
