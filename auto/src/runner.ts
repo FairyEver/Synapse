@@ -82,7 +82,6 @@ export function buildClaudeCodeArgs(config: ClaudeCodeConfig, workingDirectory: 
     '--print',
     '--output-format', config.outputFormat,
     '--max-turns', String(config.maxTurns),
-    '--cwd', workingDirectory,
   ]
   if (config.model) args.push('--model', config.model)
   if (config.dangerouslySkipPermissions) args.push('--dangerously-skip-permissions')

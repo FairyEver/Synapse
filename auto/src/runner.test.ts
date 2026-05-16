@@ -88,7 +88,6 @@ test('buildClaudeCodeArgs builds correct args with all options', () => {
     '--print',
     '--output-format', 'stream-json',
     '--max-turns', '30',
-    '--cwd', '/tmp/work',
     '--model', 'opus',
     '--dangerously-skip-permissions',
     '--system-prompt', 'be concise',
