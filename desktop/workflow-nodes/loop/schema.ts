@@ -1,5 +1,20 @@
 import { z } from "zod"
 
+const workflowNodeSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  type: z.string(),
+  position: z.object({ x: z.number(), y: z.number() }),
+  config: z.record(z.unknown()),
+}).passthrough()
+
+const workflowEdgeSchema = z.object({
+  id: z.string(),
+  from: z.string(),
+  to: z.string(),
+  branch: z.string().optional(),
+}).passthrough()
+
 export const loopNodeConfigSchema = z.object({
   mode: z.enum(["while", "for", "forEach"]),
   count: z.number().int().min(1).optional(),
@@ -14,8 +29,8 @@ export const loopNodeConfigSchema = z.object({
     description: z.string().optional(),
   })).default([]),
   subgraph: z.object({
-    nodes: z.array(z.any()).default([]),
-    edges: z.array(z.any()).default([]),
+    nodes: z.array(workflowNodeSchema).default([]),
+    edges: z.array(workflowEdgeSchema).default([]),
     outputMappings: z.array(z.object({
       targetVariable: z.string().min(1),
       sourceNodeId: z.string().min(1),
