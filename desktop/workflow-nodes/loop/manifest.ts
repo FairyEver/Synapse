@@ -3,7 +3,7 @@ import type { NodeManifest } from "../types"
 import type { LoopNodeConfig } from "./schema"
 import { loopNodeConfigSchema } from "./schema"
 
-const modeLabel: Record<string, string> = { while: "条件循环", for: "计数循环", forEach: "遍历循环" }
+const modeLabel: Record<string, string> = { while: "while", for: "for", forEach: "forEach" }
 
 export const loopNodeManifest: NodeManifest<LoopNodeConfig> = {
   type: "loop",
@@ -25,9 +25,6 @@ export const loopNodeManifest: NodeManifest<LoopNodeConfig> = {
   },
   configFields: [
     { name: "mode", kind: "select", label: "循环模式" },
-    { name: "count", kind: "text", label: "执行次数", optional: true },
-    { name: "arrayInput", kind: "text", label: "数组变量名", optional: true },
-    { name: "parallel", kind: "select", label: "并行执行", optional: true },
     { name: "maxIterations", kind: "text", label: "最大迭代次数" },
     { name: "onError", kind: "select", label: "错误处理" },
   ],
