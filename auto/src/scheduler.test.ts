@@ -1,25 +1,18 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import type { UiConfig } from './config.js'
+import { DEFAULT_UI_CONFIG, type UiConfig } from './config.js'
 import { AutoScheduler, type BatchRunner } from './scheduler.js'
+import type { OutputLine } from './runner.js'
 
 function config(): UiConfig {
   return {
+    ...DEFAULT_UI_CONFIG,
     prompt: 'hello',
-    activePromptName: 'default',
-    prompts: ['default'],
     workingDirectory: '/tmp/work',
     concurrency: 2,
     intervalMinutes: 1,
     timeoutMinutes: 1,
     maxLogs: 10,
-    codex: {
-      command: 'codex',
-      model: '',
-      sandbox: 'danger-full-access',
-      approvalPolicy: 'never',
-      json: true,
-    },
   }
 }
 
@@ -85,4 +78,36 @@ test('stopAfterCurrent aborts the wait before the next batch', async () => {
 
   assert.equal(waitAborted, true)
   assert.equal(runs, 1)
+})
+
+test('subscribeOutput receives output lines from batch runner', async () => {
+  const collectedLines: OutputLine[] = []
+  const fakeLine: OutputLine = { workerId: 1, stream: 'stdout', text: 'hello', ts: Date.now() }
+
+  const deferred: { finishRun?: () => void } = {}
+  const runner: BatchRunner = async (_config, _onUpdate, onOutput) => {
+    onOutput?.(fakeLine)
+    await new Promise<void>(resolve => { deferred.finishRun = resolve })
+    return {
+      id: 'batch-1',
+      status: 'success',
+      startedAt: new Date().toISOString(),
+      finishedAt: new Date().toISOString(),
+      durationMs: 1,
+      workers: [],
+      summaryPath: '/tmp/summary.md',
+    }
+  }
+
+  const scheduler = new AutoScheduler(runner, { wait: () => Promise.resolve() })
+  scheduler.subscribeOutput(line => collectedLines.push(line))
+  void scheduler.start(config())
+  await scheduler.waitForStatus('running')
+  scheduler.stopAfterCurrent()
+  assert.ok(deferred.finishRun)
+  deferred.finishRun()
+  await scheduler.waitForStatus('stopped')
+
+  assert.equal(collectedLines.length, 1)
+  assert.deepEqual(collectedLines[0], fakeLine)
 })

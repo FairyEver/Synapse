@@ -1,8 +1,8 @@
 import type { UiConfig } from './config.js'
-import { runBatch, type BatchResult, type BatchSnapshot } from './runner.js'
+import { runBatch, type BatchResult, type BatchSnapshot, type WorkerOutputCallback } from './runner.js'
 
 export type SchedulerStatus = 'idle' | 'running' | 'waiting' | 'stopping' | 'stopped' | 'error'
-export type BatchRunner = (config: UiConfig, onUpdate?: (snapshot: BatchSnapshot) => void) => Promise<BatchResult>
+export type BatchRunner = (config: UiConfig, onUpdate?: (snapshot: BatchSnapshot) => void, onOutput?: WorkerOutputCallback) => Promise<BatchResult>
 export type SchedulerWait = (ms: number, signal: AbortSignal) => Promise<void>
 
 export interface SchedulerSnapshot {
@@ -28,6 +28,7 @@ export class AutoScheduler {
   private lastBatch: BatchResult | null = null
   private error = ''
   private listeners = new Set<SchedulerListener>()
+  private outputListeners = new Set<WorkerOutputCallback>()
   private wait: SchedulerWait
   private waitAbortController: AbortController | null = null
   private runningPromise: Promise<void> | null = null
@@ -60,6 +61,11 @@ export class AutoScheduler {
     this.listeners.add(listener)
     listener(this.getSnapshot())
     return () => this.listeners.delete(listener)
+  }
+
+  subscribeOutput(listener: WorkerOutputCallback): () => void {
+    this.outputListeners.add(listener)
+    return () => this.outputListeners.delete(listener)
   }
 
   async start(config: UiConfig): Promise<void> {
@@ -104,6 +110,8 @@ export class AutoScheduler {
         const batch = await this.batchRunner(config, snapshot => {
           this.currentBatch = snapshot
           this.emit()
+        }, line => {
+          for (const listener of this.outputListeners) listener(line)
         })
         this.currentBatch = batch
         this.lastBatch = batch
