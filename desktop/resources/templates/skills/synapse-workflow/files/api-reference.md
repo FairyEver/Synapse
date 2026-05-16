@@ -18,8 +18,8 @@ List available node types with summaries.
 Get full manifest and config JSON Schema for a node type.
 
 **Params:** `nodeType` (string, required)
-**Returns:** `{ type, title, color, ports, configFields, configSchema }`
-**Notes:** Always call this before configuring a node to get the current schema.
+**Returns:** `{ type, title, color, ports, configFields, configSchema, availableProviders? }`
+**Notes:** Always call this before configuring a node to get the current schema. For `prompt` and `switch` nodes, the response also includes `availableProviders` — an array of `{ id, name, models: { default?, haiku?, sonnet?, opus? } }`. Use this to discover valid `providerId` values.
 
 ---
 
@@ -70,6 +70,7 @@ Create a new empty workflow with a default end node.
 
 **Params:** `name?` (string)
 **Returns:** `{ id, versionHash }`
+**Notes:** After creation, use `workflow_definition_update` to set `defaultProviderId` and `defaultModelTier` so all prompt/switch nodes inherit them.
 
 ### workflow_definition_update
 
@@ -77,7 +78,7 @@ Replace a full workflow definition. Validates before saving.
 
 **Params:** `definition` (object, required) — must include `id`
 **Returns:** `{ versionHash }`
-**Notes:** Config is replaced entirely, not merged.
+**Notes:** Config is replaced entirely, not merged. Include `defaultProviderId` and `defaultModelTier` to set workflow-level provider defaults.
 
 ### workflow_definition_delete
 
