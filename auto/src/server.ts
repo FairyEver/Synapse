@@ -104,11 +104,11 @@ async function serveFile(res: ServerResponse, path: string): Promise<void> {
   res.end(body)
 }
 
-async function serveAsset(res: ServerResponse, pathname: string): Promise<void> {
-  const relative = normalize(decodeURIComponent(pathname.replace(/^\/assets\//, '')))
+async function serveStatic(res: ServerResponse, pathname: string): Promise<void> {
+  const relative = normalize(decodeURIComponent(pathname.slice(1)))
   const path = resolve(WEB_DIR, relative)
   if (!path.startsWith(WEB_DIR)) {
-    sendError(res, 400, 'Invalid asset path')
+    sendError(res, 400, 'Invalid path')
     return
   }
   await serveFile(res, path)
@@ -143,7 +143,7 @@ export function createHandler(scheduler: AutoScheduler, outputBuffer: OutputBuff
       }
 
       if (req.method === 'GET' && url.pathname.startsWith('/assets/')) {
-        await serveAsset(res, url.pathname)
+        await serveStatic(res, url.pathname)
         return
       }
 
