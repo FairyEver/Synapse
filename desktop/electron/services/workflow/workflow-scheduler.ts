@@ -126,6 +126,23 @@ export class ReactiveScheduler {
         while (this.maxConcurrency > 0 && waitQueue.length > 0 && running.size < this.maxConcurrency) {
           tryStart(waitQueue.shift()!)
         }
+      }).catch((err: unknown) => {
+        // If task.execute() throws (not just returns failed status), catch
+        // the rejection to prevent unhandledRejection and abort listener leak.
+        running.delete(nodeId)
+        const message = err instanceof Error ? err.message : String(err)
+        const outcome: NodeExecOutcome = { nodeId, status: "failed", error: message }
+        results.set(nodeId, outcome)
+        callbacks.onNodeDone(outcome)
+        failed = true
+        logger.error("scheduler: node execution threw unexpectedly", { nodeId, error: message, ...(this.runId ? { runId: this.runId } : {}) })
+        for (const queued of waitQueue) {
+          results.set(queued, { nodeId: queued, status: "skipped", error: "upstream failed" })
+        }
+        waitQueue.length = 0
+        for (const next of downstreamOf(nodeId)) {
+          releaseSkippedDependency(next)
+        }
       })
       running.set(nodeId, promise)
     }
@@ -151,12 +168,19 @@ export class ReactiveScheduler {
       const abortPromise = new Promise<void>((resolve) => {
         abortHandler = resolve
         abortSignal.addEventListener("abort", abortHandler, { once: true })
+        // Signal may have been aborted between the while-loop check above and
+        // this point. The listener won't fire for past events, so resolve manually.
+        if (abortSignal.aborted) resolve()
       })
-      await Promise.race([...running.values(), abortPromise])
-      // Clean up the abort listener if Promise.race resolved because a task
-      // finished (not because abort fired). Without this, every loop iteration
-      // leaks a listener on the AbortSignal until the signal is GC'd.
-      abortSignal.removeEventListener("abort", abortHandler)
+      try {
+        await Promise.race([...running.values(), abortPromise])
+      } finally {
+        // Clean up the abort listener whether the race resolved normally
+        // (task finished) or abnormally (task promise rejected). Without
+        // the finally, a rejected task would skip cleanup and leak a
+        // listener on the AbortSignal until it is GC'd.
+        abortSignal.removeEventListener("abort", abortHandler)
+      }
     }
     for (const id of nodes) {
       if (!results.has(id)) {

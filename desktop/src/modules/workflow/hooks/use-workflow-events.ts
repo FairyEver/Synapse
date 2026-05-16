@@ -1,6 +1,8 @@
 import { useEffect, useRef } from "react"
 import type { NodeRunResult, WorkflowEvent } from "@/types/workflow"
 import { createRendererLogger } from "@/app-shell/logging"
+import { errorDiagnostic } from "../lib/error-utils"
+import { sanitizeError } from "../../../../electron/services/error-sanitize"
 
 const logger = createRendererLogger("workflow.events")
 
@@ -69,7 +71,7 @@ export function useWorkflowEvents(
       logger.warn("workflow hydration status query failed", {
         runId,
         boundary: "renderer.workflow.hydration-status",
-        ...errorLogMeta(error),
+        ...errorDiagnostic(error),
       })
     })
 
@@ -114,17 +116,10 @@ export function useWorkflowEvents(
   }, [runId])
 }
 
-function workflowErrorLogMeta(error: string | undefined): { readonly errorName: string; readonly errorLength: number } {
+function workflowErrorLogMeta(error: string | undefined): { readonly errorName: string; readonly errorLength: number; readonly errorMessage?: string } {
   return {
     errorName: "workflow",
     errorLength: error?.length ?? 0,
-  }
-}
-
-function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
-  const message = error instanceof Error ? error.message : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: message.length,
+    ...(error ? { errorMessage: error.length > 200 ? sanitizeError(error).slice(0, 200) + "..." : sanitizeError(error) } : {}),
   }
 }

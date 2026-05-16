@@ -1,22 +1,8 @@
 import { cn } from "@/lib/utils"
 import { httpRequestNodeManifest } from "./manifest"
 import type { HttpRequestNodeConfig } from "./schema"
-import type { NodeRunResult } from "@/types/workflow"
 import { NodeProgressBar, useRunningTimer } from "@/modules/workflow/runner/node-progress-bar"
-
-type NodeStatus = NodeRunResult["status"]
-
-function statusClass(status?: NodeStatus): string {
-  switch (status) {
-    case "pending": return "border-dashed border-muted-foreground"
-    case "running": return "border-primary"
-    case "success": return "border-primary"
-    case "failed": return "border-destructive"
-    case "cancelled": return "opacity-60 border-muted-foreground"
-    case "skipped": return "opacity-40 border-dashed"
-    default: return ""
-  }
-}
+import { statusClass, type NodeStatus } from "../node-status-utils"
 
 export function HttpRequestNodeCard({ config, name, selected, status, progressLabel, startedAt }: {
   config: HttpRequestNodeConfig; name?: string; selected?: boolean; status?: NodeStatus

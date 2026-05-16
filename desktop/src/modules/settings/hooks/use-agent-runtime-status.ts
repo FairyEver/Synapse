@@ -85,10 +85,17 @@ function useAgentRuntimeStatus(projectId?: string) {
   }, [refresh])
 
   useEffect(() => {
+    let debounceTimer: ReturnType<typeof setTimeout> | null = null
+
     const refreshWhenVisible = () => {
       if (document.visibilityState === "hidden") return
       if (loadingRefreshPendingRef.current) return
-      refresh({ showLoading: false })
+      // Debounce: coalesce rapid events from focus + visibilitychange
+      // that fire in quick succession when user switches back to the tab.
+      if (debounceTimer !== null) clearTimeout(debounceTimer)
+      debounceTimer = setTimeout(() => {
+        refresh({ showLoading: false })
+      }, 200)
     }
     const timer = window.setInterval(refreshWhenVisible, AGENT_RUNTIME_AUTO_REFRESH_INTERVAL_MS)
     window.addEventListener("focus", refreshWhenVisible)
@@ -98,6 +105,7 @@ function useAgentRuntimeStatus(projectId?: string) {
       window.clearInterval(timer)
       window.removeEventListener("focus", refreshWhenVisible)
       document.removeEventListener("visibilitychange", refreshWhenVisible)
+      if (debounceTimer !== null) clearTimeout(debounceTimer)
     }
   }, [refresh])
 

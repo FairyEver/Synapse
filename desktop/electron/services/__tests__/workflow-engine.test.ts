@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
+import { sanitizeError } from "../error-sanitize"
 
 vi.mock("electron", () => ({ app: { getPath: () => "/tmp", getAppPath: () => "/tmp" } }))
 const logger = vi.hoisted(() => ({
@@ -234,7 +235,7 @@ describe("WorkflowEngine", () => {
       .run(def, {}, "run-throw", (event) => events.push(event))
 
     const failedEvent = events.find((event) => event.type === "node:failed")
-    const summarizedError = `节点执行异常（Error，错误 ${rawError.length} 字）`
+    const summarizedError = `节点执行异常：${sanitizeError(rawError)}`
     expect(result.nodeResults.throwing?.error).toBe(summarizedError)
     expect(failedEvent).toEqual(expect.objectContaining({
       type: "node:failed",

@@ -48,8 +48,16 @@ export function PromptEditor({ value, onChange, onBlur, variables, placeholder, 
           <Badge
             key={v.name}
             variant="secondary"
-            className="cursor-pointer text-[10px] h-4 px-1.5"
+            className="cursor-pointer text-[10px] h-4 px-1.5 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            tabIndex={0}
+            role="button"
             onClick={() => insertVariable(v.name)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault()
+                insertVariable(v.name)
+              }
+            }}
           >
             {v.name}
           </Badge>

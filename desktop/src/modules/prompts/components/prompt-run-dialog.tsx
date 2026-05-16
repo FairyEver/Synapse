@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { LoaderCircle } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
+import { sanitizeError } from "../../../../electron/services/error-sanitize"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -221,11 +222,12 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
   )
 }
 
-function errorLogMeta(error: unknown): Record<string, unknown> {
+function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number; readonly errorMessage?: string } {
   const message = error instanceof Error ? error.message : String(error)
   return {
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
+    ...(message.length > 0 ? { errorMessage: message.length > 200 ? sanitizeError(message).slice(0, 200) + "…" : sanitizeError(message) } : {}),
   }
 }
 

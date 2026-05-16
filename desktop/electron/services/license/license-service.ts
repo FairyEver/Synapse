@@ -205,7 +205,9 @@ export class LicenseService {
   private scheduleNext(delayMs: number): void {
     this.renewTimer = setTimeout(() => {
       void this.syncWithServer()
-        .catch(() => {})
+        .catch((error) => {
+          this.deps.logger?.warn("授权同步处理中发生意外错误。", { error })
+        })
         .finally(() => {
           if (this.renewTimer) {
             this.scheduleNext(this.currentDelayMs)

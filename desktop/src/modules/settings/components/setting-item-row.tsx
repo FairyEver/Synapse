@@ -83,10 +83,20 @@ function SettingItemRow({ item, value, context, onSave }: SettingItemRowProps) {
 
   useEffect(() => {
     if (!supportsDraftInput || item.readOnly || !hasLocalEditRef.current) {
+      if (pendingSaveRef.current !== null) {
+        window.clearTimeout(pendingSaveRef.current)
+        pendingSaveRef.current = null
+      }
       return
     }
 
     if (draftValue === currentInputValue || validationMessage !== null) {
+      // External value sync or validation failure: cancel any pending stale save
+      // so an earlier debounce timer doesn't overwrite the externally-set value.
+      if (pendingSaveRef.current !== null) {
+        window.clearTimeout(pendingSaveRef.current)
+        pendingSaveRef.current = null
+      }
       return
     }
 

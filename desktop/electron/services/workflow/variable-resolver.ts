@@ -33,6 +33,11 @@ export function resolveVariables(
 
   for (const { name, source } of bindings) {
     if (source.type === "param") {
+      if (!(source.param in paramValues)) {
+        logger.warn("variable resolved to empty: referenced parameter is missing", {
+          variableName: name, paramName: source.param,
+        })
+      }
       resolved[name] = String(paramValues[source.param] ?? "")
     } else if (source.type === "node_output") {
       if (!(source.node in nodeOutputs)) {

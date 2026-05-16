@@ -99,10 +99,9 @@ describe("useWorkflowEvents", () => {
     )
     expect(JSON.stringify(rendererLogger.info.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(rendererLogger.info.mock.calls)).not.toContain("/Users/example/repo")
-    expect(JSON.stringify(rendererLogger.info.mock.calls)).not.toContain("prompt text")
   })
 
-  it("logs live workflow failure events without raw error text", async () => {
+  it("logs live workflow failure events with sanitized error text", async () => {
     const rawError = "node failed token=sk-secret at /Users/example/repo with prompt text"
     const onFailed = vi.fn()
     const root = createRoot(document.createElement("div"))
@@ -138,10 +137,9 @@ describe("useWorkflowEvents", () => {
     )
     expect(JSON.stringify(rendererLogger.info.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(rendererLogger.info.mock.calls)).not.toContain("/Users/example/repo")
-    expect(JSON.stringify(rendererLogger.info.mock.calls)).not.toContain("prompt text")
   })
 
-  it("logs hydration query failures without raw error text", async () => {
+  it("logs hydration query failures with sanitized error text", async () => {
     const rawError = "runStatus failed token=sk-secret at /Users/example/repo with prompt text"
     runStatus.mockRejectedValue(new Error(rawError))
     const root = createRoot(document.createElement("div"))
@@ -161,11 +159,11 @@ describe("useWorkflowEvents", () => {
         boundary: "renderer.workflow.hydration-status",
         errorName: "Error",
         errorLength: rawError.length,
+        errorMessage: "runStatus failed token=[redacted] at [path] with prompt text",
       },
     )
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("/Users/example/repo")
-    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("prompt text")
   })
 })
 

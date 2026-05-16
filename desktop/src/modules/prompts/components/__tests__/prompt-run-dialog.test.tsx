@@ -152,6 +152,7 @@ describe("PromptRunDialog", () => {
         boundary: "renderer.prompt-run.load-providers",
         errorLength: 60,
         errorName: "Error",
+        errorMessage: "Authorization=[redacted] [redacted] failed while loading providers",
       },
     )
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-test")

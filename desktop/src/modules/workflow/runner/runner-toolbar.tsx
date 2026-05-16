@@ -2,15 +2,9 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Square, RotateCcw, PenLine, LayoutDashboard, List, Loader2 } from "lucide-react"
 import type { WorkflowDefinition, WorkflowRunStatus } from "@/types/workflow"
+import { RUN_STATE_BADGE } from "../lib/status-display"
 
 type ViewMode = "dag" | "timeline"
-
-const RUN_STATE_BADGE: Record<WorkflowRunStatus["status"], { label: string; variant: "default" | "secondary" | "destructive" | "outline" }> = {
-  running: { label: "执行中", variant: "default" },
-  completed: { label: "已完成", variant: "secondary" },
-  failed: { label: "失败", variant: "destructive" },
-  cancelled: { label: "已取消", variant: "outline" },
-}
 
 interface RunnerToolbarProps {
   definition: WorkflowDefinition

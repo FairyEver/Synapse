@@ -88,7 +88,7 @@ describe("workflowIpcModule", () => {
       errorLength: rawError.length,
       stackLength: expect.any(Number),
     })
-    expect(runStatuses.get(runId)?.error).toBe(`引擎异常（Error，错误 ${rawError.length} 字）`)
+    expect(runStatuses.get(runId)?.error).toBe(`引擎异常（Error）：engine failed token=<token> at /Users/example/repo with prompt text`)
     expect(JSON.stringify(logStoreMock.logger.error.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(logStoreMock.logger.error.mock.calls)).not.toContain("/Users/example/repo")
     expect(JSON.stringify(logStoreMock.logger.error.mock.calls)).not.toContain("prompt text")

@@ -14,14 +14,14 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
     }
 
     input.onProgress?.("building_request", "构建请求…")
-    const url = buildUrl(config)
 
     logger.info("http request node executing", {
-      runId: context.runId, method: config.method, urlLength: url.length,
+      runId: context.runId, method: config.method, urlLength: config.url.length,
     })
 
     input.onProgress?.("sending_request", "发送请求…")
     try {
+      const url = buildUrl(config)
       const response = await runtimeDeps.sendHttpRequest({
         method: config.method,
         url,
@@ -56,7 +56,7 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
       const message = err instanceof Error ? err.message : String(err)
       logger.warn("http request node failed", {
         runId: context.runId, method: config.method,
-        errorLength: message.length, durationMs,
+        errorMessage: message.length <= 500 ? message : message.slice(0, 500) + "...", durationMs,
       })
       return {
         status: "failed",

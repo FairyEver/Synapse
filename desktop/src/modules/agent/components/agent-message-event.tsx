@@ -164,7 +164,7 @@ function AssistantMessageBody({
         timestamp={item.timestamp}
         content={item.content}
         messageId={item.id}
-        role={item.role}
+        role={item.role === "user" || item.role === "assistant" ? item.role : undefined}
         className="mt-2 pt-1 opacity-0 transition-opacity group-hover/message:opacity-100"
       />
     </div>

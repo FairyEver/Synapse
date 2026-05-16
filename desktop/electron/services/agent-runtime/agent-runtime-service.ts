@@ -57,6 +57,7 @@ import type {
   ScheduledAgentSendResult,
 } from "./types"
 import type { SkillRegistry } from "./skill-registry"
+import { sanitizeError } from "../error-sanitize"
 
 interface CommandExecutionRunner {
   run(request: ControlledProcessRunRequest): Promise<ControlledProcessResult>
@@ -282,29 +283,29 @@ export class AgentRuntimeService {
         return scheduledResult
       }
 
-      const errorLength = result.error?.length
       const scheduledResult: ScheduledAgentSendResult = {
         conversationId: result.conversationId,
         status: result.error ? "error" : "success",
         summary: result.resultText || undefined,
-        error: result.error ? SCHEDULED_AGENT_ERROR_MESSAGE : undefined,
+        error: result.error ? sanitizeError(result.error) : undefined,
         durationMs: Date.now() - startMs,
       }
       if (scheduledResult.status !== "success") {
-        this.logScheduledAgentFailure(input, message, scheduledResult, errorLength, result.agentSessionId)
+        this.logScheduledAgentFailure(input, message, scheduledResult, result.error?.length, result.agentSessionId)
       } else {
         this.logScheduledAgentCompletion(input, message, scheduledResult, result.agentSessionId)
       }
       return scheduledResult
     } catch (error) {
       const isTimeout = ac.signal.aborted && !externalSignal?.aborted
-      const errorLength = isTimeout ? undefined : errorMessage(error).length
+      const errorMessageText = errorMessage(error)
+      const errorLength = isTimeout ? undefined : errorMessageText.length
       const scheduledResult: ScheduledAgentSendResult = {
         conversationId: "",
         status: isTimeout ? "timeout" : "error",
         error: isTimeout
           ? `Execution exceeded ${input.timeoutMs}ms timeout`
-          : SCHEDULED_AGENT_ERROR_MESSAGE,
+          : sanitizeError(errorMessageText),
         durationMs: Date.now() - startMs,
       }
       this.logScheduledAgentFailure(input, message, scheduledResult, errorLength)
@@ -1049,35 +1050,37 @@ function formatCommandResult(name: string, result: ControlledProcessResult): str
   return output ? `${status}\n\n${truncateRunes(output, 4000)}` : status
 }
 
-function summarizePermissionResponseError(error: unknown): { errorName: string; errorLength: number } {
+function summarizePermissionResponseError(error: unknown): { errorName: string; errorLength: number; errorMessage: string } {
   if (error instanceof Error) {
     return {
       errorName: error.name || "Error",
       errorLength: error.message.length,
+      errorMessage: error.message,
     }
   }
   const message = String(error)
   return {
     errorName: typeof error,
     errorLength: message.length,
+    errorMessage: message,
   }
 }
 
-function summarizeScheduledResumeError(error: unknown): { errorName: string; errorLength: number } {
+function summarizeScheduledResumeError(error: unknown): { errorName: string; errorLength: number; errorMessage: string } {
   if (error instanceof Error) {
     return {
       errorName: error.name || "Error",
       errorLength: error.message.length,
+      errorMessage: error.message,
     }
   }
   const message = String(error)
   return {
     errorName: typeof error,
     errorLength: message.length,
+    errorMessage: message,
   }
 }
-
-const SCHEDULED_AGENT_ERROR_MESSAGE = "Agent run failed"
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)

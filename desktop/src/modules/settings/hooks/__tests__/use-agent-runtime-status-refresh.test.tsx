@@ -64,6 +64,7 @@ describe("useAgentRuntimeStatus", () => {
 
     await act(async () => {
       vi.advanceTimersByTime(5_000)
+      vi.advanceTimersByTime(300)
       await Promise.resolve()
     })
 

@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react"
 import type { NodeRunResult, ValidationError } from "@/types/workflow"
 import { createRendererLogger } from "@/app-shell/logging"
+import { errorDiagnostic } from "../lib/error-utils"
 
 const logger = createRendererLogger("workflow.run")
 
@@ -32,7 +33,7 @@ export function useWorkflowRun(workflowId: string, initialRunId?: string | null)
           workflowId,
           initialRunId,
           boundary: "renderer.workflow.run.initial-status",
-          ...errorLogMeta(err),
+          ...errorDiagnostic(err),
         })
         setRunState("idle")
       }
@@ -60,7 +61,7 @@ export function useWorkflowRun(workflowId: string, initialRunId?: string | null)
       logger.error("run IPC call failed, resetting to idle", {
         workflowId,
         boundary: "renderer.workflow.run.start",
-        ...errorLogMeta(err),
+        ...errorDiagnostic(err),
       })
       setRunState("idle")
       return null
@@ -77,22 +78,10 @@ export function useWorkflowRun(workflowId: string, initialRunId?: string | null)
         workflowId,
         runId,
         boundary: "renderer.workflow.run.cancel",
-        ...errorLogMeta(err),
+        ...errorDiagnostic(err),
       })
     }
   }, [workflowId, runId])
 
   return { runId, runState, nodeResults, setRunState, setNodeResults, start, cancel, attachRun }
-}
-
-function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
-  const text = error instanceof Error
-    ? error.message
-    : typeof error === "string"
-      ? error
-      : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: text.length,
-  }
 }

@@ -15,6 +15,7 @@ import type {
   SynapseAgentToolResultTimelineItem,
 } from "@/types/agent"
 import { AgentAnnotation } from "./agent-annotation"
+import { errorLogMeta } from "../utils"
 
 const logger = createRendererLogger("agent")
 
@@ -192,18 +193,6 @@ function shouldDefaultOpen(body: string, mode: "expanded" | "collapsed" | "auto"
 function previewText(value: string, limit: number): string {
   if (value.length <= limit) return value
   return `${value.slice(0, limit).trimEnd()}\n...`
-}
-
-function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
-  const text = error instanceof Error
-    ? error.message
-    : typeof error === "string"
-      ? error
-      : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: text.length,
-  }
 }
 
 export { AgentToolEvent }

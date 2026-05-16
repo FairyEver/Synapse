@@ -64,5 +64,6 @@ export interface WorkflowRunSnapshot {
   runId: string; workflowId: string; version: string; startedAt: number; endedAt?: number
   status: "completed" | "failed" | "cancelled"; params: Record<string, unknown>
   nodeResults: Record<string, NodeRunResult>
+  error?: string
   definition?: WorkflowDefinition
 }

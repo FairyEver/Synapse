@@ -3,11 +3,7 @@ import { Badge } from "@/components/ui/badge"
 import { X } from "lucide-react"
 import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
 import { track } from "@/lib/ui-tracking"
-
-const STATUS_LABEL: Record<string, string> = { pending: "等待", running: "执行中", success: "完成", failed: "失败", cancelled: "已取消", skipped: "跳过" }
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  pending: "outline", running: "default", success: "secondary", failed: "destructive", cancelled: "secondary", skipped: "outline",
-}
+import { NODE_STATUS_LABEL, NODE_STATUS_VARIANT } from "../lib/status-display"
 
 interface NodeResultPanelProps {
   result: NodeRunResult
@@ -51,8 +47,8 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
     <div className="h-full flex flex-col">
       <div className="flex items-center gap-2 px-3 py-2 border-b">
         <span className="text-sm font-medium truncate flex-1">{nodeName}</span>
-        <Badge variant={STATUS_VARIANT[result.status] ?? "outline"} className="text-xs">
-          {STATUS_LABEL[result.status] ?? result.status}
+        <Badge variant={NODE_STATUS_VARIANT[result.status] ?? "outline"} className="text-xs">
+          {NODE_STATUS_LABEL[result.status] ?? result.status}
         </Badge>
         {result.status === "running" && result.progressLabel && (
           <span className="text-xs text-muted-foreground animate-pulse">{result.progressLabel}</span>

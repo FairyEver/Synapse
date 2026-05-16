@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
 import type { SwitchNodeConfig } from "./schema"
 import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
+import { agentErrorDiagnostic, sanitizeAgentError, agentFailureMessage } from "../../electron/services/workflow/workflow-utils"
 import { createMainLogger } from "../../electron/services/log-store"
 
 const logger = createMainLogger("workflow.node.switch-executor")
@@ -119,24 +120,4 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
       error: `Agent 响应不匹配任何分支 [${ids.join(", ")}]`,
     }
   },
-}
-
-function agentErrorDiagnostic(error: string | undefined): { readonly errorName: string; readonly errorLength: number } {
-  return { errorName: "agent", errorLength: error?.length ?? 0 }
-}
-
-function sanitizeAgentError(error: string | undefined): string {
-  if (!error) return ""
-  return error
-    .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, "[path]")
-    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path]")
-    .replace(/\b(api[_-]?key|apikey|token|secret|authorization|bearer|cookie|password|credential)[\s=:]+[^\s,;"')]+/gi, "$1=[redacted]")
-    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, "[key]")
-}
-
-function agentFailureMessage(error: string | undefined): string {
-  const sanitized = sanitizeAgentError(error)
-  if (!sanitized) return "Agent 调用失败"
-  const truncated = sanitized.length <= 120 ? sanitized : sanitized.slice(0, 120) + "..."
-  return `Agent 调用失败：${truncated}`
 }

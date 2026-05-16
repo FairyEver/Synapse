@@ -34,6 +34,7 @@ import {
   type BridgeMessage,
   type BridgeRegister,
 } from "./bridge-protocol"
+import { sanitizeError } from "../error-sanitize"
 import {
   appendCompactProgressEntry,
   compactProgressPayload,
@@ -164,7 +165,11 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
     this.disposeDispatcher = undefined
     for (const adapter of this.adapters.values()) {
       adapter.connected = false
-      adapter.connection.close()
+      try {
+        adapter.connection.close()
+      } catch {
+        // connection already closed or unusable; continue cleaning up others
+      }
     }
     await this.deps.networkRegistry.unregister(NETWORK_SERVICE_ID)
     this.binding = undefined
@@ -292,12 +297,19 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       if (adapter) this.disconnectAdapter(adapter)
     })
     connection.onJsonMessage(async (value) => {
-      if (!adapter) {
-        const result = await this.handleRegister(connection, value)
-        adapter = result
-        return
+      try {
+        if (!adapter) {
+          const result = await this.handleRegister(connection, value)
+          adapter = result
+          return
+        }
+        await this.handleAdapterMessage(adapter, value)
+      } catch (error) {
+        this.deps.logger?.warn("Bridge WebSocket message handler failed.", {
+          boundary: "bridge-adapter.ws-message",
+          ...errorDiagnostic(error),
+        })
       }
-      await this.handleAdapterMessage(adapter, value)
     })
   }
 
@@ -1099,13 +1111,16 @@ function bridgeProtocolErrorMessage(error: unknown, fallback: string): string {
 
 function errorDiagnostic(error: unknown): {
   readonly errorName: string
+  readonly errorMessage: string
   readonly errorLength: number
   readonly errorCode?: string
 } {
-  const message = error instanceof Error ? error.message : String(error)
+  const raw = error instanceof Error ? error.message : String(error)
+  const truncated = raw.length <= 200 ? sanitizeError(raw) : sanitizeError(raw).slice(0, 200) + "..."
   return {
     errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: message.length,
+    errorMessage: truncated,
+    errorLength: raw.length,
     ...(error instanceof BridgeAdapterError ? { errorCode: error.code } : {}),
   }
 }

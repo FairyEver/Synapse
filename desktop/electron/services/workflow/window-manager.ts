@@ -17,7 +17,11 @@ export class WorkflowWindowManager {
     const existing = this.editorWindows.get(workflowId)
     if (existing && !existing.isDestroyed()) {
       logger.info("workflow editor window reused", { workflowId, runId })
-      existing.webContents.send("synapse:workflow:editor-refocus", { runId })
+      try {
+        existing.webContents.send("synapse:workflow:editor-refocus", { runId })
+      } catch (err) {
+        logger.warn("workflow editor window refocus send failed", { workflowId, runId, error: err instanceof Error ? err.message : String(err) })
+      }
       existing.focus()
       return existing
     }
@@ -30,7 +34,9 @@ export class WorkflowWindowManager {
     const params = new URLSearchParams({ window: "workflow-editor", workflowId })
     if (runId) params.set("runId", runId)
     const url = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${params.toString()}`
-    void win.loadURL(url)
+    void win.loadURL(url).catch((err: Error) => {
+      logger.error("workflow editor window URL load failed", { workflowId, url, error: err.message })
+    })
 
     const windowId = `workflow-editor:${workflowId}`
     if (this.mainWindowManager) {
@@ -58,7 +64,11 @@ export class WorkflowWindowManager {
     const existing = this.runnerWindows.get(workflowId)
     if (existing && !existing.isDestroyed()) {
       logger.info("workflow runner window reused — switching run", { workflowId, newRunId: runId })
-      existing.webContents.send("synapse:workflow:runner-switch-run", { runId })
+      try {
+        existing.webContents.send("synapse:workflow:runner-switch-run", { runId })
+      } catch (err) {
+        logger.warn("workflow runner window switch-run send failed", { workflowId, newRunId: runId, error: err instanceof Error ? err.message : String(err) })
+      }
       existing.focus()
       return existing
     }
@@ -70,7 +80,9 @@ export class WorkflowWindowManager {
 
     const params = new URLSearchParams({ window: "workflow-runner", workflowId, runId })
     const url = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${params.toString()}`
-    void win.loadURL(url)
+    void win.loadURL(url).catch((err: Error) => {
+      logger.error("workflow runner window URL load failed", { workflowId, runId, url, error: err.message })
+    })
 
     const windowId = `workflow-runner:${workflowId}`
     if (this.mainWindowManager) {

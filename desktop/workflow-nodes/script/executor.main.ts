@@ -63,7 +63,7 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
 
       logger.warn("script node failed", {
         runId: context.runId, shell: config.shell,
-        exitCode, errorLength: result.error?.length ?? 0, durationMs,
+        exitCode, errorMessage: (result.error ?? "").slice(0, 200), durationMs,
       })
       const errorMsg = result.error
         ? `脚本执行失败：${result.error.length <= 120 ? result.error : result.error.slice(0, 120) + "..."}`
@@ -80,7 +80,7 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
       const message = err instanceof Error ? err.message : String(err)
       logger.warn("script node threw exception", {
         runId: context.runId, shell: config.shell,
-        errorLength: message.length, durationMs,
+        errorMessage: message.slice(0, 200), durationMs,
       })
       return {
         status: "failed",

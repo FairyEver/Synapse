@@ -9,6 +9,8 @@ import { Loader2, Plus } from "lucide-react"
 // be pulled into the Vite renderer bundle.
 import "../../../workflow-nodes/register.renderer"
 
+import { errorDiagnostic } from "./lib/error-utils"
+
 const logger = createRendererLogger("workflow")
 
 export function WorkflowModule() {
@@ -33,7 +35,7 @@ export function WorkflowModule() {
     } catch (err) {
       logger.warn("Workflow create failed.", {
         boundary: "renderer.workflow.create",
-        ...errorLogMeta(err),
+        ...errorDiagnostic(err),
       })
       toast.error("创建工作流失败，请重试")
     } finally {
@@ -51,16 +53,4 @@ export function WorkflowModule() {
       <div className="flex-1 overflow-auto"><WorkflowList key={listKey} onCreate={handleCreate} /></div>
     </div>
   )
-}
-
-function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
-  const text = error instanceof Error
-    ? error.message
-    : typeof error === "string"
-      ? error
-      : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: text.length,
-  }
 }

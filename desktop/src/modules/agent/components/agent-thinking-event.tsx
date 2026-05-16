@@ -12,6 +12,7 @@ import type {
   SynapseAgentThinkingTimelineItem,
 } from "@/types/agent"
 import { AgentAnnotation } from "./agent-annotation"
+import { errorLogMeta } from "../utils"
 
 const logger = createRendererLogger("agent")
 
@@ -81,24 +82,6 @@ function AgentThinkingEvent({
       </Collapsible>
     </AgentAnnotation>
   )
-}
-
-function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
-  if (error instanceof DOMException) {
-    return {
-      errorName: error.name || "DOMException",
-      errorLength: error.message.length,
-    }
-  }
-  const text = error instanceof Error
-    ? error.message
-    : typeof error === "string"
-      ? error
-      : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: text.length,
-  }
 }
 
 export { AgentThinkingEvent }

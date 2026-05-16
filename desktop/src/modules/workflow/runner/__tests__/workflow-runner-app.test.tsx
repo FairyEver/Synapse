@@ -18,6 +18,10 @@ vi.mock("@/app-shell/logging", () => ({
 
 vi.mock("../../../../workflow-nodes/register.renderer", () => ({}))
 
+vi.mock("../../../../workflow-nodes/provider-lookup-context", () => ({
+  ProviderLookupProvider: ({ children }: { readonly children: ReactNode }) => <>{children}</>,
+}))
+
 vi.mock("../../hooks/use-workflow-events", () => ({
   useWorkflowEvents: vi.fn(),
 }))
@@ -41,6 +45,7 @@ vi.mock("../node-result-panel", () => ({
 }))
 
 import { WorkflowRunnerApp } from "../runner-app"
+import { sanitizeError } from "../../../../../electron/services/error-sanitize"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -97,11 +102,11 @@ describe("WorkflowRunnerApp", () => {
       boundary: "renderer.workflow.runner.hydration",
       errorName: "Error",
       errorLength: rawMessage.length,
+      errorMessage: sanitizeError(rawMessage),
     })
     expect(get).toHaveBeenCalledWith("workflow-1")
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("token=secret-value")
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("/Users/example/repo")
-    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("prompt text")
   })
 
   it("logs fallback definition failures without raw backend error text", async () => {
@@ -132,11 +137,11 @@ describe("WorkflowRunnerApp", () => {
       boundary: "renderer.workflow.runner.fallback-definition",
       errorName: "Error",
       errorLength: rawMessage.length,
+      errorMessage: sanitizeError(rawMessage),
     })
     expect(container.textContent).toContain("无法加载运行结果")
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("token=secret-value")
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("/Users/example/repo")
-    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("prompt text")
     expect(container.textContent).not.toContain(rawMessage)
   })
 
@@ -171,6 +176,7 @@ describe("WorkflowRunnerApp", () => {
       runId: "run-1",
       errorName: "Error",
       errorLength: rawMessage.length,
+      errorMessage: sanitizeError(rawMessage),
     })
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("token=secret-value")
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("/Users/example/repo")

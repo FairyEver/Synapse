@@ -807,12 +807,16 @@ class RepositoryManager {
   }
 
   private notifyContentSubscribers(contentType: SynapseContentType): void {
-    // 先更新快照缓存，确保订阅者获取到稳定的引用
-    const snapshot = {
-      items: this.getContentList(contentType),
-      isLoading: this.isContentLoading(contentType),
-      error: this.getContentError(contentType),
+    // 引用比较当前值与缓存快照，数据未变则跳过通知
+    const current = this.contentSnapshots.get(contentType)
+    const items = this.getContentList(contentType)
+    const isLoading = this.isContentLoading(contentType)
+    const error = this.getContentError(contentType)
+    if (current && current.items === items && current.isLoading === isLoading && current.error === error) {
+      return
     }
+
+    const snapshot = { items, isLoading, error }
     this.contentSnapshots.set(contentType, snapshot)
 
     const subscribers = this.contentSubscribers.get(contentType)

@@ -93,6 +93,12 @@ function TableSchemaSheet({
     setTableDescription(schema?.description ?? "")
   }, [schema?.description, schema?.name])
 
+  useEffect(() => {
+    if (!open) {
+      setEditingChoicesCol(null)
+    }
+  }, [open])
+
   const commitTableDescription = useCallback(async () => {
     if (skipTableDescriptionCommitRef.current) {
       skipTableDescriptionCommitRef.current = false

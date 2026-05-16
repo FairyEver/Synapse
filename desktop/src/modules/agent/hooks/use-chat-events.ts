@@ -13,6 +13,7 @@ import {
 } from "../live-sync"
 import type { ChatAction, ChatState } from "./use-chat-reducer"
 import type { ChatConnectionRefs, ChatConnectionResult } from "./use-chat-connection"
+import { errorLogMeta } from "../utils"
 
 const logger = createRendererLogger("agent")
 
@@ -255,18 +256,6 @@ export type { ChatEventRefs }
 
 function isTerminalPhase(phase: string, status: string): boolean {
   return phase === "cancelled" || phase === "failed" || (phase === "completed" && status === "done")
-}
-
-function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
-  const text = error instanceof Error
-    ? error.message
-    : typeof error === "string"
-      ? error
-      : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: text.length,
-  }
 }
 
 function matchesSelectedEvent(

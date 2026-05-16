@@ -1,5 +1,6 @@
 import type { MainActionDefinition } from "../../../electron/action-runtime/action-registry"
 import type { AgentRuntimeService } from "../../../electron/services/agent-runtime/agent-runtime-service"
+import { sanitizeError } from "../../../electron/services/error-sanitize"
 import { agentActionManifest } from "./manifest"
 import type { AgentActionConfig } from "./schema"
 
@@ -91,7 +92,9 @@ function persistableAgentError(
 ): string | undefined {
   if (!error) return undefined
   if (status !== "failed") return error
-  return `Agent runtime error (${error.length} chars)`
+  const sanitized = sanitizeError(error)
+  const truncated = sanitized.length > 120 ? sanitized.slice(0, 120) + "…" : sanitized
+  return `Agent runtime error: ${truncated}`
 }
 
 function scheduledTimeoutMs(timeoutMins: number | null | undefined): number {

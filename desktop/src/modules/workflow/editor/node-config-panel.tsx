@@ -32,11 +32,7 @@ interface NodeConfigPanelProps {
 }
 
 export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange, onNameChange, onDeleteNode, onCopyNode, renameSignal, projects, defaultProjectName, onDefinitionChange }: NodeConfigPanelProps) {
-  if (collapsed) {
-    return <div className="h-full bg-muted" />
-  }
-
-  const node = nodeId ? definition.nodes.find((n) => n.id === nodeId) : null
+  // Hooks must be called before any early return (React Rules of Hooks).
   const upstreamNodes = useUpstreamNodes(nodeId ?? "", definition)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const [isEditingName, setIsEditingName] = useState(false)
@@ -53,6 +49,11 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
     }
   }, [renameSignal])
 
+  if (collapsed) {
+    return <div className="h-full bg-muted" />
+  }
+
+  const node = nodeId ? definition.nodes.find((n) => n.id === nodeId) : null
   const manifest = node ? nodeTypeRegistry.getManifest(node.type) : null
   const Icon = manifest?.icon
 

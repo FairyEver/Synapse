@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -112,7 +112,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   const [actionError, setActionError] = useState<string | null>(null)
   const [isRestarting, setIsRestarting] = useState(false)
   const [clickCount, setClickCount] = useState(0)
-  const [resetTimer, setResetTimer] = useState<NodeJS.Timeout | null>(null)
+  const resetTimerRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
     const bridge = window.synapse?.updater
@@ -173,8 +173,8 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       return
     }
 
-    if (resetTimer) {
-      clearTimeout(resetTimer)
+    if (resetTimerRef.current) {
+      clearTimeout(resetTimerRef.current)
     }
 
     const nextCount = clickCount + 1
@@ -185,20 +185,20 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       onAdminModeChange(true)
       setClickCount(0)
     } else {
-      const timer = setTimeout(() => {
+      resetTimerRef.current = setTimeout(() => {
         setClickCount(0)
+        resetTimerRef.current = null
       }, ADMIN_CLICK_RESET_DELAY)
-      setResetTimer(timer)
     }
-  }, [clickCount, isAdminMode, onAdminModeChange, resetTimer])
+  }, [clickCount, isAdminMode, onAdminModeChange])
 
   useEffect(() => {
     return () => {
-      if (resetTimer) {
-        clearTimeout(resetTimer)
+      if (resetTimerRef.current) {
+        clearTimeout(resetTimerRef.current)
       }
     }
-  }, [resetTimer])
+  }, [])
 
   const handleAction = async () => {
     const bridge = window.synapse?.updater

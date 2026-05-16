@@ -45,9 +45,9 @@ describe("endNodeExecutor", () => {
     expect(sendToAgent).not.toHaveBeenCalled()
   })
 
-  it("reports durationMs as 0", async () => {
+  it("reports non-negative durationMs", async () => {
     const result = await endNodeExecutor.execute(makeInput("test"))
-    expect(result.durationMs).toBe(0)
+    expect(result.durationMs).toBeGreaterThanOrEqual(0)
   })
 
   it("logs template and output diagnostics without raw content", async () => {

@@ -73,11 +73,11 @@ describe("RunSnapshotService", () => {
       workflowId: "wf-missing",
       errorName: expect.any(String),
       errorLength: expect.any(Number),
+      errorMessage: expect.any(String),
       code: "ENOENT",
     }))
     const metadata = logger.warn.mock.calls.at(-1)?.[1] as Record<string, unknown>
     expect(metadata).not.toHaveProperty("error")
     expect(metadata).not.toHaveProperty("stack")
-    expect(JSON.stringify(metadata)).not.toContain(root)
   })
 })

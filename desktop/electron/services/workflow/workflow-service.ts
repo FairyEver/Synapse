@@ -5,6 +5,7 @@ import type { WorkflowDefinition, WorkflowMeta, ValidationError } from "../../..
 import { validateWorkflow } from "./workflow-validator"
 import { createMainLogger } from "../log-store"
 import { configStore } from "../config-store"
+import { errorCode, sanitizeAgentError } from "./workflow-utils"
 
 const logger = createMainLogger("service.workflow")
 
@@ -162,6 +163,7 @@ export class WorkflowService {
         ...summarizeRepoPath(this.repoPath),
         ...errorLogMeta(err),
       })
+      throw err
     }
   }
 }
@@ -173,17 +175,14 @@ function summarizeRepoPath(repoPath: string): { repoBasename: string; repoPathLe
   }
 }
 
-function errorLogMeta(error: unknown): { errorName: string; errorCode?: string; errorLength: number } {
-  const message = error instanceof Error ? error.message : typeof error === "string" ? error : String(error)
+function errorLogMeta(error: unknown): { errorName: string; errorCode?: string; errorLength: number; errorMessage: string } {
+  const raw = error instanceof Error ? error.message : typeof error === "string" ? error : String(error)
+  const sanitized = sanitizeAgentError(raw)
+  const truncated = sanitized.length <= 200 ? sanitized : sanitized.slice(0, 200) + "..."
   return {
     errorName: error instanceof Error ? error.name : typeof error,
     errorCode: errorCode(error),
-    errorLength: message.length,
+    errorLength: raw.length,
+    errorMessage: truncated,
   }
-}
-
-function errorCode(error: unknown): string | undefined {
-  if (!error || typeof error !== "object" || !("code" in error)) return undefined
-  const code = (error as { readonly code?: unknown }).code
-  return typeof code === "string" ? code : undefined
 }

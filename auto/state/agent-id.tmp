@@ -1,0 +1,1 @@
+AGENT_ID="agent-$(date +%s)-$(openssl rand -hex 2)"

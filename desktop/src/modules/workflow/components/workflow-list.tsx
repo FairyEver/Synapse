@@ -1,7 +1,7 @@
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { toast } from "sonner"
-import { AlertCircle, Loader2, Plus, RefreshCw } from "lucide-react"
-import { WorkflowCard } from "./workflow-card"
+import { AlertCircle, FileJson, Loader2, Plus, RefreshCw } from "lucide-react"
+import { WorkflowCard, type WorkflowCardRunState } from "./workflow-card"
 import { RunParamsDialog } from "./run-params-dialog"
 import { RunHistoryDialog } from "./run-history-dialog"
 import { useWorkflowList } from "../hooks/use-workflow-list"
@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { track } from "@/lib/ui-tracking"
 import type { WorkflowDefinition } from "@/types/workflow"
+import { errorDiagnostic } from "../lib/error-utils"
 
 const logger = createRendererLogger("workflow.list")
 
@@ -23,6 +24,29 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
   const [conflictState, setConflictState] = useState<{ def: WorkflowDefinition; params: Record<string, unknown> } | null>(null)
   // Remember last-used param values so the dialog can pre-fill them on re-run
   const [lastRunValues, setLastRunValues] = useState<Record<string, string>>({})
+
+  // Track the latest run status per workflow so WorkflowCard can show a live badge.
+  const [runStates, setRunStates] = useState<Record<string, WorkflowCardRunState>>({})
+  const runIdToWfId = useRef<Record<string, string>>({})
+
+  useEffect(() => {
+    const unsub = window.synapse?.workflow.onEvent((event) => {
+      if (event.type === "workflow:started") {
+        runIdToWfId.current[event.runId] = event.workflowId
+        setRunStates((s) => ({ ...s, [event.workflowId]: "running" }))
+      } else if (event.type === "workflow:completed") {
+        const wfId = runIdToWfId.current[event.runId]
+        if (wfId) setRunStates((s) => ({ ...s, [wfId]: "completed" }))
+      } else if (event.type === "workflow:failed") {
+        const wfId = runIdToWfId.current[event.runId]
+        if (wfId) setRunStates((s) => ({ ...s, [wfId]: "failed" }))
+      } else if (event.type === "workflow:cancelled") {
+        const wfId = runIdToWfId.current[event.runId]
+        if (wfId) setRunStates((s) => ({ ...s, [wfId]: "cancelled" }))
+      }
+    })
+    return () => { unsub?.() }
+  }, [])
 
   const handleRun = async (id: string) => {
     if (runningId) return
@@ -68,7 +92,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       logger.warn("Workflow delete failed.", {
         boundary: "renderer.workflow.list.delete",
         workflowId: id,
-        ...errorLogMeta(err),
+        ...errorDiagnostic(err),
       })
       toast.error("删除失败，请重试")
       return
@@ -134,7 +158,16 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     }
   }
 
-  if (loading) return <p className="text-sm text-muted-foreground p-4 flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" />加载中…</p>
+  if (loading) return (
+    <div className="flex h-full flex-col">
+      <div className="flex flex-1 items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <Loader2 className="size-10 animate-spin text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">加载中…</p>
+        </div>
+      </div>
+    </div>
+  )
   if (error) return (
     <div className="p-4 space-y-3">
       <Alert variant="destructive">
@@ -147,11 +180,17 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     </div>
   )
   if (items.length === 0) return (
-    <div className="p-4 space-y-3 text-center">
-      <p className="text-sm text-muted-foreground">还没有工作流</p>
-      <Button size="sm" variant="outline" onClick={onCreate}>
-        <Plus className="h-3.5 w-3.5 mr-1" />创建第一个工作流
-      </Button>
+    <div className="flex h-full flex-col">
+      <div className="flex flex-1 items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <FileJson className="size-10 text-muted-foreground/50" />
+          <p className="text-sm text-muted-foreground">还没有工作流</p>
+          <p className="text-xs text-muted-foreground">创建工作流来自动化你的任务</p>
+          <Button size="sm" variant="outline" onClick={onCreate}>
+            <Plus className="h-3.5 w-3.5 mr-1" />创建第一个工作流
+          </Button>
+        </div>
+      </div>
     </div>
   )
 
@@ -160,6 +199,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4">
         {items.map((meta) => (
           <WorkflowCard key={meta.id} meta={meta}
+            runState={runStates[meta.id]}
             running={runningId !== null}
             onOpen={() => void window.synapse?.workflow.openEditor(meta.id)}
             onRun={() => void handleRun(meta.id)}
@@ -217,19 +257,7 @@ function showRunFailure(
     workflowId: def.id,
     force,
     paramCount: Object.keys(params).length,
-    ...errorLogMeta(error),
+    ...errorDiagnostic(error),
   })
   toast.error("运行失败，请重试")
-}
-
-function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
-  const text = error instanceof Error
-    ? error.message
-    : typeof error === "string"
-      ? error
-      : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: text.length,
-  }
 }

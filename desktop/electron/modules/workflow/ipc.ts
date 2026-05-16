@@ -10,6 +10,7 @@ import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "..
 import type { NodeRunResult, WorkflowRunStatus } from "../../../src/types/workflow"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
+import { sanitizeError } from "../../services/error-sanitize"
 
 const logger = createMainLogger("workflow.ipc")
 
@@ -44,23 +45,34 @@ function pruneTerminalStatuses(runStatuses: Map<string, WorkflowRunStatus>, work
 function engineRejectionDiagnostic(error: unknown): {
   readonly errorName: string
   readonly errorLength: number
+  readonly errorMessage?: string
   readonly stackLength?: number
 } {
   if (error instanceof Error) {
     return {
       errorName: error.name,
       errorLength: error.message.length,
+      errorMessage: error.message.length > 200 ? error.message.slice(0, 200) + "…" : error.message,
       stackLength: error.stack?.length,
     }
   }
+  const text = String(error)
   return {
     errorName: typeof error,
-    errorLength: String(error).length,
+    errorLength: text.length,
+    errorMessage: text.length > 200 ? text.slice(0, 200) + "…" : text,
   }
 }
 
-function visibleEngineRejectionError(diagnostic: { readonly errorName: string; readonly errorLength: number }): string {
-  return `引擎异常（${diagnostic.errorName}，错误 ${diagnostic.errorLength} 字）`
+function visibleEngineRejectionError(error: unknown): string {
+  const errorName = error instanceof Error ? error.name : typeof error
+  const rawMessage = error instanceof Error ? error.message : String(error)
+  const sanitized = sanitizeError(rawMessage)
+  const maxLen = 120
+  const brief = sanitized.length <= maxLen
+    ? sanitized
+    : sanitized.slice(0, maxLen) + "…"
+  return `引擎异常（${errorName}）：${brief}`
 }
 
 const workflowDefinitionSchema = z.object({
@@ -269,7 +281,7 @@ export const workflowIpcModule: IpcModule = {
               definition: def,
               ...(event.type === "workflow:failed" ? { error: event.error } : {}),
             })
-            void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def })
+            void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
             pruneTerminalStatuses(runStatuses, id)
           }
         }, ac.signal, projectId, "renderer").catch((err) => {
@@ -294,14 +306,14 @@ export const workflowIpcModule: IpcModule = {
               startedAt,
               endedAt,
               durationMs,
-              error: visibleEngineRejectionError(diagnostic),
+              error: visibleEngineRejectionError(err),
             }
             runStatuses.set(runId, failedStatus)
             eventBus.emit(
               { domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: failedStatus.error, result: { status: "failed", nodeResults: current.nodeResults, durationMs } }, timestamp: new Date().toISOString() },
               { backpressure: "block" },
             )
-            void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status: "failed", params: effectiveParams, nodeResults: current.nodeResults, definition: def })
+            void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status: "failed", params: effectiveParams, nodeResults: current.nodeResults, definition: def, error: failedStatus.error })
           }
         })
 
@@ -382,12 +394,12 @@ export const workflowIpcModule: IpcModule = {
             const nodeResults = event.result?.nodeResults ?? nextNodeResults
             const durationMs = event.result?.durationMs ?? endedAt - startedAt
             runStatuses.set(runId, { ...current, runId, workflowId: def.id, status, nodeResults, startedAt, endedAt, durationMs, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
-            void snapshots.save({ runId, workflowId: def.id, version: def.version, startedAt, endedAt, status, params, nodeResults, definition: def })
+            void snapshots.save({ runId, workflowId: def.id, version: def.version, startedAt, endedAt, status, params, nodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
             pruneTerminalStatuses(runStatuses, def.id)
           }
         }, ac.signal, projectId, "editor-run-definition").catch((err) => {
           const diagnostic = engineRejectionDiagnostic(err)
-          const visibleError = visibleEngineRejectionError(diagnostic)
+          const visibleError = visibleEngineRejectionError(err)
           logger.error("workflow engine rejected (runDefinition)", { workflowId: def.id, runId, ...diagnostic })
           abortMap.delete(runId)
           const current = runStatuses.get(runId)
@@ -399,7 +411,7 @@ export const workflowIpcModule: IpcModule = {
               { domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: visibleError, result: { status: "failed", nodeResults: current.nodeResults, durationMs } }, timestamp: new Date().toISOString() },
               { backpressure: "block" },
             )
-            void snapshots.save({ runId, workflowId: def.id, version: def.version, startedAt, endedAt, status: "failed", params, nodeResults: current.nodeResults, definition: def })
+            void snapshots.save({ runId, workflowId: def.id, version: def.version, startedAt, endedAt, status: "failed", params, nodeResults: current.nodeResults, definition: def, error: visibleError })
           }
         })
 
@@ -492,12 +504,12 @@ export const workflowIpcModule: IpcModule = {
             const nodeResults = event.result?.nodeResults ?? nextNodeResults
             const durationMs = event.result?.durationMs ?? endedAt - startedAt
             runStatuses.set(runId, { ...current, runId, workflowId: workflowId!, status, nodeResults, startedAt, endedAt, durationMs, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
-            void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def })
+            void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
             pruneTerminalStatuses(runStatuses, workflowId!)
           }
         }, ac.signal, projectId, "rerun").catch((err) => {
           const diagnostic = engineRejectionDiagnostic(err)
-          const visibleError = visibleEngineRejectionError(diagnostic)
+          const visibleError = visibleEngineRejectionError(err)
           logger.error("workflow engine rejected (rerun)", { workflowId, runId, ...diagnostic })
           abortMap.delete(runId)
           const current = runStatuses.get(runId)
@@ -505,7 +517,7 @@ export const workflowIpcModule: IpcModule = {
             const endedAt = Date.now()
             runStatuses.set(runId, { runId, workflowId: workflowId!, status: "failed", nodeResults: current.nodeResults, startedAt, endedAt, durationMs: endedAt - startedAt, error: visibleError, definition: def })
             eventBus.emit({ domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: visibleError, result: { status: "failed", nodeResults: current.nodeResults, durationMs: endedAt - startedAt } }, timestamp: new Date().toISOString() }, { backpressure: "block" })
-            void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status: "failed", params: effectiveParams, nodeResults: current.nodeResults, definition: def })
+            void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status: "failed", params: effectiveParams, nodeResults: current.nodeResults, definition: def, error: visibleError })
           }
         })
 
@@ -554,14 +566,16 @@ export const workflowIpcModule: IpcModule = {
         // no node results, stuck at "running"). Hydrate from the snapshot store instead.
         const snap = await ctx.resolve<RunSnapshotService>("core.workflow.snapshots").findByRunId(runId)
         if (snap) {
-          // When the run failed, extract a workflow-level error from the first
-          // failed node's result.  The original event-level error was not
-          // persisted to the snapshot (WorkflowRunSnapshot has no error field),
-          // so we reconstruct it from the per-node errors that ARE stored.
+          // Prefer the snapshot's own error field (now persisted on new snapshots),
+          // then fall back to reconstructing from the first failed node's result
+          // for old snapshots saved before the field was added.
           let error: string | undefined
           if (snap.status === "failed") {
-            const failedNode = Object.values(snap.nodeResults).find((nr) => nr.status === "failed" && nr.error)
-            if (failedNode?.error) error = failedNode.error
+            error = snap.error
+            if (!error) {
+              const failedNode = Object.values(snap.nodeResults).find((nr) => nr.status === "failed" && nr.error)
+              if (failedNode?.error) error = failedNode.error
+            }
           }
 
           const hydrated: WorkflowRunStatus = {

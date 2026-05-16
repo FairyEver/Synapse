@@ -18,6 +18,7 @@ import { NodePalette } from "./node-palette"
 import { NodeConfigPanel } from "./node-config-panel"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { ProviderLookupProvider } from "../../../../workflow-nodes/provider-lookup-context"
+import { errorDiagnostic } from "../lib/error-utils"
 
 const logger = createRendererLogger("workflow.editor")
 
@@ -139,6 +140,7 @@ export function WorkflowEditorApp() {
     setDirty(true)
     setRunErrors([])
     setDefinition(def)
+    definitionRef.current = def
   }, [])
 
   const handleConfigChange = useCallback((nodeId: string, config: Record<string, unknown>) => {
@@ -169,7 +171,9 @@ export function WorkflowEditorApp() {
         logger.debug("synced switch edge labels", { nodeId, branchCount: branches.length })
       }
 
-      return { ...def, nodes: updatedNodes, edges: updatedEdges }
+      const updated = { ...def, nodes: updatedNodes, edges: updatedEdges }
+      definitionRef.current = updated
+      return updated
     })
   }, [])
 
@@ -180,7 +184,9 @@ export function WorkflowEditorApp() {
     canvasRef.current?.updateNodeName(nodeId, name)
     setDefinition((def) => {
       if (!def) return def
-      return { ...def, nodes: def.nodes.map((n) => n.id === nodeId ? { ...n, name } : n) }
+      const updated = { ...def, nodes: def.nodes.map((n) => n.id === nodeId ? { ...n, name } : n) }
+      definitionRef.current = updated
+      return updated
     })
   }, [])
 
@@ -457,12 +463,4 @@ export function WorkflowEditorApp() {
     </AlertDialog>
     </ProviderLookupProvider>
   )
-}
-
-function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
-  const message = error instanceof Error ? error.message : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: message.length,
-  }
 }

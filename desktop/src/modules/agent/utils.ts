@@ -130,11 +130,31 @@ function agentCliLabel(agentType: string | undefined): string | undefined {
   return normalized
 }
 
+const ERROR_MESSAGE_MAX_LENGTH = 200
+
+function errorLogMeta(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly errorMessage: string
+} {
+  const text = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: text.length,
+    errorMessage: text.length > ERROR_MESSAGE_MAX_LENGTH ? `${text.slice(0, ERROR_MESSAGE_MAX_LENGTH)}...` : text,
+  }
+}
+
 export {
   DEFAULT_LOCAL_SESSION_KEY,
   agentCliLabel,
   defaultSessionId,
   defaultSessionKey,
+  errorLogMeta,
   formatAgentTranscript,
   formatEntryTime,
   sessionLabel,

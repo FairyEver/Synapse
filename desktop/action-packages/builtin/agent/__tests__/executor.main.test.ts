@@ -307,13 +307,14 @@ describe("builtin agent action executor", () => {
 
     expect(result).toMatchObject({
       status: "failed",
-      error: `Agent runtime error (${rawError.length} chars)`,
       outputs: { conversationId: "conversation-1" },
       metrics: { durationMs: 120 },
     })
-    expect(JSON.stringify(result)).not.toContain("sk-test")
-    expect(JSON.stringify(result)).not.toContain("/Users/liyang/private")
-    expect(JSON.stringify(result)).not.toContain("prompt token")
+    expect(result.error).toContain("Agent runtime error: SDK failed for prompt")
+    expect(result.error).toContain("[redacted]")
+    expect(result.error).toContain("[path]")
+    expect(result.error).not.toContain("sk-test")
+    expect(result.error).not.toContain("/Users/liyang/private")
   })
 
   it("returns failed status when provider is not available", async () => {

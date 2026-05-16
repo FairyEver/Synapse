@@ -109,6 +109,8 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
   const { screenToFlowPosition, fitView } = useReactFlow()
   const nodesRef = useRef(nodes)
   nodesRef.current = nodes
+  const edgesRef = useRef(edges)
+  edgesRef.current = edges
   // Synchronous definition ref — updated immediately on each onChange call so that
   // sequential handlers (e.g. node-delete + edge-delete in the same event) always
   // read the latest combined state instead of a stale closure capture.
@@ -160,59 +162,56 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
   const handleNodesChange = useCallback((changes: NodeChange<WorkflowFlowNode>[]) => {
     const blockedEnd = changes.some((c) => c.type === "remove" && nodesRef.current.find((n) => n.id === c.id)?.type === "end")
     if (blockedEnd) toast("结束节点不能删除")
-    setNodes((currentNodes) => {
-      const filteredChanges = changes.filter((change) => {
-        if (change.type !== "remove") return true
-        const node = currentNodes.find((n) => n.id === change.id)
-        return node?.type !== "end"
-      })
-      const updated = applyNodeChanges(filteredChanges, currentNodes)
-      // Only propagate structural changes (add/remove) to the definition.
-      // Position changes are propagated on drag-end via onNodeDragStop to avoid
-      // excessive re-renders and premature dirty-marking during drag.
-      if (filteredChanges.some((change) => change.type !== "select" && change.type !== "dimensions" && change.type !== "position")) {
-        const newDef = { ...definitionRef.current, nodes: updated.map(flowNodeToWorkflowNode) }
-        definitionRef.current = newDef
-        onChange(newDef)
-      }
-      return updated
+    // Compute changes outside the setNodes updater — React docs say updater
+    // functions must be pure (no side effects), and calling onChange (a parent
+    // dispatch) inside the updater violates that contract.
+    const filteredChanges = changes.filter((change) => {
+      if (change.type !== "remove") return true
+      const node = nodesRef.current.find((n) => n.id === change.id)
+      return node?.type !== "end"
     })
+    const updated = applyNodeChanges(filteredChanges, nodesRef.current)
+    setNodes(updated)
+    // Only propagate structural changes (add/remove) to the definition.
+    // Position changes are propagated on drag-end via onNodeDragStop to avoid
+    // excessive re-renders and premature dirty-marking during drag.
+    if (filteredChanges.some((change) => change.type !== "select" && change.type !== "dimensions" && change.type !== "position")) {
+      const newDef = { ...definitionRef.current, nodes: updated.map(flowNodeToWorkflowNode) }
+      definitionRef.current = newDef
+      onChange(newDef)
+    }
   }, [onChange, setNodes])
 
   const handleEdgesChange = useCallback((changes: EdgeChange<WorkflowFlowEdge>[]) => {
-    setEdges((currentEdges) => {
-      const updated = applyEdgeChanges(changes, currentEdges)
-      if (changes.some((change) => change.type !== "select")) {
-        const newDef = { ...definitionRef.current, edges: updated.map(flowEdgeToWorkflowEdge) }
-        definitionRef.current = newDef
-        onChange(newDef)
-      }
-      return updated
-    })
+    const updated = applyEdgeChanges(changes, edgesRef.current)
+    setEdges(updated)
+    if (changes.some((change) => change.type !== "select")) {
+      const newDef = { ...definitionRef.current, edges: updated.map(flowEdgeToWorkflowEdge) }
+      definitionRef.current = newDef
+      onChange(newDef)
+    }
   }, [onChange, setEdges])
 
   const onConnect = useCallback((connection: Connection) => {
-    setEdges((eds) => {
-      const branchLabel = connection.sourceHandle
-        ? resolveBranchLabel(definitionRef.current, connection.source, connection.sourceHandle)
-        : undefined
-      const withBranch = branchLabel
-        ? { type: "branch", data: { label: branchLabel } }
-        : {}
-      const updated = addEdge({ ...connection, ...withBranch }, eds) as typeof eds
-      const wfEdges: WorkflowEdge[] = updated.map(flowEdgeToWorkflowEdge)
-      const newDef = { ...definitionRef.current, edges: wfEdges }
-      definitionRef.current = newDef
-      logger.info("edge connected", {
-        source: connection.source,
-        sourceHandle: connection.sourceHandle,
-        target: connection.target,
-        targetHandle: connection.targetHandle,
-        edgeCount: wfEdges.length,
-      })
-      onChange(newDef)
-      return updated
+    const branchLabel = connection.sourceHandle
+      ? resolveBranchLabel(definitionRef.current, connection.source, connection.sourceHandle)
+      : undefined
+    const withBranch = branchLabel
+      ? { type: "branch", data: { label: branchLabel } }
+      : {}
+    const updated = addEdge({ ...connection, ...withBranch }, edgesRef.current) as WorkflowFlowEdge[]
+    setEdges(updated)
+    const wfEdges: WorkflowEdge[] = updated.map(flowEdgeToWorkflowEdge)
+    const newDef = { ...definitionRef.current, edges: wfEdges }
+    definitionRef.current = newDef
+    logger.info("edge connected", {
+      source: connection.source,
+      sourceHandle: connection.sourceHandle,
+      target: connection.target,
+      targetHandle: connection.targetHandle,
+      edgeCount: wfEdges.length,
     })
+    onChange(newDef)
   }, [onChange, setEdges])
 
   const onNodeDragStop = useCallback(() => {

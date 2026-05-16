@@ -17,26 +17,13 @@ function AppShellLayout({ navigation, children, actions }: AppShellLayoutProps) 
       <SwitchRepositoryOnboardingDialog />
       <div className="flex h-full flex-col">
         <header className="shrink-0 border-b border-sidebar-border/50">
-          <div className="grid min-h-10 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-4 px-3">
-            <div aria-hidden="true" className="min-w-0 justify-self-start invisible pointer-events-none">
-              {actions ? (
-                <div className="shrink-0">
-                  {actions}
-                </div>
-              ) : null}
-            </div>
-
-            <div className="flex min-w-0 justify-center">
-              <div className="min-w-0">
-                {navigation}
-              </div>
-            </div>
-
-            {actions ? (
-              <div className="min-w-0 justify-self-end">
+          <div className="relative flex min-h-10 items-center justify-center px-3">
+            <div className="min-w-0">{navigation}</div>
+            {actions && (
+              <div className="absolute right-3 shrink-0">
                 {actions}
               </div>
-            ) : null}
+            )}
           </div>
         </header>
 

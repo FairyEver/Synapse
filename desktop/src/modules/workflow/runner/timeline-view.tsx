@@ -2,11 +2,7 @@ import { useEffect, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { track } from "@/lib/ui-tracking"
 import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
-
-const STATUS_LABEL: Record<string, string> = { running: "执行中", success: "完成", failed: "失败", cancelled: "已取消", skipped: "跳过", pending: "等待" }
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  running: "default", success: "secondary", failed: "destructive", cancelled: "secondary", skipped: "outline", pending: "outline",
-}
+import { NODE_STATUS_LABEL, NODE_STATUS_VARIANT } from "../lib/status-display"
 
 interface TimelineViewProps {
   definition: WorkflowDefinition
@@ -68,11 +64,14 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
         {results.map((r) => (
           <div
             key={r.nodeId}
-            className={`flex items-center gap-3 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors ${r.nodeId === selectedNodeId ? "bg-muted" : ""}`}
+            className={`flex items-center gap-3 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${r.nodeId === selectedNodeId ? "bg-muted" : ""}`}
+            tabIndex={0}
+            role="button"
             onClick={() => handleNodeSelect(r)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleNodeSelect(r) } }}
           >
-            <Badge variant={STATUS_VARIANT[r.status] ?? "outline"} className="text-xs shrink-0">
-              {STATUS_LABEL[r.status] ?? r.status}
+            <Badge variant={NODE_STATUS_VARIANT[r.status] ?? "outline"} className="text-xs shrink-0">
+              {NODE_STATUS_LABEL[r.status] ?? r.status}
             </Badge>
             <span className="text-sm truncate" title={nameOf(r.nodeId)}>{nameOf(r.nodeId)}</span>
             {r.status === "running" && r.startedAt && (

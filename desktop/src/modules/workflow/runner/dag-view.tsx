@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useContext, useMemo } from "react"
 import {
   ReactFlow,
   Background,
@@ -6,15 +6,60 @@ import {
   ReactFlowProvider,
   PanOnScrollMode,
   SelectionMode,
+  EdgeLabelRenderer,
+  getBezierPath,
   type Node,
   type Edge,
+  type EdgeProps,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
+import { Badge } from "@/components/ui/badge"
 import { RunnerNodeResultsContext, runnerNodeTypes } from "./runner-node-wrappers"
-import { RunnerEdge } from "./runner-edge"
 
 const edgeTypes = { default: RunnerEdge, branch: RunnerEdge }
+
+function RunnerEdge({
+  id, source, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, sourceHandleId,
+}: EdgeProps) {
+  const nodeResults = useContext(RunnerNodeResultsContext)
+  const sourceResult = nodeResults[source]
+  const sourceStatus = sourceResult?.status
+  const activated = sourceStatus === "success" && (
+    !sourceHandleId || sourceResult?.activeBranch === sourceHandleId
+  )
+
+  const [edgePath, labelX, labelY] = getBezierPath({
+    sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,
+  })
+
+  const label = (data as { label?: string } | undefined)?.label
+
+  return (
+    <>
+      <path
+        id={id}
+        d={edgePath}
+        fill="none"
+        stroke={activated ? "hsl(var(--primary))" : "hsl(var(--border))"}
+        strokeWidth={2}
+        strokeOpacity={activated ? 0.6 : 1}
+        strokeDasharray={activated ? undefined : "4 4"}
+      />
+      {label && (
+        <EdgeLabelRenderer>
+          <Badge
+            variant="outline"
+            style={{ transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)` }}
+            className="absolute bg-background text-xs pointer-events-none nodrag nopan"
+          >
+            {label}
+          </Badge>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  )
+}
 
 interface DagViewProps {
   definition: WorkflowDefinition

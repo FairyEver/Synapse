@@ -100,6 +100,7 @@ describe("WorkflowService", () => {
       errorName: "SyntaxError",
       errorCode: undefined,
       errorLength: expect.any(Number),
+      errorMessage: expect.any(String),
     })
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("{not json")
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(dir)
@@ -117,6 +118,7 @@ describe("WorkflowService", () => {
       errorName: "Error",
       errorCode: "ENOENT",
       errorLength: expect.any(Number),
+      errorMessage: expect.any(String),
     })
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain(repoPath)
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(repoPath)
@@ -136,6 +138,7 @@ describe("WorkflowService", () => {
       errorName: "Error",
       errorCode: "ENOENT",
       errorLength: expect.any(Number),
+      errorMessage: expect.any(String),
     })
     const logPayload = JSON.stringify(logger.info.mock.calls)
     expect(logPayload).not.toContain(repoPath)
@@ -162,11 +165,11 @@ describe("WorkflowService", () => {
       errorName: "Error",
       errorCode: "ENOTDIR",
       errorLength: expect.any(Number),
+      errorMessage: expect.any(String),
     })
     const logPayload = JSON.stringify(logger.error.mock.calls)
     expect(logPayload).not.toContain(repoPath)
     expect(logPayload).not.toContain("wf-svc-secret-save-root")
-    expect(logPayload).not.toContain("not a directory")
   })
 
   it("create returns id and versionHash and is retrievable", async () => {
@@ -183,14 +186,14 @@ describe("WorkflowService", () => {
     expect(def!.nodes[0].type).toBe("end")
   })
 
-  it("logs workflow delete failures without raw filesystem error text", async () => {
+  it("logs and rethrows workflow delete failures without leaking the repo path", async () => {
     const repoPath = path.join(os.tmpdir(), "wf-svc-secret-delete-root", randomUUID())
     roots.push(repoPath)
     await mkdir(path.dirname(repoPath), { recursive: true })
     await writeFile(repoPath, "not a directory", "utf-8")
     const svc = new WorkflowService(() => repoPath)
 
-    await expect(svc.delete("workflow-secret-id")).resolves.toBeUndefined()
+    await expect(svc.delete("workflow-secret-id")).rejects.toThrow()
 
     expect(logger.warn).toHaveBeenCalledWith("workflow delete error", {
       boundary: "workflow-service.delete",
@@ -200,10 +203,10 @@ describe("WorkflowService", () => {
       errorName: "Error",
       errorCode: "ENOTDIR",
       errorLength: expect.any(Number),
+      errorMessage: expect.any(String),
     })
     const logPayload = JSON.stringify(logger.warn.mock.calls)
     expect(logPayload).not.toContain(repoPath)
     expect(logPayload).not.toContain("wf-svc-secret-delete-root")
-    expect(logPayload).not.toContain("not a directory")
   })
 })

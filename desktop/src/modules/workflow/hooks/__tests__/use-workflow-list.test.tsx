@@ -66,6 +66,7 @@ describe("useWorkflowList", () => {
       boundary: "renderer.workflow.list",
       errorName: "Error",
       errorLength: rawError.length,
+      errorMessage: "list failed with token=[redacted] and prompt body",
     })
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("token=secret-value")
   })

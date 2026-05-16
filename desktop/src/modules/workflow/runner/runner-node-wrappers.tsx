@@ -15,7 +15,7 @@ import type { NodeRunResult } from "@/types/workflow"
 
 export const RunnerNodeResultsContext = createContext<Record<string, NodeRunResult>>({})
 
-export function RunnerPromptNodeWrapper({ id, data, selected }: NodeProps) {
+function RunnerPromptNodeWrapper({ id, data, selected }: NodeProps) {
   const nodeResults = useContext(RunnerNodeResultsContext)
   const result = nodeResults[id]
   const name = (data as { name?: string }).name
@@ -35,7 +35,7 @@ export function RunnerPromptNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
-export function RunnerSwitchNodeWrapper({ id, data, selected }: NodeProps) {
+function RunnerSwitchNodeWrapper({ id, data, selected }: NodeProps) {
   const nodeResults = useContext(RunnerNodeResultsContext)
   const result = nodeResults[id]
   const name = (data as { name?: string }).name
@@ -64,7 +64,7 @@ export function RunnerSwitchNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
-export function RunnerEndNodeWrapper({ id, data, selected }: NodeProps) {
+function RunnerEndNodeWrapper({ id, data, selected }: NodeProps) {
   const nodeResults = useContext(RunnerNodeResultsContext)
   const result = nodeResults[id]
   const name = (data as { name?: string }).name
@@ -83,7 +83,7 @@ export function RunnerEndNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
-export function RunnerHttpRequestNodeWrapper({ id, data, selected }: NodeProps) {
+function RunnerHttpRequestNodeWrapper({ id, data, selected }: NodeProps) {
   const nodeResults = useContext(RunnerNodeResultsContext)
   const result = nodeResults[id]
   const name = (data as { name?: string }).name
@@ -103,7 +103,7 @@ export function RunnerHttpRequestNodeWrapper({ id, data, selected }: NodeProps) 
   )
 }
 
-export function RunnerScriptNodeWrapper({ id, data, selected }: NodeProps) {
+function RunnerScriptNodeWrapper({ id, data, selected }: NodeProps) {
   const nodeResults = useContext(RunnerNodeResultsContext)
   const result = nodeResults[id]
   const name = (data as { name?: string }).name

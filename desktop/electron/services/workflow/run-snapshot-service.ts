@@ -3,6 +3,7 @@ import type { Dirent } from "node:fs"
 import path from "node:path"
 import type { WorkflowRunSnapshot } from "../../../src/types/workflow"
 import { createMainLogger } from "../log-store"
+import { errorCode } from "./workflow-utils"
 
 const logger = createMainLogger("service.workflow.snapshots")
 
@@ -41,21 +42,31 @@ export class RunSnapshotService {
   }
 
   async save(s: WorkflowRunSnapshot): Promise<void> {
+    const dir = this.dir(s.workflowId)
     try {
-      const dir = this.dir(s.workflowId)
       await mkdir(dir, { recursive: true })
       const target = path.join(dir, `${s.runId}.json`)
       const tmp = `${target}.tmp`
       await writeFile(tmp, JSON.stringify(s, null, 2), "utf-8")
       await rename(tmp, target)
       logger.info("run snapshot saved", { runId: s.runId, workflowId: s.workflowId, status: s.status, nodeCount: Object.keys(s.nodeResults).length })
+    } catch (err) {
+      logger.error("run snapshot save failed", {
+        runId: s.runId,
+        workflowId: s.workflowId,
+        ...snapshotErrorMetadata(err),
+      })
+      return
+    }
+    // Stale cleanup is best-effort — a failure here should not invalidate the save above
+    try {
       const snapshots = await this.readSnapshotFiles(s.workflowId)
       const stale = snapshots
         .sort((a, b) => this.snapshotTime(a.snapshot) - this.snapshotTime(b.snapshot))
         .slice(0, Math.max(0, snapshots.length - MAX))
       await Promise.all(stale.map(({ file }) => rm(path.join(dir, file), { force: true })))
     } catch (err) {
-      logger.error("run snapshot save failed", {
+      logger.warn("run snapshot stale cleanup failed (save succeeded)", {
         runId: s.runId,
         workflowId: s.workflowId,
         ...snapshotErrorMetadata(err),
@@ -142,6 +153,7 @@ export class RunSnapshotService {
 function snapshotErrorMetadata(error: unknown): {
   readonly errorName: string
   readonly errorLength: number
+  readonly errorMessage: string
   readonly code?: string
 } {
   const message = error instanceof Error ? error.message : String(error)
@@ -149,12 +161,7 @@ function snapshotErrorMetadata(error: unknown): {
   return {
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
+    errorMessage: message,
     ...(code ? { code } : {}),
   }
-}
-
-function errorCode(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null || !("code" in error)) return undefined
-  const code = (error as NodeJS.ErrnoException).code
-  return typeof code === "string" ? code : undefined
 }

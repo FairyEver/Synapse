@@ -67,6 +67,7 @@ describe("useWorkflowRun", () => {
       boundary: "renderer.workflow.run.start",
       errorName: "Error",
       errorLength: 55,
+      errorMessage: expect.stringMatching(/^workflow failed with/),
     })
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("token=secret-value")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret prompt")
@@ -105,6 +106,7 @@ describe("useWorkflowRun", () => {
       boundary: "renderer.workflow.run.cancel",
       errorName: "Error",
       errorLength: rawError.length,
+      errorMessage: expect.stringMatching(/^cancel failed with/),
     })
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("token=secret-value")
   })
@@ -138,6 +140,7 @@ describe("useWorkflowRun", () => {
       boundary: "renderer.workflow.run.initial-status",
       errorName: "Error",
       errorLength: rawError.length,
+      errorMessage: expect.stringMatching(/^status failed with/),
     })
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("token=secret-value")
   })

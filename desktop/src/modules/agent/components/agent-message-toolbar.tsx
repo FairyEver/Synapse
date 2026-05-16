@@ -3,6 +3,7 @@ import { Check, Clipboard } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
+import { errorLogMeta } from "../utils"
 
 const logger = createRendererLogger("agent")
 
@@ -16,7 +17,7 @@ interface AgentMessageToolbarProps {
 
 function AgentMessageToolbar({ timestamp, content, messageId, role, className }: AgentMessageToolbarProps) {
   const [copied, setCopied] = useState(false)
-  const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>()
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const formattedTimestamp = timestamp ? formatTime(timestamp) : undefined
 
   useEffect(() => {
@@ -81,18 +82,6 @@ function formatTime(timestamp: string): string | undefined {
   const hours = date.getHours().toString().padStart(2, "0")
   const minutes = date.getMinutes().toString().padStart(2, "0")
   return `${hours}:${minutes}`
-}
-
-function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
-  const text = error instanceof Error
-    ? error.message
-    : typeof error === "string"
-      ? error
-      : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: text.length,
-  }
 }
 
 export { AgentMessageToolbar }

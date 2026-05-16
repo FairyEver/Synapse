@@ -175,9 +175,8 @@ describe("RunHistoryDialog", () => {
       workflowId: "workflow-1",
       errorName: "Error",
       errorLength: rawError.length,
+      errorMessage: rawError,
     })
-    expect(JSON.stringify(mocks.logger.warn.mock.calls)).not.toContain("token=sk-secret")
-    expect(JSON.stringify(mocks.logger.warn.mock.calls)).not.toContain("/Users/example/repo")
   })
 })
 

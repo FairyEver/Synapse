@@ -3,6 +3,7 @@ import type { WorkflowDefinition, NodeRunResult, WorkflowRunStatus } from "@/typ
 import { createRendererLogger } from "@/app-shell/logging"
 import "../../../../workflow-nodes/register.renderer"
 import { useWorkflowEvents } from "../hooks/use-workflow-events"
+import { errorDiagnostic } from "../lib/error-utils"
 import { RunnerToolbar } from "./runner-toolbar"
 import { DagView } from "./dag-view"
 import { TimelineView } from "./timeline-view"
@@ -12,6 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
 import { ProviderLookupProvider } from "../../../../workflow-nodes/provider-lookup-context"
+import { sanitizeError } from "../../../../electron/services/error-sanitize"
 
 const logger = createRendererLogger("workflow.runner")
 
@@ -332,26 +334,21 @@ export function WorkflowRunnerApp() {
   )
 }
 
-function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
-  const message = error instanceof Error ? error.message : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: message.length,
-  }
-}
-
 function validationErrorsDiagnostic(errors: readonly unknown[]): {
   readonly errorCount: number
   readonly firstErrorType?: string
-  readonly firstErrorLength?: number
+  readonly firstErrorMessage?: string
 } {
   const first = validationErrorRecord(errors[0])
   const firstErrorType = typeof first?.type === "string" ? first.type : undefined
-  const firstErrorMessage = typeof first?.message === "string" ? first.message : undefined
+  const rawMessage = typeof first?.message === "string" ? first.message : undefined
+  const firstErrorMessage = rawMessage
+    ? (rawMessage.length > 200 ? sanitizeError(rawMessage).slice(0, 200) + "..." : sanitizeError(rawMessage))
+    : undefined
   return {
     errorCount: errors.length,
     firstErrorType,
-    firstErrorLength: firstErrorMessage?.length,
+    firstErrorMessage,
   }
 }
 

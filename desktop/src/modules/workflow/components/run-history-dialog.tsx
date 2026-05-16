@@ -6,6 +6,7 @@ import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
+import { errorDiagnostic } from "../lib/error-utils"
 import type { WorkflowRunSnapshot } from "@/types/workflow"
 
 const logger = createRendererLogger("workflow.run-history")
@@ -95,6 +96,13 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
     onClose()
   }
 
+  const handleKeyDown = (e: React.KeyboardEvent, runId: string) => {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault()
+      handleOpenRunner(runId)
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
       <DialogContent className="max-w-lg">
@@ -124,8 +132,11 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
               return (
               <div
                 key={s.runId}
-                className="flex items-center gap-3 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors"
+                className="flex items-center gap-3 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                tabIndex={0}
+                role="button"
                 onClick={() => handleOpenRunner(s.runId)}
+                onKeyDown={(e) => handleKeyDown(e, s.runId)}
               >
                 <Badge variant={STATUS_VARIANT[s.status] ?? "outline"} className="text-xs shrink-0">
                   {STATUS_LABEL[s.status] ?? s.status}
@@ -155,12 +166,4 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
       </DialogContent>
     </Dialog>
   )
-}
-
-function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
-  const message = error instanceof Error ? error.message : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: message.length,
-  }
 }

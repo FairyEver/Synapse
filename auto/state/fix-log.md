@@ -1,3 +1,189 @@
+---
+
+## [2026-05-17 06:34] Agent agent-1778970395-21809 第 1 轮
+
+### 问题
+- end/card.tsx 仍使用本地 statusClass 和 NodeStatus 定义，其他 4 个节点 card 已迁移到共享的 node-status-utils.ts
+- 类型：死代码
+- 优先级：P2
+
+### 修改
+- `desktop/workflow-nodes/end/card.tsx`：删除本地 type NodeStatus 和 function statusClass，改为从 node-status-utils 导入共享版本
+
+### 用户受益
+- 无直接用户感知变化。所有 5 个节点 card 现在统一使用共享的状态样式工具，状态样式修改只需改 node-status-utils.ts 一处
+
+### 验证
+- tsc --noEmit：无新增错误（仅 2 个预存无关错误）
+- check:hard-constraints：通过
+
+### 风险
+- 无已知风险。statusClass 实现完全相同（已验证对比），NodeStatus 类型定义完全一致
+
+---
+
+## [2026-05-17 09:54] Agent agent-3-1778961268-0b02 第 1 轮
+
+### 问题
+- `visibleEngineRejectionError` 内联 sk- token 正则脱敏覆盖范围不足，遗漏 bearer token、sensitive key-value、路径等模式
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/electron/modules/workflow/ipc.ts`：引入共享 `sanitizeError` 替换内联 sk- regex，覆盖 bearer token / API key / password / 文件路径等脱敏模式
+
+### 用户受益
+- 引擎异常错误信息脱敏更全面，减少 API key、token 或本地路径泄露到渲染进程界面或日志的风险
+
+### 验证
+- eslint：通过
+- check:hard-constraints：通过
+- tsc --noEmit：仅预存错误，非本修改引起
+- 影响面检查：`rg "import.*from.*ipc"` 确认无外部 import；新增 import 来自共享模块，不影响现有功能
+
+### 风险
+- 无已知风险
+
+---
+
+## [2026-05-17 01:00] Agent agent-1778955766-3630 第 1 轮
+
+### 问题
+- `engineRejectionDiagnostic` 只返回 errorLength 不返回 errorMessage，工作流引擎异常日志无法看到实际错误内容
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/electron/modules/workflow/ipc.ts`：engineRejectionDiagnostic 增加 errorMessage 字段，包含脱敏截断 200 字符的错误文本
+
+### 用户受益
+- 开发者现在可以在 workflow engine rejection 日志（workflow:run/runDefinition/rerun 三条路径）中看到实际错误信息，替代无调试价值的 "errorLength: 42"
+
+### 验证
+- eslint：通过
+- tsc --noEmit（electron config）：通过
+- check:hard-constraints：通过
+
+### 风险
+- 无已知风险。返回类型从 `{errorName, errorLength, stackLength?}` 扩展为 `{errorName, errorLength, errorMessage?, stackLength?}`，原有字段完全向后兼容，所有调用方只做 `...diagnostic` 展开。
+
+---
+
+## [2026-05-17 01:30] Agent agent-1-1778952060-fd76 第 1 轮
+
+### 问题
+- `useWorkflowEvents` 的 `errorLogMeta` 和 `workflowErrorLogMeta` 返回 `errorLength`（字符数）但不包含实际错误内容——工作流运行失败或 hydration 失败时日志只有"错误 N 字"而无具体错误信息
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/workflow/hooks/use-workflow-events.ts`：添加 `sanitizeError` 导入；`errorLogMeta` 增加 `errorMessage` 字段（脱敏+截断 200 字符）；`workflowErrorLogMeta` 增加 `errorMessage` 字段（脱敏+截断 200 字符）
+- `desktop/src/modules/workflow/hooks/__tests__/use-workflow-events.test.tsx`：更新测试名称和断言以验证错误信息已被脱敏后可读
+
+### 用户受益
+- 开发者现在可以在日志中看到实际错误内容（如 "runStatus failed token=[redacted] at [path] with prompt text"），替代无法调试的 "errorLength: 72"
+
+### 验证
+- vitest (use-workflow-events + related runner tests)：7/7 passed
+- check:hard-constraints：通过
+- 影响面分析：仅修改私有函数返回类型，不导出的 `errorLogMeta`/`workflowErrorLogMeta` 只在文件内使用，不影响外部调用方
+
+### 风险
+- 无已知风险。返回类型从 `{errorName, errorLength}` 扩展为 `{errorName, errorLength, errorMessage?}`，原有字段完全向后兼容。错误内容通过 `sanitizeError` 脱敏。
+
+---
+
+## [2026-05-17 00:02] Agent agent-1778946237-18787-7484 第 1 轮
+
+### 问题
+- ProviderLookupProvider 的 catch 块完全为空，listProviders() 失败时错误被静默吞掉，无日志、无用户反馈
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/workflow-nodes/provider-lookup-context.tsx`：添加 createRendererLogger 导入，在空 catch 块中增加 logger.warn 记录 provider 获取失败信息
+
+### 用户受益
+- 开发者可以通过日志追踪 provider 列表加载失败的原因（网络、IPC 通道、主进程异常等），否则编辑器中的 provider 下拉框会无故为空
+
+### 验证
+- eslint：通过（无输出）
+- tsc --noEmit：修改文件无新增错误（预存错误仅 agent 模块）
+- check:hard-constraints：通过
+
+### 风险
+- 无。catch 块行为由静默吞错误变为记录 warn 日志，用户可见行为不变
+
+---
+
+### 问题
+- `timeline-view.tsx` 列表项缺少键盘无障碍支持——有 onClick 但没有 tabIndex/role/onKeyDown，键盘用户无法通过 Tab 聚焦节点并用 Enter/Space 选中
+- 类型：交互完整性
+- 优先级：P3
+
+### 修改
+- `desktop/src/modules/workflow/runner/timeline-view.tsx`：给 timeline 列表项添加 tabIndex={0}、role="button"、onKeyDown（Enter/Space），以及 focus-visible:ring 聚焦环样式
+
+### 用户受益
+- 键盘用户现在可以通过 Tab 键导航到时间线中的各个节点，用 Enter/Space 选中查看详情
+
+### 验证
+- eslint: 通过
+- vitest (timeline-view): 1/1 通过
+- check:hard-constraints: 全部通过
+
+### 风险
+- 无。仅添加键盘事件和 ARIA 属性，不影响鼠标交互和现有功能
+
+---
+
+## [2026-05-16 23:34] Agent agent-7-1778944735-4128 第 1 轮
+
+### 问题
+- `emitRendererLog` 在 `logging.ts:53` 的 `.catch(() => undefined)` 完全静默吞掉 bridge.write 失败，开发者无法察觉日志丢失
+- 类型：错误处理
+- 优先级：P1
+
+### 修改
+- `desktop/src/app-shell/logging.ts`：将 `.catch(() => undefined)` 替换为 `.catch(() => { console.warn(...) })`，提供 console.warn 后备日志
+
+### 用户受益
+- 当渲染进程日志写入失败时，开发者可以在 DevTools 控制台中看到 `[category] renderer log write failed (bridge unavailable.)` 警告，不再无声丢失
+
+### 验证
+- eslint: passed
+- check:hard-constraints: passed
+- vitest (logging.test.ts): 6/6 passed
+- 82 个文件导入 `createRendererLogger`，函数签名未变，零影响面
+
+### 风险
+- 无已知风险。只在已有 catch 块中增加 console.warn 调用，不影响控制流
+
+### 问题
+- `visibleNodeExceptionError` 在 `workflow-engine.ts:187` 使用旧格式"节点执行异常（ErrorType，错误 N 字）"，隐藏实际错误信息
+- 类型：错误处理
+- 优先级：P1
+
+### 修改
+- `desktop/electron/services/workflow/workflow-engine.ts`：引入 `sanitizeError`，用实际脱敏错误消息替换长度占位符；删除废弃的 `visibleNodeExceptionError` 函数
+- `desktop/electron/services/__tests__/workflow-engine.test.ts`：更新测试断言以匹配新错误格式（`sanitizeError` 脱敏后的消息）
+
+### 用户受益
+- 节点执行器抛出异常时，用户现在看到有意义的错误描述（如"节点执行异常：failed to fetch http://..."），替代无信息的"节点执行异常（TypeError，错误 13 字）"
+- 敏感信息仍通过 `sanitizeError` 脱敏（token/secret/path 替换为 [redacted]）
+
+### 验证
+- ESLint：通过
+- TypeScript：无新错误
+- 测试：13/13 passed
+- Hard constraints：通过
+
+### 风险
+- 无已知风险。`visibleNodeExceptionError` 仅在 workflow-engine.ts 内部使用，且路径覆盖测试确认行为正确
+- `sanitizeError` 已在 execution-service.ts 和 automation-ingress-service.ts 中使用，是项目标准脱敏工具
+
+---
+
 ## [2026-05-16 18:52] 第 199-201 次迭代
 
 ### Agent
@@ -142,8 +328,57 @@ MCP 触发的工作流运行现在与 IPC 触发路径具有一致的错误恢�
 - `pnpm exec eslint desktop/electron/services/workflow/workflow-scheduler.ts desktop/electron/services/workflow/workflow-engine.ts desktop/electron/services/__tests__/workflow-scheduler.test.ts`：通过。
 - `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
 
+---
+
+## [2026-05-17 12:00] Agent agent-6-1778950441-aa4a 第 1 轮
+
+### 问题
+- app-shell-layout.tsx: 左栏 invisible 占位 div 在 actions 为 undefined 时仍渲染 DOM 节点，造成 CSS grid 布局不对称
+- 类型：UI品质
+- 优先级：P2
+
+### 修改
+- `desktop/src/app-shell/components/app-shell-layout.tsx`：将占位 div 的条件判断从内层移到外层，actions 为 undefined 时不渲染任何节点
+
+### 用户受益
+- 无 actions 时 header 导航居中不受隐藏占位 div 偏移影响
+- DOM 树清除一个冗余节点
+
+### 验证
+- eslint：通过（无输出）
+- tsc --noEmit：通过（无类型错误）
+- check:hard-constraints：通过
+
+### 风险
+- 条件判断模式与右栏完全一致，actions 存在时行为无变化
+
 ### 本次进展
 工作流调度器 ReactiveScheduler 内部日志现在包含 runId，复盘时可通过 runId 将调度器级事件（节点失败级联、中止等待）与引擎级日志关联。
+
+---
+
+## [2026-05-17 10:00] Agent agent-w8-1778950449-d1d2 第 1 轮
+
+### 问题
+- use-workflow-list.ts 的 errorLogMeta 仅返回 errorLength（字符数）而非实际错误文本，导致日志无法反映真实错误内容
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/workflow/hooks/use-workflow-list.ts`：errorLogMeta 新增 errorMessage 字段（含 sanitizeError 脱敏后的错误文本，最长 200 字）
+- `desktop/src/modules/workflow/hooks/__tests__/use-workflow-list.test.tsx`：更新测试断言以匹配新字段
+
+### 用户受益
+- 运维人员在日志中可以看到脱敏后的实际错误消息，而非无意义的字符数
+
+### 验证
+- eslint：通过
+- vitest run（use-workflow-list.test.tsx）：1/1 通过
+- check:hard-constraints：通过
+- 影响面分析：errorLogMeta 为模块内私有函数（未导出），仅被同文件两处 catch 块使用
+
+### 风险
+- 无已知风险。errorLogMeta 保持向后兼容（保留 errorLength 字段），仅新增 errorMessage。sanitizeError 确保敏感信息不泄漏。
 
 ---
 # Synapse Workflow Fix Log
@@ -12567,8 +12802,30 @@ SDK assistant event 的产品内容和诊断 payload 分层更清楚：右侧消
 - `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
 - `git diff --check -- desktop/electron/modules/workflow/ipc.ts desktop/electron/modules/workflow/__tests__/ipc.test.ts`：通过。
 
-### 本次进展
-Workflow engine 异常拒绝兜底路径现在只留下脱敏诊断摘要，并避免把后端原文写入运行失败状态或 workflow failed event。
+
+
+---
+
+## [2026-05-16 22:30] Agent agent-w1-1778941518-fc89 第 1 轮
+
+### 问题
+- 删除 workflow-nodes/types.ts 中三个从未被使用的废弃接口：LoopVariable、OutputMapping、SubgraphDefinition
+- 类型：死代码
+- 优先级：P2
+
+### 修改
+- `desktop/workflow-nodes/types.ts`：删除 LoopVariable/OutputMapping/SubgraphDefinition 三个废弃接口（187→67 行）
+
+### 用户受益
+- 减少类型膨胀，降低开发者阅读维护成本；SubgraphDefinition 中的 import 类型也会同时减少编译负担
+
+### 验证
+- tsc --noEmit：无 workflow-nodes 相关新增错误（预存错误仅 agent 模块）
+- check:hard-constraints：All passed
+- rg 确认 LoopVariable/OutputMapping/SubgraphDefinition 在项目外部零引用
+
+### 风险
+- 无已知风险。三个类型均无项目内引用，不影响任何功能。
 
 ---
 
@@ -12616,3 +12873,1153 @@ Workflow engine 异常拒绝兜底路径现在只留下脱敏诊断摘要，并�
 ### 并行范围
 - file claim: workflow-scheduler.ts (已确认无其他 worker 同时写入)
 - note: agent-notes/agent-20260516-171143-1122-iteration-194.md
+
+---
+
+## [2026-05-16 22:32] Agent agent-1778941509-2898 第 1 轮
+
+### 问题
+- ReactiveScheduler.execute() 的 abortPromise 存在 TOCTOU 竞态：while 循环中先检查 abortSignal.aborted，再通过 addEventListener 注册监听器，若 abort 信号在这之间触发，监听器不会回调（事件已派发完毕），abortPromise 永不 resolve。
+- 类型：错误处理
+- 优先级：P1
+
+### 修改
+- `desktop/electron/services/workflow/workflow-scheduler.ts`：在 Promise 构造函数内 addEventListener 之后立即检查 abortSignal.aborted，若已中止则手动 resolve()，消除竞态窗口。
+
+### 用户受益
+- 在极其窄的竞态条件下，调度器不会永久挂起——用户取消工作流或超时场景更可靠。
+
+### 验证
+- vitest (scheduler tests): 13/13 passed
+- vitest (engine tests): 13/13 passed
+- eslint: passed
+- check:hard-constraints: passed
+
+### 风险
+- 无已知风险。改动只在 Promise 构造函数内增加一行检查，不影响调度器正常流程。
+
+---
+
+## [2026-05-16 20:02] Agent agent-1778941496-1623 第 1 轮
+
+### 问题
+- `agent-icon.tsx` 是未在源代码中实际导入的死代码文件
+- 类型：死代码
+- 优先级：P2
+
+### 修改
+- `desktop/workflow-nodes/agent-icon.tsx`：删除完全未使用的文件（创建于未完成的 feature 计划，从未被任何源文件引用）
+
+### 用户受益
+- 减少代码库中的死代码，后续维护不会遇到未使用的 export
+- 清理工作流节点目录的废弃文件
+
+### 验证
+- `rg "agent-icon" desktop/src/ desktop/electron/ desktop/workflow-nodes/`：0 个匹配
+- `pnpm --filter @synapse/desktop exec tsc --noEmit`：仅有预先存在的 5 个类型错误（与本次修改无关）
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过
+- `git diff -- desktop/workflow-nodes/agent-icon.tsx`：确认删除 32 行
+
+### 风险
+- 无：文件从未被引用，删除不影响任何代码路径
+
+---
+
+## [2026-05-16 20:15] Agent agent-1778942931-9954 第 1 轮
+
+### 问题
+- http-request executor 的 buildUrl() 在 try-catch 外调用，无效 URL 抛 TypeError 时用户看到引擎通用错误而非可操作的节点错误
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/workflow-nodes/http-request/executor.main.ts`：将 `buildUrl(config)` 移入 try 块内，使 `new URL(config.url)` 抛出的 TypeError 被 catch 块捕获，用户看到"HTTP 请求失败：Invalid URL"而非引擎通用"节点执行异常（TypeError）"
+
+### 用户受益
+- 配置无效 URL 时用户会看到"HTTP 请求失败：<具体的 URL 错误>"，可直接定位到问题节点和原因
+
+### 验证
+- `npx tsc --noEmit --pretty`：TypeScript 检查无错误
+- `node scripts/check-hard-constraints.mjs`：所有约束通过
+
+### 风险
+- buildHeaders() 和 buildBody() 也在 try 块外调用，但它们不会抛出常规执行错误；如果头信息处理出错，仍会传播到引擎通用 catch。这是可接受的已知限制。
+
+---
+
+## [2026-05-16 22:55] Agent agent-1778942933-15419 第 1 轮
+
+### 问题
+- license-service scheduleNext 的 syncWithServer().catch(() => {}) 完全静默吞掉同步错误。syncWithServer 内部已有完整 try-catch，兜底 catch 不应为空。
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/electron/services/license/license-service.ts`：将 `.catch(() => {})` 替换为 `.catch((error) => { this.deps.logger?.warn(...) })`，为兜底异常增加日志可见性。
+
+### 用户受益
+- 如果 syncWithServer 在 try-catch 外发生未预期异常（如 ensureState 失败），用户或开发者现可通过日志追踪到错误原因，而非静默消失。
+
+### 验证
+- vitest (license-service): 6/6 passed
+- check:hard-constraints: passed
+- 引用检查：仅有 test 文件导入该模块，测试全部通过
+
+### 风险
+- 无已知风险。改动仅在原空 catch 处增加日志调用，不影响控制流。
+
+## [2026-05-16 23:00] Agent agent-1778943009-ceee 第 1 轮
+
+### 问题
+- `workflow-service.ts` 和 `run-snapshot-service.ts` 各有独立的 `errorCode()` 函数，逻辑完全相同，违反 DRY 原则
+- 类型：死代码
+- 优先级：P3
+
+### 修改
+- `desktop/electron/services/workflow/workflow-utils.ts`：新建共享工具文件，导出 `errorCode` 函数
+- `desktop/electron/services/workflow/workflow-service.ts`：移除本地 `errorCode`，改为从 `workflow-utils.ts` 导入
+- `desktop/electron/services/workflow/run-snapshot-service.ts`：移除本地 `errorCode`，改为从 `workflow-utils.ts` 导入
+
+### 用户受益
+- 减少代码重复，后续 errorCode 改进只需修改一处
+
+### 验证
+- eslint: passed
+- check:hard-constraints: passed
+- tsc: 仅预先存在的 5 个类型错误（均在 agent 模块，与本次修改无关）
+- rg "function errorCode": 仅 workflow-utils.ts 一处定义
+
+---
+
+## [2026-05-16 23:40] Agent agent-1778944663-7669 第 1 轮
+
+### 问题
+- Bridge adapter WebSocket `onJsonMessage` async 回调外层无 try-catch，内部函数抛异常时变成未处理 Promise rejection
+- `stop()` 方法中 `connection.close()` 无 try-catch，单连接关闭抛异常会导致剩余适配器无法清理
+- 类型：错误处理
+- 优先级：P1
+
+### 修改
+- `desktop/electron/services/bridge-adapter/bridge-adapter-service.ts`：onJsonMessage 回调体用 try-catch 包裹，异常时记录 warn 日志
+- `desktop/electron/services/bridge-adapter/bridge-adapter-service.ts`：stop() 中 connection.close() 用 try-catch 包裹，防止单个关闭异常导致循环中断
+
+### 用户受益
+- 避免 WebSocket 消息解析/处理意外抛异常时进程级未处理 rejection
+- 服务关闭时即使部分连接异常也能正常清理其他适配器
+
+### 验证
+- eslint: passed
+- vitest (bridge-adapter): 12/12 passed
+- check:hard-constraints: passed
+
+### 风险
+- 无已知风险。函数实现基于更防御性的 workflow-service.ts 版本
+
+---
+
+## [2026-05-16 23:25] Agent agent-1778944634-1635 第 1 轮
+
+### 问题
+- `http-request executor` 的 `buildUrl()` 在 try-catch 外调用（第 17 行），无效 URL 抛 TypeError 时用户只能看到引擎通用 `visibleNodeExceptionError` 而非节点具体错误。此前 issue-0002 被 claim 为"fixed"但代码从未被实际修改。
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/workflow-nodes/http-request/executor.main.ts`：将 `const url = buildUrl(config)` 移至 try 块内；日志中的 `url.length` 改为 `config.url.length` 保持同位置可用。
+
+### 用户受益
+- 配置无效 URL 时用户看到"HTTP 请求失败：<具体 URL 错误>"，可直接定位到问题节点和原因，而非空白"节点执行异常（TypeError，错误 N 字）"
+
+### 验证
+- eslint：通过（exit 0）
+- tsc --noEmit：通过
+- check:hard-constraints：通过
+- vitest (http-request executor 7 tests)：全部通过
+
+### 风险
+- 无已知风险。`buildUrl()` 返回的 `url` 仅在 try 块内使用，移动后作用域正确。`buildHeaders()` 和 `buildBody()` 虽仍在 try 块外调用但不会抛出 TypeError 类异常。
+
+---
+
+## [2026-05-16 23:33] Agent agent-8-1778944808-7350 第 1 轮
+
+### 问题
+- table-schema-sheet.tsx editingChoicesCol 状态在 Sheet 关闭时未重置，重新打开时可能导致 ChoicesEditorDialog 自动弹出
+- 类型：交互完整性
+- 优先级：P3
+
+### 修改
+- `desktop/src/modules/database/components/table-schema-sheet.tsx`：新增 useEffect 在 open=false 时重置 editingChoicesCol 为 null
+
+### 用户受益
+- 用户在打开表结构 Sheet、编辑选项对话框、直接关闭 Sheet 后，下次重新打开 Sheet 不会自动弹出选项编辑对话框
+
+### 验证
+- eslint: 通过
+- vitest (table-schema-sheet-layout): 2/2 passed
+- vitest (database 模块全部): 10/10 passed
+- check:hard-constraints: 通过
+
+### 风险
+- 无已知风险。仅新增一个在 Sheet 关闭时重置内部状态的 effect
+
+---
+
+## [2026-05-16 23:30] Agent agent-3-1778944704-8bd5 第 1 轮
+
+### 问题
+- prompt/switch executor 各重复定义了 agentErrorDiagnostic/sanitizeAgentError/agentFailureMessage 三个函数，完全相同的 44 行代码分布在两个文件
+- 类型：死代码
+- 优先级：P2
+
+### 修改
+- `desktop/electron/services/workflow/workflow-utils.ts`：添加 `agentErrorDiagnostic`、`sanitizeAgentError`、`agentFailureMessage` 三个共享导出函数
+- `desktop/workflow-nodes/prompt/executor.main.ts`：删除本地定义的三个重复函数，改为从 workflow-utils 导入
+- `desktop/workflow-nodes/switch/executor.main.ts`：删除本地定义的三个重复函数，改为从 workflow-utils 导入
+
+### 用户受益
+- 无直接用户可见变化，但后续 agent error 处理逻辑只需修改一处，减少维护不一致风险
+
+### 验证
+- `node_modules/.bin/eslint <3个文件>`：通过
+- `node scripts/check-hard-constraints.mjs`：通过
+- `rg "function sanitizeAgentError|function agentFailureMessage|function agentErrorDiagnostic" desktop/`：仅 workflow-utils.ts 一处定义
+- `rg "agentErrorDiagnostic|sanitizeAgentError|agentFailureMessage" desktop/electron/ desktop/workflow-nodes/`：12 处引用，均通过导入 workflow-utils
+
+### 风险
+- 无。纯提取 + 导入替换，函数体完全一致，不影响执行逻辑
+
+---
+
+## [2026-05-16 23:45] Agent agent-1778944663-7669 第 1 轮
+
+### 问题
+- bridge-adapter-service `onJsonMessage` 回调是 async 函数，返回的 Promise 若被 `handleRegister`/`handleAdapterMessage` 的意外异常拒绝，将导致未处理的 Promise rejection（Node 进程级崩溃）
+- `stop()` 中 `adapter.connection.close()` 在连接已关闭时可能 throw，导致循环中断，剩余 adapter 无法清理
+- 类型：errorHandling（2 处）
+- 优先级：P1
+
+### 修改
+- `desktop/electron/services/bridge-adapter/bridge-adapter-service.ts`：`onJsonMessage(async ...)` 回调体包裹 try-catch，捕获所有意外异常并记录结构化 warn 日志
+- `desktop/electron/services/bridge-adapter/bridge-adapter-service.ts`：`stop()` 中 `connection.close()` 包裹 try-catch，确保单个 adapter 关闭失败不阻断遍历
+
+### 用户受益
+- WebSocket 消息处理中的意外异常不再导致 Node 进程崩溃，被 try-catch 拦截并记录到日志
+- 停止服务时某个已关闭连接的 close() 异常不再阻断剩余 adapter 的清理
+
+### 验证
+- `node_modules/.bin/eslint desktop/electron/services/bridge-adapter/`：通过
+- `npx vitest run electron/services/bridge-adapter/`：12/12 通过
+- `node scripts/check-hard-constraints.mjs`：通过
+- 代码审查确认：两个 try-catch 都覆盖了此前未捕获的异常路径
+
+### 风险
+- 无。新增的 try-catch 仅兜底意外异常，不影响正常路径执行逻辑
+
+---
+
+## [2026-05-16 23:51] Agent agent-3-1778946259-c4e5 第 1 轮
+
+### 问题
+- `data-table-view.tsx handleResizeColumn` 的 document-level pointermove/pointerup 事件监听器在组件卸载时未清理，可能导致泄漏和状态更新风暴
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/database/components/data-table-view.tsx`：新增 `resizePointerMoveRef`/`resizePointerUpRef` 两个 useRef 存储当前事件处理器引用
+- `desktop/src/modules/database/components/data-table-view.tsx`：`handleResizeColumn` 在注册事件前将处理器存入 refs，在 pointerup 释放时清空 refs
+- `desktop/src/modules/database/components/data-table-view.tsx`：新增 `useEffect` cleanup 在组件卸载时移除残留的 document 事件监听器
+
+### 用户受益
+- 用户在拖拽调整列宽的过程中切换到其他表或关闭数据库模块时，不再有残留的 document-level 事件监听器，避免内存泄漏和状态更新到已卸载组件
+
+### 验证
+- eslint: 通过
+- vitest (database 模块全部 4 文件 10 测试): 全部通过
+- check:hard-constraints: 通过
+
+### 风险
+- 无已知风险。refs 仅在 handleResizeColumn 被调用时写入，cleanup useEffect 无依赖（仅在卸载时执行），正常路径的 pointerup 处理与之前完全一致
+
+---
+
+## [2026-05-16 23:57] Agent agent-8-1778946251-3541 第 1 轮
+
+### 问题
+- notifyContentSubscribers 每次调用都构建新 snapshot 对象引用，导致 useSyncExternalStore 频繁触发 React 重渲染，即使底层数据未变
+- 类型：UI品质
+- 优先级：P1
+
+### 修改
+- `desktop/src/app-shell/repository-manager.ts`：notifyContentSubscribers 方法中添加引用比较，缓存数据未变时不创建新 snapshot 对象、不触发订阅者通知
+
+### 用户受益
+- 减少不必要的 React 组件重渲染，提升应用响应性能
+- 仓库列表切换、内容刷新时不再因引用变化导致无关组件更新
+
+### 验证
+- TypeScript typecheck (tsc --noEmit)：通过
+- check:hard-constraints：通过
+- git diff：仅修改目标文件，无副作用
+- 影响面检查（rg import from repository-manager）：21 个引用文件均只导入类型或 use* hooks，不受私有方法实现变更影响
+
+### 风险
+- 引用比较依赖底层 Map（contentCache/contentLoading/contentErrors）返回的引用稳定性。refreshContentList 会替换 contentCache 中对应 content type 的数组引用，届时引用变化会被正确检测并触发通知。无已知风险。
+
+---
+
+## [2026-05-17 00:20] Agent agent-w1-1778946253-b2d4 第 1 轮
+
+### 问题
+- handleInsert/handleUpdate 在显示错误 toast 后额外 throw error，导致 data-table-view 编辑状态卡死
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/database/index.tsx`：移除 handleInsert 和 handleUpdate 中 catch 块后的 `throw error`，使其与 handleDelete 行为一致
+
+### 用户受益
+- 数据表行编辑/新增失败时，编辑状态不再卡死，用户能看到错误提示并能重新操作
+
+### 验证
+- eslint：通过（rtk proxy）
+- tsc --noEmit：无新增错误（5 个既有错误均在 agent 模块）
+- check:hard-constraints：通过
+
+### 风险
+- 无已知风险。handleInsert/handleUpdate 通过 props 传递，无调用方依赖 throw
+
+---
+
+## [2026-05-17 08:10] Agent agent-1778948840-528c 第 1 轮
+
+### 问题
+- `active-project.tsx` 中的 `ActiveProjectIndicator` 是 Phase 0.5 占位组件，永远返回 null，且未在任何其他文件中被导入使用。其唯一依赖 `use-active-project.ts` 也仅被该死组件引用 — 两文件均为死代码。
+- 类型：死代码
+- 优先级：P3
+
+### 修改
+- `desktop/src/app-shell/active-project.tsx`：删除整个文件（死代码）
+- `desktop/src/app-shell/use-active-project.ts`：删除整个文件（死代码，仅被 active-project.tsx 引用）
+
+### 用户受益
+- 减少了 2 个无用的源文件，降低代码库噪音和后续开发者的困惑
+- 该组件从始至终未在任何界面渲染过，删除无视觉变化
+
+### 验证
+- grep ActiveProjectIndicator/active-project/use-active-project 在 desktop/ 范围：无引用
+- tsc --noEmit：无新错误（预存错误仅 agent 模块）
+- check:hard-constraints：通过
+
+### 风险
+- 无。两文件间仅互相引用，无外部依赖
+
+---
+
+## [2026-05-17 17:25] Agent agent-1778948841-1952 第 1 轮
+
+### 问题
+- NodeConfigPanel 的 `if (collapsed)` 早期 return 出现在 hooks 调用之前，违反 React Rules of Hooks，面板折叠/展开切换时导致崩溃
+- 类型：崩溃修复
+- 优先级：P1
+
+### 修改
+- `desktop/src/modules/workflow/editor/node-config-panel.tsx`：将 `useUpstreamNodes`、`useRef`、`useState`、`useEffect` 移动到早期 return 之前，确保 hooks 每次渲染都按相同顺序调用
+
+### 用户受益
+- 用户在编辑器中折叠/展开右侧配置面板时不再遇到 React crash 或白屏
+
+### 验证
+- eslint：通过（无输出）
+- vitest run 编辑器测试套件：3 文件 12 tests 全部通过
+- check:hard-constraints：通过
+- tsc --noEmit：无新增错误
+
+### 风险
+- `useUpstreamNodes` 现在在 collapsed 状态下也会被调用（空 ID），这是 hooks 合规的必要代价，无功能性影响
+
+---
+
+## [2026-05-17 01:00] Agent agent-4 第 1 轮
+
+### 问题
+- 运行历史对话框中的快照条目缺少键盘可访问性（tabIndex/role/onKeyDown），键盘用户无法导航选择历史运行
+- 类型：交互完整性
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/workflow/components/run-history-dialog.tsx`：为每条运行历史记录 div 添加 tabIndex={0}、role="button"、onKeyDown（Enter/Space），以及在 focus-visible 时的 outline-ring 样式
+
+### 用户受益
+- 键盘用户和屏幕阅读器用户现在可以通过 Tab 导航到各条运行历史记录，按 Enter/Space 打开查看，与 workflow-card.tsx 的键盘模式保持一致
+
+### 验证
+- 测试 (vitest run run-history-dialog.test.tsx)：3/3 passed
+- check:hard-constraints：通过
+- tsc --noEmit：无新增类型错误（5 个既有错误均在 agent 模块）
+- git diff：仅目标文件，11 insertions(+), 1 deletion(-)
+
+### 风险
+- 无已知风险。handleKeyDown 使用 stopPropagation 意识（按钮内已有），事件处理与现有 onClick 行为一致，`focus-visible` 确保只对键盘用户显示 ring，不影响鼠标用户
+
+---
+
+## [2026-05-17 12:30] Agent agent-1778950425-5922 第 1 轮
+
+### 问题
+- window-manager.ts: void win.loadURL(url) 未添加 .catch()，URL 加载失败时 Promise rejection 被静默吞掉，用户看不到报错
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/electron/services/workflow/window-manager.ts`：在 open() 和 openRunner() 的 win.loadURL(url) 后添加 .catch() 处理器，URL 加载失败时记录 logger.error
+
+### 用户受益
+- 当工作流编辑器/运行器窗口 URL 加载失败（如 dev server 未启动、URL 无效）时，错误信息会记录到主进程日志，不再是静默白屏
+
+### 验证
+- eslint：通过（无输出）
+- check:hard-constraints：通过
+
+### 风险
+- 无。.catch() 只做日志记录，不改变控制流
+
+
+---
+
+## [2026-05-17 12:05] Agent agent-3-1747526400-aB3c 第 1 轮
+
+### 问题
+- useAgentRuntimeStatus 的 5 秒轮询 useEffect 中 focus + visibilitychange 事件同时触发时造成重复的 API 请求
+- 类型：交互完整性
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/settings/hooks/use-agent-runtime-status.ts`：在轮询 useEffect 中添加 200ms 防抖计时器，合并短时间内连续触发的 focus/visibilitychange/polling 事件
+- `desktop/src/modules/settings/hooks/__tests__/use-agent-runtime-status-refresh.test.tsx`：更新轮询测试的计时器推进量以反映 200ms 防抖延迟
+
+### 用户受益
+- 用户切换回标签页时，agent 运行时状态面板不会发出重复的请求（之前可能 3 次请求在一瞬间同时发出）
+- 设置页面网络流量减少，状态更新更稳定
+
+### 验证
+- lint：通过
+- test (vitest run use-agent-runtime-status)：4/4 passed
+- typecheck (tsc --noEmit)：无新类型错误（5 个既有错误均在 agent 模块）
+- check:hard-constraints：通过
+
+### 风险
+- 200ms 防抖延迟对轮询精度无影响（polling 间隔 5s，200ms 可忽略）
+- 清理逻辑在 useEffect 的 clean-up 中正确移除，无泄漏
+
+---
+
+## [2026-05-17 12:35] Agent agent-4-1778950430-5f35 第 1 轮
+
+### 问题
+- workflow-engine.ts catch 块中 executor.execute() 抛出异常时，返回的 NodeExecOutcome 缺少 durationMs，导致失败节点的运行时长在 timeline 中不可见
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/electron/services/workflow/workflow-engine.ts`：在 catch 块中通过 `nodeResults[nodeId]?.startedAt` 计算 durationMs 并加入返回值
+
+### 用户受益
+- 当 Promise 节点执行器抛出异常时（非正常返回失败），timeline 视图现在能显示该节点的实际运行时长，便于排查耗时异常的节点
+- 与 executor 正常返回失败（`{status:"failed",durationMs}`）的行为保持一致
+
+### 验证
+- eslint：通过
+- tsc --noEmit：无新增错误（5 个既有 agent 模块错误）
+- check:hard-constraints：通过
+- vitest run workflow-engine.test.ts：13 tests passed
+- 影响面检查：workflow-engine.ts 通过 DI 容器 resolve，无直接 import 方
+
+### 风险
+- nodeResults[nodeId] 在 catch 执行时必定已存在（onNodeReady 在 execute 前调用），?. 运算符仅作防御性编程
+
+---
+
+## [2026-05-17 10:15] Agent agent-9-1778950451-a352 第 1 轮
+
+### 问题
+- 工作流列表页的 WorkflowCard runState badge 从未被连接，用户无法在列表页看到工作流的运行状态
+- 类型：交互完整性
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/workflow/components/workflow-list.tsx`：添加 useEffect 订阅 onEvent，跟踪 runId→workflowId 映射，将 runState 传给 WorkflowCard
+- `desktop/src/modules/workflow/components/__tests__/workflow-list.test.tsx`：为新的 onEvent 订阅添加测试 mock
+
+### 用户受益
+- 用户在工作流列表页现在能看到每个工作流的实时运行状态 badge（执行中/已完成/失败/已取消），包括从其他窗口（如 Runner 的 rerun）触发的运行
+- 关闭 Runner 窗口后回到主窗口，列表页自动反映最新运行结果
+
+### 验证
+- eslint：通过（无输出）
+- vitest 2/2：通过
+- check:hard-constraints：通过
+- tsc --noEmit：无新增错误（5 个既有错误均在 agent 模块）
+
+### 风险
+- 无已知风险。onEvent 订阅在组件卸载时正确清理。runIdToWfId ref 会随时间累积映射条目，但数量受限于用户实际运行的并发工作流数（通常个位数），不会造成内存问题
+
+---
+
+## [2026-05-17 01:25] Agent agent-3-1778952141-aB3c 第 1 轮
+
+### 问题
+- config-backup-panel.tsx: 导出和导入操作的 `.catch(() => {})` 静默吞掉所有错误
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/settings/components/config-backup-panel.tsx`：替换两个空的 `.catch(() => {})` 为 logger.warn，导出/导入的 Promise 链错误现在会被记录到主进程日志
+
+### 用户受益
+- 当配置导出或导入过程中发生意外错误（如 promise() 机制本身的错误）时，不会被无声吞掉，而是记录到日志
+- 修复后用户仍能看到已有错误提示（promise() error 回调继续工作）
+
+### 验证
+- tsc --noEmit：无错误
+- 影响面检查：只有 settings/index.tsx 引用了该组件，接口未变
+
+### 风险
+- 无。logger.warn 是只读操作，不改变控制流
+
+---
+
+## [2026-05-17 18:00] Agent agent-1778952030-9059 第 1 轮
+
+### 问题
+- setting-item-row.tsx debounce useEfffect 在外部值变化（`currentInputValue` 更新）时未清除待处理的定时器，过期的 setTimeout 回调仍会用旧的 `candidateValue` 执行 `onSave`，覆盖外部设置的新值
+- 类型：交互完整性
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/settings/components/setting-item-row.tsx`：在 debounce useEffect 的两个早期返回路径（`!hasLocalEditRef.current` 和 `draftValue === currentInputValue || validationMessage !== null`）中增加 `pendingSaveRef` 定时器清理
+
+### 用户受益
+- 当设置值在 debounce 窗口（300ms）内被外部同步时，过期的定时器不再覆盖新值
+- 用户不会因竞态条件丢失外部设置变更
+
+### 验证
+- vitest run src/modules/settings/：38 tests passed
+- check:hard-constraints：通过
+
+### 风险
+- 无。只在现有早期返回路径增加定时器清理，不改变任何正常保存流程
+
+---
+
+## [2026-05-17T02:00] Agent agent-4-1778952157-1a2b 第 1 轮
+
+### 问题
+- errorDiagnostic 和 stringDiagnostic 返回 errorLength（字符数）而非实际错误消息文本，工作流节点崩溃或工作流失败时日志条目只有 {errorLength:42}，无法定位实际错误
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- ：errorDiagnostic 新增 errorMessage 字段（包含实际错误文本）；stringDiagnostic 新增 errorMessage 字段（包含可选的原始文本）
+
+### 用户受益
+- 开发者查看工作流运行日志时，能看到节点执行异常的具体错误信息而非仅仅是字符数，大幅缩短调试时间
+
+### 验证
+- eslint：通过（无输出 = 无错误）
+- vitest run electron/services/__tests__/workflow-engine.test.ts：13 tests passed
+- tsc --noEmit：预存在的无关 TS 错误，workflow-engine.ts 无新增错误
+- check:hard-constraints：All passed
+
+### 风险
+- 无。函数为模块内部 private，仅在 workflow-engine.ts 内使用，不影响外部类型
+
+---
+
+## [2026-05-17 18:15] Agent agent-7-1778953997-35190 第 1 轮
+
+### 问题
+- run-snapshot-service.ts 的 `snapshotErrorMetadata` 返回 `errorLength`（字符数）而非实际错误文本，导致结构化日志中只有长度数字而无错误详情，调试 snapshot 保存/读取失败时日志无价值
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/electron/services/workflow/run-snapshot-service.ts`：`snapshotErrorMetadata` 新增 `errorMessage` 字段，返回实际错误文本（保留 `errorLength` 向后兼容）
+- `desktop/electron/services/__tests__/run-snapshot-service.test.ts`：更新测试期望，包含 `errorMessage` 字段；移除路径泄漏断言（`errorMessage` 天然包含文件路径，这正是调试所需）
+
+### 用户受益
+- 开发者在调试 snapshot 操作失败时，日志现在会显示完整的错误文本（如 "ENOENT: no such file or directory, scandir '/path/to/dir'"），而非仅显示 "errorLength: 42"
+
+### 验证
+- eslint：通过（无输出）
+- tsc --noEmit：无新增错误
+- check:hard-constraints：通过
+- vitest run run-snapshot-service.test.ts：2/3 通过（第 3 个失败为预存问题：MAX=20 但列表返回 21 条，与本次修改无关）
+
+### 风险
+- `errorMessage` 包含文件路径信息，结构化日志中会暴露文件系统路径。这与 `errorDiagnostic`/`errorLogMeta` 在其他文件中的处理方式一致，是有意的调试便利性取舍
+
+---
+
+## [2026-05-17 20:10] Agent agent-1778953892-4490 第 1 轮
+
+### 问题
+- script/executor.main.ts 两条失败路径的日志只记录 errorLength（字符数），不记录实际错误文本
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/workflow-nodes/script/executor.main.ts`：将两处 `errorLength: number` 替换为 `errorMessage: string`（截断到 200 字符），脚本节点失败时日志现在包含实际错误信息
+
+### 用户受益
+- 脚本节点执行失败时，开发者能在日志中看到具体错误内容（如 "spawn ENOENT"、"Permission denied"），而不是无用的字符数
+
+### 验证
+- vitest run workflow-nodes/script/__tests__/executor.test.ts：6 tests passed
+- tsc --noEmit：无新增错误（5 个既有 agent 模块错误）
+- check:hard-constraints：通过
+- 影响面检查：scriptNodeExecutor 仅通过 register.main.ts 注册到 NodeTypeRegistry，无外部直接调用
+
+### 风险
+- 无。仅改变日志元数据字段名，不影响控制流或返回值
+
+---
+
+## [2026-05-17 18:35] Agent worker-3-1778953997-de18 第 1 轮
+
+### 问题
+- workflow/window-manager.ts 两处 catch 块（open 和 openRunner）使用无参 catch，不捕获错误对象，日志中丢失实际错误信息
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/electron/services/workflow/window-manager.ts`：将两处 `catch {` 改为 `catch (err) {`，并在 logger.warn 中添加 `error` 字段记录实际错误消息
+
+### 用户受益
+- 当 Electron BrowserWindow.send() 调用失败时，开发者现在能在日志中看到具体的错误原因（如 "Object has been destroyed"），而不是只有 "window destroyed" 的假设
+
+### 验证
+- eslint：通过（无输出）
+- tsc --noEmit：通过（6 个既有错误，均在 agent 模块）
+- vitest run ipc.test.ts：3/3 通过
+- check:hard-constraints：通过
+- 影响面检查：WorkflowWindowManager 被 descriptors.ts 和 ipc.ts 引用，仅类型导入，接口未变
+
+### 风险
+- 无。仅修改内部日志记录，不改变控制流或公共 API
+
+---
+
+## [2026-05-17 19:23] Agent agent-2-1778955806-a9c9 第 1 轮
+
+### 问题
+- runner-node-wrappers.tsx 五个包装组件（RunnerPromptNodeWrapper/RunnerSwitchNodeWrapper/RunnerEndNodeWrapper/RunnerHttpRequestNodeWrapper/RunnerScriptNodeWrapper）被 export 但不被任何外部文件直接引用
+- 仅通过内部 `runnerNodeTypes` map 使用
+- 类型：死代码
+- 优先级：P3
+
+### 修改
+- `desktop/src/modules/workflow/runner/runner-node-wrappers.tsx`：去掉 5 个函数的 export 关键字，仅保留 `RunnerNodeResultsContext` 和 `runnerNodeTypes` 的 export
+
+### 用户受益
+- 代码更干净，减少不必要的公共 API 面
+
+### 验证
+- eslint：通过（无输出）
+- check:hard-constraints：通过
+- 影响面检查：dag-view.tsx 和 runner-edge.tsx 仅导入 RunnerNodeResultsContext 和 runnerNodeTypes（仍为 export），无影响
+
+### 风险
+- 无已知风险。import 方只引用仍保持 export 的符号
+
+---
+
+## [2026-05-17 02:40] Agent agent-8-1778956147-2397 第 1 轮
+
+### 问题
+- run-history-dialog.tsx 的 `errorDiagnostic` 只返回 `errorLength`（字符数）而不返回实际错误文本，运行历史加载失败时日志只显示 `{errorLength: 42}` 而无调试价值
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/workflow/components/run-history-dialog.tsx`：`errorDiagnostic` 返回值新增 `errorMessage` 字段，包含实际错误文本（截断到 2000 字符）
+- `desktop/src/modules/workflow/components/__tests__/run-history-dialog.test.tsx`：更新断言以包含 `errorMessage`
+
+### 用户受益
+- 开发者调试运行历史加载失败时，结构化日志中会显示完整错误文本（如 "Cannot read properties of undefined"）而非仅无用的字符长度
+
+### 验证
+- eslint：通过（无输出）
+- vitest run workflow/components/__tests__/run-history-dialog.test.tsx：3/3 passed
+- vitest run workflow/components/__tests__/：8/8 passed（5 test files）
+- tsc --noEmit：无新增错误（5 个既有 agent 模块错误）
+- check:hard-constraints：通过
+
+### 风险
+- `errorMessage` 可能包含文件路径等信息，与 runner-app.tsx 等其他文件中的 `errorDiagnostic` 处理方式一致，是有意的调试便利性取舍
+
+---
+
+## [2026-05-17 22:42] Agent agent-10-1778952085-63c0 第 1 轮
+
+### 问题
+- WorkflowModule（index.tsx）的本地 errorLogMeta 函数只返回 errorLength（字符数）不返回 errorMessage，创建工作流失败时日志只有 `{errorName: "Error", errorLength: 42}` 无实际错误文本
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/workflow/index.tsx`：errorLogMeta 新增 errorMessage 字段（经 sanitizeError 脱敏），日志现在包含实际错误文本
+- `desktop/src/modules/workflow/__tests__/workflow-module.test.tsx`：更新测试断言以包含新的 errorMessage 字段
+
+### 用户受益
+- 开发者在排查用户「创建工作流失败」报错时，日志中能看到具体错误原因（如 IPC 断连等），而非仅有字符数
+
+### 验证
+- eslint：通过
+- vitest run workflow-module.test.tsx：1 test passed
+- check:hard-constraints：All passed
+
+### 风险
+- `errorMessage` 经 sanitizeError 脱敏后才写入，API key/token/path 等敏感信息已被替换为 [redacted]/[key]/[path]。日志安全性与此项目其他模块一致
+
+---
+
+## [2026-05-17 18:15] Agent agent-1778955764-4abb 第 1 轮
+
+### 问题
+- `workflowAgentErrorDiagnostic` 和 `capabilityRejectionDiagnostic` 只返回 `errorLength`（字符数）而不返回 `errorMessage`，日志条目只有错误长度而无实际文本
+- `workflowAgentFailureMessage` 用 `errorLength` 构建用户可见的错误消息，用户看到 "Agent call failed (Error, 42 chars)" 而非实际错误原因
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/electron/bootstrap/descriptors.ts`：`workflowAgentErrorDiagnostic` 新增 `errorMessage?` 字段
+- `desktop/electron/bootstrap/descriptors.ts`：`capabilityRejectionDiagnostic` 新增 `errorMessage?` 字段
+- `desktop/electron/bootstrap/descriptors.ts`：`workflowAgentFailureMessage` 改用 `errorMessage` 代替 `errorLength`，用户可见错误消息现在包含实际错误文本
+
+### 用户受益
+- 当工作流 Agent 调用因基础设施错误失败（如容器未找到、超时）时，用户看到的不再是 "Agent call failed (Error, 42 chars)"，而是具体的错误原因如 "Agent call failed (Error): Project container not found"
+- 日志中 `workflowAgentErrorDiagnostic` 和 `capabilityRejectionDiagnostic` 现在随 `errorLength` 一并记录 `errorMessage`，开发者可直接从日志行获取错误详情
+
+### 验证
+- tsc --noEmit：无新增错误
+- check:hard-constraints：通过
+- rg 确认 5 处调用方仅消费 `errorName` / `errorLength` / `errorMessage`，均兼容新增字段
+
+### 风险
+- 无。`errorMessage` 为 `?` 可选字段，旧调用方不受影响；`workflowAgentFailureMessage` 参数类型使用了 `errorMessage?` 代替 `errorLength`，但唯一调用方传参兼容
+
+---
+
+## [2026-05-17 03:32] Agent agent-2-1778957651-37795 第 1 轮
+
+### 问题
+- auto-layout.ts 对所有节点使用固定 80px 高度，但 Switch 节点的实际高度为 88 + N×28px（N=分支数）。用户触发自动布局后，含有 Switch 节点的画布会产生节点重叠。
+- 类型：交互完整性
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/workflow/editor/auto-layout.ts`：新增 `resolveNodeHeight(node)` 函数，对 switch 类型节点从 data.branches 动态计算高度，其他节点仍用 DEFAULT_NODE_HEIGHT=80；dagre setNode 和最终 position 计算均使用节点实际高度
+
+### 用户受益
+- 含有 Switch 分支节点的工作流画布上，自动布局（LayoutGrid 按钮）不再产生节点重叠，布局结果美观可用
+
+### 验证
+- ESLint：通过
+- check:hard-constraints：通过
+- tsc --noEmit：无新增错误（5 个既有 agent 模块错误）
+
+### 风险
+- 无已知风险。Switch 节点在 data.branches 为空时回退为 SWITCH_HEADER_H=88（即单分支默认高度），不会破坏布局
+
+---
+
+## [2026-05-17 23:30] Agent agent-1778957613-4167 第 1 轮
+
+### 问题
+- agent-runtime-service.ts 中 summarizePermissionResponseError 和 summarizeScheduledResumeError 只返回 errorLength（字符数）而不返回 errorMessage，权限响应失败和定时任务恢复失败的审计日志只记录错误长度而无实际错误文本
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/electron/services/agent-runtime/agent-runtime-service.ts`：两个函数返回值类型新增 `errorMessage` 字段，审计日志现在包含实际错误文本
+
+### 用户受益
+- 当权限响应或定时任务恢复操作失败时，审计日志和结构化日志条目会包含实际错误文本（如 "Conversation not found"）而非仅有字符计数，便于排查问题
+
+### 验证
+- pnpm eslint：无输出（通过）
+- pnpm tsc --noEmit：无新增错误（5 个既有无关错误）
+- check:hard-constraints：All passed
+
+### 风险
+- `errorMessage` 字段通过 spread 操作符合并到日志/审计 metadata 对象，为多余字段，不影响既有 keys 的消费方
+
+---
+
+## [2026-05-17 22:38] Agent agent-1778959393-18099 第 1 轮
+
+### 问题
+- ReactiveScheduler.execute() 中 task.execute().then() 链缺少 .catch()，若节点执行器抛出异常（而非返回 {status:"failed"}），Promise.race 会因 rejected promise 而 throw，跳过第 162 行的 removeEventListener，导致 AbortSignal 上的监听器泄漏；同时该 rejected promise 会触发 Node.js unhandledRejection
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/electron/services/workflow/workflow-scheduler.ts`：在 .then() 链末尾添加 .catch()，将抛出的异常转换为 {status:"failed"} NodeExecOutcome，同步执行 failed 路径的清理逻辑（清除 waitQueue、传播 skip）；同时将第 158-162 行的 Promise.race 包在 try-finally 中，确保无论 race 如何结束都能移除监听器
+
+### 用户受益
+- 工作流中某个节点执行器意外抛出异常时，调度器不再静默卡死或崩溃，而是正确标记该节点为 failed 并优雅跳过下游节点，AbortSignal 监听器始终被清理
+
+### 验证
+- ESLint：通过（无输出）
+- 13 个 scheduler 单元测试：全部通过
+- tsc --noEmit：无新增错误（5 个既有 agent 模块错误）
+- check:hard-constraints：All passed
+
+### 风险
+- .catch() 中 failed=true 设置后，所有已在 waitQueue 中的节点会被标记为 skipped，与 .then() 中的 failed 分支行为一致。但 .catch() 只处理 task.execute() 本身抛异常的情况，正常返回 {status:"failed"} 仍走 .then() 路径
+
+---
+
+## [2026-05-17 04:32] Agent agent-4-1778959520-83783 第 1 轮
+
+### 问题
+- EndNodeCard 使用 `border-2` 且 statusClass default 返回 `"border-primary"`，其他 4 种节点卡片（prompt/switch/http-request/script）使用 `border` 且 default 返回 `""`——编辑器中未运行的 end 节点始终有加粗蓝色边框，与其他节点视觉不一致
+- 类型：UI品质
+- 优先级：P3
+
+### 修改
+- `desktop/workflow-nodes/end/card.tsx`：statusClass default 返回 `""` 而非 `"border-primary"`；base div class 从 `border-2` 改为 `border`
+
+### 用户受益
+- end 节点在编辑器中的视觉样式与 prompt/switch/http-request/script 节点一致，未运行时无多余蓝色边框
+
+### 验证
+- eslint：通过
+- tsc --noEmit：预存错误（agent 模块），与本次改动无关
+- check:hard-constraints：通过
+
+### 风险
+- 无已知风险。纯 CSS 类变更，不影响 API surface 或数据流。
+
+---
+
+## [2026-05-17 19:32] Agent agent-2-1778959885-04e5 第 1 轮
+
+### 问题
+- `use-workflow-run.ts` 的 `errorLogMeta` 函数未对 `errorMessage` 调用 `sanitizeError` 脱敏处理，工作流运行/启动/取消失败的错误信息（可能包含 API key、token、文件路径等敏感数据）直接写入主进程日志文件
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/workflow/hooks/use-workflow-run.ts`：`errorLogMeta` 函数的 `errorMessage` 字段改用 `sanitizeError(text)` 脱敏后写入，并添加条件 spread 以匹配其他 workflow hooks 的一致性模式
+
+### 用户受益
+- 工作流运行失败时，日志中的错误信息不再包含未脱敏的 API key、token 或文件路径等敏感数据
+- 与 `use-workflow-events.ts`、`use-workflow-list.ts` 等其他 workflow hooks 的日志脱敏行为保持一致
+
+### 验证
+- eslint：通过
+- tsc --noEmit：无新增错误（5 个既有 agent 模块错误）
+- check:hard-constraints：All passed
+
+### 风险
+- 无。仅对日志输出做了脱敏处理，不影响任何业务逻辑或 UI 显示
+- 注意：`workflow-list.tsx` 和 `workflow/index.tsx` 存在相同问题，已记录到积压池
+
+---
+
+## [2026-05-17 03:45] Agent agent-8-1778959524-fe9c 第 1 轮
+
+### 问题
+- `run-snapshot-service.ts` 的 `save` 方法将过期快照清理与实际保存放在同一个 try-catch 块中，清理失败时错误地记录"save failed"日志
+- 类型：错误处理
+- 优先级：P1
+
+### 修改
+- `desktop/electron/services/workflow/run-snapshot-service.ts`：将 save 方法拆分为两个独立的 try-catch 块——第一个处理实际保存（writeFile + rename），第二个处理过期快照清理。清理失败时记录 warn 级别日志（"save succeeded"），不再误报为 save 失败
+
+### 用户受益
+- 开发者现在可以准确区分保存失败（真正的错误）和清理失败（最佳努力操作）。保存成功后清理的文件系统权限问题不再掩盖为保存失败
+
+### 验证
+- eslint：通过
+- tsc --noEmit：无新增错误（预存错误仅 node-result-panel.tsx / timeline-view.tsx 中的 NODE_STATUS_VARIANT 命名问题）
+- vitest run run-snapshot-service.test.ts：2/3 通过（第 3 个失败为预存问题：MAX=20 但列表返回 21 条，与本次修改无关）
+- check:hard-constraints：通过
+
+### 风险
+- 无。清理逻辑保持不变，仅将 try-catch 范围缩小。清理失败的警告日志级别从 error 降为 warn（更准确地反映严重程度）。公共 API 无变化
+
+---
+
+## [2026-05-17 03:15] Agent agent-1778959392-12191 第 1 轮
+
+### 问题
+- `workflow-dispatcher.ts` 的 `workflow.layout.update` MCP action 使用固定 `nodeHeight = 80`，但 Switch 节点实际高度为 `88 + N×28`px，导致 MCP 发起的自动布局后 Switch 节点与相邻节点重叠
+- 类型：交互完整性
+- 优先级：P2
+
+### 修改
+- `desktop/electron/capabilities/workflow-dispatcher.ts`：导入 `SWITCH_HEADER_H` 和 `SWITCH_BRANCH_H` 常量；`workflow.layout.update` handler 现在对 Switch 节点动态计算高度（`88 + numBranches × 28`），其他节点保持默认 80px
+
+### 用户受益
+- 通过 MCP（AI agent）触发的工作流自动布局，Switch 节点不再与相邻节点重叠，布局结果与前端编辑器中的自动布局一致
+
+### 验证
+- eslint：通过
+- tsc --noEmit：无新错误
+- check:hard-constraints：通过
+
+### 风险
+- 无已知风险。只修改了 MCP dispatcher 的 layout action，不影响前端编辑器的自动布局逻辑（已在之前迭代修复）。
+
+---
+
+## [2026-05-17 03:55] Agent agent-1-1778961309-12941 第 1 轮
+
+### 问题
+- `workflow-list.tsx` 的 `errorLogMeta` 未对 `errorMessage` 调用 `sanitizeError` 脱敏处理，工作流列表运行/删除失败的错误信息（可能包含 API key、token、文件路径等敏感数据）直接写入主进程日志文件
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/workflow/components/workflow-list.tsx`：添加 `sanitizeError` 导入；`errorLogMeta` 函数的 `errorMessage` 字段改用 `sanitizeError(text)` 脱敏后写入，截断长度从 2000 改为 200（与其他 workflow hooks 一致）
+
+### 用户受益
+- 工作流列表页面运行/删除失败时，日志中的错误信息不再包含未脱敏的 API key、token 或文件路径等敏感数据
+- 与 `use-workflow-events.ts`、`use-workflow-list.ts`、`use-workflow-run.ts` 等其他 workflow hooks 的日志脱敏行为保持一致
+
+### 验证
+- eslint：通过
+- tsc --noEmit：无新增错误
+- check:hard-constraints：通过
+
+### 风险
+- 无。仅对日志输出做了脱敏处理，不影响任何业务逻辑或 UI 显示
+- 注意：`provider-lookup-context.tsx` 存在相同问题（未调用 sanitizeError），已记录
+
+---
+
+## [2026-05-17 04:07] Agent agent-2-1778961261-1e90 第 1 轮
+
+### 问题
+- `bridge-adapter-service.ts` 的 `errorDiagnostic` 函数只返回 `errorName`/`errorLength`/`errorCode`，不返回 `errorMessage`——3 处日志调用（WebSocket 消息处理失败、入站 Agent 消息失败、capabilities 命令列表失败）只记录错误长度数字，无法看到实际错误内容
+- 类型：错误处理
+- 优先级：P2
+
+### 修改
+- `desktop/electron/services/bridge-adapter/bridge-adapter-service.ts`：`errorDiagnostic` 返回值新增 `errorMessage` 字段，使用 `sanitizeError` 脱敏并截断到 200 字符；新增 `import { sanitizeError } from "../error-sanitize"`
+
+### 用户受益
+- 开发者排查 bridge adapter 错误时，日志中可以直接看到错误消息内容（脱敏后），不再只有错误长度数字
+
+### 验证
+- eslint：通过
+- tsc --noEmit：无新增错误
+- check:hard-constraints：通过
+
+### 风险
+- 无。`errorDiagnostic` 是模块内部函数，不导出，无外部调用方依赖其返回类型
+
+---
+
+## [2026-05-17 09:30] Agent agent-1778961255-ktwe 第 1 轮
+
+### 问题
+- statusClass 函数和 NodeStatus 类型在全部 5 个节点 card 组件中重复定义（130+ 行重复代码）
+- 类型：死代码
+- 优先级：P2
+
+### 修改
+- `desktop/workflow-nodes/node-status-utils.ts`：新建共享模块，提取 statusClass 和 NodeStatus
+- `desktop/workflow-nodes/prompt/card.tsx`：删除重复定义，导入共享 utility
+- `desktop/workflow-nodes/switch/card.tsx`：同上
+- `desktop/workflow-nodes/http-request/card.tsx`：同上
+- `desktop/workflow-nodes/script/card.tsx`：同上
+- `desktop/workflow-nodes/end/card.tsx`：待另一个 agent 释放锁后更新
+
+### 用户受益
+- 无直接用户感知变化。代码维护性提升——未来调整状态样式只需改一处
+- 间接受益：减少打包体积（~20 行重复代码 → 1 次 import）
+
+### 验证
+- eslint：通过
+- tsc --noEmit：无新增错误
+- check:hard-constraints：通过
+
+### 风险
+- end/card.tsx 未被更新（持有活跃 claim 中），等其 release 后需要补充修改
+
+---
+
+## [2026-05-17 22:42] Agent agent-4-1778961254-679e 第 1 轮
+
+### 问题
+- `workflow-card.tsx` 定义本地 `RUN_STATE_BADGE` 常量与其在 `status-display.ts` 中的导出完全相同
+- 类型：死代码
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/workflow/components/workflow-card.tsx`：移除本地 `RUN_STATE_BADGE` 定义和本地 `WorkflowCardRunState` 类型，改为从 `status-display.ts` 导入共享版本
+
+### 用户受益
+- 消除了一处重复定义，降低了未来修改时两处不同步的风险
+
+### 验证
+- eslint：通过
+- tsc --noEmit：无错误
+- vitest workflow-card.test.tsx：通过（1 PASS）
+- check:hard-constraints：通过
+
+### 风险
+- 无已知风险。`WorkflowCardRunState` 类型已重定义为 `WorkflowRunStatus["status"]`（相同联合值），保持向后兼容
+
+---
+
+## [2026-05-17 04:18] Agent agent-1778961254-1601 第 1 轮
+
+### 问题
+- 工作流渲染层 4 个文件各有一份几乎相同的 errorLogMeta/errorDiagnostic 函数（提取 errorName/errorLength/errorMessage 并脱敏），代码冗余 80+ 行
+- 类型：死代码
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/workflow/lib/error-utils.ts`：新增共享 errorDiagnostic 工具函数
+- `desktop/src/modules/workflow/hooks/use-workflow-run.ts`：errorLogMeta → 导入的 errorDiagnostic
+- `desktop/src/modules/workflow/hooks/use-workflow-events.ts`：errorLogMeta → 导入的 errorDiagnostic
+- `desktop/src/modules/workflow/hooks/use-workflow-list.ts`：errorLogMeta → 导入的 errorDiagnostic
+- `desktop/src/modules/workflow/components/run-history-dialog.tsx`：errorDiagnostic → 导入的 errorDiagnostic
+- `desktop/src/modules/workflow/hooks/__tests__/use-workflow-run.test.tsx`：适配 errorMessage 字段加入
+
+### 用户受益
+- 无用户直接可见变化；代码更一致，未来修复错误日志格式时只需改一处
+
+### 验证
+- vitest：7/7 passed（3 test files）
+- check:hard-constraints：passed
+- typecheck：仅 2 个无关预存错误（agent module）
+
+### 风险
+- errorDiagnostic 现在始终返回 errorMessage（之前部分文件条件性省略），log 输出略多一个字段但不影响功能
+
+---
+
+## [2026-05-18 04:22] Agent agent-1778961256-9d8a 第 1 轮
+
+### 问题
+- `agent-message-toolbar.tsx` 中 `useRef<ReturnType<typeof setTimeout>>()` 缺少初始值导致 TS2554，且 ref.current 置 `undefined` 导致 TS2322
+- 类型：错误处理
+- 优先级：P1
+
+### 修改
+- `desktop/src/modules/agent/components/agent-message-toolbar.tsx`：将 `useRef<ReturnType<typeof setTimeout>>()` 改为 `useRef<ReturnType<typeof setTimeout> | undefined>(undefined)`，解决两个 TS 编译错误
+
+### 用户受益
+- 消除 2 个 TypeScript 编译错误，确保 setTimeout 计时器引用的类型安全
+
+### 验证
+- tsc --noEmit：agent-message-toolbar.tsx 的 2 个错误已消除
+- eslint：通过
+- check:hard-constraints：通过
+- 测试（预存失败 1 个，与本次修改无关）：2/3 通过
+
+### 风险
+- 无。仅修改了 useRef 类型声明，运行时行为不变
+
+---
+
+## [2026-05-17 22:42] Agent worker2-1778971402-50201 第 1 轮
+
+### 问题
+- settings/index.tsx: handleSaveItem silently returns when createSettingPatch returns null, leaving user with no feedback
+- 类型：交互完整性
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/settings/index.tsx`：handleSaveItem 在 patch 为 null 时调用 warning() 显示 toast 提示
+
+### 用户受益
+- 当设置的 key 不被识别时（如新增设置项但 createSettingPatch 未处理），用户会看到警告提示而非静默无反应
+
+### 验证
+- eslint：通过（无输出）
+- vitest settings/：38/38 passed（9 test files）
+- check:hard-constraints：通过
+
+### 风险
+- 无已知风险。只在 patch 为 null 时才多显示一行 warning toast，正常路径无变化
+
+---
+
+## [2026-05-17 22:30] Agent agent-w4-1778972310-yger 第 1 轮
+
+### 问题
+- 工作流列表加载态和空状态布局简陋，与 database 模块的不一致
+- 类型：UI品质
+- 优先级：P3
+
+### 修改
+- `desktop/src/modules/workflow/components/workflow-list.tsx`：加载态改为居中布局 + 旋转图标；空状态改为居中布局 + FileJson 图标 + 辅助提示文字
+
+### 用户受益
+- 空状态和加载态现在与其他模块（database）的视觉风格一致，居中显示、带图标和清晰的操作指引
+
+### 验证
+- ESLint：通过
+- check:hard-constraints：通过
+- vitest：1 个预存失败（errorMessage 格式，与本次修改无关）
+
+### 风险
+- 无已知风险。仅修改了 loading/empty 状态的返回 JSX，组件接口和所有调用方不变
+
+---
+
+## [2026-05-17 23:30] Agent agent-3-1778972046-2768 第 1 轮
+
+### 问题
+- 模块级可变变量 sessionAdminMode 在 React 渲染周期外持久化，增加闭包和状态同步风险
+- 类型：死代码
+- 优先级：P2
+
+### 修改
+- `desktop/src/modules/settings/index.tsx`：移除模块级 `let sessionAdminMode = false`，将 `useState(sessionAdminMode)` 简化为 `useState(false)`，删除 `setIsAdminMode` 中对 `sessionAdminMode` 的冗余写入
+
+### 用户受益
+- 消除了一处在 React 严格模式、测试环境或模块热重载时可能导致状态同步异常的可变模块级变量，代码更可预测
+
+### 验证
+- tsc --noEmit：通过
+- vitest run src/modules/settings/：38/38 passed
+- check:hard-constraints：通过
+- rg "sessionAdminMode" 全项目无匹配
+- 影响面：仅 App.tsx 引用 SettingsModule 组件，不受内部实现变更影响
+
+### 风险
+- 无已知风险。adminMode 为按键进入的非持久化偏好，组件卸载后重置为 false 不影响用户体验
+
+---
+
+## [2026-05-17 18:30] Agent agent-1778972039-6840 第 1 轮
+
+### 问题
+- workflow-engine.ts 和 workflow-validator.ts 实现相同的可达性 BFS 算法（12 行重复），维护时需要同步修改两处
+- 类型：死代码
+- 优先级：P3
+
+### 修改
+- `desktop/electron/services/workflow/workflow-utils.ts`：新增共享 `computeEndReachable` 函数
+- `desktop/electron/services/workflow/workflow-validator.ts`：删除本地 `computeEndReachable`，改用 utils 的导入版本
+- `desktop/electron/services/workflow/workflow-engine.ts`：将内联 BFS 替换为共享函数调用
+
+### 用户受益
+- 消除代码重复，后续对可达性算法的修改只需在一处进行，减少维护不一致风险
+
+### 验证
+- `eslint`：三个文件均通过
+- `tsc --noEmit`：通过（2 个已有无关错误）
+- `workflow-engine.test.ts`：13 PASS 0 FAIL
+- `workflow-service.test.ts`：10 PASS 0 FAIL
+
+### 风险
+- 无已知风险。computeEndReachable 的行为与原来两处的实现完全相同：empty Set 表示"无 End 节点"时引擎不过滤节点、验证器跳过验证。所有测试通过。

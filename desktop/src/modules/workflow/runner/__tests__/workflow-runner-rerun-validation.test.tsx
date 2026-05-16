@@ -56,6 +56,7 @@ vi.mock("../runner-toolbar", () => ({
 }))
 
 import { WorkflowRunnerApp } from "../runner-app"
+import { sanitizeError } from "../../../../../electron/services/error-sanitize"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -114,7 +115,7 @@ describe("WorkflowRunnerApp rerun validation", () => {
       runId: "run-1",
       errorCount: 1,
       firstErrorType: "invalid_config",
-      firstErrorLength: rawMessage.length,
+      firstErrorMessage: sanitizeError(rawMessage),
     })
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("/Users/example/repo")

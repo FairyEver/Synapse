@@ -2,23 +2,9 @@ import { cn } from "@/lib/utils"
 import { switchNodeManifest } from "./manifest"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "./constants"
 import type { SwitchNodeConfig } from "./schema"
-import type { NodeRunResult } from "@/types/workflow"
 import { NodeProgressBar, useRunningTimer } from "@/modules/workflow/runner/node-progress-bar"
 import { useProviderLookup } from "../provider-lookup-context"
-
-type NodeStatus = NodeRunResult["status"]
-
-function statusClass(status?: NodeStatus): string {
-  switch (status) {
-    case "pending": return "border-dashed border-muted-foreground"
-    case "running": return "border-primary"
-    case "success": return "border-primary"
-    case "failed": return "border-destructive"
-    case "cancelled": return "opacity-60 border-muted-foreground"
-    case "skipped": return "opacity-40 border-dashed"
-    default: return ""
-  }
-}
+import { statusClass, type NodeStatus } from "../node-status-utils"
 
 export function SwitchNodeCard({ config, name, selected, status, progressLabel, startedAt }: {
   config: SwitchNodeConfig; name?: string; selected?: boolean; status?: NodeStatus

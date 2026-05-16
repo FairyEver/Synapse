@@ -1134,12 +1134,14 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
 function workflowAgentErrorDiagnostic(error: unknown): {
   readonly errorName: string
   readonly errorLength: number
+  readonly errorMessage?: string
   readonly stackLength?: number
 } {
   if (error instanceof Error) {
     return {
       errorName: error.name,
       errorLength: error.message.length,
+      errorMessage: error.message.length > 200 ? error.message.slice(0, 200) + "…" : error.message,
       stackLength: error.stack?.length,
     }
   }
@@ -1147,18 +1149,21 @@ function workflowAgentErrorDiagnostic(error: unknown): {
   return {
     errorName: typeof error,
     errorLength: message.length,
+    errorMessage: message.length > 200 ? message.slice(0, 200) + "…" : message,
   }
 }
 
 function capabilityRejectionDiagnostic(error: unknown): {
   readonly errorName: string
   readonly errorLength: number
+  readonly errorMessage?: string
   readonly stackLength?: number
 } {
   if (error instanceof Error) {
     return {
       errorName: error.name,
       errorLength: error.message.length,
+      errorMessage: error.message.length > 200 ? error.message.slice(0, 200) + "…" : error.message,
       stackLength: error.stack?.length,
     }
   }
@@ -1166,11 +1171,13 @@ function capabilityRejectionDiagnostic(error: unknown): {
   return {
     errorName: typeof error,
     errorLength: message.length,
+    errorMessage: message.length > 200 ? message.slice(0, 200) + "…" : message,
   }
 }
 
-function workflowAgentFailureMessage(diagnostic: { readonly errorName: string; readonly errorLength: number }): string {
-  return `Agent call failed (${diagnostic.errorName}, ${diagnostic.errorLength} chars)`
+function workflowAgentFailureMessage(diagnostic: { readonly errorName: string; readonly errorMessage?: string }): string {
+  const detail = diagnostic.errorMessage ?? "unknown error"
+  return `Agent call failed (${diagnostic.errorName}): ${detail}`
 }
 
 export const coreWorkflowWindowManagerDescriptor: ServiceDescriptor<WorkflowWindowManager> = {

@@ -66,21 +66,4 @@ export interface NodeExecutor<TConfig = unknown> {
   execute(input: NodeExecutionInput<TConfig>): Promise<NodeExecutionResult>
 }
 
-export interface LoopVariable {
-  name: string
-  type: "text" | "number"
-  initialValue: string | number
-  description?: string
-}
 
-export interface OutputMapping {
-  targetVariable: string
-  sourceNodeId: string
-  sourceField: string
-}
-
-export interface SubgraphDefinition {
-  nodes: import("../src/types/workflow").WorkflowNode[]
-  edges: import("../src/types/workflow").WorkflowEdge[]
-  outputMappings: OutputMapping[]
-}

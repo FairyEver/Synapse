@@ -16,6 +16,7 @@ const {
   workflowGet,
   workflowRunDefinition,
   workflowOpenRunner,
+  workflowOnEvent,
 } = vi.hoisted(() => ({
   loggerWarn: vi.fn(),
   toastError: vi.fn(),
@@ -24,6 +25,7 @@ const {
   workflowGet: vi.fn(),
   workflowRunDefinition: vi.fn(),
   workflowOpenRunner: vi.fn(),
+  workflowOnEvent: vi.fn(() => vi.fn()),
 }))
 
 vi.mock("sonner", () => ({
@@ -121,6 +123,7 @@ beforeEach(() => {
         get: workflowGet,
         runDefinition: workflowRunDefinition,
         openRunner: workflowOpenRunner,
+        onEvent: workflowOnEvent,
       },
     } as unknown as Window["synapse"],
   })

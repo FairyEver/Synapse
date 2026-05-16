@@ -121,10 +121,10 @@ describe("WorkflowEditorApp", () => {
       boundary: "renderer.workflow.editor.load",
       errorName: "Error",
       errorLength: rawError.length,
+      errorMessage: "workflow get failed token=[redacted] at [path] prompt text",
     })
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example")
-    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("prompt text")
   })
 
   it("logs and displays workflow run IPC failures without raw backend error text", async () => {
@@ -168,10 +168,10 @@ describe("WorkflowEditorApp", () => {
       boundary: "renderer.workflow.editor.run",
       errorName: "Error",
       errorLength: rawError.length,
+      errorMessage: "workflow run failed token=[redacted] at [path] prompt text",
     })
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example")
-    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("prompt text")
   })
 
   it("logs force-run IPC failures without exposing raw backend error text", async () => {
@@ -220,10 +220,10 @@ describe("WorkflowEditorApp", () => {
       boundary: "renderer.workflow.editor.force-run",
       errorName: "Error",
       errorLength: rawError.length,
+      errorMessage: "force run failed token=[redacted] at [path] prompt text",
     })
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example")
-    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("prompt text")
   })
 })
 

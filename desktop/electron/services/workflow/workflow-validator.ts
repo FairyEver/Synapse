@@ -1,6 +1,7 @@
 import type { WorkflowDefinition, ValidationResult, ValidationError, ValidationWarning } from "../../../src/types/workflow"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { createMainLogger } from "../log-store"
+import { computeEndReachable } from "./workflow-utils"
 
 const logger = createMainLogger("service.workflow.validator")
 
@@ -30,25 +31,6 @@ function ancestors(nodeId: string, rev: Map<string, string[]>): Set<string> {
   const visited = new Set<string>(); const stack = [nodeId]
   while (stack.length) { for (const p of rev.get(stack.pop()!) ?? []) { if (!visited.has(p)) { visited.add(p); stack.push(p) } } }
   return visited
-}
-
-/**
- * Compute which nodes can reach the End node via forward edge traversal.
- * Uses a reverse BFS from the End node (following edges backwards).
- * Used to validate that every Switch branch path eventually reaches End.
- */
-function computeEndReachable(def: WorkflowDefinition, rev: Map<string, string[]>): Set<string> {
-  const endNode = def.nodes.find((n) => n.type === "end")
-  if (!endNode) return new Set()
-  const reachable = new Set<string>([endNode.id])
-  const queue = [endNode.id]
-  while (queue.length) {
-    const cur = queue.shift()!
-    for (const prev of rev.get(cur) ?? []) {
-      if (!reachable.has(prev)) { reachable.add(prev); queue.push(prev) }
-    }
-  }
-  return reachable
 }
 
 export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
@@ -182,7 +164,7 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
   // Also validate that each Switch branch's outgoing edge(s) eventually reach
   // the End node. A branch that connects to a dead-end subgraph passes the
   // edge-existence check but will fail at runtime with "结束节点未被执行".
-  const endReachable = computeEndReachable(def, revAdj)
+  const endReachable = computeEndReachable(def)
   for (const node of def.nodes) {
     if (node.type !== "switch") continue
     const branches = (node.config as Record<string, unknown>)["branches"]
@@ -234,8 +216,8 @@ export function validateRunParams(def: WorkflowDefinition, params: Record<string
   const errors: ValidationError[] = []
   for (const param of def.params) {
     const value = params[param.name]
-    const hasValue = Object.prototype.hasOwnProperty.call(params, param.name) && value !== undefined && value !== null && value !== ""
-    const hasDefault = param.default !== undefined && param.default !== null && param.default !== ""
+    const hasValue = paramHasValue(params, param.name)
+    const hasDefault = paramHasDefault(param)
     if (!hasValue) {
       if (!hasDefault) {
         errors.push({ type: "missing_param", message: `缺少必填参数「${param.name}」` })
@@ -258,10 +240,18 @@ export function validateRunParams(def: WorkflowDefinition, params: Record<string
 export function buildEffectiveRunParams(def: WorkflowDefinition, params: Record<string, unknown>): Record<string, unknown> {
   const effective = { ...params }
   for (const param of def.params) {
-    const value = effective[param.name]
-    const hasValue = Object.prototype.hasOwnProperty.call(effective, param.name) && value !== undefined && value !== null && value !== ""
-    const hasDefault = param.default !== undefined && param.default !== null && param.default !== ""
+    const hasValue = paramHasValue(effective, param.name)
+    const hasDefault = paramHasDefault(param)
     if (!hasValue && hasDefault) effective[param.name] = param.default
   }
   return effective
+}
+
+function paramHasValue(params: Record<string, unknown>, name: string): boolean {
+  const value = params[name]
+  return Object.prototype.hasOwnProperty.call(params, name) && value !== undefined && value !== null && value !== ""
+}
+
+function paramHasDefault(param: { default?: unknown }): boolean {
+  return param.default !== undefined && param.default !== null && param.default !== ""
 }

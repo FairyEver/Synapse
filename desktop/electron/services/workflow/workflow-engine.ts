@@ -5,33 +5,34 @@ import { interpolatePrompt, resolveVariables } from "./variable-resolver"
 import { ReactiveScheduler } from "./workflow-scheduler"
 import type { NodeExecOutcome, NodeTask, SchedulerCallbacks } from "./workflow-scheduler"
 import { createMainLogger } from "../log-store"
+import { sanitizeError } from "../error-sanitize"
+import { computeEndReachable } from "./workflow-utils"
 
 const logger = createMainLogger("service.workflow.engine")
 
-function summarizeRecord(record: Record<string, unknown>): { readonly keys: string[]; readonly count: number } {
-  const keys = Object.keys(record)
-  return { keys, count: keys.length }
-}
-
-function stringDiagnostic(text: string | undefined, errorName: string): { readonly errorName: string; readonly errorLength: number } {
+function stringDiagnostic(text: string | undefined, errorName: string): { readonly errorName: string; readonly errorMessage?: string; readonly errorLength: number } {
   return {
     errorName,
+    errorMessage: text ?? undefined,
     errorLength: text?.length ?? 0,
   }
 }
 
-function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number; readonly stackLength?: number } {
+function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorMessage: string; readonly errorLength: number; readonly stackLength?: number } {
   if (error instanceof Error) {
     return {
       errorName: error.name,
+      errorMessage: error.message,
       errorLength: error.message.length,
       stackLength: error.stack?.length,
     }
   }
 
+  const str = String(error)
   return {
     errorName: "Error",
-    errorLength: String(error).length,
+    errorMessage: str,
+    errorLength: str.length,
   }
 }
 
@@ -58,35 +59,22 @@ export class WorkflowEngine {
     }
     emit({ type: "workflow:started", runId, workflowId: def.id })
     const startMs = Date.now()
-    const paramSummary = summarizeRecord(paramValues)
+    const paramKeys = Object.keys(paramValues)
     logger.info("workflow run started", {
       runId,
       workflowId: def.id,
       projectId: projectId ?? "(fallback to def.id)",
       nodeCount: def.nodes.length,
-      paramKeys: paramSummary.keys,
-      paramCount: paramSummary.count,
+      paramKeys,
+      paramCount: paramKeys.length,
       triggerSource: triggerSource ?? "unknown",
     })
 
     const nodeResults: Record<string, NodeRunResult> = {}
     const nodeOutputs: Record<string, string> = {}
 
-    // --- Reachability pruning (unchanged) ---
-    const endNodeForReach = def.nodes.find((n) => n.type === "end")
-    const canReachEnd = new Set<string>()
-    if (endNodeForReach) {
-      canReachEnd.add(endNodeForReach.id)
-      const revAdj = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
-      for (const e of def.edges) { revAdj.get(e.to)?.push(e.from) }
-      const bfsQueue = [endNodeForReach.id]
-      while (bfsQueue.length) {
-        const cur = bfsQueue.shift()!
-        for (const prev of revAdj.get(cur) ?? []) {
-          if (!canReachEnd.has(prev)) { canReachEnd.add(prev); bfsQueue.push(prev) }
-        }
-      }
-    }
+    // --- Reachability pruning ---
+    const canReachEnd = computeEndReachable(def)
 
     // Filter to only nodes that can reach end
     const executableNodes = def.nodes
@@ -148,12 +136,12 @@ export class WorkflowEngine {
             nr.input = { variables: resolved, ...(resolvedPrompt !== undefined ? { prompt: resolvedPrompt } : {}) }
           }
 
-          const inputVariableSummary = summarizeRecord(resolved)
+          const inputVariableKeys = Object.keys(resolved)
           logger.info("node started", {
             runId, nodeId, nodeType: node.type, nodeName: node.name,
             triggerSource: triggerSource ?? "unknown",
-            inputVariableKeys: inputVariableSummary.keys,
-            inputVariableCount: inputVariableSummary.count,
+            inputVariableKeys,
+            inputVariableCount: inputVariableKeys.length,
             ...(resolvedPrompt !== undefined ? { promptLength: resolvedPrompt.length } : {}),
           })
 
@@ -184,12 +172,14 @@ export class WorkflowEngine {
             return { nodeId, status: "cancelled", error: "运行被取消" }
           }
           const diagnostic = errorDiagnostic(err)
-          const visibleError = visibleNodeExceptionError(diagnostic.errorName, diagnostic.errorLength)
+          const rawMessage = err instanceof Error ? err.message : String(err)
+          const visibleError = `节点执行异常：${sanitizeError(rawMessage)}`
           logger.warn("node threw exception", {
             runId, nodeId, nodeName: node.name, nodeType: node.type,
             ...diagnostic,
           })
-          return { nodeId, status: "failed", error: visibleError }
+          const throwDurationMs = nodeResults[nodeId]?.startedAt ? Date.now() - nodeResults[nodeId].startedAt! : undefined
+          return { nodeId, status: "failed", error: visibleError, durationMs: throwDurationMs }
         }
       },
     })
@@ -340,7 +330,4 @@ export class WorkflowEngine {
     }
     return result
   }
-}
-function visibleNodeExceptionError(errorName: string, errorLength: number): string {
-  return `节点执行异常（${errorName}，错误 ${errorLength} 字）`
 }

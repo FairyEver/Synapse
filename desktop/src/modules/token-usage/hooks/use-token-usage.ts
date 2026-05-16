@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseBridge } from "@/types/bridge"
@@ -184,30 +184,6 @@ export function useHourlyProfile() {
   }, [])
 
   return { data, loading, error, refresh }
-}
-
-export function useDetectedAgents() {
-  const [agents, setAgents] = useState<{ id: string; name: string; fileCount: number }[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    try {
-      const result = await requireSynapseBridge().tokenUsage.getDetectedAgents()
-      setAgents(result)
-    } catch (error) {
-      logLoadError("getDetectedAgents", error)
-      setAgents([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
-  return { agents, loading, refresh }
 }
 
 export type { GraphResult, ModelRow, AgentRow, HourlyRow, HourlyProfile, ScanResult }
