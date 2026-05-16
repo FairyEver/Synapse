@@ -13,7 +13,9 @@ import { promptNodeExecutor } from "../executor.main"
 
 const ctx = { projectId: "p1", runId: "r1", abortSignal: new AbortController().signal }
 const deps = (response: string) => ({
-  sendToAgent: vi.fn().mockResolvedValue({ status: "success" as const, response, durationMs: 5 }),
+  sendToAgent: vi.fn(async (_input: { providerId: string; modelTier: string; prompt: string; projectId: string; abortSignal: AbortSignal }) => ({
+    status: "success" as const, response, durationMs: 5,
+  })),
 })
 
 describe("promptNodeExecutor", () => {
