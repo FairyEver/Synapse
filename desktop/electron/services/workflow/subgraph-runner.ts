@@ -30,7 +30,7 @@ export interface SubgraphRunnerOutput {
 export class SubgraphRunner {
   async run(input: SubgraphRunnerInput): Promise<SubgraphRunnerOutput> {
     const startMs = Date.now()
-    const { subgraph, contextVariables, agentDeps, runtimeDeps, abortSignal, onNodeEvent, inheritedParams, nodeRegistry } = input
+    const { subgraph, contextVariables, agentDeps, runtimeDeps, abortSignal, onNodeEvent, inheritedParams } = input
     const { nodes, edges } = subgraph
 
     // Early return if already aborted
@@ -62,8 +62,8 @@ export class SubgraphRunner {
       execute: async () => {
         const node = nodes.find((n) => n.id === nodeId)!
         try {
-          const manifest = nodeRegistry.getManifest(node.type)
-          const executor = nodeRegistry.getExecutor(node.type)
+          const manifest = nodeTypeRegistry.getManifest(node.type)
+          const executor = nodeTypeRegistry.getExecutor(node.type)
           const rawCfg = manifest.configSchema.parse(node.config)
           const cfg = (node.type === "prompt" || node.type === "switch")
             ? { ...rawCfg, providerId: rawCfg.providerId || "", modelTier: rawCfg.modelTier || "default" }
@@ -82,8 +82,7 @@ export class SubgraphRunner {
             context: { projectId: "", runId: "", abortSignal },
             agentDeps, runtimeDeps,
             onProgress: (phase, label) => {
-              const event: Record<string, unknown> = { type: "node:progress", runId: "", nodeId, phase, label, iterationIndex: undefined }
-              onNodeEvent?.(event as WorkflowEvent & { iterationIndex?: number })
+              onNodeEvent?.({ type: "node:progress", runId: "", nodeId, phase, label } as never)
             },
           })
 
@@ -153,11 +152,7 @@ export class SubgraphRunner {
     let exitPort: "continue" | "break" = "continue"
     let outputData: Record<string, unknown> = {}
     if (terminalNodeOutput) {
-      outputData = {
-        output: terminalNodeOutput.output,
-        outputs: terminalNodeOutput.outputs,
-        activeBranch: terminalNodeOutput.activeBranch,
-      }
+      outputData = { output: terminalNodeOutput.output, outputs: terminalNodeOutput.outputs, ...terminalNodeOutput }
       if (terminalNodeOutput.activeBranch === "break") exitPort = "break"
     }
 
