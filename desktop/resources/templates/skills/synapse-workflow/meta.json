@@ -5,6 +5,6 @@
   "usage": "Enables your AI agent to create, edit, and run Synapse workflows via MCP",
   "description": "Use when creating, editing, running, or managing Synapse workflows through MCP tools. Triggers on: workflow, create workflow, run workflow, build automation, DAG, orchestrate, synapse workflow.",
   "category": "automation",
-  "icon": "Workflow",
+  "icon": "workflow",
   "iconBg": "amber"
 }
