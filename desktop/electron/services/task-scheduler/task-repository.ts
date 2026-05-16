@@ -63,7 +63,7 @@ export class ScheduledTaskRepository {
     const next = {
       ...task,
       nextRunAt: enabled
-        ? computeNextRunAt({ trigger, from: this.now(), createdAt: now }).toISOString()
+        ? computeNextRunAt({ trigger, from: this.now(), createdAt: now, activeDays: task.activeDays }).toISOString()
         : undefined,
     }
     await this.tasks.upsert(next)
@@ -94,7 +94,7 @@ export class ScheduledTaskRepository {
     const next: ScheduledTaskEntry = {
       ...candidate,
       nextRunAt: enabled
-        ? computeNextRunAt({ trigger, from: this.now(), createdAt: existing.createdAt }).toISOString()
+        ? computeNextRunAt({ trigger, from: this.now(), createdAt: existing.createdAt, activeDays: candidate.activeDays }).toISOString()
         : undefined,
     }
     await this.tasks.upsert(next)
@@ -126,7 +126,7 @@ export class ScheduledTaskRepository {
       enabled,
       updatedAt: this.isoNow(),
       nextRunAt: enabled
-        ? computeNextRunAt({ trigger, from: this.now(), createdAt: existing.createdAt }).toISOString()
+        ? computeNextRunAt({ trigger, from: this.now(), createdAt: existing.createdAt, activeDays: existing.activeDays }).toISOString()
         : undefined,
     }
     await this.tasks.upsert(next)
@@ -168,6 +168,7 @@ export class ScheduledTaskRepository {
               trigger: existing.trigger,
               from: this.now(),
               createdAt: existing.createdAt,
+              activeDays: existing.activeDays,
             }).toISOString(),
           }
         : {}),
