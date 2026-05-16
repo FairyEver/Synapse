@@ -1,13 +1,18 @@
 import { useEffect, useRef, useState } from "react"
-import { Copy, Ellipsis, Trash2 } from "lucide-react"
+import { Copy, Ellipsis, SlidersHorizontal, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
+import { Textarea } from "@/components/ui/textarea"
+import { Label } from "@/components/ui/label"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Separator } from "@/components/ui/separator"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowDefinition } from "@/types/workflow"
 import { getPanel } from "../../../../workflow-nodes/panel-registry"
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
 import { useUpstreamNodes } from "../hooks/use-upstream-nodes"
+import { ParamsEditorDialog } from "../components/params-editor-dialog"
 
 interface NodeConfigPanelProps {
   nodeId: string | null
@@ -19,9 +24,10 @@ interface NodeConfigPanelProps {
   renameSignal?: number
   projects: readonly SynapseProjectConfig[]
   defaultProjectName?: string
+  onDefinitionChange?: (def: WorkflowDefinition) => void
 }
 
-export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChange, onDeleteNode, onCopyNode, renameSignal, projects, defaultProjectName }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChange, onDeleteNode, onCopyNode, renameSignal, projects, defaultProjectName, onDefinitionChange }: NodeConfigPanelProps) {
   const node = nodeId ? definition.nodes.find((n) => n.id === nodeId) : null
   const upstreamNodes = useUpstreamNodes(nodeId ?? "", definition)
   const nameInputRef = useRef<HTMLInputElement>(null)
@@ -138,10 +144,91 @@ export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChan
           </div>
         </>
       ) : (
-        <div className="flex-1 flex items-center justify-center p-4">
-          <p className="text-xs text-muted-foreground text-center">点击节点编辑配置</p>
-        </div>
+        <GlobalSettingsForm definition={definition} projects={projects} onChange={onDefinitionChange} />
       )}
     </div>
+  )
+}
+
+const NO_PROJECT_VALUE = "__none__"
+
+function GlobalSettingsForm({ definition, projects, onChange }: {
+  definition: WorkflowDefinition
+  projects: readonly SynapseProjectConfig[]
+  onChange?: (def: WorkflowDefinition) => void
+}) {
+  const [paramsOpen, setParamsOpen] = useState(false)
+  return (
+    <>
+      <div className="border-b px-3 py-2.5">
+        <p className="text-sm font-medium">工作流设置</p>
+      </div>
+      <div className="flex-1 overflow-auto p-3 space-y-4">
+        <div className="space-y-1.5">
+          <Label className="text-xs">名称</Label>
+          <Input
+            className="h-7 text-sm"
+            value={definition.name}
+            onChange={(e) => onChange?.({ ...definition, name: e.target.value })}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">描述</Label>
+          <Textarea
+            className="min-h-16 text-xs resize-none"
+            value={definition.description ?? ""}
+            onChange={(e) => onChange?.({ ...definition, description: e.target.value || undefined })}
+            placeholder="添加描述"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">默认项目</Label>
+          <Select
+            value={definition.defaultProjectId ?? NO_PROJECT_VALUE}
+            onValueChange={(v) => onChange?.({ ...definition, defaultProjectId: v === NO_PROJECT_VALUE ? undefined : v })}
+          >
+            <SelectTrigger size="sm" className="w-full text-xs">
+              <SelectValue placeholder="选择项目" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                <SelectItem value={NO_PROJECT_VALUE}>无默认项目</SelectItem>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </div>
+        <Separator />
+        <div className="space-y-1.5">
+          <Label className="text-xs">工作流参数</Label>
+          {definition.params.length > 0 ? (
+            <div className="text-xs text-muted-foreground space-y-0.5">
+              {definition.params.map((p) => (
+                <div key={p.name} className="flex items-center gap-1.5">
+                  <span className="font-mono">{p.name}</span>
+                  <span className="text-muted-foreground/60">({p.type})</span>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground">暂无参数</p>
+          )}
+          <Button size="sm" variant="outline" className="w-full mt-1" onClick={() => setParamsOpen(true)}>
+            <SlidersHorizontal className="h-3.5 w-3.5 mr-1" />
+            编辑参数
+          </Button>
+        </div>
+      </div>
+      <ParamsEditorDialog
+        open={paramsOpen}
+        params={definition.params}
+        onChange={(params) => onChange?.({ ...definition, params })}
+        onClose={() => setParamsOpen(false)}
+      />
+    </>
   )
 }
