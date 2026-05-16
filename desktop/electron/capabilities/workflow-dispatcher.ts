@@ -184,16 +184,20 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   "workflow.node.create": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const node = requireObject(params, "node")
-    return atomicMutate(deps, workflowId, (def) => {
+    let nodeId: string
+    const result = await atomicMutate(deps, workflowId, (def) => {
       const position = node.position as { x: number; y: number } | undefined ?? autoPosition(def.nodes)
+      const id = randomUUID()
+      nodeId = id
       def.nodes.push({
-        id: randomUUID(),
+        id,
         name: (node.name as string) ?? "",
         type: requireString(node, "type"),
         position,
         config: (node.config as Record<string, unknown>) ?? {},
       })
     })
+    return { ...result, data: { nodeId: nodeId!, ...result.data as Record<string, unknown> } }
   },
 
   "workflow.node.update": async (params, deps) => {

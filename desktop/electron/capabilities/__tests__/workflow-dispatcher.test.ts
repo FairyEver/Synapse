@@ -115,6 +115,20 @@ describe("createWorkflowDispatcher", () => {
     expect(newNode.name).toBe("New Node")
   })
 
+  it("workflow.node.create returns nodeId", async () => {
+    const deps = makeDeps()
+    const dispatcher = createWorkflowDispatcher(deps)
+    const result = await dispatcher.dispatch(
+      "workflow.node.create",
+      { workflowId: "wf-1", node: { name: "Prompt", type: "prompt" } },
+      { source: "api" },
+    )
+    expect(result.ok).toBe(true)
+    expect(result.data).toHaveProperty("nodeId")
+    expect(typeof (result.data as Record<string, unknown>).nodeId).toBe("string")
+    expect((result.data as Record<string, unknown>).nodeId).toHaveLength(36) // UUID format
+  })
+
   it("workflow.definition.delete calls cancelRunsForWorkflow", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
