@@ -237,6 +237,70 @@ describe("createWorkflowDispatcher", () => {
     expect(data).not.toHaveProperty("availableProviders")
   })
 
+  it("workflow.layout.update repositions nodes with dagre LR", async () => {
+    const deps = makeDeps({
+      workflowService: {
+        ...makeDeps().workflowService,
+        get: vi.fn(async () => ({
+          id: "wf-1", name: "Test", description: "", version: "v1",
+          createdAt: 1, updatedAt: 2, params: [],
+          nodes: [
+            { id: "a", name: "Prompt A", type: "prompt", position: { x: 0, y: 0 }, config: {} },
+            { id: "b", name: "Prompt B", type: "prompt", position: { x: 0, y: 0 }, config: {} },
+            { id: "c", name: "End", type: "end", position: { x: 0, y: 0 }, config: {} },
+          ],
+          edges: [
+            { id: "e1", from: "a", to: "b" },
+            { id: "e2", from: "b", to: "c" },
+          ],
+        })),
+        save: vi.fn(async () => ({ versionHash: "v_layout" })),
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+    const result = await dispatcher.dispatch(
+      "workflow.layout.update",
+      { workflowId: "wf-1" },
+      { source: "mcp-http" },
+    )
+    expect(result.ok).toBe(true)
+    const savedDef = (deps.workflowService.save as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    const posA = savedDef.nodes.find((n: { id: string }) => n.id === "a").position
+    const posB = savedDef.nodes.find((n: { id: string }) => n.id === "b").position
+    const posC = savedDef.nodes.find((n: { id: string }) => n.id === "c").position
+    expect(posA.x).toBeLessThan(posB.x)
+    expect(posB.x).toBeLessThan(posC.x)
+  })
+
+  it("workflow.layout.update supports TB direction", async () => {
+    const deps = makeDeps({
+      workflowService: {
+        ...makeDeps().workflowService,
+        get: vi.fn(async () => ({
+          id: "wf-1", name: "Test", description: "", version: "v1",
+          createdAt: 1, updatedAt: 2, params: [],
+          nodes: [
+            { id: "a", name: "A", type: "prompt", position: { x: 0, y: 0 }, config: {} },
+            { id: "b", name: "B", type: "end", position: { x: 0, y: 0 }, config: {} },
+          ],
+          edges: [{ id: "e1", from: "a", to: "b" }],
+        })),
+        save: vi.fn(async () => ({ versionHash: "v_tb" })),
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+    const result = await dispatcher.dispatch(
+      "workflow.layout.update",
+      { workflowId: "wf-1", direction: "TB" },
+      { source: "mcp-http" },
+    )
+    expect(result.ok).toBe(true)
+    const savedDef = (deps.workflowService.save as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    const posA = savedDef.nodes.find((n: { id: string }) => n.id === "a").position
+    const posB = savedDef.nodes.find((n: { id: string }) => n.id === "b").position
+    expect(posA.y).toBeLessThan(posB.y)
+  })
+
   it("throws on unknown action", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)

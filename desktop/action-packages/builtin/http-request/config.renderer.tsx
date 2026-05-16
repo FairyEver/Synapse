@@ -1,9 +1,12 @@
-import { Field, FieldContent, FieldGroup, FieldLabel } from "../../../src/components/ui/field"
 import { Input } from "../../../src/components/ui/input"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
-import { parseRecordText, stringifyRecordText } from "../../records"
+import { Separator } from "../../../src/components/ui/separator"
 import type { HttpRequestActionConfig } from "./schema"
+import { KvEditor } from "./kv-editor"
+import { CodeJsonEditor } from "./code-json-editor"
+import { AuthFields } from "./auth-fields"
+import { RequestTester } from "./request-tester"
 
 const HTTP_METHOD_OPTIONS: Array<{ label: string; value: HttpRequestActionConfig["method"] }> = [
   { label: "GET", value: "GET" },
@@ -22,19 +25,20 @@ const BODY_TYPE_OPTIONS: Array<{ label: string; value: HttpRequestActionConfig["
 export function HttpRequestConfigForm({
   value,
   onChange,
+  idPrefix = "task-action-http",
 }: {
   readonly value: HttpRequestActionConfig
   readonly onChange: (value: HttpRequestActionConfig) => void
+  readonly idPrefix?: string
 }) {
   return (
-    <FieldGroup>
-      <Field>
-        <FieldLabel htmlFor="task-action-http-method-GET">方法</FieldLabel>
-        <FieldContent>
+    <div className="flex flex-col gap-3">
+      {/* Method + URL */}
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
           <ToggleGroup
             aria-label="方法"
-            className="w-full"
-            data-track="task-action-http-method"
+            className="shrink-0"
             type="single"
             value={value.method}
             variant="outline"
@@ -42,58 +46,78 @@ export function HttpRequestConfigForm({
               if (method) onChange({ ...value, method: method as HttpRequestActionConfig["method"] })
             }}
           >
-            {HTTP_METHOD_OPTIONS.map((option) => (
+            {HTTP_METHOD_OPTIONS.map((opt) => (
               <ToggleGroupItem
-                key={option.value}
-                id={`task-action-http-method-${option.value}`}
-                className="flex-1"
-                value={option.value}
+                key={opt.value}
+                id={`${idPrefix}-method-${opt.value}`}
+                className="px-2 py-1 text-xs h-7"
+                value={opt.value}
               >
-                {option.label}
+                {opt.label}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
-        </FieldContent>
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="task-action-http-url">URL</FieldLabel>
-        <FieldContent>
-          <Input
-            id="task-action-http-url"
-            value={value.url}
-            onChange={(event) => onChange({ ...value, url: event.target.value })}
-          />
-        </FieldContent>
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="task-action-http-query">Query</FieldLabel>
-        <FieldContent>
-          <Textarea
-            id="task-action-http-query"
-            rows={3}
-            value={stringifyRecordText(value.query)}
-            onChange={(event) => onChange({ ...value, query: parseRecordText(event.target.value) })}
-          />
-        </FieldContent>
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="task-action-http-headers">Headers</FieldLabel>
-        <FieldContent>
-          <Textarea
-            id="task-action-http-headers"
-            rows={3}
-            value={stringifyRecordText(value.headers)}
-            onChange={(event) => onChange({ ...value, headers: parseRecordText(event.target.value) })}
-          />
-        </FieldContent>
-      </Field>
-      <Field>
-        <FieldLabel htmlFor="task-action-http-body-type-none">Body</FieldLabel>
-        <FieldContent>
+        </div>
+        <Input
+          id={`${idPrefix}-url`}
+          placeholder="https://api.example.com/v1/endpoint"
+          className="h-8 text-xs"
+          value={value.url}
+          onChange={(e) => onChange({ ...value, url: e.target.value })}
+        />
+      </div>
+
+      <Separator />
+
+      {/* Auth */}
+      <div className="flex flex-col gap-1.5">
+        <p className="text-xs font-medium text-muted-foreground">认证</p>
+        <AuthFields
+          value={value.auth}
+          onChange={(auth) => onChange({ ...value, auth })}
+          idPrefix={idPrefix}
+        />
+      </div>
+
+      <Separator />
+
+      {/* Query */}
+      <div className="flex flex-col gap-1.5">
+        <p className="text-xs font-medium text-muted-foreground">Query</p>
+        <KvEditor
+          value={value.query ?? {}}
+          onChange={(query) => onChange({ ...value, query: Object.keys(query).length > 0 ? query : undefined })}
+          keyPlaceholder="参数名"
+          valuePlaceholder="参数值"
+          addButtonLabel="+ 添加参数"
+          emptyMessage="无查询参数"
+        />
+      </div>
+
+      <Separator />
+
+      {/* Headers */}
+      <div className="flex flex-col gap-1.5">
+        <p className="text-xs font-medium text-muted-foreground">Headers</p>
+        <KvEditor
+          value={value.headers ?? {}}
+          onChange={(headers) => onChange({ ...value, headers: Object.keys(headers).length > 0 ? headers : undefined })}
+          keyPlaceholder="Header 名"
+          valuePlaceholder="Header 值"
+          addButtonLabel="+ 添加 Header"
+          emptyMessage="无自定义 Header"
+        />
+      </div>
+
+      <Separator />
+
+      {/* Body */}
+      <div className="flex flex-col gap-1.5">
+        <div className="flex items-center gap-2">
+          <p className="text-xs font-medium text-muted-foreground">Body</p>
           <ToggleGroup
             aria-label="Body"
-            className="w-full"
-            data-track="task-action-http-body-type"
+            className="ml-auto"
             type="single"
             value={value.bodyType}
             variant="outline"
@@ -101,49 +125,58 @@ export function HttpRequestConfigForm({
               if (bodyType) onChange({ ...value, bodyType: bodyType as HttpRequestActionConfig["bodyType"] })
             }}
           >
-            {BODY_TYPE_OPTIONS.map((option) => (
+            {BODY_TYPE_OPTIONS.map((opt) => (
               <ToggleGroupItem
-                key={option.value}
-                id={`task-action-http-body-type-${option.value}`}
-                className="flex-1"
-                value={option.value}
+                key={opt.value}
+                id={`${idPrefix}-body-type-${opt.value}`}
+                className="px-2 py-1 text-xs h-7"
+                value={opt.value}
               >
-                {option.label}
+                {opt.label}
               </ToggleGroupItem>
             ))}
           </ToggleGroup>
-        </FieldContent>
-      </Field>
-      {value.bodyType === "none" ? null : (
-        <Field>
-          <FieldLabel htmlFor="task-action-http-body">内容</FieldLabel>
-          <FieldContent>
-            <Textarea
-              id="task-action-http-body"
-              rows={5}
-              value={value.body ?? ""}
-              onChange={(event) => onChange({ ...value, body: event.target.value })}
-            />
-          </FieldContent>
-        </Field>
-      )}
-      <Field>
-        <FieldLabel htmlFor="task-action-http-timeout">超时分钟</FieldLabel>
-        <FieldContent>
-          <Input
-            id="task-action-http-timeout"
-            type="number"
-            min={1}
-            value={value.timeoutMins ?? ""}
-            onChange={(event) =>
-              onChange({
-                ...value,
-                timeoutMins: event.target.value ? Number(event.target.value) : null,
-              })
-            }
+        </div>
+        {value.bodyType === "json" ? (
+          <CodeJsonEditor
+            value={value.body ?? ""}
+            onChange={(body) => onChange({ ...value, body })}
           />
-        </FieldContent>
-      </Field>
-    </FieldGroup>
+        ) : value.bodyType === "text" ? (
+          <Textarea
+            id={`${idPrefix}-body`}
+            rows={4}
+            className="text-xs"
+            value={value.body ?? ""}
+            onChange={(e) => onChange({ ...value, body: e.target.value })}
+          />
+        ) : null}
+      </div>
+
+      <Separator />
+
+      {/* Timeout */}
+      <div className="flex items-center gap-2">
+        <p className="text-xs font-medium text-muted-foreground shrink-0">超时分钟</p>
+        <Input
+          id={`${idPrefix}-timeout`}
+          type="number"
+          min={1}
+          className="h-8 w-20 text-xs"
+          value={value.timeoutMins ?? ""}
+          onChange={(e) =>
+            onChange({
+              ...value,
+              timeoutMins: e.target.value ? Number(e.target.value) : null,
+            })
+          }
+        />
+      </div>
+
+      <Separator />
+
+      {/* Request Tester */}
+      <RequestTester config={value} />
+    </div>
   )
 }

@@ -14,6 +14,7 @@ export interface NodeManifest<TConfig = unknown> {
   title: string
   icon: LucideIcon
   color: string
+  defaultConfig: TConfig
   ports: { inputs: PortDefinition[]; outputs: PortDefinition[] | "dynamic" }
   resolveDynamicPorts?: (config: TConfig) => PortDefinition[]
   cardSummary: (config: TConfig) => { title: string; subtitle: string }
@@ -36,11 +37,19 @@ export interface AgentSendDeps {
   }>
 }
 
+export interface NodeRuntimeDeps {
+  processRunner: {
+    run: (request: import("../electron/runtime/process").ControlledProcessRunRequest) => Promise<import("../electron/runtime/process").ControlledProcessResult>
+  }
+  sendHttpRequest: (request: import("../electron/runtime/network").OutboundHttpRequest) => Promise<import("../electron/runtime/network").OutboundHttpResponse>
+}
+
 export interface NodeExecutionInput<TConfig> {
   config: TConfig
   resolvedVariables: Record<string, string>
   context: WorkflowRuntimeContext
   agentDeps: AgentSendDeps
+  runtimeDeps?: NodeRuntimeDeps
   onProgress?: (phase: string, label: string) => void
 }
 
@@ -55,4 +64,23 @@ export interface NodeExecutionResult {
 
 export interface NodeExecutor<TConfig = unknown> {
   execute(input: NodeExecutionInput<TConfig>): Promise<NodeExecutionResult>
+}
+
+export interface LoopVariable {
+  name: string
+  type: "text" | "number"
+  initialValue: string | number
+  description?: string
+}
+
+export interface OutputMapping {
+  targetVariable: string
+  sourceNodeId: string
+  sourceField: string
+}
+
+export interface SubgraphDefinition {
+  nodes: import("../src/types/workflow").WorkflowNode[]
+  edges: import("../src/types/workflow").WorkflowEdge[]
+  outputMappings: OutputMapping[]
 }

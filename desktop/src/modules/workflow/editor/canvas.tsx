@@ -21,12 +21,14 @@ import {
   type NodeChange,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { Clipboard } from "lucide-react"
+import { Clipboard, LayoutGrid } from "lucide-react"
 import { nodeTypes, NodeResultsContext } from "./node-wrappers"
 import { BranchEdge } from "./custom-edge"
 import { CanvasActionsContext, type NodeClipboard } from "./canvas-context"
 import type { WorkflowDefinition, WorkflowNode, WorkflowEdge, NodeRunResult } from "@/types/workflow"
 import { createRendererLogger } from "@/app-shell/logging"
+import { autoLayoutNodes } from "./auto-layout"
+import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
 
 const logger = createRendererLogger("workflow.editor.canvas")
 
@@ -64,15 +66,15 @@ function defToFlow(def: WorkflowDefinition) {
 }
 
 function defaultConfig(type: string): Record<string, unknown> {
-  if (type === "switch") return { providerId: "", modelTier: "", prompt: "", variables: [], branches: [{ id: "branch1", label: "分支 1" }] }
-  if (type === "end") return { outputType: "text", template: "", variables: [] }
-  return { providerId: "", modelTier: "", prompt: "", variables: [] }
+  const manifest = nodeTypeRegistry.getManifest(type)
+  return (manifest?.defaultConfig ?? {}) as Record<string, unknown>
 }
 
 function defaultName(type: string): string {
   if (type === "switch") return "新分支"
   if (type === "end") return "结束"
-  return "新提示词"
+  const manifest = nodeTypeRegistry.getManifest(type)
+  return manifest?.title || "新提示词"
 }
 
 function flowNodeToWorkflowNode(node: WorkflowFlowNode): WorkflowNode {
@@ -104,7 +106,7 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
   const { nodes: initNodes, edges: initEdges } = defToFlow(definition)
   const [nodes, setNodes] = useNodesState(initNodes)
   const [edges, setEdges] = useEdgesState(initEdges)
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, fitView } = useReactFlow()
   const nodesRef = useRef(nodes)
   nodesRef.current = nodes
   // Synchronous definition ref — updated immediately on each onChange call so that
@@ -415,6 +417,17 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     onRequestRename?.(nodeId)
   }, [onNodeSelect, onRequestRename])
 
+  const handleAutoLayout = useCallback(() => {
+    const layouted = autoLayoutNodes(nodesRef.current, edges) as WorkflowFlowNode[]
+    setNodes(layouted)
+    const wfNodes: WorkflowNode[] = layouted.map(flowNodeToWorkflowNode)
+    const newDef = { ...definitionRef.current, nodes: wfNodes }
+    definitionRef.current = newDef
+    logger.info("auto layout applied", { nodeCount: layouted.length })
+    onChange(newDef)
+    requestAnimationFrame(() => fitView({ padding: 0.1 }))
+  }, [edges, onChange, setNodes, fitView])
+
   const canvasActions = useMemo(() => ({
     clipboard, getSelectedNodeIds, copyNodes, pasteNodes, disconnectNodes, deleteNodes, requestRename,
   }), [clipboard, getSelectedNodeIds, copyNodes, pasteNodes, disconnectNodes, deleteNodes, requestRename])
@@ -507,6 +520,16 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
             style={{ left: paneMenu.screenX, top: paneMenu.screenY }}
             onMouseDown={(e) => e.stopPropagation()}
           >
+            <button
+              className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+              onClick={() => {
+                handleAutoLayout()
+                setPaneMenu(null)
+              }}
+            >
+              <LayoutGrid className="size-4" />
+              自动布局
+            </button>
             <button
               className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0"
               disabled={!clipboard}

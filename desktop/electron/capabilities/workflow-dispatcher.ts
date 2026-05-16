@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto"
+import dagre from "@dagrejs/dagre"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import type { WorkflowService, WorkflowSaveResult, WorkflowSaveError } from "../services/workflow/workflow-service"
 import type { RunSnapshotService } from "../services/workflow/run-snapshot-service"
@@ -289,6 +290,36 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     const newParams = requireArray(params, "params")
     return atomicMutate(deps, workflowId, (def) => {
       def.params = newParams as WorkflowDefinition["params"]
+    })
+  },
+
+  "workflow.layout.update": async (params, deps) => {
+    const workflowId = requireString(params, "workflowId")
+    const direction = typeof params.direction === "string" && (params.direction === "LR" || params.direction === "TB")
+      ? params.direction
+      : "LR"
+    const nodeWidth = 220
+    const nodeHeight = 80
+    return atomicMutate(deps, workflowId, (def) => {
+      if (def.nodes.length === 0) return
+      const g = new dagre.graphlib.Graph()
+      g.setDefaultEdgeLabel(() => ({}))
+      g.setGraph({ rankdir: direction, nodesep: 40, ranksep: 80 })
+      for (const node of def.nodes) {
+        g.setNode(node.id, { width: nodeWidth, height: nodeHeight })
+      }
+      for (const edge of def.edges) {
+        if (g.hasNode(edge.from) && g.hasNode(edge.to)) {
+          g.setEdge(edge.from, edge.to)
+        }
+      }
+      dagre.layout(g)
+      for (const node of def.nodes) {
+        const pos = g.node(node.id)
+        if (pos) {
+          node.position = { x: pos.x - nodeWidth / 2, y: pos.y - nodeHeight / 2 }
+        }
+      }
     })
   },
 }

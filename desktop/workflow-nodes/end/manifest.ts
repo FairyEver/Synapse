@@ -8,6 +8,7 @@ export const endNodeManifest: NodeManifest<EndNodeConfig> = {
   title: "结束",
   icon: LogOut,
   color: "bg-primary/10",
+  defaultConfig: { outputType: "text", template: "", variables: [] },
   ports: { inputs: [{ id: "in", label: "输入" }], outputs: [] },
   cardSummary: (c) => ({ title: "结束", subtitle: c.template.slice(0, 40) || "返回文本" }),
   configFields: [

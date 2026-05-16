@@ -825,6 +825,15 @@ export type SynapseBridge = {
     getDetectedAgents: () => Promise<{ id: string; name: string; fileCount: number }[]>
     clearData: () => Promise<void>
   }
+  http: {
+    testRequest: (config: Record<string, unknown>) => Promise<{
+      status: number
+      statusText: string
+      headers: Record<string, string>
+      body: string
+      durationMs: number
+    }>
+  }
   diagnostics?: {
     onPing: (listener: () => void) => () => void
     pong: () => void

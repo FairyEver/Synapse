@@ -30,6 +30,8 @@ const workflowCapabilities: readonly CapabilityDefinition[] = [
   { id: "workflow.edge.create" as CapabilityId, title: "Add edge", description: "Add a directed edge between two nodes.", mutates: true },
   { id: "workflow.edge.delete" as CapabilityId, title: "Delete edge", description: "Delete an edge by ID.", mutates: true },
   { id: "workflow.param.update" as CapabilityId, title: "Update params", description: "Replace the workflow parameter list.", mutates: true },
+  // Layout
+  { id: "workflow.layout.update" as CapabilityId, title: "Auto-layout", description: "Reposition workflow nodes using dagre left-to-right auto-layout.", mutates: true },
 ]
 
 export const WORKFLOW_DOMAIN: CapabilityDomainDefinition = {
@@ -60,7 +62,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
       description: "Return the full manifest for a node type including config JSON Schema, port definitions, and field descriptors. For prompt and switch nodes, also returns `availableProviders` — a list of configured providers with their model names per tier.",
       inputSchema: {
         type: "object",
-        properties: { nodeType: { type: "string", description: "Node type identifier (e.g. \"prompt\", \"switch\", \"end\")." } },
+        properties: { nodeType: { type: "string", description: "Node type identifier (e.g. \"prompt\", \"switch\", \"http_request\", \"script\", \"end\")." } },
         required: ["nodeType"],
       },
     },
@@ -171,7 +173,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
             description: "Node specification.",
             properties: {
               name: { type: "string", description: "Display name for the node." },
-              type: { type: "string", description: "Node type (e.g. \"prompt\", \"switch\", \"end\")." },
+              type: { type: "string", description: "Node type (e.g. \"prompt\", \"switch\", \"http_request\", \"script\", \"end\")." },
               position: { type: "object", description: "Optional { x, y } position. Auto-calculated if omitted.", properties: { x: { type: "number" }, y: { type: "number" } } },
               config: { type: "object", description: "Node configuration. Use workflow_node_type_describe to see required fields." },
             },
@@ -263,6 +265,19 @@ export function buildWorkflowTools(): McpToolDefinition[] {
           },
         },
         required: ["workflowId", "params"],
+      },
+    },
+    // Layout
+    {
+      name: "workflow_layout_update",
+      description: "Reposition all nodes in a workflow using dagre left-to-right auto-layout. Saves the updated positions. The UI editor will reflect the changes on next load.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          workflowId: { type: "string", description: "Workflow ID." },
+          direction: { type: "string", enum: ["LR", "TB"], description: "Layout direction: LR (left-to-right, default) or TB (top-to-bottom)." },
+        },
+        required: ["workflowId"],
       },
     },
   ]

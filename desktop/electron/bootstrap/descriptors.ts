@@ -83,7 +83,7 @@ import { DataRepositoryAuditSink, createPermissionGuard } from "../runtime/secur
 import type { ProcessRuntime } from "../runtime/process"
 import { createControlledProcessRunner, createMainProcessRuntime } from "../runtime/process"
 import type { NetworkServiceRegistry } from "../runtime/network"
-import { createNetworkServiceRegistry } from "../runtime/network"
+import { createNetworkServiceRegistry, sendOutboundHttpRequest } from "../runtime/network"
 import type { ProjectContainerRegistry } from "../runtime/project-container"
 import { createProjectContainerRegistry } from "../runtime/project-container"
 import { migrateRepositoryScopedConnectorData } from "./project-scope-migration"
@@ -1037,6 +1037,22 @@ export const coreTokenUsageDescriptor: ServiceDescriptor<{ initialized: true }> 
   },
 }
 
+/**
+ * core.http-test — registers IPC handler for ad-hoc HTTP request testing.
+ *
+ * Status: degraded — test requests are non-critical.
+ */
+export const coreHttpTestDescriptor: ServiceDescriptor<{ initialized: true }> = {
+  id: "core.http-test",
+  criticality: "degraded",
+  dependsOn: [],
+  async create() {
+    const { registerHttpTestHandlers } = await import("../modules/http-test/ipc.js")
+    registerHttpTestHandlers()
+    return { initialized: true }
+  },
+}
+
 export const coreWorkflowServiceDescriptor: ServiceDescriptor<WorkflowService> = {
   id: "core.workflow",
   criticality: "degraded",
@@ -1074,7 +1090,7 @@ export const coreWorkflowRunStatusesDescriptor: ServiceDescriptor<Map<string, Wo
 export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
   id: "core.workflow.engine",
   criticality: "degraded",
-  dependsOn: ["core.project-containers"],
+  dependsOn: ["core.project-containers", "core.permission-guard", "core.audit-sink"],
   create(ctx) {
     const registry = ctx.registry
     const engineLogger = createMainLogger("service.workflow.engine.agent-deps")
@@ -1105,7 +1121,13 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
         return { status: "failed", response: "", error: workflowAgentFailureMessage(diagnostic), durationMs: 0 }
       }
     }
-    return new WorkflowEngine({ sendToAgent })
+    const permissionGuard = registry.get<PermissionGuard>("core.permission-guard")
+    const auditSink = registry.get<AuditSink>("core.audit-sink")
+    const runtimeDeps: import("../../workflow-nodes/types").NodeRuntimeDeps = {
+      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      sendHttpRequest: sendOutboundHttpRequest,
+    }
+    return new WorkflowEngine({ sendToAgent }, undefined, runtimeDeps)
   },
 }
 

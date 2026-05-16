@@ -140,6 +140,18 @@ Replace the workflow's parameter list entirely.
 
 ---
 
+## Layout
+
+### workflow_layout_update
+
+Reposition all nodes using dagre auto-layout algorithm. Saves the updated positions.
+
+**Params:** `workflowId` (string, required), `direction?` (string, `"LR"` or `"TB"`, default `"LR"`)
+**Returns:** `{ versionHash, validation? }`
+**Notes:** `LR` arranges nodes left-to-right, `TB` arranges top-to-bottom. The UI editor reflects the changes on next load. Useful after batch node creation to clean up overlapping positions.
+
+---
+
 ## Execute
 
 ### workflow_run_execute

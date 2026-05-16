@@ -63,6 +63,12 @@ export const httpRequestActionManifest = {
       description: "Timeout in minutes. Null disables the timeout.",
       defaultValue: 5,
     },
+    {
+      name: "auth",
+      kind: "record",
+      required: false,
+      description: "Auth configuration (bearer token or basic auth).",
+    },
   ],
   configSchema: httpRequestActionConfigSchema,
 } satisfies ActionManifest<HttpRequestActionConfig>

@@ -24,18 +24,6 @@ export interface NodeRunResult {
   output?: string; outputs?: Record<string, unknown>; activeBranch?: string; error?: string
   startedAt?: number; endedAt?: number; durationMs?: number
   progressLabel?: string
-  iterations?: IterationResult[]
-}
-export interface IterationResult {
-  index: number
-  status: "success" | "failed" | "skipped" | "cancelled"
-  nodeResults: Record<string, NodeRunResult>
-  loopVariables: Record<string, unknown>
-  exitPort: "continue" | "break"
-  output?: string
-  outputs?: Record<string, unknown>
-  durationMs?: number
-  error?: string
 }
 export interface WorkflowRunResult {
   status: "completed" | "failed" | "cancelled"

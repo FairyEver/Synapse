@@ -1,5 +1,5 @@
 import type { WorkflowDefinition, WorkflowRunResult, WorkflowEvent, NodeRunResult } from "../../../src/types/workflow"
-import type { AgentSendDeps } from "../../../workflow-nodes/types"
+import type { AgentSendDeps, NodeRuntimeDeps } from "../../../workflow-nodes/types"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { interpolatePrompt, resolveVariables } from "./variable-resolver"
 import { ReactiveScheduler } from "./workflow-scheduler"
@@ -38,7 +38,7 @@ function errorDiagnostic(error: unknown): { readonly errorName: string; readonly
 type EventCallback = (event: WorkflowEvent) => void
 
 export class WorkflowEngine {
-  constructor(private readonly agentDeps: AgentSendDeps, private readonly abortSignal?: AbortSignal) {}
+  constructor(private readonly agentDeps: AgentSendDeps, private readonly abortSignal?: AbortSignal, private readonly runtimeDeps?: NodeRuntimeDeps) {}
 
   async run(
     def: WorkflowDefinition,
@@ -164,6 +164,7 @@ export class WorkflowEngine {
             config: cfg, resolvedVariables: resolved,
             context: { projectId: effectiveProjectId, runId, abortSignal: effectiveAbortSignal },
             agentDeps: this.agentDeps,
+            runtimeDeps: this.runtimeDeps,
             onProgress: (phase, label) => {
               emit({ type: "node:progress", runId, nodeId, phase, label })
             },

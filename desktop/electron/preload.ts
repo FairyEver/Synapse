@@ -254,6 +254,11 @@ const EVENT_CHANNELS = {
   },
 }
 
+// HTTP test channels (not yet migrated to IpcModule)
+const HTTP_CHANNELS = {
+  testRequest: "synapse:http:test-request",
+} as const
+
 // Database channels (not yet migrated to IpcModule)
 const DATABASE_CHANNELS = {
   databaseTableList: "synapse:database:table:list",
@@ -782,6 +787,9 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["token-usage"].getAgentReport)(options),
     getDetectedAgents: invoke(IPC_CHANNELS["token-usage"].getDetectedAgents),
     clearData: invoke(IPC_CHANNELS["token-usage"].clearData),
+  },
+  http: {
+    testRequest: invoke(HTTP_CHANNELS.testRequest),
   },
   diagnostics: {
     onPing: (listener: () => void) => {

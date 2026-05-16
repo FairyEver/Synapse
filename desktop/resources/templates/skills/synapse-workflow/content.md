@@ -32,9 +32,10 @@ Valid `modelTier` values: `"default"`, `"haiku"`, `"sonnet"`, `"opus"`. Use the 
 6. Call `workflow_node_create` for each processing node. Save the returned `nodeId` — you need it to connect edges.
 7. Call `workflow_edge_create` to connect nodes. For switch nodes, include a `branch` field matching a branch id.
 8. Call `workflow_node_update` to configure each node (set prompt template, variable bindings, optionally override provider/model).
-9. Call `workflow_definition_inspect` to validate. Fix any errors before executing.
-10. Call `workflow_run_execute` with params to start execution. Returns `{ runId }`.
-11. Poll `workflow_run_get` with the runId (2-3 second intervals) until status is `completed` or `failed`.
+9. Call `workflow_layout_update` to auto-arrange nodes (optional — useful after batch creation to clean up overlapping positions).
+10. Call `workflow_definition_inspect` to validate. Fix any errors before executing.
+11. Call `workflow_run_execute` with params to start execution. Returns `{ runId }`.
+12. Poll `workflow_run_get` with the runId (2-3 second intervals) until status is `completed` or `failed`.
 
 ## Variable Bindings
 
@@ -60,8 +61,9 @@ A switch node's config includes `branches: [{ id, label }]` and an optional `def
 - Always query available providers before setting `providerId` — do not guess provider IDs.
 - Prefer setting `defaultProviderId`/`defaultModelTier` on the workflow rather than repeating on every node.
 - Validate with `workflow_definition_inspect` before executing.
-- Build incrementally: create nodes → connect edges → configure → validate → run.
+- Build incrementally: create nodes → connect edges → configure → auto-layout → validate → run.
 - For complex workflows, sketch the DAG structure first (which nodes, which edges) before making calls.
+- After batch-creating nodes, call `workflow_layout_update` to auto-arrange positions before validating.
 
 ## API Reference
 

@@ -4,10 +4,14 @@ import { NodeContextMenu } from "./node-context-menu"
 import { PromptNodeCard } from "../../../../workflow-nodes/prompt/card"
 import { SwitchNodeCard } from "../../../../workflow-nodes/switch/card"
 import { EndNodeCard } from "../../../../workflow-nodes/end/card"
+import { HttpRequestNodeCard } from "../../../../workflow-nodes/http-request/card"
+import { ScriptNodeCard } from "../../../../workflow-nodes/script/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
 import type { SwitchNodeConfig } from "../../../../workflow-nodes/switch/schema"
 import type { EndNodeConfig } from "../../../../workflow-nodes/end/schema"
+import type { HttpRequestNodeConfig } from "../../../../workflow-nodes/http-request/schema"
+import type { ScriptNodeConfig } from "../../../../workflow-nodes/script/schema"
 import type { NodeRunResult } from "@/types/workflow"
 
 export const NodeResultsContext = createContext<Record<string, NodeRunResult>>({})
@@ -65,8 +69,40 @@ export function EndNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
+export function HttpRequestNodeWrapper({ id, data, selected }: NodeProps) {
+  const nodeResults = useContext(NodeResultsContext)
+  const status = nodeResults[id]?.status
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="http_request">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <HttpRequestNodeCard config={data as HttpRequestNodeConfig} name={name} selected={selected} status={status} />
+        <Handle type="source" position={Position.Right} />
+      </div>
+    </NodeContextMenu>
+  )
+}
+
+export function ScriptNodeWrapper({ id, data, selected }: NodeProps) {
+  const nodeResults = useContext(NodeResultsContext)
+  const status = nodeResults[id]?.status
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="script">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <ScriptNodeCard config={data as ScriptNodeConfig} name={name} selected={selected} status={status} />
+        <Handle type="source" position={Position.Right} />
+      </div>
+    </NodeContextMenu>
+  )
+}
+
 export const nodeTypes = {
   prompt: PromptNodeWrapper,
   switch: SwitchNodeWrapper,
   end: EndNodeWrapper,
+  http_request: HttpRequestNodeWrapper,
+  script: ScriptNodeWrapper,
 }

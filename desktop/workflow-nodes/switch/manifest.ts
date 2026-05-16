@@ -5,6 +5,7 @@ import { switchNodeConfigSchema } from "./schema"
 
 export const switchNodeManifest: NodeManifest<SwitchNodeConfig> = {
   type: "switch", title: "Switch", icon: GitBranch, color: "bg-secondary",
+  defaultConfig: { providerId: "", modelTier: "default", prompt: "", variables: [], branches: [{ id: "branch1", label: "分支 1" }] },
   ports: { inputs: [{ id: "in", label: "输入" }], outputs: "dynamic" },
   resolveDynamicPorts: (c) => c.branches.map((b) => ({ id: b.id, label: b.label })),
   cardSummary: (c) => ({ title: c.providerId ? `${c.providerId} · ${c.modelTier}` : "未选择供应商", subtitle: `${c.branches.length} 个分支` }),

@@ -81,8 +81,8 @@ Expected: 无类型错误
 - [ ] **Step 4: 提交**
 
 ```bash
-git -C /Users/liyang/Documents/code/github/Synapse add action-packages/builtin/http-request/schema.ts action-packages/builtin/http-request/manifest.ts
-git -C /Users/liyang/Documents/code/github/Synapse commit -m "feat(http-request): add auth field to schema and manifest"
+git -C /Users/liyang/Documents/code/github/Synapse/desktop add action-packages/builtin/http-request/schema.ts action-packages/builtin/http-request/manifest.ts
+git -C /Users/liyang/Documents/code/github/Synapse/desktop commit -m "feat(http-request): add auth field to schema and manifest"
 ```
 
 ---
@@ -98,8 +98,8 @@ git -C /Users/liyang/Documents/code/github/Synapse commit -m "feat(http-request)
 ```tsx
 // action-packages/builtin/http-request/kv-editor.tsx
 
-import { Button } from "../../src/components/ui/button"
-import { Input } from "../../src/components/ui/input"
+import { Button } from "../../../src/components/ui/button"
+import { Input } from "../../../src/components/ui/input"
 import { X } from "lucide-react"
 
 interface KvEditorProps {
@@ -192,8 +192,8 @@ Note: The `key` is displayed as read-only `<code>` since we're using `Record<str
 - [ ] **Step 2: 提交**
 
 ```bash
-git -C /Users/liyang/Documents/code/github/Synapse add action-packages/builtin/http-request/kv-editor.tsx
-git -C /Users/liyang/Documents/code/github/Synapse commit -m "feat(http-request): create KV editor component for query/headers"
+git -C /Users/liyang/Documents/code/github/Synapse/desktop add action-packages/builtin/http-request/kv-editor.tsx
+git -C /Users/liyang/Documents/code/github/Synapse/desktop commit -m "feat(http-request): create KV editor component for query/headers"
 ```
 
 ---
@@ -212,8 +212,8 @@ import { useCallback } from "react"
 import CodeMirror from "@uiw/react-codemirror"
 import { json } from "@codemirror/lang-json"
 import { oneDark } from "@codemirror/theme-one-dark"
-import { Button } from "../../src/components/ui/button"
-import { useTheme } from "../../src/app-shell/theme-provider"
+import { Button } from "../../../src/components/ui/button"
+import { useTheme } from "../../../src/app-shell/theme-provider"
 
 interface CodeJsonEditorProps {
   readonly value: string
@@ -286,8 +286,8 @@ export function CodeJsonEditor({
 - [ ] **Step 2: 提交**
 
 ```bash
-git -C /Users/liyang/Documents/code/github/Synapse add action-packages/builtin/http-request/code-json-editor.tsx
-git -C /Users/liyang/Documents/code/github/Synapse commit -m "feat(http-request): create CodeMirror JSON editor component"
+git -C /Users/liyang/Documents/code/github/Synapse/desktop add action-packages/builtin/http-request/code-json-editor.tsx
+git -C /Users/liyang/Documents/code/github/Synapse/desktop commit -m "feat(http-request): create CodeMirror JSON editor component"
 ```
 
 ---
@@ -302,8 +302,8 @@ git -C /Users/liyang/Documents/code/github/Synapse commit -m "feat(http-request)
 ```tsx
 // action-packages/builtin/http-request/auth-fields.tsx
 
-import { Input } from "../../src/components/ui/input"
-import { ToggleGroup, ToggleGroupItem } from "../../src/components/ui/toggle-group"
+import { Input } from "../../../src/components/ui/input"
+import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
 
 interface AuthConfig {
   readonly type: "none" | "bearer" | "basic"
@@ -384,8 +384,8 @@ export function AuthFields({ value, onChange, idPrefix = "auth" }: AuthFieldsPro
 - [ ] **Step 2: 提交**
 
 ```bash
-git -C /Users/liyang/Documents/code/github/Synapse add action-packages/builtin/http-request/auth-fields.tsx
-git -C /Users/liyang/Documents/code/github/Synapse commit -m "feat(http-request): create auth fields component"
+git -C /Users/liyang/Documents/code/github/Synapse/desktop add action-packages/builtin/http-request/auth-fields.tsx
+git -C /Users/liyang/Documents/code/github/Synapse/desktop commit -m "feat(http-request): create auth fields component"
 ```
 
 ---
@@ -394,7 +394,7 @@ git -C /Users/liyang/Documents/code/github/Synapse commit -m "feat(http-request)
 
 **Files:**
 - Create: `electron/modules/http-test/ipc.ts`
-- Modify: `electron/bootstrap/ipc-registry.ts`
+- Modify: `electron/bootstrap/descriptors.ts`
 - Modify: `electron/preload.ts`
 - Modify: `src/types/bridge.ts`
 - Create: `action-packages/builtin/http-request/request-tester.tsx`
@@ -404,9 +404,9 @@ git -C /Users/liyang/Documents/code/github/Synapse commit -m "feat(http-request)
 ```typescript
 // electron/modules/http-test/ipc.ts
 
-import { handleValidatedIpc } from "../ipc/validated-ipc"
-import { sendOutboundHttpRequest } from "../runtime/network"
-import type { HttpRequestActionConfig } from "../../action-packages/builtin/http-request/schema"
+import { handleValidatedIpc } from "../../ipc/validated-ipc"
+import { sendOutboundHttpRequest } from "../../runtime/network"
+import type { HttpRequestActionConfig } from "../../../action-packages/builtin/http-request/schema"
 
 export const HTTP_TEST_CHANNEL = "synapse:http:test-request"
 
@@ -521,7 +521,7 @@ http: {
 // action-packages/builtin/http-request/request-tester.tsx
 
 import { useState } from "react"
-import { Button } from "../../src/components/ui/button"
+import { Button } from "../../../src/components/ui/button"
 import { Loader2, Play } from "lucide-react"
 import type { HttpRequestActionConfig } from "./schema"
 
@@ -614,8 +614,8 @@ function formatResponseBody(body: string): string {
 - [ ] **Step 6: 提交**
 
 ```bash
-git -C /Users/liyang/Documents/code/github/Synapse add electron/modules/http-test/ipc.ts electron/bootstrap/ipc-registry.ts electron/preload.ts src/types/bridge.ts action-packages/builtin/http-request/request-tester.tsx
-git -C /Users/liyang/Documents/code/github/Synapse commit -m "feat(http-request): add request tester IPC and UI component"
+git -C /Users/liyang/Documents/code/github/Synapse/desktop add electron/modules/http-test/ipc.ts electron/bootstrap/descriptors.ts electron/preload.ts src/types/bridge.ts action-packages/builtin/http-request/request-tester.tsx
+git -C /Users/liyang/Documents/code/github/Synapse/desktop commit -m "feat(http-request): add request tester IPC and UI component"
 ```
 
 ---
@@ -630,10 +630,10 @@ git -C /Users/liyang/Documents/code/github/Synapse commit -m "feat(http-request)
 ```tsx
 // action-packages/builtin/http-request/config.renderer.tsx
 
-import { Input } from "../../src/components/ui/input"
-import { Textarea } from "../../src/components/ui/textarea"
-import { ToggleGroup, ToggleGroupItem } from "../../src/components/ui/toggle-group"
-import { Separator } from "../../src/components/ui/separator"
+import { Input } from "../../../src/components/ui/input"
+import { Textarea } from "../../../src/components/ui/textarea"
+import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
+import { Separator } from "../../../src/components/ui/separator"
 import type { HttpRequestActionConfig } from "./schema"
 import { KvEditor } from "./kv-editor"
 import { CodeJsonEditor } from "./code-json-editor"
@@ -817,8 +817,8 @@ export function HttpRequestConfigForm({
 - [ ] **Step 2: 提交**
 
 ```bash
-git -C /Users/liyang/Documents/code/github/Synapse add action-packages/builtin/http-request/config.renderer.tsx
-git -C /Users/liyang/Documents/code/github/Synapse commit -m "feat(http-request): upgrade config form with KV editor, JSON editor, auth, and tester"
+git -C /Users/liyang/Documents/code/github/Synapse/desktop add action-packages/builtin/http-request/config.renderer.tsx
+git -C /Users/liyang/Documents/code/github/Synapse/desktop commit -m "feat(http-request): upgrade config form with KV editor, JSON editor, auth, and tester"
 ```
 
 ---
@@ -870,8 +870,8 @@ Expected: 测试全部通过
 - [ ] **Step 4: 提交**
 
 ```bash
-git -C /Users/liyang/Documents/code/github/Synapse add action-packages/builtin/http-request/executor.main.ts workflow-nodes/http-request/executor.main.ts
-git -C /Users/liyang/Documents/code/github/Synapse commit -m "feat(http-request): add auth header merging to executors"
+git -C /Users/liyang/Documents/code/github/Synapse/desktop add action-packages/builtin/http-request/executor.main.ts workflow-nodes/http-request/executor.main.ts
+git -C /Users/liyang/Documents/code/github/Synapse/desktop commit -m "feat(http-request): add auth header merging to executors"
 ```
 
 ---
@@ -951,8 +951,8 @@ Expected: 无类型错误
 - [ ] **Step 3: 提交**
 
 ```bash
-git -C /Users/liyang/Documents/code/github/Synapse add workflow-nodes/http-request/panel.tsx
-git -C /Users/liyang/Documents/code/github/Synapse commit -m "feat(http-request): remove redundant CollapsibleSection wrapper in workflow panel"
+git -C /Users/liyang/Documents/code/github/Synapse/desktop add workflow-nodes/http-request/panel.tsx
+git -C /Users/liyang/Documents/code/github/Synapse/desktop commit -m "feat(http-request): remove redundant CollapsibleSection wrapper in workflow panel"
 ```
 
 ---
