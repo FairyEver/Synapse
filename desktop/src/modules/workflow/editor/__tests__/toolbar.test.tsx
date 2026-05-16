@@ -40,6 +40,7 @@ describe("WorkflowToolbar", () => {
       root.render(
         <WorkflowToolbar
           definition={definition()}
+          projects={[]}
           onSave={vi.fn(async () => undefined)}
           onRun={vi.fn(async () => "run-1")}
           onChange={vi.fn()}
@@ -79,6 +80,9 @@ function definition(): WorkflowDefinition {
   return {
     id: "workflow-1",
     name: "Workflow",
+    version: "1",
+    createdAt: 0,
+    updatedAt: 0,
     nodes: [],
     edges: [],
     params: [],

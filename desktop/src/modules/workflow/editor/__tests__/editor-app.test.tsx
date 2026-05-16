@@ -28,6 +28,12 @@ vi.mock("sonner", () => ({
   },
 }))
 
+vi.mock("@/app-shell/config", () => ({
+  useAppConfig: () => ({
+    config: { global: { projects: [] } },
+  }),
+}))
+
 vi.mock("../../../../workflow-nodes/register.renderer", () => ({}))
 
 vi.mock("../toolbar", () => ({
@@ -87,6 +93,7 @@ describe("WorkflowEditorApp", () => {
       runDefinition: vi.fn(),
       save: vi.fn(),
       onEditorRefocus: vi.fn(() => vi.fn()),
+      onDefinitionUpdated: vi.fn(() => vi.fn()),
     }
     Object.defineProperty(window, "synapse", {
       configurable: true,
@@ -128,6 +135,7 @@ describe("WorkflowEditorApp", () => {
       runDefinition: vi.fn().mockRejectedValue(new Error(rawError)),
       save: vi.fn().mockResolvedValue({ versionHash: "v2" }),
       onEditorRefocus: vi.fn(() => vi.fn()),
+      onDefinitionUpdated: vi.fn(() => vi.fn()),
     }
     Object.defineProperty(window, "synapse", {
       configurable: true,
@@ -176,6 +184,7 @@ describe("WorkflowEditorApp", () => {
         .mockRejectedValueOnce(new Error(rawError)),
       save: vi.fn().mockResolvedValue({ versionHash: "v2" }),
       onEditorRefocus: vi.fn(() => vi.fn()),
+      onDefinitionUpdated: vi.fn(() => vi.fn()),
     }
     Object.defineProperty(window, "synapse", {
       configurable: true,

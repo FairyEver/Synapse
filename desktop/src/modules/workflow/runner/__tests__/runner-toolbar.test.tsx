@@ -79,6 +79,9 @@ function definition(): WorkflowDefinition {
   return {
     id: "workflow-1",
     name: "Workflow",
+    version: "1",
+    createdAt: 0,
+    updatedAt: 0,
     nodes: [],
     edges: [],
     params: [],
