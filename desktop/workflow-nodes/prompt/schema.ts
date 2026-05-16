@@ -2,8 +2,8 @@ import { z } from "zod"
 import { variableBindingSchema } from "../schemas/variable-binding"
 
 export const promptNodeConfigSchema = z.object({
-  providerId: z.string().min(1),
-  modelTier: z.enum(["default", "haiku", "sonnet", "opus"]),
+  providerId: z.string().optional(),
+  modelTier: z.enum(["default", "haiku", "sonnet", "opus"]).optional(),
   variables: z.array(variableBindingSchema),
   prompt: z.string(),
   projectId: z.string().optional(),
