@@ -10,10 +10,16 @@ import * as api from './api'
 export function App() {
   const { config, loading, error, save, setConfig } = useConfig()
   const [snapshot, setSnapshot] = useState<SchedulerSnapshot | null>(null)
+  const [showConfig, setShowConfig] = useState(true)
   const outputBuffer = useOutputBuffer()
 
   useSSE({
-    onSnapshot: useCallback((s: SchedulerSnapshot) => setSnapshot(s), []),
+    onSnapshot: useCallback((s: SchedulerSnapshot) => {
+      setSnapshot(s)
+      if (!['idle', 'stopped', 'error'].includes(s.status)) {
+        setShowConfig(false)
+      }
+    }, []),
     buffer: outputBuffer,
   })
 
@@ -38,6 +44,7 @@ export function App() {
       const saved = await save(config)
       const s = await api.startScheduler(saved)
       setSnapshot(s)
+      setShowConfig(false)
       outputBuffer.reset()
     } catch (err) {
       console.error('Start failed:', err)
@@ -54,6 +61,8 @@ export function App() {
   }, [])
 
   const isRunning = snapshot && !['idle', 'stopped', 'error'].includes(snapshot.status)
+  const hasResults = snapshot && (snapshot.currentBatch || snapshot.lastBatch)
+  const showRunView = !showConfig && (isRunning || hasResults)
 
   if (loading) {
     return (
@@ -82,12 +91,13 @@ export function App() {
       </header>
 
       <main className="flex-1 px-6 py-6">
-        {isRunning && snapshot ? (
+        {showRunView && snapshot ? (
           <RunView
             snapshot={snapshot}
             outputLines={outputBuffer.lines}
             trimmed={outputBuffer.trimmed}
             onStop={handleStop}
+            onBack={() => setShowConfig(true)}
           />
         ) : (
           <ConfigView

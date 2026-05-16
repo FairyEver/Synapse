@@ -1,4 +1,4 @@
-import { Square, Clock, AlertCircle } from 'lucide-react'
+import { Square, Clock, AlertCircle, ArrowLeft, CheckCircle, XCircle } from 'lucide-react'
 import type { SchedulerSnapshot, OutputLine } from '../types'
 import { WorkerGrid } from '../components/worker-grid'
 
@@ -7,6 +7,7 @@ interface RunViewProps {
   outputLines: ReadonlyMap<number, OutputLine[]>
   trimmed: ReadonlyMap<number, number>
   onStop: () => void
+  onBack: () => void
 }
 
 const statusLabels: Record<string, string> = {
@@ -25,21 +26,39 @@ function formatDuration(ms: number): string {
   return `${m}m ${s % 60}s`
 }
 
-export function RunView({ snapshot, outputLines, trimmed, onStop }: RunViewProps) {
+const batchStatusIcon: Record<string, { icon: typeof CheckCircle; className: string }> = {
+  success: { icon: CheckCircle, className: 'text-green-500' },
+  partial: { icon: AlertCircle, className: 'text-orange-500' },
+  error:   { icon: XCircle,     className: 'text-destructive' },
+}
+
+export function RunView({ snapshot, outputLines, trimmed, onStop, onBack }: RunViewProps) {
   const batch = snapshot.currentBatch
+  const displayBatch = batch ?? snapshot.lastBatch
   const canStop = snapshot.status === 'running' || snapshot.status === 'waiting'
+  const isFinished = !canStop && !batch
 
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
+          {isFinished && (
+            <button
+              type="button"
+              onClick={onBack}
+              className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <ArrowLeft className="h-3.5 w-3.5" />
+              返回配置
+            </button>
+          )}
           <span className="text-sm font-medium">
             {statusLabels[snapshot.status] ?? snapshot.status}
           </span>
-          {batch && (
+          {displayBatch && (
             <span className="text-xs text-muted-foreground flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              {formatDuration(batch.durationMs)}
+              {formatDuration(displayBatch.durationMs)}
             </span>
           )}
         </div>
@@ -53,7 +72,20 @@ export function RunView({ snapshot, outputLines, trimmed, onStop }: RunViewProps
             当前批次后停止
           </button>
         )}
+        {isFinished && !canStop && (
+          <button
+            type="button"
+            onClick={onBack}
+            className="flex items-center gap-1.5 border border-border rounded-md py-1.5 px-3 text-sm font-medium hover:bg-muted transition-colors"
+          >
+            返回配置
+          </button>
+        )}
       </div>
+
+      {isFinished && displayBatch && (
+        <BatchSummary batch={displayBatch} />
+      )}
 
       {snapshot.error && (
         <div className="flex items-center gap-2 text-destructive text-sm bg-destructive/10 rounded-md p-3">
@@ -62,19 +94,36 @@ export function RunView({ snapshot, outputLines, trimmed, onStop }: RunViewProps
         </div>
       )}
 
-      {batch && (
+      {displayBatch && (
         <WorkerGrid
-          workers={batch.workers}
+          workers={displayBatch.workers}
           outputLines={outputLines}
           trimmed={trimmed}
         />
       )}
+    </div>
+  )
+}
 
-      {snapshot.lastBatch && !batch && (
-        <div className="text-sm text-muted-foreground">
-          上次批次: {snapshot.lastBatch.status} — {formatDuration(snapshot.lastBatch.durationMs)}
-        </div>
-      )}
+function BatchSummary({ batch }: { batch: { status: string; durationMs: number; workers: Array<{ status: string }> } }) {
+  const cfg = batchStatusIcon[batch.status] ?? batchStatusIcon.error
+  const Icon = cfg.icon
+  const successCount = batch.workers.filter(w => w.status === 'success').length
+  const errorCount = batch.workers.filter(w => w.status === 'error' || w.status === 'timeout').length
+
+  return (
+    <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/50 p-3">
+      <Icon className={`h-5 w-5 ${cfg.className}`} />
+      <div className="text-sm">
+        <span className="font-medium">
+          {batch.status === 'success' ? '全部成功' : batch.status === 'partial' ? '部分成功' : '执行失败'}
+        </span>
+        <span className="text-muted-foreground ml-2">
+          {successCount}/{batch.workers.length} 成功
+          {errorCount > 0 ? ` · ${errorCount} 失败` : ''}
+          {' · '}{formatDuration(batch.durationMs)}
+        </span>
+      </div>
     </div>
   )
 }
