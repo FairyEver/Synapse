@@ -12,7 +12,7 @@ import { createRendererLogger } from "@/app-shell/logging"
 // Vite bundle (they import `electron`, `node:path`, etc.).
 import "../../../../workflow-nodes/register.renderer"
 import { Button } from "@/components/ui/button"
-import { WorkflowToolbar } from "./toolbar"
+import { CanvasFloatingToolbar } from "./canvas-floating-toolbar"
 import { WorkflowCanvas, type WorkflowCanvasHandle } from "./canvas"
 import { NodePalette } from "./node-palette"
 import { NodeConfigPanel } from "./node-config-panel"
@@ -353,7 +353,7 @@ export function WorkflowEditorApp() {
   return (
     <ProviderLookupProvider>
     <div className="flex flex-col h-screen">
-      <WorkflowToolbar definition={definition} saving={saving} running={running} dirty={dirty} projects={projects} onSave={handleSave} onRun={handleRun} onChange={handleDefinitionChange} />
+      <div className="h-8 shrink-0 [-webkit-app-region:drag]" />
       {runErrors.length > 0 && (
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
           <AlertCircle className="h-4 w-4" />
@@ -382,7 +382,10 @@ export function WorkflowEditorApp() {
         <NodePalette />
         <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
           <ResizablePanel>
-            <WorkflowCanvas ref={canvasRef} definition={definition} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} onRequestRename={handleRequestRename} />
+            <div className="relative h-full">
+              <WorkflowCanvas ref={canvasRef} definition={definition} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} onRequestRename={handleRequestRename} />
+              <CanvasFloatingToolbar definition={definition} saving={saving} running={running} dirty={dirty} onSave={handleSave} onRun={handleRun} />
+            </div>
           </ResizablePanel>
           <ResizableHandle withHandle />
           <ResizablePanel
@@ -401,6 +404,7 @@ export function WorkflowEditorApp() {
               renameSignal={renameSignal}
               projects={projects}
               defaultProjectName={defaultProjectName}
+              onDefinitionChange={handleDefinitionChange}
             />
           </ResizablePanel>
         </ResizablePanelGroup>

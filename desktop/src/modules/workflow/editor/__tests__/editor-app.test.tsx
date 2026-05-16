@@ -36,8 +36,8 @@ vi.mock("@/app-shell/config", () => ({
 
 vi.mock("../../../../workflow-nodes/register.renderer", () => ({}))
 
-vi.mock("../toolbar", () => ({
-  WorkflowToolbar: ({
+vi.mock("../canvas-floating-toolbar", () => ({
+  CanvasFloatingToolbar: ({
     onRun,
   }: {
     onRun: (params: Record<string, unknown>) => Promise<string | null>
