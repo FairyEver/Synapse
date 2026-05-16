@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { Copy, Ellipsis, SlidersHorizontal, Trash2 } from "lucide-react"
+import { AlertTriangle, ChevronDown, Copy, Ellipsis, SlidersHorizontal, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { Label } from "@/components/ui/label"
@@ -9,8 +9,11 @@ import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectVa
 import { Separator } from "@/components/ui/separator"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowDefinition } from "@/types/workflow"
+import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
+import type { ModelTier } from "@/types/provider-model"
 import { getPanel } from "../../../../workflow-nodes/panel-registry"
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
+import { useProviderLookup } from "../../../../workflow-nodes/provider-lookup-context"
 import { useUpstreamNodes } from "../hooks/use-upstream-nodes"
 import { ParamsEditorDialog } from "../components/params-editor-dialog"
 
@@ -151,6 +154,7 @@ export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChan
 }
 
 const NO_PROJECT_VALUE = "__none__"
+const TIER_LABELS: Record<ModelTier, string> = { default: "主模型", haiku: "Haiku", sonnet: "Sonnet", opus: "Opus" }
 
 function GlobalSettingsForm({ definition, projects, onChange }: {
   definition: WorkflowDefinition
@@ -158,6 +162,10 @@ function GlobalSettingsForm({ definition, projects, onChange }: {
   onChange?: (def: WorkflowDefinition) => void
 }) {
   const [paramsOpen, setParamsOpen] = useState(false)
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false)
+  const { getProviderName, getModelName, isProviderAvailable } = useProviderLookup()
+  const providerUnavailable = Boolean(definition.defaultProviderId && !isProviderAvailable(definition.defaultProviderId))
+
   return (
     <>
       <div className="border-b px-3 py-2.5">
@@ -179,6 +187,25 @@ function GlobalSettingsForm({ definition, projects, onChange }: {
             value={definition.description ?? ""}
             onChange={(e) => onChange?.({ ...definition, description: e.target.value || undefined })}
             placeholder="添加描述"
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label className="text-xs">默认供应商</Label>
+          <Button variant="outline" className={`w-full justify-between h-7 text-xs${providerUnavailable ? " border-destructive" : ""}`} onClick={() => setProviderDialogOpen(true)}>
+            <span className="flex min-w-0 items-center gap-1 truncate">
+              {providerUnavailable && <AlertTriangle className="size-3 shrink-0 text-destructive" />}
+              {definition.defaultProviderId
+                ? `${getProviderName(definition.defaultProviderId) ?? definition.defaultProviderId} · ${getModelName(definition.defaultProviderId, definition.defaultModelTier ?? "default") ?? TIER_LABELS[definition.defaultModelTier ?? "default"]}`
+                : "未设置"}
+            </span>
+            <ChevronDown className="size-3.5 text-muted-foreground" />
+          </Button>
+          {providerUnavailable && <p className="text-[11px] text-destructive">供应商不可用，请重新选择</p>}
+          <ProviderModelSelectDialog
+            open={providerDialogOpen}
+            onOpenChange={setProviderDialogOpen}
+            defaultSelection={definition.defaultProviderId ? { providerId: definition.defaultProviderId, modelTier: definition.defaultModelTier ?? "default" } : undefined}
+            onSelect={(s) => onChange?.({ ...definition, defaultProviderId: s.providerId, defaultModelTier: s.modelTier })}
           />
         </div>
         <div className="space-y-1.5">
