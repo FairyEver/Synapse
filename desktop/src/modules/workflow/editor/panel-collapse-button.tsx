@@ -8,13 +8,14 @@ interface PanelCollapseButtonProps {
 }
 
 export function PanelCollapseButton({ side, collapsed, onToggle }: PanelCollapseButtonProps) {
-  const showExpand = collapsed
   const Icon = side === "left"
-    ? (showExpand ? ChevronRight : ChevronLeft)
-    : (showExpand ? ChevronLeft : ChevronRight)
+    ? (collapsed ? ChevronRight : ChevronLeft)
+    : (collapsed ? ChevronLeft : ChevronRight)
 
   return (
     <button
+      type="button"
+      aria-label={collapsed ? `展开${side === "left" ? "左侧" : "右侧"}面板` : `收起${side === "left" ? "左侧" : "右侧"}面板`}
       onClick={onToggle}
       className={cn(
         "absolute z-10 flex h-5 w-5 items-center justify-center rounded-full",
