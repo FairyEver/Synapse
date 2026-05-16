@@ -30,7 +30,7 @@ export function Terminal({ lines, trimmedCount, className }) {
                         position: 'relative',
                     }, children: virtualizer.getVirtualItems().map(virtualRow => {
                         const line = lines[virtualRow.index];
-                        return (_jsx("div", { className: cn('absolute left-0 w-full px-3 whitespace-pre-wrap break-all', line.stream === 'stderr' && 'text-terminal-stderr'), style: {
+                        return (_jsx("div", { className: cn('absolute left-0 w-full px-3 whitespace-pre', line.stream === 'stderr' && 'text-terminal-stderr'), style: {
                                 top: virtualRow.start,
                                 height: virtualRow.size,
                             }, children: line.text }, virtualRow.index));
