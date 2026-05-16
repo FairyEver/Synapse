@@ -387,6 +387,7 @@ export function WorkflowEditorApp() {
         <ResizablePanel
           id="node-palette"
           panelRef={leftPanelRef}
+          style={{ transition: "flex-basis 200ms ease" }}
           defaultSize={176}
           minSize={176}
           maxSize={220}
@@ -434,6 +435,7 @@ export function WorkflowEditorApp() {
         <ResizablePanel
           id="node-config"
           panelRef={rightPanelRef}
+          style={{ transition: "flex-basis 200ms ease" }}
           defaultSize={400}
           minSize={300}
           maxSize={600}
