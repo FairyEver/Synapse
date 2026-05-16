@@ -15,6 +15,7 @@ type TaskFormState = {
   description: string
   cwd: string
   enabled: boolean
+  activeDays: number[]
   triggerType: TaskFormTriggerType
   cronExpr: string
   everyMinutes: string

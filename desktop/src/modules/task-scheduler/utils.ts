@@ -18,6 +18,7 @@ const DEFAULT_TASK_FORM_STATE: TaskFormState = {
   description: "",
   cwd: "",
   enabled: true,
+  activeDays: [0, 1, 2, 3, 4, 5, 6],
   triggerType: "cron",
   cronExpr: "0 9 * * *",
   everyMinutes: "60",
@@ -41,6 +42,7 @@ function createTaskFormState(
     description: task.description ?? "",
     cwd: task.cwd ?? "",
     enabled: task.enabled,
+    activeDays: task.activeDays ?? [0, 1, 2, 3, 4, 5, 6],
     triggerType: task.trigger.type === "builtin.cron" ? "cron" : "interval",
     cronExpr: task.trigger.type === "builtin.cron" ? task.trigger.config.expr : DEFAULT_TASK_FORM_STATE.cronExpr,
     everyMinutes: task.trigger.type === "builtin.interval"
@@ -75,6 +77,10 @@ function buildTaskPayload(form: TaskFormState): ScheduledTaskCreateInput {
     ? { type: "project" as const, projectId: projectId.trim() }
     : { type: "global" as const }
 
+  if (form.activeDays.length === 0) {
+    throw new Error("请至少选择一个活跃日")
+  }
+
   return {
     name,
     description,
@@ -94,6 +100,7 @@ function buildTaskPayload(form: TaskFormState): ScheduledTaskCreateInput {
       config: actionConfig,
     },
     enabled: form.enabled,
+    activeDays: form.activeDays,
     missedRunPolicy: form.missedRunPolicy,
   }
 }
@@ -231,6 +238,7 @@ function serializeTasksForExport(tasks: ScheduledTask[]): TaskExportFile {
       cwd: task.cwd,
       trigger: task.trigger,
       action: task.action,
+      activeDays: task.activeDays,
       missedRunPolicy: task.missedRunPolicy,
     })),
   }

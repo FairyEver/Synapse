@@ -127,6 +127,7 @@ function task(id: string, actionType = "builtin.agent"): ScheduledTask {
     trigger: { type: "builtin.interval", config: { everyMinutes: 5 } },
     action: { type: actionType, config: { prompt: "hello" } },
     enabled: true,
+    activeDays: [0, 1, 2, 3, 4, 5, 6],
     missedRunPolicy: "skip",
     overlapPolicy: "skip",
     createdAt: "2026-05-14T00:00:00.000Z",

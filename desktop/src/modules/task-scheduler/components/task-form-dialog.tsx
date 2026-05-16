@@ -54,6 +54,7 @@ import {
   createTaskFormState,
 } from "../utils"
 import { CronInput } from "./cron-input"
+import { ActiveDaysInput } from "./active-days-input"
 
 type TaskFormDialogProps = {
   open: boolean
@@ -359,6 +360,13 @@ function TaskFormDialog({
                     </TaskField>
                   ) : null}
                 </div>
+                <TaskField label="活跃日" htmlFor="task-form-active-days">
+                  <ActiveDaysInput
+                    value={form.activeDays}
+                    onChange={(days) => updateField("activeDays", days)}
+                    error={form.activeDays.length === 0 ? "请至少选择一个活跃日" : undefined}
+                  />
+                </TaskField>
               </TaskFormSection>
 
               <TaskFormSection
