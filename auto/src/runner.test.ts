@@ -86,6 +86,7 @@ test('buildClaudeCodeArgs builds correct args with all options', () => {
 
   assert.deepEqual(args, [
     '--print',
+    '--verbose',
     '--output-format', 'stream-json',
     '--max-turns', '30',
     '--model', 'opus',
