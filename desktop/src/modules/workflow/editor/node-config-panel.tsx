@@ -3,6 +3,7 @@ import { Copy, Ellipsis, Trash2 } from "lucide-react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
+import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowDefinition } from "@/types/workflow"
 import { getPanel } from "../../../../workflow-nodes/panel-registry"
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
@@ -16,9 +17,11 @@ interface NodeConfigPanelProps {
   onDeleteNode?: (nodeId: string) => void
   onCopyNode?: (nodeId: string) => void
   renameSignal?: number
+  projects: readonly SynapseProjectConfig[]
+  defaultProjectName?: string
 }
 
-export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChange, onDeleteNode, onCopyNode, renameSignal }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChange, onDeleteNode, onCopyNode, renameSignal, projects, defaultProjectName }: NodeConfigPanelProps) {
   const node = nodeId ? definition.nodes.find((n) => n.id === nodeId) : null
   const upstreamNodes = useUpstreamNodes(nodeId ?? "", definition)
   const nameInputRef = useRef<HTMLInputElement>(null)
@@ -127,6 +130,8 @@ export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChan
                   onChange={(c) => onConfigChange(node.id, c)}
                   upstreamNodes={upstreamNodes}
                   workflowParams={definition.params}
+                  projects={projects}
+                  defaultProjectName={defaultProjectName}
                 />
               )
             })()}

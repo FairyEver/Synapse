@@ -4,6 +4,7 @@ import { AlertCircle, Loader2, RefreshCw, X } from "lucide-react"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import type { WorkflowDefinition, ValidationError } from "@/types/workflow"
 import { Alert, AlertDescription, AlertTitle, AlertAction } from "@/components/ui/alert"
+import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 // Side-effect: populate node type registry in the editor window's renderer process.
 // Without this, NodePalette.listTypes() returns [] and users cannot add nodes.
@@ -36,6 +37,11 @@ export function WorkflowEditorApp() {
   setShowCloseDialogRef.current = setShowCloseDialog
   const canvasRef = useRef<WorkflowCanvasHandle>(null)
   const [renameSignal, setRenameSignal] = useState(0)
+  const { config: appConfig } = useAppConfig()
+  const projects = appConfig.global.projects
+  const defaultProjectName = definition?.defaultProjectId
+    ? projects.find((p) => p.id === definition.defaultProjectId)?.name
+    : undefined
   const definitionRef = useRef(definition)
   definitionRef.current = definition
   const isDirtyRef = useRef(false)
@@ -393,6 +399,8 @@ export function WorkflowEditorApp() {
               onDeleteNode={(id) => { canvasRef.current?.deleteNodes([id]); setSelectedNodeId(null) }}
               onCopyNode={(id) => canvasRef.current?.copyNodes([id])}
               renameSignal={renameSignal}
+              projects={projects}
+              defaultProjectName={defaultProjectName}
             />
           </ResizablePanel>
         </ResizablePanelGroup>

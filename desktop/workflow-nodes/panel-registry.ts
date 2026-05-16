@@ -1,4 +1,5 @@
 import type { ComponentType } from "react"
+import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowParam } from "@/types/workflow"
 import { PromptNodePanel } from "./prompt/panel"
 import { SwitchNodePanel } from "./switch/panel"
@@ -9,6 +10,8 @@ export interface NodePanelProps {
   onChange: (config: Record<string, unknown>) => void
   upstreamNodes: { id: string; name: string }[]
   workflowParams: WorkflowParam[]
+  projects: readonly SynapseProjectConfig[]
+  defaultProjectName?: string
 }
 
 type PanelComponent = ComponentType<NodePanelProps>
