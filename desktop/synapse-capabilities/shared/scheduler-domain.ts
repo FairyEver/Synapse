@@ -28,6 +28,7 @@ export type SchedulerTaskCreateParams = {
   }
   readonly enabled?: boolean
   readonly missedRunPolicy?: "skip" | "run_once"
+  readonly activeDays?: readonly number[]
 }
 
 export type SchedulerTaskUpdateParams = {
@@ -37,6 +38,7 @@ export type SchedulerTaskUpdateParams = {
   readonly cwd?: string
   readonly schedule?: SchedulerSchedule
   readonly missedRunPolicy?: "skip" | "run_once"
+  readonly activeDays?: readonly number[]
 }
 
 export type SchedulerTaskRunsListParams = {
@@ -168,6 +170,13 @@ export function buildSchedulerTools(): McpToolDefinition[] {
           },
           enabled: { type: "boolean" },
           missedRunPolicy: { type: "string", enum: ["skip", "run_once"] },
+          activeDays: {
+            type: "array",
+            items: { type: "integer", minimum: 0, maximum: 6 },
+            minItems: 1,
+            maxItems: 7,
+            description: "Days of week when the task is allowed to run. 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat. Defaults to all days if omitted.",
+          },
         },
         required: ["name", "scope", "schedule", "action"],
       },
@@ -211,7 +220,7 @@ export function buildSchedulerTools(): McpToolDefinition[] {
     },
     {
       name: "scheduler_task_update",
-      description: "Conservatively update a scheduled task. Only name, description, cwd, schedule, and missedRunPolicy are accepted. Use scheduler_task_enable or scheduler_task_disable for enabled state. Task action, scope, delete, manual run, and stop-run are not exposed through MCP.",
+      description: "Conservatively update a scheduled task. Only name, description, cwd, schedule, activeDays, and missedRunPolicy are accepted. Use scheduler_task_enable or scheduler_task_disable for enabled state. Task action, scope, delete, manual run, and stop-run are not exposed through MCP.",
       inputSchema: {
         type: "object",
         properties: {
@@ -240,6 +249,13 @@ export function buildSchedulerTools(): McpToolDefinition[] {
                 required: ["type", "everyMinutes"],
               },
             ],
+          },
+          activeDays: {
+            type: "array",
+            items: { type: "integer", minimum: 0, maximum: 6 },
+            minItems: 1,
+            maxItems: 7,
+            description: "Days of week when the task is allowed to run. 0=Sun, 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat. Defaults to all days if omitted.",
           },
           missedRunPolicy: { type: "string", enum: ["skip", "run_once"] },
         },

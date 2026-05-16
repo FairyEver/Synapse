@@ -21,6 +21,7 @@ const baseTask: ScheduledTaskEntry = {
   enabled: true,
   missedRunPolicy: "skip",
   overlapPolicy: "skip",
+  activeDays: [0, 1, 2, 3, 4, 5, 6],
   createdAt: "2026-05-02T00:00:00.000Z",
   updatedAt: "2026-05-02T00:00:00.000Z",
   nextRunAt: "2026-05-02T00:30:00.000Z",
@@ -271,5 +272,51 @@ describe("task scheduler external api", () => {
   it("rejects hidden external actions", async () => {
     await expect(dispatchSchedulerAction(serviceMock(), actionRegistry(), "scheduler.task.delete", { taskId: "task:1" }))
       .rejects.toThrow(/Unknown scheduler action/)
+  })
+
+  it("scheduler.task.create accepts activeDays and passes to service", async () => {
+    const service = serviceMock()
+    const result = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.create", {
+      name: "Weekday task",
+      scope: { type: "global" },
+      schedule: { type: "cron", expr: "0 9 * * *" },
+      action: { type: "builtin.command", config: { command: "echo hi" } },
+      activeDays: [1, 2, 3, 4, 5],
+    })
+    expect(result.ok).toBe(true)
+    expect((result.data as { activeDays: number[] }).activeDays).toEqual([1, 2, 3, 4, 5])
+  })
+
+  it("scheduler.task.create defaults activeDays to all days when omitted", async () => {
+    const service = serviceMock()
+    const result = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.create", {
+      name: "All days task",
+      scope: { type: "global" },
+      schedule: { type: "cron", expr: "0 9 * * *" },
+      action: { type: "builtin.command", config: { command: "echo hi" } },
+    })
+    expect(result.ok).toBe(true)
+    expect((result.data as { activeDays: number[] }).activeDays).toEqual([0, 1, 2, 3, 4, 5, 6])
+  })
+
+  it("scheduler.task.create rejects empty activeDays", async () => {
+    const service = serviceMock()
+    await expect(dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.create", {
+      name: "No days",
+      scope: { type: "global" },
+      schedule: { type: "cron", expr: "0 9 * * *" },
+      action: { type: "builtin.command", config: { command: "echo hi" } },
+      activeDays: [],
+    })).rejects.toThrow(/activeDays/)
+  })
+
+  it("scheduler.task.update can change activeDays", async () => {
+    const service = serviceMock()
+    const result = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.update", {
+      taskId: "task:1",
+      activeDays: [6, 0],
+    })
+    expect(result.ok).toBe(true)
+    expect((result.data as { activeDays: number[] }).activeDays).toEqual([6, 0])
   })
 })

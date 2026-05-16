@@ -38,6 +38,7 @@ export type SchedulerTaskSummary = {
   readonly scope: { readonly type: "global" } | { readonly type: "project"; readonly projectId: string }
   readonly schedule: SchedulerSchedule
   readonly action: { readonly type: string }
+  readonly activeDays: readonly number[]
   readonly nextRunAt?: string
   readonly lastRunAt?: string
   readonly lastStatus?: string
@@ -133,6 +134,7 @@ export function toPublicTaskSummary(task: ScheduledTaskEntry): SchedulerTaskSumm
     scope: task.scope,
     schedule: fromTrigger(task.trigger),
     action: { type: task.action.type },
+    activeDays: task.activeDays,
     nextRunAt: task.nextRunAt,
     lastRunAt: task.lastRunAt,
     lastStatus: task.lastStatus,
@@ -253,11 +255,12 @@ function parseCreateParams(params: Record<string, unknown>): SchedulerTaskCreate
     action: parseAction(action),
     enabled: optionalBoolean(params.enabled, "enabled"),
     missedRunPolicy: parseMissedRunPolicy(params.missedRunPolicy),
+    activeDays: parseOptionalActiveDays(params.activeDays),
   }
 }
 
 function parseUpdateParams(params: Record<string, unknown>): SchedulerTaskUpdateParams {
-  const allowed = new Set(["taskId", "name", "description", "cwd", "schedule", "missedRunPolicy"])
+  const allowed = new Set(["taskId", "name", "description", "cwd", "schedule", "activeDays", "missedRunPolicy"])
   for (const key of Object.keys(params)) {
     if (!allowed.has(key)) throw new Error(`Forbidden scheduler update field: ${key}`)
   }
@@ -268,6 +271,7 @@ function parseUpdateParams(params: Record<string, unknown>): SchedulerTaskUpdate
     description: optionalString(params.description, "description"),
     cwd: optionalString(params.cwd, "cwd"),
     schedule: params.schedule === undefined ? undefined : parseSchedule(requireRecord(params.schedule, "schedule")),
+    activeDays: parseOptionalActiveDays(params.activeDays),
     missedRunPolicy: parseMissedRunPolicy(params.missedRunPolicy),
   }
   if (
@@ -275,6 +279,7 @@ function parseUpdateParams(params: Record<string, unknown>): SchedulerTaskUpdate
     && input.description === undefined
     && input.cwd === undefined
     && input.schedule === undefined
+    && input.activeDays === undefined
     && input.missedRunPolicy === undefined
   ) {
     throw new Error("scheduler.task.update requires at least one field to update")
@@ -292,6 +297,7 @@ function toCreateInput(input: SchedulerTaskCreateParams): ScheduledTaskCreateInp
     action: input.action,
     enabled: input.enabled,
     missedRunPolicy: input.missedRunPolicy,
+    ...(input.activeDays !== undefined ? { activeDays: [...input.activeDays] } : {}),
   }
 }
 
@@ -300,8 +306,9 @@ function toUpdatePatch(input: SchedulerTaskUpdateParams): ScheduledTaskUpdateInp
     name: input.name,
     description: input.description,
     cwd: input.cwd,
-    trigger: input.schedule ? toTrigger(input.schedule) : undefined,
+    ...(input.schedule !== undefined ? { trigger: toTrigger(input.schedule) } : {}),
     missedRunPolicy: input.missedRunPolicy,
+    ...(input.activeDays !== undefined ? { activeDays: [...input.activeDays] } : {}),
   }
 }
 
@@ -370,6 +377,18 @@ function parseMissedRunPolicy(value: unknown): "skip" | "run_once" | undefined {
   if (value === undefined) return undefined
   if (value === "skip" || value === "run_once") return value
   throw new Error("Missing or invalid 'missedRunPolicy': expected skip or run_once")
+}
+
+function parseOptionalActiveDays(value: unknown): readonly number[] | undefined {
+  if (value === undefined) return undefined
+  if (!Array.isArray(value)) throw new Error("Missing or invalid 'activeDays': expected array")
+  if (value.length === 0) throw new Error("'activeDays' must contain at least one day (0-6)")
+  for (const item of value) {
+    if (!Number.isInteger(item) || item < 0 || item > 6) {
+      throw new Error("'activeDays' values must be integers 0-6")
+    }
+  }
+  return value as number[]
 }
 
 function optionalString(value: unknown, key: string): string | undefined {
