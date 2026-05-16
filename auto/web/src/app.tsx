@@ -27,6 +27,11 @@ export function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps -- load on mount + batch change
   }, [snapshot?.currentBatch?.id])
 
+  const handleSave = useCallback(async () => {
+    if (!config) return
+    await save(config)
+  }, [config, save])
+
   const handleStart = useCallback(async () => {
     if (!config) return
     try {
@@ -88,6 +93,7 @@ export function App() {
           <ConfigView
             config={config}
             onChange={setConfig}
+            onSave={handleSave}
             onStart={handleStart}
           />
         )}
