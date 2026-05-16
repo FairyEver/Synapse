@@ -67,30 +67,31 @@ export function App() {
   }
 
   return (
-    <div className="min-h-screen p-6">
-      <header className="mb-6 flex items-center gap-3">
-        <h1 className="text-lg font-semibold tracking-tight">auto</h1>
-        {snapshot && (
-          <span className="text-xs text-muted-foreground">
-            {snapshot.status}
-          </span>
-        )}
+    <div className="min-h-screen flex flex-col">
+      <header className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b border-border px-6 py-3 flex items-center gap-3">
+        <h1 className="text-sm font-bold tracking-tight uppercase text-foreground/80">auto</h1>
+        <div className="h-3 w-px bg-border" />
+        <span className="text-xs text-muted-foreground">
+          {snapshot ? snapshot.status : 'idle'}
+        </span>
       </header>
 
-      {isRunning && snapshot ? (
-        <RunView
-          snapshot={snapshot}
-          outputLines={outputBuffer.lines}
-          trimmed={outputBuffer.trimmed}
-          onStop={handleStop}
-        />
-      ) : (
-        <ConfigView
-          config={config}
-          onChange={setConfig}
-          onStart={handleStart}
-        />
-      )}
+      <main className="flex-1 px-6 py-6">
+        {isRunning && snapshot ? (
+          <RunView
+            snapshot={snapshot}
+            outputLines={outputBuffer.lines}
+            trimmed={outputBuffer.trimmed}
+            onStop={handleStop}
+          />
+        ) : (
+          <ConfigView
+            config={config}
+            onChange={setConfig}
+            onStart={handleStart}
+          />
+        )}
+      </main>
     </div>
   )
 }

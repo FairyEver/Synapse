@@ -7,81 +7,110 @@ interface ConfigFormProps {
   onChange: (config: UiConfig) => void
 }
 
+const CONCURRENCY_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20]
+const INTERVAL_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90, 120]
+const TIMEOUT_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90, 120]
+const MAX_LOGS_OPTIONS = [10, 20, 30, 50, 100, 200]
+
 export function ConfigForm({ config, onChange }: ConfigFormProps) {
   const update = <K extends keyof UiConfig>(key: K, value: UiConfig[K]) => {
     onChange({ ...config, [key]: value })
   }
 
   return (
-    <div className="space-y-6">
-      <PromptEditor config={config} onChange={onChange} />
+    <div className="space-y-8">
+      <Section title="Prompt">
+        <PromptEditor config={config} onChange={onChange} />
+      </Section>
 
-      <div className="grid grid-cols-2 gap-4">
-        <Field label="工作目录">
-          <input
-            value={config.workingDirectory}
-            onChange={e => update('workingDirectory', e.target.value)}
-            className="w-full border border-input rounded-md px-2 py-1.5 text-sm bg-background font-mono"
-          />
-        </Field>
-        <Field label="Provider">
-          <select
-            value={config.provider}
-            onChange={e => update('provider', e.target.value as Provider)}
-            className="w-full border border-input rounded-md px-2 py-1.5 text-sm bg-background"
-          >
-            <option value="codex">Codex</option>
-            <option value="claude-code">Claude Code</option>
-          </select>
-        </Field>
-        <Field label="并发数">
-          <input
-            type="number"
-            min={1}
-            max={20}
-            value={config.concurrency}
-            onChange={e => update('concurrency', Number(e.target.value))}
-            className="w-full border border-input rounded-md px-2 py-1.5 text-sm bg-background"
-          />
-        </Field>
-        <Field label="间隔 (分钟)">
-          <input
-            type="number"
-            min={1}
-            value={config.intervalMinutes}
-            onChange={e => update('intervalMinutes', Number(e.target.value))}
-            className="w-full border border-input rounded-md px-2 py-1.5 text-sm bg-background"
-          />
-        </Field>
-        <Field label="超时 (分钟)">
-          <input
-            type="number"
-            min={1}
-            value={config.timeoutMinutes}
-            onChange={e => update('timeoutMinutes', Number(e.target.value))}
-            className="w-full border border-input rounded-md px-2 py-1.5 text-sm bg-background"
-          />
-        </Field>
-        <Field label="保留日志数">
-          <input
-            type="number"
-            min={1}
-            value={config.maxLogs}
-            onChange={e => update('maxLogs', Number(e.target.value))}
-            className="w-full border border-input rounded-md px-2 py-1.5 text-sm bg-background"
-          />
-        </Field>
-      </div>
+      <Section title="运行配置">
+        <div className="grid grid-cols-2 gap-x-6 gap-y-4">
+          <Field label="Provider">
+            <select
+              value={config.provider}
+              onChange={e => update('provider', e.target.value as Provider)}
+              className="select-field"
+            >
+              <option value="codex">Codex</option>
+              <option value="claude-code">Claude Code</option>
+            </select>
+          </Field>
+          <Field label="并发数">
+            <select
+              value={config.concurrency}
+              onChange={e => update('concurrency', Number(e.target.value))}
+              className="select-field"
+            >
+              {CONCURRENCY_OPTIONS.map(n => (
+                <option key={n} value={n}>{n} worker{n > 1 ? 's' : ''}</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="循环间隔">
+            <select
+              value={config.intervalMinutes}
+              onChange={e => update('intervalMinutes', Number(e.target.value))}
+              className="select-field"
+            >
+              {INTERVAL_OPTIONS.map(n => (
+                <option key={n} value={n}>{n} 分钟</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="超时时间">
+            <select
+              value={config.timeoutMinutes}
+              onChange={e => update('timeoutMinutes', Number(e.target.value))}
+              className="select-field"
+            >
+              {TIMEOUT_OPTIONS.map(n => (
+                <option key={n} value={n}>{n} 分钟</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="保留日志" className="col-span-1">
+            <select
+              value={config.maxLogs}
+              onChange={e => update('maxLogs', Number(e.target.value))}
+              className="select-field"
+            >
+              {MAX_LOGS_OPTIONS.map(n => (
+                <option key={n} value={n}>最近 {n} 次</option>
+              ))}
+            </select>
+          </Field>
+          <Field label="工作目录" className="col-span-2">
+            <input
+              value={config.workingDirectory}
+              onChange={e => update('workingDirectory', e.target.value)}
+              className="w-full border border-input rounded-md px-2.5 py-1.5 text-sm bg-background font-mono"
+            />
+          </Field>
+        </div>
+      </Section>
 
-      <ProviderSettings config={config} onChange={onChange} />
+      <Section title={config.provider === 'codex' ? 'Codex 设置' : 'Claude Code 设置'}>
+        <ProviderSettings config={config} onChange={onChange} />
+      </Section>
     </div>
   )
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div>
-      <label className="text-sm font-medium text-foreground mb-1 block">{label}</label>
+    <section>
+      <h2 className="text-sm font-semibold text-foreground mb-3 pb-2 border-b border-border">
+        {title}
+      </h2>
+      {children}
+    </section>
+  )
+}
+
+function Field({ label, children, className }: { label: string; children: React.ReactNode; className?: string }) {
+  return (
+    <div className={className}>
+      <label className="text-xs font-medium text-muted-foreground mb-1.5 block">{label}</label>
       {children}
     </div>
   )
