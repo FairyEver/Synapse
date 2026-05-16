@@ -1,0 +1,12 @@
+import { jsx as _jsx, jsxs as _jsxs } from "react/jsx-runtime";
+import { PromptEditor } from './prompt-editor';
+import { ProviderSettings } from './provider-settings';
+export function ConfigForm({ config, onChange }) {
+    const update = (key, value) => {
+        onChange({ ...config, [key]: value });
+    };
+    return (_jsxs("div", { className: "space-y-6", children: [_jsx(PromptEditor, { config: config, onChange: onChange }), _jsxs("div", { className: "grid grid-cols-2 gap-4", children: [_jsx(Field, { label: "\u5DE5\u4F5C\u76EE\u5F55", children: _jsx("input", { value: config.workingDirectory, onChange: e => update('workingDirectory', e.target.value), className: "w-full border border-input rounded-md px-2 py-1.5 text-sm bg-background font-mono" }) }), _jsx(Field, { label: "Provider", children: _jsxs("select", { value: config.provider, onChange: e => update('provider', e.target.value), className: "w-full border border-input rounded-md px-2 py-1.5 text-sm bg-background", children: [_jsx("option", { value: "codex", children: "Codex" }), _jsx("option", { value: "claude-code", children: "Claude Code" })] }) }), _jsx(Field, { label: "\u5E76\u53D1\u6570", children: _jsx("input", { type: "number", min: 1, max: 20, value: config.concurrency, onChange: e => update('concurrency', Number(e.target.value)), className: "w-full border border-input rounded-md px-2 py-1.5 text-sm bg-background" }) }), _jsx(Field, { label: "\u95F4\u9694 (\u5206\u949F)", children: _jsx("input", { type: "number", min: 1, value: config.intervalMinutes, onChange: e => update('intervalMinutes', Number(e.target.value)), className: "w-full border border-input rounded-md px-2 py-1.5 text-sm bg-background" }) }), _jsx(Field, { label: "\u8D85\u65F6 (\u5206\u949F)", children: _jsx("input", { type: "number", min: 1, value: config.timeoutMinutes, onChange: e => update('timeoutMinutes', Number(e.target.value)), className: "w-full border border-input rounded-md px-2 py-1.5 text-sm bg-background" }) }), _jsx(Field, { label: "\u4FDD\u7559\u65E5\u5FD7\u6570", children: _jsx("input", { type: "number", min: 1, value: config.maxLogs, onChange: e => update('maxLogs', Number(e.target.value)), className: "w-full border border-input rounded-md px-2 py-1.5 text-sm bg-background" }) })] }), _jsx(ProviderSettings, { config: config, onChange: onChange })] }));
+}
+function Field({ label, children }) {
+    return (_jsxs("div", { children: [_jsx("label", { className: "text-sm font-medium text-foreground mb-1 block", children: label }), children] }));
+}
