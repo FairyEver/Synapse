@@ -32,7 +32,7 @@ test('saveUiConfig persists active prompt content and runtime settings separatel
       activePromptName: 'work',
       workingDirectory: dir,
       concurrency: 2,
-      intervalMinutes: 3,
+      intervalSeconds: 180,
       timeoutMinutes: 4,
       maxLogs: 5,
       codex: {

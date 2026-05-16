@@ -126,7 +126,7 @@ export class AutoScheduler {
         this.currentBatch = null
         this.emit()
         this.waitAbortController = new AbortController()
-        await this.wait(config.intervalMinutes * 60_000, this.waitAbortController.signal)
+        await this.wait(config.intervalSeconds * 1_000, this.waitAbortController.signal)
         this.waitAbortController = null
         if (this.drainAfterCurrent) {
           this.status = 'stopped'

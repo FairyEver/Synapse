@@ -26,7 +26,7 @@ export interface UiConfig {
   prompts: string[]
   workingDirectory: string
   concurrency: number
-  intervalMinutes: number
+  intervalSeconds: number
   timeoutMinutes: number
   maxLogs: number
   provider: Provider

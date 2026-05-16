@@ -10,7 +10,7 @@ function config(): UiConfig {
     prompt: 'hello',
     workingDirectory: '/tmp/work',
     concurrency: 2,
-    intervalMinutes: 1,
+    intervalSeconds: 60,
     timeoutMinutes: 1,
     maxLogs: 10,
   }
