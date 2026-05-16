@@ -116,7 +116,15 @@ export class WorkflowEngine {
         try {
           const manifest = nodeTypeRegistry.getManifest(node.type)
           const executor = nodeTypeRegistry.getExecutor(node.type)
-          const cfg = manifest.configSchema.parse(node.config)
+          const rawCfg = manifest.configSchema.parse(node.config)
+          // Resolve provider/model from workflow defaults when node omits them
+          const cfg = (node.type === "prompt" || node.type === "switch")
+            ? {
+                ...(rawCfg as Record<string, unknown>),
+                providerId: (rawCfg as Record<string, unknown>).providerId || def.defaultProviderId,
+                modelTier: (rawCfg as Record<string, unknown>).modelTier || def.defaultModelTier,
+              }
+            : rawCfg
           const vars = (cfg as Record<string, unknown>)["variables"]
           const { resolved, skippedReferences } = resolveVariables(
             Array.isArray(vars) ? vars as never : [], paramValues, nodeOutputs, nodeNames, allNodeIds,

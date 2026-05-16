@@ -250,6 +250,40 @@ describe("WorkflowEngine", () => {
     expect(cIdx).toBeLessThan(endIdx)
   })
 
+  it("resolves provider from workflow default when node omits it", async () => {
+    const nodeNoProvider = { id: "np", name: "NP", type: "prompt", position: { x: 0, y: 0 }, config: { variables: [], prompt: "test" } }
+    const def: WorkflowDefinition = {
+      id: "wf-default-provider", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      defaultProviderId: "resolved-provider", defaultModelTier: "opus" as const,
+      params: [],
+      nodes: [nodeNoProvider, nodeEnd],
+      edges: [{ id: "e1", from: "np", to: "end" }],
+    }
+    const agent = fakeAgent("ok")
+    const engine = new WorkflowEngine(agent)
+    await engine.run(def, {}, "run-resolve", () => {})
+    expect(agent.sendToAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "resolved-provider", modelTier: "opus" }),
+    )
+  })
+
+  it("node-level provider takes priority over workflow default", async () => {
+    const nodeWithProvider = { id: "wp", name: "WP", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "node-provider", modelTier: "haiku", variables: [], prompt: "test" } }
+    const def: WorkflowDefinition = {
+      id: "wf-override", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      defaultProviderId: "wf-provider", defaultModelTier: "opus" as const,
+      params: [],
+      nodes: [nodeWithProvider, nodeEnd],
+      edges: [{ id: "e1", from: "wp", to: "end" }],
+    }
+    const agent = fakeAgent("ok")
+    const engine = new WorkflowEngine(agent)
+    await engine.run(def, {}, "run-override", () => {})
+    expect(agent.sendToAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "node-provider", modelTier: "haiku" }),
+    )
+  })
+
   it("parallel root failure skips downstream but lets other running nodes finish", async () => {
     const nodeC = { id: "c", name: "C", type: "prompt", position: { x: 100, y: 100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "c" } }
     const def: WorkflowDefinition = {
