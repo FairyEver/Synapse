@@ -67,6 +67,8 @@ const workflowDefinitionSchema = z.object({
   id: z.string(), name: z.string(), description: z.string().optional(),
   version: z.string(), createdAt: z.number(), updatedAt: z.number(),
   defaultProjectId: z.string().optional(),
+  defaultProviderId: z.string().optional(),
+  defaultModelTier: z.enum(["default", "haiku", "sonnet", "opus"]).optional(),
   params: z.array(z.object({ name: z.string(), type: z.enum(["text", "number"]), default: z.union([z.string(), z.number(), z.null()]), description: z.string().optional() })),
   nodes: z.array(z.object({ id: z.string(), name: z.string(), type: z.string(), position: z.object({ x: z.number(), y: z.number() }), config: z.record(z.string(), z.unknown()) })),
   edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), branch: z.string().optional() })),

@@ -9,6 +9,8 @@ export interface WorkflowDefinition {
   id: string; name: string; description?: string; version: string
   createdAt: number; updatedAt: number
   defaultProjectId?: string
+  defaultProviderId?: string
+  defaultModelTier?: "default" | "haiku" | "sonnet" | "opus"
   params: WorkflowParam[]; nodes: WorkflowNode[]; edges: WorkflowEdge[]
 }
 export interface WorkflowMeta {
