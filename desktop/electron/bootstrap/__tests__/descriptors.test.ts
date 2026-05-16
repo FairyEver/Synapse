@@ -189,7 +189,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(result).toEqual({
       status: "failed",
       response: "",
-      error: `Agent call failed (${rawError.message.length} chars)`,
+      error: `Agent call failed (Error, ${rawError.message.length} chars)`,
       durationMs: 0,
     })
     expect(logger.error).toHaveBeenCalledWith(
@@ -207,6 +207,93 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(serialized).not.toContain("sk-test")
     expect(serialized).not.toContain("/Users/liyang/private")
     expect(serialized).not.toContain("secret prompt")
+  })
+
+  it("createRunWorkflowHandler catch handler handles engine rejection without leaking raw error text", async () => {
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: "repo-1",
+          repositories: [{ uuid: "repo-1", name: "Test", localPath: "/test" }],
+        })),
+      },
+    }))
+
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    vi.doMock("../../services/log-store", () => ({
+      logStore: {},
+      createMainLogger: () => logger,
+    }))
+
+    const { createRunWorkflowHandler } = await importBootstrap()
+
+    const workflowDef = {
+      id: "wf-1",
+      name: "Test",
+      version: "",
+      nodes: [
+        { id: "end-1", type: "end" as const, name: "End", position: { x: 400, y: 200 }, config: { outputType: "text" as const, template: "", variables: [] } },
+      ],
+      edges: [],
+      params: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+
+    const workflowService = { get: vi.fn().mockResolvedValue(workflowDef) }
+    const runAborts = new Map<string, AbortController>()
+    const runStatuses = new Map<string, { runId: string; workflowId: string; status: string; nodeResults: Record<string, unknown>; startedAt: number; error?: string; params?: Record<string, unknown>; definition?: unknown }>()
+    const eventBus = { emit: vi.fn() }
+    const snapshotService = { save: vi.fn() }
+    const capabilityLogger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const engineError = new Error("engine crashed token=sk-secret at /Users/example")
+    const workflowEngine = { run: vi.fn().mockRejectedValue(engineError) }
+
+    const handler = createRunWorkflowHandler({
+      workflowService: workflowService as never,
+      workflowEngine: workflowEngine as never,
+      snapshotService: snapshotService as never,
+      eventBus: eventBus as never,
+      runAborts: runAborts as never,
+      runStatuses: runStatuses as never,
+      capabilityLogger: capabilityLogger as never,
+    })
+
+    const result = await handler("wf-1", {})
+    expect(result).toHaveProperty("runId")
+    const runId = (result as { runId: string }).runId
+
+    await vi.waitFor(() => {
+      expect(runAborts.has(runId)).toBe(false)
+    })
+
+    const status = runStatuses.get(runId)
+    expect(status?.status).toBe("failed")
+    expect(status?.error).toBe("工作流引擎异常")
+    expect(eventBus.emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: "workflow",
+        type: "workflow:failed",
+        payload: expect.objectContaining({ runId, error: "工作流引擎异常" }),
+      }),
+      expect.objectContaining({ backpressure: "block" }),
+    )
+    expect(snapshotService.save).toHaveBeenCalledWith(
+      expect.objectContaining({ runId, status: "failed" }),
+    )
+    expect(capabilityLogger.error).toHaveBeenCalledWith(
+      "workflow engine rejected (mcp dispatch)",
+      expect.objectContaining({
+        workflowId: "wf-1",
+        runId,
+        errorName: "Error",
+        errorLength: "engine crashed token=sk-secret at /Users/example".length,
+      }),
+    )
+
+    const serialized = JSON.stringify([runStatuses.get(runId), eventBus.emit.mock.calls, snapshotService.save.mock.calls, capabilityLogger.error.mock.calls])
+    expect(serialized).not.toContain("sk-secret")
+    expect(serialized).not.toContain("/Users/example")
   })
 
   it("coreTaskSchedulerDescriptor depends on action runtime", async () => {

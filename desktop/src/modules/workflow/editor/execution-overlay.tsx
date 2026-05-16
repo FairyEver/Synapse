@@ -132,7 +132,7 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
               )}
               {!dialogTarget.input.prompt && !dialogTarget.error && !dialogTarget.activeBranch && (dialogTarget.output == null || dialogTarget.output === "") && (
                 <p className="text-xs text-muted-foreground">
-                  {dialogTarget.status === "skipped" ? "节点因工作流分支逻辑被跳过，未执行" : "（无可展示的输出）"}
+                  {dialogTarget.status === "skipped" ? "节点因工作流分支逻辑被跳过，未执行" : dialogTarget.status === "cancelled" ? "节点执行被取消" : dialogTarget.status === "pending" ? "节点等待执行" : dialogTarget.status === "running" ? "节点正在执行…" : "（无可展示的输出）"}
                 </p>
               )}
             </div>

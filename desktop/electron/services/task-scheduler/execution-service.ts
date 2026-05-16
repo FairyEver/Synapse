@@ -1,5 +1,6 @@
 import type { MainActionRegistry } from "../../action-runtime/action-registry"
 import type { AuditSink, PermissionGuard, PermissionRequest } from "../../runtime/security"
+import { sanitizeError } from "../error-sanitize"
 import { createMainLogger } from "../log-store"
 import type { ScheduledTaskRunRepository } from "./run-repository"
 import type { ScheduledTaskRepository } from "./task-repository"
@@ -39,6 +40,14 @@ export class TaskSchedulerExecutionService {
     const run = await this.deps.runs.start(task.id, triggeredBy)
     const controller = new AbortController()
     this.activeRuns.set(run.id, controller)
+    this.logger.info?.("Scheduled task execution started.", {
+      source: "task-scheduler",
+      taskId: task.id,
+      runId: run.id,
+      actionType: task.action.type,
+      triggeredBy,
+      boundary: "task-scheduler-execution-start",
+    })
     let permissionRequest: PermissionRequest | undefined
     let permissionAllowed = false
     let permissionDenied = false
@@ -176,7 +185,7 @@ export class TaskSchedulerExecutionService {
       }
       const visibleError = permissionDenied
         ? message
-        : visibleFailureMessage(status)
+        : visibleFailureMessage(status, diagnostic.errorName)
       const finished = await this.deps.runs.finish(run.id, {
         status,
         error: visibleError,
@@ -223,17 +232,26 @@ function errorDiagnostic(error: unknown): { readonly errorName: string; readonly
   }
 }
 
-function resultErrorDiagnostic(error: string | undefined): { readonly errorName?: string; readonly errorLength?: number } {
+function resultErrorDiagnostic(error: string | undefined): { readonly errorName?: string; readonly errorLength?: number; readonly diagnosticMessage?: string } {
   if (!error) return {}
-  return {
-    errorName: "string",
-    errorLength: error.length,
+  const sanitized = sanitizePersistableError(error)
+  if (sanitized) {
+    const truncated = sanitized.length <= 120 ? sanitized : sanitized.slice(0, 120) + "..."
+    return { errorName: "action_error", errorLength: error.length, diagnosticMessage: truncated }
   }
+  return { errorName: "action_error", errorLength: error.length }
 }
 
 function persistableActionError(error: string | undefined): string | undefined {
   if (!error) return undefined
-  return `执行失败（错误 ${error.length} 字）`
+  const sanitized = sanitizePersistableError(error)
+  if (!sanitized) return `执行失败（${error.length} 字）`
+  const truncated = sanitized.length <= 120 ? sanitized : sanitized.slice(0, 120) + "..."
+  return `执行失败：${truncated}`
+}
+
+function sanitizePersistableError(value: string): string {
+  return sanitizeError(value)
 }
 
 class TaskRunCancelledError extends Error {
@@ -243,6 +261,7 @@ class TaskRunCancelledError extends Error {
   }
 }
 
-function visibleFailureMessage(status: "failed" | "cancelled"): string {
-  return status === "cancelled" ? "已停止" : "执行失败"
+function visibleFailureMessage(status: "failed" | "cancelled", errorName: string): string {
+  if (status === "cancelled") return "已停止"
+  return `执行失败（${errorName}）`
 }

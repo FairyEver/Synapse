@@ -1,3 +1,4 @@
+import { useRef } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -18,9 +19,10 @@ interface WorkflowCardProps { meta: WorkflowMeta; running?: boolean; runState?: 
 
 export function WorkflowCard({ meta, running, runState, onOpen, onRun, onHistory, onDelete }: WorkflowCardProps) {
   const badge = runState ? RUN_STATE_BADGE[runState] : null
+  const suppressClickRef = useRef(false)
 
   return (
-    <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={onOpen}>
+    <Card className="cursor-pointer hover:bg-muted/50 transition-colors" onClick={() => { if (!suppressClickRef.current) onOpen() }}>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <GitBranch className="h-4 w-4 text-muted-foreground" />
@@ -54,7 +56,7 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onHistory
           >
             <History className="h-3.5 w-3.5" />
           </Button>
-          <AlertDialog>
+          <AlertDialog onOpenChange={(open) => { suppressClickRef.current = open }}>
             <AlertDialogTrigger asChild>
               <Button
                 type="button"

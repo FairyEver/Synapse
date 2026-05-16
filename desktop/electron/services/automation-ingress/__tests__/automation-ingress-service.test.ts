@@ -110,8 +110,9 @@ describe("AutomationIngressService", () => {
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
     const auditEvents: Parameters<AuditSink["record"]>[0][] = []
     const logger = structuredLogger()
-    const errorText = "SDK failed for secret prompt text"
-    const safeErrorText = `执行失败（错误 ${errorText.length} 字）`
+    const errorText = "SDK failed for api_key=sk-ant-test123456 secret prompt"
+    const sanitizedErrorText = "SDK failed for api_key=[redacted] secret prompt"
+    const safeErrorText = `执行失败：${sanitizedErrorText}`
     const service = new AutomationIngressService({
       projectContainers: fakeProjectContainers({
         send: async () => ({
@@ -208,10 +209,11 @@ describe("AutomationIngressService", () => {
         }),
       }),
     ]))
-    expect(JSON.stringify(responseBody)).not.toContain("secret prompt text")
-    expect(JSON.stringify(await runs.list())).not.toContain("secret prompt text")
-    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt text")
-    expect(JSON.stringify(auditEvents)).not.toContain("secret prompt text")
+    expect(JSON.stringify(responseBody)).toContain("api_key=[redacted]")
+    expect(JSON.stringify(responseBody)).not.toContain("sk-ant-test123456")
+    expect(JSON.stringify(await runs.list())).not.toContain("sk-ant-test123456")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sk-ant-test123456")
+    expect(JSON.stringify(auditEvents)).not.toContain("sk-ant-test123456")
 
     await service.stop()
   })
@@ -219,8 +221,9 @@ describe("AutomationIngressService", () => {
   it("summarizes webhook prompt agent errors before sending automation replies", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
-    const errorText = "SDK failed for secret prompt text"
-    const safeErrorText = `执行失败（错误 ${errorText.length} 字）`
+    const errorText = "SDK failed for api_key=sk-ant-test123456 secret prompt"
+    const sanitizedErrorText = "SDK failed for api_key=[redacted] secret prompt"
+    const safeErrorText = `执行失败：${sanitizedErrorText}`
     const sendAutomationMessage = vi.fn(async () => {})
     const service = new AutomationIngressService({
       projectContainers: fakeProjectContainers({
@@ -269,7 +272,7 @@ describe("AutomationIngressService", () => {
       }),
       safeErrorText,
     )
-    expect(JSON.stringify(sendAutomationMessage.mock.calls)).not.toContain("secret prompt text")
+    expect(JSON.stringify(sendAutomationMessage.mock.calls)).not.toContain("sk-ant-test123456")
 
     await service.stop()
   })
@@ -278,8 +281,9 @@ describe("AutomationIngressService", () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
     const logger = structuredLogger()
-    const errorText = "SDK failed for secret prompt text"
-    const safeErrorText = `执行失败（错误 ${errorText.length} 字）`
+    const errorText = "SDK failed for api_key=sk-ant-test123456 secret prompt"
+    const sanitizedErrorText = "SDK failed for api_key=[redacted] secret prompt"
+    const safeErrorText = `执行失败：${sanitizedErrorText}`
     const service = new AutomationIngressService({
       projectContainers: fakeProjectContainers({
         send: async () => {
@@ -324,7 +328,7 @@ describe("AutomationIngressService", () => {
         message: "internal error",
       },
     })
-    expect(JSON.stringify(responseBody)).not.toContain("secret prompt text")
+    expect(JSON.stringify(responseBody)).not.toContain("sk-ant-test123456")
     const [run] = await runs.list()
     expect(run).toEqual(expect.objectContaining({
       kind: "prompt",
@@ -345,8 +349,8 @@ describe("AutomationIngressService", () => {
         errorLength: errorText.length,
       }),
     )
-    expect(JSON.stringify(await runs.list())).not.toContain("secret prompt text")
-    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt text")
+    expect(JSON.stringify(await runs.list())).not.toContain("sk-ant-test123456")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sk-ant-test123456")
 
     await service.stop()
   })
@@ -435,7 +439,7 @@ describe("AutomationIngressService", () => {
         Authorization: `Bearer ${config.token ?? ""}`,
         "Content-Type": "application/json",
       },
-      body: '{"prompt":"secret prompt text",',
+      body: '{"prompt":"test body",',
     })
 
     expect(response.status).toBe(400)
@@ -448,12 +452,68 @@ describe("AutomationIngressService", () => {
         method: "POST",
         status: 400,
         errorCode: "invalid_json",
-        bodyLength: '{"prompt":"secret prompt text",'.length,
+        bodyLength: '{"prompt":"test body",'.length,
         source: "local",
       }),
     )
-    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt text")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("test body")
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain(config.token ?? "")
+
+    await service.stop()
+  })
+
+  it("redacts exec shell errors from processRunner in persisted lastError", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const logger = structuredLogger()
+    const errorText = "exec failed: /Users/alice/.ssh/id_rsa found at sk-ant-test5678"
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({
+        send: async () => ({ resultText: "not used" }),
+      }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: {
+        run: async () => {
+          throw new Error(errorText)
+        },
+      },
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      logger,
+    })
+    const config = await service.updateConfig({ enabled: true, resetToken: true })
+    await service.start()
+    const status = await service.getStatus()
+
+    const response = await fetch(`http://${status.bindAddress}:${String(status.assignedPort)}${status.path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.token ?? ""}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        project: "project-1",
+        sessionKey: "local:automation",
+        exec: "cat /etc/passwd",
+        shell: "posix",
+        replyMode: "wait",
+      }),
+    })
+
+    expect(response.status).toBe(500)
+    const [run] = await runs.list()
+    expect(run).toEqual(expect.objectContaining({
+      kind: "exec",
+      projectId: "project-1",
+      sessionKey: "local:automation",
+      status: "failed",
+    }))
+    expect(run?.lastError).toBeDefined()
+    expect(run?.lastError).not.toContain("sk-ant-test5678")
+    expect(run?.lastError).not.toContain("/Users/alice/.ssh/id_rsa")
+    expect(run?.lastError).toContain("[path]")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sk-ant-test5678")
 
     await service.stop()
   })

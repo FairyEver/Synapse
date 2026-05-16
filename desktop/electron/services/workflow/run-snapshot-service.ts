@@ -1,4 +1,5 @@
 import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises"
+import type { Dirent } from "node:fs"
 import path from "node:path"
 import type { WorkflowRunSnapshot } from "../../../src/types/workflow"
 import { createMainLogger } from "../log-store"
@@ -47,6 +48,7 @@ export class RunSnapshotService {
       const tmp = `${target}.tmp`
       await writeFile(tmp, JSON.stringify(s, null, 2), "utf-8")
       await rename(tmp, target)
+      logger.info("run snapshot saved", { runId: s.runId, workflowId: s.workflowId, status: s.status, nodeCount: Object.keys(s.nodeResults).length })
       const snapshots = await this.readSnapshotFiles(s.workflowId)
       const stale = snapshots
         .sort((a, b) => this.snapshotTime(a.snapshot) - this.snapshotTime(b.snapshot))
@@ -98,7 +100,7 @@ export class RunSnapshotService {
    * vs the N+1 file reads of iterating workflows and calling get() for each.
    */
   async findByRunId(runId: string): Promise<WorkflowRunSnapshot | null> {
-    let wfDirs: string[]
+    let wfDirs: Dirent[]
     try {
       wfDirs = await readdir(path.join(this.dataDir, "workflow-runs"), { withFileTypes: true })
     } catch (err) {

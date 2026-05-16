@@ -1,0 +1,38 @@
+{
+  "agent-1778925956-3618": {
+    "iteration": 1,
+    "covered": [
+      "electron/services/workflow/workflow-engine.ts: node started/succeeded/failed/cancelled logs + workflow terminal logs",
+      "electron/services/workflow/__tests__/workflow-engine.test.ts: 13 tests passed",
+      "electron/services/workflow/__tests__/workflow-scheduler.test.ts: 12 tests passed"
+    ],
+    "verified": [
+      "pnpm exec vitest run electron/services/__tests__/workflow-engine.test.ts (13 passed)",
+      "pnpm exec vitest run electron/services/__tests__/workflow-scheduler.test.ts (12 passed)",
+      "pnpm exec eslint electron/services/workflow/workflow-engine.ts (0 errors)"
+    ]
+  },
+  "agent-1778925969-9746": {
+    "iteration": 197,
+    "covered": [
+      "electron/services/task-scheduler/execution-service.ts: persistableActionError now includes sanitized error summary (\u2264120 chars)",
+      "electron/services/task-scheduler/__tests__/execution-service.test.ts: 8 tests passed"
+    ],
+    "verified": [
+      "pnpm exec vitest run electron/services/task-scheduler/__tests__/execution-service.test.ts (8 passed)",
+      "pnpm exec eslint electron/services/task-scheduler/execution-service.ts (no errors)",
+      "pnpm run check:hard-constraints (passed)"
+    ]
+  },
+  "agent-1778926571-5737": {
+    "iteration": 1,
+    "covered": [
+      "electron/capabilities/workflow-dispatcher.ts: success log now includes dispatchCorrelation(params)",
+      "electron/capabilities/__tests__/workflow-dispatcher.test.ts: 15 tests passed"
+    ],
+    "verified": [
+      "pnpm exec vitest run electron/capabilities/__tests__/workflow-dispatcher.test.ts (15 passed)",
+      "pnpm exec eslint electron/capabilities/workflow-dispatcher.ts (0 errors)"
+    ]
+  }
+}

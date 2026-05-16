@@ -98,7 +98,7 @@ import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "../services/workflow/workflow-validator"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
-import type { WorkflowRunStatus } from "../../src/types/workflow"
+import type { WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
 import { nodeTypeRegistry } from "../../workflow-nodes/registry"
 import "../../workflow-nodes/register.main"
 
@@ -184,6 +184,92 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
   },
 }
 
+export function createRunWorkflowHandler(deps: {
+  workflowService: Pick<WorkflowService, "get">
+  workflowEngine: WorkflowEngine
+  snapshotService: Pick<RunSnapshotService, "save">
+  eventBus: EventBus
+  runAborts: Map<string, AbortController>
+  runStatuses: Map<string, WorkflowRunStatus>
+  capabilityLogger: ReturnType<typeof createMainLogger>
+}) {
+  return async (id: string, params: Record<string, unknown>): Promise<{ runId: string } | { errors: ValidationError[] }> => {
+    const { workflowService, workflowEngine, snapshotService, eventBus, runAborts, runStatuses, capabilityLogger } = deps
+    const def = await workflowService.get(id)
+    if (!def) return { errors: [{ type: "invalid_config" as const, message: "Workflow not found" }] }
+    const validation = validateWorkflow(def)
+    if (!validation.valid) return { errors: validation.errors }
+    const paramErrors = validateRunParams(def, params)
+    if (paramErrors.length > 0) return { errors: paramErrors }
+    const effectiveParams = buildEffectiveRunParams(def, params)
+    const runId = randomUUID()
+    const ac = new AbortController()
+    const startedAt = Date.now()
+    runAborts.set(runId, ac)
+    runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt, params: effectiveParams, definition: def })
+    const appConfig = await configStore.load()
+    const activeRepo = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
+    const projectId = activeRepo?.uuid
+    workflowEngine.run(def, effectiveParams, runId, (event) => {
+      const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
+      const nextNodeResults = { ...current.nodeResults }
+      if (event.type === "node:started") {
+        nextNodeResults[event.nodeId] = { ...(nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, input: { variables: {} } }), status: "running", startedAt: event.startedAt ?? Date.now() }
+      } else if (event.type === "node:completed" || event.type === "node:failed" || event.type === "node:skipped") {
+        nextNodeResults[event.nodeId] = event.result ?? nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: "failed", input: { variables: {} } }
+      }
+      runStatuses.set(runId, { ...current, nodeResults: nextNodeResults })
+      eventBus.emit({ domain: "workflow", type: event.type, payload: event, timestamp: new Date().toISOString() }, { backpressure: "block" })
+      if (event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled") {
+        runAborts.delete(runId)
+        const endedAt = Date.now()
+        const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
+        runStatuses.set(runId, { ...current, runId, workflowId: id, status, nodeResults: event.result?.nodeResults ?? nextNodeResults, startedAt, endedAt, durationMs: event.result?.durationMs ?? endedAt - startedAt, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
+        snapshotService.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: event.result?.nodeResults ?? nextNodeResults, definition: def }).catch((err) => {
+          capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
+        })
+      }
+    }, ac.signal, projectId, "mcp").catch((err) => {
+      const diagnostic = capabilityRejectionDiagnostic(err)
+      capabilityLogger.error("workflow engine rejected (mcp dispatch)", { workflowId: id, runId, ...diagnostic })
+      runAborts.delete(runId)
+      const current = runStatuses.get(runId)
+      if (current && current.status === "running") {
+        const endedAt = Date.now()
+        runStatuses.set(runId, {
+          ...current, runId, workflowId: id,
+          status: "failed",
+          error: "工作流引擎异常",
+          nodeResults: current.nodeResults,
+          startedAt, endedAt,
+          durationMs: endedAt - startedAt,
+        })
+        eventBus.emit({
+          domain: "workflow",
+          type: "workflow:failed",
+          payload: {
+            type: "workflow:failed",
+            runId,
+            error: "工作流引擎异常",
+            result: { status: "failed", nodeResults: current.nodeResults, durationMs: endedAt - startedAt },
+          },
+          timestamp: new Date().toISOString(),
+        }, { backpressure: "block" })
+        snapshotService.save({
+          runId, workflowId: id, version: def.version,
+          startedAt, endedAt, status: "failed",
+          params: effectiveParams,
+          nodeResults: current.nodeResults,
+          definition: def,
+        }).catch((err) => {
+          capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
+        })
+      }
+    })
+    return { runId }
+  }
+}
+
 /**
  * core.database — opens SQLite, starts HTTP + MCP servers, registers IPC,
  * wires change dispatcher, attempts CLI install, attempts MCP registration.
@@ -218,48 +304,22 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const runStatuses = ctx.registry.get<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
     const workflowEngine = ctx.registry.get<WorkflowEngine>("core.workflow.engine")
     const providerService = ctx.registry.get<ProviderService>(PROVIDER_SERVICE_ID)
+    const capabilityLogger = createMainLogger("bootstrap.workflow-capability")
 
     const workflowDispatcher = createWorkflowDispatcher({
       workflowService,
       snapshotService,
       nodeTypeRegistry,
       eventBus,
-      runWorkflow: async (id: string, params: Record<string, unknown>) => {
-        const def = await workflowService.get(id)
-        if (!def) return { errors: [{ type: "invalid_config" as const, message: "Workflow not found" }] }
-        const validation = validateWorkflow(def)
-        if (!validation.valid) return { errors: validation.errors }
-        const paramErrors = validateRunParams(def, params)
-        if (paramErrors.length > 0) return { errors: paramErrors }
-        const effectiveParams = buildEffectiveRunParams(def, params)
-        const runId = randomUUID()
-        const ac = new AbortController()
-        const startedAt = Date.now()
-        runAborts.set(runId, ac)
-        runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt, params: effectiveParams, definition: def })
-        const appConfig = await configStore.load()
-        const activeRepo = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
-        const projectId = activeRepo?.uuid
-        workflowEngine.run(def, effectiveParams, runId, (event) => {
-          const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
-          const nextNodeResults = { ...current.nodeResults }
-          if (event.type === "node:started") {
-            nextNodeResults[event.nodeId] = { ...(nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, input: { variables: {} } }), status: "running", startedAt: event.startedAt ?? Date.now() }
-          } else if (event.type === "node:completed" || event.type === "node:failed" || event.type === "node:skipped") {
-            nextNodeResults[event.nodeId] = event.result ?? nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: "failed", input: { variables: {} } }
-          }
-          runStatuses.set(runId, { ...current, nodeResults: nextNodeResults })
-          eventBus.emit({ domain: "workflow", type: event.type, payload: event, timestamp: new Date().toISOString() }, { backpressure: "block" })
-          if (event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled") {
-            runAborts.delete(runId)
-            const endedAt = Date.now()
-            const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
-            runStatuses.set(runId, { ...current, runId, workflowId: id, status, nodeResults: event.result?.nodeResults ?? nextNodeResults, startedAt, endedAt, durationMs: event.result?.durationMs ?? endedAt - startedAt, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
-            void snapshotService.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: event.result?.nodeResults ?? nextNodeResults, definition: def })
-          }
-        }, ac.signal, projectId).catch(() => { runAborts.delete(runId) })
-        return { runId }
-      },
+      runWorkflow: createRunWorkflowHandler({
+        workflowService,
+        workflowEngine,
+        snapshotService,
+        eventBus,
+        runAborts,
+        runStatuses,
+        capabilityLogger,
+      }),
       cancelRun: (runId: string) => { runAborts.get(runId)?.abort(); runAborts.delete(runId) },
       cancelRunsForWorkflow: (workflowId: string) => {
         for (const [runId, status] of runStatuses) {
@@ -1068,8 +1128,27 @@ function workflowAgentErrorDiagnostic(error: unknown): {
   }
 }
 
-function workflowAgentFailureMessage(diagnostic: { readonly errorLength: number }): string {
-  return `Agent call failed (${diagnostic.errorLength} chars)`
+function capabilityRejectionDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly stackLength?: number
+} {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name,
+      errorLength: error.message.length,
+      stackLength: error.stack?.length,
+    }
+  }
+  const message = String(error)
+  return {
+    errorName: typeof error,
+    errorLength: message.length,
+  }
+}
+
+function workflowAgentFailureMessage(diagnostic: { readonly errorName: string; readonly errorLength: number }): string {
+  return `Agent call failed (${diagnostic.errorName}, ${diagnostic.errorLength} chars)`
 }
 
 export const coreWorkflowWindowManagerDescriptor: ServiceDescriptor<WorkflowWindowManager> = {

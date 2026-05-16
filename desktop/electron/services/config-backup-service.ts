@@ -288,6 +288,7 @@ function validateConfig(
     },
     agent: {
       defaultPermissionMode: "default",
+      defaultProviderModel: null,
     },
   }
 }

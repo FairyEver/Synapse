@@ -118,6 +118,46 @@ describe("validateWorkflow", () => {
     const r = validateWorkflow(defWithDefault)
     expect(r.valid).toBe(true)
   })
+
+  // Edge case: switch branch with no outgoing edge
+  it("errors when switch branch has no outgoing edge", () => {
+    const sw = { id: "sw", name: "S", type: "switch", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }, { id: "no", label: "N" }] } }
+    const r = validateWorkflow({ ...base, nodes: [sw, nodeB, nodeEnd], edges: [{ id: "e1", from: "sw", to: "b", branch: "yes" }, { id: "e2", from: "b", to: "end" }] })
+    expect(r.errors.some((e) => e.type === "invalid_switch_edge" && e.message.includes("N"))).toBe(true)
+  })
+
+  // Edge case: switch branch edge exists but path cannot reach end node
+  it("errors when switch branch path cannot reach end node", () => {
+    const sw = { id: "sw", name: "S", type: "switch", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }, { id: "no", label: "N" }] } }
+    const nodeC = { id: "c", name: "C", type: "prompt", position: { x: 400, y: 200 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "" } }
+    const r = validateWorkflow({ ...base, nodes: [sw, nodeB, nodeC, nodeEnd], edges: [{ id: "e1", from: "sw", to: "b", branch: "yes" }, { id: "e2", from: "sw", to: "c", branch: "no" }, { id: "e3", from: "b", to: "end" }] })
+    expect(r.errors.some((e) => e.type === "invalid_switch_edge" && e.message.includes("N"))).toBe(true)
+  })
+
+  // Edge case: non-switch node edge incorrectly carries a branch field
+  it("errors on non-switch edge with orphan branch field", () => {
+    const r = validateWorkflow({ ...base, edges: [{ id: "e1", from: "a", to: "b", branch: "yes" }, { id: "e2", from: "b", to: "end" }] })
+    expect(r.errors.some((e) => e.type === "orphan_edge_branch")).toBe(true)
+  })
+
+  // Edge case: end node exists but nothing connects to it
+  it("warns when end node has no incoming edges", () => {
+    const r = validateWorkflow({ ...base, edges: [{ id: "e1", from: "a", to: "b" }] })
+    expect(r.valid).toBe(true)
+    expect(r.warnings.some((w) => w.type === "disconnected_node" && w.nodeId === "end")).toBe(true)
+  })
+
+  // Edge case: whitespace-only param names are silently skipped
+  it("silently skips whitespace-only param names", () => {
+    const r = validateWorkflow({ ...base, params: [{ name: " ", type: "text" }] })
+    expect(r.valid).toBe(true)
+  })
+
+  // Edge case: multiple nodes with no incoming edges
+  it("warns about multiple start nodes", () => {
+    const r = validateWorkflow({ ...base, edges: [{ id: "e1", from: "a", to: "end" }, { id: "e2", from: "b", to: "end" }] })
+    expect(r.warnings.some((w) => w.type === "multiple_start_nodes")).toBe(true)
+  })
 })
 
 describe("validateRunParams", () => {
@@ -150,5 +190,14 @@ describe("buildEffectiveRunParams", () => {
       ],
     }
     expect(buildEffectiveRunParams(def, { text: "显式文本" })).toEqual({ text: "显式文本", count: 3 })
+  })
+
+  it("handles null default without including it in effective params", () => {
+    const def: WorkflowDefinition = {
+      ...base,
+      params: [{ name: "a", type: "text", default: null }],
+    }
+    expect(buildEffectiveRunParams(def, {})).toEqual({})
+    expect(buildEffectiveRunParams(def, { a: "explicit" })).toEqual({ a: "explicit" })
   })
 })

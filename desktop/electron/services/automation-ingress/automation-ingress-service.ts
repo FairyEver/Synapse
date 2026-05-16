@@ -16,6 +16,7 @@ import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import type { ControlledProcessRunner } from "../../runtime/process"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
+import { sanitizeError } from "../error-sanitize"
 import { isShellKind, resolveShellCommand } from "../shell-exec"
 import {
   AgentRuntimeService,
@@ -263,7 +264,7 @@ export class AutomationIngressService {
       const diagnostic = errorDiagnostic(error)
       const persistedLastError = run.kind === "prompt" && !(error instanceof WebhookError)
         ? summarizeReturnedAgentError(message)
-        : message
+        : sanitizeWebhookAgentError(message)
       await this.finishRun(run, "failed", { lastError: persistedLastError })
       this.deps.logger?.warn("Webhook run threw.", {
         runId: run.id,
@@ -704,7 +705,14 @@ function errorMessage(error: unknown): string {
 }
 
 function summarizeReturnedAgentError(error: string): string {
-  return `执行失败（错误 ${error.length} 字）`
+  const sanitized = sanitizeWebhookAgentError(error)
+  if (!sanitized) return "执行失败"
+  const truncated = sanitized.length <= 120 ? sanitized : `${sanitized.slice(0, 120)}...`
+  return `执行失败：${truncated}`
+}
+
+function sanitizeWebhookAgentError(value: string): string {
+  return sanitizeError(value)
 }
 
 function webhookAgentMessageId(body: Record<string, unknown>, runId: string): string {

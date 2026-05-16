@@ -7,6 +7,9 @@ import type { EventBus } from "../runtime/event-bus/types"
 import type { WorkflowDefinition, WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
 import { validateWorkflow } from "../services/workflow/workflow-validator"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
+import { createMainLogger } from "../services/log-store"
+
+const logger = createMainLogger("capability.workflow-dispatcher")
 
 export type WorkflowDispatchDeps = {
   workflowService: WorkflowService
@@ -290,12 +293,53 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   },
 }
 
+function dispatchCorrelation(params: Record<string, unknown>): Record<string, unknown> {
+  const correlation: Record<string, unknown> = {}
+  if (typeof params.workflowId === "string") correlation.workflowId = params.workflowId
+  if (typeof params.runId === "string") correlation.runId = params.runId
+  if (typeof params.nodeId === "string") correlation.nodeId = params.nodeId
+  if (typeof params.nodeType === "string") correlation.nodeType = params.nodeType
+  if (typeof params.edgeId === "string") correlation.edgeId = params.edgeId
+  if (typeof params.from === "string") correlation.from = params.from
+  if (typeof params.to === "string") correlation.to = params.to
+  if (typeof params.branch === "string") correlation.branch = params.branch
+  if ("definition" in params) correlation.hasDefinition = true
+  if ("params" in params) correlation.hasRunParams = true
+  if ("node" in params) correlation.hasNode = true
+  if ("patch" in params) correlation.hasPatch = true
+  if ("limit" in params) correlation.limit = params.limit
+  return correlation
+}
+
+function dispatchErrorDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+} {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
+}
+
 export function createWorkflowDispatcher(deps: WorkflowDispatchDeps) {
   return {
     async dispatch(action: string, params: Record<string, unknown>, _context: DispatchContext): Promise<DispatchResult> {
       const handler = ACTION_HANDLERS[action]
       if (!handler) throw new Error(`Unknown workflow action: ${action}`)
-      return handler(params, deps)
+      logger.info("workflow mcp dispatch", { action, ...dispatchCorrelation(params) })
+      try {
+        const result = await handler(params, deps)
+        logger.info("workflow mcp dispatch succeeded", { action, ...dispatchCorrelation(params) })
+        return result
+      } catch (error) {
+        logger.warn("workflow mcp dispatch failed", {
+          action,
+          ...dispatchCorrelation(params),
+          ...dispatchErrorDiagnostic(error),
+        })
+        throw error
+      }
     },
   }
 }

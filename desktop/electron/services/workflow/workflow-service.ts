@@ -4,6 +4,7 @@ import { createHash, randomUUID } from "node:crypto"
 import type { WorkflowDefinition, WorkflowMeta, ValidationError } from "../../../src/types/workflow"
 import { validateWorkflow } from "./workflow-validator"
 import { createMainLogger } from "../log-store"
+import { configStore } from "../config-store"
 
 const logger = createMainLogger("service.workflow")
 
@@ -131,8 +132,11 @@ export class WorkflowService {
   async create(): Promise<{ id: string; versionHash: string } | WorkflowSaveError> {
     const id = randomUUID()
     const now = Date.now()
+    const appConfig = await configStore.load()
+    const pm = appConfig.agent.defaultProviderModel
     const def: WorkflowDefinition = {
       id, name: "新工作流", version: "", createdAt: now, updatedAt: now, params: [],
+      ...(pm ? { defaultProviderId: pm.providerId, defaultModelTier: pm.modelTier } : {}),
       nodes: [{ id: randomUUID(), name: "结束", type: "end", position: { x: 600, y: 200 }, config: { outputType: "text", template: "", variables: [] } }],
       edges: [],
     }

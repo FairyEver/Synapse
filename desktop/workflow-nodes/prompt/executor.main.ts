@@ -18,13 +18,15 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
     })
 
     input.onProgress?.("awaiting_response", "等待响应…")
-    const result = await input.agentDeps.sendToAgent({ providerId: input.config.providerId, modelTier: input.config.modelTier, prompt, projectId: input.context.projectId, abortSignal: input.context.abortSignal })
+    const result = await input.agentDeps.sendToAgent({ providerId: input.config.providerId ?? "", modelTier: input.config.modelTier ?? "default", prompt, projectId: input.context.projectId, abortSignal: input.context.abortSignal })
     const durationMs = Date.now() - start
 
     if (result.status === "failed") {
+      const sanitizedError = sanitizeAgentError(result.error)
       logger.warn("prompt node agent call failed", {
         projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
         ...agentErrorDiagnostic(result.error),
+        sanitizedError,
         durationMs,
       })
       return { status: "failed", output: "", error: agentFailureMessage(result.error), durationMs }
@@ -46,6 +48,18 @@ function agentErrorDiagnostic(error: string | undefined): { readonly errorName: 
   }
 }
 
+function sanitizeAgentError(error: string | undefined): string {
+  if (!error) return ""
+  return error
+    .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, "[path]")
+    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path]")
+    .replace(/\b(api[_-]?key|apikey|token|secret|authorization|bearer|cookie|password|credential)[\s=:]+[^\s,;"')]+/gi, "$1=[redacted]")
+    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, "[key]")
+}
+
 function agentFailureMessage(error: string | undefined): string {
-  return error || "Agent 调用失败"
+  const sanitized = sanitizeAgentError(error)
+  if (!sanitized) return "Agent 调用失败"
+  const truncated = sanitized.length <= 120 ? sanitized : sanitized.slice(0, 120) + "..."
+  return `Agent 调用失败：${truncated}`
 }

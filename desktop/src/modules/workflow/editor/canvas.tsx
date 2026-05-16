@@ -26,9 +26,7 @@ import { nodeTypes, NodeResultsContext } from "./node-wrappers"
 import { BranchEdge } from "./custom-edge"
 import { CanvasActionsContext, type NodeClipboard } from "./canvas-context"
 import type { WorkflowDefinition, WorkflowNode, WorkflowEdge, NodeRunResult } from "@/types/workflow"
-import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
-import type { ModelTier } from "@/types/provider-model"
 
 const logger = createRendererLogger("workflow.editor.canvas")
 
@@ -65,11 +63,10 @@ function defToFlow(def: WorkflowDefinition) {
   return { nodes, edges }
 }
 
-function defaultConfig(type: string, providerModel?: { providerId: string; modelTier: ModelTier } | null): Record<string, unknown> {
-  const pm = providerModel ?? { providerId: "", modelTier: "sonnet" as ModelTier }
-  if (type === "switch") return { providerId: pm.providerId, modelTier: pm.modelTier, prompt: "", variables: [], branches: [{ id: "branch1", label: "分支 1" }] }
+function defaultConfig(type: string): Record<string, unknown> {
+  if (type === "switch") return { providerId: "", modelTier: "", prompt: "", variables: [], branches: [{ id: "branch1", label: "分支 1" }] }
   if (type === "end") return { outputType: "text", template: "", variables: [] }
-  return { providerId: pm.providerId, modelTier: pm.modelTier, prompt: "", variables: [] }
+  return { providerId: "", modelTier: "", prompt: "", variables: [] }
 }
 
 function defaultName(type: string): string {
@@ -113,7 +110,6 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
   // Synchronous definition ref — updated immediately on each onChange call so that
   // sequential handlers (e.g. node-delete + edge-delete in the same event) always
   // read the latest combined state instead of a stale closure capture.
-  const { config: appConfig } = useAppConfig()
   const definitionRef = useRef(definition)
   definitionRef.current = definition
   const [clipboard, setClipboard] = useState<NodeClipboard | null>(null)
@@ -239,7 +235,7 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     if (!type) return
     const position = screenToFlowPosition({ x: event.clientX, y: event.clientY })
     const id = crypto.randomUUID()
-    const config = defaultConfig(type, appConfig.agent.defaultProviderModel)
+    const config = defaultConfig(type)
     const name = defaultName(type)
     // Unselect existing nodes and add the new node as selected, matching pasteNodes
     // behaviour so the user can immediately configure the dropped node.
@@ -255,7 +251,7 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     })
     onChange(newDef)
     onNodeSelect?.(id)
-  }, [screenToFlowPosition, onChange, setNodes, onNodeSelect, appConfig.agent.defaultProviderModel])
+  }, [screenToFlowPosition, onChange, setNodes, onNodeSelect])
 
   const selectionChangeHandler = useCallback(({ nodes: selectedNodes }: { nodes: WorkflowFlowNode[] }) => {
     if (runState && runState !== "idle") return

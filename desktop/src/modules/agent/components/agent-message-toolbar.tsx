@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Check, Clipboard } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
@@ -16,7 +16,14 @@ interface AgentMessageToolbarProps {
 
 function AgentMessageToolbar({ timestamp, content, messageId, role, className }: AgentMessageToolbarProps) {
   const [copied, setCopied] = useState(false)
+  const copiedTimerRef = useRef<ReturnType<typeof setTimeout>>()
   const formattedTimestamp = timestamp ? formatTime(timestamp) : undefined
+
+  useEffect(() => {
+    return () => {
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
+    }
+  }, [])
 
   const handleCopy = () => {
     const metadata = {
@@ -33,8 +40,12 @@ function AgentMessageToolbar({ timestamp, content, messageId, role, className }:
       metadata,
     })
     void navigator.clipboard.writeText(content).then(() => {
+      if (copiedTimerRef.current) clearTimeout(copiedTimerRef.current)
       setCopied(true)
-      setTimeout(() => setCopied(false), 1500)
+      copiedTimerRef.current = setTimeout(() => {
+        copiedTimerRef.current = undefined
+        setCopied(false)
+      }, 1500)
     }).catch((rawError: unknown) => {
       logger.error("Agent message copy failed.", {
         ...metadata,

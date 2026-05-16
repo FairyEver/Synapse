@@ -1058,6 +1058,7 @@ function createEmptyConfig(): SynapseConfig {
     },
     agent: {
       defaultPermissionMode: "default",
+      defaultProviderModel: null,
     },
   }
 }

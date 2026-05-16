@@ -109,8 +109,8 @@ describe("TaskSchedulerExecutionService", () => {
     const run = await harness.service.runTask(harness.task, "schedule")
 
     expect(run.status).toBe("failed")
-    expect(run.error).toBe("执行失败")
-    expect(run.result?.error).toBe("执行失败")
+    expect(run.error).toBe("执行失败（Error）")
+    expect(run.result?.error).toBe("执行失败（Error）")
     expect(logger.warn).toHaveBeenCalledWith(
       "Scheduled task preparation failed.",
       expect.objectContaining({
@@ -139,10 +139,10 @@ describe("TaskSchedulerExecutionService", () => {
     const run = await harness.service.runTask(harness.task, "schedule")
 
     expect(run.status).toBe("failed")
-    expect(run.error).toBe("执行失败")
+    expect(run.error).toBe("执行失败（Error）")
     expect(run.result).toEqual({
       status: "failed",
-      error: "执行失败",
+      error: "执行失败（Error）",
       summary: "执行失败",
     })
     expect(harness.auditEvents).toEqual([
@@ -195,8 +195,8 @@ describe("TaskSchedulerExecutionService", () => {
     const run = await harness.service.runTask(harness.task, "schedule")
 
     expect(run.status).toBe("failed")
-    expect(run.error).toBe("执行失败（错误 60 字）")
-    expect(run.result?.error).toBe("执行失败（错误 60 字）")
+    expect(run.error).toBe("执行失败：sdk failed for token=[redacted] at [path] prompt")
+    expect(run.result?.error).toBe("执行失败：sdk failed for token=[redacted] at [path] prompt")
     expect(harness.auditEvents).toEqual([
       expect.objectContaining({
         action: "shell.exec",
@@ -213,7 +213,7 @@ describe("TaskSchedulerExecutionService", () => {
           triggeredBy: "schedule",
           boundary: "task-scheduler-action",
           status: "failed",
-          errorName: "string",
+          errorName: "action_error",
           errorLength: "sdk failed for token=sk-secret at /Users/example/repo prompt".length,
         }),
       }),
@@ -228,7 +228,7 @@ describe("TaskSchedulerExecutionService", () => {
         triggeredBy: "schedule",
         boundary: "task-scheduler-action",
         status: "failed",
-        errorName: "string",
+        errorName: "action_error",
         errorLength: "sdk failed for token=sk-secret at /Users/example/repo prompt".length,
       }),
     )
@@ -236,7 +236,7 @@ describe("TaskSchedulerExecutionService", () => {
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt")
     expect(JSON.stringify(run)).not.toContain("sk-secret")
     expect(JSON.stringify(run)).not.toContain("/Users/example")
-    expect(JSON.stringify(run)).not.toContain("prompt")
+    expect(JSON.stringify(run)).not.toContain("sdk failed for token=sk-secret at /Users/example/repo prompt")
   })
 
   it("passes task configVersion through action context", async () => {
@@ -316,6 +316,72 @@ describe("TaskSchedulerExecutionService", () => {
         status: "cancelled",
       }),
     )
+  })
+
+  it("persistableActionError handles undefined error gracefully", async () => {
+    const harness = await createExecutionHarness({
+      action: {
+        ...testAction,
+        execute: async () => ({ status: "failed", summary: "no error field" }),
+      },
+    })
+    const run = await harness.service.runTask(harness.task, "manual")
+    expect(run.status).toBe("failed")
+    expect(run.result?.error).toBeUndefined()
+  })
+
+  it("persistableActionError handles empty error string", async () => {
+    const harness = await createExecutionHarness({
+      action: {
+        ...testAction,
+        execute: async () => ({ status: "failed", error: "", summary: "empty" }),
+      },
+    })
+    const run = await harness.service.runTask(harness.task, "manual")
+    expect(run.status).toBe("failed")
+    expect(run.result?.error).toBe("")
+  })
+
+  it("persistableActionError handles whitespace-only error", async () => {
+    const harness = await createExecutionHarness({
+      action: {
+        ...testAction,
+        execute: async () => ({ status: "failed", error: "   ", summary: "blank" }),
+      },
+    })
+    const run = await harness.service.runTask(harness.task, "manual")
+    expect(run.status).toBe("failed")
+    expect(run.result?.error).toMatch(/执行失败（\d+ 字）/)
+  })
+
+  it("persistableActionError truncates long errors at 120 characters", async () => {
+    const longError = "x".repeat(200)
+    const harness = await createExecutionHarness({
+      action: {
+        ...testAction,
+        execute: async () => ({ status: "failed", error: longError, summary: "long" }),
+      },
+      logger: { warn: vi.fn() },
+    })
+    const run = await harness.service.runTask(harness.task, "manual")
+    expect(run.status).toBe("failed")
+    expect(run.result?.error).toBe(`执行失败：${"x".repeat(120)}...`)
+    expect(run.result?.error!.length).toBe(120 + "执行失败：...".length)
+  })
+
+  it("persistableActionError redacts secrets from long errors before truncation", async () => {
+    const error = `long error with token=sk-secret-key-12345 ${"x".repeat(120)}`
+    const harness = await createExecutionHarness({
+      action: {
+        ...testAction,
+        execute: async () => ({ status: "failed", error, summary: "long secret" }),
+      },
+      logger: { warn: vi.fn() },
+    })
+    const run = await harness.service.runTask(harness.task, "manual")
+    expect(run.status).toBe("failed")
+    expect(run.result?.error).not.toContain("sk-secret-key-12345")
+    expect(JSON.stringify(run)).not.toContain("sk-secret-key-12345")
   })
 })
 

@@ -1,7 +1,254 @@
+## [2026-05-16 18:52] 第 199-201 次迭代
+
+### Agent
+- agent-1778925969-9746
+
+### 发现的问题
+- `runWorkflow` 闭包在 `descriptors.ts` 中无法独立测试，MCP 路径 engine rejection 恢复逻辑无测试覆盖。
+- `execution-service.ts` 和 `automation-ingress-service.ts` 各有独立的脱敏函数，模式覆盖不一致。
+- `BEARER_PATTERN` 在 `SENSITIVE_KEY_PATTERN` 之后执行，导致 `"Authorization: Bearer <jwt>"` 中 JWT token 被泄漏（`[^\s,;]+` 在空格处停止，仅捕获 `Bearer`）。
+
+### 修复内容
+- [descriptors.ts] 提取 `createRunWorkflowHandler` 为命名导出函数，替换内联闭包。
+- [descriptors.ts] 为两处 `void snapshotService.save()` 添加 `.catch()` logger handler，避免未处理拒绝。
+- [services/error-sanitize.ts] **新建共享脱敏工具**，合并 `sanitizePersistableError` 和 `sanitizeWebhookAgentError`，统一五种模式。
+- [services/error-sanitize.ts] **修复 BEARER_PATTERN 顺序 bug**：Bearer 替换移至 SENSITIVE_KEY_PATTERN 之前，确保 JWT token 被完整脱敏。
+- [services/task-scheduler/execution-service.ts] 改用共享 `sanitizeError` 委托。
+- [services/automation-ingress/automation-ingress-service.ts] 改用共享 `sanitizeError` 委托，移除局部常量和函数。
+
+### 新增测试
+- [descriptors.test.ts] MCP catch handler 测试：验证 engine rejection 后 runAborts 清理、runStatuses 更新、eventBus 发射 workflow:failed、snapshotService.save 调用、敏感文本不泄漏。
+- [services/__tests__/error-sanitize.test.ts] **新建** 13 个 case：无变化文本、sk-key、Bearer token、命名密钥、引号值、POSIX/Windows 路径、混合字段、空字符串、空白字符串、credential、独立 Bearer。
+- [execution-service.test.ts] 5 个 case：persistableActionError 处理 undefined、空字符串、空白字符串、120 字截断、长错误脱敏。
+
+### 验证结果
+- `electron/services/task-scheduler/`：74 passed
+- `electron/services/__tests__/error-sanitize.test.ts`：13 passed
+- `electron/bootstrap/__tests__/descriptors.test.ts`：16 passed, 1 pre-existing failure (dependsOn PROVIDER_SERVICE_ID)
+- `electron/services/automation-ingress/`：8 passed
+
+### Agent
+- agent-1778925969-9746
+
+### 发现的问题
+- `persistableActionError` 在 `execution-service.ts` 中将 action 返回的错误信息完全剥离为 `"执行失败（错误 N 字）"`，丢失全部诊断上下文，与 iter 193-196 已修复的 `visibleNodeExceptionError`/`visibleFailureMessage`/`visibleEngineRejectionError` 同一反模式。
+
+### 修复内容
+- [execution-service.ts:254-264] `persistableActionError` 重写为脱敏前 120 字错误摘要，替代仅保留长度。
+- [execution-service.ts:266-277] 新增 `sanitizePersistableError`，复用项目标准脱敏模式（token/secret/path/credential）。
+- [execution-service.test.ts:198-199] 断言更新为匹配新错误格式。
+- [execution-service.test.ts:239] 敏感数据泄露断言语义重写为检查完整 raw error 是否未泄露。
+
+### 日志补充
+- 现在 task run 持久化结果包含脱敏后的错误摘要（最多 120 字），替代无信息的 `"执行失败（错误 N 字）"`。
+
+### 并行范围
+- file claim：`desktop/electron/services/task-scheduler/execution-service.ts`
+- file claim：`desktop/electron/services/task-scheduler/__tests__/execution-service.test.ts`
+- note：`auto/state/parallel/agent-notes/agent-1778925969-9746-iteration-197.md`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/task-scheduler/__tests__/execution-service.test.ts`：通过，8 tests passed。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+- ESLint：通过，无输出。
+
+### 本次进展
+定时任务失败时持久化的错误信息现在包含脱敏摘要（如 `"执行失败：sdk failed for token=[redacted] at [path] prompt"`），替代无信息的 `"执行失败（错误 60 字）"`，用户可从运行历史初步定位失败原因。
+
+## [2026-05-16 17:35] 第 196 次迭代
+
+### Agent
+- agent-1778923524-b42f
+
+### 发现的问题
+- `visibleFailureMessage` 在 `TaskSchedulerExecutionService.runTask()` catch 块中返回完全无诊断信息错误（"执行失败" / "已停止"），与 iter 193 已修复的 `visibleNodeExceptionError` 和 iter 194 已修复的 `agentFailureMessage` 同一反模式——剥离所有诊断上下文，用户无法区分 TypeError / ReferenceError / NetworkError 等不同失败原因。
+
+### 修复内容
+- [execution-service.ts:254-257] `visibleFailureMessage` 签名从 `(status)` 改为 `(status, errorName)`，失败消息从"执行失败"改为"执行失败（ErrorType）"。
+- [execution-service.ts:185-187] 调用点传入 `diagnostic.errorName`（已在同 catch 块中提取）。
+- [execution-service.test.ts:112-113,142,145] 4 处断言更新为期待含 errorName 的消息。
+
+### 日志补充
+- 无额外日志改动。`diagnostic.errorName` 已在 `errorDiagnostic(error)` 中提取并写入 auditSink/log，本轮只让用户可见失败消息也承载 errorName。
+
+### 并行范围
+- file claim：`desktop/electron/services/task-scheduler/execution-service.ts`
+- file claim：`desktop/electron/services/task-scheduler/__tests__/execution-service.test.ts`
+- note：`auto/state/parallel/agent-notes/agent-1778923524-b42f-iteration-196.md`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/task-scheduler/__tests__/execution-service.test.ts`：通过，8 tests passed。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+- ESLint：环境已存在配置问题，非本轮引入。
+
+### 本次进展
+定时任务执行异常路径现在显示"执行失败（ErrorType）"替代无信息的"执行失败"，用户可通过错误类型初步定位根因。
+
+### Agent
+- agent-1778923819-20e5
+
+### 发现的问题
+- MCP 触发的工作流运行（`coreWorkflowEngineDescriptor.runWorkflow`）的 `engine.run()` catch handler 仅做 `runAborts.delete(runId)`，缺少错误状态更新、事件发送和快照保存。与 IPC handler（`ipc.ts:275-306`）的完整恢复路径对比，MCP 路径在 engine 异常时不会更新 runStatuses 为 failed、不发送 workflow:failed 事件、不保存快照，导致运行在内存中永久 stuck 为 "running"。
+
+### 修复内容
+- [descriptors.ts:260-292] MCP catch handler 现在包含完整错误恢复：更新 runStatuses 为 failed、发送 workflow:failed 事件、保存快照。
+
+### 日志补充
+- 无额外日志改动。MCP 路径已有 triggerSource "mcp" 传递到 engine.run()，engine 内部日志可关联到 MCP 触发。
+
+### 并行范围
+- symbol claim：`desktop/electron/bootstrap/descriptors.ts` MCP catch handler（line 260）
+- note：`auto/state/parallel/agent-notes/agent-1778923819-20e5-iteration-196.md`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec eslint electron/bootstrap/descriptors.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过。
+- `pnpm --filter @synapse/desktop exec vitest run electron/bootstrap/__tests__/descriptors.test.ts`：15/16 passed，1 个失败是已有问题（coreDatabaseDescriptor.dependsOn 缺少 PROVIDER_SERVICE_ID，与本次改动无关）。
+
+### 本次进展
+MCP 触发的工作流运行现在与 IPC 触发路径具有一致的错误恢复能力。
+
+---
+
+## [2026-05-16 17:25] 第 195 次迭代
+
+### Agent
+- agent-202605161714-rb017
+
+### 发现的问题
+- 工作流调度器 `ReactiveScheduler` 内部日志（"scheduler: node failed, stopping new launches" 和 "scheduler: abort detected, waiting for in-flight nodes"）缺少 `runId`，导致复盘多节点工作流失败或中止时无法将调度器级事件关联到具体运行。
+
+### 修复内容
+- [workflow-scheduler.ts:20-23] `SchedulerOptions` 新增 `runId?: string` 字段。
+- [workflow-scheduler.ts:31-38] `ReactiveScheduler` 存储 `runId` 并在构造器中读取。
+- [workflow-scheduler.ts:98-104] "scheduler: node failed" 日志新增 `runId`（条件包含）。
+- [workflow-scheduler.ts:130-141] "scheduler: abort detected" 日志新增 `runId`（条件包含）。
+- [workflow-engine.ts:248] `new ReactiveScheduler()` 改为 `new ReactiveScheduler({ runId })`。
+- [workflow-scheduler.test.ts:3-11] mock 重构为 `vi.hoisted` 以暴露 logger 实例。
+- [workflow-scheduler.test.ts:227-265] 新增 2 个测试：验证 runId 出现在 node-failed 和 abort-detected 日志中。
+
+### 日志补充
+- 调度器 "scheduler: node failed"、"scheduler: abort detected" 日志现在包含 `runId`，可通过 runId 搜索关联工作流引擎日志和调度器日志，回答"哪个运行的哪个节点先失败导致级联跳过"和"哪个运行被中止时调度器正在执行哪些节点"。
+
+### 并行范围
+- file claim：`desktop/electron/services/workflow/workflow-scheduler.ts`
+- file claim：`desktop/electron/services/workflow/workflow-engine.ts`
+- file claim：`desktop/electron/services/__tests__/workflow-scheduler.test.ts`
+- note：`auto/state/parallel/agent-notes/agent-202605161714-rb017-iteration-195.md`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/workflow-scheduler.test.ts`：通过，12 tests passed（含 2 个新增）。
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/workflow-engine.test.ts`：通过，13 tests passed。
+- `pnpm exec eslint desktop/electron/services/workflow/workflow-scheduler.ts desktop/electron/services/workflow/workflow-engine.ts desktop/electron/services/__tests__/workflow-scheduler.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### 本次进展
+工作流调度器 ReactiveScheduler 内部日志现在包含 runId，复盘时可通过 runId 将调度器级事件（节点失败级联、中止等待）与引擎级日志关联。
+
+---
 # Synapse Workflow Fix Log
 
 ---
 
+## [2026-05-16 19:15] 第 195 次迭代
+
+### Agent
+- agent-1778922687-c621
+
+### 发现的问题
+- agent-message-toolbar.tsx 快速连续点击复制按钮时，handleCopy 中的 setTimeout 未追踪和清除，导致前一次点击的 timer 在第二次点击后过早将 copied 状态重置为 false，用户看到 check 图标提前消失。
+
+### 修复内容
+- [agent-message-toolbar.tsx:18-42] 新增 copiedTimerRef (useRef<ReturnType<typeof setTimeout>>) 追踪 copy timer。每次 handleCopy 进入 .then() 时先 clearTimeout 旧 timer，再设置新 timer。
+
+### 验证结果
+- vitest: 3/3 passed。eslint: no errors。check:hard-constraints: passed。
+
+### 并行范围
+- file claim: agent-message-toolbar.tsx
+- note: agent-notes/agent-1778922687-c621-iteration-195.md
+
+---
+
+## [2026-05-16 17:20] 第 194 次迭代
+
+### Agent
+- agent-1778921758-51be
+
+### 发现的问题
+- Prompt executor `agentFailureMessage` 将错误消息从透传原始SDK错误改为只返回"Agent 调用失败（错误 X 字）"。安全修复杜绝了原始错误可能泄露token/path的问题，但完全丢弃错误内容导致用户无法排查任何Agent调用失败。
+
+### 修复内容
+- [executor.main.ts:51-58] 新增 `sanitizeAgentError()`：路径脱敏（Windows/Unix）+ 密钥脱敏（sk-xxx、api_key/token/secret/bearer等字段值）+ 截断至120字符。
+- [executor.main.ts:60-65] `agentFailureMessage` 改为"Agent 调用失败：<脱敏后错误>"。
+- [executor.main.ts:25-31] logger.warn 新增 `sanitizedError` 字段。
+- [executor.test.ts] 测试更新为验证脱敏后展示和日志中的 sanitizedError 字段。
+
+### 验证结果
+- vitest: 4/4 passed。eslint: passed。check:hard-constraints: passed。
+
+### 并行范围
+- file claim: executor.main.ts, executor.test.ts
+- note: agent-notes/agent-1778921758-51be-iteration-194.md
+
+---
+
+
+## [2026-05-16 16:47] 第 193 次迭代
+
+### Agent
+- agent-1778920860-3138
+
+### 发现的问题
+- 工作流引擎 `visibleNodeExceptionError` 生成的用户可见错误消息只包含错误长度（如"节点执行异常（错误 45 字）"），丢失了 `errorDiagnostic` 已提取的 `errorName`（如 TypeError/ReferenceError），用户无法据此定位根因。任何包含运行时代码的 workflow 节点抛出异常时，用户都会遇到此无信息量的消息。
+
+### 修复内容
+- [desktop/electron/services/workflow/workflow-engine.ts:332] `visibleNodeExceptionError` 签名从 `({ errorLength })` 改为 `(errorName, errorLength)`，消息格式从"节点执行异常（错误 X 字）"改为"节点执行异常（ErrorType，错误 X 字）"。
+- [desktop/electron/services/workflow/workflow-engine.ts:184] 调用点传入 `diagnostic.errorName`。
+- [desktop/electron/services/__tests__/workflow-engine.test.ts:237] throwing 测试更新为验证新格式包含 errorName。
+
+### 日志补充
+- 无额外日志改动。现有 `node threw exception` warn 日志已包含完整 `errorDiagnostic` 信息用于复盘。
+
+### 并行范围
+- file claim / lock：`desktop/electron/services/workflow/workflow-engine.ts`
+- file claim / lock：`desktop/electron/services/__tests__/workflow-engine.test.ts`
+- 个人 note：`auto/state/parallel/agent-notes/agent-1778920860-3138-iteration-193.md`
+
+### 验证结果
+- `pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/workflow-engine.test.ts`：通过，13 tests passed。
+- `pnpm --filter @synapse/desktop exec eslint electron/services/workflow/workflow-engine.ts electron/services/__tests__/workflow-engine.test.ts`：通过。
+- `pnpm --filter @synapse/desktop run check:hard-constraints`：通过，All hard-constraint checks passed。
+
+### Agent
+- agent-1778920859-8016
+
+### 发现的问题（agent-1778920859-8016）
+- Workflow engine 已支持 `triggerSource` 参数（迭代 192），但 IPC handler 三个入口点（`workflow:run`、`workflow:runDefinition`、`workflow:rerun`）均未传递具体值，导致引擎启动日志中 `triggerSource` 始终为 `"unknown"`。夜间复盘无法区分用户从列表页运行、从编辑器运行、还是 rerun。
+
+### 修复内容（agent-1778920859-8016）
+- [desktop/electron/modules/workflow/ipc.ts:275] `workflow:run` handler 传递 `triggerSource: "renderer"`。
+- [desktop/electron/modules/workflow/ipc.ts:388] `workflow:runDefinition` handler 传递 `triggerSource: "editor-run-definition"`。
+- [desktop/electron/modules/workflow/ipc.ts:498] `workflow:rerun` handler 传递 `triggerSource: "rerun"`。
+- [desktop/electron/modules/workflow/__tests__/ipc.test.ts:97] 新增 triggerSource 断言测试，验证三个入口点传递正确值。
+
+### 日志补充（agent-1778920859-8016）
+- 现可通过 engine "workflow run started" 日志的 `triggerSource` 字段区分三种触发来源。不记录 prompt、message、token、secret。
+
+### 并行范围（agent-1778920859-8016）
+- file claim / lock：`desktop/electron/modules/workflow/ipc.ts`
+- file claim / lock：`desktop/electron/modules/workflow/__tests__/ipc.test.ts`
+- 个人 note：`auto/state/parallel/agent-notes/agent-1778920859-8016-iteration-193.md`
+
+### 验证结果（agent-1778920859-8016）
+- `vitest run electron/modules/workflow/__tests__/ipc.test.ts`：通过，3 tests passed。
+- `eslint electron/modules/workflow/ipc.ts electron/modules/workflow/__tests__/ipc.test.ts`：通过。
+- `check:hard-constraints`：通过。
+
+### 后续
+- MCP 入口（`workflow-dispatcher.ts`）和 scheduler 触发时尚未传递 triggerSource。
+
+---
 ## [2026-05-15 06:45] 第 191 次迭代
 
 ### Agent
@@ -12322,3 +12569,50 @@ SDK assistant event 的产品内容和诊断 payload 分层更清楚：右侧消
 
 ### 本次进展
 Workflow engine 异常拒绝兜底路径现在只留下脱敏诊断摘要，并避免把后端原文写入运行失败状态或 workflow failed event。
+
+---
+
+## [2026-05-16 19:15] 第 194 次迭代（agent-1778922687-yadl）
+
+### Agent
+- agent-1778922687-yadl
+
+### 发现的问题
+- Switch executor `agentFailureMessage` 与已修复的 prompt executor 相同模式：仅展示错误长度（"Agent 调用失败（错误 X 字）"），用户无法排查任何 Agent 调用失败。prompt executor 已在 iter 194（agent-1778921758-51be）修复，switch executor 遗漏。
+
+### 修复内容
+- [executor.main.ts:125-138] 新增 `sanitizeAgentError`（路径/密钥/API key 脱敏，与 prompt executor 一致）。
+- [executor.main.ts:140-145] `agentFailureMessage` 改为展示脱敏后错误内容（最多 120 字符）。
+- [executor.main.ts:84-85] logger.warn 新增 `sanitizedError` 字段。
+- [executor.test.ts:110-112] 新增断言验证 agentFailed.error 包含脱敏后内容（"Agent 调用失败："前缀，长度 > 20）且不含原始密钥。
+- [executor.test.ts:137] 新增断言验证 logger.warn 含 `sanitizedError: expect.stringContaining("[redacted]")`。
+
+### 验证结果
+- vitest: 6/6 passed。eslint: passed。check:hard-constraints: passed。
+
+### 并行范围
+- file claim: executor.main.ts, executor.test.ts
+- note: agent-notes/agent-1778922687-yadl-iteration-194.md
+
+---
+
+## [2026-05-16 17:20] 第 194 次迭代（agent-20260516-171143-1122）
+
+### Agent
+- agent-20260516-171143-1122
+
+### 发现的问题
+- ReactiveScheduler 缺少入口/出口结构化日志。调度执行入口和出口均无日志覆盖，复盘时无法判断 scheduler 是否启动、何时完成、有多少节点成功/失败/跳过/取消。
+
+### 修复内容
+- [workflow-scheduler.ts:47-52] 在 execute() 开头添加入口日志，记录 nodeCount/edgeCount/maxConcurrency/runId。
+- [workflow-scheduler.ts:161-165] 在 execute() 返回前添加出口日志，记录 successCount/failedCount/skippedCount/cancelledCount/runId。
+- [workflow-scheduler.ts:170-189] 新增 schedulerResultCounts() 辅助函数，统计结果 Map 中各状态的节点数。
+
+### 验证结果
+- vitest run electron/services/__tests__/workflow-engine.test.ts: 13 passed, 0 failed。
+- pnpm --filter @synapse/desktop run check:hard-constraints: All passed。
+
+### 并行范围
+- file claim: workflow-scheduler.ts (已确认无其他 worker 同时写入)
+- note: agent-notes/agent-20260516-171143-1122-iteration-194.md

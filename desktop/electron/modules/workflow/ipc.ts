@@ -59,8 +59,8 @@ function engineRejectionDiagnostic(error: unknown): {
   }
 }
 
-function visibleEngineRejectionError(diagnostic: { readonly errorLength: number }): string {
-  return `引擎异常（错误 ${diagnostic.errorLength} 字）`
+function visibleEngineRejectionError(diagnostic: { readonly errorName: string; readonly errorLength: number }): string {
+  return `引擎异常（${diagnostic.errorName}，错误 ${diagnostic.errorLength} 字）`
 }
 
 const workflowDefinitionSchema = z.object({
@@ -272,7 +272,7 @@ export const workflowIpcModule: IpcModule = {
             void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def })
             pruneTerminalStatuses(runStatuses, id)
           }
-        }, ac.signal, projectId).catch((err) => {
+        }, ac.signal, projectId, "renderer").catch((err) => {
           // Guard against unhandled rejection: if the engine throws before emitting
           // a terminal event, the run would be stuck at "running" forever. Catch the
           // rejection, update status to "failed", and emit workflow:failed so the
@@ -385,7 +385,7 @@ export const workflowIpcModule: IpcModule = {
             void snapshots.save({ runId, workflowId: def.id, version: def.version, startedAt, endedAt, status, params, nodeResults, definition: def })
             pruneTerminalStatuses(runStatuses, def.id)
           }
-        }, ac.signal, projectId).catch((err) => {
+        }, ac.signal, projectId, "editor-run-definition").catch((err) => {
           const diagnostic = engineRejectionDiagnostic(err)
           const visibleError = visibleEngineRejectionError(diagnostic)
           logger.error("workflow engine rejected (runDefinition)", { workflowId: def.id, runId, ...diagnostic })
@@ -495,7 +495,7 @@ export const workflowIpcModule: IpcModule = {
             void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def })
             pruneTerminalStatuses(runStatuses, workflowId!)
           }
-        }, ac.signal, projectId).catch((err) => {
+        }, ac.signal, projectId, "rerun").catch((err) => {
           const diagnostic = engineRejectionDiagnostic(err)
           const visibleError = visibleEngineRejectionError(diagnostic)
           logger.error("workflow engine rejected (rerun)", { workflowId, runId, ...diagnostic })
@@ -526,8 +526,13 @@ export const workflowIpcModule: IpcModule = {
       channel: "synapse:workflow:cancel", kind: "invoke", request: z.object({ runId: z.string() }), response: z.void(),
       handler: (ctx, { runId }: { runId: string }) => {
         logger.info("workflow:cancel requested", { runId })
-        ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts").get(runId)?.abort()
-        logger.info("workflow:cancel signal sent", { runId })
+        const controller = ctx.resolve<Map<string, AbortController>>("core.workflow.run-aborts").get(runId)
+        if (controller) {
+          controller.abort()
+          logger.info("workflow:cancel signal sent", { runId })
+        } else {
+          logger.warn("workflow:cancel — no active run to cancel", { runId })
+        }
       },
     },
     runHistory: {

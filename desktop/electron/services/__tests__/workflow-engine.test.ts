@@ -189,6 +189,24 @@ describe("WorkflowEngine", () => {
     }))
   })
 
+  it("logs triggerSource when provided, defaults to unknown otherwise", async () => {
+    const def: WorkflowDefinition = {
+      id: "wf-trigger", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeEnd],
+      edges: [{ id: "e1", from: "a", to: "end" }],
+    }
+    const engine = new WorkflowEngine(fakeAgent("ok"))
+    await engine.run(def, {}, "run-trigger-known", () => {}, undefined, undefined, "renderer")
+    expect(logger.info).toHaveBeenCalledWith("workflow run started", expect.objectContaining({
+      triggerSource: "renderer",
+    }))
+    logger.info.mockClear()
+    await engine.run(def, {}, "run-trigger-unknown", () => {})
+    expect(logger.info).toHaveBeenCalledWith("workflow run started", expect.objectContaining({
+      triggerSource: "unknown",
+    }))
+  })
+
   it("summarizes executor exceptions before storing and emitting workflow failure results", async () => {
     const rawError = "SDK error authorization=Bearer-secret prompt=raw-user-prompt"
     nodeTypeRegistry.register(
@@ -216,7 +234,7 @@ describe("WorkflowEngine", () => {
       .run(def, {}, "run-throw", (event) => events.push(event))
 
     const failedEvent = events.find((event) => event.type === "node:failed")
-    const summarizedError = `节点执行异常（错误 ${rawError.length} 字）`
+    const summarizedError = `节点执行异常（Error，错误 ${rawError.length} 字）`
     expect(result.nodeResults.throwing?.error).toBe(summarizedError)
     expect(failedEvent).toEqual(expect.objectContaining({
       type: "node:failed",

@@ -41,7 +41,7 @@ describe("promptNodeExecutor", () => {
     expect(r.status).toBe("success")
     expect(r.output).toBe("answer")
   })
-  it("returns the actual Agent error for UI display", async () => {
+  it("returns sanitized Agent error for UI display — redacts secrets and paths", async () => {
     const error = "SDK failed with token=sk-secret from /Users/liyang/private"
     const r = await promptNodeExecutor.execute({
       config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "test" },
@@ -49,7 +49,11 @@ describe("promptNodeExecutor", () => {
       agentDeps: { sendToAgent: vi.fn().mockResolvedValue({ status: "failed" as const, response: "", error, durationMs: 100 }) },
     })
     expect(r.status).toBe("failed")
-    expect(r.error).toBe(error)
+    expect(r.error).not.toContain("sk-secret")
+    expect(r.error).not.toContain("/Users/liyang/private")
+    expect(r.error).toContain("Agent 调用失败")
+    expect(r.error).toContain("token=[redacted]")
+    expect(r.error).toContain("[path]")
   })
 
   it("logs Agent diagnostics without prompt, output, or raw error text", async () => {
@@ -98,6 +102,7 @@ describe("promptNodeExecutor", () => {
       modelTier: "sonnet",
       errorName: "agent",
       errorLength: error.length,
+      sanitizedError: "SDK failed for secret=[redacted] at [path]",
     }))
     const logs = JSON.stringify({
       info: logger.info.mock.calls,

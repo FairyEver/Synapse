@@ -1,8 +1,13 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("electron", () => ({ app: { getPath: () => "/tmp", getAppPath: () => "/tmp" } }))
+const schedLogger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}))
 vi.mock("../log-store", () => ({
-  createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
+  createMainLogger: () => schedLogger,
 }))
 
 import { ReactiveScheduler } from "../workflow/workflow-scheduler"
@@ -32,6 +37,12 @@ function makeCallbacks(
 }
 
 describe("ReactiveScheduler", () => {
+  afterEach(() => {
+    schedLogger.info.mockClear()
+    schedLogger.warn.mockClear()
+    schedLogger.error.mockClear()
+  })
+
   it("runs a linear chain A→B→C in order", async () => {
     const edges = [{ from: "a", to: "b" }, { from: "b", to: "c" }]
     const cb = makeCallbacks(edges)
@@ -206,10 +217,84 @@ describe("ReactiveScheduler", () => {
     expect(cb.readyOrder).toEqual(["switch", "positive", "end"])
   })
 
+  it("propagates skip through inactive branch chain when a shared downstream node has both activated and non-activated upstream paths", async () => {
+    // switch → A, switch → B ; A → C, B → C ; C → D
+    // switch activates "A" only. B and anything only reachable via B should be "skipped".
+    // But C is also reachable via A, and D via C, so C and D should still execute.
+    const edges = [
+      { from: "switch", to: "a" },
+      { from: "switch", to: "b" },
+      { from: "a", to: "c" },
+      { from: "b", to: "c" },
+      { from: "c", to: "d" },
+    ]
+    const cb = makeCallbacks(edges)
+    cb.resolveActivatedDownstream = (nodeId) => {
+      if (nodeId === "switch") return ["a"]
+      return edges.filter((e) => e.from === nodeId).map((e) => e.to)
+    }
+    const s = new ReactiveScheduler()
+    const results = await s.execute(
+      ["switch", "a", "b", "c", "d"], edges,
+      (id) => ({ nodeId: id, execute: () => Promise.resolve(ok(id)) }),
+      cb, new AbortController().signal,
+    )
+    // Activated branch
+    expect(results.get("a")?.status).toBe("success")
+    // Inactive branch
+    expect(results.get("b")?.status).toBe("skipped")
+    // Shared downstream — activated by A's chain, not by B (which was skipped)
+    expect(results.get("c")?.status).toBe("success")
+    // Transitive downstream from C
+    expect(results.get("d")?.status).toBe("success")
+    // B never starts; D starts after C
+    expect(cb.readyOrder).toEqual(["switch", "a", "c", "d"])
+  })
+
   it("handles empty node list", async () => {
     const s = new ReactiveScheduler()
     const cb = makeCallbacks([])
     const results = await s.execute([], [], () => { throw new Error("unreachable") }, cb, new AbortController().signal)
     expect(results.size).toBe(0)
+  })
+
+  it("includes runId in abort-detected log when provided via SchedulerOptions", async () => {
+    const edges = [{ from: "a", to: "b" }]
+    const cb = makeCallbacks(edges)
+    const ctrl = new AbortController()
+    const s = new ReactiveScheduler({ runId: "test-run-abc" })
+    const executePromise = s.execute(
+      ["a", "b"], edges,
+      (id) => ({
+        nodeId: id,
+        execute: async () => {
+          if (id === "a") { ctrl.abort(); return ok(id) }
+          return ok(id)
+        },
+      }),
+      cb, ctrl.signal,
+    )
+    const results = await executePromise
+    expect(results.get("a")?.status).toBe("success")
+    expect(schedLogger.info).toHaveBeenCalledWith(
+      "scheduler: abort detected, waiting for in-flight nodes",
+      expect.objectContaining({ runId: "test-run-abc" }),
+    )
+  })
+
+  it("includes runId in node-failed log when provided via SchedulerOptions", async () => {
+    const edges = [{ from: "a", to: "b" }]
+    const cb = makeCallbacks(edges)
+    const s = new ReactiveScheduler({ runId: "test-run-def" })
+    const results = await s.execute(
+      ["a", "b"], edges,
+      (id) => ({ nodeId: id, execute: () => Promise.resolve(fail(id)) }),
+      cb, new AbortController().signal,
+    )
+    expect(results.get("a")?.status).toBe("failed")
+    expect(schedLogger.info).toHaveBeenCalledWith(
+      "scheduler: node failed, stopping new launches",
+      expect.objectContaining({ nodeId: "a", runId: "test-run-def" }),
+    )
   })
 })

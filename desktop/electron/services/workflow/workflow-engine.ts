@@ -47,6 +47,7 @@ export class WorkflowEngine {
     emit: EventCallback,
     abortSignal?: AbortSignal,
     projectId?: string,
+    triggerSource?: string,
   ): Promise<WorkflowRunResult> {
     const effectiveAbortSignal = abortSignal ?? this.abortSignal ?? new AbortController().signal
     if (effectiveAbortSignal.aborted) {
@@ -65,6 +66,7 @@ export class WorkflowEngine {
       nodeCount: def.nodes.length,
       paramKeys: paramSummary.keys,
       paramCount: paramSummary.count,
+      triggerSource: triggerSource ?? "unknown",
     })
 
     const nodeResults: Record<string, NodeRunResult> = {}
@@ -149,6 +151,7 @@ export class WorkflowEngine {
           const inputVariableSummary = summarizeRecord(resolved)
           logger.info("node started", {
             runId, nodeId, nodeType: node.type, nodeName: node.name,
+            triggerSource: triggerSource ?? "unknown",
             inputVariableKeys: inputVariableSummary.keys,
             inputVariableCount: inputVariableSummary.count,
             ...(resolvedPrompt !== undefined ? { promptLength: resolvedPrompt.length } : {}),
@@ -180,7 +183,7 @@ export class WorkflowEngine {
             return { nodeId, status: "cancelled", error: "运行被取消" }
           }
           const diagnostic = errorDiagnostic(err)
-          const visibleError = visibleNodeExceptionError(diagnostic)
+          const visibleError = visibleNodeExceptionError(diagnostic.errorName, diagnostic.errorLength)
           logger.warn("node threw exception", {
             runId, nodeId, nodeName: node.name, nodeType: node.type,
             ...diagnostic,
@@ -212,17 +215,22 @@ export class WorkflowEngine {
         if (outcome.status === "success") {
           logger.info("node succeeded", {
             runId, nodeId: outcome.nodeId, nodeName: nodeNames[outcome.nodeId], durationMs: nr.durationMs,
+            triggerSource: triggerSource ?? "unknown",
             ...(nr.output !== undefined ? { outputLength: nr.output.length } : {}),
             ...(nr.activeBranch !== undefined ? { activeBranch: nr.activeBranch } : {}),
           })
           if (outcome.output !== undefined) nodeOutputs[outcome.nodeId] = outcome.output
           emit({ type: "node:completed", runId, nodeId: outcome.nodeId, output: outcome.output, result: { ...nr } })
         } else if (outcome.status === "cancelled") {
-          logger.info("node cancelled", { runId, nodeId: outcome.nodeId, nodeName: nodeNames[outcome.nodeId] })
+          logger.info("node cancelled", {
+            runId, nodeId: outcome.nodeId, nodeName: nodeNames[outcome.nodeId],
+            triggerSource: triggerSource ?? "unknown",
+          })
         } else {
           const node = def.nodes.find((n) => n.id === outcome.nodeId)
           logger.warn("node failed", {
             runId, nodeId: outcome.nodeId, nodeName: node?.name, nodeType: node?.type,
+            triggerSource: triggerSource ?? "unknown",
             ...stringDiagnostic(outcome.error, "agent"),
             durationMs: nr.durationMs,
           })
@@ -243,7 +251,7 @@ export class WorkflowEngine {
     }
 
     // --- Execute via scheduler ---
-    const scheduler = new ReactiveScheduler()
+    const scheduler = new ReactiveScheduler({ runId })
     const schedulerResults = await scheduler.execute(
       executableNodes, executableEdges, taskFactory, callbacks, effectiveAbortSignal,
     )
@@ -267,13 +275,23 @@ export class WorkflowEngine {
 
     if (effectiveAbortSignal.aborted) {
       // Mark any still-running nodes
+      const runningNodes: string[] = []
       for (const nr of Object.values(nodeResults)) {
         if (nr.status === "running") {
           nr.status = "cancelled"; nr.error = "运行被取消"
           nr.endedAt = Date.now()
           nr.durationMs = nr.startedAt ? nr.endedAt - nr.startedAt : undefined
+          runningNodes.push(nr.nodeId)
         }
       }
+      logger.info("workflow cancelled mid-run", {
+        runId,
+        workflowId: def.id,
+        durationMs,
+        triggerSource: triggerSource ?? "unknown",
+        runningNodeCount: runningNodes.length,
+        runningNodeIds: runningNodes,
+      })
       const result: WorkflowRunResult = { status: "cancelled", nodeResults, durationMs }
       emit({ type: "workflow:cancelled", runId, result })
       return result
@@ -306,6 +324,7 @@ export class WorkflowEngine {
         runId,
         workflowId: def.id,
         durationMs,
+        triggerSource: triggerSource ?? "unknown",
         firstFailedNode: failedNode?.nodeId,
         ...stringDiagnostic(detailedError, "workflow"),
       })
@@ -313,6 +332,7 @@ export class WorkflowEngine {
     } else {
       logger.info("workflow run completed", {
         runId, workflowId: def.id, durationMs,
+        triggerSource: triggerSource ?? "unknown",
         ...(result.output !== undefined ? { outputLength: result.output.length } : {}),
       })
       emit({ type: "workflow:completed", runId, result })
@@ -320,6 +340,6 @@ export class WorkflowEngine {
     return result
   }
 }
-function visibleNodeExceptionError(diagnostic: { readonly errorLength: number }): string {
-  return `节点执行异常（错误 ${diagnostic.errorLength} 字）`
+function visibleNodeExceptionError(errorName: string, errorLength: number): string {
+  return `节点执行异常（${errorName}，错误 ${errorLength} 字）`
 }

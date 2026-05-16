@@ -141,6 +141,14 @@ export class TaskSchedulerService {
       createdAt: task.createdAt,
       now: this.now(),
     })
+    this.deps.logger?.info?.("Scheduled task startup decision.", {
+      taskId: task.id,
+      action: decision.action,
+      name: task.name,
+      taskEnabled: task.enabled,
+      ...(decision.action === "run_missed_once" ? { missedRunPolicy: task.missedRunPolicy } : {}),
+      boundary: "task-scheduler-startup-decision",
+    })
     if (decision.action === "none") return
     if (decision.action === "run_missed_once") {
       this.runScheduledInBackground(task.id, "missed_run")
@@ -163,6 +171,12 @@ export class TaskSchedulerService {
       this.runScheduledInBackground(id, "schedule")
     }, delayMs)
     this.timers.set(id, timer)
+    this.deps.logger?.info?.("Scheduled task timer set.", {
+      taskId: id,
+      nextRunAt: nextRunAt.toISOString(),
+      delayMs,
+      boundary: "task-scheduler-schedule-timer",
+    })
   }
 
   private runScheduledInBackground(id: string, triggeredBy: ScheduledTaskRunTrigger): void {

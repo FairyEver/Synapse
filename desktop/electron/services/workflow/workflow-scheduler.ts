@@ -19,6 +19,7 @@ export interface NodeTask {
 
 export interface SchedulerOptions {
   maxConcurrency?: number
+  runId?: string
 }
 
 export interface SchedulerCallbacks {
@@ -29,9 +30,11 @@ export interface SchedulerCallbacks {
 
 export class ReactiveScheduler {
   private readonly maxConcurrency: number
+  private readonly runId?: string
 
   constructor(options?: SchedulerOptions) {
     this.maxConcurrency = options?.maxConcurrency ?? 0
+    this.runId = options?.runId
   }
 
   async execute(
@@ -41,6 +44,12 @@ export class ReactiveScheduler {
     callbacks: SchedulerCallbacks,
     abortSignal: AbortSignal,
   ): Promise<Map<string, NodeExecOutcome>> {
+    logger.info("scheduler: execute started", {
+      nodeCount: nodes.length,
+      edgeCount: edges.length,
+      maxConcurrency: this.maxConcurrency,
+      ...(this.runId ? { runId: this.runId } : {}),
+    })
     const nodeSet = new Set(nodes)
     const pending = new Map<string, number>()
     for (const id of nodes) pending.set(id, 0)
@@ -92,11 +101,16 @@ export class ReactiveScheduler {
         callbacks.onNodeDone(outcome)
         if (outcome.status === "failed") {
           failed = true
-          logger.info("scheduler: node failed, stopping new launches", { nodeId })
+          logger.info("scheduler: node failed, stopping new launches", { nodeId, ...(this.runId ? { runId: this.runId } : {}) })
           for (const queued of waitQueue) {
             results.set(queued, { nodeId: queued, status: "skipped", error: "upstream failed" })
           }
           waitQueue.length = 0
+          // Release downstream dependencies so the skip propagates eagerly
+          // through the DAG rather than waiting for the final cleanup loop.
+          for (const next of downstreamOf(nodeId)) {
+            releaseSkippedDependency(next)
+          }
           return
         }
         const downstream = callbacks.resolveActivatedDownstream(nodeId, outcome)
@@ -124,6 +138,12 @@ export class ReactiveScheduler {
         // Abort fired — wait for in-flight tasks to finish so their
         // onNodeDone callbacks complete before we return results.
         // Tasks check the signal and should resolve promptly.
+        logger.info("scheduler: abort detected, waiting for in-flight nodes", {
+          runningNodeCount: running.size,
+          runningNodeIds: [...running.keys()],
+          queuedNodeCount: waitQueue.length,
+          ...(this.runId ? { runId: this.runId } : {}),
+        })
         await Promise.allSettled([...running.values()])
         break
       }
@@ -143,6 +163,32 @@ export class ReactiveScheduler {
         results.set(id, { nodeId: id, status: "skipped", ...(failed ? { error: "upstream failed" } : {}) })
       }
     }
+    const counts = schedulerResultCounts(results)
+    logger.info("scheduler: execute done", {
+      ...counts,
+      ...(this.runId ? { runId: this.runId } : {}),
+    })
     return results
   }
+}
+
+function schedulerResultCounts(results: Map<string, NodeExecOutcome>): {
+  readonly successCount: number
+  readonly failedCount: number
+  readonly skippedCount: number
+  readonly cancelledCount: number
+} {
+  let successCount = 0
+  let failedCount = 0
+  let skippedCount = 0
+  let cancelledCount = 0
+  for (const outcome of results.values()) {
+    switch (outcome.status) {
+      case "success": successCount++; break
+      case "failed": failedCount++; break
+      case "skipped": skippedCount++; break
+      case "cancelled": cancelledCount++; break
+    }
+  }
+  return { successCount, failedCount, skippedCount, cancelledCount }
 }
