@@ -19,9 +19,9 @@ export function PanelCollapseButton({ side, collapsed, onToggle }: PanelCollapse
       onClick={onToggle}
       className={cn(
         "absolute z-10 flex h-5 w-5 items-center justify-center rounded-full",
-        "border border-border bg-background hover:bg-accent",
+        "border border-border bg-background hover:bg-accent hover:text-accent-foreground",
         "transition-colors",
-        side === "left" ? "-right-2.5" : "-left-2.5",
+        side === "left" ? "right-0" : "left-0",
         "bottom-[100px]"
       )}
     >

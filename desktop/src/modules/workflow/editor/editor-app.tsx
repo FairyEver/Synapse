@@ -398,40 +398,29 @@ export function WorkflowEditorApp() {
             setLeftCollapsed(size.inPixels <= 32)
           }}
         >
-          <NodePalette collapsed={leftCollapsed} />
+          <div className="relative h-full">
+            <NodePalette collapsed={leftCollapsed} />
+            <PanelCollapseButton
+              side="left"
+              collapsed={leftCollapsed}
+              onToggle={() => {
+                if (leftCollapsed) {
+                  leftPanelRef.current?.expand()
+                } else {
+                  leftPanelRef.current?.collapse()
+                }
+              }}
+            />
+          </div>
         </ResizablePanel>
-        <ResizableHandle withHandle className="relative">
-          <PanelCollapseButton
-            side="left"
-            collapsed={leftCollapsed}
-            onToggle={() => {
-              if (leftCollapsed) {
-                leftPanelRef.current?.expand()
-              } else {
-                leftPanelRef.current?.collapse()
-              }
-            }}
-          />
-        </ResizableHandle>
+        <ResizableHandle withHandle />
         <ResizablePanel>
           <div className="relative h-full">
             <WorkflowCanvas ref={canvasRef} definition={definition} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} onRequestRename={handleRequestRename} />
             <CanvasFloatingToolbar definition={definition} saving={saving} running={running} dirty={dirty} onSave={handleSave} onRun={handleRun} />
           </div>
         </ResizablePanel>
-        <ResizableHandle withHandle className="relative">
-          <PanelCollapseButton
-            side="right"
-            collapsed={rightCollapsed}
-            onToggle={() => {
-              if (rightCollapsed) {
-                rightPanelRef.current?.expand()
-              } else {
-                rightPanelRef.current?.collapse()
-              }
-            }}
-          />
-        </ResizableHandle>
+        <ResizableHandle withHandle />
         <ResizablePanel
           id="node-config"
           panelRef={rightPanelRef}
@@ -446,19 +435,32 @@ export function WorkflowEditorApp() {
             setRightCollapsed(size.inPixels <= 32)
           }}
         >
-          <NodeConfigPanel
-            collapsed={rightCollapsed}
-            nodeId={selectedNodeId}
-            definition={definition}
-            onConfigChange={handleConfigChange}
-            onNameChange={handleNameChange}
-            onDeleteNode={(id) => { canvasRef.current?.deleteNodes([id]); setSelectedNodeId(null) }}
-            onCopyNode={(id) => canvasRef.current?.copyNodes([id])}
-            renameSignal={renameSignal}
-            projects={projects}
-            defaultProjectName={defaultProjectName}
-            onDefinitionChange={handleDefinitionChange}
-          />
+          <div className="relative h-full">
+            <NodeConfigPanel
+              collapsed={rightCollapsed}
+              nodeId={selectedNodeId}
+              definition={definition}
+              onConfigChange={handleConfigChange}
+              onNameChange={handleNameChange}
+              onDeleteNode={(id) => { canvasRef.current?.deleteNodes([id]); setSelectedNodeId(null) }}
+              onCopyNode={(id) => canvasRef.current?.copyNodes([id])}
+              renameSignal={renameSignal}
+              projects={projects}
+              defaultProjectName={defaultProjectName}
+              onDefinitionChange={handleDefinitionChange}
+            />
+            <PanelCollapseButton
+              side="right"
+              collapsed={rightCollapsed}
+              onToggle={() => {
+                if (rightCollapsed) {
+                  rightPanelRef.current?.expand()
+                } else {
+                  rightPanelRef.current?.collapse()
+                }
+              }}
+            />
+          </div>
         </ResizablePanel>
       </ResizablePanelGroup>
     </div>
