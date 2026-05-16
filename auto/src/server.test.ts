@@ -5,7 +5,7 @@ import { mkdir, mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { AutoScheduler } from './scheduler.js'
-import { createHandler } from './server.js'
+import { createHandler, OutputBuffer } from './server.js'
 
 async function listen(server: Server): Promise<string> {
   await new Promise<void>(resolve => {
@@ -35,7 +35,7 @@ function record(value: unknown): Record<string, unknown> {
 
 test('prompt API creates, reads, renames, and deletes prompts', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'auto-server-'))
-  const server = createServer(createHandler(new AutoScheduler(), {
+  const server = createServer(createHandler(new AutoScheduler(), new OutputBuffer(), {
     configPath: join(dir, 'ui-config.json'),
     promptPath: join(dir, 'prompt.md'),
     promptsDir: join(dir, 'prompts'),
@@ -88,7 +88,7 @@ test('prompt API creates, reads, renames, and deletes prompts', async () => {
 test('guide API returns the prompt writing guide', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'auto-server-'))
   const guidePath = join(dir, 'GUIDE.md')
-  const server = createServer(createHandler(new AutoScheduler(), {
+  const server = createServer(createHandler(new AutoScheduler(), new OutputBuffer(), {
     configPath: join(dir, 'ui-config.json'),
     promptPath: join(dir, 'prompt.md'),
     promptsDir: join(dir, 'prompts'),
@@ -101,6 +101,33 @@ test('guide API returns the prompt writing guide', async () => {
     const guide = record(await requestJson(baseUrl, '/api/guide'))
 
     assert.equal(guide.content, '# Guide\n\nCopy this into an AI chat.')
+  } finally {
+    server.close()
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('output buffer endpoint returns buffered lines', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-server-'))
+  const outputBuffer = new OutputBuffer()
+  const server = createServer(createHandler(new AutoScheduler(), outputBuffer, {
+    configPath: join(dir, 'ui-config.json'),
+    promptPath: join(dir, 'prompt.md'),
+    promptsDir: join(dir, 'prompts'),
+  }))
+  try {
+    await mkdir(join(dir, 'prompts'), { recursive: true })
+    const baseUrl = await listen(server)
+
+    outputBuffer.append({ workerId: 1, stream: 'stdout', text: 'hello', ts: 1000 })
+    outputBuffer.append({ workerId: 2, stream: 'stderr', text: 'warn', ts: 2000 })
+
+    const result = record(await requestJson(baseUrl, '/api/workers/output'))
+    const workers = result.workers as Record<string, unknown[]>
+    assert.equal(Array.isArray(workers[1]), true)
+    assert.equal(Array.isArray(workers[2]), true)
+    assert.equal((workers[1] as Array<{ text: string }>)[0].text, 'hello')
+    assert.equal((workers[2] as Array<{ text: string }>)[0].text, 'warn')
   } finally {
     server.close()
     await rm(dir, { recursive: true, force: true })

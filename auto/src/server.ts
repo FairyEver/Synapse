@@ -6,12 +6,46 @@ import { fileURLToPath } from 'url'
 import { loadUiConfig, saveUiConfig, type UiConfig } from './config.js'
 import { createPrompt, deletePrompt, readPrompt, renamePrompt, type PromptLibraryPaths } from './prompt-library.js'
 import { AutoScheduler } from './scheduler.js'
+import type { OutputLine } from './runner.js'
 import { c } from './ui.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const WEB_DIR = resolve(__dirname, 'web')
+const WEB_DIR = resolve(__dirname, '../dist/web')
 const GUIDE_PATH = resolve(__dirname, '../GUIDE.md')
 const DEFAULT_PORT = 47831
+
+export class OutputBuffer {
+  private lines = new Map<number, OutputLine[]>()
+  private maxPerWorker: number
+
+  constructor(maxPerWorker = 2000) {
+    this.maxPerWorker = maxPerWorker
+  }
+
+  append(line: OutputLine): void {
+    let bucket = this.lines.get(line.workerId)
+    if (!bucket) {
+      bucket = []
+      this.lines.set(line.workerId, bucket)
+    }
+    bucket.push(line)
+    if (bucket.length > this.maxPerWorker) {
+      bucket.splice(0, bucket.length - this.maxPerWorker)
+    }
+  }
+
+  reset(): void {
+    this.lines.clear()
+  }
+
+  getAll(): Record<number, OutputLine[]> {
+    const result: Record<number, OutputLine[]> = {}
+    for (const [id, lines] of this.lines) {
+      result[id] = [...lines]
+    }
+    return result
+  }
+}
 
 function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
   const payload = JSON.stringify(body)
@@ -98,7 +132,7 @@ interface HandlerPaths extends PromptLibraryPaths {
   promptPath?: string
 }
 
-export function createHandler(scheduler: AutoScheduler, paths: HandlerPaths = {}) {
+export function createHandler(scheduler: AutoScheduler, outputBuffer: OutputBuffer, paths: HandlerPaths = {}) {
   return async (req: IncomingMessage, res: ServerResponse): Promise<void> => {
     try {
       const url = new URL(req.url ?? '/', 'http://127.0.0.1')
@@ -184,17 +218,29 @@ export function createHandler(scheduler: AutoScheduler, paths: HandlerPaths = {}
         return
       }
 
+      if (req.method === 'GET' && url.pathname === '/api/workers/output') {
+        sendJson(res, 200, { workers: outputBuffer.getAll() })
+        return
+      }
+
       if (req.method === 'GET' && url.pathname === '/events') {
         res.writeHead(200, {
           'content-type': 'text/event-stream; charset=utf-8',
           'cache-control': 'no-cache',
           connection: 'keep-alive',
         })
-        const send = (snapshot: unknown): void => {
-          res.write(`data: ${JSON.stringify(snapshot)}\n\n`)
+        const sendSnapshot = (snapshot: unknown): void => {
+          res.write(`event: snapshot\ndata: ${JSON.stringify(snapshot)}\n\n`)
         }
-        const unsubscribe = scheduler.subscribe(send)
-        req.on('close', unsubscribe)
+        const sendOutput = (line: OutputLine): void => {
+          res.write(`event: output\ndata: ${JSON.stringify(line)}\n\n`)
+        }
+        const unsubSnapshot = scheduler.subscribe(sendSnapshot)
+        const unsubOutput = scheduler.subscribeOutput(sendOutput)
+        req.on('close', () => {
+          unsubSnapshot()
+          unsubOutput()
+        })
         return
       }
 
@@ -223,11 +269,24 @@ async function listen(server: Server, port: number): Promise<number> {
 
 export async function startServer(options: { port?: number; open?: boolean } = {}): Promise<{ server: Server; url: string }> {
   const scheduler = new AutoScheduler()
+  const outputBuffer = new OutputBuffer()
+
+  scheduler.subscribeOutput(line => outputBuffer.append(line))
+
+  let lastBatchId = ''
+  scheduler.subscribe(snapshot => {
+    const batchId = snapshot.currentBatch?.id ?? ''
+    if (batchId && batchId !== lastBatchId) {
+      outputBuffer.reset()
+      lastBatchId = batchId
+    }
+  })
+
   let port = options.port ?? DEFAULT_PORT
 
   while (true) {
     const server = createServer((req, res) => {
-      void createHandler(scheduler)(req, res)
+      void createHandler(scheduler, outputBuffer)(req, res)
     })
     try {
       const actualPort = await listen(server, port)
