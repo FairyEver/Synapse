@@ -102,8 +102,11 @@ export class AutoScheduler {
   }
 
   private async loop(config: UiConfig): Promise<void> {
+    let round = 0
     try {
       while (true) {
+        round++
+        console.log(`[scheduler] round ${round} starting (interval=${config.intervalSeconds}s)`)
         this.status = this.drainAfterCurrent ? 'stopping' : 'running'
         this.currentBatch = null
         this.emit()
@@ -113,6 +116,7 @@ export class AutoScheduler {
         }, line => {
           for (const listener of this.outputListeners) listener(line)
         })
+        console.log(`[scheduler] round ${round} finished: ${batch.status}`)
         this.currentBatch = batch
         this.lastBatch = batch
         this.emit()
@@ -120,23 +124,28 @@ export class AutoScheduler {
           this.status = 'stopped'
           this.currentBatch = null
           this.emit()
+          console.log(`[scheduler] stopped after round ${round}`)
           return
         }
         this.status = 'waiting'
         this.currentBatch = null
         this.emit()
+        console.log(`[scheduler] waiting ${config.intervalSeconds}s before round ${round + 1}`)
         this.waitAbortController = new AbortController()
         await this.wait(config.intervalSeconds * 1_000, this.waitAbortController.signal)
         this.waitAbortController = null
+        console.log(`[scheduler] wait complete, drainAfterCurrent=${this.drainAfterCurrent}`)
         if (this.drainAfterCurrent) {
           this.status = 'stopped'
           this.emit()
+          console.log(`[scheduler] stopped during wait`)
           return
         }
       }
     } catch (err) {
       this.status = 'error'
       this.error = err instanceof Error ? err.message : String(err)
+      console.error(`[scheduler] loop error at round ${round}:`, err)
       this.emit()
     }
   }
