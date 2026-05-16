@@ -6,7 +6,7 @@ import type { WorkflowEngine } from "../../services/workflow/workflow-engine"
 import type { RunSnapshotService } from "../../services/workflow/run-snapshot-service"
 import type { WorkflowWindowManager } from "../../services/workflow/window-manager"
 import type { EventBus } from "../../runtime/event-bus"
-import { validateWorkflow } from "../../services/workflow/workflow-validator"
+import { validateWorkflow, validateRunParams } from "../../services/workflow/workflow-validator"
 import type { NodeRunResult, WorkflowRunStatus } from "../../../src/types/workflow"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
@@ -66,6 +66,7 @@ function visibleEngineRejectionError(diagnostic: { readonly errorLength: number 
 const workflowDefinitionSchema = z.object({
   id: z.string(), name: z.string(), description: z.string().optional(),
   version: z.string(), createdAt: z.number(), updatedAt: z.number(),
+  defaultProjectId: z.string().optional(),
   params: z.array(z.object({ name: z.string(), type: z.enum(["text", "number"]), default: z.union([z.string(), z.number(), z.null()]), description: z.string().optional() })),
   nodes: z.array(z.object({ id: z.string(), name: z.string(), type: z.string(), position: z.object({ x: z.number(), y: z.number() }), config: z.record(z.string(), z.unknown()) })),
   edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), branch: z.string().optional() })),
@@ -203,6 +204,11 @@ export const workflowIpcModule: IpcModule = {
         if (!validation.valid) {
           logger.warn("workflow:run blocked by validation", { workflowId: id, errors: validation.errors })
           return { errors: validation.errors }
+        }
+        const paramErrors = validateRunParams(def, params)
+        if (paramErrors.length > 0) {
+          logger.warn("workflow:run blocked by missing params", { workflowId: id, errors: paramErrors })
+          return { errors: paramErrors }
         }
 
         const ac = new AbortController()

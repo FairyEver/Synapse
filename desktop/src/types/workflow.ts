@@ -8,6 +8,7 @@ export interface WorkflowEdge { id: string; from: string; to: string; branch?: s
 export interface WorkflowDefinition {
   id: string; name: string; description?: string; version: string
   createdAt: number; updatedAt: number
+  defaultProjectId?: string
   params: WorkflowParam[]; nodes: WorkflowNode[]; edges: WorkflowEdge[]
 }
 export interface WorkflowMeta {
@@ -52,10 +53,10 @@ export type WorkflowEvent =
   | { type: "workflow:failed"; runId: string; error: string; result?: WorkflowRunResult }
   | { type: "workflow:cancelled"; runId: string; result?: WorkflowRunResult }
 export interface ValidationError {
-  type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch" | "missing_end_node" | "multiple_end_nodes"
+  type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch" | "missing_end_node" | "multiple_end_nodes" | "missing_param"
   nodeId?: string; edgeId?: string; message: string
 }
-export interface ValidationWarning { type: "disconnected_node" | "multiple_start_nodes"; nodeId?: string; message: string }
+export interface ValidationWarning { type: "disconnected_node" | "multiple_start_nodes" | "unbound_template_variable" | "disconnected_switch_branch" | "unreachable_node_output"; nodeId?: string; message: string }
 export interface ValidationResult { valid: boolean; errors: ValidationError[]; warnings: ValidationWarning[] }
 export interface WorkflowRunSnapshot {
   runId: string; workflowId: string; version: string; startedAt: number; endedAt?: number
