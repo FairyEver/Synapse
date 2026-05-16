@@ -255,6 +255,14 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
         return { runId }
       },
       cancelRun: (runId: string) => { runAborts.get(runId)?.abort(); runAborts.delete(runId) },
+      cancelRunsForWorkflow: (workflowId: string) => {
+        for (const [runId, status] of runStatuses) {
+          if (status.workflowId === workflowId && status.status === "running") {
+            runAborts.get(runId)?.abort()
+            runAborts.delete(runId)
+          }
+        }
+      },
       getRunStatus: async (runId: string) => runStatuses.get(runId) ?? null,
     })
 

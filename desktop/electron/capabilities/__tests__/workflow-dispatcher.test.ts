@@ -38,6 +38,7 @@ function makeDeps(overrides: Partial<WorkflowDispatchDeps> = {}): WorkflowDispat
     eventBus: { emit: vi.fn() } as unknown as WorkflowDispatchDeps["eventBus"],
     runWorkflow: vi.fn(async () => ({ runId: "run-1" })),
     cancelRun: vi.fn(),
+    cancelRunsForWorkflow: vi.fn(),
     getRunStatus: vi.fn(async () => null),
     ...overrides,
   }
@@ -112,6 +113,17 @@ describe("createWorkflowDispatcher", () => {
     expect(newNode.position).toEqual({ x: 850, y: 200 })
     expect(newNode.type).toBe("prompt")
     expect(newNode.name).toBe("New Node")
+  })
+
+  it("workflow.definition.delete calls cancelRunsForWorkflow", async () => {
+    const deps = makeDeps()
+    const dispatcher = createWorkflowDispatcher(deps)
+    const result = await dispatcher.dispatch("workflow.definition.delete", { workflowId: "wf-1" }, { source: "api" })
+    expect(result.ok).toBe(true)
+    expect(deps.cancelRunsForWorkflow).toHaveBeenCalledWith("wf-1")
+    expect(deps.cancelRun).not.toHaveBeenCalled()
+    expect(deps.workflowService.delete).toHaveBeenCalledWith("wf-1")
+    expect(deps.snapshotService.deleteWorkflow).toHaveBeenCalledWith("wf-1")
   })
 
   it("throws on unknown action", async () => {

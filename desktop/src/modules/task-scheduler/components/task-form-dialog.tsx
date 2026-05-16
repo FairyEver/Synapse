@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react"
 import { ChevronDown } from "lucide-react"
 
 import { FormDialog } from "@/components/form-dialog"
@@ -11,6 +11,7 @@ import {
   ModuleSidebarList,
 } from "@/components/module-sidebar"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
+import { useProviderModelLabel } from "@/lib/provider-model"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import {
@@ -38,7 +39,6 @@ import {
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import type { SynapseProjectConfig } from "@/types/config"
@@ -539,38 +539,13 @@ function AgentActionFields({
   onConfigChange: (config: AgentActionConfig) => void
 }) {
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
-  const [resolvedProviderLabel, setResolvedProviderLabel] = useState("")
-
-  useEffect(() => {
-    if (!config.providerId) {
-      setResolvedProviderLabel("")
-      return
-    }
-    if (config.providerName) {
-      setResolvedProviderLabel(`${config.providerName} ${config.modelName ?? config.modelTier}`)
-      return
-    }
-    let cancelled = false
-    void (async () => {
-      try {
-        const providers = await requireSynapseBridge().agent.listProviders()
-        if (cancelled) return
-        const provider = providers.find((p) => p.id === config.providerId)
-        if (provider) {
-          const tierField = config.modelTier === "default" ? provider.model
-            : config.modelTier === "haiku" ? provider.haikuModel
-            : config.modelTier === "sonnet" ? provider.sonnetModel
-            : provider.opusModel
-          setResolvedProviderLabel(`${provider.name} ${tierField?.trim() || config.modelTier}`)
-        } else {
-          setResolvedProviderLabel(config.providerId)
-        }
-      } catch {
-        setResolvedProviderLabel(config.providerId)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [config.providerId, config.providerName, config.modelName, config.modelTier])
+  const providerSelection = useMemo(
+    () => config.providerId
+      ? { providerId: config.providerId, modelTier: config.modelTier, providerName: config.providerName, modelName: config.modelName }
+      : null,
+    [config.providerId, config.modelTier, config.providerName, config.modelName],
+  )
+  const resolvedProviderLabel = useProviderModelLabel(providerSelection)
 
   return (
     <>

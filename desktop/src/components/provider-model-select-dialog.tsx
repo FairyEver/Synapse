@@ -19,6 +19,7 @@ import {
 import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { track } from "@/lib/ui-tracking"
+import { resolveModelName } from "@/lib/provider-model"
 import type { SynapseAgentProvider } from "@/types/bridge"
 import type { ModelTier, ProviderModelSelection } from "@/types/provider-model"
 import { cn } from "@/lib/utils"
@@ -39,17 +40,8 @@ const TIER_CONFIG: ReadonlyArray<{ tier: ModelTier; label: string }> = [
   { tier: "opus", label: "Opus" },
 ]
 
-function tierModelValue(provider: SynapseAgentProvider, tier: ModelTier): string | undefined {
-  const raw = tier === "default" ? provider.model
-    : tier === "haiku" ? provider.haikuModel
-    : tier === "sonnet" ? provider.sonnetModel
-    : provider.opusModel
-  const trimmed = raw?.trim()
-  return trimmed || undefined
-}
-
 function availableTiers(provider: SynapseAgentProvider) {
-  return TIER_CONFIG.flatMap((c) => tierModelValue(provider, c.tier) ? [c] : [])
+  return TIER_CONFIG.flatMap((c) => resolveModelName(provider, c.tier) ? [c] : [])
 }
 
 function ProviderModelSelectDialog({
@@ -95,7 +87,7 @@ function ProviderModelSelectDialog({
       if (preselectedProvider) {
         setSelectedProviderId(preselectedProvider.id)
         if (defaultSelection && defaultProvider) {
-          const defaultTierAvailable = tierModelValue(defaultProvider, defaultSelection.modelTier)
+          const defaultTierAvailable = resolveModelName(defaultProvider, defaultSelection.modelTier)
           if (defaultTierAvailable) {
             setSelectedTier(defaultSelection.modelTier)
           } else {
@@ -143,7 +135,7 @@ function ProviderModelSelectDialog({
     setSelectedProviderId(providerId)
     const provider = visibleProviders.find((p) => p.id === providerId)
     if (provider) {
-      if (selectedTier && tierModelValue(provider, selectedTier)) {
+      if (selectedTier && resolveModelName(provider, selectedTier)) {
         return
       }
       setSelectedTier(pickDefaultTier(provider))
@@ -170,7 +162,7 @@ function ProviderModelSelectDialog({
     })
     const provider = visibleProviders.find((p) => p.id === selectedProviderId)
     const providerName = provider?.name
-    const modelName = provider ? tierModelValue(provider, selectedTier) : undefined
+    const modelName = provider ? resolveModelName(provider, selectedTier) : undefined
     onSelect({ providerId: selectedProviderId, modelTier: selectedTier, providerName, modelName })
     onOpenChange(false)
   }, [canConfirm, onOpenChange, onSelect, selectedProviderId, selectedTier, visibleProviders])
@@ -231,7 +223,7 @@ function ProviderModelSelectDialog({
                         <TableCell className="min-w-0">
                           <div className="flex flex-col">
                             {tiers.map((tierConfig) => {
-                              const modelName = tierModelValue(provider, tierConfig.tier)
+                              const modelName = resolveModelName(provider, tierConfig.tier)
                               const isTierSelected = selected && selectedTier === tierConfig.tier
                               return (
                                 <div
@@ -282,7 +274,7 @@ function ProviderModelSelectDialog({
 }
 
 function pickDefaultTier(provider: SynapseAgentProvider): ModelTier | undefined {
-  if (tierModelValue(provider, "sonnet")) return "sonnet"
+  if (resolveModelName(provider, "sonnet")) return "sonnet"
   const tiers = availableTiers(provider)
   return tiers[0]?.tier
 }

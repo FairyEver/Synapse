@@ -58,23 +58,37 @@ describe("configIpcModule", () => {
   })
 
   it("preserves Agent config on get responses", async () => {
-    vi.mocked(configStore.load).mockResolvedValue(configFixture({ defaultPermissionMode: "plan" }))
+    vi.mocked(configStore.load).mockResolvedValue(configFixture({ defaultPermissionMode: "plan", defaultProviderModel: null }))
     const harness = createHarness()
 
     const result = await harness.invoke("synapse:config:get", undefined)
 
-    expect(result).toEqual(configFixture({ defaultPermissionMode: "plan" }))
+    expect(result).toEqual(configFixture({ defaultPermissionMode: "plan", defaultProviderModel: null }))
   })
 
   it("preserves Agent config on update responses", async () => {
-    vi.mocked(configStore.update).mockResolvedValue(configFixture({ defaultPermissionMode: "default" }))
+    vi.mocked(configStore.update).mockResolvedValue(configFixture({ defaultPermissionMode: "default", defaultProviderModel: null }))
     const harness = createHarness()
 
     const result = await harness.invoke("synapse:config:update", {
       agent: { defaultPermissionMode: "default" },
     })
 
-    expect(result).toEqual(configFixture({ defaultPermissionMode: "default" }))
+    expect(result).toEqual(configFixture({ defaultPermissionMode: "default", defaultProviderModel: null }))
+  })
+
+  it("preserves defaultProviderModel through IPC round-trip", async () => {
+    const providerModel = { providerId: "p1", modelTier: "sonnet" as const }
+    vi.mocked(configStore.update).mockResolvedValue(
+      configFixture({ defaultPermissionMode: "default", defaultProviderModel: providerModel }),
+    )
+    const harness = createHarness()
+
+    const result = await harness.invoke("synapse:config:update", {
+      agent: { defaultProviderModel: providerModel },
+    }) as SynapseConfig
+
+    expect(result.agent.defaultProviderModel).toEqual(providerModel)
   })
 })
 

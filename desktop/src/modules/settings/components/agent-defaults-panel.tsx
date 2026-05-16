@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
 import { ChevronDown } from "lucide-react"
 import {
   AlertDialog,
@@ -16,7 +16,7 @@ import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { useProviderModelLabel } from "@/lib/provider-model"
 import { AgentPermissionModeMenu } from "@/modules/agent/components/permission-mode-menu"
 import { permissionModeLabels } from "@/modules/agent/permission-mode-options"
 import { SettingsFieldRow } from "@/modules/settings/components/settings-field-row"
@@ -30,9 +30,9 @@ function AgentDefaultsContent() {
   const { promise } = useAppNotifications()
   const [pendingMode, setPendingMode] = useState<SynapseAgentPermissionMode | null>(null)
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
-  const [resolvedLabel, setResolvedLabel] = useState("")
   const selectedMode = config.agent.defaultPermissionMode
   const defaultPM = config.agent.defaultProviderModel
+  const resolvedLabel = useProviderModelLabel(defaultPM)
 
   const saveDefaultPermissionMode = async (nextMode: SynapseAgentPermissionMode) => {
     try {
@@ -48,33 +48,6 @@ function AgentDefaultsContent() {
       logger.error("Agent default permission setting save failed.", error)
     }
   }
-
-  useEffect(() => {
-    if (!defaultPM) {
-      setResolvedLabel("")
-      return
-    }
-    let cancelled = false
-    void (async () => {
-      try {
-        const providers = await requireSynapseBridge().agent.listProviders()
-        if (cancelled) return
-        const provider = providers.find((p) => p.id === defaultPM.providerId)
-        if (provider) {
-          const tierField = defaultPM.modelTier === "default" ? provider.model
-            : defaultPM.modelTier === "haiku" ? provider.haikuModel
-            : defaultPM.modelTier === "sonnet" ? provider.sonnetModel
-            : provider.opusModel
-          setResolvedLabel(`${provider.name} ${tierField?.trim() || defaultPM.modelTier}`)
-        } else {
-          setResolvedLabel(defaultPM.providerId)
-        }
-      } catch {
-        setResolvedLabel(defaultPM.providerId)
-      }
-    })()
-    return () => { cancelled = true }
-  }, [defaultPM?.providerId, defaultPM?.modelTier])
 
   const saveDefaultProviderModel = useCallback(async (selection: ProviderModelSelection | null) => {
     const value = selection ? { providerId: selection.providerId, modelTier: selection.modelTier } : null

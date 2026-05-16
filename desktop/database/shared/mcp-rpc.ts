@@ -51,8 +51,8 @@ function isDryRun(data: unknown): boolean {
 function normalizeToolResult(action: string, result: unknown): unknown {
   if (!isRecord(result) || result.ok !== true) return result
 
-  if (action.startsWith("scheduler.")) {
-    return result.data
+  if (action.startsWith("scheduler.") || action.startsWith("workflow.")) {
+    return result.data ?? null
   }
 
   switch (action) {

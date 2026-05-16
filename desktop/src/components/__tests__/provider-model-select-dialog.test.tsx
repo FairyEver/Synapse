@@ -169,6 +169,8 @@ describe("ProviderModelSelectDialog", () => {
     expect(props.onSelect).toHaveBeenCalledWith({
       providerId: "anthropic",
       modelTier: "sonnet",
+      providerName: "Claude Official",
+      modelName: "claude-sonnet-4-20250514",
     })
   })
 
@@ -208,6 +210,8 @@ describe("ProviderModelSelectDialog", () => {
     expect(props.onSelect).toHaveBeenCalledWith({
       providerId: "anthropic",
       modelTier: "haiku",
+      providerName: "Claude Official",
+      modelName: "claude-haiku",
     })
   })
 
@@ -297,6 +301,8 @@ describe("ProviderModelSelectDialog", () => {
     expect(props.onSelect).toHaveBeenCalledWith({
       providerId: "anthropic",
       modelTier: "opus",
+      providerName: "Claude Official",
+      modelName: "claude-opus",
     })
   })
 })

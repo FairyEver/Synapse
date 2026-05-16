@@ -35,7 +35,7 @@
 - Modify: `desktop/src/lib/config.ts:1-16,409-423`
 - Test: `desktop/src/lib/__tests__/config.test.ts`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Add to `desktop/src/lib/__tests__/config.test.ts`:
 
@@ -98,12 +98,12 @@ it("clears defaultProviderModel with null patch", () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm --filter @synapse/desktop exec vitest run src/lib/__tests__/config.test.ts`
 Expected: Multiple type errors and test failures (property does not exist).
 
-- [ ] **Step 3: Add type**
+- [x] **Step 3: Add type**
 
 In `desktop/src/types/config.ts`, add import and field:
 
@@ -119,7 +119,7 @@ export type SynapseAgentGlobalConfig = {
 }
 ```
 
-- [ ] **Step 4: Add default value**
+- [x] **Step 4: Add default value**
 
 In `desktop/src/constants/defaults.ts`:
 
@@ -130,7 +130,7 @@ export const DEFAULT_AGENT_GLOBAL_CONFIG: SynapseAgentGlobalConfig = {
 }
 ```
 
-- [ ] **Step 5: Add normalization**
+- [x] **Step 5: Add normalization**
 
 In `desktop/src/lib/config.ts`, add import of `MODEL_TIERS` from `../types/provider-model` and update `normalizeAgentGlobalConfig`:
 
@@ -161,12 +161,12 @@ Also add `ModelTier` type import:
 import type { ModelTier } from "../types/provider-model"
 ```
 
-- [ ] **Step 6: Run tests to verify they pass**
+- [x] **Step 6: Run tests to verify they pass**
 
 Run: `pnpm --filter @synapse/desktop exec vitest run src/lib/__tests__/config.test.ts`
 Expected: All tests PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add desktop/src/types/config.ts desktop/src/constants/defaults.ts desktop/src/lib/config.ts desktop/src/lib/__tests__/config.test.ts
@@ -181,7 +181,7 @@ git commit -m "feat(config): add defaultProviderModel to agent global config"
 - Modify: `desktop/src/modules/settings/components/agent-defaults-panel.tsx`
 - Test: `desktop/src/modules/settings/components/__tests__/agent-defaults-panel.test.tsx`
 
-- [ ] **Step 1: Write failing test**
+- [x] **Step 1: Write failing test**
 
 Add to `desktop/src/modules/settings/components/__tests__/agent-defaults-panel.test.tsx`:
 
@@ -233,12 +233,12 @@ describe("AgentDefaultsPanel provider model", () => {
 })
 ```
 
-- [ ] **Step 2: Run tests to verify they fail**
+- [x] **Step 2: Run tests to verify they fail**
 
 Run: `pnpm --filter @synapse/desktop exec vitest run src/modules/settings/components/__tests__/agent-defaults-panel.test.tsx`
 Expected: FAIL — button not found.
 
-- [ ] **Step 3: Implement settings panel changes**
+- [x] **Step 3: Implement settings panel changes**
 
 In `desktop/src/modules/settings/components/agent-defaults-panel.tsx`, add provider/model row to `AgentDefaultsContent`:
 
@@ -343,12 +343,12 @@ const saveDefaultProviderModel = async (selection: ProviderModelSelection | null
 </SettingsFieldRow>
 ```
 
-- [ ] **Step 4: Run tests to verify they pass**
+- [x] **Step 4: Run tests to verify they pass**
 
 Run: `pnpm --filter @synapse/desktop exec vitest run src/modules/settings/components/__tests__/agent-defaults-panel.test.tsx`
 Expected: All tests PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/src/modules/settings/components/agent-defaults-panel.tsx desktop/src/modules/settings/components/__tests__/agent-defaults-panel.test.tsx
@@ -362,7 +362,7 @@ git commit -m "feat(settings): add default provider model selector"
 **Files:**
 - Modify: `desktop/src/modules/agent/components/agent-session-sidebar.tsx:127-134`
 
-- [ ] **Step 1: Add config import and pass `defaultSelection`**
+- [x] **Step 1: Add config import and pass `defaultSelection`**
 
 In `desktop/src/modules/agent/components/agent-session-sidebar.tsx`:
 
@@ -389,12 +389,12 @@ Update the `ProviderModelSelectDialog` usage (line ~127):
 />
 ```
 
-- [ ] **Step 2: Verify types compile**
+- [x] **Step 2: Verify types compile**
 
 Run: `pnpm --filter @synapse/desktop exec tsc --noEmit`
 Expected: No errors related to this file.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add desktop/src/modules/agent/components/agent-session-sidebar.tsx
@@ -408,7 +408,7 @@ git commit -m "feat(agent): pre-select default provider in new session dialog"
 **Files:**
 - Modify: `desktop/src/modules/task-scheduler/components/task-form-dialog.tsx:113-119`
 
-- [ ] **Step 1: Add config import and update `updateActionType`**
+- [x] **Step 1: Add config import and update `updateActionType`**
 
 In `desktop/src/modules/task-scheduler/components/task-form-dialog.tsx`:
 
@@ -438,12 +438,12 @@ const updateActionType = (actionType: string) => {
 }
 ```
 
-- [ ] **Step 2: Verify types compile**
+- [x] **Step 2: Verify types compile**
 
 Run: `pnpm --filter @synapse/desktop exec tsc --noEmit`
 Expected: No errors related to this file.
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add desktop/src/modules/task-scheduler/components/task-form-dialog.tsx
@@ -457,7 +457,7 @@ git commit -m "feat(scheduler): pre-fill default provider in new agent tasks"
 **Files:**
 - Modify: `desktop/src/modules/workflow/editor/canvas.tsx:1,66-69,232-254`
 
-- [ ] **Step 1: Update `defaultConfig` to accept provider model**
+- [x] **Step 1: Update `defaultConfig` to accept provider model**
 
 In `desktop/src/modules/workflow/editor/canvas.tsx`:
 
@@ -477,7 +477,7 @@ function defaultConfig(type: string, providerModel?: { providerId: string; model
 }
 ```
 
-- [ ] **Step 2: Pass config to `onDrop`**
+- [x] **Step 2: Pass config to `onDrop`**
 
 Inside `CanvasContent` component, add config access:
 ```ts
@@ -509,12 +509,12 @@ const onDrop = useCallback((event: React.DragEvent) => {
 }, [screenToFlowPosition, onChange, setNodes, onNodeSelect, appConfig.agent.defaultProviderModel])
 ```
 
-- [ ] **Step 3: Verify types compile**
+- [x] **Step 3: Verify types compile**
 
 Run: `pnpm --filter @synapse/desktop exec tsc --noEmit`
 Expected: No errors.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add desktop/src/modules/workflow/editor/canvas.tsx
@@ -525,17 +525,17 @@ git commit -m "feat(workflow): use default provider model for new nodes"
 
 ### Task 6: Final Verification
 
-- [ ] **Step 1: Run full test suite**
+- [x] **Step 1: Run full test suite**
 
 Run: `pnpm --filter @synapse/desktop exec vitest run src/lib/__tests__/config.test.ts src/modules/settings/components/__tests__/agent-defaults-panel.test.tsx`
 Expected: All tests PASS.
 
-- [ ] **Step 2: Type check entire project**
+- [x] **Step 2: Type check entire project**
 
 Run: `pnpm --filter @synapse/desktop exec tsc --noEmit`
 Expected: No type errors.
 
-- [ ] **Step 3: Final commit (if any fixups needed)**
+- [x] **Step 3: Final commit (if any fixups needed)**
 
 ```bash
 git status

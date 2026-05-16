@@ -34,7 +34,9 @@ void (async () => {
     createRoot(document.getElementById("root")!).render(
       <StrictMode>
         <AppErrorBoundary>
-          <WorkflowEditorApp />
+          <AppConfigProvider>
+            <WorkflowEditorApp />
+          </AppConfigProvider>
         </AppErrorBoundary>
       </StrictMode>,
     )
