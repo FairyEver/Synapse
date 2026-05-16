@@ -30,6 +30,12 @@ export function useWorkflowList() {
     }
   }, [])
   useEffect(() => { void refresh() }, [refresh])
+  useEffect(() => {
+    const unsub = window.synapse?.workflow.onDefinitionUpdated?.(() => {
+      void refresh()
+    })
+    return () => { unsub?.() }
+  }, [refresh])
   return { items, loading, error, refresh }
 }
 

@@ -6,7 +6,7 @@ import type { WorkflowEngine } from "../../services/workflow/workflow-engine"
 import type { RunSnapshotService } from "../../services/workflow/run-snapshot-service"
 import type { WorkflowWindowManager } from "../../services/workflow/window-manager"
 import type { EventBus } from "../../runtime/event-bus"
-import { validateWorkflow, validateRunParams } from "../../services/workflow/workflow-validator"
+import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "../../services/workflow/workflow-validator"
 import type { NodeRunResult, WorkflowRunStatus } from "../../../src/types/workflow"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
@@ -164,6 +164,12 @@ export const workflowIpcModule: IpcModule = {
         await ctx.resolve<WorkflowService>("core.workflow").delete(id)
         await ctx.resolve<RunSnapshotService>("core.workflow.snapshots").deleteWorkflow(id)
         ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").forceCloseAll(id)
+        ctx.resolve<EventBus>("core.event-bus").emit({
+          domain: "workflow",
+          type: "workflow:definition-updated",
+          payload: { workflowId: id },
+          timestamp: new Date().toISOString(),
+        })
         logger.info("workflow:delete done", { id })
       },
     },
@@ -212,12 +218,13 @@ export const workflowIpcModule: IpcModule = {
           logger.warn("workflow:run blocked by missing params", { workflowId: id, errors: paramErrors })
           return { errors: paramErrors }
         }
+        const effectiveParams = buildEffectiveRunParams(def, params)
 
         const ac = new AbortController()
         const runId = randomUUID()
         const startedAt = Date.now()
         abortMap.set(runId, ac)
-        runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt, params, definition: def })
+        runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt, params: effectiveParams, definition: def })
 
         // Resolve the project ID for the runtime context
         const appConfig = await configStore.load()
@@ -229,7 +236,7 @@ export const workflowIpcModule: IpcModule = {
 
         logger.info("workflow:run started", { workflowId: id, runId, workflowName: def.name, nodeCount: def.nodes.length, projectId })
 
-        engine.run(def, params, runId, (event) => {
+        engine.run(def, effectiveParams, runId, (event) => {
           const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
           const nextNodeResults: Record<string, NodeRunResult> = { ...current.nodeResults }
           if (event.type === "node:started") {
@@ -262,7 +269,7 @@ export const workflowIpcModule: IpcModule = {
               definition: def,
               ...(event.type === "workflow:failed" ? { error: event.error } : {}),
             })
-            void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params, nodeResults, definition: def })
+            void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def })
             pruneTerminalStatuses(runStatuses, id)
           }
         }, ac.signal, projectId).catch((err) => {
@@ -294,7 +301,7 @@ export const workflowIpcModule: IpcModule = {
               { domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: failedStatus.error, result: { status: "failed", nodeResults: current.nodeResults, durationMs } }, timestamp: new Date().toISOString() },
               { backpressure: "block" },
             )
-            void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status: "failed", params, nodeResults: current.nodeResults, definition: def })
+            void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status: "failed", params: effectiveParams, nodeResults: current.nodeResults, definition: def })
           }
         })
 

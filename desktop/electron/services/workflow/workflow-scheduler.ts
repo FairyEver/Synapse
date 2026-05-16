@@ -52,8 +52,31 @@ export class ReactiveScheduler {
 
     const running = new Map<string, Promise<void>>()
     const results = new Map<string, NodeExecOutcome>()
+    const activeSignals = new Map<string, number>()
     const waitQueue: string[] = []
     let failed = false
+
+    const downstreamOf = (nodeId: string) => edges.filter((e) => e.from === nodeId).map((e) => e.to)
+    const decrementPending = (nodeId: string): number | undefined => {
+      const curr = pending.get(nodeId)
+      if (curr === undefined) return undefined
+      const updated = curr - 1
+      pending.set(nodeId, updated)
+      return updated
+    }
+    const skipNodeAndPropagate = (nodeId: string) => {
+      if (results.has(nodeId) || running.has(nodeId)) return
+      const queuedIndex = waitQueue.indexOf(nodeId)
+      if (queuedIndex >= 0) waitQueue.splice(queuedIndex, 1)
+      results.set(nodeId, { nodeId, status: "skipped" })
+      for (const next of downstreamOf(nodeId)) releaseSkippedDependency(next)
+    }
+    const releaseSkippedDependency = (nodeId: string) => {
+      const updated = decrementPending(nodeId)
+      if (updated !== 0) return
+      if ((activeSignals.get(nodeId) ?? 0) > 0) tryStart(nodeId)
+      else skipNodeAndPropagate(nodeId)
+    }
 
     const tryStart = (nodeId: string) => {
       if (failed || abortSignal.aborted) return
@@ -77,12 +100,14 @@ export class ReactiveScheduler {
           return
         }
         const downstream = callbacks.resolveActivatedDownstream(nodeId, outcome)
+        const activatedSet = new Set(downstream)
         for (const next of downstream) {
-          const curr = pending.get(next)
-          if (curr === undefined) continue
-          const updated = curr - 1
-          pending.set(next, updated)
+          activeSignals.set(next, (activeSignals.get(next) ?? 0) + 1)
+          const updated = decrementPending(next)
           if (updated === 0) tryStart(next)
+        }
+        for (const next of downstreamOf(nodeId)) {
+          if (!activatedSet.has(next)) releaseSkippedDependency(next)
         }
         while (this.maxConcurrency > 0 && waitQueue.length > 0 && running.size < this.maxConcurrency) {
           tryStart(waitQueue.shift()!)

@@ -159,6 +159,25 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
 
   "workflow.definition.update": async (params, deps) => {
     const definition = requireObject(params, "definition") as unknown as WorkflowDefinition
+    // Normalize fields required by the IPC response schema but often missing from
+    // external callers (MCP agents). Without this, the saved JSON passes DAG
+    // validation but fails Zod response validation when the UI loads it via IPC get.
+    const now = Date.now()
+    if (typeof definition.createdAt !== "number") {
+      // Prefer preserving the existing createdAt from disk if available
+      const existing = await deps.workflowService.get(definition.id)
+      definition.createdAt = existing?.createdAt ?? now
+    }
+    if (typeof definition.updatedAt !== "number") definition.updatedAt = now
+    if (!definition.version) definition.version = ""
+    // Ensure every param has a `default` (required by IPC schema)
+    if (Array.isArray(definition.params)) {
+      for (const p of definition.params) {
+        if ((p as { default?: unknown }).default === undefined) {
+          (p as { default: unknown }).default = null
+        }
+      }
+    }
     const saveResult = await deps.workflowService.save(definition)
     if ("errors" in saveResult) throw new Error(`Save failed: ${(saveResult as WorkflowSaveError).errors.map((e) => e.message).join("; ")}`)
     emitDefinitionUpdated(deps.eventBus, definition.id)

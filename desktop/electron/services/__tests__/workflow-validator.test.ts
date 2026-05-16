@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 vi.mock("electron", () => ({ app: { getPath: () => "/tmp", getAppPath: () => "/tmp" } }))
 
-import { validateWorkflow } from "../workflow/workflow-validator"
+import { buildEffectiveRunParams, validateRunParams, validateWorkflow } from "../workflow/workflow-validator"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
 import "../../../workflow-nodes/register.main"
 
@@ -117,5 +117,38 @@ describe("validateWorkflow", () => {
     const defWithDefault = { ...base, defaultProviderId: "test-provider", defaultModelTier: "sonnet" as const, nodes: [sw, nodeB, nodeEnd], edges: [{ id: "e1", from: "sw", to: "b", branch: "yes" }, { id: "e2", from: "b", to: "end" }] }
     const r = validateWorkflow(defWithDefault)
     expect(r.valid).toBe(true)
+  })
+})
+
+describe("validateRunParams", () => {
+  it("returns missing_param when a required text param is omitted", () => {
+    const def: WorkflowDefinition = { ...base, params: [{ name: "text", type: "text", default: null }] }
+    const errors = validateRunParams(def, {})
+    expect(errors).toHaveLength(1)
+    expect(errors[0]).toMatchObject({ type: "missing_param", message: "缺少必填参数「text」" })
+  })
+
+  it("allows omitted params when defaults are configured", () => {
+    const def: WorkflowDefinition = { ...base, params: [{ name: "text", type: "text", default: "默认文本" }] }
+    expect(validateRunParams(def, {})).toHaveLength(0)
+  })
+
+  it("validates number params passed as strings", () => {
+    const def: WorkflowDefinition = { ...base, params: [{ name: "count", type: "number", default: null }] }
+    expect(validateRunParams(def, { count: "12" })).toHaveLength(0)
+    expect(validateRunParams(def, { count: "abc" })[0]).toMatchObject({ type: "invalid_config", message: "参数「count」必须是数字" })
+  })
+})
+
+describe("buildEffectiveRunParams", () => {
+  it("fills missing params from defaults without overwriting explicit values", () => {
+    const def: WorkflowDefinition = {
+      ...base,
+      params: [
+        { name: "text", type: "text", default: "默认文本" },
+        { name: "count", type: "number", default: 3 },
+      ],
+    }
+    expect(buildEffectiveRunParams(def, { text: "显式文本" })).toEqual({ text: "显式文本", count: 3 })
   })
 })

@@ -5,8 +5,8 @@
 本 Prompt 会被 N 个 Codex worker 在同一工作目录中并行循环执行。每个 worker 每轮都要快速关注三条线：
 
 1. Agent 对话右侧消息内容区的展示问题和可用性细节。
-2. Cloud Code SDK 替换后，流程运行、调度、自动化触发链路可利用的新能力或现有 bug。
-3. 对话、流程、SDK 边界、用户操作追踪相关日志缺口。
+2. **（最高权重）** 工作流引擎执行正确性、节点结果传播、调度触发、自动化链路可利用的新能力或现有 bug。
+3. 对话、流程、SDK 边界、用户操作追踪相关日志缺口（工作流/调度日志优先）。
 
 最终每轮最多只实施 1 个真实问题，或补齐 1 组同一链路上的关键日志。其余发现只记录为候选，不要一轮改多处。
 
@@ -66,7 +66,7 @@
 - `desktop/src/modules/agent/utils/phase-reducer.ts`
 - 对应 `desktop/src/modules/agent/**/__tests__/*`
 
-### B. Cloud Code SDK、流程运行与后台触发
+### B. Cloud Code SDK 与 Agent 运行时
 
 - `desktop/package.json`
 - `desktop/src/definitions/agent/claude-code/`
@@ -78,13 +78,145 @@
 - `desktop/electron/services/agent-runtime/conversation-router.ts`
 - `desktop/electron/services/agent-runtime/agent-runtime-service.ts`
 - `desktop/electron/services/agent-runtime/types.ts`
-- `desktop/electron/services/workflow/`
-- `desktop/src/modules/workflow/`
-- `desktop/electron/services/task-scheduler/`
-- `desktop/src/modules/task-scheduler/`
-- `desktop/electron/services/automation-ingress/automation-ingress-service.ts`
-- `desktop/electron/services/side-channel/`
-- 对应 `desktop/electron/services/**/__tests__/*` 和 `desktop/src/modules/{workflow,task-scheduler}/**/__tests__/*`
+- 对应 `desktop/electron/services/agent-runtime/__tests__/*`
+
+### B+. 工作流全链路（高权重）
+
+本区域是本轮巡检的重点加权方向，每轮必须优先扫描。按分层列出所有工作流相关代码。
+
+#### 共享类型与 MCP 能力定义
+
+- `desktop/src/types/workflow.ts` — renderer 侧工作流类型定义
+- `desktop/src/types/bridge.ts` — preload bridge 中的工作流 IPC 类型
+- `desktop/synapse-capabilities/shared/workflow-domain.ts` — MCP workflow 能力定义、tool action 映射、MCP tool schema
+- `desktop/synapse-capabilities/shared/registry.ts` — 注册 WORKFLOW_DOMAIN 到全局 MCP_TOOL_ACTIONS
+- `desktop/synapse-capabilities/shared/types.ts` — CapabilityDomainDefinition、McpToolDefinition 基础类型
+
+#### 主进程：工作流引擎
+
+- `desktop/electron/services/workflow/workflow-engine.ts` — DAG 执行引擎：拓扑排序、并行调度、节点执行、结果收集
+- `desktop/electron/services/workflow/workflow-service.ts` — 工作流 CRUD：创建、更新、删除、获取定义
+- `desktop/electron/services/workflow/workflow-validator.ts` — 定义校验：环检测、端口连通、schema 合规
+- `desktop/electron/services/workflow/workflow-scheduler.ts` — 工作流调度：触发执行、关联 scheduler task
+- `desktop/electron/services/workflow/variable-resolver.ts` — 变量解析：`{{varName}}` 模板插值、上游 output 绑定
+- `desktop/electron/services/workflow/run-snapshot-service.ts` — 运行快照：持久化 run 状态、节点结果、错误
+- `desktop/electron/services/workflow/window-manager.ts` — 工作流编辑器/运行器窗口管理
+
+#### 主进程：工作流 IPC 与能力分发
+
+- `desktop/electron/modules/workflow/ipc.ts` — 工作流 IPC handler 注册（所有 renderer→main workflow 调用入口）
+- `desktop/electron/capabilities/workflow-dispatcher.ts` — MCP/Agent 能力请求到 workflow-service 的分发器
+- `desktop/electron/capabilities/action-router.ts` — 全局 action router（含 workflow 分发路由）
+- `desktop/electron/preload.ts` — preload 暴露的 `window.synapse.workflow.*` 接口
+
+#### 主进程：工作流测试
+
+- `desktop/electron/services/__tests__/workflow-engine.test.ts`
+- `desktop/electron/services/__tests__/workflow-service.test.ts`
+- `desktop/electron/services/__tests__/workflow-validator.test.ts`
+- `desktop/electron/services/__tests__/workflow-scheduler.test.ts`
+- `desktop/electron/services/__tests__/workflow-variable-resolver.test.ts`
+- `desktop/electron/capabilities/__tests__/workflow-dispatcher.test.ts`
+- `desktop/electron/modules/workflow/__tests__/ipc.test.ts`
+
+#### 节点系统（`desktop/workflow-nodes/`）
+
+- `desktop/workflow-nodes/types.ts` — 节点通用类型：NodeManifest、NodeExecutor、NodePanel
+- `desktop/workflow-nodes/registry.ts` — 节点注册表：按 type 查找 manifest/executor/panel
+- `desktop/workflow-nodes/register.main.ts` — 主进程侧节点 executor 注册
+- `desktop/workflow-nodes/register.renderer.ts` — renderer 侧节点 UI 注册
+- `desktop/workflow-nodes/panel-registry.ts` — 节点配置面板注册表
+- `desktop/workflow-nodes/schemas/variable-binding.ts` — 变量绑定 schema 与校验
+- `desktop/workflow-nodes/variable-binding-editor.tsx` — 变量绑定编辑器组件
+- `desktop/workflow-nodes/prompt-editor.tsx` — prompt 模板编辑器组件
+- `desktop/workflow-nodes/project-select.tsx` — 项目选择组件
+- `desktop/workflow-nodes/provider-lookup-context.tsx` — Provider 查找上下文
+- `desktop/workflow-nodes/collapsible-section.tsx` — 可折叠区块组件
+- `desktop/workflow-nodes/agent-icon.tsx` — Agent 图标组件
+- Prompt 节点：`desktop/workflow-nodes/prompt/{index,manifest,schema,card,panel,executor.main}.ts(x)`
+- Switch 节点：`desktop/workflow-nodes/switch/{index,manifest,schema,constants,card,panel,executor.main}.ts(x)`
+- End 节点：`desktop/workflow-nodes/end/{index,manifest,schema,card,panel,executor.main}.ts(x)`
+- 节点测试：`desktop/workflow-nodes/__tests__/`、`desktop/workflow-nodes/prompt/__tests__/`、`desktop/workflow-nodes/switch/__tests__/`、`desktop/workflow-nodes/schemas/__tests__/`
+
+#### Renderer：工作流列表与管理
+
+- `desktop/src/modules/workflow/index.tsx` — 工作流模块入口
+- `desktop/src/modules/workflow/components/workflow-list.tsx` — 工作流列表
+- `desktop/src/modules/workflow/components/workflow-card.tsx` — 工作流卡片
+- `desktop/src/modules/workflow/components/run-history-dialog.tsx` — 运行历史对话框
+- `desktop/src/modules/workflow/components/run-params-dialog.tsx` — 运行参数输入对话框
+- `desktop/src/modules/workflow/components/params-editor-dialog.tsx` — 参数定义编辑器
+
+#### Renderer：工作流编辑器
+
+- `desktop/src/modules/workflow/editor/editor-app.tsx` — 编辑器主应用（DAG 画布 + 侧栏）
+- `desktop/src/modules/workflow/editor/canvas.tsx` — ReactFlow DAG 画布
+- `desktop/src/modules/workflow/editor/canvas-context.ts` — 画布上下文状态
+- `desktop/src/modules/workflow/editor/canvas-floating-toolbar.tsx` — 画布浮动工具栏
+- `desktop/src/modules/workflow/editor/custom-edge.tsx` — 自定义边渲染
+- `desktop/src/modules/workflow/editor/node-wrappers.tsx` — 节点包装组件
+- `desktop/src/modules/workflow/editor/node-config-panel.tsx` — 节点配置侧栏
+- `desktop/src/modules/workflow/editor/node-context-menu.tsx` — 节点右键菜单
+- `desktop/src/modules/workflow/editor/node-palette.tsx` — 节点面板/拖拽面板
+- `desktop/src/modules/workflow/editor/execution-overlay.tsx` — 执行状态覆盖层
+
+#### Renderer：工作流运行器
+
+- `desktop/src/modules/workflow/runner/runner-app.tsx` — 运行器主应用
+- `desktop/src/modules/workflow/runner/dag-view.tsx` — 运行态 DAG 视图
+- `desktop/src/modules/workflow/runner/timeline-view.tsx` — 运行时间线视图
+- `desktop/src/modules/workflow/runner/node-result-panel.tsx` — 节点结果面板
+- `desktop/src/modules/workflow/runner/node-progress-bar.tsx` — 节点进度条
+- `desktop/src/modules/workflow/runner/runner-toolbar.tsx` — 运行器工具栏
+- `desktop/src/modules/workflow/runner/runner-edge.tsx` — 运行态边渲染
+- `desktop/src/modules/workflow/runner/runner-node-wrappers.tsx` — 运行态节点包装
+
+#### Renderer：工作流 Hooks
+
+- `desktop/src/modules/workflow/hooks/use-workflow-list.ts` — 工作流列表数据获取
+- `desktop/src/modules/workflow/hooks/use-workflow-run.ts` — 工作流运行控制
+- `desktop/src/modules/workflow/hooks/use-workflow-events.ts` — 工作流运行时事件监听
+- `desktop/src/modules/workflow/hooks/use-upstream-nodes.ts` — 上游节点查询（变量绑定）
+
+#### Renderer：工作流测试
+
+- `desktop/src/modules/workflow/__tests__/workflow-module.test.tsx`
+- `desktop/src/modules/workflow/components/__tests__/workflow-list.test.tsx`
+- `desktop/src/modules/workflow/components/__tests__/workflow-card.test.tsx`
+- `desktop/src/modules/workflow/components/__tests__/run-history-dialog.test.tsx`
+- `desktop/src/modules/workflow/components/__tests__/run-params-dialog.test.tsx`
+- `desktop/src/modules/workflow/components/__tests__/params-editor-dialog.test.tsx`
+- `desktop/src/modules/workflow/editor/__tests__/editor-app.test.tsx`
+- `desktop/src/modules/workflow/editor/__tests__/execution-overlay.test.tsx`
+- `desktop/src/modules/workflow/hooks/__tests__/use-workflow-list.test.tsx`
+- `desktop/src/modules/workflow/hooks/__tests__/use-workflow-run.test.tsx`
+- `desktop/src/modules/workflow/hooks/__tests__/use-workflow-events.test.tsx`
+- `desktop/src/modules/workflow/runner/__tests__/workflow-runner-app.test.tsx`
+- `desktop/src/modules/workflow/runner/__tests__/workflow-runner-rerun-validation.test.tsx`
+- `desktop/src/modules/workflow/runner/__tests__/runner-toolbar.test.tsx`
+- `desktop/src/modules/workflow/runner/__tests__/node-result-panel.test.tsx`
+- `desktop/src/modules/workflow/runner/__tests__/timeline-view.test.tsx`
+
+#### 调度与自动化触发
+
+- `desktop/electron/services/task-scheduler/` — 定时任务调度：cron/interval 执行、missed run 策略
+- `desktop/src/modules/task-scheduler/` — 调度器 UI：任务列表、运行日志、启停控制
+- `desktop/electron/services/automation-ingress/automation-ingress-service.ts` — 外部自动化入口
+- `desktop/electron/services/side-channel/` — 侧信道通信
+- `desktop/synapse-capabilities/shared/scheduler-domain.ts` — scheduler MCP 能力定义
+
+#### MCP 服务与外部接口
+
+- `desktop/database/mcp/index.ts` — MCP server 入口（workflow tool 请求经此分发）
+- `desktop/database/shared/mcp-rpc.ts` — MCP JSON-RPC 协议处理
+- `desktop/docs/workflow-mcp-guide.md` — 工作流 MCP 使用指南
+
+#### 设计文档
+
+- `desktop/docs/superpowers/plans/2026-05-10-workflow-orchestration.md`
+- `desktop/docs/superpowers/plans/2026-05-12-workflow-node-info-density.md`
+- `desktop/docs/superpowers/specs/2026-05-10-workflow-orchestration-design.md`
+- `desktop/docs/superpowers/specs/2026-05-12-workflow-node-info-density-design.md`
 
 ### C. 日志、诊断与用户操作追踪
 
@@ -127,21 +259,81 @@ UI 或样式相关改动前还必须读：
 - Codex 类桌面对话里，思考/工具/命令/结果应有明确边界；失败和需要用户处理的状态比成功细节更显眼。
 - 不要为“更像某个客户端”做主观改版；必须落到 Synapse 现有组件和具体 bug。
 
-### 2. SDK 替换后的流程运行优化
-
-重点找 Cloud Code SDK 第一公民后可以小步修正的真实问题：
+### 2. SDK 替换后的 Agent 运行时
 
 - fresh/resume session 路由是否保持 `conversationId`、`sessionId`、`sdkSessionId` 一致。
 - SDK event 是否完整桥接：assistant/user/result/error/system/tool_use/tool_result/permission/usage/unknown future event。
 - Abort、timeout、cancel、close、dispose、duplicate send、concurrent send 是否留下悬挂 session 或错误状态。
-- workflow / task-scheduler / automation ingress / side-channel 调 Agent 时，是否能关联 runId、taskId、messageId、conversationId、sessionId。
-- 流程运行是否能利用 SDK 的 session、usage、permission、tool/result、error 事件改善状态展示或失败复盘。
-- 后台触发是否会误报成功、重复执行、丢最终结果、丢错误原因、无法停止。
 - 如果旧模式留下“选择 Agent/Provider/运行时”的 UI 或状态假设，确认它没有误导当前 SDK-first 工作方式。
+
+### 2+. 工作流引擎与调度（加权重点）
+
+**本轮巡检对工作流和调度链路给予最高权重。** 每轮必须至少花 40% 扫描时间在此区域。
+
+#### 工作流执行正确性
+
+- DAG 执行顺序：拓扑排序是否正确、并行节点是否真正独立、环检测是否有效。
+- 节点执行：prompt 节点变量绑定是否解析正确、switch 节点分支路由是否覆盖 default、end 节点是否收集全部上游输出。
+- 结果传播：上游节点 output 是否正确传递给下游节点 variables、跨节点引用 `{{varName}}` 是否解析到正确值。
+- 错误传播：单节点失败是否正确终止后续依赖节点、错误信息是否保留到 run snapshot、部分成功的运行是否有清晰的节点级状态。
+- 执行状态机：running → completed/failed/cancelled 转换是否覆盖所有异常路径、是否存在状态卡死。
+
+#### 工作流与 Agent 集成
+
+- workflow 调 Agent 时，是否能关联 runId、nodeId、messageId、conversationId、sessionId。
+- prompt 节点调用 Agent 后，SDK 的 session、usage、permission、tool/result、error 事件是否正确映射到节点执行结果。
+- Agent 执行超时、abort、permission denied 时，节点状态和 run 状态是否一致更新。
+- 长时间运行的 Agent 节点是否有进度反馈机制或至少有心跳日志。
+
+#### 调度与自动化触发
+
+- task-scheduler cron/interval 触发是否准时、missed run policy 是否生效。
+- automation ingress / side-channel 调 Agent 或 workflow 时，是否能关联 taskId、runId。
+- 后台触发是否会误报成功、重复执行、丢最终结果、丢错误原因、无法停止。
+- 定时任务 enable/disable 是否立即生效、是否存在竞态（disable 时正好触发）。
+- scheduler 对 workflow 的触发是否正确传递 params、是否记录触发来源。
+
+#### 节点系统正确性
+
+- 节点注册：`register.main.ts` 和 `register.renderer.ts` 是否正确注册所有节点类型、是否存在遗漏的 manifest/executor/panel。
+- prompt 节点 executor：变量绑定解析 → Agent 调用 → 结果提取完整链路是否稳定。
+- switch 节点 executor：分支条件匹配逻辑是否覆盖所有 case + default、空输入或异常输入时是否有合理 fallback。
+- end 节点 executor：是否正确收集全部上游 output、是否处理上游部分失败。
+- variable-binding schema：校验规则是否与 variable-resolver 一致、是否有 schema 与实际运行不匹配的情况。
+- 节点 card/panel 组件：配置变更是否即时反映到定义、是否有未保存状态丢失。
+
+#### MCP 工作流能力
+
+- `workflow-domain.ts` 中 MCP tool schema 与 `workflow-service` 实际接口是否一致（参数名、类型、必填/可选）。
+- `workflow-dispatcher.ts` 对 MCP 请求的分发是否覆盖所有 workflow capability action。
+- MCP 调用 workflow CRUD（create/update/delete/get/list）时，校验逻辑是否与 UI 侧一致。
+- MCP 调用 workflow run（execute/cancel/get status）时，是否正确关联 runId、是否能获取节点级结果。
+- MCP 调用 node/edge 增删改时，是否正确触发 validator 校验、是否返回有意义的错误。
+- MCP 调用 param update 时，是否校验 param 类型与默认值兼容性。
+- `action-router.ts` 中 workflow 路由是否完整覆盖所有 workflow domain capabilities。
+- MCP server 入口（`database/mcp/index.ts`）到 workflow dispatcher 的请求转发是否可靠、错误是否正确序列化返回。
+
+#### 工作流 UI 与状态展示
+
+- 运行历史对话框是否正确展示每个节点的状态、耗时、输出摘要。
+- 执行覆盖层是否实时反映节点执行进度。
+- 节点执行失败时，错误信息是否用户可读、是否指向具体节点。
+- 编辑器中节点配置变更后，是否有 unsaved 状态提示、是否会影响正在执行的 run。
+- 工作流参数界面是否正确校验类型、是否处理默认值。
+- DAG 编辑器：节点拖拽、边连接、删除操作后 canvas 状态是否与定义同步。
+- 运行器：DAG view 与 timeline view 切换是否保持状态、rerun 时参数回填是否正确。
+- workflow-list / workflow-card：列表加载、空状态、错误状态、删除确认是否完整。
+- IPC 事件监听（`use-workflow-events`）：运行状态变更是否实时推送到 UI、断连重连后是否恢复。
+
+#### 工作流编辑器窗口管理
+
+- `window-manager.ts`：编辑器窗口打开/关闭/聚焦生命周期是否正确。
+- 多窗口场景：同一 workflow 是否防止并发编辑、运行器窗口与编辑器窗口是否关联。
+- 窗口关闭时未保存修改是否有提示。
 
 不要做大功能。允许的小优化必须满足：
 
-- 直接基于 SDK 已有事件或现有类型。
+- 直接基于 SDK 已有事件、workflow engine 现有类型或 scheduler 现有接口。
 - 能在 1 到 3 个文件内完成。
 - 有测试或静态证据证明行为更正确。
 - 不恢复旧运行时，不新增全局架构。
@@ -176,14 +368,14 @@ UI 或样式相关改动前还必须读：
 
 ## 优先级
 
-1. P0：崩溃、白屏、主进程未捕获异常、SDK session 卡死、消息完全丢失、流程/定时任务重复执行或无法停止。
-2. P1：右侧消息展示错乱、流式消息顺序错误、resume/fresh 会话路由错误、SDK error/result/tool/permission 事件误映射、流程运行误报成功。
-3. P2：关键日志不足，无法把一次用户操作或后台触发关联到 SDK session/message/run/task/workflow。
+1. P0：崩溃、白屏、主进程未捕获异常、SDK session 卡死、消息完全丢失、**工作流执行状态卡死**、**定时任务重复执行或无法停止**。
+2. P1：右侧消息展示错乱、流式消息顺序错误、resume/fresh 会话路由错误、SDK error/result/tool/permission 事件误映射、**工作流节点结果传播错误**、**工作流运行误报成功/丢失错误**、**scheduler 触发未关联 runId/taskId**。
+3. P2：关键日志不足，无法把一次用户操作或后台触发关联到 SDK session/message/run/task/workflow；**工作流执行链路缺少节点级日志**；**scheduler 执行缺少触发来源和结果关联日志**。
 4. P3：局部 UI 可用性瑕疵或 loading/error/empty/disabled 状态不完整，但必须影响发送消息、查看结果、恢复会话、运行流程、判断错误中的一个真实动作。
 
 ## 候选选择方法
 
-每轮先各用 5 到 10 分钟扫三条线。每个候选都必须先写出证据链：
+每轮扫描时间分配：工作流/调度方向 40%，对话消息区 30%，日志补齐 30%。每个候选都必须先写出证据链：
 
 ```text
 触发入口
@@ -197,10 +389,12 @@ UI 或样式相关改动前还必须读：
 最终选择规则：
 
 - 优先选择 P0/P1。
-- 同优先级下，优先选择能用聚焦测试证明的问题。
+- **同优先级下，工作流/调度相关问题优先于对话消息区问题。**
+- 同方向下，优先选择能用聚焦测试证明的问题。
 - 再同等，优先选择写入范围最小、和其他 worker 冲突最少的问题。
-- 如果本轮只发现日志缺口，优先补 SDK / workflow / scheduler 边界日志，其次补 renderer 用户操作追踪。
+- 如果本轮只发现日志缺口，优先补 workflow engine / scheduler execution / automation ingress 边界日志，其次补 SDK session 日志，最后补 renderer 用户操作追踪。
 - 如果发现 UI 问题但无法静态证明，不改代码，只记录候选和需要人工验证的点。
+- **如果三条线都有 P2 候选，优先选择工作流/调度方向。**
 
 ## 缺陷卡片
 

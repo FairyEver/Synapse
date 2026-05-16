@@ -183,6 +183,29 @@ describe("ReactiveScheduler", () => {
     expect(results.get("d")?.status).toBe("success")
   })
 
+  it("runs a shared downstream node after an inactive switch branch is skipped", async () => {
+    const edges = [
+      { from: "switch", to: "positive" },
+      { from: "switch", to: "negative" },
+      { from: "positive", to: "end" },
+      { from: "negative", to: "end" },
+    ]
+    const cb = makeCallbacks(edges)
+    cb.resolveActivatedDownstream = (nodeId) => {
+      if (nodeId === "switch") return ["positive"]
+      return edges.filter((e) => e.from === nodeId).map((e) => e.to)
+    }
+    const s = new ReactiveScheduler()
+    const results = await s.execute(
+      ["switch", "positive", "negative", "end"], edges,
+      (id) => ({ nodeId: id, execute: () => Promise.resolve(ok(id)) }),
+      cb, new AbortController().signal,
+    )
+    expect(results.get("negative")?.status).toBe("skipped")
+    expect(results.get("end")?.status).toBe("success")
+    expect(cb.readyOrder).toEqual(["switch", "positive", "end"])
+  })
+
   it("handles empty node list", async () => {
     const s = new ReactiveScheduler()
     const cb = makeCallbacks([])

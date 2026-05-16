@@ -96,7 +96,7 @@ import { collectOpsStatus } from "../modules/ops/status"
 import { WorkflowService } from "../services/workflow/workflow-service"
 import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
-import { validateWorkflow, validateRunParams } from "../services/workflow/workflow-validator"
+import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "../services/workflow/workflow-validator"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
 import type { WorkflowRunStatus } from "../../src/types/workflow"
 import { nodeTypeRegistry } from "../../workflow-nodes/registry"
@@ -231,15 +231,16 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
         if (!validation.valid) return { errors: validation.errors }
         const paramErrors = validateRunParams(def, params)
         if (paramErrors.length > 0) return { errors: paramErrors }
+        const effectiveParams = buildEffectiveRunParams(def, params)
         const runId = randomUUID()
         const ac = new AbortController()
         const startedAt = Date.now()
         runAborts.set(runId, ac)
-        runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt, params, definition: def })
+        runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt, params: effectiveParams, definition: def })
         const appConfig = await configStore.load()
         const activeRepo = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
         const projectId = activeRepo?.uuid
-        workflowEngine.run(def, params, runId, (event) => {
+        workflowEngine.run(def, effectiveParams, runId, (event) => {
           const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
           const nextNodeResults = { ...current.nodeResults }
           if (event.type === "node:started") {
@@ -254,7 +255,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
             const endedAt = Date.now()
             const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
             runStatuses.set(runId, { ...current, runId, workflowId: id, status, nodeResults: event.result?.nodeResults ?? nextNodeResults, startedAt, endedAt, durationMs: event.result?.durationMs ?? endedAt - startedAt, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
-            void snapshotService.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params, nodeResults: event.result?.nodeResults ?? nextNodeResults, definition: def })
+            void snapshotService.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: event.result?.nodeResults ?? nextNodeResults, definition: def })
           }
         }, ac.signal, projectId).catch(() => { runAborts.delete(runId) })
         return { runId }

@@ -60,7 +60,7 @@ export function Terminal({ lines, trimmedCount, className }: TerminalProps) {
               <div
                 key={virtualRow.index}
                 className={cn(
-                  'absolute left-0 w-full px-3 whitespace-pre-wrap break-all',
+                  'absolute left-0 w-full px-3 whitespace-pre',
                   line.stream === 'stderr' && 'text-terminal-stderr',
                 )}
                 style={{

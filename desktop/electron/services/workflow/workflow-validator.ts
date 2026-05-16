@@ -229,3 +229,39 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
 
   return { valid: errors.length === 0, errors, warnings }
 }
+
+export function validateRunParams(def: WorkflowDefinition, params: Record<string, unknown>): ValidationError[] {
+  const errors: ValidationError[] = []
+  for (const param of def.params) {
+    const value = params[param.name]
+    const hasValue = Object.prototype.hasOwnProperty.call(params, param.name) && value !== undefined && value !== null && value !== ""
+    const hasDefault = param.default !== undefined && param.default !== null && param.default !== ""
+    if (!hasValue) {
+      if (!hasDefault) {
+        errors.push({ type: "missing_param", message: `缺少必填参数「${param.name}」` })
+      }
+      continue
+    }
+    if (param.type === "text" && typeof value !== "string") {
+      errors.push({ type: "invalid_config", message: `参数「${param.name}」必须是文本` })
+    }
+    if (param.type === "number") {
+      const numberValue = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN
+      if (!Number.isFinite(numberValue)) {
+        errors.push({ type: "invalid_config", message: `参数「${param.name}」必须是数字` })
+      }
+    }
+  }
+  return errors
+}
+
+export function buildEffectiveRunParams(def: WorkflowDefinition, params: Record<string, unknown>): Record<string, unknown> {
+  const effective = { ...params }
+  for (const param of def.params) {
+    const value = effective[param.name]
+    const hasValue = Object.prototype.hasOwnProperty.call(effective, param.name) && value !== undefined && value !== null && value !== ""
+    const hasDefault = param.default !== undefined && param.default !== null && param.default !== ""
+    if (!hasValue && hasDefault) effective[param.name] = param.default
+  }
+  return effective
+}
