@@ -24,6 +24,7 @@
  */
 
 import { app, safeStorage } from "electron"
+import os from "node:os"
 import path from "node:path"
 import { randomUUID } from "node:crypto"
 
@@ -1020,8 +1021,9 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
           ? config.repositories.find((r) => r.uuid === projectId)
           : (config.repositories.find((r) => r.uuid === config.activeRepoUuid) ?? config.repositories[0])
         const effectiveProjectId = repo?.uuid ?? ""
+        const workspacePath = repo?.localPath ?? os.homedir()
         const containers = registry.get<ProjectContainerRegistry>("core.project-containers")
-        const container = await containers.open(effectiveProjectId, { name: "", workspacePath: repo?.localPath ?? "" })
+        const container = await containers.open(effectiveProjectId, { name: "", workspacePath })
         const agentRuntime = container.get<import("../services/agent-runtime").AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
         const result = await agentRuntime.sendScheduled({
           projectId: effectiveProjectId, agentType: "claude-code", mode: "bypassPermissions", prompt,
