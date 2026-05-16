@@ -216,10 +216,19 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   "workflow.node.delete": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const nodeId = requireString(params, "nodeId")
-    return atomicMutate(deps, workflowId, (def) => {
-      def.nodes = def.nodes.filter((n) => n.id !== nodeId)
-      def.edges = def.edges.filter((e) => e.from !== nodeId && e.to !== nodeId)
+    const def = await deps.workflowService.get(workflowId)
+    if (!def) throw new Error(`Workflow not found: ${workflowId}`)
+    const target = def.nodes.find((n) => n.id === nodeId)
+    if (!target) throw new Error(`Node not found: ${nodeId}`)
+    if (target.type === "end") throw new Error("Cannot delete the end node")
+    let removedEdgeCount: number
+    const result = await atomicMutate(deps, workflowId, (d) => {
+      const before = d.edges.length
+      d.nodes = d.nodes.filter((n) => n.id !== nodeId)
+      d.edges = d.edges.filter((e) => e.from !== nodeId && e.to !== nodeId)
+      removedEdgeCount = before - d.edges.length
     })
+    return { ...result, data: { removedEdgeCount: removedEdgeCount!, ...result.data as Record<string, unknown> } }
   },
 
   "workflow.edge.create": async (params, deps) => {

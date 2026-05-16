@@ -168,6 +168,42 @@ describe("createWorkflowDispatcher", () => {
     expect((result.data as Record<string, unknown>).edgeId).toHaveLength(36)
   })
 
+  it("workflow.node.delete rejects deleting end node", async () => {
+    const deps = makeDeps()
+    const dispatcher = createWorkflowDispatcher(deps)
+    await expect(
+      dispatcher.dispatch("workflow.node.delete", { workflowId: "wf-1", nodeId: "n1" }, { source: "api" }),
+    ).rejects.toThrow(/Cannot delete the end node/)
+  })
+
+  it("workflow.node.delete returns removedEdgeCount", async () => {
+    const deps = makeDeps({
+      workflowService: {
+        ...makeDeps().workflowService,
+        get: vi.fn(async () => ({
+          id: "wf-1", name: "Test", description: "", version: "v1",
+          createdAt: 1, updatedAt: 2, params: [],
+          nodes: [
+            { id: "n1", name: "Prompt", type: "prompt", position: { x: 200, y: 200 }, config: {} },
+            { id: "n2", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} },
+          ],
+          edges: [
+            { id: "e1", from: "n1", to: "n2" },
+          ],
+        })),
+        save: vi.fn(async () => ({ versionHash: "v_789" })),
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+    const result = await dispatcher.dispatch(
+      "workflow.node.delete",
+      { workflowId: "wf-1", nodeId: "n1" },
+      { source: "api" },
+    )
+    expect(result.ok).toBe(true)
+    expect((result.data as Record<string, unknown>).removedEdgeCount).toBe(1)
+  })
+
   it("throws on unknown action", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
