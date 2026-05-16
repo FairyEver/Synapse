@@ -187,7 +187,8 @@ export function createClaudeCodeEventAccumulator(): { read(event: unknown): stri
             for (const block of content) {
               if (!isRecord(block)) continue
               if (block.type === 'text' && typeof block.text === 'string') {
-                parts.push(block.text)
+                const text = block.text.trim()
+                if (text && text !== lastToolResult) parts.push(text)
               } else if (block.type === 'tool_use') {
                 const name = stringField(block, ['name']) || '?'
                 const input = block.input
