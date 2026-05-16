@@ -27,7 +27,7 @@ export function PromptNodeCard({ config, name, selected, status, progressLabel, 
   const timer = useRunningTimer(startedAt, status === "running")
   const { getProviderName, getModelName } = useProviderLookup()
   const providerDisplay = config.providerId ? (getProviderName(config.providerId) ?? config.providerId) : undefined
-  const modelDisplay = config.providerId ? (getModelName(config.providerId, config.modelTier) ?? config.modelTier) : undefined
+  const modelDisplay = config.providerId ? (getModelName(config.providerId, config.modelTier ?? "default") ?? config.modelTier ?? "default") : undefined
   return (
     <div className={cn("relative rounded-lg border bg-card px-3 py-2 w-56 shadow-sm", status === "running" && "pb-4", selected && "ring-2 ring-primary", statusClass(status))}>
       <div className="flex items-center gap-2 mb-1.5">

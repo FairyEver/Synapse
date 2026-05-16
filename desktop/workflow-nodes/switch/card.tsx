@@ -28,7 +28,7 @@ export function SwitchNodeCard({ config, name, selected, status, progressLabel, 
   const timer = useRunningTimer(startedAt, status === "running")
   const { getProviderName, getModelName } = useProviderLookup()
   const providerDisplay = config.providerId ? (getProviderName(config.providerId) ?? config.providerId) : undefined
-  const modelDisplay = config.providerId ? (getModelName(config.providerId, config.modelTier) ?? config.modelTier) : undefined
+  const modelDisplay = config.providerId ? (getModelName(config.providerId, config.modelTier ?? "default") ?? config.modelTier ?? "default") : undefined
   const progressPadding = status === "running" ? 12 : 0
   const totalHeight = SWITCH_HEADER_H + config.branches.length * SWITCH_BRANCH_H + progressPadding
   return (

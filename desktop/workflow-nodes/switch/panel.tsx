@@ -25,9 +25,11 @@ export interface SwitchNodePanelProps {
   workflowParams: WorkflowParam[]
   projects: readonly SynapseProjectConfig[]
   defaultProjectName?: string
+  defaultProviderId?: string
+  defaultModelTier?: string
 }
 
-export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParams, projects, defaultProjectName }: SwitchNodePanelProps) {
+export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParams, projects, defaultProjectName, defaultProviderId, defaultModelTier }: SwitchNodePanelProps) {
   const [prompt, setPrompt] = useState(config.prompt)
   const [branches, setBranches] = useState<SwitchBranch[]>(config.branches)
   const [defaultBranch, setDefaultBranch] = useState<string>(config.defaultBranch ?? NO_DEFAULT)
@@ -81,8 +83,10 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
           <span className="flex min-w-0 items-center gap-1 truncate">
             {providerUnavailable && <AlertTriangle className="size-3 shrink-0 text-destructive" />}
             {config.providerId
-              ? `${getProviderName(config.providerId) ?? config.providerId} · ${getModelName(config.providerId, config.modelTier) ?? TIER_LABELS[config.modelTier] ?? config.modelTier}`
-              : "选择供应商 + 模型"}
+              ? `${getProviderName(config.providerId) ?? config.providerId} · ${getModelName(config.providerId, config.modelTier ?? "default") ?? TIER_LABELS[config.modelTier ?? "default"]}`
+              : defaultProviderId
+                ? `继承: ${getProviderName(defaultProviderId) ?? defaultProviderId} · ${getModelName(defaultProviderId, (defaultModelTier as ModelTier) ?? "default") ?? TIER_LABELS[(defaultModelTier as ModelTier) ?? "default"]}`
+                : "选择供应商 + 模型"}
           </span>
           <ChevronDown className="size-3.5 text-muted-foreground" />
         </Button>
@@ -90,7 +94,7 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
         <ProviderModelSelectDialog
           open={providerDialogOpen}
           onOpenChange={setProviderDialogOpen}
-          defaultSelection={config.providerId ? { providerId: config.providerId, modelTier: config.modelTier } : undefined}
+          defaultSelection={config.providerId ? { providerId: config.providerId, modelTier: config.modelTier ?? "default" } : undefined}
           onSelect={(s) => commit({ providerId: s.providerId, modelTier: s.modelTier })}
         />
       </CollapsibleSection>

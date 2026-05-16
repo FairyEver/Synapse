@@ -12,6 +12,8 @@ export interface NodePanelProps {
   workflowParams: WorkflowParam[]
   projects: readonly SynapseProjectConfig[]
   defaultProjectName?: string
+  defaultProviderId?: string
+  defaultModelTier?: string
 }
 
 type PanelComponent = ComponentType<NodePanelProps>

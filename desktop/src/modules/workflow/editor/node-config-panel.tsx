@@ -141,6 +141,8 @@ export function NodeConfigPanel({ nodeId, definition, onConfigChange, onNameChan
                   workflowParams={definition.params}
                   projects={projects}
                   defaultProjectName={defaultProjectName}
+                  defaultProviderId={definition.defaultProviderId}
+                  defaultModelTier={definition.defaultModelTier}
                 />
               )
             })()}
