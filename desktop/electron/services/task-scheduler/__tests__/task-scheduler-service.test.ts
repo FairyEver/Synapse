@@ -116,6 +116,21 @@ describe("TaskSchedulerService", () => {
     })
   })
 
+  it("skips scheduled run when current day is not in activeDays", async () => {
+    // 2026-04-29 is a Wednesday (day 3). activeDays excludes Wednesday.
+    const harness = createHarness()
+    await harness.taskItems.upsert(createTask({
+      id: "task:1",
+      activeDays: [1, 2, 4, 5], // Mon, Tue, Thu, Fri — no Wednesday
+    }))
+
+    await harness.service.start()
+    const result = await harness.service.triggerForTest("task:1", "schedule")
+    expect(result!.status).toBe("skipped")
+    expect(result!.error).toBe("day not in activeDays")
+    harness.service.stop()
+  })
+
   it("logs missed-run background failures with sanitized task context", async () => {
     const logger = structuredLogger()
     const harness = createHarness({ logger })

@@ -186,6 +186,14 @@ export class TaskSchedulerService {
     if (!task.enabled) {
       return this.recordSkipped(task.id, triggeredBy, "task is disabled")
     }
+    if (task.activeDays && task.activeDays.length < 7) {
+      const timezone = task.trigger.type === "builtin.cron" ? task.trigger.config.timezone : undefined
+      const currentDay = getWeekdayForDate(this.now(), timezone)
+      if (!task.activeDays.includes(currentDay)) {
+        await this.schedule(id)
+        return this.recordSkipped(task.id, triggeredBy, "day not in activeDays")
+      }
+    }
     const deferSchedule =
       task.trigger.type === "builtin.interval" &&
       task.trigger.config.anchor === "last_completed_at"
@@ -246,6 +254,7 @@ export class TaskSchedulerService {
       trigger: task.trigger,
       from: this.now(),
       createdAt: task.createdAt,
+      activeDays: task.activeDays,
     })
   }
 
@@ -275,4 +284,12 @@ function errorMetadata(error: unknown): { readonly errorName: string; readonly e
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
   }
+}
+
+function getWeekdayForDate(date: Date, timezone?: string): number {
+  if (!timezone) return date.getDay()
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).formatToParts(date)
+  const weekdayStr = parts.find((p) => p.type === "weekday")?.value ?? ""
+  const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+  return map[weekdayStr] ?? date.getDay()
 }
