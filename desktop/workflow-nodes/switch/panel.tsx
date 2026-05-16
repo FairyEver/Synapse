@@ -5,12 +5,14 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { AlertTriangle, ChevronDown, Plus, Trash2 } from "lucide-react"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
 import type { ModelTier } from "@/types/provider-model"
+import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowParam } from "@/types/workflow"
 import type { SwitchNodeConfig, SwitchBranch } from "./schema"
 import { VariableBindingEditor } from "../variable-binding-editor"
 import { PromptEditor } from "../prompt-editor"
 import { CollapsibleSection } from "../collapsible-section"
 import { useProviderLookup } from "../provider-lookup-context"
+import { ProjectSelect } from "../project-select"
 
 const TIER_LABELS: Record<ModelTier, string> = { default: "主模型", haiku: "Haiku", sonnet: "Sonnet", opus: "Opus" }
 
@@ -21,9 +23,11 @@ export interface SwitchNodePanelProps {
   onChange: (config: SwitchNodeConfig) => void
   upstreamNodes: { id: string; name: string }[]
   workflowParams: WorkflowParam[]
+  projects: readonly SynapseProjectConfig[]
+  defaultProjectName?: string
 }
 
-export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParams }: SwitchNodePanelProps) {
+export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParams, projects, defaultProjectName }: SwitchNodePanelProps) {
   const [prompt, setPrompt] = useState(config.prompt)
   const [branches, setBranches] = useState<SwitchBranch[]>(config.branches)
   const [defaultBranch, setDefaultBranch] = useState<string>(config.defaultBranch ?? NO_DEFAULT)
@@ -97,6 +101,15 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
           onChange={(variables) => commit({ variables })}
           upstreamNodes={upstreamNodes}
           workflowParams={workflowParams}
+        />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="项目">
+        <ProjectSelect
+          value={config.projectId}
+          onChange={(projectId) => commit({ projectId })}
+          projects={projects}
+          placeholder={defaultProjectName ? `继承: ${defaultProjectName}` : "继承默认"}
         />
       </CollapsibleSection>
 
