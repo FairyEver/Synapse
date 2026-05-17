@@ -14,6 +14,9 @@ import type { ServiceRegistryImpl } from "../runtime/service-registry"
 import type { MainWindowState } from "./main-window"
 
 const logger = createMainLogger("bootstrap.before-quit")
+const QUIT_FLOW_TIMEOUT_MS = 15_000
+const QUIT_PUSH_TIMEOUT_MS = 12_000
+let pendingPushFlowRunning = false
 
 export interface BeforeQuitDeps {
   readonly state: MainWindowState
@@ -54,27 +57,68 @@ export function attachBeforeQuitHandler(deps: BeforeQuitDeps): void {
 
     event.preventDefault()
 
-    void runPendingPushFlow(deps)
+    if (pendingPushFlowRunning) {
+      return
+    }
+
+    pendingPushFlowRunning = true
+    void runPendingPushFlow(deps).finally(() => {
+      pendingPushFlowRunning = false
+    })
   })
 }
 
 async function runPendingPushFlow(deps: BeforeQuitDeps): Promise<void> {
+  let quitRequested = false
+  let quitTimeout: ReturnType<typeof setTimeout> | null = null
+
+  const requestQuit = () => {
+    if (quitRequested) return
+    quitRequested = true
+    if (quitTimeout) {
+      clearTimeout(quitTimeout)
+      quitTimeout = null
+    }
+    deps.setAllowQuit(true)
+    app.quit()
+  }
+
   try {
-    const quitTimeout = setTimeout(() => {
+    quitTimeout = setTimeout(() => {
       logger.warn("Before-quit flow timed out after 15s. Force quitting.")
-      deps.setAllowQuit(true)
-      app.quit()
-    }, 15_000)
+      requestQuit()
+    }, QUIT_FLOW_TIMEOUT_MS)
 
     await logStore.flush()
 
-    const coordinator = deps.registry.get<RepositorySyncCoordinator>("repo.sync-coordinator")
+    let coordinator: RepositorySyncCoordinator
+    try {
+      coordinator = deps.registry.get<RepositorySyncCoordinator>("repo.sync-coordinator")
+    } catch (error) {
+      logger.error("Repository sync coordinator is unavailable during before-quit flow.", error)
+      const result = await dialog.showMessageBox({
+        type: "warning",
+        title: "同步服务不可用",
+        message: "无法检查未同步变更。",
+        detail: "可以继续退出，未同步变更下次启动后仍可处理。",
+        buttons: ["继续退出", "取消"],
+        defaultId: 1,
+        cancelId: 1,
+      })
+
+      if (result.response === 0) {
+        requestQuit()
+      } else if (quitTimeout) {
+        clearTimeout(quitTimeout)
+        quitTimeout = null
+      }
+      return
+    }
+
     const pendingPushCount = await coordinator.countAllPending()
 
     if (pendingPushCount === 0) {
-      clearTimeout(quitTimeout)
-      deps.setAllowQuit(true)
-      app.quit()
+      requestQuit()
       return
     }
 
@@ -102,16 +146,28 @@ async function runPendingPushFlow(deps: BeforeQuitDeps): Promise<void> {
       const config = await configStore.load()
 
       for (const repository of config.repositories) {
-        await coordinator.requestPush(repository, "quit")
+        await withTimeout(
+          coordinator.requestPush(repository, "quit"),
+          QUIT_PUSH_TIMEOUT_MS,
+          `Repository push timed out during quit: ${repository.uuid}`,
+        )
       }
     }
 
-    clearTimeout(quitTimeout)
-    deps.setAllowQuit(true)
-    app.quit()
+    requestQuit()
   } catch (error) {
     logger.error("Failed to resolve before-quit pending pushes flow.", error)
-    deps.setAllowQuit(true)
-    app.quit()
+    requestQuit()
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  const timeoutPromise = new Promise<never>((_resolve, reject) => {
+    timeout = setTimeout(() => reject(new Error(message)), timeoutMs)
+  })
+
+  return Promise.race([promise, timeoutPromise]).finally(() => {
+    if (timeout) clearTimeout(timeout)
+  })
 }

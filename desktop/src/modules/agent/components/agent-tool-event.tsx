@@ -81,7 +81,7 @@ function AgentToolEvent({
             {status ? (
               <Badge
                 variant={failed ? "destructive" : "secondary"}
-                className="ml-1 h-5 shrink-0 text-[10px]"
+                className="ml-1 h-5 shrink-0 text-xs"
               >
                 {status}
               </Badge>

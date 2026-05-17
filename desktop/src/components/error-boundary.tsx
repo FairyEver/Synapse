@@ -14,15 +14,16 @@ interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   error: Error | null
+  resetKey: number
 }
 
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props)
-    this.state = { error: null }
+    this.state = { error: null, resetKey: 0 }
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return { error }
   }
 
@@ -36,13 +37,13 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   }
 
   private handleReset = () => {
-    this.setState({ error: null })
+    this.setState((state) => ({ error: null, resetKey: state.resetKey + 1 }))
     this.props.onReset?.()
   }
 
   render() {
     if (!this.state.error) {
-      return this.props.children
+      return <div key={this.state.resetKey} className="contents">{this.props.children}</div>
     }
 
     return (

@@ -15,7 +15,6 @@ const RepositoryManagerContext = createContext<RepositoryManager | null>(null)
 
 function RepositoryManagerProvider({ children }: { children: ReactNode }) {
   const [manager] = useState(() => getRepositoryManager())
-  const [isReady, setIsReady] = useState(false)
   const [initError, setInitError] = useState<string | null>(null)
   const [isRetrying, setIsRetrying] = useState(false)
 
@@ -26,7 +25,6 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
     void manager
       .initialize()
       .then(() => {
-        setIsReady(true)
         logger.info("RepositoryManager initialized.")
       })
       .catch((error) => {
@@ -59,14 +57,6 @@ function RepositoryManagerProvider({ children }: { children: ReactNode }) {
           </Button>
         </div>
       </main>
-    )
-  }
-
-  if (!isReady) {
-    return (
-      <RepositoryManagerContext.Provider value={manager}>
-        {children}
-      </RepositoryManagerContext.Provider>
     )
   }
 

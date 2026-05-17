@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react"
 import type { NodeRunResult, WorkflowEvent } from "@/types/workflow"
 import { createRendererLogger } from "@/app-shell/logging"
 import { errorDiagnostic } from "../lib/error-utils"
-import { sanitizeError } from "../../../../electron/services/error-sanitize"
+import { sanitizeError } from "@/lib/error-sanitize"
 
 const logger = createRendererLogger("workflow.events")
 

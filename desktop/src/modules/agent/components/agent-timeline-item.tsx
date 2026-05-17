@@ -79,7 +79,7 @@ function AgentTimelineItem({
           <div className="flex min-w-0 items-center gap-2 px-0 py-1 text-xs text-muted-foreground">
             <Info className="size-3.5 shrink-0" />
             <span className="shrink-0">{item.label}</span>
-            <Badge variant="secondary" className="h-5 shrink-0 text-[10px]">
+            <Badge variant="secondary" className="h-5 shrink-0 text-xs">
               {item.sdkType}
             </Badge>
             {item.sdkSubtype ? (

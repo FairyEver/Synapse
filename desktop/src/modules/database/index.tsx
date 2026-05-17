@@ -180,6 +180,7 @@ function DatabaseModule() {
       setPendingImport(null)
     } catch (error) {
       logger.error("Table import failed.", { error })
+      setPendingImport(null)
     }
   }, [pendingImport, promise, refreshTables])
 

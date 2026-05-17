@@ -75,11 +75,11 @@ function EditorScanSidebar({
             iconElement={<EditorIcon editorId={s.editorId} className="size-4" />}
             trailing={
               s.detected ? (
-                <span className="text-[11px] tabular-nums text-muted-foreground">
+                <span className="text-xs tabular-nums text-muted-foreground">
                   {s.skillCount + s.ruleCount}
                 </span>
               ) : (
-                <span className="text-[11px] text-muted-foreground">—</span>
+                <span className="text-xs text-muted-foreground">—</span>
               )
             }
           >

@@ -149,7 +149,7 @@ function HourlyProfileView({ profile }: { profile: HourlyProfile | null }) {
             <XAxis type="number" tickFormatter={(v: number) => formatTokens(v)} />
             <YAxis type="category" dataKey="day" width={36} interval={0} />
             <Tooltip formatter={(value) => [formatTokens(Number(value)), "Token"]} />
-            <Bar dataKey="tokens" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="tokens" fill="var(--primary)" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

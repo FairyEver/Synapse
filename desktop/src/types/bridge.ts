@@ -7,6 +7,7 @@ import type {
   DatabaseMcpServerInfo,
   DatabaseMcpStatus,
   DatabaseMcpTarget,
+  DatabaseOverview,
   Column,
   DatabaseQueryParams,
   DatabaseQueryResult,
@@ -419,7 +420,7 @@ export type SynapseBridge = {
     listFiles: () => Promise<SynapseLogFileInfo[]>
     readAll: () => Promise<string>
     readFiles: (fileNames: string[]) => Promise<string>
-    write: (payload: SynapseRendererLogPayload) => void
+    write: (payload: SynapseRendererLogPayload) => Promise<void>
   }
   license: {
     activate: (payload: SynapseLicenseActivationRequest) => Promise<SynapseLicenseStatus>
@@ -497,6 +498,7 @@ export type SynapseBridge = {
     databaseTableCreate: (params: { name: string; description?: string; columns: Column[] }) => Promise<void>
     databaseTableDelete: (name: string) => Promise<void>
     databaseTableDescribe: (name: string) => Promise<DatabaseTableSchema>
+    databaseOverviewGet: () => Promise<DatabaseOverview>
     databaseTableUpdate: (params: { table: string; description: string }) => Promise<void>
     databaseColumnCreate: (params: { table: string; column: Column & { default?: unknown } }) => Promise<void>
     databaseColumnUpdate: (params: { table: string; column: string; description: string }) => Promise<void>

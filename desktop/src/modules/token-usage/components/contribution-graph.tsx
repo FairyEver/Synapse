@@ -1,4 +1,5 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
+import { cn } from "@/lib/utils"
 import { formatTokens } from "../lib/format"
 
 interface ContributionDay {
@@ -15,10 +16,10 @@ interface ContributionGraphProps {
 
 const INTENSITY_CLASSES = [
   "bg-muted",
-  "bg-emerald-200 dark:bg-emerald-900",
-  "bg-emerald-400 dark:bg-emerald-700",
-  "bg-emerald-500 dark:bg-emerald-500",
-  "bg-emerald-700 dark:bg-emerald-300",
+  "bg-chart-1",
+  "bg-chart-2",
+  "bg-chart-3",
+  "bg-chart-4",
 ]
 
 export function ContributionGraph({ contributions, selectedDate, onDateClick }: ContributionGraphProps) {
@@ -56,7 +57,12 @@ export function ContributionGraph({ contributions, selectedDate, onDateClick }: 
                 <Tooltip key={di}>
                   <TooltipTrigger asChild>
                     <div
-                      className={`h-2.5 w-2.5 rounded-[2px] ${INTENSITY_CLASSES[day.intensity]} ${onDateClick ? "cursor-pointer" : ""} ${isSelected ? "ring-primary ring-1" : ""}`}
+                      className={cn(
+                        "size-2.5 rounded-sm",
+                        INTENSITY_CLASSES[day.intensity],
+                        onDateClick ? "cursor-pointer" : null,
+                        isSelected ? "ring-primary ring-1" : null,
+                      )}
                       onClick={() => onDateClick?.(isSelected ? null : day.date)}
                     />
                   </TooltipTrigger>

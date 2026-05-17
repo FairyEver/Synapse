@@ -1,4 +1,4 @@
-import { BrowserWindow, dialog } from "electron"
+import { BrowserWindow, dialog, type IpcMainInvokeEvent, type OpenDialogOptions, type SaveDialogOptions } from "electron"
 import path from "node:path"
 import { DATABASE_IPC_CHANNELS } from "./channels"
 import { databaseService } from "./service"
@@ -17,6 +17,20 @@ import type {
 
 const logger = createMainLogger("database.ipc")
 let handlersRegistered = false
+
+function getOwnerWindow(event: IpcMainInvokeEvent): BrowserWindow | undefined {
+  return BrowserWindow.fromWebContents(event.sender) ?? undefined
+}
+
+function showSaveDialogForEvent(event: IpcMainInvokeEvent, options: SaveDialogOptions) {
+  const ownerWindow = getOwnerWindow(event)
+  return ownerWindow ? dialog.showSaveDialog(ownerWindow, options) : dialog.showSaveDialog(options)
+}
+
+function showOpenDialogForEvent(event: IpcMainInvokeEvent, options: OpenDialogOptions) {
+  const ownerWindow = getOwnerWindow(event)
+  return ownerWindow ? dialog.showOpenDialog(ownerWindow, options) : dialog.showOpenDialog(options)
+}
 
 function registerDatabaseHandlers(): void {
   if (handlersRegistered) return
@@ -39,6 +53,10 @@ function registerDatabaseHandlers(): void {
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseTableDescribe, async (_event, name: string) => {
     return databaseService.databaseTableDescribe(name)
+  })
+
+  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseOverviewGet, async () => {
+    return databaseService.databaseOverviewGet()
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseTableUpdate, async (_event, params: {
@@ -175,8 +193,7 @@ function registerDatabaseHandlers(): void {
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseExport, async (event) => {
-    const ownerWindow = BrowserWindow.fromWebContents(event.sender)
-    const result = await dialog.showSaveDialog(ownerWindow!, {
+    const result = await showSaveDialogForEvent(event, {
       title: "导出数据库",
       defaultPath: "synapse-database.db",
       filters: [{ name: "SQLite Database", extensions: ["db"] }],
@@ -192,8 +209,7 @@ function registerDatabaseHandlers(): void {
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseImport, async (event) => {
-    const ownerWindow = BrowserWindow.fromWebContents(event.sender)
-    const result = await dialog.showOpenDialog(ownerWindow!, {
+    const result = await showOpenDialogForEvent(event, {
       title: "导入数据库",
       filters: [{ name: "SQLite Database", extensions: ["db"] }],
       properties: ["openFile"],
@@ -208,8 +224,7 @@ function registerDatabaseHandlers(): void {
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseTableExport, async (event, table: string) => {
-    const ownerWindow = BrowserWindow.fromWebContents(event.sender)
-    const result = await dialog.showSaveDialog(ownerWindow!, {
+    const result = await showSaveDialogForEvent(event, {
       title: "导出表",
       defaultPath: `${table}.synapse-table.sql`,
       filters: [{ name: "Synapse Table Export", extensions: ["sql"] }],
@@ -224,8 +239,7 @@ function registerDatabaseHandlers(): void {
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseTableImportInspect, async (event) => {
-    const ownerWindow = BrowserWindow.fromWebContents(event.sender)
-    const result = await dialog.showOpenDialog(ownerWindow!, {
+    const result = await showOpenDialogForEvent(event, {
       title: "导入表",
       filters: [{ name: "Synapse Table Export", extensions: ["sql"] }],
       properties: ["openFile"],

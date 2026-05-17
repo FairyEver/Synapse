@@ -132,7 +132,13 @@ function serviceProxy<T extends object>(
 ): T {
   return new Proxy({}, {
     get(_target, prop) {
-      const service = registry.get<T>(serviceId) as Record<PropertyKey, unknown>
+      let service: Record<PropertyKey, unknown>
+      try {
+        service = registry.get<T>(serviceId) as Record<PropertyKey, unknown>
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new Error(`Service "${serviceId}" is unavailable while resolving "${String(prop)}": ${message}`)
+      }
       const value = service[prop]
       return typeof value === "function" ? value.bind(service) : value
     },

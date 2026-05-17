@@ -9,11 +9,25 @@ import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { track } from "@/lib/ui-tracking"
 import type { WorkflowDefinition } from "@/types/workflow"
 import { errorDiagnostic } from "../lib/error-utils"
 
 const logger = createRendererLogger("workflow.list")
+type WorkflowBridge = NonNullable<Window["synapse"]>["workflow"]
+
+function openRunner(workflowApi: WorkflowBridge, workflowId: string, runId: string): void {
+  void workflowApi.openRunner(workflowId, runId).catch((err) => {
+    logger.warn("Workflow runner open failed.", {
+      boundary: "renderer.workflow.list.openRunner",
+      workflowId,
+      runId,
+      ...errorDiagnostic(err),
+    })
+    toast.error("打开运行窗口失败，请重试")
+  })
+}
 
 export function WorkflowList({ onCreate }: { onCreate: () => void }) {
   const { items, loading, error, refresh } = useWorkflowList()
@@ -30,29 +44,38 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
   const runIdToWfId = useRef<Record<string, string>>({})
 
   useEffect(() => {
-    const unsub = window.synapse?.workflow.onEvent((event) => {
-      if (event.type === "workflow:started") {
-        runIdToWfId.current[event.runId] = event.workflowId
-        setRunStates((s) => ({ ...s, [event.workflowId]: "running" }))
-      } else if (event.type === "workflow:completed") {
-        const wfId = runIdToWfId.current[event.runId]
-        if (wfId) setRunStates((s) => ({ ...s, [wfId]: "completed" }))
-      } else if (event.type === "workflow:failed") {
-        const wfId = runIdToWfId.current[event.runId]
-        if (wfId) setRunStates((s) => ({ ...s, [wfId]: "failed" }))
-      } else if (event.type === "workflow:cancelled") {
-        const wfId = runIdToWfId.current[event.runId]
-        if (wfId) setRunStates((s) => ({ ...s, [wfId]: "cancelled" }))
-      }
-    })
-    return () => { unsub?.() }
+    try {
+      const unsub = requireBridgeDomain("workflow").onEvent((event) => {
+        if (event.type === "workflow:started") {
+          runIdToWfId.current[event.runId] = event.workflowId
+          setRunStates((s) => ({ ...s, [event.workflowId]: "running" }))
+        } else if (event.type === "workflow:completed") {
+          const wfId = runIdToWfId.current[event.runId]
+          if (wfId) setRunStates((s) => ({ ...s, [wfId]: "completed" }))
+        } else if (event.type === "workflow:failed") {
+          const wfId = runIdToWfId.current[event.runId]
+          if (wfId) setRunStates((s) => ({ ...s, [wfId]: "failed" }))
+        } else if (event.type === "workflow:cancelled") {
+          const wfId = runIdToWfId.current[event.runId]
+          if (wfId) setRunStates((s) => ({ ...s, [wfId]: "cancelled" }))
+        }
+      })
+      return () => { unsub() }
+    } catch (err) {
+      logger.warn("Workflow event subscription failed.", {
+        boundary: "renderer.workflow.list.events",
+        ...errorDiagnostic(err),
+      })
+      return undefined
+    }
   }, [])
 
   const handleRun = async (id: string) => {
     if (runningId) return
     setRunningId(id)
     try {
-      const def = await window.synapse?.workflow.get(id)
+      const workflowApi = requireBridgeDomain("workflow")
+      const def = await workflowApi.get(id)
       if (!def) {
         toast.error("工作流不存在，请刷新列表")
         void refresh()
@@ -60,11 +83,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       }
       if (def.params.length === 0) {
         trackWorkflowRunSubmit(def, {}, false)
-        const result = await window.synapse?.workflow.runDefinition(def, {})
-        if (!result) {
-          toast.error("运行失败：无法连接到主进程")
-          return
-        }
+        const result = await workflowApi.runDefinition(def, {})
         if ("errors" in result) {
           const errors = result.errors as { message?: string }[]
           toast.error(errors[0]?.message ?? "工作流校验失败")
@@ -74,7 +93,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
           setConflictState({ def, params: {} })
           return
         }
-        void window.synapse?.workflow.openRunner(def.id, result.runId)
+        openRunner(workflowApi, def.id, result.runId)
       } else {
         setRunTarget(def)
       }
@@ -87,7 +106,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
 
   const handleDelete = async (id: string) => {
     try {
-      await window.synapse?.workflow.delete(id)
+      await requireBridgeDomain("workflow").delete(id)
     } catch (err) {
       logger.warn("Workflow delete failed.", {
         boundary: "renderer.workflow.list.delete",
@@ -107,12 +126,9 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     setRunTarget(null)
     setRunningId(def.id)
     try {
+      const workflowApi = requireBridgeDomain("workflow")
       trackWorkflowRunSubmit(def, params, false)
-      const result = await window.synapse?.workflow.runDefinition(def, params)
-      if (!result) {
-        toast.error("运行失败：无法连接到主进程")
-        return
-      }
+      const result = await workflowApi.runDefinition(def, params)
       if ("errors" in result) {
         const errors = result.errors as { message?: string }[]
         toast.error(errors[0]?.message ?? "工作流校验失败")
@@ -122,7 +138,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
         setConflictState({ def, params })
         return
       }
-      void window.synapse?.workflow.openRunner(def.id, result.runId)
+      openRunner(workflowApi, def.id, result.runId)
       void refresh()
     } catch (err) {
       showRunFailure(def, params, false, err)
@@ -137,12 +153,9 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     setConflictState(null)
     setRunningId(def.id)
     try {
+      const workflowApi = requireBridgeDomain("workflow")
       trackWorkflowRunSubmit(def, params, true)
-      const forceResult = await window.synapse?.workflow.runDefinition(def, params, true)
-      if (!forceResult) {
-        toast.error("运行失败：无法连接到主进程")
-        return
-      }
+      const forceResult = await workflowApi.runDefinition(def, params, true)
       if ("errors" in forceResult) {
         const errors = forceResult.errors as Array<{ message?: string }>
         toast.error(errors[0]?.message ?? "运行失败：校验未通过")
@@ -152,7 +165,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
         toast.error("仍有运行中的实例，请先取消")
         return
       }
-      void window.synapse?.workflow.openRunner(def.id, forceResult.runId)
+      openRunner(workflowApi, def.id, forceResult.runId)
       void refresh()
     } catch (err) {
       showRunFailure(def, params, true, err)
@@ -204,7 +217,16 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
           <WorkflowCard key={meta.id} meta={meta}
             runState={runStates[meta.id]}
             running={runningId !== null}
-            onOpen={() => void window.synapse?.workflow.openEditor(meta.id)}
+            onOpen={() => {
+              void requireBridgeDomain("workflow").openEditor(meta.id).catch((err) => {
+                logger.warn("Workflow editor open failed.", {
+                  boundary: "renderer.workflow.list.openEditor",
+                  workflowId: meta.id,
+                  ...errorDiagnostic(err),
+                })
+                toast.error("打开工作流失败，请重试")
+              })
+            }}
             onRun={() => void handleRun(meta.id)}
             onHistory={() => setHistoryWorkflowId(meta.id)}
             onDelete={() => void handleDelete(meta.id)} />

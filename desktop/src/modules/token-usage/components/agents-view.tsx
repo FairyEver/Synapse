@@ -2,7 +2,8 @@ import {
   Table, TableBody, TableCell, TableHeader, TableRow,
 } from "@/components/ui/table"
 import { formatTokens, formatCost } from "../lib/format"
-import { getProviderColor } from "../lib/colors"
+import { getProviderColorClassName } from "../lib/colors"
+import { cn } from "@/lib/utils"
 import { Badge } from "@/components/ui/badge"
 import { useSort } from "../hooks/use-sort"
 import { SortableHeader } from "./sortable-header"
@@ -62,7 +63,7 @@ export function AgentsView({ agents }: AgentsViewProps) {
               <span className="flex flex-wrap gap-1">
                 {a.providers.slice(0, 3).map((p) => (
                   <Badge key={p} variant="outline" className="gap-1 text-xs">
-                    <span className="h-1.5 w-1.5 rounded-full" style={{ backgroundColor: getProviderColor(p) }} />
+                    <span className={cn("size-1.5 rounded-full", getProviderColorClassName(p))} />
                     {p}
                   </Badge>
                 ))}

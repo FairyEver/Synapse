@@ -3,6 +3,7 @@ export const DATABASE_IPC_CHANNELS = {
   databaseTableCreate: "synapse:database:table:create",
   databaseTableDelete: "synapse:database:table:delete",
   databaseTableDescribe: "synapse:database:table:describe",
+  databaseOverviewGet: "synapse:database:overview:get",
   databaseTableUpdate: "synapse:database:table:update",
   databaseColumnCreate: "synapse:database:column:create",
   databaseColumnUpdate: "synapse:database:column:update",

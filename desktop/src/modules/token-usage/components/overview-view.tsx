@@ -1,7 +1,8 @@
 import { useState } from "react"
 import { StackedBarChart } from "./stacked-bar-chart"
 import { formatTokens, formatCost, formatPercent, formatCacheRatio } from "../lib/format"
-import { getProviderColor } from "../lib/colors"
+import { getProviderColorClassName } from "../lib/colors"
+import { cn } from "@/lib/utils"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { GraphResult, HourlyRow } from "../hooks/use-token-usage"
 
@@ -82,10 +83,7 @@ export function OverviewView({ graphResult, hourlyRows = [] }: OverviewViewProps
           {topModels.map(([modelId, info], i) => (
             <div key={modelId} className="flex items-center gap-2 text-sm">
               <span className="text-muted-foreground w-5 text-right">{i + 1}</span>
-              <span
-                className="h-2 w-2 rounded-full"
-                style={{ backgroundColor: getProviderColor(info.providerId) }}
-              />
+              <span className={cn("size-2 rounded-full", getProviderColorClassName(info.providerId))} />
               <span className="flex-1 truncate">{modelId}</span>
               <span className="text-muted-foreground">{formatPercent(info.tokens, summary.totalTokens)}</span>
               <span className="w-20 text-right">{formatTokens(info.tokens)}</span>

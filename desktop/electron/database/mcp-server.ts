@@ -46,20 +46,71 @@ function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     let size = 0
-    req.on("data", (chunk: Buffer) => {
+    let settled = false
+    const cleanup = () => {
+      req.off("data", onData)
+      req.off("end", onEnd)
+      req.off("error", onError)
+      req.off("aborted", onAborted)
+    }
+    const settle = (callback: () => void) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      callback()
+    }
+    const onData = (chunk: Buffer) => {
       size += chunk.length
-      if (size > MAX_BODY_SIZE) { req.destroy(); reject(new Error("Request body too large")); return }
+      if (size > MAX_BODY_SIZE) {
+        req.destroy()
+        settle(() => reject(new Error("Request body too large")))
+        return
+      }
       chunks.push(chunk)
-    })
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")))
-    req.on("error", reject)
+    }
+    const onEnd = () => settle(() => resolve(Buffer.concat(chunks).toString("utf-8")))
+    const onError = (error: Error) => settle(() => reject(error))
+    const onAborted = () => settle(() => reject(new Error("Request aborted")))
+
+    req.on("data", onData)
+    req.on("end", onEnd)
+    req.on("error", onError)
+    req.on("aborted", onAborted)
   })
 }
 
+function applyCorsHeaders(req: IncomingMessage, res: ServerResponse): boolean {
+  const origin = req.headers.origin
+  if (!origin) {
+    return true
+  }
+
+  let parsed: URL
+  try {
+    parsed = new URL(origin)
+  } catch {
+    res.writeHead(403, { "Content-Type": "application/json" })
+    res.end(JSON.stringify({ error: "Forbidden origin" }))
+    return false
+  }
+
+  if (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") {
+    res.writeHead(403, { "Content-Type": "application/json" })
+    res.end(JSON.stringify({ error: "Forbidden origin" }))
+    return false
+  }
+
+  res.setHeader("Access-Control-Allow-Origin", origin)
+  res.setHeader("Vary", "Origin")
+  return true
+}
+
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type")
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
+  if (!applyCorsHeaders(req, res)) {
+    return
+  }
 
   if (req.method === "OPTIONS") {
     res.writeHead(204)

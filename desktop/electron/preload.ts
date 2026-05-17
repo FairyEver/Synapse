@@ -265,6 +265,7 @@ const DATABASE_CHANNELS = {
   databaseTableCreate: "synapse:database:table:create",
   databaseTableDelete: "synapse:database:table:delete",
   databaseTableDescribe: "synapse:database:table:describe",
+  databaseOverviewGet: "synapse:database:overview:get",
   databaseTableUpdate: "synapse:database:table:update",
   databaseColumnCreate: "synapse:database:column:create",
   databaseColumnUpdate: "synapse:database:column:update",
@@ -465,9 +466,7 @@ const synapseBridge: SynapseBridge = {
     listFiles: invoke(IPC_CHANNELS.log.listFiles),
     readAll: invoke(IPC_CHANNELS.log.readAll),
     readFiles: (fileNames: string[]) => invoke(IPC_CHANNELS.log.readFiles)(fileNames),
-    write: (payload) => {
-      void invoke(IPC_CHANNELS.log.write)(payload)
-    },
+    write: (payload) => invoke(IPC_CHANNELS.log.write)(payload),
   },
   license: {
     activate: (payload) => invoke(IPC_CHANNELS.license.activate)(payload),
@@ -573,6 +572,7 @@ const synapseBridge: SynapseBridge = {
     databaseTableCreate: (params) => invoke(DATABASE_CHANNELS.databaseTableCreate)(params),
     databaseTableDelete: (name) => invoke(DATABASE_CHANNELS.databaseTableDelete)(name),
     databaseTableDescribe: (name) => invoke(DATABASE_CHANNELS.databaseTableDescribe)(name),
+    databaseOverviewGet: invoke(DATABASE_CHANNELS.databaseOverviewGet),
     databaseTableUpdate: (params) =>
       invoke(DATABASE_CHANNELS.databaseTableUpdate)(params),
     databaseColumnCreate: (params) => invoke(DATABASE_CHANNELS.databaseColumnCreate)(params),

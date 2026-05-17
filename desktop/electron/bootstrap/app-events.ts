@@ -26,10 +26,12 @@ export function configureWindowsAppIdentity(platform: NodeJS.Platform = process.
 export function attachProcessLevelLogging(): void {
   process.on("uncaughtException", (error) => {
     logger.error("Uncaught exception in main process.", error)
+    app.exit(1)
   })
 
   process.on("unhandledRejection", (reason) => {
     logger.error("Unhandled rejection in main process.", reason)
+    app.exit(1)
   })
 }
 

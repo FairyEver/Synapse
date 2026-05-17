@@ -131,7 +131,7 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
                 </DropdownMenu>
               )}
             </div>
-            <p className="text-[11px] text-muted-foreground mt-1">
+            <p className="text-xs text-muted-foreground mt-1">
               {manifest?.title ?? node.type} · {connectionSummary}
             </p>
           </div>
@@ -209,7 +209,7 @@ function GlobalSettingsForm({ definition, projects, onChange }: {
             </span>
             <ChevronDown className="size-3.5 text-muted-foreground" />
           </Button>
-          {providerUnavailable && <p className="text-[11px] text-destructive">供应商不可用，请重新选择</p>}
+          {providerUnavailable && <p className="text-xs text-destructive">供应商不可用，请重新选择</p>}
           <ProviderModelSelectDialog
             open={providerDialogOpen}
             onOpenChange={setProviderDialogOpen}

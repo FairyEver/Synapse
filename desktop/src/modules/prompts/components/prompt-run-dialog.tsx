@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { LoaderCircle } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
-import { sanitizeError } from "../../../../electron/services/error-sanitize"
+import { sanitizeError } from "@/lib/error-sanitize"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,

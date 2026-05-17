@@ -77,7 +77,7 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
             placeholder="param_name"
             className={isDuplicate ? "border-destructive" : undefined}
           />
-          {isDuplicate && <p className="text-[11px] text-destructive">参数名称重复</p>}
+          {isDuplicate && <p className="text-xs text-destructive">参数名称重复</p>}
         </div>
         <div className="grid gap-1.5">
           <Label className="text-xs">类型</Label>

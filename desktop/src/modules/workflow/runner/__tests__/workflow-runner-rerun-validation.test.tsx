@@ -56,7 +56,7 @@ vi.mock("../runner-toolbar", () => ({
 }))
 
 import { WorkflowRunnerApp } from "../runner-app"
-import { sanitizeError } from "../../../../../electron/services/error-sanitize"
+import { sanitizeError } from "@/lib/error-sanitize"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 

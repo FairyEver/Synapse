@@ -13,7 +13,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
 import { ProviderLookupProvider } from "../../../../workflow-nodes/provider-lookup-context"
-import { sanitizeError } from "../../../../electron/services/error-sanitize"
+import { sanitizeError } from "@/lib/error-sanitize"
 
 const logger = createRendererLogger("workflow.runner")
 

@@ -100,7 +100,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
             <div className="bg-muted rounded p-2 space-y-1">
               {Object.entries(result.outputs).map(([k, v]) => (
                 <div key={k} className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
-                  <span className="font-mono text-muted-foreground text-[11px]">{k}</span>
+                  <span className="font-mono text-muted-foreground text-xs">{k}</span>
                   <span className="break-all">{formatOutputValue(v)}</span>
                 </div>
               ))}

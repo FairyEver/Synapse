@@ -1,4 +1,4 @@
-import { sanitizeError } from "../../../../electron/services/error-sanitize"
+import { sanitizeError } from "@/lib/error-sanitize"
 
 const MAX_ERROR_MESSAGE_LENGTH = 200
 

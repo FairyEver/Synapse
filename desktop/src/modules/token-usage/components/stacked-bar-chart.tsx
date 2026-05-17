@@ -1,7 +1,7 @@
 import { useState, useCallback } from "react"
 import { BarChart, Bar, XAxis, YAxis, Tooltip, Legend, ResponsiveContainer } from "recharts"
 import { formatTokens } from "../lib/format"
-import { getProviderColor } from "../lib/colors"
+import { getProviderColorVariable } from "../lib/colors"
 import type { GraphResult } from "../hooks/use-token-usage"
 
 type Contribution = GraphResult["contributions"][number]
@@ -40,9 +40,9 @@ export function StackedBarChart({ contributions }: StackedBarChartProps) {
 
   const modelColors = new Map<string, string>()
   for (const [id, info] of modelTotals) {
-    modelColors.set(id, getProviderColor(info.providerId))
+    modelColors.set(id, getProviderColorVariable(info.providerId))
   }
-  modelColors.set("other", "#888888")
+  modelColors.set("other", "var(--muted)")
 
   const barKeys = [...topModels, ...(sorted.length > 8 ? ["other"] : [])]
 
@@ -70,7 +70,7 @@ export function StackedBarChart({ contributions }: StackedBarChartProps) {
             key={key}
             dataKey={key}
             stackId="tokens"
-            fill={modelColors.get(key) || "#888"}
+            fill={modelColors.get(key) || "var(--muted)"}
             hide={hiddenKeys.has(key)}
           />
         ))}

@@ -77,7 +77,7 @@ function ProjectOverview({
                 {project.projectName}
               </h4>
               {!project.pathExists && (
-                <Badge variant="secondary" className="text-[10px] px-1.5 py-0">
+                <Badge variant="secondary" className="text-xs px-1.5 py-0">
                   路径不存在
                 </Badge>
               )}

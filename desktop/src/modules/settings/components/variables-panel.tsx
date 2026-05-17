@@ -232,7 +232,7 @@ function VariablesPanel() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          在内容中使用 <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">{"${{ NAME }}"}</code> 占位符，安装时自动替换。
+          在内容中使用 <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{"${{ NAME }}"}</code> 占位符，安装时自动替换。
         </p>
         <Button variant="outline" size="sm" className="shrink-0" onClick={handleAdd}>
           <Plus className="size-3.5" />

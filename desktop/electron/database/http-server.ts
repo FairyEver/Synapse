@@ -23,18 +23,61 @@ function readBody(req: IncomingMessage): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
     let size = 0
-    req.on("data", (chunk: Buffer) => {
+    let settled = false
+    const cleanup = () => {
+      req.off("data", onData)
+      req.off("end", onEnd)
+      req.off("error", onError)
+      req.off("aborted", onAborted)
+    }
+    const settle = (callback: () => void) => {
+      if (settled) return
+      settled = true
+      cleanup()
+      callback()
+    }
+    const onData = (chunk: Buffer) => {
       size += chunk.length
       if (size > MAX_BODY_SIZE) {
         req.destroy()
-        reject(new Error("Request body too large"))
+        settle(() => reject(new Error("Request body too large")))
         return
       }
       chunks.push(chunk)
-    })
-    req.on("end", () => resolve(Buffer.concat(chunks).toString("utf-8")))
-    req.on("error", reject)
+    }
+    const onEnd = () => settle(() => resolve(Buffer.concat(chunks).toString("utf-8")))
+    const onError = (error: Error) => settle(() => reject(error))
+    const onAborted = () => settle(() => reject(new Error("Request aborted")))
+
+    req.on("data", onData)
+    req.on("end", onEnd)
+    req.on("error", onError)
+    req.on("aborted", onAborted)
   })
+}
+
+function applyCorsHeaders(req: IncomingMessage, res: ServerResponse): boolean {
+  const origin = req.headers.origin
+  if (!origin) {
+    return true
+  }
+
+  let parsed: URL
+  try {
+    parsed = new URL(origin)
+  } catch {
+    sendJson(res, 403, { ok: false, error: "Forbidden origin" })
+    return false
+  }
+
+  if (parsed.hostname !== "127.0.0.1" && parsed.hostname !== "localhost") {
+    sendJson(res, 403, { ok: false, error: "Forbidden origin" })
+    return false
+  }
+
+  res.setHeader("Access-Control-Allow-Origin", origin)
+  res.setHeader("Vary", "Origin")
+  return true
 }
 
 function sendJson(res: ServerResponse, status: number, data: unknown): void {
@@ -44,8 +87,11 @@ function sendJson(res: ServerResponse, status: number, data: unknown): void {
 }
 
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  res.setHeader("Access-Control-Allow-Origin", "*")
   res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
+  if (!applyCorsHeaders(req, res)) {
+    return
+  }
 
   if (req.method === "OPTIONS") {
     res.writeHead(204)
@@ -147,7 +193,7 @@ function startHttpServer(router: SynapseActionRouter): Promise<number> {
       }
 
       try {
-        writeFileSync(getServerInfoPath(), JSON.stringify(serverInfo, null, 2))
+        writeFileSync(getServerInfoPath(), JSON.stringify(serverInfo, null, 2), { mode: 0o600 })
       } catch (error) {
         logger.error("Failed to write server info file.", { error })
         s.close()

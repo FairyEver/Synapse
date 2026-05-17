@@ -23,6 +23,10 @@ function isTrustedRendererUrl(url: string): boolean {
     }
   }
 
+  if (!url.startsWith("file:")) {
+    return false
+  }
+
   try {
     const rendererUrl = new URL(url)
     const trustedIndexUrl = getTrustedRendererIndexUrl()
