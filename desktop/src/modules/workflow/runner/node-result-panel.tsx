@@ -94,13 +94,28 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
             <pre className={`bg-muted rounded p-2 whitespace-pre-wrap break-all ${result.status === "cancelled" ? "text-muted-foreground" : "text-destructive"}`}>{result.error}</pre>
           </div>
         )}
+        {result.outputs && Object.keys(result.outputs).length > 0 && (
+          <div className="grid gap-1">
+            <p className="font-medium text-muted-foreground">结构化输出</p>
+            <div className="bg-muted rounded p-2 space-y-1">
+              {Object.entries(result.outputs).map(([k, v]) => (
+                <div key={k} className="grid grid-cols-[auto_1fr] gap-x-2 gap-y-0.5">
+                  <span className="font-mono text-muted-foreground text-[11px]">{k}</span>
+                  <span className="break-all">{formatOutputValue(v)}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
         {activeBranchLabel && (
           <div className="grid gap-1">
             <p className="font-medium text-muted-foreground">激活分支</p>
             <span className="font-mono">{activeBranchLabel}</span>
           </div>
         )}
-        {!result.input.prompt && !result.error && !activeBranchLabel && (result.output == null || result.output === "") && (
+        {!result.input.prompt && !result.error && !activeBranchLabel
+          && (result.output == null || result.output === "")
+          && (!result.outputs || Object.keys(result.outputs).length === 0) && (
           <p className="text-muted-foreground">
             {result.status === "skipped" ? "节点因工作流分支逻辑被跳过，未执行" : result.status === "pending" ? "节点等待执行" : result.status === "running" ? "节点正在执行…" : result.status === "cancelled" ? "节点执行被取消" : "（无可展示的输出）"}
           </p>
@@ -108,4 +123,10 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
       </div>
     </div>
   )
+}
+
+function formatOutputValue(value: unknown): string {
+  if (value === null || value === undefined) return "（空）"
+  if (typeof value === "object") return JSON.stringify(value)
+  return String(value)
 }

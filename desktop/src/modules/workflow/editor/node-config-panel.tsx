@@ -54,7 +54,8 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
   }
 
   const node = nodeId ? definition.nodes.find((n) => n.id === nodeId) : null
-  const manifest = node ? nodeTypeRegistry.getManifest(node.type) : null
+  let manifest: ReturnType<typeof nodeTypeRegistry.getManifest> | null = null
+  try { manifest = node ? nodeTypeRegistry.getManifest(node.type) : null } catch { manifest = null }
   const Icon = manifest?.icon
 
   const inCount = node ? definition.edges.filter((e) => e.to === node.id).length : 0
@@ -137,7 +138,7 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
           <div className="flex-1 overflow-auto p-3">
             {(() => {
               const PanelComponent = getPanel(node.type)
-              if (!PanelComponent) return null
+              if (!PanelComponent) return <div className="flex items-center justify-center h-full text-xs text-muted-foreground"><p>该节点类型暂不支持配置编辑</p></div>
               return (
                 <PanelComponent
                   key={node.id}

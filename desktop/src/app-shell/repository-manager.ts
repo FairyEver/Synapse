@@ -674,12 +674,17 @@ class RepositoryManager {
       return
     }
 
-    const states = await bridge.getStates()
-    this.repositoryStates.clear()
-    for (const state of states) {
-      this.repositoryStates.set(state.repositoryUuid, state)
+    try {
+      const states = await bridge.getStates()
+      this.repositoryStates.clear()
+      for (const state of states) {
+        this.repositoryStates.set(state.repositoryUuid, state)
+      }
+      this.notifyRepositorySubscribers()
+    } catch {
+      // bridge.getStates() 可能因 IPC 断开或数据库查询异常抛出，
+      // 保留现有状态不变以避免 UI 闪白，等待下一次 onUpdated 回调重试
     }
-    this.notifyRepositorySubscribers()
   }
 
   private async refreshPendingPushes(uuid: string): Promise<void> {

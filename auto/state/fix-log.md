@@ -1,8 +1,27 @@
 ---
 
-## [2026-05-17 06:34] Agent agent-1778970395-21809 第 1 轮
+---
+
+## [2026-05-17 14:57] Agent agent-1779000983-6c45 第 1 轮
 
 ### 问题
+- NodeConfigPanel 在节点类型未注册时抛出未捕获异常，导致配置面板崩溃
+- 类型：崩溃修复
+- 优先级：P1
+
+### 修改
+- `desktop/src/modules/workflow/editor/node-config-panel.tsx`：在 `getManifest` 调用外包裹 try-catch，未知节点类型时优雅降级显示"该节点类型暂不支持配置编辑"
+
+### 用户受益
+- 如果工作流中包含已取消注册的节点类型（代码更新后），选择该节点时面板显示友好提示而非整个面板崩溃
+- 用户仍能看到节点名称、连线信息等基本内容
+
+### 验证
+- `pnpm exec tsc --noEmit`：通过
+- `pnpm run check:hard-constraints`：通过
+
+### 风险
+- 无已知风险：manifest 已通过可选链访问，不存在后续 null 引用问题
 - end/card.tsx 仍使用本地 statusClass 和 NodeStatus 定义，其他 4 个节点 card 已迁移到共享的 node-status-utils.ts
 - 类型：死代码
 - 优先级：P2
@@ -14023,3 +14042,31 @@ SDK assistant event 的产品内容和诊断 payload 分层更清楚：右侧消
 
 ### 风险
 - 无已知风险。computeEndReachable 的行为与原来两处的实现完全相同：empty Set 表示"无 End 节点"时引擎不过滤节点、验证器跳过验证。所有测试通过。
+
+---
+
+## [2026-05-18 15:13] Agent agent-20260517150353-2675 第 1 轮
+
+### 问题
+- NodeResultPanel 不渲染 result.outputs，http-request 和 script 节点的结构化输出（status/stderr/stdout/exitCode）用户不可见
+- 类型：交互完整性
+- 优先级：P1
+
+### 修改
+- `desktop/src/modules/workflow/runner/node-result-panel.tsx`：新增 outputs 渲染区域，以 key-value 网格展示结构化输出
+- `desktop/src/modules/workflow/runner/node-result-panel.tsx`：更新空状态条件，当 outputs 有值时不显示"无可展示的输出"
+
+### 用户受益
+- HTTP 请求节点运行后，用户现在能在结果面板中查看状态码、响应头等结构化数据
+- 脚本节点运行后，用户现在能查看 stdout、stderr 和退出码
+- 空状态提示不再错误地在有 structured outputs 时显示
+
+### 验证
+- eslint：通过
+- tsc --noEmit：通过
+- check:hard-constraints：通过
+- workflow-module.test.tsx：通过
+- 影响面检查：仅 runner-app.tsx 导入 NodeResultPanel，props 不变
+
+### 风险
+- 无已知风险。formatOutputValue 为纯函数，不涉及组件外部状态

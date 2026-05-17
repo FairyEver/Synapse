@@ -10,7 +10,6 @@ export function useWorkflowList() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const refresh = useCallback(async () => {
-    setLoading(true)
     setError(null)
     try {
       const data = await window.synapse?.workflow.list()
