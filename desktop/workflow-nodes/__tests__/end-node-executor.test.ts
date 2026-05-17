@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 vi.mock("electron", () => ({ app: { getPath: () => "/tmp", getAppPath: () => "/tmp" } }))
 const logger = vi.hoisted(() => ({
   info: vi.fn(),
+  warn: vi.fn(),
 }))
 vi.mock("../../electron/services/log-store", () => ({
   createMainLogger: () => logger,

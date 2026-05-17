@@ -113,7 +113,11 @@ export class WorkflowEngine {
     const taskFactory = (nodeId: string): NodeTask => ({
       nodeId,
       execute: async (): Promise<NodeExecOutcome> => {
-        const node = def.nodes.find((n) => n.id === nodeId)!
+        const node = def.nodes.find((n) => n.id === nodeId)
+        if (!node) {
+          logger.warn("taskFactory: node ID not found in definition", { runId, nodeId })
+          return { nodeId, status: "failed", error: `节点 ID「${nodeId}」在工作流定义中不存在` }
+        }
         try {
           const manifest = nodeTypeRegistry.getManifest(node.type)
           const executor = nodeTypeRegistry.getExecutor(node.type)
@@ -169,7 +173,7 @@ export class WorkflowEngine {
             },
           })
 
-          if (effectiveAbortSignal.aborted) {
+          if (effectiveAbortSignal.aborted && execResult.status !== "failed") {
             return { nodeId, status: "cancelled", error: "运行被取消", durationMs: execResult.durationMs }
           }
 

@@ -71,5 +71,10 @@ export function resolveVariables(
 
 export function interpolatePrompt(template: string, vars: Record<string, string>): string {
   // Supports both {{varName}} and {{$varName}} syntax (design spec uses $-prefix)
-  return template.replace(/\{\{\$?([\p{L}\p{N}_]+)\}\}/gu, (match, n) => vars[n] ?? match)
+  return template.replace(/\{\{\$?([\p{L}\p{N}_]+)\}\}/gu, (match, n) => {
+    if (!(n in vars)) {
+      logger.warn("unbound template variable kept as-is", { variable: n, match })
+    }
+    return vars[n] ?? match
+  })
 }

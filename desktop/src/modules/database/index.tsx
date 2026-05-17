@@ -77,7 +77,11 @@ function DatabaseModule() {
         return
       }
 
-      await dataTableViewRef.current?.commitPendingChanges()
+      try {
+        await dataTableViewRef.current?.commitPendingChanges()
+      } catch (err) {
+        logger.warn("Failed to commit pending changes before table switch.", { from: selectedTable, to: name, error: err instanceof Error ? err.message : String(err) })
+      }
       logger.info("Table selected.", {
         from: selectedTable,
         to: name,

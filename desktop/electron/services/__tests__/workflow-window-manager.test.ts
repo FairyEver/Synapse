@@ -1,0 +1,154 @@
+import Module from "node:module"
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
+
+type FakeBrowserWindow = {
+  readonly id: number
+  destroyed: boolean
+  focused: boolean
+  loadedUrls: string[]
+  sentMessages: Array<{ channel: string; payload: unknown }>
+  closedHandler?: () => void
+  webContents: {
+    send: (channel: string, payload: unknown) => void
+    ipc: { on: () => void; removeListener: () => void }
+    on: () => void
+    removeListener: () => void
+    isDestroyed: () => boolean
+  }
+  isDestroyed: () => boolean
+  focus: () => void
+  loadURL: (url: string) => Promise<void>
+  on: (event: string, handler: () => void) => void
+  destroy: () => void
+}
+
+const electronMock = vi.hoisted(() => {
+  const windows: FakeBrowserWindow[] = []
+  let nextId = 1
+
+  function createWindow(): FakeBrowserWindow {
+    const win: FakeBrowserWindow = {
+      id: nextId++,
+      destroyed: false,
+      focused: false,
+      loadedUrls: [],
+      sentMessages: [],
+      webContents: {
+        send: (channel, payload) => {
+          win.sentMessages.push({ channel, payload })
+        },
+        ipc: { on: vi.fn(), removeListener: vi.fn() },
+        on: vi.fn(),
+        removeListener: vi.fn(),
+        isDestroyed: () => win.destroyed,
+      },
+      isDestroyed: () => win.destroyed,
+      focus: () => {
+        win.focused = true
+      },
+      loadURL: async (url: string) => {
+        win.loadedUrls.push(url)
+      },
+      on: (event: string, handler: () => void) => {
+        if (event === "closed") win.closedHandler = handler
+      },
+      destroy: () => {
+        win.destroyed = true
+      },
+    }
+    windows.push(win)
+    return win
+  }
+
+  return {
+    windows,
+    reset: () => {
+      windows.length = 0
+      nextId = 1
+    },
+    BrowserWindow: vi.fn(function BrowserWindow() {
+      return createWindow()
+    }),
+  }
+})
+
+vi.mock("electron", () => ({
+  BrowserWindow: electronMock.BrowserWindow,
+}))
+
+const healthMock = vi.hoisted(() => ({
+  attach: vi.fn(),
+  detach: vi.fn(),
+}))
+
+vi.mock("../renderer-health", () => ({
+  RendererHealthService: vi.fn(function RendererHealthService() {
+    return healthMock
+  }),
+}))
+
+vi.mock("../log-store", () => ({
+  createMainLogger: vi.fn(() => ({
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  })),
+}))
+
+const moduleResolver = Module as typeof Module & {
+  _resolveFilename: (
+    request: string,
+    parent?: unknown,
+    isMain?: boolean,
+    options?: unknown,
+  ) => string
+}
+const originalResolveFilename = moduleResolver._resolveFilename
+
+import { WorkflowWindowManager } from "../workflow/window-manager"
+
+describe("WorkflowWindowManager", () => {
+  beforeAll(() => {
+    moduleResolver._resolveFilename = (request, parent, isMain, options) => {
+      if (request === "../../preload") return "/tmp/synapse-preload.js"
+      return originalResolveFilename.call(moduleResolver, request, parent, isMain, options)
+    }
+  })
+
+  afterAll(() => {
+    moduleResolver._resolveFilename = originalResolveFilename
+  })
+
+  beforeEach(() => {
+    electronMock.reset()
+    electronMock.BrowserWindow.mockClear()
+    healthMock.attach.mockClear()
+    healthMock.detach.mockClear()
+  })
+
+  it("closes the editor window when opening the runner for the same workflow", () => {
+    const manager = new WorkflowWindowManager()
+
+    const editor = manager.open("workflow-1", "app://-")
+    const runner = manager.openRunner("workflow-1", "run-1", "app://-")
+
+    expect(editor).not.toBe(runner)
+    expect(editor.isDestroyed()).toBe(true)
+    expect(runner.isDestroyed()).toBe(false)
+    expect(manager.getOpenEditorIds()).toEqual([])
+    expect(manager.hasActiveRun("workflow-1")).toBe(true)
+  })
+
+  it("closes the runner window when opening the editor for the same workflow", () => {
+    const manager = new WorkflowWindowManager()
+
+    const runner = manager.openRunner("workflow-1", "run-1", "app://-")
+    const editor = manager.open("workflow-1", "app://-")
+
+    expect(runner).not.toBe(editor)
+    expect(runner.isDestroyed()).toBe(true)
+    expect(editor.isDestroyed()).toBe(false)
+    expect(manager.hasActiveRun("workflow-1")).toBe(false)
+    expect(manager.getOpenEditorIds()).toEqual(["workflow-1"])
+  })
+})

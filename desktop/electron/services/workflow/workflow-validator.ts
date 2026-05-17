@@ -40,11 +40,14 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
   const paramNamesSeen = new Set<string>()
   for (const p of def.params) {
     const trimmed = p.name.trim()
-    if (!trimmed) continue
+    if (!trimmed) {
+      errors.push({ type: "invalid_config", message: "工作流参数名称不能为空" })
+      continue
+    }
     if (paramNamesSeen.has(trimmed)) {
       errors.push({ type: "invalid_config", message: `工作流参数名称「${trimmed}」重复，请确保每个参数名称唯一` })
       logger.warn("duplicate param name detected", { workflowId: def.id, duplicateName: trimmed })
-      break
+      continue
     }
     paramNamesSeen.add(trimmed)
   }
@@ -59,7 +62,7 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
     if (nodeIdsSeen.has(node.id)) {
       errors.push({ type: "invalid_config", nodeId: node.id, message: `节点 ID「${node.id}」重复，请删除重复节点后重试` })
       logger.warn("duplicate node id detected", { workflowId: def.id, nodeId: node.id })
-      break
+      continue
     }
     nodeIdsSeen.add(node.id)
   }
@@ -108,7 +111,7 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
           if (seen.has(bid)) {
             errors.push({ type: "invalid_config", nodeId: node.id, message: `Switch 节点 "${node.name}" 存在重复的分支 ID "${bid}"` })
             logger.warn("duplicate branch id detected", { workflowId: def.id, nodeId: node.id, nodeName: node.name, duplicateId: bid })
-            break
+            continue
           }
           seen.add(bid)
         }
@@ -139,7 +142,7 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
     if (edgeIdsSeen.has(edge.id)) {
       errors.push({ type: "invalid_config", edgeId: edge.id, message: `连线 ID「${edge.id}」重复，请重新连线后重试` })
       logger.warn("duplicate edge id detected", { workflowId: def.id, edgeId: edge.id })
-      break
+      continue
     }
     edgeIdsSeen.add(edge.id)
     if (!from || !to) {

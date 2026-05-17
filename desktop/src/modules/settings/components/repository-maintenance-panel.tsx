@@ -42,7 +42,7 @@ function RepositoryMaintenancePanel({ repositoryUuid }: RepositoryMaintenancePan
                   success: (result) => result.message ?? "整理完成。",
                   error: (error) => error instanceof Error ? error.message : "整理失败。",
                 },
-              ).catch(() => {})
+              ).catch((err) => { logger.warn("Repository maintenance failed.", { repositoryUuid, error: err instanceof Error ? err.message : String(err) }) })
             }}
           >
             {isBusy ? <LoaderCircle className="animate-spin" /> : null}

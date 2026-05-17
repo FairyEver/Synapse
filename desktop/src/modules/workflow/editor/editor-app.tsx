@@ -104,6 +104,11 @@ export function WorkflowEditorApp() {
     const unsub = window.synapse?.workflow.onDefinitionUpdated((payload) => {
       if (payload.workflowId !== workflowId) return
       if (payload.source !== "mcp") return
+      if (isDirtyRef.current) {
+        logger.warn("external definition update received but editor has unsaved changes, skipping reload", { workflowId })
+        toast.warning("工作流已被外部更新，当前有未保存的更改", { duration: 3000 })
+        return
+      }
       loadDefinition()
       toast.info("工作流已被外部更新", { duration: 2000 })
     })

@@ -342,6 +342,12 @@ export const workflowIpcModule: IpcModule = {
           logger.warn("workflow:runDefinition blocked by validation", { workflowId: def.id, errors: validation.errors })
           return { errors: validation.errors }
         }
+        const paramErrors = validateRunParams(def, params)
+        if (paramErrors.length > 0) {
+          logger.warn("workflow:runDefinition blocked by missing params", { workflowId: def.id, errors: paramErrors })
+          return { errors: paramErrors }
+        }
+        const effectiveParams = buildEffectiveRunParams(def, params)
 
         if (!force) {
           for (const [existingRunId, status] of runStatuses) {
@@ -363,7 +369,7 @@ export const workflowIpcModule: IpcModule = {
         const runId = randomUUID()
         const startedAt = Date.now()
         abortMap.set(runId, ac)
-        runStatuses.set(runId, { runId, workflowId: def.id, status: "running", nodeResults: {}, startedAt, params, definition: def })
+        runStatuses.set(runId, { runId, workflowId: def.id, status: "running", nodeResults: {}, startedAt, params: effectiveParams, definition: def })
 
         const appConfig = await configStore.load()
         const defaultProject = def.defaultProjectId
@@ -374,7 +380,7 @@ export const workflowIpcModule: IpcModule = {
 
         logger.info("workflow:runDefinition started", { workflowId: def.id, runId, nodeCount: def.nodes.length })
 
-        engine.run(def, params, runId, (event) => {
+        engine.run(def, effectiveParams, runId, (event) => {
           const current = runStatuses.get(runId) ?? { runId, workflowId: def.id, status: "running" as const, nodeResults: {}, startedAt, definition: def }
           const nextNodeResults: Record<string, NodeRunResult> = { ...current.nodeResults }
           if (event.type === "node:started") {
@@ -394,7 +400,7 @@ export const workflowIpcModule: IpcModule = {
             const nodeResults = event.result?.nodeResults ?? nextNodeResults
             const durationMs = event.result?.durationMs ?? endedAt - startedAt
             runStatuses.set(runId, { ...current, runId, workflowId: def.id, status, nodeResults, startedAt, endedAt, durationMs, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
-            void snapshots.save({ runId, workflowId: def.id, version: def.version, startedAt, endedAt, status, params, nodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
+            void snapshots.save({ runId, workflowId: def.id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
             pruneTerminalStatuses(runStatuses, def.id)
           }
         }, ac.signal, projectId, "editor-run-definition").catch((err) => {
@@ -411,7 +417,7 @@ export const workflowIpcModule: IpcModule = {
               { domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: visibleError, result: { status: "failed", nodeResults: current.nodeResults, durationMs } }, timestamp: new Date().toISOString() },
               { backpressure: "block" },
             )
-            void snapshots.save({ runId, workflowId: def.id, version: def.version, startedAt, endedAt, status: "failed", params, nodeResults: current.nodeResults, definition: def, error: visibleError })
+            void snapshots.save({ runId, workflowId: def.id, version: def.version, startedAt, endedAt, status: "failed", params: effectiveParams, nodeResults: current.nodeResults, definition: def, error: visibleError })
           }
         })
 
@@ -467,6 +473,12 @@ export const workflowIpcModule: IpcModule = {
 
         const validation = validateWorkflow(def)
         if (!validation.valid) return { errors: validation.errors }
+        const paramErrors = validateRunParams(def, effectiveParams)
+        if (paramErrors.length > 0) {
+          logger.warn("workflow:rerun blocked by missing params", { workflowId, errors: paramErrors })
+          return { errors: paramErrors }
+        }
+        const validatedParams = buildEffectiveRunParams(def, effectiveParams)
 
         for (const [existingRunId, status] of runStatuses) {
           if (status.workflowId === workflowId && status.status === "running") {
@@ -478,7 +490,7 @@ export const workflowIpcModule: IpcModule = {
         const runId = randomUUID()
         const startedAt = Date.now()
         abortMap.set(runId, ac)
-        runStatuses.set(runId, { runId, workflowId, status: "running", nodeResults: {}, startedAt, params: effectiveParams, definition: def })
+        runStatuses.set(runId, { runId, workflowId, status: "running", nodeResults: {}, startedAt, params: validatedParams, definition: def })
 
         const appConfig = await configStore.load()
         const defaultProject = def.defaultProjectId
@@ -487,7 +499,7 @@ export const workflowIpcModule: IpcModule = {
         const activeRepo = defaultProject ?? appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
         const projectId = activeRepo?.uuid ?? ""
 
-        engine.run(def, effectiveParams, runId, (event) => {
+        engine.run(def, validatedParams, runId, (event) => {
           const current = runStatuses.get(runId) ?? { runId, workflowId: workflowId!, status: "running" as const, nodeResults: {}, startedAt, definition: def }
           const nextNodeResults: Record<string, NodeRunResult> = { ...current.nodeResults }
           if (event.type === "node:started") {
@@ -504,7 +516,7 @@ export const workflowIpcModule: IpcModule = {
             const nodeResults = event.result?.nodeResults ?? nextNodeResults
             const durationMs = event.result?.durationMs ?? endedAt - startedAt
             runStatuses.set(runId, { ...current, runId, workflowId: workflowId!, status, nodeResults, startedAt, endedAt, durationMs, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
-            void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
+            void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status, params: validatedParams, nodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
             pruneTerminalStatuses(runStatuses, workflowId!)
           }
         }, ac.signal, projectId, "rerun").catch((err) => {
@@ -517,7 +529,7 @@ export const workflowIpcModule: IpcModule = {
             const endedAt = Date.now()
             runStatuses.set(runId, { runId, workflowId: workflowId!, status: "failed", nodeResults: current.nodeResults, startedAt, endedAt, durationMs: endedAt - startedAt, error: visibleError, definition: def })
             eventBus.emit({ domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: visibleError, result: { status: "failed", nodeResults: current.nodeResults, durationMs: endedAt - startedAt } }, timestamp: new Date().toISOString() }, { backpressure: "block" })
-            void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status: "failed", params: effectiveParams, nodeResults: current.nodeResults, definition: def, error: visibleError })
+            void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status: "failed", params: validatedParams, nodeResults: current.nodeResults, definition: def, error: visibleError })
           }
         })
 

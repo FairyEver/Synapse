@@ -134,7 +134,7 @@ export class WorkflowService {
     const id = randomUUID()
     const now = Date.now()
     const appConfig = await configStore.load()
-    const pm = appConfig.agent.defaultProviderModel
+    const pm = appConfig.agent?.defaultProviderModel
     const def: WorkflowDefinition = {
       id, name: "新工作流", version: "", createdAt: now, updatedAt: now, params: [],
       ...(pm ? { defaultProviderId: pm.providerId, defaultModelTier: pm.modelTier } : {}),

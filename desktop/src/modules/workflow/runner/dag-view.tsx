@@ -41,7 +41,7 @@ function RunnerEdge({
         id={id}
         d={edgePath}
         fill="none"
-        stroke={activated ? "hsl(var(--primary))" : "hsl(var(--border))"}
+        stroke={activated ? "var(--primary)" : "var(--border)"}
         strokeWidth={2}
         strokeOpacity={activated ? 0.6 : 1}
         strokeDasharray={activated ? undefined : "4 4"}

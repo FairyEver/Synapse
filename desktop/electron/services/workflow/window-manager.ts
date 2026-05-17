@@ -23,6 +23,7 @@ export class WorkflowWindowManager {
         logger.warn("workflow editor window refocus send failed", { workflowId, runId, error: err instanceof Error ? err.message : String(err) })
       }
       existing.focus()
+      this.closeRunnerWindow(workflowId, "workflow runner window closed after editor opened")
       return existing
     }
 
@@ -56,6 +57,7 @@ export class WorkflowWindowManager {
       this.editorWindows.delete(workflowId)
     })
     this.editorWindows.set(workflowId, win)
+    this.closeRunnerWindow(workflowId, "workflow runner window closed after editor opened")
     logger.info("workflow editor window opened", { workflowId, runId })
     return win
   }
@@ -70,6 +72,7 @@ export class WorkflowWindowManager {
         logger.warn("workflow runner window switch-run send failed", { workflowId, newRunId: runId, error: err instanceof Error ? err.message : String(err) })
       }
       existing.focus()
+      this.closeEditorWindow(workflowId, "workflow editor window closed after runner opened")
       return existing
     }
 
@@ -102,6 +105,7 @@ export class WorkflowWindowManager {
       this.runnerWindows.delete(workflowId)
     })
     this.runnerWindows.set(workflowId, win)
+    this.closeEditorWindow(workflowId, "workflow editor window closed after runner opened")
     logger.info("workflow runner window opened", { workflowId, runId })
     return win
   }
@@ -114,29 +118,13 @@ export class WorkflowWindowManager {
   }
 
   forceClose(workflowId: string): void {
-    const editor = this.editorWindows.get(workflowId)
-    if (editor && !editor.isDestroyed()) {
-      logger.info("workflow editor window force-closed", { workflowId })
-      const windowId = `workflow-editor:${workflowId}`
-      this.healthServices.get(windowId)?.detach()
-      this.healthServices.delete(windowId)
-      editor.destroy()
-    }
-    this.editorWindows.delete(workflowId)
+    this.closeEditorWindow(workflowId, "workflow editor window force-closed")
   }
 
   forceCloseAll(workflowId: string): void {
     logger.info("workflow force-close-all", { workflowId })
     this.forceClose(workflowId)
-    const runner = this.runnerWindows.get(workflowId)
-    if (runner && !runner.isDestroyed()) {
-      logger.info("workflow runner window force-closed", { workflowId })
-      const windowId = `workflow-runner:${workflowId}`
-      this.healthServices.get(windowId)?.detach()
-      this.healthServices.delete(windowId)
-      runner.destroy()
-    }
-    this.runnerWindows.delete(workflowId)
+    this.closeRunnerWindow(workflowId, "workflow runner window force-closed")
   }
 
   hasActiveRun(workflowId: string): boolean {
@@ -153,5 +141,29 @@ export class WorkflowWindowManager {
     return open.length > 0
       ? { canSync: false, blockers: open.map((id) => `Workflow editor open: ${id}`) }
       : { canSync: true, blockers: [] }
+  }
+
+  private closeEditorWindow(workflowId: string, message: string): void {
+    const editor = this.editorWindows.get(workflowId)
+    if (editor && !editor.isDestroyed()) {
+      logger.info(message, { workflowId })
+      const windowId = `workflow-editor:${workflowId}`
+      this.healthServices.get(windowId)?.detach()
+      this.healthServices.delete(windowId)
+      editor.destroy()
+    }
+    this.editorWindows.delete(workflowId)
+  }
+
+  private closeRunnerWindow(workflowId: string, message: string): void {
+    const runner = this.runnerWindows.get(workflowId)
+    if (runner && !runner.isDestroyed()) {
+      logger.info(message, { workflowId })
+      const windowId = `workflow-runner:${workflowId}`
+      this.healthServices.get(windowId)?.detach()
+      this.healthServices.delete(windowId)
+      runner.destroy()
+    }
+    this.runnerWindows.delete(workflowId)
   }
 }

@@ -2,6 +2,7 @@ import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../t
 import type { ScriptNodeConfig } from "./schema"
 import { runShellAction } from "../../action-packages/builtin/shell-process.main"
 import { createMainLogger } from "../../electron/services/log-store"
+import { sanitizeError } from "../../electron/services/error-sanitize"
 
 const logger = createMainLogger("workflow.node.script-executor")
 
@@ -85,7 +86,7 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
       return {
         status: "failed",
         output: "",
-        error: `脚本执行异常：${message.length <= 120 ? message : message.slice(0, 120) + "..."}`,
+        error: `脚本执行异常：${sanitizeError(message.length <= 120 ? message : message.slice(0, 120) + "...")}`,
         durationMs,
       }
     }

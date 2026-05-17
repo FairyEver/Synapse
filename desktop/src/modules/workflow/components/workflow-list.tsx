@@ -135,6 +135,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     if (!conflictState) return
     const { def, params } = conflictState
     setConflictState(null)
+    setRunningId(def.id)
     try {
       trackWorkflowRunSubmit(def, params, true)
       const forceResult = await window.synapse?.workflow.runDefinition(def, params, true)
@@ -155,6 +156,8 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       void refresh()
     } catch (err) {
       showRunFailure(def, params, true, err)
+    } finally {
+      setRunningId(null)
     }
   }
 

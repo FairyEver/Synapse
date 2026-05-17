@@ -87,7 +87,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
         const summary = manifest.cardSummary({} as never)
         title = summary.title
         subtitle = summary.subtitle
-      } catch { /* fallback to manifest.title */ }
+      } catch (err) { logger.warn("cardSummary failed, falling back to manifest.title", { type, error: err instanceof Error ? err.message : String(err) }) }
       return { type, title, subtitle, color: manifest.color }
     })
     return { ok: true, data: summaries }
