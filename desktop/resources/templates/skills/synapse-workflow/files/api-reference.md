@@ -23,6 +23,57 @@ Get full manifest and config JSON Schema for a node type.
 
 ---
 
+## Node Type Config Reference
+
+These are the key config fields for each node type. Always call `workflow_node_type_describe` for the full JSON Schema.
+
+### prompt
+
+- `prompt` (string) — prompt template text with `{{variable}}` placeholders
+- `variables` (array) — variable bindings
+- `providerId?` / `modelTier?` — override workflow-level provider defaults
+
+### switch
+
+- `prompt` (string) — evaluation prompt
+- `branches` (array of `{ id, label }`) — possible branch outcomes
+- `defaultBranch?` (string) — fallback branch id
+- `variables` (array) — variable bindings
+- `providerId?` / `modelTier?` — override workflow-level provider defaults
+
+### http_request
+
+No provider needed. Config fields:
+
+- `method` (enum: GET/POST/PUT/PATCH/DELETE, default "GET")
+- `url` (string) — request URL
+- `headers?` (object) — key-value request headers
+- `query?` (object) — key-value query parameters
+- `bodyType` (enum: none/json/text, default "none")
+- `body?` (string) — request body (when bodyType is json or text)
+- `auth?` (`{ type: "none"|"bearer"|"basic", bearerToken?, basicUsername?, basicPassword? }`)
+- `timeoutMins?` (number) — request timeout in minutes
+- `variables` (array) — variable bindings
+
+### script
+
+No provider needed. Config fields:
+
+- `script` (string) — shell script content
+- `shell` (enum: posix/cmd/powershell, default "posix")
+- `env?` (object) — key-value environment variables
+- `pathStrategy?` (enum: merge/replace) — PATH handling
+- `posixLogin?` (boolean) — run as login shell (posix only)
+- `timeoutMins?` (number) — execution timeout in minutes
+- `variables` (array) — variable bindings
+
+### end
+
+- `outputTemplate` (string) — final output template with `{{variable}}` placeholders
+- `variables` (array) — variable bindings
+
+---
+
 ## Read
 
 ### workflow_definition_list

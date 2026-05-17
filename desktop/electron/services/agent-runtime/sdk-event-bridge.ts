@@ -23,13 +23,21 @@ export function bridgeSdkMessage(
 
   if (raw.type === "result") {
     if (raw.subtype !== "success" || raw.is_error === true) {
-      return {
-        type: "error",
-        message: resultErrorMessage(raw),
-        sdkSessionId,
-        payload: sanitizeResultErrorPayload(payload),
-        ...envelope,
+      const errors = Array.isArray(raw.errors)
+        ? raw.errors.filter((error): error is string => typeof error === "string")
+        : []
+      if (errors.length > 0) {
+        return {
+          type: "error",
+          message: errors.map(sanitizeDiagnosticText).join("\n"),
+          sdkSessionId,
+          payload: sanitizeResultErrorPayload(payload),
+          ...envelope,
+        }
       }
+      // No actual error messages — stop_reason (e.g. "stop_sequence") is a
+      // normal API response indicator, not an error. Bridges that only report
+      // a stop_reason are treated as success.
     }
 
     return {
@@ -120,15 +128,6 @@ export function bridgeSdkMessage(
     payload,
     ...envelope,
   }
-}
-
-function resultErrorMessage(message: Record<string, unknown>): string {
-  const errors = Array.isArray(message.errors)
-    ? message.errors.filter((error): error is string => typeof error === "string")
-    : []
-  if (errors.length > 0) return errors.map(sanitizeDiagnosticText).join("\n")
-
-  return sanitizeDiagnosticText(stringValue(message.stop_reason) ?? "SDK result failed")
 }
 
 function sanitizeResultSuccessPayload(payload: Record<string, unknown>): Record<string, unknown> {

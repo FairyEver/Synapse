@@ -52,3 +52,63 @@ export function computeEndReachable(def: WorkflowDefinition): Set<string> {
   }
   return reachable
 }
+
+/**
+ * Compute the full set of nodes to execute, including side-effect branches.
+ * Side-effect branches are nodes reachable from the main path (nodes that can
+ * reach End) but that don't themselves have a path to End.
+ *
+ * Returns implicit edges from side-effect leaf nodes to End so that End acts
+ * as a barrier waiting for all branches to complete.
+ */
+export function computeFullExecutionSet(def: WorkflowDefinition): {
+  executableNodeIds: Set<string>
+  implicitEdges: Array<{ from: string; to: string }>
+} {
+  const mainPathSet = computeEndReachable(def)
+  if (mainPathSet.size === 0) {
+    return { executableNodeIds: new Set(), implicitEdges: [] }
+  }
+
+  const endNode = def.nodes.find((n) => n.type === "end")!
+  const allNodeIds = new Set(def.nodes.map((n) => n.id))
+
+  const forwardAdj = new Map<string, string[]>()
+  for (const e of def.edges) {
+    if (!forwardAdj.has(e.from)) forwardAdj.set(e.from, [])
+    forwardAdj.get(e.from)!.push(e.to)
+  }
+
+  const sideEffectSet = new Set<string>()
+  const queue: string[] = []
+  for (const nodeId of mainPathSet) {
+    for (const target of forwardAdj.get(nodeId) ?? []) {
+      if (!mainPathSet.has(target) && allNodeIds.has(target)) {
+        sideEffectSet.add(target)
+        queue.push(target)
+      }
+    }
+  }
+  while (queue.length > 0) {
+    const cur = queue.shift()!
+    for (const target of forwardAdj.get(cur) ?? []) {
+      if (!mainPathSet.has(target) && !sideEffectSet.has(target) && allNodeIds.has(target)) {
+        sideEffectSet.add(target)
+        queue.push(target)
+      }
+    }
+  }
+
+  const fullSet = new Set([...mainPathSet, ...sideEffectSet])
+
+  const implicitEdges: Array<{ from: string; to: string }> = []
+  for (const nodeId of sideEffectSet) {
+    const outTargets = forwardAdj.get(nodeId) ?? []
+    const hasOutInFullSet = outTargets.some((t) => fullSet.has(t))
+    if (!hasOutInFullSet) {
+      implicitEdges.push({ from: nodeId, to: endNode.id })
+    }
+  }
+
+  return { executableNodeIds: fullSet, implicitEdges }
+}

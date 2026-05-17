@@ -8,7 +8,7 @@ const logger = createMainLogger("workflow.node.script-executor")
 export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
   async execute(input: NodeExecutionInput<ScriptNodeConfig>): Promise<NodeExecutionResult> {
     const start = Date.now()
-    const { config, context, runtimeDeps } = input
+    const { config, context, runtimeDeps, resolvedVariables } = input
 
     if (!runtimeDeps?.processRunner) {
       return { status: "failed", output: "", error: "脚本执行能力不可用", durationMs: Date.now() - start }
@@ -26,13 +26,13 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
         content: config.script,
         config: {
           shell: config.shell,
-          env: config.env,
+          env: { ...config.env, ...resolvedVariables },
           pathStrategy: config.pathStrategy,
           posixLogin: config.posixLogin,
           timeoutMins: config.timeoutMins,
         },
         context: {
-          actor: { kind: "system" as const },
+          actor: { kind: "system" as const, id: "workflow-engine" },
           taskId: context.runId,
           runId: context.runId,
           cwd: process.cwd(),

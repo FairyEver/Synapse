@@ -4,13 +4,15 @@ You have access to Synapse Workflow — a DAG-based workflow engine exposed via 
 
 ## Node Types
 
-- **prompt** — Sends a prompt to an AI model, returns the response as output.
-- **switch** — Evaluates input via AI, returns a branch label. Only the matching branch's downstream nodes execute.
+- **prompt** — Sends a prompt to an AI model, returns the response as output. Requires a provider.
+- **switch** — Evaluates input via AI, returns a branch label. Only the matching branch's downstream nodes execute. Requires a provider.
+- **http_request** — Sends an HTTP request (GET/POST/PUT/PATCH/DELETE) and returns the response. Supports headers, query params, JSON/text body, auth (bearer/basic), and timeout. No provider needed.
+- **script** — Executes a shell script (posix/cmd/powershell) and returns stdout as output. Supports env vars, timeout, and login shell mode. No provider needed.
 - **end** — Terminal node (every workflow has exactly one). Defines the final output template. Cannot be deleted.
 
 ## Provider / Model Configuration
 
-Prompt and switch nodes require a provider (AI service) and model tier to execute. You can configure these at two levels:
+Only **prompt** and **switch** nodes require a provider (AI service). **http_request** and **script** nodes execute without any provider configuration. You can configure providers at two levels:
 
 - **Workflow default** — Set `defaultProviderId` and `defaultModelTier` on the workflow definition. All prompt/switch nodes inherit these unless they override.
 - **Node override** — Set `providerId` and `modelTier` directly on a node's config to override the workflow default.

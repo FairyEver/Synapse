@@ -120,6 +120,7 @@ function AgentSessionSidebar({
                 unreadByConversationId={unreadByConversationId}
                 onSelect={onSelect}
                 onDelete={onDelete}
+                onDeleteOthers={onDeleteOthers}
                 onRename={onRename}
               />
             ) : null}

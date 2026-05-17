@@ -2,7 +2,7 @@ import { z } from "zod"
 
 export const httpRequestActionConfigSchema = z.object({
   method: z.enum(["GET", "POST", "PUT", "PATCH", "DELETE"]).default("GET"),
-  url: z.string().url().or(z.literal("")).default(""),
+  url: z.string().default(""),
   headers: z.record(z.string(), z.string()).optional(),
   query: z.record(z.string(), z.string()).optional(),
   bodyType: z.enum(["none", "json", "text"]).default("none"),

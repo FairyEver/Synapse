@@ -6,7 +6,7 @@ import { ReactiveScheduler } from "./workflow-scheduler"
 import type { NodeExecOutcome, NodeTask, SchedulerCallbacks } from "./workflow-scheduler"
 import { createMainLogger } from "../log-store"
 import { sanitizeError } from "../error-sanitize"
-import { computeEndReachable } from "./workflow-utils"
+import { computeFullExecutionSet } from "./workflow-utils"
 
 const logger = createMainLogger("service.workflow.engine")
 
@@ -73,17 +73,28 @@ export class WorkflowEngine {
     const nodeResults: Record<string, NodeRunResult> = {}
     const nodeOutputs: Record<string, string> = {}
 
-    // --- Reachability pruning ---
-    const canReachEnd = computeEndReachable(def)
+    // --- Reachability pruning (includes side-effect branches) ---
+    const { executableNodeIds, implicitEdges } = computeFullExecutionSet(def)
 
-    // Filter to only nodes that can reach end
     const executableNodes = def.nodes
-      .filter((n) => canReachEnd.size === 0 || canReachEnd.has(n.id))
+      .filter((n) => executableNodeIds.size === 0 || executableNodeIds.has(n.id))
       .map((n) => n.id)
     const executableSet = new Set(executableNodes)
-    const executableEdges = def.edges
-      .filter((e) => executableSet.has(e.from) && executableSet.has(e.to))
-      .map((e) => ({ from: e.from, to: e.to }))
+    const executableEdgesRaw = [
+      ...def.edges
+        .filter((e) => executableSet.has(e.from) && executableSet.has(e.to))
+        .map((e) => ({ from: e.from, to: e.to })),
+      ...implicitEdges,
+    ]
+    // Deduplicate by from+to to prevent inflated pending counts when
+    // multiple switch branch edges target the same node.
+    const edgeKeySeen = new Set<string>()
+    const executableEdges = executableEdgesRaw.filter((e) => {
+      const key = `${e.from}->${e.to}`
+      if (edgeKeySeen.has(key)) return false
+      edgeKeySeen.add(key)
+      return true
+    })
 
     // Mark pruned nodes as skipped immediately
     for (const node of def.nodes) {
@@ -230,11 +241,23 @@ export class WorkflowEngine {
       },
       resolveActivatedDownstream: (nodeId, outcome) => {
         const activated: string[] = []
-        for (const edge of def.edges.filter((e) => e.from === nodeId)) {
-          if (!outcome.activeBranch || edge.branch === outcome.activeBranch) {
-            activated.push(edge.to)
-            logger.info("edge activated", { runId, from: nodeId, to: edge.to, branch: edge.branch ?? null })
-            emit({ type: "edge:activated", runId, from: edge.from, to: edge.to })
+        // Iterate def.edges directly to preserve branch info and avoid
+        // find()-by-from+to ambiguity when multiple branch edges share a target.
+        for (const defEdge of def.edges.filter((e) => e.from === nodeId && executableSet.has(e.to))) {
+          if (!outcome.activeBranch || !defEdge.branch || defEdge.branch === outcome.activeBranch) {
+            if (!activated.includes(defEdge.to)) {
+              activated.push(defEdge.to)
+              logger.info("edge activated", { runId, from: nodeId, to: defEdge.to, branch: defEdge.branch ?? null })
+              emit({ type: "edge:activated", runId, from: defEdge.from, to: defEdge.to })
+            }
+          }
+        }
+        // Implicit edges (side-effect leaf → End) always activate
+        for (const ie of implicitEdges.filter((e) => e.from === nodeId)) {
+          if (!activated.includes(ie.to)) {
+            activated.push(ie.to)
+            logger.info("edge activated", { runId, from: nodeId, to: ie.to, branch: null })
+            emit({ type: "edge:activated", runId, from: ie.from, to: ie.to })
           }
         }
         return activated

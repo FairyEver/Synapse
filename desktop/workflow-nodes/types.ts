@@ -4,7 +4,7 @@ import type { ZodType } from "zod"
 export interface PortDefinition { id: string; label: string }
 export interface ConfigFieldDescriptor {
   name: string
-  kind: "text" | "select" | "variable-binding-list" | "branch-list"
+  kind: "text" | "select" | "variable-binding-list" | "branch-list" | "record" | "number"
   label: string
   optional?: boolean
 }

@@ -17,6 +17,12 @@ export const httpRequestNodeManifest: NodeManifest<HttpRequestNodeConfig> = {
   configFields: [
     { name: "method", kind: "select", label: "方法" },
     { name: "url", kind: "text", label: "URL" },
+    { name: "headers", kind: "record", label: "请求头", optional: true },
+    { name: "query", kind: "record", label: "查询参数", optional: true },
+    { name: "bodyType", kind: "select", label: "Body 类型" },
+    { name: "body", kind: "text", label: "请求体", optional: true },
+    { name: "timeoutMins", kind: "number", label: "超时分钟", optional: true },
+    { name: "auth", kind: "record", label: "认证", optional: true },
     { name: "variables", kind: "variable-binding-list", label: "变量绑定" },
   ],
   configSchema: httpRequestNodeConfigSchema,

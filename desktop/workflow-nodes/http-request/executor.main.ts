@@ -1,5 +1,6 @@
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
 import type { HttpRequestNodeConfig } from "./schema"
+import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
 import { createMainLogger } from "../../electron/services/log-store"
 
 const logger = createMainLogger("workflow.node.http-request-executor")
@@ -7,26 +8,27 @@ const logger = createMainLogger("workflow.node.http-request-executor")
 export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
   async execute(input: NodeExecutionInput<HttpRequestNodeConfig>): Promise<NodeExecutionResult> {
     const start = Date.now()
-    const { config, context, runtimeDeps } = input
+    const { config, context, runtimeDeps, resolvedVariables } = input
 
     if (!runtimeDeps?.sendHttpRequest) {
       return { status: "failed", output: "", error: "HTTP 请求能力不可用", durationMs: Date.now() - start }
     }
 
     input.onProgress?.("building_request", "构建请求…")
+    const interpolated = interpolateConfig(config, resolvedVariables)
 
     logger.info("http request node executing", {
-      runId: context.runId, method: config.method, urlLength: config.url.length,
+      runId: context.runId, method: interpolated.method, urlLength: interpolated.url.length,
     })
 
     input.onProgress?.("sending_request", "发送请求…")
     try {
-      const url = buildUrl(config)
+      const url = buildUrl(interpolated)
       const response = await runtimeDeps.sendHttpRequest({
-        method: config.method,
+        method: interpolated.method,
         url,
-        headers: buildHeaders(config),
-        body: buildBody(config),
+        headers: buildHeaders(interpolated),
+        body: buildBody(interpolated),
         timeoutMs: config.timeoutMins === null ? undefined : (config.timeoutMins ?? 5) * 60_000,
         abortSignal: context.abortSignal,
       })
@@ -82,7 +84,16 @@ function buildHeaders(config: HttpRequestNodeConfig): Record<string, string> | u
 }
 
 function buildUrl(config: HttpRequestNodeConfig): string {
-  const url = new URL(config.url)
+  let raw = config.url
+  if (!/^[a-zA-Z][a-zA-Z0-9+\-.]*:\/\//.test(raw)) {
+    raw = `https://${raw}`
+  }
+  let url: URL
+  try {
+    url = new URL(raw)
+  } catch {
+    throw new Error(`URL 无法解析，请确保包含合法协议前缀（如 https://）：${config.url}`)
+  }
   for (const [key, value] of Object.entries(config.query ?? {})) {
     url.searchParams.set(key, value)
   }
@@ -92,4 +103,21 @@ function buildUrl(config: HttpRequestNodeConfig): string {
 function buildBody(config: HttpRequestNodeConfig): string | undefined {
   if (config.bodyType === "none") return undefined
   return config.body ?? ""
+}
+
+/** Interpolate {{var}} templates in all string config fields. */
+function interpolateConfig(config: HttpRequestNodeConfig, vars: Record<string, string>): HttpRequestNodeConfig {
+  const url = interpolatePrompt(config.url, vars)
+  const headers = config.headers
+    ? Object.fromEntries(
+        Object.entries(config.headers).map(([k, v]) => [k, interpolatePrompt(v, vars)]),
+      )
+    : undefined
+  const query = config.query
+    ? Object.fromEntries(
+        Object.entries(config.query).map(([k, v]) => [k, interpolatePrompt(v, vars)]),
+      )
+    : undefined
+  const body = config.body ? interpolatePrompt(config.body, vars) : undefined
+  return { ...config, url, headers, query, body }
 }

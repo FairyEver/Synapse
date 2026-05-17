@@ -79,7 +79,7 @@ import { WindowBroadcaster } from "../runtime/event-bus/broadcaster"
 import type { DataRepository } from "../runtime/data-repo"
 import { createFileBackedDataRepository } from "../runtime/data-repo"
 import type { PermissionGuard, AuditSink } from "../runtime/security"
-import { DataRepositoryAuditSink, createPermissionGuard } from "../runtime/security"
+import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy } from "../runtime/security"
 import type { ProcessRuntime } from "../runtime/process"
 import { createControlledProcessRunner, createMainProcessRuntime } from "../runtime/process"
 import type { NetworkServiceRegistry } from "../runtime/network"
@@ -709,7 +709,10 @@ export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> =
   id: "core.permission-guard",
   criticality: "fatal",
   create() {
-    return createPermissionGuard()
+    const guard = createPermissionGuard()
+    guard.registerPolicy(userInitiatedAllowPolicy)
+    guard.registerPolicy(systemShellExecPolicy)
+    return guard
   },
 }
 

@@ -102,6 +102,49 @@ describe("httpRequestNodeExecutor", () => {
     expect(input.agentDeps.sendToAgent).not.toHaveBeenCalled()
   })
 
+  it("auto-prepends https:// when url has no scheme", async () => {
+    const deps = fakeRuntimeDeps()
+    await httpRequestNodeExecutor.execute(makeInput({ url: "example.com/api" }, deps))
+    expect(deps.sendHttpRequest).toHaveBeenCalledWith(expect.objectContaining({
+      url: "https://example.com/api",
+    }))
+  })
+
+  it("preserves explicit http:// scheme", async () => {
+    const deps = fakeRuntimeDeps()
+    await httpRequestNodeExecutor.execute(makeInput({ url: "http://example.com/api" }, deps))
+    expect(deps.sendHttpRequest).toHaveBeenCalledWith(expect.objectContaining({
+      url: "http://example.com/api",
+    }))
+  })
+
+  it("interpolates {{var}} in url field", async () => {
+    const deps = fakeRuntimeDeps()
+    const input = makeInput({ url: "https://{{host}}/api/{{path}}" }, deps)
+    input.resolvedVariables = { host: "httpbin.org", path: "get" }
+    await httpRequestNodeExecutor.execute(input)
+    expect(deps.sendHttpRequest).toHaveBeenCalledWith(expect.objectContaining({
+      url: "https://httpbin.org/api/get",
+    }))
+  })
+
+  it("interpolates pure variable url and auto-prepends scheme", async () => {
+    const deps = fakeRuntimeDeps()
+    const input = makeInput({ url: "{{api_url}}" }, deps)
+    input.resolvedVariables = { api_url: "httpbin.org/get" }
+    await httpRequestNodeExecutor.execute(input)
+    expect(deps.sendHttpRequest).toHaveBeenCalledWith(expect.objectContaining({
+      url: "https://httpbin.org/get",
+    }))
+  })
+
+  it("fails with clear error for unparseable url", async () => {
+    const deps = fakeRuntimeDeps()
+    const result = await httpRequestNodeExecutor.execute(makeInput({ url: "://invalid" }, deps))
+    expect(result.status).toBe("failed")
+    expect(result.error).toContain("URL")
+  })
+
   it("logs diagnostics without raw url or body", async () => {
     const secretUrl = "https://example.com/api?token=sk-secret"
     const deps = fakeRuntimeDeps()
