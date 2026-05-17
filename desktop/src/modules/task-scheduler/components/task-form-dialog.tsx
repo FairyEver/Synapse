@@ -51,6 +51,7 @@ import type { TaskFormDialogState, TaskFormState } from "../types"
 import {
   buildTaskCreateInput,
   buildTaskUpdateInput,
+  createDefaultAgentActionConfig,
   createTaskFormState,
 } from "../utils"
 import { CronInput } from "./cron-input"
@@ -115,9 +116,8 @@ function TaskFormDialog({
 
   const updateActionType = (actionType: string) => {
     const baseConfig = rendererActionRegistry.getDefaultConfig(actionType)
-    const defaultPM = appConfig.agent.defaultProviderModel
-    const actionConfig = actionType === "builtin.agent" && defaultPM
-      ? { ...baseConfig, providerId: defaultPM.providerId, modelTier: defaultPM.modelTier }
+    const actionConfig = actionType === "builtin.agent"
+      ? createDefaultAgentActionConfig(appConfig.agent)
       : baseConfig
     setForm((current) => ({
       ...current,

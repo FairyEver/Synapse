@@ -18,9 +18,21 @@ const rendererLogger = vi.hoisted(() => ({
   warn: vi.fn(),
 }))
 const track = vi.hoisted(() => vi.fn())
+const appConfig = vi.hoisted(() => ({
+  agent: {
+    defaultPermissionMode: "default",
+    defaultProviderModel: null,
+  },
+}))
 
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => rendererLogger,
+}))
+
+vi.mock("@/app-shell/config", () => ({
+  useAppConfig: () => ({
+    config: appConfig,
+  }),
 }))
 
 vi.mock("@/lib/ui-tracking", async (importOriginal) => {
@@ -136,6 +148,8 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  appConfig.agent.defaultPermissionMode = "default"
+  appConfig.agent.defaultProviderModel = null
   vi.clearAllMocks()
 })
 
@@ -540,6 +554,8 @@ describe("TaskFormDialog", () => {
                 config: {
                   projectId: "project-1",
                   agentType: "claude-code",
+                  providerId: "provider-1",
+                  modelTier: "sonnet",
                   mode: "plan",
                   prompt: "secret scheduled prompt",
                   sessionPolicy: "fresh",

@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   buildTaskCreateInput,
+  createDefaultAgentActionConfig,
   createTaskFormState,
   DEFAULT_TASK_FORM_STATE,
   formatTaskAction,
@@ -78,6 +79,17 @@ describe("task scheduler utils", () => {
     })
   })
 
+  it("uses the global Agent permission default for new Agent task config", () => {
+    expect(createDefaultAgentActionConfig({
+      defaultPermissionMode: "dontAsk",
+      defaultProviderModel: null,
+    })).toMatchObject({
+      agentType: "claude-code",
+      mode: "dontAsk",
+      sessionPolicy: "fresh",
+    })
+  })
+
   it("hydrates form state from an interval task", () => {
     const task: ScheduledTask = {
       id: "task-1",
@@ -133,6 +145,8 @@ describe("task scheduler utils", () => {
       actionConfig: {
         projectId: "project-1",
         agentType: "claude-code",
+        providerId: "provider-1",
+        modelTier: "sonnet",
         mode: "auto",
         prompt: "hello",
         sessionPolicy: "fresh",

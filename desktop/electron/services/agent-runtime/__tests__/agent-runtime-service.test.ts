@@ -534,6 +534,66 @@ describe("AgentRuntimeService", () => {
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain("done from sensitive prompt")
   })
 
+  it("persists scheduled fresh-session permission mode for renderer summaries", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+      now: fixedNow,
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "bypassPermissions",
+      prompt: "scheduled prompt",
+      sessionPolicy: "fresh",
+      timeoutMs: 120_000,
+    })
+
+    const session = await conversations.get(result.conversationId)
+    expect(session?.agentConfig?.mode).toBe("bypassPermissions")
+  })
+
+  it("persists scheduled resumed permission mode for renderer summaries", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+      now: fixedNow,
+    })
+    const existing = await service.createSession({
+      sessionKey: "scheduled:project-1:run-1",
+      platform: "scheduled",
+      name: "Existing",
+      agentType: "claude-code",
+      mode: "default",
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "bypassPermissions",
+      prompt: "scheduled prompt",
+      sessionPolicy: "resume",
+      lastConversationId: existing.id,
+      timeoutMs: 120_000,
+    })
+
+    const session = await conversations.get(result.conversationId)
+    expect(session?.agentConfig?.mode).toBe("bypassPermissions")
+  })
+
   it("does not create a scheduled timeout when timeoutMs is non-positive", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn() }

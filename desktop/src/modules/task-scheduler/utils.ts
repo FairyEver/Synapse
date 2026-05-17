@@ -5,9 +5,10 @@ import type {
   ScheduledTaskStatus,
   ScheduledTaskUpdateInput,
 } from "@/types/task-scheduler"
-import type { SynapseProjectConfig } from "@/types/config"
+import type { SynapseAgentGlobalConfig, SynapseProjectConfig } from "@/types/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
+import type { AgentActionConfig } from "../../../action-packages/builtin/agent"
 import type { TaskExportFile, TaskFormState } from "./types"
 
 const DEFAULT_ACTION_TYPE = "builtin.command"
@@ -54,6 +55,23 @@ function createTaskFormState(
     actionType: task.action.type,
     actionConfig: task.action.config,
     missedRunPolicy: task.missedRunPolicy,
+  }
+}
+
+function createDefaultAgentActionConfig(
+  agentDefaults: Pick<SynapseAgentGlobalConfig, "defaultPermissionMode" | "defaultProviderModel">,
+): AgentActionConfig {
+  const baseConfig = rendererActionRegistry.getDefaultConfig("builtin.agent") as AgentActionConfig
+  const defaultProviderModel = agentDefaults.defaultProviderModel
+  return {
+    ...baseConfig,
+    mode: agentDefaults.defaultPermissionMode,
+    ...(defaultProviderModel
+      ? {
+          providerId: defaultProviderModel.providerId,
+          modelTier: defaultProviderModel.modelTier,
+        }
+      : {}),
   }
 }
 
@@ -262,6 +280,7 @@ export {
   DEFAULT_TASK_FORM_STATE,
   buildTaskCreateInput,
   buildTaskUpdateInput,
+  createDefaultAgentActionConfig,
   createTaskFormState,
   formatTaskNextRun,
   formatRunStatus,

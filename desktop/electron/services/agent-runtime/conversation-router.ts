@@ -93,7 +93,10 @@ export class ConversationRouter {
     if (!conversation) {
       throw new Error(`Conversation "${conversationId}" not found`)
     }
-    return this.enqueueTurn(message, conversation, options.abortSignal)
+    const effectiveConversation = message.modeOverride
+      ? await this.repository.savePermissionMode(conversation.id, message.modeOverride)
+      : conversation
+    return this.enqueueTurn(message, effectiveConversation, options.abortSignal)
   }
 
   async sendNewSession(
@@ -111,6 +114,8 @@ export class ConversationRouter {
       workspacePath: message.workspacePath,
       agentType: "claude-sdk",
       providerId,
+      mode: message.modeOverride,
+      modelTier: message.modelTier,
       name,
       userMeta: userMetaFromMessage(message),
       resumePolicy: "fresh",
@@ -134,6 +139,8 @@ export class ConversationRouter {
       workspacePath: message.workspacePath,
       agentType: "claude-sdk",
       providerId,
+      mode: message.modeOverride,
+      modelTier: message.modelTier,
       name,
       userMeta: userMetaFromMessage(message),
       resumePolicy: "fresh",
