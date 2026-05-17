@@ -94,8 +94,15 @@ export class WorkflowEngine {
     }
     const { executableNodeIds, implicitEdges } = executionSet
 
+    if (executableNodeIds.size === 0) {
+      const visibleError = "工作流缺少结束节点，无法执行"
+      logger.warn("workflow has no End node — aborting", { runId, workflowId: def.id })
+      const result: WorkflowRunResult = { status: "failed", nodeResults, durationMs: Date.now() - startMs }
+      emit({ type: "workflow:failed", runId, error: visibleError, result })
+      return result
+    }
     const executableNodes = def.nodes
-      .filter((n) => executableNodeIds.size === 0 || executableNodeIds.has(n.id))
+      .filter((n) => executableNodeIds.has(n.id))
       .map((n) => n.id)
     const executableSet = new Set(executableNodes)
     const executableEdgesRaw = [
@@ -212,7 +219,7 @@ export class WorkflowEngine {
             runId, nodeId, nodeName: node.name, nodeType: node.type,
             ...diagnostic,
           })
-          const throwDurationMs = nodeResults[nodeId]?.startedAt ? Date.now() - nodeResults[nodeId].startedAt! : undefined
+          const throwDurationMs = nodeResults[nodeId]?.startedAt != null ? Date.now() - nodeResults[nodeId].startedAt! : undefined
           return { nodeId, status: "failed", error: visibleError, durationMs: throwDurationMs }
         }
       },
@@ -226,8 +233,18 @@ export class WorkflowEngine {
         nodeResults[nodeId] = nr
       },
       onNodeDone: (outcome) => {
-        const nr = nodeResults[outcome.nodeId]
-        if (!nr) return
+        let nr = nodeResults[outcome.nodeId]
+        if (!nr) {
+          // taskFactory threw before onNodeReady — no entry exists yet.
+          // Initialize from the outcome so the failure is recorded correctly
+          // instead of being silently dropped and later marked as "skipped".
+          if (outcome.status === "failed") {
+            nr = { nodeId: outcome.nodeId, status: "failed", input: { variables: {} }, error: outcome.error, endedAt: Date.now() }
+            nodeResults[outcome.nodeId] = nr
+          } else {
+            return
+          }
+        }
         nr.status = outcome.status
         nr.output = outcome.output
         nr.outputs = outcome.outputs

@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
 import type { Dirent } from "node:fs"
 import path from "node:path"
 import type { WorkflowRunSnapshot } from "../../../src/types/workflow"
@@ -48,11 +48,7 @@ export class RunSnapshotService {
       const target = path.join(dir, `${s.runId}.json`)
       const tmp = `${target}.tmp`
       await writeFile(tmp, JSON.stringify(s, null, 2), "utf-8")
-      try {
-        await rename(tmp, target)
-      } finally {
-        await rm(tmp, { force: true }).catch(() => undefined)
-      }
+      await rename(tmp, target)
       logger.info("run snapshot saved", { runId: s.runId, workflowId: s.workflowId, status: s.status, nodeCount: Object.keys(s.nodeResults).length })
     } catch (err) {
       logger.error("run snapshot save failed", {
@@ -69,9 +65,19 @@ export class RunSnapshotService {
         .sort((a, b) => this.snapshotTime(a.snapshot) - this.snapshotTime(b.snapshot))
         .slice(0, Math.max(0, snapshots.length - MAX))
       const tmpFiles = (await readdir(dir)).filter((file) => file.endsWith(".tmp"))
+      const now = Date.now()
+      const STALE_TMP_AGE_MS = 60_000
+      const staleTmpFiles = (await Promise.all(
+        tmpFiles.map(async (file) => {
+          try {
+            const st = await stat(path.join(dir, file))
+            return now - st.mtimeMs > STALE_TMP_AGE_MS ? file : null
+          } catch { return null }
+        }),
+      )).filter((f): f is string => f !== null)
       await Promise.all([
         ...stale.map(({ file }) => rm(path.join(dir, file), { force: true })),
-        ...tmpFiles.map((file) => rm(path.join(dir, file), { force: true })),
+        ...staleTmpFiles.map((file) => rm(path.join(dir, file), { force: true })),
       ])
     } catch (err) {
       logger.warn("run snapshot stale cleanup failed (save succeeded)", {

@@ -154,6 +154,14 @@ export class ReactiveScheduler {
         }
       }).catch((err: unknown) => {
         if (!acceptingResults) return
+        // If the .then() callback already recorded this node's result (e.g.
+        // onNodeDone threw after results.set), do not overwrite it with a
+        // synthetic failure — the real outcome is already stored.
+        if (results.has(nodeId)) {
+          running.delete(nodeId)
+          logger.warn("scheduler: .then callback threw after result was recorded", { nodeId, error: err instanceof Error ? err.message : String(err), ...(this.runId ? { runId: this.runId } : {}) })
+          return
+        }
         // If task.execute() throws (not just returns failed status), catch
         // the rejection to prevent unhandledRejection and abort listener leak.
         running.delete(nodeId)

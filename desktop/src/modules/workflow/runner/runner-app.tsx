@@ -3,7 +3,7 @@ import type { WorkflowDefinition, NodeRunResult, WorkflowRunStatus } from "@/typ
 import { createRendererLogger } from "@/app-shell/logging"
 import "../../../../workflow-nodes/register.renderer"
 import { useWorkflowEvents } from "../hooks/use-workflow-events"
-import { errorDiagnostic } from "../lib/error-utils"
+import { errorDiagnostic, truncateWithEllipsis } from "../lib/error-utils"
 import { RunnerToolbar } from "./runner-toolbar"
 import { DagView } from "./dag-view"
 import { TimelineView } from "./timeline-view"
@@ -146,7 +146,7 @@ export function WorkflowRunnerApp() {
       }
     })
     return () => { unsubEvent?.(); unsubSwitch?.() }
-  }, [workflowId])
+  }, [workflowId, retrySignal])
 
   useWorkflowEvents(runId, {
     onNodeStarted: (nodeId, partial) => setNodeResults((r) => ({
@@ -365,12 +365,6 @@ function validationErrorsDiagnostic(errors: readonly unknown[]): {
     firstErrorType,
     firstErrorMessage,
   }
-}
-
-function truncateWithEllipsis(value: string, maxLength: number): string {
-  if (value.length <= maxLength) return value
-  if (maxLength <= 3) return ".".repeat(Math.max(0, maxLength))
-  return `${value.slice(0, maxLength - 3)}...`
 }
 
 function validationErrorRecord(value: unknown): {

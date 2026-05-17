@@ -19,7 +19,7 @@ export function errorDiagnostic(error: unknown): ErrorDiagnostic {
   }
 }
 
-function truncateWithEllipsis(value: string, maxLength: number): string {
+export function truncateWithEllipsis(value: string, maxLength: number): string {
   if (value.length <= maxLength) return value
   if (maxLength <= 3) return ".".repeat(Math.max(0, maxLength))
   return `${value.slice(0, maxLength - 3)}...`

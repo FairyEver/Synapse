@@ -102,9 +102,10 @@ export function LicenseGate({ children }: { readonly children: ReactNode }) {
           />
         </div>
 
-        {status?.message ? <p className="text-sm text-muted-foreground">{status.message}</p> : null}
-        {error ? <p className="text-sm text-destructive">{error}</p> : null}
-        {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
+        {formError ? <p className="text-sm text-destructive">{formError}</p>
+          : error ? <p className="text-sm text-destructive">{error}</p>
+          : status?.message ? <p className="text-sm text-muted-foreground">{status.message}</p>
+          : null}
 
         <div className="flex flex-col gap-2 pt-2">
           <Button type="submit" disabled={isSubmitting || isRenewing}>

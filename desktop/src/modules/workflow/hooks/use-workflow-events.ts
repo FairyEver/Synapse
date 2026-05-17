@@ -1,7 +1,7 @@
 import { useEffect, useRef } from "react"
 import type { NodeRunResult, WorkflowEvent } from "@/types/workflow"
 import { createRendererLogger } from "@/app-shell/logging"
-import { errorDiagnostic } from "../lib/error-utils"
+import { errorDiagnostic, truncateWithEllipsis } from "../lib/error-utils"
 import { sanitizeError } from "@/lib/error-sanitize"
 
 const logger = createRendererLogger("workflow.events")
@@ -122,10 +122,4 @@ function workflowErrorLogMeta(error: string | undefined): { readonly errorName: 
     errorLength: error?.length ?? 0,
     ...(error ? { errorMessage: truncateWithEllipsis(sanitizeError(error), 200) } : {}),
   }
-}
-
-function truncateWithEllipsis(value: string, maxLength: number): string {
-  if (value.length <= maxLength) return value
-  if (maxLength <= 3) return ".".repeat(Math.max(0, maxLength))
-  return `${value.slice(0, maxLength - 3)}...`
 }

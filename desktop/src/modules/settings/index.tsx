@@ -115,7 +115,6 @@ function SettingsModule() {
         return true
       } catch (updateError) {
         logger.error("Failed to apply settings patch.", updateError)
-        warning("保存设置失败。")
         return false
       }
     },
@@ -210,7 +209,7 @@ function SettingsModule() {
           </div>
         ) : null}
 
-        {!isReady ? (
+        {!isReady && !error ? (
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">

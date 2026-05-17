@@ -49,8 +49,9 @@ export function computeEndReachable(def: WorkflowDefinition): Set<string> {
   for (const e of def.edges) revAdj.get(e.to)?.push(e.from)
   const reachable = new Set<string>([endNode.id])
   const queue = [endNode.id]
-  while (queue.length) {
-    const cur = queue.shift()!
+  let qi = 0
+  while (qi < queue.length) {
+    const cur = queue[qi++]
     for (const prev of revAdj.get(cur) ?? []) {
       if (!reachable.has(prev)) { reachable.add(prev); queue.push(prev) }
     }
@@ -94,8 +95,9 @@ export function computeFullExecutionSet(def: WorkflowDefinition): {
       }
     }
   }
-  while (queue.length > 0) {
-    const cur = queue.shift()!
+  let qi = 0
+  while (qi < queue.length) {
+    const cur = queue[qi++]
     for (const target of forwardAdj.get(cur) ?? []) {
       if (!mainPathSet.has(target) && !sideEffectSet.has(target) && allNodeIds.has(target)) {
         sideEffectSet.add(target)

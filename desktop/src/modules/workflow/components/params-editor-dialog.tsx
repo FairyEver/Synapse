@@ -44,6 +44,7 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
             className="h-6 w-6 text-muted-foreground"
             disabled={index === 0}
             onClick={onMoveUp}
+            aria-label="上移参数"
           >
             <ChevronUp className="size-3" />
           </Button>
@@ -54,6 +55,7 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
             className="h-6 w-6 text-muted-foreground"
             disabled={index === total - 1}
             onClick={onMoveDown}
+            aria-label="下移参数"
           >
             <ChevronDown className="size-3" />
           </Button>
@@ -63,6 +65,7 @@ function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelet
             variant="ghost"
             className="h-6 w-6 text-muted-foreground hover:text-destructive"
             onClick={onDelete}
+            aria-label="删除参数"
           >
             <Trash2 className="size-3" />
           </Button>

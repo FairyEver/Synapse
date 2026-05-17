@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { SynapseAgentProvider } from "@/types/bridge"
 import type { ModelTier } from "@/types/provider-model"
 import { createRendererLogger } from "@/app-shell/logging"
+import { truncateWithEllipsis } from "@/modules/workflow/lib/error-utils"
 
 const logger = createRendererLogger("workflow.provider-lookup")
 
@@ -12,12 +13,6 @@ function errorLogMeta(error: unknown): { readonly errorName: string; readonly er
     errorLength: raw.length,
     errorMessage: truncateWithEllipsis(raw, 200),
   }
-}
-
-function truncateWithEllipsis(value: string, maxLength: number): string {
-  if (value.length <= maxLength) return value
-  if (maxLength <= 3) return ".".repeat(Math.max(0, maxLength))
-  return `${value.slice(0, maxLength - 3)}...`
 }
 
 type ProviderLookup = {

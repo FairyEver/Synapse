@@ -84,9 +84,11 @@ function IdentityGate({ children }: { children: ReactNode }) {
               className="font-mono"
               aria-invalid={recoveryError ? true : undefined}
               onChange={(event) => {
-                setRecoveryValue(event.target.value)
-                setRecoveryError(validateUserIdInput(event.target.value))
+                const v = event.target.value
+                setRecoveryValue(v)
+                if (recoveryError) setRecoveryError(validateUserIdInput(v))
               }}
+              onBlur={() => setRecoveryError(validateUserIdInput(recoveryValue))}
             />
             {recoveryError ? <p className="text-sm text-destructive">{recoveryError}</p> : null}
           </div>

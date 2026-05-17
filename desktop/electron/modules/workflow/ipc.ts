@@ -304,13 +304,13 @@ function handleEngineRejection(options: {
   saveRunSnapshot(snapshots, { runId, workflowId: def.id, version: def.version, startedAt, endedAt, status: "failed", params, nodeResults: current.nodeResults, definition: def, error: visibleError }, eventBus)
 }
 
-async function resolveWorkflowProjectId(def: WorkflowDefinition): Promise<string> {
+async function resolveWorkflowProjectId(def: WorkflowDefinition): Promise<string | undefined> {
   const appConfig = await configStore.load()
   const defaultProject = def.defaultProjectId
     ? appConfig.repositories.find((r) => r.uuid === def.defaultProjectId)
     : undefined
   const activeRepo = defaultProject ?? appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
-  return activeRepo?.uuid ?? ""
+  return activeRepo?.uuid
 }
 
 function findActiveRun(runStatuses: Map<string, WorkflowRunStatus>, workflowId: string): string | undefined {
@@ -419,18 +419,15 @@ export const workflowIpcModule: IpcModule = {
         const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
         const windowManager = ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager")
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
-        try {
-          await ctx.resolve<WorkflowService>("core.workflow").delete(id)
-        } finally {
-          await snapshots.deleteWorkflow(id)
-          windowManager.forceCloseAll(id)
-          eventBus.emit({
-            domain: "workflow",
-            type: "workflow:definition-updated",
-            payload: { workflowId: id },
-            timestamp: new Date().toISOString(),
-          })
-        }
+        await ctx.resolve<WorkflowService>("core.workflow").delete(id)
+        await snapshots.deleteWorkflow(id)
+        windowManager.forceCloseAll(id)
+        eventBus.emit({
+          domain: "workflow",
+          type: "workflow:definition-updated",
+          payload: { workflowId: id },
+          timestamp: new Date().toISOString(),
+        })
         logger.info("workflow:delete done", { id })
       },
     },

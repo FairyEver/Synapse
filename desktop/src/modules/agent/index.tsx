@@ -415,6 +415,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                     size="icon"
                     disabled={!chat.activeProjectId || chat.timeline.length === 0}
                     onClick={() => void handleCopyTranscript()}
+                    aria-label="复制对话"
                   >
                     <Copy />
                   </Button>
@@ -426,7 +427,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <PopoverTrigger asChild>
-                      <Button type="button" variant="ghost" size="icon">
+                      <Button type="button" variant="ghost" size="icon" aria-label="命令">
                         <CommandIcon />
                       </Button>
                     </PopoverTrigger>

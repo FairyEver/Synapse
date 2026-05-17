@@ -38,15 +38,16 @@ export function resolveVariables(
           variableName: name, paramName: source.param,
         })
       }
-      // Executors receive resolved variables as strings; numeric params are intentionally stringified here.
-      resolved[name] = String(paramValues[source.param] ?? "")
+      const raw = paramValues[source.param]
+      const isNaN = typeof raw === "number" && Number.isNaN(raw)
+      resolved[name] = (raw != null && !isNaN) ? String(raw) : ""
     } else if (source.type === "node_output") {
       if (!(source.node in nodeOutputs)) {
         const displayName = nodeNames?.[source.node] ?? source.node
         // If the node exists in the workflow but has no output, it was skipped
         // by branch logic. Resolve gracefully to empty string.
         if (allNodeIds && allNodeIds.has(source.node)) {
-          logger.warn("variable resolved to empty: source node was skipped (branch inactive)", {
+          logger.warn("variable resolved to empty: source node not available", {
             variableName: name, sourceNodeId: source.node, sourceNodeName: displayName,
           })
           resolved[name] = ""

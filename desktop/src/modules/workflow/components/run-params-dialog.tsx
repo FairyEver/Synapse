@@ -16,9 +16,11 @@ interface RunParamsDialogProps {
 
 export function RunParamsDialog({ open, params, lastValues, onConfirm, onCancel }: RunParamsDialogProps) {
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(params.map((p) => [p.name, String(p.default ?? "")])))
+  const [submitting, setSubmitting] = useState(false)
 
   useEffect(() => {
     if (open) {
+      setSubmitting(false)
       // Pre-fill with last-submitted values when available; fall back to defaults
       setValues(Object.fromEntries(params.map((p) => [
         p.name,
@@ -29,6 +31,8 @@ export function RunParamsDialog({ open, params, lastValues, onConfirm, onCancel 
 
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault()
+    if (submitting) return
+    setSubmitting(true)
     const parsed: Record<string, unknown> = {}
     for (const p of params) {
       if (p.type === "number") {
@@ -69,7 +73,7 @@ export function RunParamsDialog({ open, params, lastValues, onConfirm, onCancel 
           </div>
           <DialogFooter>
             <Button type="button" variant="ghost" onClick={onCancel}>取消</Button>
-            <Button type="submit">运行</Button>
+            <Button type="submit" disabled={submitting}>运行</Button>
           </DialogFooter>
         </form>
       </DialogContent>

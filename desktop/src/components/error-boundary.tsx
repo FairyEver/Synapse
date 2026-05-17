@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getDiagnosticSnapshot } from "@/lib/diagnostic-context"
+import { sanitizeError } from "@/lib/error-sanitize"
 
 const logger = createRendererLogger("error-boundary")
 
@@ -56,7 +57,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              {this.state.error.message}
+              {sanitizeError(this.state.error.message)}
             </p>
           </CardContent>
           <CardFooter>

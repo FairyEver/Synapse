@@ -400,7 +400,7 @@ export function WorkflowEditorApp() {
             </ul>
           </AlertDescription>
           <AlertAction>
-            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setRunErrors([])}>
+            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setRunErrors([])} aria-label="关闭错误提示">
               <X className="h-3.5 w-3.5" />
             </Button>
           </AlertAction>
