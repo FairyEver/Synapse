@@ -43,7 +43,7 @@ pnpm dev
 - 老站 / 文档站：<http://localhost:19773/>
 - 管理后台：<http://localhost:3000/admin/>
 
-管理后台地址必须保留末尾的 `/`，访问 `http://localhost:3000/admin` 会被 Vite dev server 拒绝。
+管理后台标准地址带末尾 `/`；访问 `http://localhost:3000/admin` 时，开发服务器会重定向到 `http://localhost:3000/admin/`。
 管理后台前端固定使用 `3000` 端口，接口默认代理到 `3001` 端口的后端服务；如需调整后端接口端口，可在 `server/.env` 中设置 `SYNAPSE_SERVER_API_PORT`。
 
 ### 常用脚本
