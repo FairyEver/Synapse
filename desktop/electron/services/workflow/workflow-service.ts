@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises"
+import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { createHash, randomUUID } from "node:crypto"
 import type { WorkflowDefinition, WorkflowMeta, ValidationError } from "../../../src/types/workflow"
@@ -84,6 +84,7 @@ export class WorkflowService {
         })
       }
     }
+    logger.error("workflow get: all version files corrupted", { id, versionCount: versions.length })
     return null
   }
 
@@ -116,10 +117,24 @@ export class WorkflowService {
     try {
       const allFiles = await readdir(this.dir(def.id))
       const versionFiles = allFiles.filter((f) => f.startsWith("v_") && f.endsWith(".json")).sort()
-      if (versionFiles.length > MAX_VERSIONS) {
-        const stale = versionFiles.slice(0, versionFiles.length - MAX_VERSIONS)
-        await Promise.all(stale.map((f) => rm(path.join(this.dir(def.id), f), { force: true })))
-        logger.info("workflow version files pruned", { id: def.id, pruned: stale.length, remaining: MAX_VERSIONS })
+      const staleVersions = versionFiles.length > MAX_VERSIONS
+        ? versionFiles.slice(0, versionFiles.length - MAX_VERSIONS)
+        : []
+      const tmpFiles = allFiles.filter((f) => f.endsWith(".tmp"))
+      const STALE_TMP_AGE_MS = 60_000
+      const now = Date.now()
+      const staleTmpFiles = (await Promise.all(
+        tmpFiles.map(async (f) => {
+          try {
+            const st = await stat(path.join(this.dir(def.id), f))
+            return now - st.mtimeMs > STALE_TMP_AGE_MS ? f : null
+          } catch { return null }
+        }),
+      )).filter((f): f is string => f !== null)
+      const toDelete = [...staleVersions, ...staleTmpFiles]
+      if (toDelete.length > 0) {
+        await Promise.all(toDelete.map((f) => rm(path.join(this.dir(def.id), f), { force: true })))
+        logger.info("workflow version files pruned", { id: def.id, prunedVersions: staleVersions.length, prunedTmp: staleTmpFiles.length, remaining: MAX_VERSIONS })
       }
     } catch (err) {
       logger.warn("workflow version pruning failed (non-critical)", {

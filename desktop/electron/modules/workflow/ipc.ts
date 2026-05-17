@@ -163,7 +163,7 @@ const validationResultSchema = z.object({
 interface RunLifecycleOptions {
   readonly def: WorkflowDefinition
   readonly params: Record<string, unknown>
-  readonly projectId: string
+  readonly projectId: string | undefined
   readonly triggerSource: string
   readonly engine: WorkflowEngine
   readonly snapshots: RunSnapshotService
@@ -538,12 +538,15 @@ export const workflowIpcModule: IpcModule = {
             return { conflict: true as const, activeRunId }
           }
         } else {
+          const abortedRunIds: string[] = []
           for (const [existingRunId, status] of runStatuses) {
             if (status.workflowId === def.id && status.status === "running") {
               logger.info("workflow:runDefinition force — cancelling active run", { activeRunId: existingRunId })
               abortMap.get(existingRunId)?.abort()
+              abortedRunIds.push(existingRunId)
             }
           }
+          await Promise.all(abortedRunIds.map(waitForRunCompletion))
         }
 
         const projectId = await resolveWorkflowProjectId(def)
@@ -620,11 +623,14 @@ export const workflowIpcModule: IpcModule = {
         }
         const validatedParams = buildEffectiveRunParams(def, effectiveParams)
 
+        const abortedRunIds: string[] = []
         for (const [existingRunId, status] of runStatuses) {
           if (status.workflowId === workflowId && status.status === "running") {
             abortMap.get(existingRunId)?.abort()
+            abortedRunIds.push(existingRunId)
           }
         }
+        await Promise.all(abortedRunIds.map(waitForRunCompletion))
 
         const projectId = await resolveWorkflowProjectId(def)
         const runId = startRunWithLifecycle({

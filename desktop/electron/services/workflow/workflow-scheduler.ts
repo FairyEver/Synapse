@@ -66,6 +66,7 @@ export class ReactiveScheduler {
     const running = new Map<string, Promise<void>>()
     const results = new Map<string, NodeExecOutcome>()
     const activeSignals = new Map<string, number>()
+    const failedUpstream = new Set<string>()
     const waitQueue: string[] = []
     let hadFailure = false
     let acceptingResults = true
@@ -97,6 +98,7 @@ export class ReactiveScheduler {
       else skipNodeAndPropagate(nodeId)
     }
     const releaseFailedDependency = (nodeId: string) => {
+      failedUpstream.add(nodeId)
       const updated = decrementPending(nodeId)
       if (updated !== 0) return
       skipNodeAndPropagate(nodeId, "upstream failed")
@@ -143,7 +145,10 @@ export class ReactiveScheduler {
           for (const next of downstream) {
             activeSignals.set(next, (activeSignals.get(next) ?? 0) + 1)
             const updated = decrementPending(next)
-            if (updated === 0) tryStart(next)
+            if (updated === 0) {
+              if (failedUpstream.has(next)) skipNodeAndPropagate(next, "upstream failed")
+              else tryStart(next)
+            }
           }
           for (const next of downstreamOf(nodeId)) {
             if (!activatedSet.has(next)) releaseSkippedDependency(next)

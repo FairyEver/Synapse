@@ -392,7 +392,10 @@ export function WorkflowEditorApp() {
                 <li
                   key={i}
                   className={e.nodeId ? "cursor-pointer hover:underline" : undefined}
+                  role={e.nodeId ? "button" : undefined}
+                  tabIndex={e.nodeId ? 0 : undefined}
                   onClick={e.nodeId ? () => setSelectedNodeId(e.nodeId!) : undefined}
+                  onKeyDown={e.nodeId ? (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); setSelectedNodeId(e.nodeId!) } } : undefined}
                 >
                   {e.message}
                 </li>

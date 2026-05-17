@@ -344,7 +344,7 @@ function TaskSchedulerModule() {
         </div>
 
         <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-0.5">
-          {error ? (
+          {error && !loading ? (
             <div className="flex items-center gap-3 p-4">
               <p className="text-sm text-destructive">{error}</p>
               <Button variant="outline" size="sm" onClick={() => void refresh()}>

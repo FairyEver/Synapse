@@ -1,3 +1,4 @@
+import { homedir } from "node:os"
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
 import type { ScriptNodeConfig } from "./schema"
 import { runShellAction } from "../../action-packages/builtin/shell-process.main"
@@ -37,7 +38,7 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
           actor: { kind: "system" as const, id: "workflow-engine" },
           taskId: context.runId,
           runId: context.runId,
-          cwd: process.cwd(),
+          cwd: homedir(),
           triggeredBy: "manual",
           abortSignal: context.abortSignal,
         },

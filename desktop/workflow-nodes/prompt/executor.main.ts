@@ -10,7 +10,12 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
   async execute(input: NodeExecutionInput<PromptNodeConfig>): Promise<NodeExecutionResult> {
     const start = Date.now()
     input.onProgress?.("resolving_variables", "解析变量…")
-    const prompt = interpolatePrompt(input.config.prompt, input.resolvedVariables)
+    let prompt: string
+    try {
+      prompt = interpolatePrompt(input.config.prompt, input.resolvedVariables)
+    } catch (err) {
+      return { status: "failed", output: "", error: `模板变量解析失败：${err instanceof Error ? err.message : String(err)}`, durationMs: Date.now() - start }
+    }
 
     input.onProgress?.("calling_model", "调用模型…")
     logger.info("prompt node executing", {

@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, readdir, rm, writeFile } from "node:fs/promises"
+import { mkdir, readdir, rm, utimes, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -69,7 +69,10 @@ describe("RunSnapshotService", () => {
     const root = await tmpDir()
     const dir = path.join(root, "workflow-runs", "wf")
     await mkdir(dir, { recursive: true })
-    await writeFile(path.join(dir, "orphan.json.tmp"), "partial", "utf-8")
+    const tmpPath = path.join(dir, "orphan.json.tmp")
+    await writeFile(tmpPath, "partial", "utf-8")
+    const past = new Date(Date.now() - 120_000)
+    await utimes(tmpPath, past, past)
     const svc = new RunSnapshotService(root)
 
     await svc.save(snapshot("run", 100))

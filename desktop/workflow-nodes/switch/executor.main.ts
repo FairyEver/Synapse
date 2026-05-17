@@ -60,7 +60,12 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
     const { config, resolvedVariables, agentDeps, context } = input
     const ids = config.branches.map((b) => b.id)
     input.onProgress?.("resolving_variables", "解析变量…")
-    const basePrompt = interpolatePrompt(config.prompt, resolvedVariables)
+    let basePrompt: string
+    try {
+      basePrompt = interpolatePrompt(config.prompt, resolvedVariables)
+    } catch (err) {
+      return { status: "failed", output: "", error: `模板变量解析失败：${err instanceof Error ? err.message : String(err)}`, durationMs: Date.now() - start }
+    }
     // Include branch labels in the prompt so the LLM understands the semantic
     // meaning of each branch ID (e.g. "- branch1（正面）" instead of "- branch1").
     // This bridges the gap between user-configured labels (used in the human's

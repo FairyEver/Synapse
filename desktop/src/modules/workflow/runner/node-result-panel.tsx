@@ -131,7 +131,8 @@ function formatOutputValue(value: unknown): string {
   if (typeof value === "object") {
     try {
       return JSON.stringify(value)
-    } catch {
+    } catch (err) {
+      console.warn("[node-result-panel] JSON.stringify failed", err)
       return String(value)
     }
   }

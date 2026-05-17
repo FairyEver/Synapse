@@ -95,8 +95,9 @@ export class WorkflowEngine {
     const { executableNodeIds, implicitEdges } = executionSet
 
     if (executableNodeIds.size === 0) {
-      const visibleError = "工作流缺少结束节点，无法执行"
-      logger.warn("workflow has no End node — aborting", { runId, workflowId: def.id })
+      const hasEndNode = def.nodes.some((n) => n.type === "end")
+      const visibleError = hasEndNode ? "没有节点连接到结束节点，无法执行" : "工作流缺少结束节点，无法执行"
+      logger.warn("workflow has no executable nodes — aborting", { runId, workflowId: def.id, hasEndNode })
       const result: WorkflowRunResult = { status: "failed", nodeResults, durationMs: Date.now() - startMs }
       emit({ type: "workflow:failed", runId, error: visibleError, result })
       return result
@@ -151,8 +152,8 @@ export class WorkflowEngine {
           const cfg = (node.type === "prompt" || node.type === "switch")
             ? {
                 ...(rawCfg as Record<string, unknown>),
-                providerId: (rawCfg as Record<string, unknown>).providerId || def.defaultProviderId,
-                modelTier: (rawCfg as Record<string, unknown>).modelTier || def.defaultModelTier,
+                providerId: (rawCfg as Record<string, unknown>).providerId ?? def.defaultProviderId,
+                modelTier: (rawCfg as Record<string, unknown>).modelTier ?? def.defaultModelTier,
               }
             : rawCfg
           const vars = (cfg as Record<string, unknown>)["variables"]
@@ -291,12 +292,14 @@ export class WorkflowEngine {
             }
           }
         }
-        // Implicit edges (side-effect leaf → End) always activate
-        for (const ie of implicitEdges.filter((e) => e.from === nodeId)) {
-          if (!activated.includes(ie.to)) {
-            activated.push(ie.to)
-            logger.info("edge activated", { runId, from: nodeId, to: ie.to, branch: null })
-            emit({ type: "edge:activated", runId, from: ie.from, to: ie.to })
+        // Implicit edges (side-effect leaf → End) only activate on success
+        if (outcome.status === "success") {
+          for (const ie of implicitEdges.filter((e) => e.from === nodeId)) {
+            if (!activated.includes(ie.to)) {
+              activated.push(ie.to)
+              logger.info("edge activated", { runId, from: nodeId, to: ie.to, branch: null })
+              emit({ type: "edge:activated", runId, from: ie.from, to: ie.to })
+            }
           }
         }
         return activated
@@ -327,13 +330,13 @@ export class WorkflowEngine {
     const endNodeId = endNode?.id
 
     if (effectiveAbortSignal.aborted) {
-      // Mark any still-running nodes
+      // Mark any still-running or scheduler-skipped nodes as cancelled
       const runningNodes: string[] = []
       for (const nr of Object.values(nodeResults)) {
-        if (nr.status === "running") {
+        if (nr.status === "running" || nr.status === "skipped") {
           nr.status = "cancelled"; nr.error = "运行被取消"
-          nr.endedAt = Date.now()
-          nr.durationMs = nr.startedAt ? nr.endedAt - nr.startedAt : undefined
+          nr.endedAt = nr.endedAt ?? Date.now()
+          nr.durationMs = nr.startedAt ? (nr.endedAt ?? Date.now()) - nr.startedAt : undefined
           runningNodes.push(nr.nodeId)
         }
       }

@@ -55,7 +55,7 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
 
   const node = nodeId ? definition.nodes.find((n) => n.id === nodeId) : null
   let manifest: ReturnType<typeof nodeTypeRegistry.getManifest> | null = null
-  try { manifest = node ? nodeTypeRegistry.getManifest(node.type) : null } catch { manifest = null }
+  try { manifest = node ? nodeTypeRegistry.getManifest(node.type) : null } catch (err) { console.warn("[node-config-panel] getManifest failed", node?.type, err); manifest = null }
   const Icon = manifest?.icon
 
   const inCount = node ? definition.edges.filter((e) => e.to === node.id).length : 0
