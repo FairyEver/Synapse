@@ -179,6 +179,36 @@ describe("ScheduledTaskRepository", () => {
     expect(result!.activeDays).toEqual([0, 1, 2, 3, 4, 5, 6])
   })
 
+  it("hydrates activeDays before updating legacy stored data", async () => {
+    const tasks = new MemoryNamespace<ScheduledTaskEntry>("task-scheduler.tasks")
+    const repo = new ScheduledTaskRepository({
+      tasks,
+      now: () => new Date("2026-04-29T00:00:00.000Z"),
+      idFactory: () => "task:legacy-update",
+    })
+    await tasks.upsert({
+      id: "task:legacy-update",
+      schemaVersion: 2,
+      name: "Legacy",
+      scope: { type: "global" },
+      trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
+      action: { type: "builtin.command", config: { command: "echo hi" } },
+      enabled: true,
+      activeDays: undefined,
+      missedRunPolicy: "skip",
+      overlapPolicy: "skip",
+      createdAt: "2026-01-01T00:00:00Z",
+      updatedAt: "2026-01-01T00:00:00Z",
+      runCount: 0,
+      configVersion: 0,
+    } as never)
+
+    const result = await repo.update("task:legacy-update", { name: "Updated" })
+
+    expect(result.name).toBe("Updated")
+    expect(result.activeDays).toEqual([0, 1, 2, 3, 4, 5, 6])
+  })
+
   it("preserves activeDays when creating a task with specific days", async () => {
     const repo = new ScheduledTaskRepository({
       tasks: new MemoryNamespace<ScheduledTaskEntry>("task-scheduler.tasks"),

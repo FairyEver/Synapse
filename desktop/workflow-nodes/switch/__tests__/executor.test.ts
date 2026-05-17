@@ -37,6 +37,16 @@ describe("switchNodeExecutor", () => {
     })
     expect(r.status).toBe("success"); expect(r.activeBranch).toBe("no")
   })
+  it("fails provider API error text instead of falling back to defaultBranch", async () => {
+    const r = await switchNodeExecutor.execute({
+      config: { ...config, defaultBranch: "no" }, resolvedVariables: {}, context: ctx,
+      agentDeps: { sendToAgent: vi.fn().mockResolvedValue({ status: "success" as const, response: "API Error: 402 Insufficient Balance", durationMs: 5 }) },
+    })
+    expect(r.status).toBe("failed")
+    expect(r.activeBranch).toBeUndefined()
+    expect(r.output).toBe("")
+    expect(r.error).toContain("402 Insufficient Balance")
+  })
   it("returns failed on mismatch with no defaultBranch", async () => {
     const r = await switchNodeExecutor.execute({
       config, resolvedVariables: {}, context: ctx,

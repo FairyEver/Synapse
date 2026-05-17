@@ -83,14 +83,32 @@ auto/state/workflow-e2e-results.jsonl
 
 参考夜间巡检：用 append-only JSONL。每条记录必须是单行 JSON，建议小于 8KB。
 
-推荐写法：
+**严格禁止**把任何命令的 stderr 重定向进 JSONL。尤其不要使用 `2>&1 >> auto/state/workflow-e2e-results.jsonl`、`&>> auto/state/workflow-e2e-results.jsonl`，也不要让 Python warning、DeprecationWarning、调试输出进入结果文件。
+
+推荐写法是先得到一个干净的单行 JSON 字符串，校验后再 append：
 
 ```bash
 mkdir -p auto/state
-printf '%s\n' '<单行 JSON>' >> auto/state/workflow-e2e-results.jsonl
+json='<单行 JSON>'
+printf '%s\n' "$json" | python3 -m json.tool >/dev/null
+printf '%s\n' "$json" >> auto/state/workflow-e2e-results.jsonl
 ```
 
 macOS 对追加写入使用 `O_APPEND`，单行小记录并发追加安全，不需要锁。不要用编辑器打开并改写整个文件。
+
+如果使用 Python 生成 JSON：
+
+- 使用 `datetime.now(datetime.UTC)` 或 `datetime.now(timezone.utc)`，不要使用已废弃的 `datetime.utcnow()`。
+- 生成脚本只能输出最终 JSON 到 stdout；warning、debug、traceback 不得进入 JSONL。
+- 不要把 Python 脚本的 stderr 合并到 stdout 后追加到 JSONL。
+
+写入后必须验证最后一行是合法 JSON：
+
+```bash
+tail -n 1 auto/state/workflow-e2e-results.jsonl | python3 -m json.tool >/dev/null
+```
+
+如果验证失败，本轮不要继续追加第二条错误记录；在最终控制台输出说明 JSONL 写入失败，并保留现场让人工处理。
 
 ### JSON schema
 
@@ -233,8 +251,12 @@ macOS 对追加写入使用 `O_APPEND`，单行小记录并发追加安全，不
 
 1. 组装本轮单行 JSON。
 2. 确认 JSON 可解析，且只包含必要摘要。
-3. 追加到 `auto/state/workflow-e2e-results.jsonl`。
-4. 不要重写整个 JSONL 文件。
+3. 确认该行只包含 JSON 本体，不包含 warning、日志、Markdown、表格或多余前后缀。
+4. 使用 `printf '%s\n' "$json" >> auto/state/workflow-e2e-results.jsonl` 追加。
+5. 写入后用 `tail -n 1 ... | python3 -m json.tool >/dev/null` 校验最后一行。
+6. 不要重写整个 JSONL 文件。
+
+JSONL 文件中每一行必须以 `{` 开头并能被 JSON parser 解析。任何以 `DeprecationWarning`、`Traceback`、`<string>:`、普通日志文本开头的行都是污染，禁止写入。
 
 ## 退出条件
 

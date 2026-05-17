@@ -30,6 +30,11 @@ export function agentFailureMessage(error: string | undefined): string {
   return `Agent 调用失败：${truncated}`
 }
 
+export function agentProviderFailureFromResponse(response: string): string | undefined {
+  const firstLine = response.split(/\r?\n/, 1)[0]?.trim() ?? ""
+  return /^API Error:\s*\d{3}\b/i.test(firstLine) ? firstLine : undefined
+}
+
 /**
  * Compute which nodes can reach the End node via forward edge traversal.
  * Uses a reverse BFS from the End node (following edges backwards).

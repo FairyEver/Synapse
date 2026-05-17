@@ -21,6 +21,7 @@ describe("taskSchedulerIpcModule", () => {
       schedulerTaskCreate: vi.fn(async (input) => ({
         id: "task:1",
         schemaVersion: 2,
+        activeDays: [0, 1, 2, 3, 4, 5, 6],
         ...input,
         enabled: true,
         missedRunPolicy: "skip",
@@ -37,6 +38,7 @@ describe("taskSchedulerIpcModule", () => {
         trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
         action: { type: "builtin.command", config: { command: "echo ok", shell: "posix", timeoutMins: 30 } },
         enabled: true,
+        activeDays: [0, 1, 2, 3, 4, 5, 6],
         missedRunPolicy: "skip",
         overlapPolicy: "skip",
         createdAt: "2026-04-29T00:00:00.000Z",
@@ -53,6 +55,7 @@ describe("taskSchedulerIpcModule", () => {
         trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
         action: { type: "builtin.command", config: { command: "echo ok", shell: "posix", timeoutMins: 30 } },
         enabled: true,
+        activeDays: [0, 1, 2, 3, 4, 5, 6],
         missedRunPolicy: "skip",
         overlapPolicy: "skip",
         createdAt: "2026-04-29T00:00:00.000Z",
@@ -67,6 +70,7 @@ describe("taskSchedulerIpcModule", () => {
         trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
         action: { type: "builtin.command", config: { command: "echo ok", shell: "posix", timeoutMins: 30 } },
         enabled: false,
+        activeDays: [0, 1, 2, 3, 4, 5, 6],
         missedRunPolicy: "skip",
         overlapPolicy: "skip",
         createdAt: "2026-04-29T00:00:00.000Z",
@@ -102,6 +106,63 @@ describe("taskSchedulerIpcModule", () => {
     expect(service.schedulerTaskUpdate).toHaveBeenCalledWith("task:1", { enabled: false })
     expect(service.runTaskNow).toHaveBeenCalledWith("task:1")
     expect(service.schedulerRunList).toHaveBeenCalledWith("task:1", { limit: undefined })
+  })
+
+  it("preserves activeDays through create and update IPC validation", async () => {
+    const service = {
+      schedulerTaskCreate: vi.fn(async (input) => ({
+        id: "task:1",
+        schemaVersion: 2,
+        activeDays: [0, 1, 2, 3, 4, 5, 6],
+        ...input,
+        enabled: true,
+        missedRunPolicy: "skip",
+        overlapPolicy: "skip",
+        createdAt: "2026-04-29T00:00:00.000Z",
+        updatedAt: "2026-04-29T00:00:00.000Z",
+        runCount: 0,
+      })),
+      schedulerTaskUpdate: vi.fn(async (_id, patch) => ({
+        id: "task:1",
+        schemaVersion: 2,
+        name: "Build",
+        scope: { type: "global" },
+        trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
+        action: { type: "builtin.command", config: { command: "echo ok", shell: "posix", timeoutMins: 30 } },
+        enabled: true,
+        activeDays: [0, 1, 2, 3, 4, 5, 6],
+        missedRunPolicy: "skip",
+        overlapPolicy: "skip",
+        createdAt: "2026-04-29T00:00:00.000Z",
+        updatedAt: "2026-04-29T00:00:00.000Z",
+        runCount: 0,
+        ...patch,
+      })),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.task-scheduler") return service as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(taskSchedulerIpcModule, { moduleId: "task-scheduler", resolve })
+
+    const created = await harness.invoke("synapse:task-scheduler:tasks:create", {
+      name: "Build",
+      scope: { type: "global" },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
+      action: { type: "builtin.command", config: { command: "echo ok", shell: "posix", timeoutMins: 30 } },
+      activeDays: [1, 2, 3, 4, 5],
+    })
+    await harness.invoke("synapse:task-scheduler:tasks:update", {
+      id: "task:1",
+      patch: { activeDays: [0, 6] },
+    })
+
+    expect(created.activeDays).toEqual([1, 2, 3, 4, 5])
+    expect(service.schedulerTaskCreate).toHaveBeenCalledWith(expect.objectContaining({
+      activeDays: [1, 2, 3, 4, 5],
+    }))
+    expect(service.schedulerTaskUpdate).toHaveBeenCalledWith("task:1", { activeDays: [0, 6] })
   })
 
   it("logs manual run failures with sanitized IPC context", async () => {

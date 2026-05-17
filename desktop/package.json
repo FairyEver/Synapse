@@ -124,6 +124,10 @@
       "source/tray/**",
       "package.json"
     ],
+    "asarUnpack": [
+      "node_modules/@anthropic-ai/claude-agent-sdk-*/claude",
+      "node_modules/@anthropic-ai/claude-agent-sdk-*/claude.exe"
+    ],
     "extraMetadata": {
       "main": "dist-electron/electron/main.js"
     },

@@ -33,6 +33,8 @@ import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
 const logger = createRendererLogger("workflow.editor.canvas")
 
 const edgeTypes = { branch: BranchEdge }
+const CANVAS_FIT_VIEW_OPTIONS = { padding: 0.1, duration: 200 }
+const EMPTY_CANVAS_VIEWPORT = { x: 0, y: 0, zoom: 1 }
 
 type WorkflowFlowNode = Node<Record<string, unknown>, string>
 type WorkflowFlowEdge = Edge<{ label?: string }, string>
@@ -106,7 +108,7 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
   const { nodes: initNodes, edges: initEdges } = defToFlow(definition)
   const [nodes, setNodes] = useNodesState(initNodes)
   const [edges, setEdges] = useEdgesState(initEdges)
-  const { screenToFlowPosition, fitView } = useReactFlow()
+  const { screenToFlowPosition, fitView, setViewport } = useReactFlow()
   const nodesRef = useRef(nodes)
   nodesRef.current = nodes
   const edgesRef = useRef(edges)
@@ -424,8 +426,20 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     definitionRef.current = newDef
     logger.info("auto layout applied", { nodeCount: layouted.length })
     onChange(newDef)
-    requestAnimationFrame(() => fitView({ padding: 0.1 }))
+    requestAnimationFrame(() => {
+      void fitView(CANVAS_FIT_VIEW_OPTIONS)
+    })
   }, [edges, onChange, setNodes, fitView])
+
+  const handleFitView = useCallback(() => {
+    if (nodesRef.current.length === 0) {
+      void setViewport(EMPTY_CANVAS_VIEWPORT, { duration: 200 })
+      return
+    }
+    requestAnimationFrame(() => {
+      void fitView(CANVAS_FIT_VIEW_OPTIONS)
+    })
+  }, [fitView, setViewport])
 
   const canvasActions = useMemo(() => ({
     clipboard, getSelectedNodeIds, copyNodes, pasteNodes, disconnectNodes, deleteNodes, requestRename,
@@ -511,7 +525,7 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
           selectionOnDrag selectionMode={SelectionMode.Partial}
           fitView panOnScroll panOnScrollMode={PanOnScrollMode.Free}>
           <Background />
-          <Controls />
+          <Controls fitViewOptions={CANVAS_FIT_VIEW_OPTIONS} onFitView={handleFitView} />
         </ReactFlow>
         {paneMenu && (
           <div

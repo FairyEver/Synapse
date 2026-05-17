@@ -1,7 +1,7 @@
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
 import type { SwitchNodeConfig } from "./schema"
 import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
-import { agentErrorDiagnostic, sanitizeAgentError, agentFailureMessage } from "../../electron/services/workflow/workflow-utils"
+import { agentErrorDiagnostic, sanitizeAgentError, agentFailureMessage, agentProviderFailureFromResponse } from "../../electron/services/workflow/workflow-utils"
 import { createMainLogger } from "../../electron/services/log-store"
 
 const logger = createMainLogger("workflow.node.switch-executor")
@@ -88,6 +88,16 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
         projectId: context.projectId, runId: context.runId, ...diagnostic, sanitizedError, durationMs,
       })
       return { status: "failed", output: "", error: agentFailureMessage(agentResult.error), durationMs }
+    }
+
+    const providerFailure = agentProviderFailureFromResponse(agentResult.response)
+    if (providerFailure) {
+      const diagnostic = agentErrorDiagnostic(providerFailure)
+      const sanitizedError = sanitizeAgentError(providerFailure)
+      logger.warn("switch node agent call failed", {
+        projectId: context.projectId, runId: context.runId, ...diagnostic, sanitizedError, durationMs,
+      })
+      return { status: "failed", output: "", error: agentFailureMessage(providerFailure), durationMs }
     }
 
     const rawResponse = agentResult.response.trim()

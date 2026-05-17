@@ -56,6 +56,18 @@ describe("promptNodeExecutor", () => {
     expect(r.error).toContain("[path]")
   })
 
+  it("treats provider API error text as failure even when Agent reports success", async () => {
+    const r = await promptNodeExecutor.execute({
+      config: { providerId: "deepseek", modelTier: "default", variables: [], prompt: "test" },
+      resolvedVariables: {}, context: ctx,
+      agentDeps: deps("API Error: 402 Insufficient Balance"),
+    })
+    expect(r.status).toBe("failed")
+    expect(r.output).toBe("")
+    expect(r.error).toContain("Agent 调用失败")
+    expect(r.error).toContain("402 Insufficient Balance")
+  })
+
   it("logs Agent diagnostics without prompt, output, or raw error text", async () => {
     const prompt = "Summarize sk-secret from /Users/liyang/private"
     const output = "answer includes private repository context"

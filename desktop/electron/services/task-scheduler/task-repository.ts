@@ -180,7 +180,7 @@ export class ScheduledTaskRepository {
   private async require(id: string): Promise<ScheduledTaskEntry> {
     const task = await this.tasks.get(id)
     if (!task) throw new Error(`Scheduled task "${id}" was not found`)
-    return task
+    return hydrateActiveDays(task)
   }
 
   private isoNow(): string {

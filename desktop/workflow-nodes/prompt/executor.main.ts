@@ -1,7 +1,7 @@
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
 import type { PromptNodeConfig } from "./schema"
 import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
-import { agentErrorDiagnostic, sanitizeAgentError, agentFailureMessage } from "../../electron/services/workflow/workflow-utils"
+import { agentErrorDiagnostic, sanitizeAgentError, agentFailureMessage, agentProviderFailureFromResponse } from "../../electron/services/workflow/workflow-utils"
 import { createMainLogger } from "../../electron/services/log-store"
 
 const logger = createMainLogger("workflow.node.prompt-executor")
@@ -31,6 +31,18 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
         durationMs,
       })
       return { status: "failed", output: "", error: agentFailureMessage(result.error), durationMs }
+    }
+
+    const providerFailure = agentProviderFailureFromResponse(result.response)
+    if (providerFailure) {
+      const sanitizedError = sanitizeAgentError(providerFailure)
+      logger.warn("prompt node agent call failed", {
+        projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
+        ...agentErrorDiagnostic(providerFailure),
+        sanitizedError,
+        durationMs,
+      })
+      return { status: "failed", output: "", error: agentFailureMessage(providerFailure), durationMs }
     }
 
     input.onProgress?.("processing_output", "处理输出…")

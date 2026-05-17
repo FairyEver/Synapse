@@ -38,6 +38,7 @@ const taskActionSchema = z.object({
 const taskStatusSchema = z.enum(["success", "failed", "timeout", "cancelled", "skipped"])
 const runStatusSchema = z.enum(["running", "success", "failed", "timeout", "cancelled", "skipped"])
 const runTriggerSchema = z.enum(["schedule", "manual", "missed_run"])
+const activeDaysSchema = z.array(z.number().int().min(0).max(6)).min(1)
 const activeRunSchema = z.object({
   status: z.literal("running"),
 })
@@ -64,6 +65,7 @@ const taskSchema = z.object({
   trigger: taskTriggerSchema,
   action: taskActionSchema,
   enabled: z.boolean(),
+  activeDays: activeDaysSchema,
   missedRunPolicy: z.enum(["skip", "run_once"]),
   overlapPolicy: z.literal("skip"),
   createdAt: z.string(),
@@ -95,6 +97,7 @@ const createTaskInputSchema = z.object({
   trigger: taskTriggerSchema,
   action: taskActionSchema,
   enabled: z.boolean().optional(),
+  activeDays: activeDaysSchema.optional(),
   missedRunPolicy: z.enum(["skip", "run_once"]).optional(),
 })
 
@@ -106,6 +109,7 @@ const updateTaskPatchSchema = z.object({
   trigger: taskTriggerSchema.optional(),
   action: taskActionSchema.optional(),
   enabled: z.boolean().optional(),
+  activeDays: activeDaysSchema.optional(),
   missedRunPolicy: z.enum(["skip", "run_once"]).optional(),
 })
 
