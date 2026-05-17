@@ -6,3 +6,4 @@ state/panel/data.js
 state/issue-backlog.jsonl
 node_modules/
 dist/
+*.tsbuildinfo
