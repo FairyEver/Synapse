@@ -16,6 +16,7 @@ import "@xyflow/react/dist/style.css"
 import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
 import { Badge } from "@/components/ui/badge"
 import { RunnerNodeResultsContext, runnerNodeTypes } from "./runner-node-wrappers"
+import { resolveBranchLabel } from "../lib/branch-label"
 
 const edgeTypes = { default: RunnerEdge, branch: RunnerEdge }
 
@@ -66,13 +67,6 @@ interface DagViewProps {
   nodeResults: Record<string, NodeRunResult>
   selectedNodeId?: string | null
   onNodeSelect: (nodeId: string | null) => void
-}
-
-function resolveBranchLabel(def: WorkflowDefinition, fromId: string, branchId: string): string {
-  const node = def.nodes.find((n) => n.id === fromId)
-  if (!node || node.type !== "switch") return branchId
-  const branches = (node.config as { branches?: Array<{ id: string; label: string }> }).branches
-  return branches?.find((b) => b.id === branchId)?.label ?? branchId
 }
 
 function DagViewInner({ definition, nodeResults, selectedNodeId, onNodeSelect }: DagViewProps) {

@@ -193,16 +193,6 @@ export class AgentRelayService {
       : runs
   }
 
-  getStatus(): {
-    readonly bindingCount: number
-    readonly recentRunCount: number
-  } {
-    return {
-      bindingCount: 0,
-      recentRunCount: 0,
-    }
-  }
-
   private async createRun(
     request: RelaySendRequest,
     targetSessionKey: string,

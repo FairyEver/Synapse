@@ -132,7 +132,7 @@ describe("WorkflowEngine", () => {
       version: "v1",
       createdAt: 0,
       updatedAt: 0,
-      params: [{ name: "apiToken", type: "string", required: false }],
+      params: [{ name: "apiToken", type: "text", default: null }],
       nodes: [
         {
           ...nodeA,

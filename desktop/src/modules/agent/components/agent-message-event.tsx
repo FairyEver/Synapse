@@ -11,6 +11,7 @@ import type {
 import { AgentMessageHeader } from "./agent-message-header"
 import { AgentMessageBubble } from "./agent-message-bubble"
 import { AgentMessageToolbar } from "./agent-message-toolbar"
+import { errorLogMeta } from "../utils"
 
 const COPY_BUTTON_HTML = `<button type="button" class="code-copy-btn absolute right-2 top-2 inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-border bg-background text-muted-foreground opacity-0 transition-opacity" aria-label="复制代码"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>`
 
@@ -121,8 +122,7 @@ function AssistantMessageBody({
             role: item.role,
             contentLength: item.content.length,
             codeLength: codeText.length,
-            errorName: clipboardErrorName(error),
-            errorLength: clipboardErrorLength(error),
+            ...errorLogMeta(error),
           })
         })
       }
@@ -287,18 +287,6 @@ function isLocalReferenceHref(href: string): boolean {
     || href.startsWith("../")
     || href.startsWith("/")
     || /^[\w.-]+\//.test(href)
-}
-
-function clipboardErrorName(error: unknown): string {
-  if (error instanceof DOMException && error.name) return error.name
-  if (error instanceof Error && error.name) return error.name
-  return typeof error
-}
-
-function clipboardErrorLength(error: unknown): number {
-  if (error instanceof DOMException || error instanceof Error) return error.message.length
-  if (typeof error === "string") return error.length
-  return 0
 }
 
 export { AgentMessageEvent, wrapLocalReferences }

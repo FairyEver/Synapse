@@ -161,6 +161,14 @@ export class AutomationIngressService {
       const mode = stringValue(body.replyMode) === "wait" ? "wait" : "async"
       const promise = this.executeWebhook(body, request, config.path)
       if (mode === "wait") {
+        promise.catch((error) => {
+          this.deps.logger?.warn("Webhook wait-mode run failed after response.", {
+            boundary: "webhook-wait-background",
+            path: config.path,
+            mode,
+            ...errorDiagnostic(error),
+          })
+        })
         const result = await promiseWithTimeout(promise, DEFAULT_WAIT_MS)
         if (!result) return jsonResponse(202, true, { status: "running" })
         return jsonResponse(200, true, result)

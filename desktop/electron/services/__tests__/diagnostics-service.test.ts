@@ -531,6 +531,7 @@ function createConfig(): SynapseConfig {
     },
     agent: {
       defaultPermissionMode: "default",
+      defaultProviderModel: null,
     },
   }
 }

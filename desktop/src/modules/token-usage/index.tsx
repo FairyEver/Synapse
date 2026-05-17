@@ -16,6 +16,9 @@ import type { GroupByMode } from "./components/group-by-picker"
 import { ExportButton } from "./components/export-button"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 
 type SubTab = "overview" | "models" | "daily" | "hourly" | "agents" | "stats"
 
@@ -25,12 +28,12 @@ export function TokenUsageModule() {
   const [groupBy, setGroupBy] = useState<GroupByMode>("clientModel")
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set())
   const { scan, scanning, error: scanError } = useTokenUsageScan()
-  const { data: graphResult, refresh: refreshGraph } = useGraphResult()
-  const { data: models, refresh: refreshModels } = useModelReport()
-  const { data: dailyRows, refresh: refreshDaily } = useDailyReport()
-  const { data: agentRows, refresh: refreshAgents } = useAgentReport()
-  const { data: hourlyRows, refresh: refreshHourly } = useHourlyReport()
-  const { data: hourlyProfile, refresh: refreshHourlyProfile } = useHourlyProfile()
+  const { data: graphResult, loading: graphLoading, error: graphError, refresh: refreshGraph } = useGraphResult()
+  const { data: models, loading: modelsLoading, error: modelsError, refresh: refreshModels } = useModelReport()
+  const { data: dailyRows, loading: dailyLoading, error: dailyError, refresh: refreshDaily } = useDailyReport()
+  const { data: agentRows, loading: agentsLoading, error: agentsError, refresh: refreshAgents } = useAgentReport()
+  const { data: hourlyRows, loading: hourlyLoading, error: hourlyError, refresh: refreshHourly } = useHourlyReport()
+  const { data: hourlyProfile, loading: hourlyProfileLoading, error: hourlyProfileError, refresh: refreshHourlyProfile } = useHourlyProfile()
   const [lastScanInfo, setLastScanInfo] = useState<Pick<ScanResult, "elapsedMs" | "newMessages"> | null>(null)
   const initialScanDone = useRef(false)
 
@@ -78,6 +81,8 @@ export function TokenUsageModule() {
 
   const sourceFilter = useCallback((client: string) => selectedSources.has(client), [selectedSources])
   const isFiltering = selectedSources.size > 0 && selectedSources.size < allClients.length
+  const loadErrors = [scanError, graphError, modelsError, dailyError, agentsError, hourlyError, hourlyProfileError].filter(Boolean)
+  const isLoading = graphLoading || modelsLoading || dailyLoading || agentsLoading || hourlyLoading || hourlyProfileLoading
 
   const filteredModels = useMemo(() =>
     isFiltering ? models.filter((m) => sourceFilter(m.client)) : models,
@@ -116,24 +121,42 @@ export function TokenUsageModule() {
         <ScanButton scanning={scanning} onScan={handleScan} lastScanInfo={lastScanInfo} error={scanError} />
       </div>
       <ScrollArea className="min-h-0 flex-1 px-4 pb-4">
-        {activeSubTab === "overview" && graphResult ? (
-          <OverviewView graphResult={graphResult} hourlyRows={filteredHourlyRows} />
-        ) : null}
-        {activeSubTab === "models" ? (
-          <ModelsView models={filteredModels} />
-        ) : null}
-        {activeSubTab === "daily" ? (
-          <DailyView rows={dailyRows as { date: string; turns: number; messages: number; input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number; cost: number }[]} />
-        ) : null}
-        {activeSubTab === "hourly" ? (
-          <HourlyView rows={filteredHourlyRows} profile={hourlyProfile} />
-        ) : null}
-        {activeSubTab === "agents" ? (
-          <AgentsView agents={filteredAgentRows} />
-        ) : null}
-        {activeSubTab === "stats" && graphResult ? (
-          <StatsView graphResult={graphResult} />
-        ) : null}
+        <div className="flex flex-col gap-3">
+          {loadErrors.length > 0 ? (
+            <Alert variant="destructive">
+              <AlertDescription className="flex items-center justify-between gap-3">
+                <span>{loadErrors[0]?.message ?? "读取失败"}</span>
+                <Button size="sm" variant="outline" onClick={() => refreshAll(dateRangeToOptions(range))}>
+                  重试
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {isLoading && !graphResult ? (
+            <div className="flex flex-col gap-2">
+              <Skeleton className="h-24 w-full" />
+              <Skeleton className="h-24 w-full" />
+            </div>
+          ) : null}
+          {activeSubTab === "overview" && graphResult ? (
+            <OverviewView graphResult={graphResult} hourlyRows={filteredHourlyRows} />
+          ) : null}
+          {activeSubTab === "models" ? (
+            <ModelsView models={filteredModels} />
+          ) : null}
+          {activeSubTab === "daily" ? (
+            <DailyView rows={dailyRows as { date: string; turns: number; messages: number; input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number; cost: number }[]} />
+          ) : null}
+          {activeSubTab === "hourly" ? (
+            <HourlyView rows={filteredHourlyRows} profile={hourlyProfile} />
+          ) : null}
+          {activeSubTab === "agents" ? (
+            <AgentsView agents={filteredAgentRows} />
+          ) : null}
+          {activeSubTab === "stats" && graphResult ? (
+            <StatsView graphResult={graphResult} />
+          ) : null}
+        </div>
       </ScrollArea>
     </div>
   )

@@ -78,13 +78,14 @@ function DatabaseSidebar({
   const [renamingFolderId, setRenamingFolderId] = useState<number | null>(null)
   const [renameValue, setRenameValue] = useState("")
   const [deletingFolder, setDeletingFolder] = useState<{ id: number; name: string; memberCount: number } | null>(null)
+  const normalizedSearchQuery = searchQuery.trim()
 
   const filteredTables = useMemo(
-    () => filterDatabaseTables(tables, searchQuery),
-    [tables, searchQuery],
+    () => filterDatabaseTables(tables, normalizedSearchQuery),
+    [tables, normalizedSearchQuery],
   )
 
-  const isSearching = searchQuery.trim().length > 0
+  const isSearching = normalizedSearchQuery.length > 0
 
   const folderMemberSet = useMemo(() => {
     const set = new Set<string>()

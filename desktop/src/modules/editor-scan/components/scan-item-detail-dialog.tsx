@@ -10,6 +10,7 @@ import {
 } from "@/app-shell/content-navigation"
 import { closeDialogThenNavigate } from "@/app-shell/dialog-navigate"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
+import { formatSkillAttachmentSize } from "@/modules/skills/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -811,12 +812,6 @@ function ScanItemContentArea({
   )
 }
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
 function SkillFilesSection({ files }: { files: EditorScanSkillFileEntry[] }) {
   return (
     <div className="mt-4 border-t pt-4">
@@ -831,7 +826,7 @@ function SkillFilesSection({ files }: { files: EditorScanSkillFileEntry[] }) {
           >
             <File className="size-3.5 shrink-0" />
             <span className="min-w-0 truncate">{f.name}</span>
-            <span className="ml-auto shrink-0 tabular-nums">{formatFileSize(f.size)}</span>
+            <span className="ml-auto shrink-0 tabular-nums">{formatSkillAttachmentSize(f.size)}</span>
           </div>
         ))}
       </div>

@@ -56,6 +56,10 @@ function HourlyTable({ rows }: { rows: HourlyRow[] }) {
   const hasReasoning = sortRows.some((r) => r.reasoning > 0)
   const hasTurns = sortRows.some((r) => r.turns > 0)
 
+  if (rows.length === 0) {
+    return <p className="py-8 text-center text-sm text-muted-foreground">暂无时段数据</p>
+  }
+
   return (
     <Table>
       <TableHeader>

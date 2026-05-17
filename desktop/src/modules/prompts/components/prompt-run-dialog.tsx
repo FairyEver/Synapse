@@ -163,6 +163,9 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
                 ))}
               </SelectContent>
             </Select>
+            {projects.length === 0 ? (
+              <p className="text-sm text-muted-foreground">请先在设置中添加项目</p>
+            ) : null}
           </div>
           <div className="flex flex-col gap-2">
             <Label>Provider</Label>

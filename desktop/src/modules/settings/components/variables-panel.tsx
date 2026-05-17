@@ -179,10 +179,10 @@ function VariablesPanel() {
       await updateRepository(activeRepository.uuid, {
         variables: nextVariables.length > 0 ? nextVariables : undefined,
       })
+      setDeletingVariable(null)
     } catch {
-      // best effort
+      setFormError("删除失败，请重试。")
     }
-    setDeletingVariable(null)
   }, [activeRepository, deletingVariable, updateRepository, variables])
 
   if (!activeRepository) {
@@ -247,11 +247,16 @@ function VariablesPanel() {
               key={variable.name}
               variable={variable}
               onEdit={handleEdit}
-              onDelete={setDeletingVariable}
+              onDelete={(nextVariable) => {
+                setFormError(null)
+                setDeletingVariable(nextVariable)
+              }}
             />
           ))}
         </div>
-      ) : null}
+      ) : (
+        <p className="py-6 text-center text-sm text-muted-foreground">还没有变量</p>
+      )}
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <FormDialog
@@ -296,6 +301,7 @@ function VariablesPanel() {
             <AlertDialogDescription>
               确定删除变量 <span className="font-mono">{deletingVariable?.name}</span> 吗？
             </AlertDialogDescription>
+            {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>

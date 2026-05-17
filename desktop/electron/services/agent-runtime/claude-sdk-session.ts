@@ -144,6 +144,10 @@ export class ClaudeSDKSession implements AgentLiveSession {
     return this.eventQueue.next()
   }
 
+  nextEventWithTimeout(timeoutMs: number): Promise<AgentEvent | null> {
+    return this.eventQueue.nextWithTimeout(timeoutMs)
+  }
+
   currentSessionId(): string | undefined {
     return this.sdkSessionId
   }
@@ -376,6 +380,8 @@ function defaultQueryFactory(input: {
 
 class LazyQuery implements QueryLike {
   private readonly query: Promise<Query>
+  private failed = false
+  private failure: unknown
 
   constructor(input: {
     readonly prompt: AsyncIterable<SDKUserMessage>
@@ -386,26 +392,40 @@ class LazyQuery implements QueryLike {
         prompt: input.prompt,
         options: input.options as Options,
       }))
+      .catch((error) => {
+        this.failed = true
+        this.failure = error
+        throw error
+      })
   }
 
   async next(): Promise<IteratorResult<SDKMessage, void>> {
+    this.throwIfFailed()
     return (await this.query).next()
   }
 
   async interrupt(): Promise<void> {
+    if (this.failed) return
     await (await this.query).interrupt()
   }
 
   async close(): Promise<void> {
+    if (this.failed) return
     await (await this.query).close()
   }
 
   async streamInput(stream: AsyncIterable<SDKUserMessage>): Promise<void> {
+    this.throwIfFailed()
     await (await this.query).streamInput(stream)
   }
 
   async setPermissionMode(mode: PermissionMode): Promise<void> {
+    this.throwIfFailed()
     await (await this.query).setPermissionMode(mode)
+  }
+
+  private throwIfFailed(): void {
+    if (this.failed) throw this.failure
   }
 }
 
@@ -559,6 +579,30 @@ class AsyncQueue<T> implements AsyncIterable<T> {
       this.waiters.push((result) => {
         resolve(result.done ? null : result.value)
       })
+    })
+  }
+
+  nextWithTimeout(timeoutMs: number): Promise<T | null> {
+    const value = this.values.shift()
+    if (value) return Promise.resolve(value)
+    if (this.closed) return Promise.resolve(null)
+    return new Promise((resolve) => {
+      let settled = false
+      let timeout: ReturnType<typeof setTimeout> | undefined
+      const waiter = (result: IteratorResult<T, void>): void => {
+        if (settled) return
+        settled = true
+        if (timeout) clearTimeout(timeout)
+        resolve(result.done ? null : result.value)
+      }
+      timeout = setTimeout(() => {
+        if (settled) return
+        settled = true
+        const index = this.waiters.indexOf(waiter)
+        if (index >= 0) this.waiters.splice(index, 1)
+        resolve(null)
+      }, timeoutMs)
+      this.waiters.push(waiter)
     })
   }
 

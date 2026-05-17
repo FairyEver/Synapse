@@ -237,6 +237,8 @@ function failingAgent(message: string): Pick<AgentRuntimeService, "sendSideSessi
 function successAgent(resultText: string): Pick<AgentRuntimeService, "sendSideSessionWithTimeout"> {
   return {
     sendSideSessionWithTimeout: async () => ({
+      conversationId: "conversation-relay-1",
+      events: [],
       resultText,
       partialText: undefined,
       timedOut: false,
@@ -247,6 +249,9 @@ function successAgent(resultText: string): Pick<AgentRuntimeService, "sendSideSe
 function errorResultAgent(message: string): Pick<AgentRuntimeService, "sendSideSessionWithTimeout"> {
   return {
     sendSideSessionWithTimeout: async () => ({
+      conversationId: "conversation-relay-1",
+      events: [],
+      resultText: "",
       partialText: undefined,
       timedOut: false,
       error: message,
@@ -254,7 +259,7 @@ function errorResultAgent(message: string): Pick<AgentRuntimeService, "sendSideS
   }
 }
 
-function fakeSideChannel(): Pick<SideChannelService, "getReplyTarget"> {
+function fakeSideChannel(): SideChannelService {
   return {
     getReplyTarget: () => ({
       projectId: "source",
@@ -262,9 +267,19 @@ function fakeSideChannel(): Pick<SideChannelService, "getReplyTarget"> {
       transport: { kind: "feishu", connectorId: "feishu-1" },
       replyCtx: {},
     }) satisfies ReplyTarget,
-  }
+  } as unknown as SideChannelService
 }
 
-function fakeLogger(): Pick<StructuredLogger, "warn"> & { warn: ReturnType<typeof vi.fn> } {
-  return { warn: vi.fn() }
+function fakeLogger(): StructuredLogger & { warn: ReturnType<typeof vi.fn> } {
+  const logger = {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn(),
+  } satisfies Omit<StructuredLogger, "child"> & { child: ReturnType<typeof vi.fn> }
+  logger.child.mockReturnValue(logger)
+  return logger as StructuredLogger & { warn: ReturnType<typeof vi.fn> }
 }

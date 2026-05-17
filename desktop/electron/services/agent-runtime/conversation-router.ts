@@ -44,6 +44,7 @@ export interface ConversationRouterDeps {
 
 const DEFAULT_PENDING_QUEUE_LIMIT = 5
 const DEFAULT_PERMISSION_TIMEOUT_MS = 5 * 60 * 1000
+const DEFAULT_LIVE_EVENT_TIMEOUT_MS = 5 * 60 * 1000
 const MAX_EVENT_PAYLOAD_BYTES = 8192
 const MAX_SUMMARY_LENGTH = 1000
 const SENSITIVE_ERROR_ASSIGNMENT_PATTERN = /\b(secret|token|api[-_]?key|authorization|cookie|password|credential)\b\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)/gi
@@ -234,13 +235,13 @@ export class ConversationRouter {
         resolve,
       })
       if (!state.busy) {
+        state.busy = true
         void this.processQueue(state)
       }
     })
   }
 
   private async processQueue(state: RuntimeSessionState): Promise<void> {
-    state.busy = true
     try {
       while (state.queue.length > 0) {
         const turn = state.queue.shift()
@@ -381,9 +382,12 @@ export class ConversationRouter {
     await liveSession.send(message)
 
     while (liveSession.alive()) {
-      const event = await liveSession.nextEvent()
+      const event = await nextLiveEventWithTimeout(liveSession, DEFAULT_LIVE_EVENT_TIMEOUT_MS)
       if (!event) {
-        error = "Agent session ended"
+        error = liveSession.alive() ? "Agent session timed out." : "Agent session ended"
+        if (liveSession.alive()) {
+          await this.sessionManager.closeCurrentTurn(conversation.id)
+        }
         break
       }
       events.push(event)
@@ -401,7 +405,7 @@ export class ConversationRouter {
         continue
       }
       if (event.type === "result") {
-        resultText = latestAssistantText || streamedText || event.content
+        resultText = latestAssistantText || event.content || streamedText
         await this.repository.saveUsage({
           conversationId: conversation.id,
           usage: event.usage as ConversationEntryV1["usage"] | undefined,
@@ -514,7 +518,7 @@ export class ConversationRouter {
           break
         }
         if (event.type === "result") {
-          resultText = latestAssistantText || partialText || event.content
+          resultText = latestAssistantText || event.content || partialText
           partialText = resultText || partialText
           break
         }
@@ -634,6 +638,7 @@ export class ConversationRouter {
         return
       }
       timeout = setTimeout(() => {
+        if (settled) return
         void liveSession.respondPermission(event.requestId, {
           behavior: "deny",
           message: "Permission request timed out waiting for user response.",
@@ -1016,14 +1021,17 @@ function errorSummary(error: unknown): {
   readonly errorName: string
   readonly errorLength: number
 } {
-  const message = error instanceof Error ? error.message : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: message.length,
-  }
+  return errorMetadata(error)
 }
 
 function queuedTurnFailureMetadata(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+} {
+  return errorMetadata(error)
+}
+
+function errorMetadata(error: unknown): {
   readonly errorName: string
   readonly errorLength: number
 } {
@@ -1079,6 +1087,9 @@ async function nextLiveEventWithTimeout(
   liveSession: AgentLiveSession,
   timeoutMs: number,
 ): Promise<AgentEvent | null> {
+  if (liveSession.nextEventWithTimeout) {
+    return liveSession.nextEventWithTimeout(timeoutMs)
+  }
   let timeout: ReturnType<typeof setTimeout> | undefined
   try {
     return await Promise.race([
@@ -1094,8 +1105,8 @@ async function nextLiveEventWithTimeout(
 
 function appendRelayText(current: string, event: AgentEvent): string {
   if (event.type === "assistant") return assistantEventText(event) ?? current
-  if (event.type === "text") return `${current}${event.content}`
-  if (event.type === "stream" && event.text) return `${current}${event.text}`
+  const streamed = appendStreamedText(current, event)
+  if (streamed !== current) return streamed
   if (event.type === "result") return current || event.content
   if (event.type === "error" && !current) return event.message
   return current

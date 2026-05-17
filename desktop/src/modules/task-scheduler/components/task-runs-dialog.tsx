@@ -49,6 +49,7 @@ function TaskRunsDialog({
 
     let cancelled = false
     setLoading(true)
+    setRuns([])
     listRuns(task.id)
       .then((nextRuns) => {
         if (!cancelled) {
@@ -125,7 +126,7 @@ function TaskRunsDialog({
               <p className="text-sm text-muted-foreground">暂无运行记录</p>
             ) : null}
 
-            {runs.map((run) => (
+            {!loading && runs.map((run) => (
               <RunItem key={run.id} run={run} task={task} busy={busy} onStop={handleStop} />
             ))}
           </div>

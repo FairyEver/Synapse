@@ -7,6 +7,8 @@ import type {
   WebhookRunEntryV1,
 } from "../../../runtime/data-repo"
 import { createNetworkServiceRegistry } from "../../../runtime/network"
+import type { ControlledProcessRunner } from "../../../runtime/process"
+import type { ProjectContainerRegistry } from "../../../runtime/project-container"
 import type { AuditSink } from "../../../runtime/security"
 import type { StructuredLogger } from "../../../runtime/service-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "../../agent-runtime"
@@ -22,11 +24,7 @@ describe("AutomationIngressService", () => {
       networkRegistry: createNetworkServiceRegistry(),
       configs,
       runs,
-      processRunner: {
-        run: async () => {
-          throw new Error("not used")
-        },
-      },
+      processRunner: unusedProcessRunner(),
       listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
     })
     const config = await service.updateConfig({ enabled: true, resetToken: true })
@@ -67,11 +65,7 @@ describe("AutomationIngressService", () => {
       networkRegistry: createNetworkServiceRegistry(),
       configs,
       runs,
-      processRunner: {
-        run: async () => {
-          throw new Error("not used")
-        },
-      },
+      processRunner: unusedProcessRunner(),
       listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
     })
     const config = await service.updateConfig({ enabled: true, resetToken: true })
@@ -124,11 +118,7 @@ describe("AutomationIngressService", () => {
       networkRegistry: createNetworkServiceRegistry(),
       configs,
       runs,
-      processRunner: {
-        run: async () => {
-          throw new Error("not used")
-        },
-      },
+      processRunner: unusedProcessRunner(),
       listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
       logger,
       auditSink: {
@@ -232,11 +222,7 @@ describe("AutomationIngressService", () => {
       networkRegistry: createNetworkServiceRegistry(),
       configs,
       runs,
-      processRunner: {
-        run: async () => {
-          throw new Error("not used")
-        },
-      },
+      processRunner: unusedProcessRunner(),
       listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
       feishuConnector: { sendAutomationMessage },
     })
@@ -293,11 +279,7 @@ describe("AutomationIngressService", () => {
       networkRegistry: createNetworkServiceRegistry(),
       configs,
       runs,
-      processRunner: {
-        run: async () => {
-          throw new Error("not used")
-        },
-      },
+      processRunner: unusedProcessRunner(),
       listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
       logger,
     })
@@ -368,11 +350,7 @@ describe("AutomationIngressService", () => {
       networkRegistry: createNetworkServiceRegistry(),
       configs,
       runs,
-      processRunner: {
-        run: async () => {
-          throw new Error("not used")
-        },
-      },
+      processRunner: unusedProcessRunner(),
       listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
       logger,
     })
@@ -421,11 +399,7 @@ describe("AutomationIngressService", () => {
       networkRegistry: createNetworkServiceRegistry(),
       configs,
       runs,
-      processRunner: {
-        run: async () => {
-          throw new Error("not used")
-        },
-      },
+      processRunner: unusedProcessRunner(),
       listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
       logger,
     })
@@ -474,11 +448,7 @@ describe("AutomationIngressService", () => {
       networkRegistry: createNetworkServiceRegistry(),
       configs,
       runs,
-      processRunner: {
-        run: async () => {
-          throw new Error(errorText)
-        },
-      },
+      processRunner: failingProcessRunner(errorText),
       listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
       logger,
     })
@@ -532,10 +502,10 @@ function structuredLogger(): StructuredLogger & { warn: ReturnType<typeof vi.fn>
     child: ReturnType<typeof vi.fn>
   }
   logger.child.mockReturnValue(logger)
-  return logger
+  return logger as StructuredLogger & { warn: ReturnType<typeof vi.fn> }
 }
 
-function fakeProjectContainers(agent: { send: (message: unknown) => Promise<unknown> }) {
+function fakeProjectContainers(agent: { send: (message: unknown) => Promise<unknown> }): ProjectContainerRegistry {
   return {
     open: async () => ({
       get: (id: string) => {
@@ -551,7 +521,19 @@ function fakeProjectContainers(agent: { send: (message: unknown) => Promise<unkn
     list: () => [],
     registerService: () => {},
     setQuota: () => {},
-  }
+  } as ProjectContainerRegistry
+}
+
+function unusedProcessRunner(): ControlledProcessRunner {
+  return failingProcessRunner("not used")
+}
+
+function failingProcessRunner(message: string): ControlledProcessRunner {
+  return {
+    run: async () => {
+      throw new Error(message)
+    },
+  } as unknown as ControlledProcessRunner
 }
 
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {

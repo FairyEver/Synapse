@@ -66,8 +66,7 @@ function AgentSessionSidebar({
 
   return (
     <ModuleSidebar variant="bare">
-      {/* TODO: 跟随飞书功能未完成，暂时隐藏 */}
-      <div className="hidden items-center justify-between px-3">
+      <div className="flex items-center justify-between px-3">
         <Label htmlFor="agent-follow-feishu" className="text-xs text-muted-foreground">
           跟随飞书
         </Label>

@@ -178,7 +178,7 @@ describe("SideChannelService", () => {
     expect(outboxEntries).toEqual([
       expect.objectContaining({
         status: "failed",
-        lastError: "dispatch failed",
+        lastError: "Error (37 chars)",
       }),
     ])
     expect(auditSink.list()).toEqual([
@@ -281,7 +281,7 @@ describe("SideChannelService", () => {
     expect(outboxEntries).toEqual([
       expect.objectContaining({
         status: "failed",
-        lastError: "dispatch failed",
+        lastError: "dispatcher is unavailable",
       }),
     ])
     expect(auditSink.list()).toEqual([
@@ -427,6 +427,7 @@ describe("SideChannelService", () => {
     service.dispatchAgentEvent(bridgeTarget(), {
       type: "result",
       content: "done",
+      done: true,
       projectId: "project-1",
       sdkSessionId: "sdk-session-1",
     })

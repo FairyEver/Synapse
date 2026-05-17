@@ -247,7 +247,7 @@ export class SideChannelService implements ReplyTargetRuntime {
       }
     } catch (error) {
       const diagnostic = errorDiagnostic(error)
-      outbox.record({ target, payload, status: "failed", lastError: "dispatch failed" })
+      outbox.record({ target, payload, status: "failed", lastError: outboxLastError(error) })
       this.recordSendAudit("failed", target, attachments.length, diagnostic)
       this.deps.logger?.warn("Side-channel send dispatch failed.", {
         projectId: target.projectId,
@@ -530,6 +530,12 @@ function errorCode(error: unknown): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function outboxLastError(error: unknown): string {
+  if (error instanceof SideChannelError) return error.message
+  const diagnostic = errorDiagnostic(error)
+  return `${diagnostic.errorName} (${diagnostic.errorLength} chars)`
 }
 
 function errorDiagnostic(error: unknown): {

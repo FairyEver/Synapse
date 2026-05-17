@@ -325,5 +325,5 @@ function isTerminalLicenseServerError(error: unknown): boolean {
     return false
   }
   const status = (error as { status: unknown }).status
-  return typeof status === "number" && [400, 401, 403, 404, 409].includes(status)
+  return typeof status === "number" && [400, 401, 403, 409].includes(status)
 }

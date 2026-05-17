@@ -51,6 +51,7 @@ describe("migrateRepositoryScopedConnectorData", () => {
         },
         agent: {
           defaultPermissionMode: "default",
+          defaultProviderModel: null,
         },
       }, createNoopLogger())
     } finally {

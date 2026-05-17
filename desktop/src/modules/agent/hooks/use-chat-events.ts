@@ -277,7 +277,10 @@ function streamEventConversationId(domainEvent: SynapseAgentDomainEvent): string
   if (domainEvent.scope?.sessionId) return domainEvent.scope.sessionId
   if (!("event" in domainEvent.payload)) return undefined
 
-  const conversationId = domainEvent.payload.event.conversationId
+  const event = domainEvent.payload.event
+  if (!("conversationId" in event)) return undefined
+
+  const conversationId = event.conversationId
   return typeof conversationId === "string" && conversationId.length > 0
     ? conversationId
     : undefined

@@ -11,8 +11,13 @@ const DATA_TABLE_COLUMN_CLASS = "overflow-hidden"
 const DATA_TABLE_STICKY_ACTION_COLUMN_CLASS = `${DATA_TABLE_COLUMN_CLASS} sticky right-0 z-10 bg-background`
 const DATA_TABLE_RESIZABLE_HEAD_CLASS = "relative select-none"
 
-const columnMeasureCanvas = document.createElement("canvas")
-const columnMeasureContext = columnMeasureCanvas.getContext("2d")
+let columnMeasureContext: CanvasRenderingContext2D | null | undefined
+
+function getColumnMeasureContext(): CanvasRenderingContext2D | null {
+  if (columnMeasureContext !== undefined) return columnMeasureContext
+  columnMeasureContext = document.createElement("canvas").getContext("2d")
+  return columnMeasureContext
+}
 
 function getTableTextFont(): string {
   const rootStyle = window.getComputedStyle(document.documentElement)
@@ -25,12 +30,13 @@ function measureTableTextWidth(text: string): number {
     return 0
   }
 
-  if (!columnMeasureContext) {
+  const context = getColumnMeasureContext()
+  if (!context) {
     return text.length * 8
   }
 
-  columnMeasureContext.font = getTableTextFont()
-  return columnMeasureContext.measureText(text).width
+  context.font = getTableTextFont()
+  return context.measureText(text).width
 }
 
 function formatCellValue(value: unknown, type?: string, columnName?: string): string {

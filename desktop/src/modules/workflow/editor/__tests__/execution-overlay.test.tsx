@@ -128,6 +128,49 @@ describe("ExecutionOverlay", () => {
     expect(JSON.stringify(track.mock.calls)).not.toContain(rawError)
     expect(`${JSON.stringify(warnSpy.mock.calls)}${JSON.stringify(errorSpy.mock.calls)}`).not.toContain("Missing `Description`")
   })
+
+  it("clears external node viewing state when closing a locally selected detail", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const onViewClose = vi.fn()
+
+    await act(async () => {
+      root.render(
+        <ExecutionOverlay
+          definition={definition([
+            { id: "node-1", name: "External" },
+            { id: "node-2", name: "Local" },
+          ])}
+          runState="completed"
+          viewingNodeId="node-1"
+          onViewClose={onViewClose}
+          nodeResults={{
+            "node-1": {
+              nodeId: "node-1",
+              status: "success",
+              input: { variables: {} },
+            },
+            "node-2": {
+              nodeId: "node-2",
+              status: "success",
+              input: { variables: {} },
+            },
+          }}
+        />,
+      )
+    })
+
+    await act(async () => {
+      textElement(container, "Local").click()
+    })
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>('[data-slot="dialog-close"]')?.click()
+    })
+
+    expect(onViewClose).toHaveBeenCalledTimes(1)
+  })
 })
 
 function definition(nodes: Array<{ id: string; name: string }> = [{ id: "node-1", name: "Transform" }]): WorkflowDefinition {

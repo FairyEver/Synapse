@@ -113,13 +113,13 @@ describe("switchNodeExecutor", () => {
       agentDeps: { sendToAgent: vi.fn().mockResolvedValue({ status: "failed" as const, response: "", error: agentError, durationMs: 5 }) },
     })
 
-    expect(failed.error).not.toContain("sk-secret")
-    expect(failed.error).not.toContain("/Users/liyang/private")
-    expect(agentFailed.error).not.toContain("sk-secret")
-    expect(agentFailed.error).not.toContain("/Users/liyang/private")
+    expect(failed.error ?? "").not.toContain("sk-secret")
+    expect(failed.error ?? "").not.toContain("/Users/liyang/private")
+    expect(agentFailed.error ?? "").not.toContain("sk-secret")
+    expect(agentFailed.error ?? "").not.toContain("/Users/liyang/private")
     // After fix: error shows sanitized content, not just length
-    expect(agentFailed.error).toContain("Agent 调用失败：")
-    expect(agentFailed.error.length).toBeGreaterThan(20)
+    expect(agentFailed.error ?? "").toContain("Agent 调用失败：")
+    expect((agentFailed.error ?? "").length).toBeGreaterThan(20)
     expect(logger.info).toHaveBeenCalledWith("switch node branch matched", expect.objectContaining({
       projectId: "p1",
       runId: "r1",

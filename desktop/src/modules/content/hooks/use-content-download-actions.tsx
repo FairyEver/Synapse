@@ -116,9 +116,7 @@ function useContentDownloadActions({
     editorId: SynapseEditorId
     initialSelection: EditorWriteTargetInitialSelection
   }): Promise<boolean> => {
-    const adaptersToSearch = filteredAdapters.length > 0
-      ? filteredAdapters
-      : await loadInstallTargets()
+    const adaptersToSearch = await loadInstallTargets(true)
     const adapter = adaptersToSearch.find((candidate) => candidate.id === editorId)
 
     if (!adapter) {

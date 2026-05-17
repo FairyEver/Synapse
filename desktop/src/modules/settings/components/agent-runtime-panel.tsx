@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtime-status"
 import type { SynapseAgentRuntimeStatusItem } from "@/types/agent"
@@ -94,7 +95,12 @@ function AgentRuntimePanel({ children, projectId, onRefresh }: AgentRuntimePanel
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        {error && agents.length === 0 ? (
+        {loading && agents.length === 0 ? (
+          <div className="flex flex-col gap-3 px-4 py-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : error && agents.length === 0 ? (
           <div className="px-4 py-6 text-center text-sm text-muted-foreground">
             {error}
           </div>

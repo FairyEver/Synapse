@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import type { SynapseAgentPermissionRequestTimelineItem } from "@/types/agent"
+import { redactAgentPathLikeValue, sanitizeAgentRawInput } from "../utils"
 
 type AgentPermissionCardProps = {
   readonly item: SynapseAgentPermissionRequestTimelineItem
@@ -15,7 +16,7 @@ type AgentPermissionCardProps = {
 
 function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: AgentPermissionCardProps) {
   const [codeCollapsed, setCodeCollapsed] = useState(false)
-  const body = item.toolInput ?? formatRawInput(item.toolInputRaw)
+  const body = item.toolInput ? redactAgentPathLikeValue(item.toolInput) : formatRawInput(item.toolInputRaw)
   const showActions = pending
 
   function handleRespond(behavior: "allow" | "deny") {
@@ -42,6 +43,7 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
 
   return (
     <div
+      data-agent-permission-request-id={item.requestId}
       className={cn(
         "my-1 overflow-hidden rounded-lg border border-border bg-card",
         isLatestPending && showActions && "ring-2 ring-primary",
@@ -95,35 +97,7 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
 }
 
 function formatRawInput(value: Record<string, unknown> | undefined): string {
-  return value ? JSON.stringify(sanitizeRawInput(value), null, 2) : ""
-}
-
-const REDACTED = "[redacted]"
-const MAX_RAW_INPUT_STRING_LENGTH = 160
-const sensitiveRawInputKeyPattern = /token|secret|api[-_]?key|authorization|cookie|password|credential/i
-
-function sanitizeRawInput(value: unknown, key = ""): unknown {
-  if (sensitiveRawInputKeyPattern.test(key)) return REDACTED
-  if (typeof value === "string") return truncateRawInputString(redactPathLikeValue(value))
-  if (Array.isArray(value)) return value.map((item) => sanitizeRawInput(item))
-  if (!value || typeof value !== "object") return value
-
-  const sanitized: Record<string, unknown> = {}
-  for (const [childKey, childValue] of Object.entries(value)) {
-    sanitized[childKey] = sanitizeRawInput(childValue, childKey)
-  }
-  return sanitized
-}
-
-function truncateRawInputString(value: string): string {
-  if (value.length <= MAX_RAW_INPUT_STRING_LENGTH) return value
-  return `${value.slice(0, MAX_RAW_INPUT_STRING_LENGTH)}...[truncated]`
-}
-
-function redactPathLikeValue(value: string): string {
-  return value
-    .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, "[path redacted]")
-    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]")
+  return value ? JSON.stringify(sanitizeAgentRawInput(value), null, 2) : ""
 }
 
 export { AgentPermissionCard }

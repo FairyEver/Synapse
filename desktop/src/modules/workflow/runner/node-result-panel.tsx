@@ -4,6 +4,7 @@ import { X } from "lucide-react"
 import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
 import { track } from "@/lib/ui-tracking"
 import { NODE_STATUS_LABEL, NODE_STATUS_VARIANT } from "../lib/status-display"
+import { resolveBranchLabel } from "../lib/branch-label"
 
 interface NodeResultPanelProps {
   result: NodeRunResult
@@ -16,10 +17,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
   // Resolve activeBranch ID to user-configured label when definition is available
   const activeBranchLabel = (() => {
     if (!result.activeBranch || !definition) return result.activeBranch
-    const node = definition.nodes.find((n) => n.id === result.nodeId)
-    if (!node || node.type !== "switch") return result.activeBranch
-    const branches = (node.config as { branches?: Array<{ id: string; label: string }> }).branches
-    return branches?.find((b) => b.id === result.activeBranch)?.label ?? result.activeBranch
+    return resolveBranchLabel(definition, result.nodeId, result.activeBranch)
   })()
   const handleClose = () => {
     track({

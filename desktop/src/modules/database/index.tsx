@@ -350,7 +350,11 @@ function DatabaseModule() {
           table: selectedTable,
           rowId: id,
         })
-        await refreshQuery()
+        if (rows.length === 1 && page > 1) {
+          setPage(page - 1)
+        } else {
+          await refreshQuery()
+        }
         await refreshTables()
         showSuccess("已删除一行")
       } catch (error) {
@@ -358,7 +362,7 @@ function DatabaseModule() {
         showError(error instanceof Error ? error.message : "删除失败，请稍后重试。")
       }
     },
-    [selectedTable, refreshQuery, refreshTables, showSuccess, showError],
+    [selectedTable, rows.length, page, refreshQuery, refreshTables, showSuccess, showError],
   )
 
   useEffect(() => {

@@ -147,10 +147,10 @@ describe("validateWorkflow", () => {
     expect(r.warnings.some((w) => w.type === "disconnected_node" && w.nodeId === "end")).toBe(true)
   })
 
-  // Edge case: whitespace-only param names are silently skipped
-  it("silently skips whitespace-only param names", () => {
-    const r = validateWorkflow({ ...base, params: [{ name: " ", type: "text" }] })
-    expect(r.valid).toBe(true)
+  it("rejects whitespace-only param names", () => {
+    const r = validateWorkflow({ ...base, params: [{ name: " ", type: "text", default: null }] })
+    expect(r.valid).toBe(false)
+    expect(r.errors[0]).toMatchObject({ type: "invalid_config", message: "工作流参数名称不能为空" })
   })
 
   // Edge case: multiple nodes with no incoming edges
@@ -178,6 +178,18 @@ describe("validateRunParams", () => {
     expect(validateRunParams(def, { count: "12" })).toHaveLength(0)
     expect(validateRunParams(def, { count: "abc" })[0]).toMatchObject({ type: "invalid_config", message: "参数「count」必须是数字" })
   })
+
+  it("treats an explicit empty text param as a provided value", () => {
+    const def: WorkflowDefinition = { ...base, params: [{ name: "text", type: "text", default: null }] }
+
+    expect(validateRunParams(def, { text: "" })).toHaveLength(0)
+  })
+
+  it("allows an empty text default", () => {
+    const def: WorkflowDefinition = { ...base, params: [{ name: "text", type: "text", default: "" }] }
+
+    expect(validateRunParams(def, {})).toHaveLength(0)
+  })
 })
 
 describe("buildEffectiveRunParams", () => {
@@ -199,5 +211,20 @@ describe("buildEffectiveRunParams", () => {
     }
     expect(buildEffectiveRunParams(def, {})).toEqual({})
     expect(buildEffectiveRunParams(def, { a: "explicit" })).toEqual({ a: "explicit" })
+  })
+
+  it("preserves explicit empty text params and applies empty defaults", () => {
+    const def: WorkflowDefinition = {
+      ...base,
+      params: [
+        { name: "explicit", type: "text", default: "fallback" },
+        { name: "emptyDefault", type: "text", default: "" },
+      ],
+    }
+
+    expect(buildEffectiveRunParams(def, { explicit: "" })).toEqual({
+      explicit: "",
+      emptyDefault: "",
+    })
   })
 })

@@ -133,22 +133,31 @@ export class SessionLifecycleManager {
     const conversation = await this.deps.repository.getActive(sessionKey, platform, workspaceKey)
     const agentType = conversation ? await this.deps.getActiveAgentType() : undefined
     if (conversation) {
-      await this.deps.sessionManager.closeState(conversation.id)
+      optionalResetCoordinator(this.deps.sessionManager).beginReset?.(conversation.id)
     }
-    const reset = conversation
-      ? await this.deps.repository.clearCurrentAgentSessionId(conversation.id, agentType)
-      : null
-    this.deps.logger?.info("Agent session reset.", {
-      projectId: this.deps.projectId,
-      boundary: "agent-runtime.session.reset",
-      sessionKey,
-      platform,
-      workspaceKey,
-      conversationId: conversation?.id,
-      agentType,
-      hadConversation: Boolean(conversation),
-    })
-    return reset
+    try {
+      if (conversation) {
+        await this.deps.sessionManager.closeState(conversation.id)
+      }
+      const reset = conversation
+        ? await this.deps.repository.clearCurrentAgentSessionId(conversation.id, agentType)
+        : null
+      this.deps.logger?.info("Agent session reset.", {
+        projectId: this.deps.projectId,
+        boundary: "agent-runtime.session.reset",
+        sessionKey,
+        platform,
+        workspaceKey,
+        conversationId: conversation?.id,
+        agentType,
+        hadConversation: Boolean(conversation),
+      })
+      return reset
+    } finally {
+      if (conversation) {
+        optionalResetCoordinator(this.deps.sessionManager).endReset?.(conversation.id)
+      }
+    }
   }
 
   async reclaimIdleSessions(): Promise<void> {
@@ -192,7 +201,7 @@ export class SessionLifecycleManager {
     const state = this.deps.states.get(conversation.id)
     if (!state) return
     if (state.busy || state.activeTurns > 0 || state.queue.length > 0) {
-      throw new Error("Session is busy.")
+      return
     }
     this.deps.sessionManager.settlePending(state)
     await this.deps.sessionManager.closeCurrentTurn(conversation.id)
@@ -201,6 +210,15 @@ export class SessionLifecycleManager {
   stateForConversation(conversationIdValue: string, message?: AgentMessage): RuntimeSessionState {
     return this.deps.sessionManager.stateForConversation(conversationIdValue, message)
   }
+}
+
+function optionalResetCoordinator(
+  sessionManager: SessionManager,
+): Pick<SessionManager, "beginReset" | "endReset"> & {
+  beginReset?: (conversationId: string) => void
+  endReset?: (conversationId: string) => void
+} {
+  return sessionManager
 }
 
 function errorDiagnostic(error: unknown): Record<string, unknown> {

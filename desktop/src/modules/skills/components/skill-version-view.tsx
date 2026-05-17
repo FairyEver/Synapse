@@ -2,6 +2,7 @@ import { ContentVersionView } from "@/modules/content/components/content-version
 import type { SynapseLoadedContentVersion } from "@/modules/content/hooks/use-content-detail-state"
 import type { MarkdownViewerSurface } from "@/components/markdown-viewer"
 import type { SynapseContentViewMode } from "@/types/content"
+import { formatSkillAttachmentSize } from "@/modules/skills/utils"
 
 type SkillVersionViewProps = {
   mode: SynapseContentViewMode
@@ -41,7 +42,7 @@ function SkillVersionView({ mode, surface, version }: SkillVersionViewProps) {
                       {attachment.originalName}
                     </span>
                     <span className="shrink-0 text-muted-foreground">
-                      {attachment.size} B
+                      {formatSkillAttachmentSize(attachment.size)}
                     </span>
                   </li>
                 ))}

@@ -50,7 +50,7 @@ describe("agent tool IPC methods", () => {
   })
 
   it("records a failed audit when opening an Agent reference rejects", async () => {
-    const auditSink = { record: vi.fn() }
+    const auditSink = fakeAuditSink()
     electronMock.shell.openPath.mockRejectedValue(new Error("shell failed for /repo/src/app.ts"))
 
     await expect(toolMethods.openReference.handler(createContext({ auditSink }), {
@@ -74,7 +74,7 @@ describe("agent tool IPC methods", () => {
   })
 
   it("records sanitized audit metadata when opening an Agent reference returns an error", async () => {
-    const auditSink = { record: vi.fn() }
+    const auditSink = fakeAuditSink()
     const rawError = "shell failed for /repo/src/app.ts token=sk-secret"
     electronMock.shell.openPath.mockResolvedValue(rawError)
 
@@ -101,7 +101,7 @@ describe("agent tool IPC methods", () => {
   })
 
   it("logs invalid Agent reference opens without recording the raw reference", async () => {
-    const auditSink = { record: vi.fn() }
+    const auditSink = fakeAuditSink()
     const rawReference = "https://example.com/private?token=sk-secret"
 
     await expect(toolMethods.openReference.handler(createContext({ auditSink }), {
@@ -128,7 +128,8 @@ function createContext(options: {
   readonly auditSink: AuditSink
 }) {
   const permissionGuard: PermissionGuard = {
-    check: vi.fn(async () => ({ allowed: true })),
+    registerPolicy: () => () => {},
+    check: vi.fn(async () => ({ allowed: true as const })),
   }
   const container = {
     get: vi.fn((serviceId: string) => {
@@ -139,9 +140,11 @@ function createContext(options: {
   } as unknown as ProjectContainer
   const containers: ProjectContainerRegistry = {
     open: vi.fn(async () => container),
+    peek: vi.fn(() => undefined),
     close: vi.fn(),
-    closeAll: vi.fn(),
-    listOpen: vi.fn(() => []),
+    list: vi.fn(() => []),
+    registerService: vi.fn(),
+    setQuota: vi.fn(),
   }
 
   return {
@@ -152,5 +155,14 @@ function createContext(options: {
       if (serviceId === "core.audit-sink") return options.auditSink as T
       throw new Error(`Unknown service: ${serviceId}`)
     },
+  }
+}
+
+function fakeAuditSink(): AuditSink & { record: ReturnType<typeof vi.fn> } {
+  const record = vi.fn<AuditSink["record"]>()
+  return {
+    record,
+    list: vi.fn(() => []),
+    clearForTests: vi.fn(),
   }
 }

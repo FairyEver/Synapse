@@ -124,7 +124,7 @@ describe("reducePhaseEvent", () => {
       ...failed,
       completedAt: "2026-05-10T00:00:05.000Z",
       errorMessage: "second",
-      timestamp: "2026-05-10T00:00:05.000Z",
+      eventTimestamp: "2026-05-10T00:00:05.000Z",
     })
 
     const failedRows = next.filter(

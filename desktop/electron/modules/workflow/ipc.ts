@@ -75,6 +75,24 @@ function visibleEngineRejectionError(error: unknown): string {
   return `引擎异常（${errorName}）：${brief}`
 }
 
+function rendererBaseUrl(): string {
+  return process.env.VITE_DEV_SERVER_URL ?? "app://-"
+}
+
+function saveRunSnapshot(
+  snapshots: RunSnapshotService,
+  snapshot: Parameters<RunSnapshotService["save"]>[0],
+): void {
+  void snapshots.save(snapshot).catch((error) => {
+    logger.warn("workflow snapshot save failed", {
+      runId: snapshot.runId,
+      workflowId: snapshot.workflowId,
+      status: snapshot.status,
+      ...engineRejectionDiagnostic(error),
+    })
+  })
+}
+
 const workflowDefinitionSchema = z.object({
   id: z.string(), name: z.string(), description: z.string().optional(),
   version: z.string(), createdAt: z.number(), updatedAt: z.number(),
@@ -281,7 +299,7 @@ export const workflowIpcModule: IpcModule = {
               definition: def,
               ...(event.type === "workflow:failed" ? { error: event.error } : {}),
             })
-            void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
+            saveRunSnapshot(snapshots, { runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
             pruneTerminalStatuses(runStatuses, id)
           }
         }, ac.signal, projectId, "renderer").catch((err) => {
@@ -313,7 +331,7 @@ export const workflowIpcModule: IpcModule = {
               { domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: failedStatus.error, result: { status: "failed", nodeResults: current.nodeResults, durationMs } }, timestamp: new Date().toISOString() },
               { backpressure: "block" },
             )
-            void snapshots.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status: "failed", params: effectiveParams, nodeResults: current.nodeResults, definition: def, error: failedStatus.error })
+            saveRunSnapshot(snapshots, { runId, workflowId: id, version: def.version, startedAt, endedAt, status: "failed", params: effectiveParams, nodeResults: current.nodeResults, definition: def, error: failedStatus.error })
           }
         })
 
@@ -400,7 +418,7 @@ export const workflowIpcModule: IpcModule = {
             const nodeResults = event.result?.nodeResults ?? nextNodeResults
             const durationMs = event.result?.durationMs ?? endedAt - startedAt
             runStatuses.set(runId, { ...current, runId, workflowId: def.id, status, nodeResults, startedAt, endedAt, durationMs, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
-            void snapshots.save({ runId, workflowId: def.id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
+            saveRunSnapshot(snapshots, { runId, workflowId: def.id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
             pruneTerminalStatuses(runStatuses, def.id)
           }
         }, ac.signal, projectId, "editor-run-definition").catch((err) => {
@@ -417,7 +435,7 @@ export const workflowIpcModule: IpcModule = {
               { domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: visibleError, result: { status: "failed", nodeResults: current.nodeResults, durationMs } }, timestamp: new Date().toISOString() },
               { backpressure: "block" },
             )
-            void snapshots.save({ runId, workflowId: def.id, version: def.version, startedAt, endedAt, status: "failed", params: effectiveParams, nodeResults: current.nodeResults, definition: def, error: visibleError })
+            saveRunSnapshot(snapshots, { runId, workflowId: def.id, version: def.version, startedAt, endedAt, status: "failed", params: effectiveParams, nodeResults: current.nodeResults, definition: def, error: visibleError })
           }
         })
 
@@ -516,7 +534,7 @@ export const workflowIpcModule: IpcModule = {
             const nodeResults = event.result?.nodeResults ?? nextNodeResults
             const durationMs = event.result?.durationMs ?? endedAt - startedAt
             runStatuses.set(runId, { ...current, runId, workflowId: workflowId!, status, nodeResults, startedAt, endedAt, durationMs, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
-            void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status, params: validatedParams, nodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
+            saveRunSnapshot(snapshotSvc, { runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status, params: validatedParams, nodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
             pruneTerminalStatuses(runStatuses, workflowId!)
           }
         }, ac.signal, projectId, "rerun").catch((err) => {
@@ -529,7 +547,7 @@ export const workflowIpcModule: IpcModule = {
             const endedAt = Date.now()
             runStatuses.set(runId, { runId, workflowId: workflowId!, status: "failed", nodeResults: current.nodeResults, startedAt, endedAt, durationMs: endedAt - startedAt, error: visibleError, definition: def })
             eventBus.emit({ domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: visibleError, result: { status: "failed", nodeResults: current.nodeResults, durationMs: endedAt - startedAt } }, timestamp: new Date().toISOString() }, { backpressure: "block" })
-            void snapshotSvc.save({ runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status: "failed", params: validatedParams, nodeResults: current.nodeResults, definition: def, error: visibleError })
+            saveRunSnapshot(snapshotSvc, { runId, workflowId: workflowId!, version: def!.version, startedAt, endedAt, status: "failed", params: validatedParams, nodeResults: current.nodeResults, definition: def, error: visibleError })
           }
         })
 
@@ -542,7 +560,7 @@ export const workflowIpcModule: IpcModule = {
       response: z.void(),
       handler: (ctx, { workflowId, runId }: { workflowId: string; runId: string }) => {
         logger.info("workflow:openRunner", { workflowId, runId })
-        const baseUrl = process.env.VITE_DEV_SERVER_URL ?? "app://-"
+        const baseUrl = rendererBaseUrl()
         ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").openRunner(workflowId, runId, baseUrl)
       },
     },
@@ -618,7 +636,7 @@ export const workflowIpcModule: IpcModule = {
       channel: "synapse:workflow:open-editor", kind: "invoke", request: z.object({ id: z.string(), runId: z.string().optional() }), response: z.void(),
       handler: (ctx, { id, runId }: { id: string; runId?: string }) => {
         logger.info("workflow:openEditor", { workflowId: id, runId })
-        const baseUrl = process.env.VITE_DEV_SERVER_URL ?? "app://-"
+        const baseUrl = rendererBaseUrl()
         ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").open(id, baseUrl, runId)
       },
     },

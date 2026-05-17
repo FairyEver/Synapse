@@ -47,6 +47,7 @@ const IDLE_TIMEOUT_MS = 10 * 60 * 1000
 export class SessionManager {
   private readonly deps: SessionManagerDeps
   private readonly createSession: AgentLiveSessionFactory
+  private readonly resettingConversations = new Set<string>()
 
   constructor(deps: SessionManagerDeps) {
     this.deps = deps
@@ -67,6 +68,9 @@ export class SessionManager {
   }
 
   stateForConversation(conversationId: string, message?: AgentMessage): RuntimeSessionState {
+    if (this.resettingConversations.has(conversationId)) {
+      throw new Error("Session is resetting.")
+    }
     const existing = this.deps.states.get(conversationId)
     if (existing) {
       if (message) {
@@ -86,7 +90,15 @@ export class SessionManager {
       lastActivity: Date.now(),
     }
     this.deps.states.set(conversationId, state)
-    return state
+    return this.deps.states.get(conversationId) ?? state
+  }
+
+  beginReset(conversationId: string): void {
+    this.resettingConversations.add(conversationId)
+  }
+
+  endReset(conversationId: string): void {
+    this.resettingConversations.delete(conversationId)
   }
 
   async getOrCreateSession(input: {

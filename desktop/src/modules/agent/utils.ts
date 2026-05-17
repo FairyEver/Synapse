@@ -131,6 +131,9 @@ function agentCliLabel(agentType: string | undefined): string | undefined {
 }
 
 const ERROR_MESSAGE_MAX_LENGTH = 200
+const REDACTED = "[redacted]"
+const MAX_RAW_INPUT_STRING_LENGTH = 160
+const SENSITIVE_RAW_INPUT_KEY_PATTERN = /token|secret|api[-_]?key|authorization|cookie|password|credential/i
 
 function errorLogMeta(error: unknown): {
   readonly errorName: string
@@ -149,6 +152,30 @@ function errorLogMeta(error: unknown): {
   }
 }
 
+function sanitizeAgentRawInput(value: unknown, key = ""): unknown {
+  if (SENSITIVE_RAW_INPUT_KEY_PATTERN.test(key)) return REDACTED
+  if (typeof value === "string") return truncateRawInputString(redactAgentPathLikeValue(value))
+  if (Array.isArray(value)) return value.map((item) => sanitizeAgentRawInput(item))
+  if (!value || typeof value !== "object") return value
+
+  const sanitized: Record<string, unknown> = {}
+  for (const [childKey, childValue] of Object.entries(value)) {
+    sanitized[childKey] = sanitizeAgentRawInput(childValue, childKey)
+  }
+  return sanitized
+}
+
+function redactAgentPathLikeValue(value: string): string {
+  return value
+    .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, "[path redacted]")
+    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]")
+}
+
+function truncateRawInputString(value: string): string {
+  if (value.length <= MAX_RAW_INPUT_STRING_LENGTH) return value
+  return `${value.slice(0, MAX_RAW_INPUT_STRING_LENGTH)}...[truncated]`
+}
+
 export {
   DEFAULT_LOCAL_SESSION_KEY,
   agentCliLabel,
@@ -157,6 +184,8 @@ export {
   errorLogMeta,
   formatAgentTranscript,
   formatEntryTime,
+  redactAgentPathLikeValue,
+  sanitizeAgentRawInput,
   sessionLabel,
   thinkingIndicatorText,
 }

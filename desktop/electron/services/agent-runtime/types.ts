@@ -223,6 +223,7 @@ export interface AgentLiveSession {
     decision: AgentPermissionDecision,
   ): Promise<void>
   nextEvent(): Promise<AgentEvent | null>
+  nextEventWithTimeout?(timeoutMs: number): Promise<AgentEvent | null>
   currentSessionId(): string | undefined
   alive(): boolean
   close(): Promise<void>

@@ -246,6 +246,7 @@ function createTask(overrides: Partial<ScheduledTaskEntry> = {}): ScheduledTaskE
     trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
     action: { type: "builtin.test", config: { message: "ok" } },
     enabled: true,
+    activeDays: [0, 1, 2, 3, 4, 5, 6],
     missedRunPolicy: "skip",
     overlapPolicy: "skip",
     createdAt: "2026-04-29T10:00:00.000Z",

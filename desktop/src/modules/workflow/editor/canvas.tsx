@@ -29,12 +29,14 @@ import type { WorkflowDefinition, WorkflowNode, WorkflowEdge, NodeRunResult } fr
 import { createRendererLogger } from "@/app-shell/logging"
 import { autoLayoutNodes } from "./auto-layout"
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
+import { resolveBranchLabel } from "../lib/branch-label"
 
 const logger = createRendererLogger("workflow.editor.canvas")
 
 const edgeTypes = { branch: BranchEdge }
 const CANVAS_FIT_VIEW_OPTIONS = { padding: 0.1, duration: 200 }
 const EMPTY_CANVAS_VIEWPORT = { x: 0, y: 0, zoom: 1 }
+const CONFIG_NAME_DATA_KEY = "__synapseConfigName"
 
 type WorkflowFlowNode = Node<Record<string, unknown>, string>
 type WorkflowFlowEdge = Edge<{ label?: string }, string>
@@ -48,15 +50,14 @@ export interface WorkflowCanvasHandle {
   copyNodes: (nodeIds: string[]) => void
 }
 
-function resolveBranchLabel(def: WorkflowDefinition, fromId: string, branchId: string): string | undefined {
-  const node = def.nodes.find((n) => n.id === fromId)
-  if (!node || node.type !== "switch") return undefined
-  const branches = (node.config as { branches?: Array<{ id: string; label: string }> }).branches
-  return branches?.find((b) => b.id === branchId)?.label ?? branchId
-}
-
 function defToFlow(def: WorkflowDefinition) {
-  const nodes: WorkflowFlowNode[] = def.nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: { ...n.config, name: n.name }, selected: false, deletable: n.type !== "end" }))
+  const nodes: WorkflowFlowNode[] = def.nodes.map((n) => {
+    const data: Record<string, unknown> = { ...n.config, name: n.name }
+    if (Object.prototype.hasOwnProperty.call(n.config, "name")) {
+      data[CONFIG_NAME_DATA_KEY] = (n.config as { name?: unknown }).name
+    }
+    return { id: n.id, type: n.type, position: n.position, data, selected: false, deletable: n.type !== "end" }
+  })
   const edges: WorkflowFlowEdge[] = def.edges.map((e) => {
     const branchLabel = e.branch ? resolveBranchLabel(def, e.from, e.branch) : undefined
     return {
@@ -80,7 +81,8 @@ function defaultName(type: string): string {
 }
 
 function flowNodeToWorkflowNode(node: WorkflowFlowNode): WorkflowNode {
-  const { name, ...config } = node.data
+  const { name, [CONFIG_NAME_DATA_KEY]: configName, ...config } = node.data
+  if (configName !== undefined) config.name = configName
   return {
     id: node.id,
     name: typeof name === "string" && name.trim() ? name : node.id,
@@ -129,7 +131,14 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
         if (n.id !== nodeId) return n
         const previousName = (n.data as { name?: unknown }).name
         const nextName = (config as { name?: unknown }).name ?? previousName
-        return { ...n, data: { ...config, ...(typeof nextName === "string" ? { name: nextName } : {}) } }
+        const nextData: Record<string, unknown> = {
+          ...config,
+          ...(typeof nextName === "string" ? { name: nextName } : {}),
+        }
+        if (Object.prototype.hasOwnProperty.call(config, "name")) {
+          nextData[CONFIG_NAME_DATA_KEY] = config.name
+        }
+        return { ...n, data: nextData }
       }))
     },
     updateNodeName: (nodeId, name) => {
@@ -242,7 +251,11 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     const name = defaultName(type)
     // Unselect existing nodes and add the new node as selected, matching pasteNodes
     // behaviour so the user can immediately configure the dropped node.
-    setNodes((nds) => nds.map((n) => ({ ...n, selected: false })).concat({ id, type, position, data: { ...config, name }, selected: true, deletable: true }))
+    const data: Record<string, unknown> = { ...config, name }
+    if (Object.prototype.hasOwnProperty.call(config, "name")) {
+      data[CONFIG_NAME_DATA_KEY] = config.name
+    }
+    setNodes((nds) => nds.map((n) => ({ ...n, selected: false })).concat({ id, type, position, data, selected: true, deletable: true }))
     const newWfNode: WorkflowNode = { id, name, type, position, config }
     const newDef = { ...definitionRef.current, nodes: [...definitionRef.current.nodes, newWfNode] }
     definitionRef.current = newDef
@@ -356,10 +369,16 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     // editor is reopened.
     definitionRef.current = newDef
 
-    const flowNodes = newNodes.map((n) => ({
-      id: n.id, type: n.type, position: n.position,
-      data: { ...n.config, name: n.name }, selected: true, deletable: n.type !== "end",
-    }))
+    const flowNodes = newNodes.map((n) => {
+      const data: Record<string, unknown> = { ...n.config, name: n.name }
+      if (Object.prototype.hasOwnProperty.call(n.config, "name")) {
+        data[CONFIG_NAME_DATA_KEY] = (n.config as { name?: unknown }).name
+      }
+      return {
+        id: n.id, type: n.type, position: n.position,
+        data, selected: true, deletable: n.type !== "end",
+      }
+    })
     setNodes((nds) => nds.map((n) => ({ ...n, selected: false })).concat(flowNodes))
 
     const flowEdges: WorkflowFlowEdge[] = newEdges.map((e) => {
@@ -566,7 +585,7 @@ export const WorkflowCanvas = forwardRef<WorkflowCanvasHandle, WorkflowCanvasPro
 function WorkflowCanvas(props, ref) {
   return (
     <ReactFlowProvider>
-      <CanvasContent ref={ref} {...props} />
+      <CanvasContent key={`${props.definition.id}:${props.definition.version}`} ref={ref} {...props} />
     </ReactFlowProvider>
   )
 })

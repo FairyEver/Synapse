@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 
 import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
@@ -15,17 +15,13 @@ function useTaskSchedulerTasks() {
   const [tasks, setTasks] = useState<ScheduledTask[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const hasLoadedOnceRef = useRef(false)
 
   const refresh = useCallback(async () => {
     try {
-      if (!hasLoadedOnceRef.current) {
-        setLoading(true)
-      }
+      setLoading(true)
       const nextTasks = await requireSynapseBridge().taskScheduler.listTasks()
       setTasks(nextTasks)
       setError(null)
-      hasLoadedOnceRef.current = true
     } catch (refreshError) {
       logger.warn("Task scheduler list refresh failed.", {
         action: "listTasks",

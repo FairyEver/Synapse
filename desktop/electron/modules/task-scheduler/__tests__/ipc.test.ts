@@ -152,7 +152,7 @@ describe("taskSchedulerIpcModule", () => {
       trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
       action: { type: "builtin.command", config: { command: "echo ok", shell: "posix", timeoutMins: 30 } },
       activeDays: [1, 2, 3, 4, 5],
-    })
+    }) as { activeDays: readonly number[] }
     await harness.invoke("synapse:task-scheduler:tasks:update", {
       id: "task:1",
       patch: { activeDays: [0, 6] },

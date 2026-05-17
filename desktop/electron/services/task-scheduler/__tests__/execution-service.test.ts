@@ -418,7 +418,7 @@ async function createExecutionHarness(options: {
     actions,
     permissionGuard: options.permissionGuard ?? permissionGuard({ allowed: true }),
     auditSink: {
-      record: (event) => {
+      record: (event: Parameters<AuditSink["record"]>[0]) => {
         auditEvents.push(event)
       },
       list: () => [],

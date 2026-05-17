@@ -381,6 +381,12 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
 
   const handleResizeColumn = useCallback(
     (columnName: string, startClientX: number) => {
+      if (resizePointerMoveRef.current) {
+        document.removeEventListener("pointermove", resizePointerMoveRef.current)
+      }
+      if (resizePointerUpRef.current) {
+        document.removeEventListener("pointerup", resizePointerUpRef.current)
+      }
       const startWidth = columnWidths[columnName]
       let nextWidth = startWidth
 

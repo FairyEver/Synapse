@@ -110,13 +110,6 @@ export class WorkflowWindowManager {
     return win
   }
 
-  focusEditor(workflowId: string): boolean {
-    const win = this.editorWindows.get(workflowId)
-    if (win && !win.isDestroyed()) { win.focus(); return true }
-    logger.info("workflow editor focus skipped — window not found or destroyed", { workflowId })
-    return false
-  }
-
   forceClose(workflowId: string): void {
     this.closeEditorWindow(workflowId, "workflow editor window force-closed")
   }

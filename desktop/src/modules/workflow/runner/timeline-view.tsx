@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { track } from "@/lib/ui-tracking"
 import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
@@ -12,17 +12,23 @@ interface TimelineViewProps {
 }
 
 export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSelect }: TimelineViewProps) {
-  const nameOf = (nodeId: string) => definition.nodes.find((n) => n.id === nodeId)?.name ?? nodeId
-  const typeOf = (nodeId: string) => definition.nodes.find((n) => n.id === nodeId)?.type ?? "unknown"
+  const nodeMeta = useMemo(
+    () => new Map(definition.nodes.map((node) => [node.id, { name: node.name, type: node.type }])),
+    [definition.nodes],
+  )
+  const nameOf = (nodeId: string) => nodeMeta.get(nodeId)?.name ?? nodeId
+  const typeOf = (nodeId: string) => nodeMeta.get(nodeId)?.type ?? "unknown"
 
   // Combine active results (sorted by startedAt) with pending nodes (not yet in nodeResults)
-  const activeResults = Object.values(nodeResults)
-    .sort((a, b) => (a.startedAt ?? Infinity) - (b.startedAt ?? Infinity))
-  const activeNodeIds = new Set(activeResults.map((r) => r.nodeId))
-  const pendingNodes = definition.nodes
-    .filter((n) => !activeNodeIds.has(n.id))
-    .map((n) => ({ nodeId: n.id, status: "pending" as const, input: { variables: {} } }))
-  const results = [...activeResults, ...pendingNodes]
+  const results = useMemo(() => {
+    const activeResults = Object.values(nodeResults)
+      .sort((a, b) => (a.startedAt ?? Infinity) - (b.startedAt ?? Infinity))
+    const activeNodeIds = new Set(activeResults.map((r) => r.nodeId))
+    const pendingNodes = definition.nodes
+      .filter((n) => !activeNodeIds.has(n.id))
+      .map((n) => ({ nodeId: n.id, status: "pending" as const, input: { variables: {} } }))
+    return [...activeResults, ...pendingNodes]
+  }, [definition.nodes, nodeResults])
 
   function handleNodeSelect(result: NodeRunResult) {
     track({

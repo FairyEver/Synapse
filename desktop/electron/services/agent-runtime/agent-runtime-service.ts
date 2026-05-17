@@ -346,9 +346,11 @@ export class AgentRuntimeService {
       }
       const conversation = await this.repository.get(conversationId)
       const sessionKey = conversation?.sessionKey ?? ""
-      state.cancelState.escalationTimer = setTimeout(() => {
+      const escalationTimer = setTimeout(() => {
+        if (state.cancelState?.escalationTimer !== escalationTimer || !state.busy) return
         this.emitCancelEscalation(conversationId, sessionKey)
       }, 5000)
+      state.cancelState.escalationTimer = escalationTimer
       const result: CancelTurnResult = { status: "graceful-pending" }
       this.logTurnCancellation("cancel", conversationId, state, result, { gracefulSent: true })
       return result
@@ -1050,19 +1052,17 @@ function formatCommandResult(name: string, result: ControlledProcessResult): str
   return output ? `${status}\n\n${truncateRunes(output, 4000)}` : status
 }
 
-function summarizePermissionResponseError(error: unknown): { errorName: string; errorLength: number; errorMessage: string } {
+function summarizePermissionResponseError(error: unknown): { errorName: string; errorLength: number } {
   if (error instanceof Error) {
     return {
       errorName: error.name || "Error",
       errorLength: error.message.length,
-      errorMessage: error.message,
     }
   }
   const message = String(error)
   return {
     errorName: typeof error,
     errorLength: message.length,
-    errorMessage: message,
   }
 }
 

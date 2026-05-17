@@ -15,7 +15,7 @@ import type {
   SynapseAgentToolResultTimelineItem,
 } from "@/types/agent"
 import { AgentAnnotation } from "./agent-annotation"
-import { errorLogMeta } from "../utils"
+import { errorLogMeta, redactAgentPathLikeValue, sanitizeAgentRawInput } from "../utils"
 
 const logger = createRendererLogger("agent")
 
@@ -123,45 +123,11 @@ function AgentToolEvent({
 
 function toolBody(item: AgentToolEventItem): string {
   if (item.kind === "toolResult") return item.content ?? ""
-  return item.toolInput ? redactPathLikeValue(item.toolInput) : formatRawInput(item.toolInputRaw)
+  return item.toolInput ? redactAgentPathLikeValue(item.toolInput) : formatRawInput(item.toolInputRaw)
 }
 
 function formatRawInput(value: Record<string, unknown> | undefined): string {
-  return value ? JSON.stringify(sanitizeRawInput(value), null, 2) : ""
-}
-
-function sanitizeRawInput(value: unknown, key = ""): unknown {
-  if (typeof value === "string") {
-    if (isSensitiveRawInputKey(key)) return "[redacted]"
-    return redactPathLikeValue(value)
-  }
-  if (Array.isArray(value)) {
-    return value.map((item) => sanitizeRawInput(item, key))
-  }
-  if (!value || typeof value !== "object") return value
-
-  const sanitized: Record<string, unknown> = {}
-  for (const [entryKey, entryValue] of Object.entries(value)) {
-    sanitized[entryKey] = sanitizeRawInput(entryValue, entryKey)
-  }
-  return sanitized
-}
-
-function isSensitiveRawInputKey(key: string): boolean {
-  const normalized = key.toLowerCase().replace(/[-_]/g, "")
-  return normalized.includes("secret")
-    || normalized.includes("apikey")
-    || normalized.includes("authorization")
-    || normalized.includes("cookie")
-    || normalized.includes("password")
-    || normalized.includes("credential")
-    || (normalized.includes("token") && !normalized.endsWith("tokens"))
-}
-
-function redactPathLikeValue(value: string): string {
-  return value
-    .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, "[path redacted]")
-    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]")
+  return value ? JSON.stringify(sanitizeAgentRawInput(value), null, 2) : ""
 }
 
 function statusLabel(item: AgentToolEventItem, profile: SynapseAgentDisplayProfile): string {

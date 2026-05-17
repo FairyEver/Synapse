@@ -367,14 +367,35 @@ export class FeishuConnectorService {
         onMessage: (event) => this.handleMessage(projectId, connector.id, event),
         onCardAction: (event) => this.handleCardAction(event),
         onError: (error) => {
-          void this.markDegraded(connector.id, error)
+          void this.markDegraded(connector.id, error).catch((markError) => {
+            this.deps.logger?.warn("Failed to mark Feishu connector degraded.", {
+              connectorId: connector.id,
+              projectId,
+              errorName: markError instanceof Error ? markError.name : typeof markError,
+              errorLength: (markError instanceof Error ? markError.message : String(markError)).length,
+            })
+          })
         },
         onReconnecting: () => {
-          void this.connectorRepository.updateStatus(connector.id, "degraded")
+          void this.connectorRepository.updateStatus(connector.id, "degraded").catch((error) => {
+            this.deps.logger?.warn("Failed to mark Feishu connector reconnecting.", {
+              connectorId: connector.id,
+              projectId,
+              errorName: error instanceof Error ? error.name : typeof error,
+              errorLength: (error instanceof Error ? error.message : String(error)).length,
+            })
+          })
         },
         onReconnected: () => {
           void this.connectorRepository.updateStatus(connector.id, "connected", {
             lastConnectedAt: new Date().toISOString(),
+          }).catch((error) => {
+            this.deps.logger?.warn("Failed to mark Feishu connector reconnected.", {
+              connectorId: connector.id,
+              projectId,
+              errorName: error instanceof Error ? error.name : typeof error,
+              errorLength: (error instanceof Error ? error.message : String(error)).length,
+            })
           })
         },
       })

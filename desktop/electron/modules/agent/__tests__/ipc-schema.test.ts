@@ -80,10 +80,11 @@ describe("agent IPC schemas", () => {
   })
 
   it("accepts a create session permission mode", () => {
-    expect(sessionMethods.createSession.request.parse({
+    const parsed = sessionMethods.createSession.request.parse({
       projectId: "project-1",
       mode: "bypassPermissions",
-    }).mode).toBe("bypassPermissions")
+    }) as { mode?: string }
+    expect(parsed.mode).toBe("bypassPermissions")
   })
 
   it("rejects an invalid create session permission mode", () => {

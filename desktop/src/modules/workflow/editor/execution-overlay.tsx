@@ -5,6 +5,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { track } from "@/lib/ui-tracking"
 import { NODE_STATUS_LABEL, NODE_STATUS_VARIANT, RUN_STATE_BADGE } from "../lib/status-display"
 import type { WorkflowRunStatus } from "@/types/workflow"
+import { resolveBranchLabel } from "../lib/branch-label"
 
 type RunState = "idle" | "running" | "completed" | "failed" | "cancelled"
 
@@ -15,13 +16,6 @@ interface ExecutionOverlayProps {
   definition: WorkflowDefinition
   viewingNodeId?: string | null
   onViewClose?: () => void
-}
-
-function resolveActiveBranchLabel(nodeId: string, branchId: string, definition: WorkflowDefinition): string {
-  const node = definition.nodes.find((n) => n.id === nodeId)
-  if (!node || node.type !== "switch") return branchId
-  const branches = (node.config as { branches?: Array<{ id: string; label: string }> }).branches
-  return branches?.find((b) => b.id === branchId)?.label ?? branchId
 }
 
 export function ExecutionOverlay({ nodeResults, runState, runError, definition, viewingNodeId, onViewClose }: ExecutionOverlayProps) {
@@ -43,7 +37,7 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
   const dialogTarget = selected ?? externalResult
   const handleDialogClose = () => {
     if (selected) setSelected(null)
-    else onViewClose?.()
+    if (viewingNodeId) onViewClose?.()
   }
   const handleResultOpen = (result: NodeRunResult) => {
     if (result.status !== "success" && result.status !== "failed" && result.status !== "cancelled" && result.status !== "skipped") return
@@ -119,7 +113,7 @@ export function ExecutionOverlay({ nodeResults, runState, runError, definition, 
               {dialogTarget.activeBranch && (
                 <div className="grid gap-1">
                   <p className="font-medium text-muted-foreground">激活分支</p>
-                  <span className="font-mono">{resolveActiveBranchLabel(dialogTarget.nodeId, dialogTarget.activeBranch, definition)}</span>
+                  <span className="font-mono">{resolveBranchLabel(definition, dialogTarget.nodeId, dialogTarget.activeBranch)}</span>
                 </div>
               )}
               {!dialogTarget.input.prompt && !dialogTarget.error && !dialogTarget.activeBranch && (dialogTarget.output == null || dialogTarget.output === "") && (

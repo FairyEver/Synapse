@@ -252,6 +252,18 @@ export function WorkflowRunnerApp() {
     ? nodeResults[selectedNodeId] ?? { nodeId: selectedNodeId, status: "pending" as const, input: { variables: {} } }
     : null
 
+  if (!workflowId && !runId) {
+    return (
+      <div className="flex h-screen items-center justify-center p-4">
+        <Alert variant="destructive" className="max-w-sm">
+          <AlertCircle data-icon="inline-start" />
+          <AlertTitle>缺少运行参数</AlertTitle>
+          <AlertDescription>请从工作流列表重新打开运行结果。</AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
   if (!definition) {
     if (loadError) {
       return (

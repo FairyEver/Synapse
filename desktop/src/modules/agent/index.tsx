@@ -274,6 +274,14 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     }
   }
 
+  const handlePendingPermissionsClick = () => {
+    const requestId = chat.pendingPermissions[0]?.requestId
+    if (!requestId) return
+    document
+      .querySelector(`[data-agent-permission-request-id="${CSS.escape(requestId)}"]`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" })
+  }
+
   const activeProvider = chat.providers?.providers.find((provider) => provider.active)
   const selectedProvider = selectedSession?.providerId
     ? chat.providers?.providers.find((provider) => provider.id === selectedSession.providerId)
@@ -387,7 +395,13 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               ) : null}
 
               {chat.pendingPermissions.length > 0 ? (
-                <Button type="button" variant="outline" size="sm">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  data-track="agent-pending-permissions-focus"
+                  onClick={handlePendingPermissionsClick}
+                >
                   <ShieldAlert data-icon="inline-start" />
                   权限 {chat.pendingPermissions.length}
                 </Button>
