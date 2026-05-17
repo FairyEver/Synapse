@@ -86,6 +86,20 @@ describe("scriptNodeExecutor", () => {
     expect(input.agentDeps.sendToAgent).not.toHaveBeenCalled()
   })
 
+  it("does not let resolved variables override protected process env names", async () => {
+    const deps = fakeRuntimeDeps()
+    const input = makeInput({ env: { CUSTOM: "configured" } }, deps)
+    input.resolvedVariables = { PATH: "/tmp/bad", CUSTOM: "resolved", SAFE_VALUE: "ok" }
+    await scriptNodeExecutor.execute(input)
+    expect(deps.processRunner?.run).toHaveBeenCalledWith(expect.objectContaining({
+      env: expect.objectContaining({
+        CUSTOM: "resolved",
+        SAFE_VALUE: "ok",
+      }),
+    }))
+    expect((deps.processRunner?.run as ReturnType<typeof vi.fn>).mock.calls[0]?.[0]?.env).not.toHaveProperty("PATH", "/tmp/bad")
+  })
+
   it("logs diagnostics without raw script content", async () => {
     const secretScript = "echo sk-secret-key"
     const deps = fakeRuntimeDeps()

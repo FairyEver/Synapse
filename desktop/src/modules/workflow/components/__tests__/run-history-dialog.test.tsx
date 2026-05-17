@@ -175,7 +175,7 @@ describe("RunHistoryDialog", () => {
       workflowId: "workflow-1",
       errorName: "Error",
       errorLength: rawError.length,
-      errorMessage: rawError,
+      errorMessage: "history failed with token=[redacted] and prompt body at [path]",
     })
   })
 })

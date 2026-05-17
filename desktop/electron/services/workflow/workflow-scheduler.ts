@@ -19,6 +19,7 @@ export interface NodeTask {
 
 export interface SchedulerOptions {
   maxConcurrency?: number
+  cancelGraceMs?: number
   runId?: string
 }
 
@@ -30,10 +31,13 @@ export interface SchedulerCallbacks {
 
 export class ReactiveScheduler {
   private readonly maxConcurrency: number
+  private readonly cancelGraceMs: number
   private readonly runId?: string
 
   constructor(options?: SchedulerOptions) {
+    // 0 means unlimited concurrency. Callers that need a cap should pass a positive value.
     this.maxConcurrency = options?.maxConcurrency ?? 0
+    this.cancelGraceMs = options?.cancelGraceMs ?? 5_000
     this.runId = options?.runId
   }
 
@@ -63,7 +67,8 @@ export class ReactiveScheduler {
     const results = new Map<string, NodeExecOutcome>()
     const activeSignals = new Map<string, number>()
     const waitQueue: string[] = []
-    let failed = false
+    let hadFailure = false
+    let acceptingResults = true
 
     const downstreamOf = (nodeId: string) => edges.filter((e) => e.from === nodeId).map((e) => e.to)
     const decrementPending = (nodeId: string): number | undefined => {
@@ -73,12 +78,17 @@ export class ReactiveScheduler {
       pending.set(nodeId, updated)
       return updated
     }
-    const skipNodeAndPropagate = (nodeId: string) => {
+    const skipNodeAndPropagate = (nodeId: string, error?: string) => {
       if (results.has(nodeId) || running.has(nodeId)) return
       const queuedIndex = waitQueue.indexOf(nodeId)
       if (queuedIndex >= 0) waitQueue.splice(queuedIndex, 1)
-      results.set(nodeId, { nodeId, status: "skipped" })
-      for (const next of downstreamOf(nodeId)) releaseSkippedDependency(next)
+      const outcome: NodeExecOutcome = { nodeId, status: "skipped", ...(error ? { error } : {}) }
+      results.set(nodeId, outcome)
+      callbacks.onNodeDone(outcome)
+      for (const next of downstreamOf(nodeId)) {
+        if (error) skipNodeAndPropagate(next, error)
+        else releaseSkippedDependency(next)
+      }
     }
     const releaseSkippedDependency = (nodeId: string) => {
       const updated = decrementPending(nodeId)
@@ -86,47 +96,64 @@ export class ReactiveScheduler {
       if ((activeSignals.get(nodeId) ?? 0) > 0) tryStart(nodeId)
       else skipNodeAndPropagate(nodeId)
     }
+    const releaseFailedDependency = (nodeId: string) => {
+      const updated = decrementPending(nodeId)
+      if (updated !== 0) return
+      skipNodeAndPropagate(nodeId, "upstream failed")
+    }
 
     const tryStart = (nodeId: string) => {
-      if (failed || abortSignal.aborted) return
+      if (abortSignal.aborted) return
       if (this.maxConcurrency > 0 && running.size >= this.maxConcurrency) {
         waitQueue.push(nodeId)
         return
       }
-      const task = taskFactory(nodeId)
-      callbacks.onNodeReady(nodeId)
+      let task: NodeTask
+      try {
+        task = taskFactory(nodeId)
+        callbacks.onNodeReady(nodeId)
+      } catch (err) {
+        hadFailure = true
+        const message = err instanceof Error ? err.message : String(err)
+        const outcome: NodeExecOutcome = { nodeId, status: "failed", error: message }
+        results.set(nodeId, outcome)
+        callbacks.onNodeDone(outcome)
+        logger.error("scheduler: task factory threw unexpectedly", { nodeId, error: message, ...(this.runId ? { runId: this.runId } : {}) })
+        for (const next of downstreamOf(nodeId)) {
+          releaseFailedDependency(next)
+        }
+        return
+      }
       const promise = task.execute().then((outcome) => {
+        if (!acceptingResults) return
         results.set(nodeId, outcome)
         running.delete(nodeId)
         callbacks.onNodeDone(outcome)
         if (outcome.status === "failed") {
-          failed = true
+          hadFailure = true
           logger.info("scheduler: node failed, stopping new launches", { nodeId, ...(this.runId ? { runId: this.runId } : {}) })
-          for (const queued of waitQueue) {
-            results.set(queued, { nodeId: queued, status: "skipped", error: "upstream failed" })
-          }
-          waitQueue.length = 0
           // Release downstream dependencies so the skip propagates eagerly
           // through the DAG rather than waiting for the final cleanup loop.
           for (const next of downstreamOf(nodeId)) {
-            releaseSkippedDependency(next)
+            releaseFailedDependency(next)
           }
-          return
-        }
-        const downstream = callbacks.resolveActivatedDownstream(nodeId, outcome)
-        const activatedSet = new Set(downstream)
-        for (const next of downstream) {
-          activeSignals.set(next, (activeSignals.get(next) ?? 0) + 1)
-          const updated = decrementPending(next)
-          if (updated === 0) tryStart(next)
-        }
-        for (const next of downstreamOf(nodeId)) {
-          if (!activatedSet.has(next)) releaseSkippedDependency(next)
+        } else {
+          const downstream = callbacks.resolveActivatedDownstream(nodeId, outcome)
+          const activatedSet = new Set(downstream)
+          for (const next of downstream) {
+            activeSignals.set(next, (activeSignals.get(next) ?? 0) + 1)
+            const updated = decrementPending(next)
+            if (updated === 0) tryStart(next)
+          }
+          for (const next of downstreamOf(nodeId)) {
+            if (!activatedSet.has(next)) releaseSkippedDependency(next)
+          }
         }
         while (this.maxConcurrency > 0 && waitQueue.length > 0 && running.size < this.maxConcurrency) {
           tryStart(waitQueue.shift()!)
         }
       }).catch((err: unknown) => {
+        if (!acceptingResults) return
         // If task.execute() throws (not just returns failed status), catch
         // the rejection to prevent unhandledRejection and abort listener leak.
         running.delete(nodeId)
@@ -134,14 +161,13 @@ export class ReactiveScheduler {
         const outcome: NodeExecOutcome = { nodeId, status: "failed", error: message }
         results.set(nodeId, outcome)
         callbacks.onNodeDone(outcome)
-        failed = true
+        hadFailure = true
         logger.error("scheduler: node execution threw unexpectedly", { nodeId, error: message, ...(this.runId ? { runId: this.runId } : {}) })
-        for (const queued of waitQueue) {
-          results.set(queued, { nodeId: queued, status: "skipped", error: "upstream failed" })
-        }
-        waitQueue.length = 0
         for (const next of downstreamOf(nodeId)) {
-          releaseSkippedDependency(next)
+          releaseFailedDependency(next)
+        }
+        while (this.maxConcurrency > 0 && waitQueue.length > 0 && running.size < this.maxConcurrency) {
+          tryStart(waitQueue.shift()!)
         }
       })
       running.set(nodeId, promise)
@@ -161,7 +187,17 @@ export class ReactiveScheduler {
           queuedNodeCount: waitQueue.length,
           ...(this.runId ? { runId: this.runId } : {}),
         })
-        await Promise.allSettled([...running.values()])
+        const timeout = new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), this.cancelGraceMs))
+        const settled = await Promise.race([Promise.allSettled([...running.values()]), timeout])
+        if (settled === "timeout") {
+          acceptingResults = false
+          running.clear()
+          waitQueue.length = 0
+          logger.warn("scheduler: abort grace timeout elapsed", {
+            cancelGraceMs: this.cancelGraceMs,
+            ...(this.runId ? { runId: this.runId } : {}),
+          })
+        }
         break
       }
       let abortHandler!: () => void
@@ -184,7 +220,7 @@ export class ReactiveScheduler {
     }
     for (const id of nodes) {
       if (!results.has(id)) {
-        results.set(id, { nodeId: id, status: "skipped", ...(failed ? { error: "upstream failed" } : {}) })
+        results.set(id, { nodeId: id, status: "skipped", ...(hadFailure ? { error: "upstream failed" } : {}) })
       }
     }
     const counts = schedulerResultCounts(results)

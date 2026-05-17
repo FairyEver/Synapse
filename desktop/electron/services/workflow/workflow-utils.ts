@@ -1,16 +1,17 @@
 import type { WorkflowDefinition } from "../../../src/types/workflow"
+export { errorCode } from "../error-utils"
 
-export function errorCode(error: unknown): string | undefined {
-  if (!error || typeof error !== "object" || !("code" in error)) return undefined
-  const code = (error as { readonly code?: unknown }).code
-  return typeof code === "string" ? code : undefined
+export function truncateWithEllipsis(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value
+  if (maxLength <= 3) return ".".repeat(Math.max(0, maxLength))
+  return `${value.slice(0, maxLength - 3)}...`
 }
 
 export function agentErrorDiagnostic(error: string | undefined): { readonly errorName: string; readonly errorLength: number; readonly errorMessage: string } {
   return {
     errorName: "agent",
     errorLength: error?.length ?? 0,
-    errorMessage: error ? (error.length > 200 ? sanitizeAgentError(error).slice(0, 200) + "..." : sanitizeAgentError(error)) : "",
+    errorMessage: error ? truncateWithEllipsis(sanitizeAgentError(error), 200) : "",
   }
 }
 
@@ -26,8 +27,7 @@ export function sanitizeAgentError(error: string | undefined): string {
 export function agentFailureMessage(error: string | undefined): string {
   const sanitized = sanitizeAgentError(error)
   if (!sanitized) return "Agent 调用失败"
-  const truncated = sanitized.length <= 120 ? sanitized : sanitized.slice(0, 120) + "..."
-  return `Agent 调用失败：${truncated}`
+  return `Agent 调用失败：${truncateWithEllipsis(sanitized, 120)}`
 }
 
 export function agentProviderFailureFromResponse(response: string): string | undefined {

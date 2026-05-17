@@ -251,6 +251,75 @@ describe("ReactiveScheduler", () => {
     expect(cb.readyOrder).toEqual(["switch", "a", "c", "d"])
   })
 
+  it("emits done callbacks for nodes skipped through inactive branch propagation", async () => {
+    const edges = [{ from: "switch", to: "inactive" }]
+    const done: NodeExecOutcome[] = []
+    const cb = makeCallbacks(edges)
+    cb.onNodeDone = (outcome) => { done.push(outcome) }
+    cb.resolveActivatedDownstream = () => []
+    const results = await new ReactiveScheduler().execute(
+      ["switch", "inactive"], edges,
+      (id) => ({ nodeId: id, execute: () => Promise.resolve(ok(id)) }),
+      cb, new AbortController().signal,
+    )
+    expect(results.get("inactive")?.status).toBe("skipped")
+    expect(done).toContainEqual({ nodeId: "inactive", status: "skipped" })
+  })
+
+  it("records a taskFactory synchronous throw and still awaits in-flight nodes", async () => {
+    const edges: Array<{ from: string; to: string }> = []
+    const done: NodeExecOutcome[] = []
+    const cb = makeCallbacks(edges)
+    cb.onNodeDone = (outcome) => { done.push(outcome) }
+    const results = await new ReactiveScheduler().execute(
+      ["a", "bad"], edges,
+      (id) => {
+        if (id === "bad") throw new Error("factory exploded")
+        return { nodeId: id, execute: () => delayed(5, ok(id)) }
+      },
+      cb, new AbortController().signal,
+    )
+    expect(results.get("a")?.status).toBe("success")
+    expect(results.get("bad")).toMatchObject({ nodeId: "bad", status: "failed", error: "factory exploded" })
+    expect(done.map((outcome) => outcome.nodeId)).toEqual(expect.arrayContaining(["a", "bad"]))
+  })
+
+  it("continues unrelated queued branches after one branch fails", async () => {
+    const edges = [{ from: "fail", to: "blocked" }]
+    const cb = makeCallbacks(edges)
+    const results = await new ReactiveScheduler({ maxConcurrency: 1 }).execute(
+      ["fail", "other", "blocked"], edges,
+      (id) => ({
+        nodeId: id,
+        execute: () => Promise.resolve(id === "fail" ? fail(id) : ok(id)),
+      }),
+      cb, new AbortController().signal,
+    )
+    expect(results.get("fail")?.status).toBe("failed")
+    expect(results.get("blocked")?.status).toBe("skipped")
+    expect(results.get("other")?.status).toBe("success")
+  })
+
+  it("returns after abort grace timeout even when a task ignores abort", async () => {
+    const ctrl = new AbortController()
+    const cb = makeCallbacks([])
+    const startedAt = Date.now()
+    const promise = new ReactiveScheduler({ cancelGraceMs: 1 }).execute(
+      ["a"], [],
+      (id) => ({
+        nodeId: id,
+        execute: async () => {
+          ctrl.abort()
+          await delayed(50, undefined)
+          return ok(id)
+        },
+      }),
+      cb, ctrl.signal,
+    )
+    await expect(promise).resolves.toBeInstanceOf(Map)
+    expect(Date.now() - startedAt).toBeLessThan(40)
+  })
+
   it("handles empty node list", async () => {
     const s = new ReactiveScheduler()
     const cb = makeCallbacks([])

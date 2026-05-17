@@ -73,6 +73,32 @@ describe("NodeResultPanel", () => {
       root.unmount()
     })
   })
+
+  it("renders non-JSON-safe structured outputs without crashing", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const result = nodeResult()
+    const cyclic: Record<string, unknown> = { label: "cyclic" }
+    cyclic.self = cyclic
+
+    await act(async () => {
+      root.render(
+        <NodeResultPanel
+          result={{ ...result, outputs: { big: BigInt(1), cyclic } }}
+          nodeName="Prompt node"
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain("1")
+    expect(container.textContent).toContain("[object Object]")
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
 })
 
 function nodeResult(): NodeRunResult {

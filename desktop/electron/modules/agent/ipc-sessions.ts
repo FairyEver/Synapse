@@ -130,18 +130,18 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
     handler: async (ctx, request: CreateSessionRequest) => {
       const sessionKey = request.sessionKey?.trim() || DEFAULT_LOCAL_SESSION_KEY
       const agentType = request.agentType?.trim() || undefined
-      const config = await configStore.load()
-      const mode = resolveCreateSessionMode(request.mode, config.agent.defaultPermissionMode)
-      const input = {
-        sessionKey,
-        platform: LOCAL_RENDERER_PLATFORM,
-        name: request.name?.trim() || undefined,
-        agentType,
-        providerId: request.providerId,
-        modelTier: request.modelTier,
-        ...(mode ? { mode } : undefined),
-      }
       try {
+        const config = await configStore.load()
+        const mode = resolveCreateSessionMode(request.mode, config.agent?.defaultPermissionMode ?? "default")
+        const input = {
+          sessionKey,
+          platform: LOCAL_RENDERER_PLATFORM,
+          name: request.name?.trim() || undefined,
+          agentType,
+          providerId: request.providerId,
+          modelTier: request.modelTier,
+          ...(mode ? { mode } : undefined),
+        }
         const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
         const session = await agent.createSession(input)
         return sessionSummary(session)

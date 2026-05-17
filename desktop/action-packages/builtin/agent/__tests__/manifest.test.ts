@@ -14,6 +14,7 @@ describe("builtin agent action manifest", () => {
         ...agentActionManifest.defaultConfig,
         projectId: "project-1",
         agentType,
+        providerId: "anthropic",
         prompt: "Run the scheduled task",
       })
 

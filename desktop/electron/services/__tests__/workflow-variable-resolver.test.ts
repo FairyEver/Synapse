@@ -46,7 +46,7 @@ describe("interpolatePrompt", () => {
     expect(interpolatePrompt("Hello {{name}}", { name: "world" })).toBe("Hello world")
   })
   it("leaves unresolved tokens unchanged", () => {
-    expect(interpolatePrompt("{{missing}}", {})).toBe("{{missing}}")
+    expect(() => interpolatePrompt("{{missing}}", {})).toThrow("未绑定")
   })
   it("replaces {{$prefixed}} tokens", () => {
     expect(interpolatePrompt("{{$name}}", { name: "val" })).toBe("val")
@@ -65,5 +65,8 @@ describe("interpolatePrompt", () => {
   })
   it("replaces digits in variable names", () => {
     expect(interpolatePrompt("{{v2}}", { v2: "val" })).toBe("val")
+  })
+  it("replaces variable names with hyphens, dots, and surrounding spaces", () => {
+    expect(interpolatePrompt("{{ my-var }} {{obj.name}}", { "my-var": "a", "obj.name": "b" })).toBe("a b")
   })
 })

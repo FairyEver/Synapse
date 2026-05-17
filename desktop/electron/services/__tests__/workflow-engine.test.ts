@@ -32,8 +32,8 @@ nodeTypeRegistry.register(switchNodeManifest, {
 })
 
 const nodeA = { id: "a", name: "A", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "hi" } }
-const nodeB = { id: "b", name: "B", type: "prompt", position: { x: 200, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "{{prev}}" } }
-const nodeEnd = { id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "done: {{out}}", variables: [] } }
+const nodeB = { id: "b", name: "B", type: "prompt", position: { x: 200, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "bye" } }
+const nodeEnd = { id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "done", variables: [] } }
 
 function fakeAgent(response: string) {
   return { sendToAgent: vi.fn().mockResolvedValue({ status: "success" as const, response, durationMs: 5 }) }
@@ -59,6 +59,28 @@ describe("WorkflowEngine", () => {
     expect(events.some((e) => e.type === "workflow:started")).toBe(true)
     expect(events.some((e) => e.type === "workflow:completed")).toBe(true)
     expect(events.filter((e) => e.type === "node:completed")).toHaveLength(3)
+  })
+
+  it("emits a sanitized workflow failure when preparation throws", async () => {
+    const def = {
+      id: "wf-bad",
+      name: "WF",
+      version: "v1",
+      createdAt: 0,
+      updatedAt: 0,
+      params: [],
+      nodes: [null],
+      edges: [],
+    } as unknown as WorkflowDefinition
+    const events: WorkflowEvent[] = []
+    const engine = new WorkflowEngine(fakeAgent("unused"))
+
+    const result = await engine.run(def, {}, "run-bad", (event) => events.push(event))
+
+    expect(result.status).toBe("failed")
+    const failed = events.find((event) => event.type === "workflow:failed")
+    expect(failed).toMatchObject({ type: "workflow:failed", runId: "run-bad" })
+    expect(JSON.stringify(failed)).not.toContain("/Users/")
   })
 
   it("populates WorkflowRunResult.output from end node template", async () => {

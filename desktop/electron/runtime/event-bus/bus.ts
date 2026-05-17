@@ -24,8 +24,10 @@ import type {
   Unsubscribe,
 } from "./types"
 import { buildKey, makeUnrefTimeout } from "../lib"
+import { ConsoleSink, createLogger } from "../logging"
 
 const DEFAULT_COALESCE_WINDOW_MS = 16
+const listenerLogger = createLogger({ module: "runtime.event-bus", sink: new ConsoleSink() })
 
 export interface EventBusOptions {
   /** Optional bridge to WindowManager (or any other broadcaster). */
@@ -119,8 +121,11 @@ export class EventBusImpl implements EventBus {
       try {
         entry.listener(event)
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error(`[event-bus:${event.domain}] listener threw`, err)
+        listenerLogger.error("EventBus listener threw.", {
+          domain: event.domain,
+          type: event.type,
+          error: err,
+        })
       }
     }
   }

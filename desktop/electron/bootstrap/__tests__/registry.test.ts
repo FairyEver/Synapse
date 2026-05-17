@@ -83,6 +83,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.event-bus",
         "core.execution-isolation",
         "core.feishu-connector",
+        "core.http-test",
         "core.license",
         "core.logging",
         "core.network-registry",
@@ -119,6 +120,8 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.data-repository",
       "core.permission-guard",
       "core.audit-sink",
+      "core.task-scheduler",
+      "core.workflow",
     ])
     expect(byId.get("core.network-registry")?.dependsOn).toEqual([])
     expect(byId.get("core.permission-guard")?.dependsOn).toEqual([])
@@ -190,6 +193,12 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.event-bus",
       "core.task-scheduler",
       "core.action-runtime",
+      "core.workflow",
+      "core.workflow.snapshots",
+      "core.workflow.run-aborts",
+      "core.workflow.run-statuses",
+      "core.workflow.engine",
+      "provider",
     ])
     expect(byId.get("core.diagnostics")?.dependsOn).toEqual([
       "core.config",

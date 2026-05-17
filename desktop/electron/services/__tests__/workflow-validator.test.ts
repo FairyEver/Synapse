@@ -89,6 +89,17 @@ describe("validateWorkflow", () => {
     expect(r.valid).toBe(false)
     expect(r.errors.some((e) => e.type === "multiple_end_nodes")).toBe(true)
   })
+  it("errors when an end node has outgoing edges", () => {
+    const r = validateWorkflow({
+      ...base,
+      edges: [
+        { id: "e1", from: "a", to: "end" },
+        { id: "e2", from: "end", to: "b" },
+      ],
+    })
+    expect(r.valid).toBe(false)
+    expect(r.errors.some((e) => e.type === "invalid_config" && e.nodeId === "end")).toBe(true)
+  })
 
   // Provider resolution validation
   it("errors when prompt node has no providerId and workflow has no default", () => {
@@ -154,9 +165,16 @@ describe("validateWorkflow", () => {
   })
 
   // Edge case: multiple nodes with no incoming edges
-  it("warns about multiple start nodes", () => {
-    const r = validateWorkflow({ ...base, edges: [{ id: "e1", from: "a", to: "end" }, { id: "e2", from: "b", to: "end" }] })
+  it("warns about multiple explicit start nodes", () => {
+    const startA = { ...nodeA, type: "start" }
+    const startB = { ...nodeB, type: "start" }
+    const r = validateWorkflow({ ...base, nodes: [startA, startB, nodeEnd], edges: [{ id: "e1", from: "a", to: "end" }, { id: "e2", from: "b", to: "end" }] })
     expect(r.warnings.some((w) => w.type === "multiple_start_nodes")).toBe(true)
+  })
+
+  it("does not report multiple start nodes for ordinary root nodes", () => {
+    const r = validateWorkflow({ ...base, edges: [{ id: "e1", from: "a", to: "end" }, { id: "e2", from: "b", to: "end" }] })
+    expect(r.warnings.some((w) => w.type === "multiple_start_nodes")).toBe(false)
   })
 })
 

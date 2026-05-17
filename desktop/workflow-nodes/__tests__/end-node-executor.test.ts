@@ -35,9 +35,9 @@ describe("endNodeExecutor", () => {
     expect(result.output).toBe("")
   })
 
-  it("preserves unresolved placeholders", async () => {
-    const result = await endNodeExecutor.execute(makeInput("{{missing}} value"))
-    expect(result.output).toBe("{{missing}} value")
+  it("rejects unresolved placeholders", async () => {
+    await expect(endNodeExecutor.execute(makeInput("{{missing}} value")))
+      .rejects.toThrow("模板变量「missing」未绑定")
   })
 
   it("does not call Agent", async () => {

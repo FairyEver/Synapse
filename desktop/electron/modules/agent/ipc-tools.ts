@@ -31,8 +31,8 @@ import { resolveProjectAgent } from "./ipc-shared"
 
 const logger = createMainLogger("agent.ipc")
 
-type CreateProviderIpcInput = CreateProviderInput
-type UpdateProviderIpcInput = UpdateProviderInput
+type CreateProviderIpcInput = Omit<CreateProviderInput, "env">
+type UpdateProviderIpcInput = Omit<UpdateProviderInput, "env">
 
 // ─── Request schemas ──────────────────────────────────────────────────────────
 
@@ -80,7 +80,6 @@ const createProviderInputSchema = z.object({
   haikuModel: z.string().optional(),
   sonnetModel: z.string().optional(),
   opusModel: z.string().optional(),
-  env: providerEnvSchema.default({}),
   settingsConfig: providerSettingsConfigSchema.optional(),
   secretEnv: providerEnvSchema.optional(),
   sortIndex: z.number().optional(),
@@ -99,7 +98,6 @@ const updateProviderInputSchema = z.object({
   haikuModel: z.string().optional(),
   sonnetModel: z.string().optional(),
   opusModel: z.string().optional(),
-  env: providerEnvSchema.optional(),
   settingsConfig: providerSettingsConfigSchema.optional(),
   secretEnv: providerEnvSchema.optional(),
   clearSecretEnv: z.array(z.string()).optional(),
@@ -193,7 +191,6 @@ const publicProviderSchema = z.object({
   haikuModel: z.string().optional(),
   sonnetModel: z.string().optional(),
   opusModel: z.string().optional(),
-  env: providerEnvSchema.optional(),
   settingsConfig: providerSettingsConfigSchema.optional(),
   archived: z.boolean().optional(),
   sortIndex: z.number().optional(),
@@ -310,7 +307,6 @@ function publicProvider(provider: CCProvider): z.infer<typeof publicProviderSche
     haikuModel: provider.haikuModel,
     sonnetModel: provider.sonnetModel,
     opusModel: provider.opusModel,
-    env: provider.env,
     settingsConfig: provider.settingsConfig,
     archived: provider.archived,
     sortIndex: provider.sortIndex,

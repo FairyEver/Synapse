@@ -14,6 +14,7 @@ import { Button } from "@/components/ui/button"
 import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
 import { ProviderLookupProvider } from "../../../../workflow-nodes/provider-lookup-context"
 import { sanitizeError } from "@/lib/error-sanitize"
+import { ErrorBoundary } from "@/components/error-boundary"
 
 const logger = createRendererLogger("workflow.runner")
 
@@ -286,6 +287,7 @@ export function WorkflowRunnerApp() {
 
   return (
     <ProviderLookupProvider>
+    <ErrorBoundary fallbackTitle="运行结果出现问题">
     <div className="flex flex-col h-screen">
       <RunnerToolbar
         definition={definition}
@@ -342,6 +344,7 @@ export function WorkflowRunnerApp() {
         )}
       </ResizablePanelGroup>
     </div>
+    </ErrorBoundary>
     </ProviderLookupProvider>
   )
 }
@@ -355,13 +358,19 @@ function validationErrorsDiagnostic(errors: readonly unknown[]): {
   const firstErrorType = typeof first?.type === "string" ? first.type : undefined
   const rawMessage = typeof first?.message === "string" ? first.message : undefined
   const firstErrorMessage = rawMessage
-    ? (rawMessage.length > 200 ? sanitizeError(rawMessage).slice(0, 200) + "..." : sanitizeError(rawMessage))
+    ? truncateWithEllipsis(sanitizeError(rawMessage), 200)
     : undefined
   return {
     errorCount: errors.length,
     firstErrorType,
     firstErrorMessage,
   }
+}
+
+function truncateWithEllipsis(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value
+  if (maxLength <= 3) return ".".repeat(Math.max(0, maxLength))
+  return `${value.slice(0, maxLength - 3)}...`
 }
 
 function validationErrorRecord(value: unknown): {

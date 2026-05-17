@@ -6,6 +6,7 @@ import path from "node:path"
 import type { PublishedAgentCommand } from "./command-registry"
 import { normalizeCommandName } from "./command-registry"
 import type { StructuredLogger } from "../../runtime/logging"
+import { errorCode } from "../error-utils"
 import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
 
 export interface AgentSkill {
@@ -204,11 +205,6 @@ function errorSummary(error: unknown): string {
     .replace(/"[^"]*"/g, "\"[path redacted]\"")
     .replace(/[A-Za-z]:\\[^\s'"`]+/g, "[path redacted]")
     .replace(/\/[^\s'"`]+/g, "[path redacted]")
-}
-
-function errorCode(error: unknown): string | undefined {
-  const code = (error as { readonly code?: unknown } | null)?.code
-  return typeof code === "string" ? code : undefined
 }
 
 function isMissingPathError(error: unknown): boolean {

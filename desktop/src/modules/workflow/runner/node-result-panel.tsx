@@ -127,6 +127,13 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
 
 function formatOutputValue(value: unknown): string {
   if (value === null || value === undefined) return "（空）"
-  if (typeof value === "object") return JSON.stringify(value)
+  if (typeof value === "bigint") return value.toString()
+  if (typeof value === "object") {
+    try {
+      return JSON.stringify(value)
+    } catch {
+      return String(value)
+    }
+  }
   return String(value)
 }

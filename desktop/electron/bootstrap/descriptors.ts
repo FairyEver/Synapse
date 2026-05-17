@@ -98,6 +98,7 @@ import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "../services/workflow/workflow-validator"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
+import { sanitizeError } from "../services/error-sanitize"
 import type { WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
 import { nodeTypeRegistry } from "../../workflow-nodes/registry"
 import "../../workflow-nodes/register.main"
@@ -225,7 +226,7 @@ export function createRunWorkflowHandler(deps: {
         const endedAt = Date.now()
         const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
         runStatuses.set(runId, { ...current, runId, workflowId: id, status, nodeResults: event.result?.nodeResults ?? nextNodeResults, startedAt, endedAt, durationMs: event.result?.durationMs ?? endedAt - startedAt, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
-        snapshotService.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: event.result?.nodeResults ?? nextNodeResults, definition: def }).catch((err) => {
+        Promise.resolve(snapshotService.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: event.result?.nodeResults ?? nextNodeResults, definition: def })).catch((err) => {
           capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
         })
       }
@@ -255,13 +256,13 @@ export function createRunWorkflowHandler(deps: {
           },
           timestamp: new Date().toISOString(),
         }, { backpressure: "block" })
-        snapshotService.save({
+        Promise.resolve(snapshotService.save({
           runId, workflowId: id, version: def.version,
           startedAt, endedAt, status: "failed",
           params: effectiveParams,
           nodeResults: current.nodeResults,
           definition: def,
-        }).catch((err) => {
+        })).catch((err) => {
           capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
         })
       }
@@ -1144,7 +1145,7 @@ function workflowAgentErrorDiagnostic(error: unknown): {
     return {
       errorName: error.name,
       errorLength: error.message.length,
-      errorMessage: error.message.length > 200 ? error.message.slice(0, 200) + "…" : error.message,
+      errorMessage: sanitizeDiagnosticMessage(error.message),
       stackLength: error.stack?.length,
     }
   }
@@ -1152,7 +1153,7 @@ function workflowAgentErrorDiagnostic(error: unknown): {
   return {
     errorName: typeof error,
     errorLength: message.length,
-    errorMessage: message.length > 200 ? message.slice(0, 200) + "…" : message,
+    errorMessage: sanitizeDiagnosticMessage(message),
   }
 }
 
@@ -1166,7 +1167,7 @@ function capabilityRejectionDiagnostic(error: unknown): {
     return {
       errorName: error.name,
       errorLength: error.message.length,
-      errorMessage: error.message.length > 200 ? error.message.slice(0, 200) + "…" : error.message,
+      errorMessage: sanitizeDiagnosticMessage(error.message),
       stackLength: error.stack?.length,
     }
   }
@@ -1174,13 +1175,20 @@ function capabilityRejectionDiagnostic(error: unknown): {
   return {
     errorName: typeof error,
     errorLength: message.length,
-    errorMessage: message.length > 200 ? message.slice(0, 200) + "…" : message,
+    errorMessage: sanitizeDiagnosticMessage(message),
   }
 }
 
-function workflowAgentFailureMessage(diagnostic: { readonly errorName: string; readonly errorMessage?: string }): string {
-  const detail = diagnostic.errorMessage ?? "unknown error"
-  return `Agent call failed (${diagnostic.errorName}): ${detail}`
+function workflowAgentFailureMessage(diagnostic: { readonly errorName: string; readonly errorLength: number; readonly errorMessage?: string }): string {
+  if (!diagnostic.errorMessage) {
+    return `Agent call failed (${diagnostic.errorName})`
+  }
+  return `Agent call failed (${diagnostic.errorName}, ${diagnostic.errorLength} chars)`
+}
+
+function sanitizeDiagnosticMessage(message: string): string {
+  const safe = sanitizeError(message)
+  return safe.length > 200 ? safe.slice(0, 200) + "…" : safe
 }
 
 export const coreWorkflowWindowManagerDescriptor: ServiceDescriptor<WorkflowWindowManager> = {

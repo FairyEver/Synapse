@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { mkdir, rm } from "node:fs/promises"
+import { mkdir, readdir, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -8,6 +8,7 @@ import { RunSnapshotService } from "../workflow/run-snapshot-service"
 
 const logger = vi.hoisted(() => ({
   error: vi.fn(),
+  info: vi.fn(),
   warn: vi.fn(),
 }))
 
@@ -26,6 +27,7 @@ async function tmpDir() {
 
 beforeEach(() => {
   logger.error.mockClear()
+  logger.info.mockClear()
   logger.warn.mockClear()
 })
 
@@ -61,6 +63,18 @@ describe("RunSnapshotService", () => {
     expect(runs).toHaveLength(20)
     expect(runs[0]?.runId).toBe("run-20")
     expect(runs.some((run) => run.runId === "run-0")).toBe(false)
+  })
+
+  it("cleans stale tmp files during save cleanup", async () => {
+    const root = await tmpDir()
+    const dir = path.join(root, "workflow-runs", "wf")
+    await mkdir(dir, { recursive: true })
+    await writeFile(path.join(dir, "orphan.json.tmp"), "partial", "utf-8")
+    const svc = new RunSnapshotService(root)
+
+    await svc.save(snapshot("run", 100))
+
+    expect((await readdir(dir)).some((file) => file.endsWith(".tmp"))).toBe(false)
   })
 
   it("logs snapshot filesystem failures with sanitized diagnostics", async () => {

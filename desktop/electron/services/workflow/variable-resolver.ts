@@ -38,6 +38,7 @@ export function resolveVariables(
           variableName: name, paramName: source.param,
         })
       }
+      // Executors receive resolved variables as strings; numeric params are intentionally stringified here.
       resolved[name] = String(paramValues[source.param] ?? "")
     } else if (source.type === "node_output") {
       if (!(source.node in nodeOutputs)) {
@@ -70,11 +71,12 @@ export function resolveVariables(
 
 
 export function interpolatePrompt(template: string, vars: Record<string, string>): string {
-  // Supports both {{varName}} and {{$varName}} syntax (design spec uses $-prefix)
-  return template.replace(/\{\{\$?([\p{L}\p{N}_]+)\}\}/gu, (match, n) => {
+  // Supports {{varName}} and {{$varName}} with spaces, dots, and hyphens.
+  return template.replace(/\{\{\s*\$?([\p{L}\p{N}_.-]+)\s*\}\}/gu, (match, n: string) => {
     if (!(n in vars)) {
-      logger.warn("unbound template variable kept as-is", { variable: n, match })
+      logger.warn("unbound template variable", { variable: n, match })
+      throw new Error(`模板变量「${n}」未绑定`)
     }
-    return vars[n] ?? match
+    return vars[n]
   })
 }

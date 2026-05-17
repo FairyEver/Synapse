@@ -443,7 +443,7 @@ export class SideChannelService implements ReplyTargetRuntime {
       messageLength: typeof request?.message === "string" ? request.message.length : 0,
       imageCount: arrayLength(request?.images),
       fileCount: arrayLength(request?.files),
-      errorCode: errorCode(error),
+      errorCode: sideChannelErrorCode(error),
       status,
       boundary: "side-channel-http",
       errorName: error instanceof Error ? error.name : typeof error,
@@ -518,12 +518,12 @@ function responseForError(error: unknown): LocalHttpResponse {
     })
   }
   return jsonResponse(500, false, undefined, {
-    code: "internal_error",
+    code: sideChannelErrorCode(error),
     message: "internal error",
   })
 }
 
-function errorCode(error: unknown): string {
+function sideChannelErrorCode(error: unknown): string {
   if (error instanceof AttachmentPolicyError || error instanceof SideChannelError) return error.code
   return "internal_error"
 }

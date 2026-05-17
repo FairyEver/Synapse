@@ -2,6 +2,7 @@ import { fileURLToPath } from "node:url"
 import fs from "node:fs/promises"
 import path from "node:path"
 import type { Dirent, Stats } from "node:fs"
+import { errorCode } from "../error-utils"
 
 export interface LocalReference {
   readonly raw: string
@@ -209,12 +210,6 @@ function referenceReadError(
   }
   const suffix = code ? ` (${code})` : ""
   return new Error(`Reference ${operation} failed: ${reference.relativePath}${suffix}`)
-}
-
-function errorCode(error: unknown): string | undefined {
-  if (typeof error !== "object" || error === null || !("code" in error)) return undefined
-  const code = (error as { readonly code?: unknown }).code
-  return typeof code === "string" ? code : undefined
 }
 
 function normalizeReferenceInput(input: string): string {

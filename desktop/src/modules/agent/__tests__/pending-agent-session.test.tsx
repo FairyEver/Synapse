@@ -75,6 +75,7 @@ vi.mock("../hooks/use-agent-chat", () => ({
 }))
 
 vi.mock("../hooks/use-stick-to-bottom", () => ({
+  latestTimelineContentSignal: () => "",
   useStickToBottom: () => ({
     forcePin: mocks.forcePin,
     viewportRef: { current: null },

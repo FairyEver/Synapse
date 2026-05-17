@@ -88,7 +88,7 @@ describe("workflowIpcModule", () => {
       errorLength: rawError.length,
       stackLength: expect.any(Number),
     })
-    expect(runStatuses.get(runId)?.error).toBe(`引擎异常（Error）：engine failed token=<token> at /Users/example/repo with prompt text`)
+    expect(runStatuses.get(runId)?.error).toBe(`引擎异常（Error）：engine failed token=[redacted] at [path] with prompt text`)
     expect(JSON.stringify(logStoreMock.logger.error.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(logStoreMock.logger.error.mock.calls)).not.toContain("/Users/example/repo")
     expect(JSON.stringify(logStoreMock.logger.error.mock.calls)).not.toContain("prompt text")
@@ -190,6 +190,65 @@ describe("workflowIpcModule", () => {
       { runId: "active-run" },
     )
     expect(ac.signal.aborted).toBe(true)
+  })
+
+  it("blocks workflow:run when the workflow already has an active run", async () => {
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    runStatuses.set("active-run", {
+      runId: "active-run",
+      workflowId: "workflow-1",
+      status: "running",
+      nodeResults: {},
+      startedAt: 1,
+      definition: workflowDefinition(),
+    })
+    const workflow = { get: vi.fn(async () => workflowDefinition()) }
+    const engine = { run: vi.fn() }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return { save: vi.fn() } as T
+      if (serviceId === "core.event-bus") return { emit: vi.fn() } as T
+      if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const result = await harness.invoke("synapse:workflow:run", { id: "workflow-1", params: {} })
+
+    expect(result).toEqual({ errors: [{ type: "invalid_config", message: "已有运行中的实例，请先取消或等待完成" }] })
+    expect(engine.run).not.toHaveBeenCalled()
+  })
+
+  it("stores node progress labels in live run status", async () => {
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    const eventBus = { emit: vi.fn() }
+    const workflow = { get: vi.fn(async () => workflowDefinition()) }
+    const engine = {
+      run: vi.fn((_def, _params, runId, emit) => {
+        emit({ type: "node:started", runId, nodeId: "node-1", startedAt: 10, result: { nodeId: "node-1", status: "running", input: { variables: {} }, startedAt: 10 } })
+        emit({ type: "node:progress", runId, nodeId: "node-1", phase: "work", label: "Working" })
+        return new Promise(() => undefined)
+      }),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return { save: vi.fn() } as T
+      if (serviceId === "core.event-bus") return eventBus as T
+      if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const result = await harness.invoke("synapse:workflow:run", { id: "workflow-1", params: {} })
+    const runId = (result as { runId: string }).runId
+
+    expect(runStatuses.get(runId)?.nodeResults["node-1"]?.progressLabel).toBe("Working")
   })
 })
 

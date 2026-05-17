@@ -450,7 +450,7 @@ describe("ClaudeSDKSession", () => {
     expect(session.alive()).toBe(false)
   })
 
-  it("rejects sends after the SDK query has finished", async () => {
+  it("ignores sends after the SDK query has finished", async () => {
     const { factory, query } = createQueryFactory()
     const logger = { warn: vi.fn() }
     const session = createSession(factory, { logger, sdkSessionId: "sdk-1" })
@@ -460,9 +460,7 @@ describe("ClaudeSDKSession", () => {
     await expect(event).resolves.toMatchObject({ type: "error" })
     expect(session.alive()).toBe(false)
 
-    await expect(session.send(message("late message"))).rejects.toThrow(
-      "Claude SDK session is not accepting messages",
-    )
+    await expect(session.send(message("late message"))).resolves.toBeUndefined()
     expect(logger.warn).toHaveBeenCalledWith("Claude SDK send rejected after query finished.", {
       boundary: "claude-sdk-send",
       conversationId: "conversation-1",

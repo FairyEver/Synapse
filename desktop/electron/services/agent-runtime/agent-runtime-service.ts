@@ -470,7 +470,7 @@ export class AgentRuntimeService {
   }
 
   async getActiveAgentType(): Promise<string> {
-    return "claude-code"
+    return this.agentType()
   }
 
   async listSessions(): Promise<readonly ConversationEntryV1[]> {
@@ -867,7 +867,7 @@ export class AgentRuntimeService {
   }
 
   private agentType(): string {
-    return "claude-code"
+    return this.deps.agentType ?? "claude-code"
   }
 
   private emitConversationUpdated(conversation: ConversationEntryV1): void {

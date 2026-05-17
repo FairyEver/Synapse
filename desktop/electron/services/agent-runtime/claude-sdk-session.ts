@@ -27,6 +27,7 @@ export interface QueryLike {
 export type QueryFactory = (input: {
   prompt: AsyncIterable<SDKUserMessage>
   options: Record<string, unknown>
+  logger?: Pick<StructuredLogger, "warn">
 }) => QueryLike
 
 export interface ClaudeSDKSessionOptions {
@@ -91,6 +92,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.query = queryFactory({
       prompt: this.inputQueue,
       options: this.buildQueryOptions(options),
+      logger: this.logger,
     })
     this.pumpPromise = this.pumpQueryEvents()
   }
@@ -105,7 +107,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
         providerId: this.providerId,
         sdkSessionId: this.sdkSessionId,
       })
-      throw new Error("Claude SDK session is not accepting messages")
+      return
     }
     this.inputQueue.push({
       type: "user",
@@ -374,6 +376,7 @@ const sensitiveToolInputKeyPattern = /token|secret|api[-_]?key|authorization|coo
 function defaultQueryFactory(input: {
   prompt: AsyncIterable<SDKUserMessage>
   options: Record<string, unknown>
+  logger?: Pick<StructuredLogger, "warn">
 }): QueryLike {
   return new LazyQuery(input)
 }
@@ -386,6 +389,7 @@ class LazyQuery implements QueryLike {
   constructor(input: {
     readonly prompt: AsyncIterable<SDKUserMessage>
     readonly options: Record<string, unknown>
+    readonly logger?: Pick<StructuredLogger, "warn">
   }) {
     this.query = import("@anthropic-ai/claude-agent-sdk")
       .then(({ query }) => query({
@@ -395,6 +399,10 @@ class LazyQuery implements QueryLike {
       .catch((error) => {
         this.failed = true
         this.failure = error
+        input.logger?.warn("Claude SDK import failed.", {
+          boundary: "claude-sdk-import",
+          ...errorLogMeta(error),
+        })
         throw error
       })
   }
@@ -573,7 +581,7 @@ class AsyncQueue<T> implements AsyncIterable<T> {
 
   next(): Promise<T | null> {
     const value = this.values.shift()
-    if (value) return Promise.resolve(value)
+    if (value !== undefined) return Promise.resolve(value)
     if (this.closed) return Promise.resolve(null)
     return new Promise((resolve) => {
       this.waiters.push((result) => {
@@ -584,7 +592,7 @@ class AsyncQueue<T> implements AsyncIterable<T> {
 
   nextWithTimeout(timeoutMs: number): Promise<T | null> {
     const value = this.values.shift()
-    if (value) return Promise.resolve(value)
+    if (value !== undefined) return Promise.resolve(value)
     if (this.closed) return Promise.resolve(null)
     return new Promise((resolve) => {
       let settled = false
@@ -623,7 +631,7 @@ class AsyncQueue<T> implements AsyncIterable<T> {
     return {
       next: () => {
         const value = this.values.shift()
-        if (value) return Promise.resolve({ done: false, value })
+        if (value !== undefined) return Promise.resolve({ done: false, value })
         if (this.closed) return Promise.resolve({ done: true, value: undefined })
         return new Promise((resolve) => {
           this.waiters.push(resolve)

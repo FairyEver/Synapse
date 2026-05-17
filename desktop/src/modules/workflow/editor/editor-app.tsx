@@ -19,6 +19,7 @@ import { NodeConfigPanel } from "./node-config-panel"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { ProviderLookupProvider } from "../../../../workflow-nodes/provider-lookup-context"
 import { errorDiagnostic } from "../lib/error-utils"
+import { ErrorBoundary } from "@/components/error-boundary"
 
 const logger = createRendererLogger("workflow.editor")
 
@@ -120,24 +121,9 @@ export function WorkflowEditorApp() {
       if (!isDirtyRef.current) return
       e.preventDefault()
       e.returnValue = ""
-      setShowCloseDialogRef.current(true)
     }
     window.addEventListener("beforeunload", handler)
     return () => window.removeEventListener("beforeunload", handler)
-  }, [])
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-        e.preventDefault()
-        if (savingRef.current) return
-        if (!isDirtyRef.current) return
-        const def = definitionRef.current
-        if (def) void handleSave(def)
-      }
-    }
-    window.addEventListener("keydown", handler)
-    return () => window.removeEventListener("keydown", handler)
   }, [])
 
   const handleDefinitionChange = useCallback((def: WorkflowDefinition) => {
@@ -212,21 +198,33 @@ export function WorkflowEditorApp() {
 
   const handleCloseSave = async () => {
     const def = definitionRef.current
-    if (def) {
-      const result = await handleSave(def)
-      // If save failed (validation errors or IPC failure), abort the close —
-      // keep the window open so the user can fix the issues and retry.
-      if (!result || "errors" in result) {
-        setShowCloseDialog(false)
-        return
+    try {
+      if (def) {
+        const result = await handleSave(def)
+        // If save failed (validation errors or IPC failure), abort the close —
+        // keep the window open so the user can fix the issues and retry.
+        if (!result || "errors" in result) {
+          setShowCloseDialog(false)
+          toast.error("保存失败，请重试")
+          return
+        }
       }
+    } catch (err) {
+      logger.error("close-save failed", {
+        workflowId,
+        boundary: "renderer.workflow.editor.close-save",
+        ...errorDiagnostic(err),
+      })
+      setShowCloseDialog(false)
+      toast.error("保存失败，请重试")
+      return
     }
     isDirtyRef.current = false
     setShowCloseDialog(false)
     window.close()
   }
 
-  const handleSave = async (def: WorkflowDefinition, silent?: boolean) => {
+  const handleSave = useCallback(async (def: WorkflowDefinition, silent?: boolean) => {
     // Short-circuit when nothing changed — avoid a pointless IPC round-trip
     // and give clear feedback that no save is needed (no spinner, no toast).
     if (!isDirtyRef.current) return { versionHash: def.version }
@@ -271,7 +269,21 @@ export function WorkflowEditorApp() {
       savingRef.current = false
       setSaving(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault()
+        if (savingRef.current) return
+        if (!isDirtyRef.current) return
+        const def = definitionRef.current
+        if (def) void handleSave(def)
+      }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [handleSave])
 
   const handleRun = async (params: Record<string, unknown>) => {
     const def = definitionRef.current
@@ -279,7 +291,10 @@ export function WorkflowEditorApp() {
     setRunning(true)
     try {
       const saveResult = await handleSave(def, true)
-      if (!saveResult || "errors" in saveResult) return null
+      if (!saveResult || "errors" in saveResult) {
+        toast.error("保存失败，运行已取消")
+        return null
+      }
       const saved = definitionRef.current
       if (!saved) return null
       const result = await window.synapse?.workflow.runDefinition(saved, params)
@@ -365,6 +380,7 @@ export function WorkflowEditorApp() {
 
   return (
     <ProviderLookupProvider>
+    <ErrorBoundary fallbackTitle="工作流编辑器出现问题">
     <div className="flex flex-col h-screen">
       {runErrors.length > 0 && (
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
@@ -466,6 +482,7 @@ export function WorkflowEditorApp() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
+    </ErrorBoundary>
     </ProviderLookupProvider>
   )
 }

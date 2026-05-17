@@ -19,6 +19,16 @@ vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => rendererLogger,
 }))
 
+vi.mock("@/app-shell/config", () => ({
+  useAppConfig: () => ({
+    config: {
+      agent: {
+        defaultProviderModel: null,
+      },
+    },
+  }),
+}))
+
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let roots: Root[] = []
@@ -156,7 +166,12 @@ describe("AgentSessionSidebar", () => {
       confirmButton?.click()
     })
 
-    expect(onCreateSession).toHaveBeenCalledWith("project-1", { providerId: "anthropic", modelTier: "sonnet" })
+    expect(onCreateSession).toHaveBeenCalledWith("project-1", {
+      providerId: "anthropic",
+      providerName: "Anthropic",
+      modelTier: "sonnet",
+      modelName: "claude-sonnet-4-5",
+    })
   })
 
   it("shows the dialog even when only one provider is available", async () => {
@@ -222,7 +237,12 @@ describe("AgentSessionSidebar", () => {
       confirmButton?.click()
     })
 
-    expect(onCreateSession).toHaveBeenCalledWith("project-1", { providerId: "anthropic", modelTier: "sonnet" })
+    expect(onCreateSession).toHaveBeenCalledWith("project-1", {
+      providerId: "anthropic",
+      providerName: "Anthropic",
+      modelTier: "sonnet",
+      modelName: "claude-sonnet-4-5",
+    })
   })
 
   it("logs provider list failures without exposing the raw error message", async () => {

@@ -7,6 +7,7 @@ import path from "node:path"
 import type { AgentCommandEntryV1, DataNamespace } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/logging"
 import type { ShellKind } from "../shell-exec"
+import { errorCode } from "../error-utils"
 import type { AgentMessage } from "./types"
 import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-yaml-scalar"
 
@@ -321,11 +322,6 @@ function errorSummary(error: unknown): string {
     .replace(/"[^"]*"/g, "\"[path redacted]\"")
     .replace(/[A-Za-z]:\\[^\s'"`]+/g, "[path redacted]")
     .replace(/\/[^\s'"`]+/g, "[path redacted]")
-}
-
-function errorCode(error: unknown): string | undefined {
-  const code = (error as { readonly code?: unknown } | null)?.code
-  return typeof code === "string" ? code : undefined
 }
 
 function isMissingPathError(error: unknown): boolean {

@@ -5,6 +5,8 @@ import { agentActionConfigSchema } from "../schema"
 const baseConfig = {
   projectId: "project-1",
   agentType: "claude-code",
+  providerId: "anthropic",
+  modelTier: "sonnet",
   prompt: "Run scheduled work",
   sessionPolicy: "fresh",
   timeoutMins: 30,

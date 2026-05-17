@@ -9,6 +9,7 @@ import { sanitizeError } from "../error-sanitize"
 import { computeFullExecutionSet } from "./workflow-utils"
 
 const logger = createMainLogger("service.workflow.engine")
+const DEFAULT_WORKFLOW_MAX_CONCURRENCY = 5
 
 function stringDiagnostic(text: string | undefined, errorName: string): { readonly errorName: string; readonly errorMessage?: string; readonly errorLength: number } {
   return {
@@ -74,7 +75,24 @@ export class WorkflowEngine {
     const nodeOutputs: Record<string, string> = {}
 
     // --- Reachability pruning (includes side-effect branches) ---
-    const { executableNodeIds, implicitEdges } = computeFullExecutionSet(def)
+    let executionSet: ReturnType<typeof computeFullExecutionSet>
+    try {
+      executionSet = computeFullExecutionSet(def)
+    } catch (err) {
+      const diagnostic = errorDiagnostic(err)
+      const rawMessage = err instanceof Error ? err.message : String(err)
+      const visibleError = `工作流执行准备失败：${sanitizeError(rawMessage)}`
+      logger.warn("workflow preparation failed", {
+        runId,
+        workflowId: def.id,
+        triggerSource: triggerSource ?? "unknown",
+        ...diagnostic,
+      })
+      const result: WorkflowRunResult = { status: "failed", nodeResults, durationMs: Date.now() - startMs }
+      emit({ type: "workflow:failed", runId, error: visibleError, result })
+      return result
+    }
+    const { executableNodeIds, implicitEdges } = executionSet
 
     const executableNodes = def.nodes
       .filter((n) => executableNodeIds.size === 0 || executableNodeIds.has(n.id))
@@ -150,6 +168,7 @@ export class WorkflowEngine {
           if (nr) {
             nr.input = { variables: resolved, ...(resolvedPrompt !== undefined ? { prompt: resolvedPrompt } : {}) }
           }
+          emit({ type: "node:started", runId, nodeId, startedAt: nr?.startedAt, result: nr ? { ...nr } : undefined })
 
           const inputVariableKeys = Object.keys(resolved)
           logger.info("node started", {
@@ -203,7 +222,6 @@ export class WorkflowEngine {
     const callbacks: SchedulerCallbacks = {
       onNodeReady: (nodeId) => {
         const nodeStartedAt = Date.now()
-        emit({ type: "node:started", runId, nodeId, startedAt: nodeStartedAt })
         const nr: NodeRunResult = { nodeId, status: "running", input: { variables: {} }, startedAt: nodeStartedAt }
         nodeResults[nodeId] = nr
       },
@@ -269,7 +287,7 @@ export class WorkflowEngine {
     }
 
     // --- Execute via scheduler ---
-    const scheduler = new ReactiveScheduler({ runId })
+    const scheduler = new ReactiveScheduler({ runId, maxConcurrency: DEFAULT_WORKFLOW_MAX_CONCURRENCY })
     const schedulerResults = await scheduler.execute(
       executableNodes, executableEdges, taskFactory, callbacks, effectiveAbortSignal,
     )

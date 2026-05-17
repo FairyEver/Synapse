@@ -2,6 +2,7 @@ import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../t
 import type { HttpRequestNodeConfig } from "./schema"
 import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
 import { createMainLogger } from "../../electron/services/log-store"
+import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-utils"
 
 const logger = createMainLogger("workflow.node.http-request-executor")
 
@@ -29,7 +30,7 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
         url,
         headers: buildHeaders(interpolated),
         body: buildBody(interpolated),
-        timeoutMs: config.timeoutMins === null ? undefined : (config.timeoutMins ?? 5) * 60_000,
+        timeoutMs: (config.timeoutMins ?? 5) * 60_000,
         abortSignal: context.abortSignal,
       })
 
@@ -58,12 +59,12 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
       const message = err instanceof Error ? err.message : String(err)
       logger.warn("http request node failed", {
         runId: context.runId, method: config.method,
-        errorMessage: message.length <= 500 ? message : message.slice(0, 500) + "...", durationMs,
+        errorMessage: truncateWithEllipsis(message, 500), durationMs,
       })
       return {
         status: "failed",
         output: "",
-        error: `HTTP 请求失败：${message.length <= 120 ? message : message.slice(0, 120) + "..."}`,
+        error: `HTTP 请求失败：${truncateWithEllipsis(message, 120)}`,
         durationMs,
       }
     }

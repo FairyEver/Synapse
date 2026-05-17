@@ -120,6 +120,12 @@ function workflowErrorLogMeta(error: string | undefined): { readonly errorName: 
   return {
     errorName: "workflow",
     errorLength: error?.length ?? 0,
-    ...(error ? { errorMessage: error.length > 200 ? sanitizeError(error).slice(0, 200) + "..." : sanitizeError(error) } : {}),
+    ...(error ? { errorMessage: truncateWithEllipsis(sanitizeError(error), 200) } : {}),
   }
+}
+
+function truncateWithEllipsis(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value
+  if (maxLength <= 3) return ".".repeat(Math.max(0, maxLength))
+  return `${value.slice(0, maxLength - 3)}...`
 }

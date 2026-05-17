@@ -130,7 +130,6 @@ function agentCliLabel(agentType: string | undefined): string | undefined {
   return normalized
 }
 
-const ERROR_MESSAGE_MAX_LENGTH = 200
 const REDACTED = "[redacted]"
 const MAX_RAW_INPUT_STRING_LENGTH = 160
 const SENSITIVE_RAW_INPUT_KEY_PATTERN = /token|secret|api[-_]?key|authorization|cookie|password|credential/i
@@ -138,17 +137,25 @@ const SENSITIVE_RAW_INPUT_KEY_PATTERN = /token|secret|api[-_]?key|authorization|
 function errorLogMeta(error: unknown): {
   readonly errorName: string
   readonly errorLength: number
-  readonly errorMessage: string
 } {
+  const named = error && typeof error === "object"
+    ? error as { readonly name?: unknown; readonly message?: unknown }
+    : undefined
   const text = error instanceof Error
     ? error.message
-    : typeof error === "string"
-      ? error
-      : String(error)
+    : typeof named?.message === "string"
+      ? named.message
+      : typeof error === "string"
+        ? error
+        : String(error)
+  const errorName = error instanceof Error
+    ? error.name
+    : typeof named?.name === "string"
+      ? named.name
+      : typeof error
   return {
-    errorName: error instanceof Error ? error.name : typeof error,
+    errorName,
     errorLength: text.length,
-    errorMessage: text.length > ERROR_MESSAGE_MAX_LENGTH ? `${text.slice(0, ERROR_MESSAGE_MAX_LENGTH)}...` : text,
   }
 }
 

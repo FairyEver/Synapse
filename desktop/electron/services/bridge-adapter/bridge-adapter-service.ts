@@ -34,7 +34,6 @@ import {
   type BridgeMessage,
   type BridgeRegister,
 } from "./bridge-protocol"
-import { sanitizeError } from "../error-sanitize"
 import {
   appendCompactProgressEntry,
   compactProgressPayload,
@@ -1111,15 +1110,12 @@ function bridgeProtocolErrorMessage(error: unknown, fallback: string): string {
 
 function errorDiagnostic(error: unknown): {
   readonly errorName: string
-  readonly errorMessage: string
   readonly errorLength: number
   readonly errorCode?: string
 } {
   const raw = error instanceof Error ? error.message : String(error)
-  const truncated = raw.length <= 200 ? sanitizeError(raw) : sanitizeError(raw).slice(0, 200) + "..."
   return {
     errorName: error instanceof Error ? error.name : typeof error,
-    errorMessage: truncated,
     errorLength: raw.length,
     ...(error instanceof BridgeAdapterError ? { errorCode: error.code } : {}),
   }

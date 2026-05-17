@@ -3,6 +3,7 @@ import type { StructuredLogger } from "../../runtime/logging"
 import { isShellKind, type ShellKind } from "../shell-exec"
 import type { CCProvider, ProviderService } from "../provider"
 import { agentRuntimeDefinitionById } from "../definitions/generated/main-registry"
+import { errorCode } from "../error-utils"
 import type {
   AgentEvent,
   AgentMessage,
@@ -409,11 +410,6 @@ export class AgentCommandRouter {
     const skills = await this.deps.skills?.listPublished() ?? []
     return [...BUILTIN_COMMANDS, ...custom, ...skills]
   }
-}
-
-function errorCode(error: unknown): string | undefined {
-  const code = (error as { readonly code?: unknown } | null)?.code
-  return typeof code === "string" ? code : undefined
 }
 
 function errorMessage(error: unknown): string {

@@ -218,7 +218,7 @@ export class ProviderService {
       haikuModel: input.haikuModel,
       sonnetModel: input.sonnetModel,
       opusModel: input.opusModel,
-      env: input.env,
+      env: input.env ?? {},
       settingsConfig: input.settingsConfig,
       secretRef,
       secretEnvRefs,

@@ -121,6 +121,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
         const input = targetColumnName ? inputRefs.current[targetColumnName] : null
         input?.focus()
         input?.select()
+        setValidationError(error instanceof Error ? error.message : "保存失败，请重试")
         throw error
       })
       .finally(() => {

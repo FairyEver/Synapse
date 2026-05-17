@@ -14,7 +14,13 @@ export function errorDiagnostic(error: unknown): ErrorDiagnostic {
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
     ...(message.length > 0
-      ? { errorMessage: message.length > MAX_ERROR_MESSAGE_LENGTH ? sanitizeError(message).slice(0, MAX_ERROR_MESSAGE_LENGTH) + "..." : sanitizeError(message) }
+      ? { errorMessage: truncateWithEllipsis(sanitizeError(message), MAX_ERROR_MESSAGE_LENGTH) }
       : {}),
   }
+}
+
+function truncateWithEllipsis(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value
+  if (maxLength <= 3) return ".".repeat(Math.max(0, maxLength))
+  return `${value.slice(0, maxLength - 3)}...`
 }

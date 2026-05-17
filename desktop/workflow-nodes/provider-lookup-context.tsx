@@ -7,12 +7,17 @@ const logger = createRendererLogger("workflow.provider-lookup")
 
 function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number; readonly errorMessage: string } {
   const raw = error instanceof Error ? error.message : String(error)
-  const message = raw.length <= 200 ? raw : raw.slice(0, 200) + "..."
   return {
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: raw.length,
-    errorMessage: message,
+    errorMessage: truncateWithEllipsis(raw, 200),
   }
+}
+
+function truncateWithEllipsis(value: string, maxLength: number): string {
+  if (value.length <= maxLength) return value
+  if (maxLength <= 3) return ".".repeat(Math.max(0, maxLength))
+  return `${value.slice(0, maxLength - 3)}...`
 }
 
 type ProviderLookup = {

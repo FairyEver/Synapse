@@ -119,6 +119,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.workflow.run-aborts",
       "core.workflow.run-statuses",
       "core.workflow.engine",
+      "provider",
     ])
     expect(coreDatabaseDescriptor.stop).toBeTypeOf("function")
   })

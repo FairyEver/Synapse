@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge"
 import { track } from "@/lib/ui-tracking"
 import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
 import { NODE_STATUS_LABEL, NODE_STATUS_VARIANT } from "../lib/status-display"
+import { useRunningTimer } from "./node-progress-bar"
 
 interface TimelineViewProps {
   definition: WorkflowDefinition
@@ -81,9 +82,7 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
             </Badge>
             <span className="text-sm truncate" title={nameOf(r.nodeId)}>{nameOf(r.nodeId)}</span>
             {r.status === "running" && r.startedAt && (
-              <span className="text-xs text-muted-foreground ml-auto">
-                已运行 {Math.round((Date.now() - r.startedAt) / 1000)}s
-              </span>
+              <TimelineElapsed startedAt={r.startedAt} />
             )}
             {r.status === "success" && r.durationMs != null && (
               <span className="text-xs text-muted-foreground ml-auto">
@@ -108,5 +107,14 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
         ))}
       </div>
     </div>
+  )
+}
+
+function TimelineElapsed({ startedAt }: { startedAt: number }) {
+  const elapsed = useRunningTimer(startedAt, true)
+  return (
+    <span className="text-xs text-muted-foreground ml-auto">
+      已运行 {elapsed}
+    </span>
   )
 }

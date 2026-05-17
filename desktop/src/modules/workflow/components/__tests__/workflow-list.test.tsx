@@ -207,6 +207,7 @@ describe("WorkflowList", () => {
       workflowId: "workflow-param",
       errorName: "Error",
       errorLength: rawError.length,
+      errorMessage: "SDK failed token=[redacted] [path] prompt text",
     })
     expect(JSON.stringify(toastError.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain("sk-secret")

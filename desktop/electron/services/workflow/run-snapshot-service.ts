@@ -48,7 +48,11 @@ export class RunSnapshotService {
       const target = path.join(dir, `${s.runId}.json`)
       const tmp = `${target}.tmp`
       await writeFile(tmp, JSON.stringify(s, null, 2), "utf-8")
-      await rename(tmp, target)
+      try {
+        await rename(tmp, target)
+      } finally {
+        await rm(tmp, { force: true }).catch(() => undefined)
+      }
       logger.info("run snapshot saved", { runId: s.runId, workflowId: s.workflowId, status: s.status, nodeCount: Object.keys(s.nodeResults).length })
     } catch (err) {
       logger.error("run snapshot save failed", {
@@ -56,7 +60,7 @@ export class RunSnapshotService {
         workflowId: s.workflowId,
         ...snapshotErrorMetadata(err),
       })
-      return
+      throw err
     }
     // Stale cleanup is best-effort — a failure here should not invalidate the save above
     try {
@@ -64,7 +68,11 @@ export class RunSnapshotService {
       const stale = snapshots
         .sort((a, b) => this.snapshotTime(a.snapshot) - this.snapshotTime(b.snapshot))
         .slice(0, Math.max(0, snapshots.length - MAX))
-      await Promise.all(stale.map(({ file }) => rm(path.join(dir, file), { force: true })))
+      const tmpFiles = (await readdir(dir)).filter((file) => file.endsWith(".tmp"))
+      await Promise.all([
+        ...stale.map(({ file }) => rm(path.join(dir, file), { force: true })),
+        ...tmpFiles.map((file) => rm(path.join(dir, file), { force: true })),
+      ])
     } catch (err) {
       logger.warn("run snapshot stale cleanup failed (save succeeded)", {
         runId: s.runId,

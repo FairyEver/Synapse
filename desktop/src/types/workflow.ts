@@ -45,7 +45,7 @@ export interface WorkflowRunStatus {
 }
 export type WorkflowEvent =
   | { type: "workflow:started"; runId: string; workflowId: string }
-  | { type: "node:started"; runId: string; nodeId: string; startedAt?: number }
+  | { type: "node:started"; runId: string; nodeId: string; startedAt?: number; result?: NodeRunResult }
   | { type: "node:progress"; runId: string; nodeId: string; phase: string; label: string }
   | { type: "node:completed"; runId: string; nodeId: string; output: unknown; result?: NodeRunResult }
   | { type: "node:failed"; runId: string; nodeId: string; error: string; result?: NodeRunResult }
@@ -58,7 +58,7 @@ export interface ValidationError {
   type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch" | "missing_end_node" | "multiple_end_nodes" | "missing_param"
   nodeId?: string; edgeId?: string; message: string
 }
-export interface ValidationWarning { type: "disconnected_node" | "multiple_start_nodes" | "unbound_template_variable" | "disconnected_switch_branch" | "unreachable_node_output"; nodeId?: string; message: string }
+export interface ValidationWarning { type: "disconnected_node" | "multiple_start_nodes"; nodeId?: string; message: string }
 export interface ValidationResult { valid: boolean; errors: ValidationError[]; warnings: ValidationWarning[] }
 export interface WorkflowRunSnapshot {
   runId: string; workflowId: string; version: string; startedAt: number; endedAt?: number

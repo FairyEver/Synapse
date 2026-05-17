@@ -57,6 +57,11 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
     errors.push({ type: "missing_end_node", message: "工作流必须包含一个结束节点" })
   if (endNodes.length > 1)
     errors.push({ type: "multiple_end_nodes", message: "结束节点只能有一个" })
+  for (const endNode of endNodes) {
+    if (def.edges.some((edge) => edge.from === endNode.id)) {
+      errors.push({ type: "invalid_config", nodeId: endNode.id, message: `结束节点「${endNode.name}」不能连接到下游节点` })
+    }
+  }
   const nodeIdsSeen = new Set<string>()
   for (const node of def.nodes) {
     if (nodeIdsSeen.has(node.id)) {
@@ -72,7 +77,7 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
 
   const byId = new Map(def.nodes.map((n) => [n.id, n]))
   const revAdj = buildReverseAdj(def)
-  if (def.nodes.filter((n) => n.type !== "end" && !def.edges.some((e) => e.to === n.id)).length > 1)
+  if (def.nodes.filter((n) => n.type === "start").length > 1)
     warnings.push({ type: "multiple_start_nodes", message: "存在多个起始节点" })
 
   for (const node of def.nodes) {

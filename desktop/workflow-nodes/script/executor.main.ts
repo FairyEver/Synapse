@@ -3,6 +3,7 @@ import type { ScriptNodeConfig } from "./schema"
 import { runShellAction } from "../../action-packages/builtin/shell-process.main"
 import { createMainLogger } from "../../electron/services/log-store"
 import { sanitizeError } from "../../electron/services/error-sanitize"
+import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-utils"
 
 const logger = createMainLogger("workflow.node.script-executor")
 
@@ -27,7 +28,7 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
         content: config.script,
         config: {
           shell: config.shell,
-          env: { ...config.env, ...resolvedVariables },
+          env: { ...config.env, ...safeResolvedEnv(resolvedVariables, context.runId) },
           pathStrategy: config.pathStrategy,
           posixLogin: config.posixLogin,
           timeoutMins: config.timeoutMins,
@@ -64,10 +65,10 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
 
       logger.warn("script node failed", {
         runId: context.runId, shell: config.shell,
-        exitCode, errorMessage: (result.error ?? "").slice(0, 200), durationMs,
+        exitCode, errorMessage: truncateWithEllipsis(result.error ?? "", 200), durationMs,
       })
       const errorMsg = result.error
-        ? `脚本执行失败：${result.error.length <= 120 ? result.error : result.error.slice(0, 120) + "..."}`
+        ? `脚本执行失败：${truncateWithEllipsis(result.error, 120)}`
         : `脚本退出码 ${String(exitCode)}`
       return {
         status: "failed",
@@ -81,14 +82,45 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
       const message = err instanceof Error ? err.message : String(err)
       logger.warn("script node threw exception", {
         runId: context.runId, shell: config.shell,
-        errorMessage: message.slice(0, 200), durationMs,
+        errorMessage: truncateWithEllipsis(message, 200), durationMs,
       })
       return {
         status: "failed",
         output: "",
-        error: `脚本执行异常：${sanitizeError(message.length <= 120 ? message : message.slice(0, 120) + "...")}`,
+        error: `脚本执行异常：${truncateWithEllipsis(sanitizeError(message), 120)}`,
         durationMs,
       }
     }
   },
+}
+
+const PROTECTED_ENV_NAMES = new Set([
+  "PATH",
+  "HOME",
+  "SHELL",
+  "USER",
+  "USERNAME",
+  "PWD",
+  "OLDPWD",
+  "TMPDIR",
+  "TEMP",
+  "TMP",
+  "NODE_OPTIONS",
+  "NODE_ENV",
+])
+
+function safeResolvedEnv(resolvedVariables: Record<string, string>, runId: string): Record<string, string> {
+  const env: Record<string, string> = {}
+  const skipped: string[] = []
+  for (const [key, value] of Object.entries(resolvedVariables)) {
+    if (PROTECTED_ENV_NAMES.has(key.toUpperCase())) {
+      skipped.push(key)
+      continue
+    }
+    env[key] = value
+  }
+  if (skipped.length > 0) {
+    logger.warn("script node skipped protected resolved variable env names", { runId, skipped })
+  }
+  return env
 }

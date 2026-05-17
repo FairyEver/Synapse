@@ -5,7 +5,7 @@ import type { WorkflowDefinition, WorkflowMeta, ValidationError } from "../../..
 import { validateWorkflow } from "./workflow-validator"
 import { createMainLogger } from "../log-store"
 import { configStore } from "../config-store"
-import { errorCode, sanitizeAgentError } from "./workflow-utils"
+import { errorCode, sanitizeAgentError, truncateWithEllipsis } from "./workflow-utils"
 
 const logger = createMainLogger("service.workflow")
 
@@ -178,7 +178,7 @@ function summarizeRepoPath(repoPath: string): { repoBasename: string; repoPathLe
 function errorLogMeta(error: unknown): { errorName: string; errorCode?: string; errorLength: number; errorMessage: string } {
   const raw = error instanceof Error ? error.message : typeof error === "string" ? error : String(error)
   const sanitized = sanitizeAgentError(raw)
-  const truncated = sanitized.length <= 200 ? sanitized : sanitized.slice(0, 200) + "..."
+  const truncated = truncateWithEllipsis(sanitized, 200)
   return {
     errorName: error instanceof Error ? error.name : typeof error,
     errorCode: errorCode(error),

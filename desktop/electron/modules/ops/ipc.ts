@@ -14,6 +14,7 @@ import { configStore } from "../../services/config-store"
 import type { DiagnosticsService } from "../../services/diagnostics-service"
 import type { ExecutionIsolationService } from "../../services/execution-isolation"
 import { createMainLogger, logStore } from "../../services/log-store"
+import { errorCode } from "../../services/error-utils"
 import type { AgentRelayService } from "../../services/relay"
 import { collectOpsStatus } from "./status"
 
@@ -434,12 +435,6 @@ function errorDiagnostic(error: unknown): {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
-}
-
-function errorCode(error: unknown): string | undefined {
-  if (!error || typeof error !== "object" || !("code" in error)) return undefined
-  const value = (error as { readonly code?: unknown }).code
-  return typeof value === "string" ? value : undefined
 }
 
 function optional<T>(
