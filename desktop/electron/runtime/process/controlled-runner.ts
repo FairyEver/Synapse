@@ -194,6 +194,7 @@ export class ControlledProcessRunner {
           reason: permission.reason,
           policyId: permission.policyId,
           cwd: request.cwd,
+          ...request.metadata,
         },
       })
       throw new ControlledProcessPermissionError(permission)
@@ -275,6 +276,7 @@ export class ControlledProcessRunner {
           reason: permission.reason,
           policyId: permission.policyId,
           cwd: request.cwd,
+          ...request.metadata,
         },
       })
       throw new ControlledProcessPermissionError(permission)
@@ -402,6 +404,7 @@ export class ControlledProcessRunner {
         timedOut,
         error: errorMessage(finalError) ?? errorMessage(spawnError),
         isolation: launch.isolationMetadata,
+        ...request.metadata,
       },
     })
 
@@ -428,6 +431,7 @@ export class ControlledProcessRunner {
         durationMs: Date.now() - startedAt,
         error,
         isolation: request.isolation,
+        ...request.metadata,
       },
     })
   }
@@ -624,6 +628,7 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
         error,
         longRunning: true,
         isolation: this.request.isolation,
+        ...this.request.metadata,
       },
     })
 
