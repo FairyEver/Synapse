@@ -305,10 +305,14 @@ class LogService {
       const logFiles = await this.readLogFiles({ newestFirst: true })
 
       for (const file of logFiles.slice(MAX_LOG_FILES)) {
-        await unlink(file.path).catch(() => undefined)
+        try {
+          await unlink(file.path)
+        } catch {
+          writeFallbackError("Failed to clean old log file.", file.path)
+        }
       }
-    } catch {
-      // Ignore cleanup failures for background rotation.
+    } catch (error) {
+      writeFallbackError("Failed to clean old log files.", error)
     }
   }
 
