@@ -129,11 +129,20 @@ export class WorkflowWindowManager {
   private closeEditorWindow(workflowId: string, message: string): void {
     const editor = this.editorWindows.get(workflowId)
     if (editor && !editor.isDestroyed()) {
+      // Use close() instead of destroy() to allow the renderer's beforeunload
+      // handler to prevent closing when the editor has unsaved changes.
+      editor.close()
+      // If close was prevented (e.g. dirty editor), the window stays alive
+      // and will be cleaned up by its 'closed' event handler when the user
+      // eventually closes it. Don't detach health service or remove from map.
+      if (!editor.isDestroyed()) {
+        logger.info("editor close was prevented, window kept open", { workflowId })
+        return
+      }
       logger.info(message, { workflowId })
       const windowId = `workflow-editor:${workflowId}`
       this.healthServices.get(windowId)?.detach()
       this.healthServices.delete(windowId)
-      editor.destroy()
     }
     this.editorWindows.delete(workflowId)
   }
