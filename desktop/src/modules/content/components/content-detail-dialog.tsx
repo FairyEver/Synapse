@@ -96,7 +96,7 @@ type ContentDetailDialogProps<
     mode: "edit"
     open: boolean
     onOpenChange: (open: boolean) => void
-    onSubmit: (payload: TPayload) => void
+    onSubmit: (payload: TPayload) => void | Promise<void>
     submitDisabled: boolean
     submitDisabledReason: string | null
   }) => ReactNode
@@ -304,7 +304,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
       ? await serializePayload(payload)
       : payload
 
-    void promise(
+    await promise(
       async () => {
         const updatePayload: SynapseUpdateContentPayload<typeof item.type> = {
           ...serializedPayload as SynapseUpdateContentPayload<typeof item.type>,
@@ -628,7 +628,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
           mode: "edit",
           open: isEditOpen,
           onOpenChange: setIsEditOpen,
-          onSubmit: (payload) => void handleSave(payload),
+          onSubmit: (payload) => handleSave(payload),
           submitDisabled: isSaving || submitDisabledReason !== null,
           submitDisabledReason: isSaving ? "正在保存..." : submitDisabledReason,
         })
