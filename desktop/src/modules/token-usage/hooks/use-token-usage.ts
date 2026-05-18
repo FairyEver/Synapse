@@ -13,14 +13,17 @@ type ScanResult = Awaited<ReturnType<SynapseBridge["tokenUsage"]["scan"]>>
 const logger = createRendererLogger("token-usage.hooks")
 
 function toLoadError(error: unknown): Error {
-  return error instanceof Error ? error : new Error("读取失败")
+  return new Error("读取失败")
 }
 
 function logLoadError(operation: string, error: unknown, options?: unknown): void {
+  const errorName = error instanceof Error ? error.name : typeof error
+  const errorLength = error instanceof Error ? error.message.length : String(error).length
   logger.error("Token usage load failed.", {
     operation,
     options,
-    error,
+    errorName,
+    errorLength,
   })
 }
 
