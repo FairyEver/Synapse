@@ -96,7 +96,6 @@ function TaskRunsDialog({
     })
     try {
       await onStopRun(run.id)
-      setRuns(await listRuns(task.id))
       setError(null)
     } catch (stopError) {
       logger.warn("Task run stop failed.", {
@@ -107,6 +106,17 @@ function TaskRunsDialog({
         ...errorDiagnostic(stopError),
       })
       setError("停止失败")
+      return
+    }
+
+    try {
+      setRuns(await listRuns(task.id))
+    } catch {
+      logger.warn("Task runs list refresh failed after stop.", {
+        taskId: task.id,
+        runId: run.id,
+        boundary: "renderer.task-scheduler.runs.list-after-stop",
+      })
     }
   }
 
