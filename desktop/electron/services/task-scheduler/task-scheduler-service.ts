@@ -31,10 +31,20 @@ export class TaskSchedulerService {
 
   async start(): Promise<void> {
     if (this.started) return
-    this.started = true
-    for (const task of await this.deps.tasks.list()) {
-      await this.scheduleOnStartup(task)
+    const tasks = await this.deps.tasks.list()
+    for (const task of tasks) {
+      try {
+        await this.scheduleOnStartup(task)
+      } catch (error) {
+        this.deps.logger?.warn?.("Scheduled task startup failed, skipping.", {
+          taskId: task.id,
+          name: task.name,
+          boundary: "task-scheduler-startup",
+          ...errorMetadata(error instanceof Error ? error : new Error(String(error))),
+        })
+      }
     }
+    this.started = true
   }
 
   stop(): void {
