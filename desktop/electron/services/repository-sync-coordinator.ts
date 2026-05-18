@@ -191,16 +191,6 @@ class RepositorySyncCoordinator {
       return this.requestSync(repository, reason)
     }
 
-    if (state.currentPromise) {
-      await state.currentPromise
-      return this.requestSync(repository, reason)
-    }
-
-    if (state.maintenancePromise) {
-      await state.maintenancePromise
-      return this.requestSync(repository, reason)
-    }
-
     if (state.syncPromise) {
       return state.syncPromise
     }
