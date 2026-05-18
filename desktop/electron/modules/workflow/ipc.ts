@@ -14,7 +14,7 @@ import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
 
 const logger = createMainLogger("workflow.ipc")
-const DELETE_ABORT_WAIT_MS = 3_000
+const DELETE_ABORT_WAIT_MS = 5_000
 const runCompletions = new Map<string, Promise<unknown>>()
 
 /**
