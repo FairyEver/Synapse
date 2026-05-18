@@ -118,7 +118,7 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
               {node.type !== "end" && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0">
+                    <Button size="icon" variant="ghost" className="h-6 w-6 shrink-0" aria-label="节点操作">
                       <Ellipsis className="h-3.5 w-3.5" />
                     </Button>
                   </DropdownMenuTrigger>
