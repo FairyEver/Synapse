@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
+import { toast } from "sonner"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
@@ -92,7 +93,15 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
         runId,
       },
     })
-    void window.synapse?.workflow.openRunner(workflowId, runId)
+    window.synapse?.workflow.openRunner(workflowId, runId).catch((err) => {
+      logger.warn("Workflow runner open failed from run history.", {
+        boundary: "renderer.workflow.run-history.open-runner",
+        workflowId,
+        runId,
+        ...errorDiagnostic(err),
+      })
+      toast.error("打开运行窗口失败，请重试")
+    })
     onClose()
   }
 

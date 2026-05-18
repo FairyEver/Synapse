@@ -316,7 +316,15 @@ export function WorkflowEditorApp() {
         setConflictState({ saved, params })
         return null
       }
-      void window.synapse?.workflow.openRunner(saved.id, result.runId)
+      window.synapse?.workflow.openRunner(saved.id, result.runId).catch((err) => {
+        logger.warn("Workflow runner open failed after run.", {
+          boundary: "renderer.workflow.editor.run",
+          workflowId: saved.id,
+          runId: result.runId,
+          ...errorDiagnostic(err),
+        })
+        toast.error("打开运行窗口失败，请重试")
+      })
       return result.runId
     } catch (err) {
       logger.error("handleRun failed", {
@@ -351,7 +359,15 @@ export function WorkflowEditorApp() {
         toast.error("仍有运行中的实例，请先取消")
         return
       }
-      void window.synapse?.workflow.openRunner(saved.id, forceResult.runId)
+      window.synapse?.workflow.openRunner(saved.id, forceResult.runId).catch((err) => {
+        logger.warn("Workflow runner open failed after force run.", {
+          boundary: "renderer.workflow.editor.force-run",
+          workflowId: saved.id,
+          runId: forceResult.runId,
+          ...errorDiagnostic(err),
+        })
+        toast.error("打开运行窗口失败，请重试")
+      })
     } catch (err) {
       logger.error("force run failed", {
         workflowId: saved.id,
