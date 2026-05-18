@@ -163,7 +163,7 @@ function TaskSchedulerModule() {
       return
     }
     const task = deleteTarget
-    await runMutation(
+    const result = await runMutation(
       async () => {
         const result = await deleteTask(task.id)
         logger.info("Task deleted.", { taskId: task.id, taskNameLength: task.name.length })
@@ -171,7 +171,9 @@ function TaskSchedulerModule() {
       },
       { loading: "正在删除任务...", success: "任务已删除。", error: "删除任务失败。" },
     )
-    setDeleteTarget(null)
+    if (result !== null) {
+      setDeleteTarget(null)
+    }
   }
 
   async function handleExport(selectedIds: string[]) {
@@ -450,11 +452,12 @@ function TaskSchedulerModule() {
             <AlertDialogFooter>
               <AlertDialogCancel>取消</AlertDialogCancel>
               <AlertDialogAction
+                disabled={busy}
                 onClick={() => {
                   void handleDelete()
                 }}
               >
-                删除
+                {busy ? "正在删除..." : "删除"}
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
