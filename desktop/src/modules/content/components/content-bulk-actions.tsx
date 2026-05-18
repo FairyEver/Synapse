@@ -91,7 +91,7 @@ function ContentBulkActions({
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction
-              className="bg-destructive text-white hover:bg-destructive/90"
+              variant="destructive"
               onClick={onPurgeConfirm}
             >
               永久删除
@@ -116,7 +116,7 @@ function ContentBulkActions({
           <AlertDialogFooter>
             <AlertDialogCancel disabled={isBatchBusy}>取消</AlertDialogCancel>
             <AlertDialogAction
-              className={batchAction === "purge" ? "bg-destructive text-white hover:bg-destructive/90" : ""}
+              variant={batchAction === "purge" ? "destructive" : undefined}
               disabled={isBatchBusy}
               onClick={onBatchConfirm}
             >
