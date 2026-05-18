@@ -155,22 +155,27 @@ function RepositoryListEditor({
       return
     }
 
-    logger.info("Opening native directory picker from repository settings.")
-    const localPath = await chooseDirectory()
+    try {
+      logger.info("Opening native directory picker from repository settings.")
+      const localPath = await chooseDirectory()
 
-    if (!localPath) {
-      logger.info("Native directory picker was dismissed without selecting a directory.")
-      return
+      if (!localPath) {
+        logger.info("Native directory picker was dismissed without selecting a directory.")
+        return
+      }
+
+      const validationResult = await validateDirectory(localPath)
+      if (!validationResult.isValid) {
+        logger.warn("Chosen repository directory failed validation.", { message: validationResult.message })
+        setFormError(validationResult.message)
+        return
+      }
+
+      await saveRepository(localPath)
+    } catch (error) {
+      logger.error("Failed to select or validate repository directory.", { error })
+      setFormError(error instanceof Error ? error.message : "选择目录失败。")
     }
-
-    const validationResult = await validateDirectory(localPath)
-    if (!validationResult.isValid) {
-      logger.warn("Chosen repository directory failed validation.", { message: validationResult.message })
-      setFormError(validationResult.message)
-      return
-    }
-
-    await saveRepository(localPath)
   }
 
   const resetCreateRepositoryForm = () => {
@@ -199,17 +204,22 @@ function RepositoryListEditor({
       return
     }
 
-    logger.info("Opening native directory picker for new repository parent path.")
-    const selectedPath = await chooseDirectory()
+    try {
+      logger.info("Opening native directory picker for new repository parent path.")
+      const selectedPath = await chooseDirectory()
 
-    if (!selectedPath) {
-      logger.info("New repository parent path picker was dismissed.")
-      return
+      if (!selectedPath) {
+        logger.info("New repository parent path picker was dismissed.")
+        return
+      }
+
+      logger.info("New repository parent path selected.", { dirName: selectedPath.split(/[/\\]/).pop() ?? selectedPath })
+      setNewRepositoryParentPath(selectedPath)
+      setCreateRepositoryError(null)
+    } catch (error) {
+      logger.error("Failed to select parent path for new repository.", { error })
+      setCreateRepositoryError(error instanceof Error ? error.message : "选择目录失败。")
     }
-
-    logger.info("New repository parent path selected.", { dirName: selectedPath.split(/[/\\]/).pop() ?? selectedPath })
-    setNewRepositoryParentPath(selectedPath)
-    setCreateRepositoryError(null)
   }
 
   const handleCreateLocalRepository = async (event: FormEvent<HTMLFormElement>) => {
@@ -281,17 +291,22 @@ function RepositoryListEditor({
       return
     }
 
-    logger.info("Opening native directory picker for editing repository.")
-    const selectedPath = await chooseDirectory()
+    try {
+      logger.info("Opening native directory picker for editing repository.")
+      const selectedPath = await chooseDirectory()
 
-    if (!selectedPath) {
-      logger.info("Repository edit directory picker was dismissed.")
-      return
+      if (!selectedPath) {
+        logger.info("Repository edit directory picker was dismissed.")
+        return
+      }
+
+      logger.info("Repository edit directory selected.", { dirName: selectedPath.split(/[/\\]/).pop() ?? selectedPath })
+      setEditPath(selectedPath)
+      setEditError(null)
+    } catch (error) {
+      logger.error("Failed to select directory for editing repository.", { error })
+      setEditError(error instanceof Error ? error.message : "选择目录失败。")
     }
-
-    logger.info("Repository edit directory selected.", { dirName: selectedPath.split(/[/\\]/).pop() ?? selectedPath })
-    setEditPath(selectedPath)
-    setEditError(null)
   }
 
   const handleSaveEdit = async (event: FormEvent<HTMLFormElement>) => {

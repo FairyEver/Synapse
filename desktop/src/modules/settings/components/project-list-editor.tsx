@@ -120,17 +120,22 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       return
     }
 
-    logger.info("Opening native directory picker from project settings.")
-    const selectedPath = await bridge.chooseDirectory()
+    try {
+      logger.info("Opening native directory picker from project settings.")
+      const selectedPath = await bridge.chooseDirectory()
 
-    if (!selectedPath) {
-      logger.info("Project directory picker was dismissed without selecting a directory.")
-      return
+      if (!selectedPath) {
+        logger.info("Project directory picker was dismissed without selecting a directory.")
+        return
+      }
+
+      setDraftPath(selectedPath)
+      setDraftName((currentName) => (currentName.trim() ? currentName : getProjectNameFromPath(selectedPath)))
+      setFormError(null)
+    } catch (error) {
+      logger.error("Failed to select project directory.", { error })
+      setFormError(error instanceof Error ? error.message : "选择目录失败。")
     }
-
-    setDraftPath(selectedPath)
-    setDraftName((currentName) => (currentName.trim() ? currentName : getProjectNameFromPath(selectedPath)))
-    setFormError(null)
   }
 
   const handleEditProject = (project: SynapseProjectConfig) => {
@@ -177,18 +182,23 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       return
     }
 
-    logger.info("Opening native directory picker for editing project.")
-    const selectedPath = await bridge.chooseDirectory()
+    try {
+      logger.info("Opening native directory picker for editing project.")
+      const selectedPath = await bridge.chooseDirectory()
 
-    if (!selectedPath) {
-      logger.info("Project edit directory picker was dismissed.")
-      return
+      if (!selectedPath) {
+        logger.info("Project edit directory picker was dismissed.")
+        return
+      }
+
+      logger.info("Project edit directory selected.", { selectedPath })
+
+      setEditPath(selectedPath)
+      setEditError(null)
+    } catch (error) {
+      logger.error("Failed to select directory for editing project.", { error })
+      setEditError(error instanceof Error ? error.message : "选择目录失败。")
     }
-
-    logger.info("Project edit directory selected.", { selectedPath })
-
-    setEditPath(selectedPath)
-    setEditError(null)
   }
 
   const handleSaveEdit = async () => {
