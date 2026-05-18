@@ -116,7 +116,6 @@ export class AgentSessionRepository {
   }
 
   async createSession(input: CreateAgentSessionInput): Promise<ConversationEntryV1> {
-    await this.deactivateActive(input.sessionKey, input.platform, undefined, input.workspaceKey)
     const now = this.isoNow()
     const conversation: ConversationEntryV1 = {
       id: input.id
@@ -145,6 +144,7 @@ export class AgentSessionRepository {
       updatedAt: now,
     }
     await this.conversations.upsert(conversation)
+    await this.deactivateActive(input.sessionKey, input.platform, conversation.id, input.workspaceKey)
     return conversation
   }
 
@@ -190,14 +190,14 @@ export class AgentSessionRepository {
     if (!target || target.projectId !== this.projectId || target.sessionKey !== sessionKey) {
       throw new Error(`Conversation "${conversationIdValue}" is not available for this session key`)
     }
+    const updated = { ...target, active: true, updatedAt: this.isoNow() }
+    await this.conversations.upsert(updated)
     await this.deactivateActive(
       sessionKey,
       platform ?? target.platform,
       conversationIdValue,
       workspaceKey ?? target.workspaceKey,
     )
-    const updated = { ...target, active: true, updatedAt: this.isoNow() }
-    await this.conversations.upsert(updated)
     return updated
   }
 
