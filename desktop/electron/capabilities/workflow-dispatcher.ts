@@ -20,7 +20,7 @@ export type WorkflowDispatchDeps = {
   eventBus: EventBus
   runWorkflow: (id: string, params: Record<string, unknown>) => Promise<{ runId: string } | { errors: ValidationError[] }>
   cancelRun: (runId: string) => void
-  cancelRunsForWorkflow: (workflowId: string) => void
+  cancelRunsForWorkflow: (workflowId: string) => Promise<void>
   getRunStatus: (runId: string) => Promise<WorkflowRunStatus | null>
   listProviders?: () => Promise<readonly { id: string; name: string; model?: string; haikuModel?: string; sonnetModel?: string; opusModel?: string }[]>
 }
@@ -191,7 +191,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
 
   "workflow.definition.delete": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
-    deps.cancelRunsForWorkflow(workflowId)
+    await deps.cancelRunsForWorkflow(workflowId)
     await deps.workflowService.delete(workflowId)
     await deps.snapshotService.deleteWorkflow(workflowId)
     emitDefinitionUpdated(deps.eventBus, workflowId)

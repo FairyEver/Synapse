@@ -192,10 +192,11 @@ export function createRunWorkflowHandler(deps: {
   eventBus: EventBus
   runAborts: Map<string, AbortController>
   runStatuses: Map<string, WorkflowRunStatus>
+  runCompletions: Map<string, Promise<unknown>>
   capabilityLogger: ReturnType<typeof createMainLogger>
 }) {
   return async (id: string, params: Record<string, unknown>): Promise<{ runId: string } | { errors: ValidationError[] }> => {
-    const { workflowService, workflowEngine, snapshotService, eventBus, runAborts, runStatuses, capabilityLogger } = deps
+    const { workflowService, workflowEngine, snapshotService, eventBus, runAborts, runStatuses, runCompletions, capabilityLogger } = deps
     const def = await workflowService.get(id)
     if (!def) return { errors: [{ type: "invalid_config" as const, message: "Workflow not found" }] }
     const validation = validateWorkflow(def)
@@ -211,7 +212,7 @@ export function createRunWorkflowHandler(deps: {
     const appConfig = await configStore.load()
     const activeRepo = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
     const projectId = activeRepo?.uuid
-    workflowEngine.run(def, effectiveParams, runId, (event) => {
+    const completion = workflowEngine.run(def, effectiveParams, runId, (event) => {
       const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
       const nextNodeResults = { ...current.nodeResults }
       if (event.type === "node:started") {
@@ -269,7 +270,10 @@ export function createRunWorkflowHandler(deps: {
           capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
         })
       }
+    }).finally(() => {
+      runCompletions.delete(runId)
     })
+    runCompletions.set(runId, completion)
     return { runId }
   }
 }
@@ -309,6 +313,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const workflowEngine = ctx.registry.get<WorkflowEngine>("core.workflow.engine")
     const providerService = ctx.registry.get<ProviderService>(PROVIDER_SERVICE_ID)
     const capabilityLogger = createMainLogger("bootstrap.workflow-capability")
+    const runCompletions = new Map<string, Promise<unknown>>()
 
     const workflowDispatcher = createWorkflowDispatcher({
       workflowService,
@@ -322,14 +327,28 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
         eventBus,
         runAborts,
         runStatuses,
+        runCompletions,
         capabilityLogger,
       }),
       cancelRun: (runId: string) => { runAborts.get(runId)?.abort(); runAborts.delete(runId) },
-      cancelRunsForWorkflow: (workflowId: string) => {
+      cancelRunsForWorkflow: async (workflowId: string) => {
+        const runningRunIds: string[] = []
         for (const [runId, status] of runStatuses) {
           if (status.workflowId === workflowId && status.status === "running") {
             runAborts.get(runId)?.abort()
+            runningRunIds.push(runId)
+          }
+        }
+        if (runningRunIds.length > 0) {
+          const CANCEL_WAIT_MS = 3_000
+          await Promise.all(runningRunIds.map((runId) => {
+            const completion = runCompletions.get(runId)
+            if (!completion) return
+            return Promise.race([completion.then(() => undefined), new Promise<void>((r) => setTimeout(r, CANCEL_WAIT_MS))])
+          }))
+          for (const runId of runningRunIds) {
             runAborts.delete(runId)
+            runStatuses.delete(runId)
           }
         }
       },
