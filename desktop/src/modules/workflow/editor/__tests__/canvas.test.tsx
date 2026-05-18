@@ -43,9 +43,6 @@ vi.mock("@xyflow/react", async () => {
 })
 
 vi.mock("../node-wrappers", () => ({
-  NodeResultsContext: {
-    Provider: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
-  },
   nodeTypes: {},
 }))
 

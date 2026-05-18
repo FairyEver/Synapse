@@ -22,10 +22,10 @@ import {
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
 import { Clipboard, LayoutGrid } from "lucide-react"
-import { nodeTypes, NodeResultsContext } from "./node-wrappers"
+import { nodeTypes } from "./node-wrappers"
 import { BranchEdge } from "./custom-edge"
 import { CanvasActionsContext, type NodeClipboard } from "./canvas-context"
-import type { WorkflowDefinition, WorkflowNode, WorkflowEdge, NodeRunResult } from "@/types/workflow"
+import type { WorkflowDefinition, WorkflowNode, WorkflowEdge } from "@/types/workflow"
 import { createRendererLogger } from "@/app-shell/logging"
 import { autoLayoutNodes } from "./auto-layout"
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
@@ -98,15 +98,13 @@ function flowEdgeToWorkflowEdge(edge: WorkflowFlowEdge): WorkflowEdge {
 
 interface WorkflowCanvasProps {
   definition: WorkflowDefinition
-  nodeResults?: Record<string, NodeRunResult>
-  runState?: string
   onChange: (def: WorkflowDefinition) => void
   onNodeSelect?: (nodeId: string | null) => void
   onRequestRename?: (nodeId: string) => void
 }
 
 const CanvasContent = forwardRef<WorkflowCanvasHandle, WorkflowCanvasProps>(
-function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSelect, onRequestRename }, ref) {
+function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, ref) {
   const { nodes: initNodes, edges: initEdges } = defToFlow(definition)
   const [nodes, setNodes] = useNodesState(initNodes)
   const [edges, setEdges] = useEdgesState(initEdges)
@@ -270,21 +268,14 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
   }, [screenToFlowPosition, onChange, setNodes, onNodeSelect])
 
   const selectionChangeHandler = useCallback(({ nodes: selectedNodes }: { nodes: WorkflowFlowNode[] }) => {
-    if (runState && runState !== "idle") return
     logger.info("selection changed", {
       selectedNodeIds: selectedNodes.map((node) => node.id),
       selectedCount: selectedNodes.length,
     })
     onNodeSelect?.(selectedNodes.length === 1 ? selectedNodes[0].id : null)
-  }, [runState, onNodeSelect])
+  }, [onNodeSelect])
 
   useOnSelectionChange({ onChange: selectionChangeHandler })
-
-  const onNodeClick = useCallback((_: React.MouseEvent, node: WorkflowFlowNode) => {
-    if (runState && runState !== "idle") {
-      onNodeSelect?.(node.id)
-    }
-  }, [runState, onNodeSelect])
 
   const copyNodes = useCallback((nodeIds: string[]) => {
     const def = definitionRef.current
@@ -548,52 +539,49 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
 
   return (
     <CanvasActionsContext.Provider value={canvasActions}>
-      <NodeResultsContext.Provider value={nodeResults ?? {}}>
-        <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
-          onNodesChange={handleNodesChange} onEdgesChange={handleEdgesChange}
-          onConnect={onConnect} onNodeDragStop={onNodeDragStop}
-          onDrop={onDrop} onDragOver={onDragOver}
-          onNodeClick={onNodeClick}
-          onPaneClick={closePaneMenu}
-          onMoveStart={closePaneMenu}
-          onPaneContextMenu={onPaneContextMenu}
-          edgeTypes={edgeTypes}
-          selectionOnDrag selectionMode={SelectionMode.Partial}
-          fitView panOnScroll panOnScrollMode={PanOnScrollMode.Free}>
-          <Background />
-          <Controls fitViewOptions={CANVAS_FIT_VIEW_OPTIONS} onFitView={handleFitView} />
-        </ReactFlow>
-        {paneMenu && (
-          <div
-            className="fixed z-50 min-w-32 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
-            style={{ left: paneMenu.screenX, top: paneMenu.screenY }}
-            onMouseDown={(e) => e.stopPropagation()}
+      <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
+        onNodesChange={handleNodesChange} onEdgesChange={handleEdgesChange}
+        onConnect={onConnect} onNodeDragStop={onNodeDragStop}
+        onDrop={onDrop} onDragOver={onDragOver}
+        onPaneClick={closePaneMenu}
+        onMoveStart={closePaneMenu}
+        onPaneContextMenu={onPaneContextMenu}
+        edgeTypes={edgeTypes}
+        selectionOnDrag selectionMode={SelectionMode.Partial}
+        fitView panOnScroll panOnScrollMode={PanOnScrollMode.Free}>
+        <Background />
+        <Controls fitViewOptions={CANVAS_FIT_VIEW_OPTIONS} onFitView={handleFitView} />
+      </ReactFlow>
+      {paneMenu && (
+        <div
+          className="fixed z-50 min-w-32 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+          style={{ left: paneMenu.screenX, top: paneMenu.screenY }}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+            onClick={() => {
+              handleAutoLayout()
+              setPaneMenu(null)
+            }}
           >
-            <button
-              className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
-              onClick={() => {
-                handleAutoLayout()
-                setPaneMenu(null)
-              }}
-            >
-              <LayoutGrid className="size-4" />
-              自动布局
-            </button>
-            <button
-              className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0"
-              disabled={!clipboard}
-              onClick={() => {
-                pasteNodes({ x: paneMenu.flowX, y: paneMenu.flowY })
-                setPaneMenu(null)
-              }}
-            >
-              <Clipboard className="size-4" />
-              粘贴
-              <span className="ml-auto text-xs tracking-widest text-muted-foreground">⌘V</span>
-            </button>
-          </div>
-        )}
-      </NodeResultsContext.Provider>
+            <LayoutGrid className="size-4" />
+            自动布局
+          </button>
+          <button
+            className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0"
+            disabled={!clipboard}
+            onClick={() => {
+              pasteNodes({ x: paneMenu.flowX, y: paneMenu.flowY })
+              setPaneMenu(null)
+            }}
+          >
+            <Clipboard className="size-4" />
+            粘贴
+            <span className="ml-auto text-xs tracking-widest text-muted-foreground">⌘V</span>
+          </button>
+        </div>
+      )}
     </CanvasActionsContext.Provider>
   )
 })
