@@ -82,10 +82,7 @@ function createContentWindowService(deps: ContentWindowServiceDeps) {
       contentWindowHealthServices.set(window, health)
 
       window.webContents.on("preload-error", (_event, preloadPath, error) => {
-        deps.logger.error("Content window preload script failed.", {
-          error,
-          preloadPath,
-        })
+        deps.logger.error("Content window preload script failed.", { error })
       })
 
       window.once("ready-to-show", () => {

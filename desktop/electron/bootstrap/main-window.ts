@@ -58,7 +58,7 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
   deps.windowManager?.attach({ id: "main", role: "main" }, managedBrowserWindow(window, "main"))
 
   window.webContents.on("preload-error", (_event, preloadPath, error) => {
-    logger.error("Preload script failed.", { error, preloadPath })
+    logger.error("Preload script failed.", { error })
   })
 
   window.once("ready-to-show", () => {
