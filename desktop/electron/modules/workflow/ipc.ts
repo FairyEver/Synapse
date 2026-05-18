@@ -383,6 +383,13 @@ export const workflowIpcModule: IpcModule = {
           logger.warn("workflow:save blocked by validation", { id: d.id, errors: result.errors })
         } else {
           logger.info("workflow:save succeeded", { id: d.id, versionHash: result.versionHash })
+          const eventBus = ctx.resolve<EventBus>("core.event-bus")
+          eventBus.emit({
+            domain: "workflow",
+            type: "workflow:definition-updated",
+            payload: { workflowId: d.id, versionHash: result.versionHash, source: "save" },
+            timestamp: new Date().toISOString(),
+          })
         }
         return result
       },

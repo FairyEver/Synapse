@@ -80,20 +80,26 @@ describe("RunSnapshotService", () => {
     expect((await readdir(dir)).some((file) => file.endsWith(".tmp"))).toBe(false)
   })
 
-  it("logs snapshot filesystem failures with sanitized diagnostics", async () => {
+  it("sanitizes file paths from error messages in logs", async () => {
     const root = await tmpDir()
+    const wfDir = path.join(root, "workflow-runs", "wf")
+    await mkdir(wfDir, { recursive: true })
+    // Create a "file" that's actually a directory — readFile fails with EISDIR on macOS,
+    // and the error message contains the file path
+    await mkdir(path.join(wfDir, "run-1.json"), { recursive: true })
+
     const svc = new RunSnapshotService(root)
+    await svc.list("wf")
 
-    await expect(svc.list("wf-missing")).resolves.toEqual([])
-
-    expect(logger.warn).toHaveBeenCalledWith("run snapshot readdir failed", expect.objectContaining({
-      workflowId: "wf-missing",
-      errorName: expect.any(String),
-      errorLength: expect.any(Number),
-      errorMessage: expect.any(String),
-      code: "ENOENT",
-    }))
-    const metadata = logger.warn.mock.calls.at(-1)?.[1] as Record<string, unknown>
+    const warnCall = logger.warn.mock.calls.find(
+      (call: unknown[]) => call[0] === "run snapshot file corrupted or unreadable, skipping"
+    )
+    expect(warnCall).toBeDefined()
+    const metadata = warnCall![1] as Record<string, unknown>
+    expect(metadata.errorMessage).toBeDefined()
+    // Should not contain any local file paths
+    expect(String(metadata.errorMessage)).not.toContain(root)
+    expect(String(metadata.errorMessage)).not.toMatch(/\/(?:Users|tmp|private)\//)
     expect(metadata).not.toHaveProperty("error")
     expect(metadata).not.toHaveProperty("stack")
   })

@@ -4,6 +4,7 @@ import path from "node:path"
 import type { WorkflowRunSnapshot } from "../../../src/types/workflow"
 import { createMainLogger } from "../log-store"
 import { errorCode } from "./workflow-utils"
+import { sanitizeError } from "../error-sanitize"
 
 const logger = createMainLogger("service.workflow.snapshots")
 
@@ -180,11 +181,12 @@ function snapshotErrorMetadata(error: unknown): {
   readonly code?: string
 } {
   const message = error instanceof Error ? error.message : String(error)
+  const sanitized = sanitizeError(message)
   const code = errorCode(error)
   return {
     errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: message.length,
-    errorMessage: message,
+    errorLength: sanitized.length,
+    errorMessage: sanitized,
     ...(code ? { code } : {}),
   }
 }
