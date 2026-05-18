@@ -1,9 +1,11 @@
 import { useEffect, useRef } from "react"
+import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import { renderMarkdown } from "@/lib/markdown"
 import { MARKDOWN_BODY_CLASSNAME } from "@/components/markdown-viewer"
+import { requireBridgeDomain } from "@/lib/electron-bridge"
 import type {
   SynapseAgentDisplayProfile,
   SynapseAgentMessageTimelineItem,
@@ -147,6 +149,21 @@ function AssistantMessageBody({
           },
         })
         onOpenReference(href)
+      } else {
+        // External link — open in system browser via shell.openExternal
+        event.preventDefault()
+        try {
+          requireBridgeDomain("shell").openExternal(href)
+        } catch (error) {
+          logger.warn("agent.external-link.open.failed", {
+            boundary: "renderer.agent.external-link",
+            messageId: item.id,
+            role: item.role,
+            href,
+            ...errorLogMeta(error),
+          })
+          toast.error("无法打开外部链接")
+        }
       }
     }
   }
