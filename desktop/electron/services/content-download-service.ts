@@ -188,15 +188,15 @@ class ContentDownloadService {
 
     await withTemporaryOutput(definition.download.extension, async (tempPath) => {
       await writeFile(tempPath, file.content, "utf8")
-      logger.info("Wrote text content to temp file.", { tempPath })
+      logger.info("Wrote text content to temp file.", { tempPath: path.basename(tempPath) })
       await copyFile(tempPath, targetPath)
-      logger.info("Copied text content to target.", { targetPath })
+      logger.info("Copied text content to target.", { targetPath: path.basename(targetPath) })
     })
 
     logger.info("Text content download export completed.", {
       contentType,
       id,
-      targetPath,
+      targetPath: path.basename(targetPath),
     })
   }
 
@@ -214,11 +214,11 @@ class ContentDownloadService {
 
       try {
         await mkdir(stagingDirectoryPath, { recursive: true })
-        logger.info("Created staging directory for zip export.", { stagingDirectoryPath })
+        logger.info("Created staging directory for zip export.", { stagingDirectoryPath: path.basename(stagingDirectoryPath) })
 
         const mainFilePath = path.join(stagingDirectoryPath, "main.md")
         await writeFile(mainFilePath, `${detail.content}\n`, "utf8")
-        logger.info("Wrote main content to staging.", { filePath: mainFilePath })
+        logger.info("Wrote main content to staging.", { filePath: path.basename(mainFilePath) })
 
         assertUniqueContentAttachmentPaths(detail.attachments.map((attachment) => attachment.originalName))
 
@@ -250,9 +250,9 @@ class ContentDownloadService {
         }
 
         await createSkillArchive(stagingDirectoryPath, tempPath)
-        logger.info("Created skill archive.", { tempPath })
+        logger.info("Created skill archive.", { tempPath: path.basename(tempPath) })
         await copyFile(tempPath, targetPath)
-        logger.info("Copied archive to target.", { targetPath })
+        logger.info("Copied archive to target.", { targetPath: path.basename(targetPath) })
       } finally {
         await rm(stagingRoot, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up staging root", err))
       }
@@ -261,7 +261,7 @@ class ContentDownloadService {
     logger.info("Archive content download export completed.", {
       contentType,
       id,
-      targetPath,
+      targetPath: path.basename(targetPath),
     })
   }
 }

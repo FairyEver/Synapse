@@ -423,7 +423,7 @@ export const contentIpcModule: IpcModule = {
             outcome: "denied",
             metadata: downloadMetadata,
           })
-          logger.warn("Content download permission denied.", { targetPath: result.filePath, ...downloadMetadata })
+          logger.warn("Content download permission denied.", { targetPath: path.basename(result.filePath), ...downloadMetadata })
           throw new Error("没有写入该位置的权限。")
         }
 
@@ -435,7 +435,7 @@ export const contentIpcModule: IpcModule = {
           metadata: { ...downloadMetadata, fileName: sanitizedFileName },
         })
 
-        logger.info(`Content download started. contentType: ${args.contentType}, contentId: ${args.id}, targetPath: ${result.filePath}`)
+        logger.info(`Content download started. contentType: ${args.contentType}, contentId: ${args.id}, targetPath: ${path.basename(result.filePath)}`)
         await contentDownloadService.download(args.contentType, args.id, result.filePath)
 
         return {
