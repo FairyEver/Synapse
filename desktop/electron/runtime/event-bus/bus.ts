@@ -106,7 +106,12 @@ export class EventBusImpl implements EventBus {
     this.notifyLocalListeners(event)
     if (this.broadcaster) {
       const channel = channelForDomain(event.domain)
-      this.broadcaster.broadcast(event, channel)
+      try {
+        this.broadcaster.broadcast(event, channel)
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn(`[event-bus:${event.domain}] broadcaster threw`, err)
+      }
     }
   }
 

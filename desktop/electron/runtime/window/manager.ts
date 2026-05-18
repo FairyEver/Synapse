@@ -168,8 +168,12 @@ export class WindowManagerImpl implements WindowManager {
       const handle = entry.handle
       if (!handle || handle.isDestroyed()) continue
       if (filter && !filter(handle)) continue
-      handle.send(channel, payload)
-      sent++
+      try {
+        handle.send(channel, payload)
+        sent++
+      } catch {
+        // Window destroyed between isDestroyed() check and send — skip silently.
+      }
     }
     return sent
   }
