@@ -20,11 +20,14 @@ export class RunSnapshotService {
     try {
       files = (await readdir(dir)).filter((f) => f.endsWith(".json"))
     } catch (err) {
+      const code = errorCode(err)
+      // ENOENT means no history yet — return empty without warning
+      if (code === "ENOENT") return []
       logger.warn("run snapshot readdir failed", {
         workflowId,
         ...snapshotErrorMetadata(err),
       })
-      return []
+      throw err
     }
     const entries = await Promise.all(files.map(async (file) => {
       try {
@@ -93,17 +96,9 @@ export class RunSnapshotService {
   }
 
   async list(workflowId: string): Promise<WorkflowRunSnapshot[]> {
-    try {
-      return (await this.readSnapshotFiles(workflowId))
-        .sort((a, b) => this.snapshotTime(b.snapshot) - this.snapshotTime(a.snapshot))
-        .map(({ snapshot }) => snapshot)
-    } catch (err) {
-      logger.warn("run snapshot list failed", {
-        workflowId,
-        ...snapshotErrorMetadata(err),
-      })
-      return []
-    }
+    return (await this.readSnapshotFiles(workflowId))
+      .sort((a, b) => this.snapshotTime(b.snapshot) - this.snapshotTime(a.snapshot))
+      .map(({ snapshot }) => snapshot)
   }
 
   async deleteWorkflow(workflowId: string): Promise<void> {
