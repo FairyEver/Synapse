@@ -461,6 +461,7 @@ function useChatConnection(
         }
         return
       }
+      clearTimeline()
       dispatch({ type: "SET_ERROR", error: "切换失败" })
     }
   }, [clearTimeline, dispatch, loadTimeline, refreshProjectMeta, selectRequestIdRef, setSelectedSession, state.sessions])
