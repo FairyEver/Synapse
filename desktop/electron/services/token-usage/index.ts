@@ -1,4 +1,5 @@
 import fs from "node:fs"
+import path from "node:path"
 import { scanAllClients } from "./scanner"
 import { getFingerprint, upsertFingerprint, upsertDailyUsage, upsertHourlyUsage, clearDailyUsageForClient, clearHourlyUsageForClient, clearFingerprintsForClient, clearAllData, setScanMeta } from "./db"
 import { getGraphResult, getModelReport, getDailyReport, getAgentReport, getHourlyReport, getHourlyProfile } from "./aggregator"
@@ -100,7 +101,7 @@ async function doScan(): Promise<ScanProgress> {
         anyDirty = true
         break
       } catch (error) {
-        logger.error("Failed to stat file", { filePath, error: String(error) })
+        logger.error("Failed to stat file", { fileName: path.basename(filePath), pathLength: filePath.length, error: String(error) })
       }
     }
 
@@ -121,7 +122,7 @@ async function doScan(): Promise<ScanProgress> {
         parsed.push({ messages, stat })
       } catch (error) {
         logger.error("Failed to parse file, preserving old data for client", {
-          clientId: result.clientId, filePath, error: String(error),
+          clientId: result.clientId, fileName: path.basename(filePath), pathLength: filePath.length, error: String(error),
         })
         parseAborted = true
         break
