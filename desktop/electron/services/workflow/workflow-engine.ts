@@ -200,7 +200,7 @@ export class WorkflowEngine {
             },
           })
 
-          if (effectiveAbortSignal.aborted && execResult.status !== "failed") {
+          if (effectiveAbortSignal.aborted) {
             return { nodeId, status: "cancelled", error: "运行被取消", durationMs: execResult.durationMs }
           }
 
