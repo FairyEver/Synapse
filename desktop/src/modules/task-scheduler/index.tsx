@@ -201,19 +201,18 @@ const [isExporting, setIsExporting] = useState(false)
   }
 
   async function handleImportStart() {
-    const result = await importTasksFromFile()
-    if (!result.success || !result.content) return
     try {
+      const result = await importTasksFromFile()
+      if (!result.success || !result.content) return
       const parsed = parseTaskImportFile(result.content)
       setImportEntries(parsed.tasks)
     } catch (importError) {
-      logger.warn("Task import parse failed.", {
+      logger.warn("Task import failed.", {
         action: "importTasks",
-        boundary: "renderer.task-scheduler.import.parse",
-        contentLength: result.content.length,
+        boundary: "renderer.task-scheduler.import.read",
         ...errorLogMeta(importError),
       })
-      notify({ message: "文件格式无效", tone: "destructive" })
+      notify({ message: "导入失败", tone: "destructive" })
     }
   }
 
