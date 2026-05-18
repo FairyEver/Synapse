@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { toast } from "sonner"
 import {
   openContentDetailWindow,
 } from "@/app-shell/content"
@@ -300,9 +301,21 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
     })
     setIsSaving(true)
 
-    const serializedPayload = serializePayload
-      ? await serializePayload(payload)
-      : payload
+    let serializedPayload: TPayload | SynapseUpdateContentPayload<typeof item.type>
+    try {
+      serializedPayload = serializePayload
+        ? await serializePayload(payload)
+        : payload
+    } catch (serializeError) {
+      setIsSaving(false)
+      logger.error(`${labels.singular} save payload serialization failed.`, {
+        contentId: detail.id,
+        contentType,
+        error: serializeError,
+      })
+      toast("附件读取失败，请检查后重试。")
+      return
+    }
 
     await promise(
       async () => {

@@ -3,7 +3,6 @@ import { Pencil, Plus, Trash2 } from "lucide-react"
 import { useActiveRepository, useRepositoryActions } from "@/app-shell/use-repository-manager"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -80,6 +79,7 @@ function VariablesPanel() {
   const [deletingVariable, setDeletingVariable] = useState<SynapseVariable | null>(null)
   const [form, setForm] = useState<VariableFormState>({ name: "", value: "", description: "" })
   const [formError, setFormError] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState(false)
 
   const variables = useMemo(
     () => activeRepository?.variables ?? [],
@@ -176,6 +176,7 @@ function VariablesPanel() {
     if (!activeRepository || !deletingVariable) return
 
     const nextVariables = variables.filter((v) => v.name !== deletingVariable.name)
+    setDeleting(true)
 
     try {
       await updateRepository(activeRepository.uuid, {
@@ -184,6 +185,8 @@ function VariablesPanel() {
       setDeletingVariable(null)
     } catch {
       setFormError("删除失败，请重试。")
+    } finally {
+      setDeleting(false)
     }
   }, [activeRepository, deletingVariable, updateRepository, variables])
 
@@ -306,10 +309,10 @@ function VariablesPanel() {
             {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction onClick={() => void handleDelete()}>
-              删除
-            </AlertDialogAction>
+            <AlertDialogCancel disabled={deleting}>取消</AlertDialogCancel>
+            <Button variant="destructive" disabled={deleting} onClick={() => void handleDelete()}>
+              {deleting ? "正在删除..." : "删除"}
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
