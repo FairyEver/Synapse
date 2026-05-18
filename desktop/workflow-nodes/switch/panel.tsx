@@ -142,6 +142,7 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
                 size="icon" variant="ghost" className="h-7 w-7 shrink-0"
                 onClick={() => removeBranch(i)}
                 disabled={branches.length <= 1}
+                aria-label={`删除分支 ${b.label || b.id}`}
               >
                 <Trash2 className="h-3 w-3" />
               </Button>
