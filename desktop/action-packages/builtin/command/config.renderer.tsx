@@ -92,7 +92,14 @@ export function CommandConfigForm({
             placeholder={"KEY=value\nANOTHER_KEY=value"}
             rows={3}
             value={stringifyRecordText(value.env)}
-            onChange={(event) => onChange({ ...value, env: parseRecordText(event.target.value) })}
+            onChange={(event) => {
+              try {
+                onChange({ ...value, env: parseRecordText(event.target.value) })
+              } catch {
+                // Ignore parse errors for intermediate input — user types character by
+                // character and hasn't completed a KEY=value line yet.
+              }
+            }}
           />
           <FieldDescription>每行一个 KEY=value，会与系统允许的环境变量合并</FieldDescription>
         </FieldContent>
