@@ -82,4 +82,26 @@ describe("sendOutboundHttpRequest", () => {
       }),
     )
   })
+
+  it("throws AbortError when abortSignal is already aborted before request starts", async () => {
+    const controller = new AbortController()
+    controller.abort()
+    let signalWasAborted = false
+    const fetchImpl = vi.fn(async (_url: string, opts: { signal: AbortSignal }) => {
+      signalWasAborted = opts.signal?.aborted ?? false
+      if (opts.signal?.aborted) {
+        throw new DOMException("Aborted", "AbortError")
+      }
+      return new Response("ok", { status: 200 })
+    })
+
+    await expect(sendOutboundHttpRequest({
+      method: "GET",
+      url: "https://example.com/api",
+      abortSignal: controller.signal,
+      fetchImpl,
+    })).rejects.toThrow()
+
+    expect(signalWasAborted).toBe(true)
+  })
 })

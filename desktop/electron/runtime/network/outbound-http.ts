@@ -27,7 +27,11 @@ export async function sendOutboundHttpRequest(
     ? undefined
     : setTimeout(() => controller.abort(), request.timeoutMs)
   const onAbort = () => controller.abort()
-  request.abortSignal?.addEventListener("abort", onAbort, { once: true })
+  if (request.abortSignal?.aborted) {
+    controller.abort()
+  } else {
+    request.abortSignal?.addEventListener("abort", onAbort, { once: true })
+  }
   const startedAt = performance.now()
   try {
     const response = await (request.fetchImpl ?? fetch)(request.url, {
