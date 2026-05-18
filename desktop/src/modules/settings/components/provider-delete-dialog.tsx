@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
 import {
   AlertDialog,
@@ -33,12 +33,16 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
   const [scan, setScan] = useState<ScanState>({ status: "loading" })
   const [migrationOpen, setMigrationOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const scanningProviderIdRef = useRef<string | null>(null)
 
   const runScan = useCallback(async () => {
     if (!provider) return
+    const providerId = provider.id
+    scanningProviderIdRef.current = providerId
     setScan({ status: "loading" })
     try {
-      const result = await requireSynapseBridge().agent.scanProviderReferences({ providerId: provider.id })
+      const result = await requireSynapseBridge().agent.scanProviderReferences({ providerId })
+      if (scanningProviderIdRef.current !== providerId) return
       setScan({
         status: "loaded",
         taskCount: result.taskCount,
@@ -47,6 +51,7 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
         references: result.references.map((r) => ({ kind: r.kind, entityName: r.entityName, nodeName: r.nodeName })),
       })
     } catch {
+      if (scanningProviderIdRef.current !== providerId) return
       logger.error("Provider reference scan failed.", { boundary: "settings.providers.scan", providerId: provider.id })
       setScan({ status: "error", message: "扫描引用失败" })
     }
