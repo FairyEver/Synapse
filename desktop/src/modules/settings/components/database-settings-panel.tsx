@@ -157,16 +157,18 @@ function DatabaseSettingsPanel() {
   }, [])
 
   const handleInstallCLI = useCallback(async () => {
-    await promise(
-      async () => {
-        const result = await databaseCliInstall()
-        if (!result.success) throw new Error(result.error ?? "安装失败")
-        const status = await databaseCliStatusGet()
-        setCliStatus(status)
-        logger.info("CLI installed.", { available: status.available })
-      },
-      { loading: "正在安装 CLI...", success: "CLI 已安装" },
-    )
+    try {
+      await promise(
+        async () => {
+          const result = await databaseCliInstall()
+          if (!result.success) throw new Error(result.error ?? "安装失败")
+          const status = await databaseCliStatusGet()
+          setCliStatus(status)
+          logger.info("CLI installed.", { available: status.available })
+        },
+        { loading: "正在安装 CLI...", success: "CLI 已安装" },
+      )
+    } catch {}
   }, [promise])
 
   const refreshCliDebugInfo = useCallback(async () => {
@@ -227,26 +229,30 @@ function DatabaseSettingsPanel() {
   }, [cliDebugInfo, promise, refreshCliDebugInfo])
 
   const handleExport = useCallback(async () => {
-    await promise(
-      async () => {
-        const result = await databaseExport()
-        if (!result.success) return
-        logger.info("Database exported.")
-      },
-      { loading: "正在导出...", success: "数据库已导出" },
-    )
+    try {
+      await promise(
+        async () => {
+          const result = await databaseExport()
+          if (!result.success) return
+          logger.info("Database exported.")
+        },
+        { loading: "正在导出...", success: "数据库已导出" },
+      )
+    } catch {}
   }, [promise])
 
   const handleImport = useCallback(async () => {
-    await promise(
-      async () => {
-        const result = await databaseImport()
-        if (!result.success) return
-        await refreshStatus()
-        logger.info("Database imported.")
-      },
-      { loading: "正在导入...", success: "数据库已导入" },
-    )
+    try {
+      await promise(
+        async () => {
+          const result = await databaseImport()
+          if (!result.success) return
+          await refreshStatus()
+          logger.info("Database imported.")
+        },
+        { loading: "正在导入...", success: "数据库已导入" },
+      )
+    } catch {}
   }, [promise, refreshStatus])
 
   const handleOpenDbDirectory = useCallback(() => {
