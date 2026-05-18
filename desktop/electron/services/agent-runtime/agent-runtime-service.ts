@@ -571,14 +571,13 @@ export class AgentRuntimeService {
         pending,
         { behavior: request.behavior },
       )
+      this.sessionManager.settlePendingPermission(pending)
     } catch (error) {
       this.recordPermissionAudit(action, request.actor, resource, "failed", pending, {
         behavior: request.behavior,
         ...summarizePermissionResponseError(error),
       })
       throw error
-    } finally {
-      this.sessionManager.settlePendingPermission(pending)
     }
   }
 
