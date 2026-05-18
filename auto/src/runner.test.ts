@@ -285,6 +285,18 @@ test('createClaudeCodeEventAccumulator deduplicates result with last tool_result
   assert.equal(acc.read({ type: 'result', result: 'different' }), 'different')
 })
 
+test('createClaudeCodeEventAccumulator surfaces API retry system events', () => {
+  const acc = createClaudeCodeEventAccumulator()
+  assert.equal(acc.read({
+    type: 'system',
+    subtype: 'api_retry',
+    attempt: 8,
+    max_retries: 10,
+    error_status: 401,
+    error: 'authentication_failed',
+  }), 'API 重试 8/10：authentication_failed (401)')
+})
+
 test('runWorker calls onOutput for each stdout line', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'auto-runner-output-'))
   try {
@@ -317,6 +329,42 @@ test('runWorker calls onOutput for each stdout line', async () => {
     assert.ok(outputLines.some(l => l.stream === 'stdout' && l.text === 'line two'))
     assert.ok(outputLines.every(l => l.workerId === 1))
     assert.ok(outputLines.every(l => typeof l.ts === 'number'))
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('runWorker splits multi-line readable events before publishing output', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-runner-output-multiline-'))
+  try {
+    const command = join(dir, 'claude.sh')
+    await writeFile(command, `#!/bin/sh
+printf '%s\\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"first line\\nsecond line"}]}}'
+`, 'utf-8')
+    await chmod(command, 0o755)
+
+    const config: UiConfig = {
+      ...DEFAULT_UI_CONFIG,
+      prompt: 'hello',
+      workingDirectory: dir,
+      provider: 'claude-code',
+      claudeCode: {
+        command,
+        model: 'sonnet',
+        dangerouslySkipPermissions: true,
+        outputFormat: 'stream-json',
+        maxTurns: 10,
+        systemPrompt: '',
+      },
+    }
+    const logger = new BatchLogger(new Date('2026-05-13T12:00:00Z'), dir)
+    const outputLines: OutputLine[] = []
+    await runWorker(config, 1, logger.createWorkerLogger(1), undefined, line => {
+      outputLines.push(line)
+    })
+
+    assert.deepEqual(outputLines.map(line => line.text), ['first line', 'second line'])
+    assert.ok(outputLines.every(line => line.stream === 'event'))
   } finally {
     await rm(dir, { recursive: true, force: true })
   }

@@ -27,7 +27,7 @@ describe("agent bridge preview progress", () => {
     expect(JSON.stringify(payload)).not.toContain("session=abc")
   })
 
-  it("redacts JSON-style secret fields from progress previews", () => {
+  it("redacts JSON-style auth fields from progress previews", () => {
     const entry = progressEntryFromEvent({
       type: "toolUse",
       toolName: "mcp",
@@ -62,6 +62,45 @@ describe("agent bridge preview progress", () => {
 
     expect(rendered).toContain("authorization=[redacted]")
     expect(`${rendered}\n${payloadJson}`).not.toContain("sk-equals")
+  })
+
+  it("redacts secret assignment fields from progress previews", () => {
+    const entry = progressEntryFromEvent({
+      type: "toolUse",
+      toolName: "bash",
+      toolInput: "deploy secret=sk-secret client_secret=client-secret api_key=sk-api",
+    })
+
+    if (!entry) throw new Error("Expected progress entry")
+
+    const rendered = renderCompactProgress([entry])
+    const payloadJson = JSON.stringify(compactProgressPayload([entry]))
+
+    expect(rendered).toContain("secret=[redacted]")
+    expect(rendered).toContain("client_secret=[redacted]")
+    expect(rendered).toContain("api_key=[redacted]")
+    expect(`${rendered}\n${payloadJson}`).not.toContain("sk-secret")
+    expect(`${rendered}\n${payloadJson}`).not.toContain("client-secret")
+    expect(`${rendered}\n${payloadJson}`).not.toContain("sk-api")
+  })
+
+  it("redacts JSON-style secret fields from progress previews", () => {
+    const entry = progressEntryFromEvent({
+      type: "toolResult",
+      toolName: "mcp",
+      content: '{"secret":"json-secret","client_secret":"client-json-secret","safe":"ok"}',
+    })
+
+    if (!entry) throw new Error("Expected progress entry")
+
+    const rendered = renderCompactProgress([entry])
+    const payloadJson = JSON.stringify(compactProgressPayload([entry]))
+
+    expect(rendered).toContain('"secret":"[redacted]"')
+    expect(rendered).toContain('"client_secret":"[redacted]"')
+    expect(rendered).toContain('"safe":"ok"')
+    expect(`${rendered}\n${payloadJson}`).not.toContain("json-secret")
+    expect(`${rendered}\n${payloadJson}`).not.toContain("client-json-secret")
   })
 
   it("redacts local absolute paths from progress previews", () => {

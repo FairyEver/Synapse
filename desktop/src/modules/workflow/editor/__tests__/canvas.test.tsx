@@ -1,11 +1,12 @@
 /**
  * @vitest-environment jsdom
  */
-import { act } from "react"
+import { act, createRef } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { WorkflowDefinition } from "@/types/workflow"
+import type { WorkflowCanvasHandle } from "../canvas"
 
 const { setViewportMock } = vi.hoisted(() => ({
   setViewportMock: vi.fn(),
@@ -34,7 +35,10 @@ vi.mock("@xyflow/react", async () => {
     useOnSelectionChange: vi.fn(),
     addEdge: vi.fn((_connection: unknown, edges: unknown[]) => edges),
     applyEdgeChanges: vi.fn((_changes: unknown[], edges: unknown[]) => edges),
-    applyNodeChanges: vi.fn((_changes: unknown[], nodes: unknown[]) => nodes),
+    applyNodeChanges: vi.fn((changes: Array<{ type: string; id?: string }>, nodes: Array<{ id: string }>) => {
+      const removedIds = new Set(changes.filter((change) => change.type === "remove").map((change) => change.id))
+      return nodes.filter((node) => !removedIds.has(node.id))
+    }),
   }
 })
 
@@ -89,6 +93,28 @@ describe("WorkflowCanvas", () => {
 
     expect(setViewportMock).toHaveBeenCalledWith({ x: 0, y: 0, zoom: 1 }, { duration: 200 })
   })
+
+  it("propagates one definition without connected edges when deleting a node", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const canvasRef = createRef<WorkflowCanvasHandle>()
+    const onChange = vi.fn()
+
+    await act(async () => {
+      root.render(<WorkflowCanvas ref={canvasRef} definition={definitionWithConnectedPrompt()} onChange={onChange} />)
+    })
+
+    await act(async () => {
+      canvasRef.current?.deleteNodes(["prompt-1"])
+    })
+
+    const lastDefinition = onChange.mock.lastCall?.[0] as WorkflowDefinition | undefined
+    expect(onChange).toHaveBeenCalledTimes(1)
+    expect(lastDefinition?.nodes.map((node) => node.id)).toEqual(["start-1", "end-1"])
+    expect(lastDefinition?.edges).toEqual([])
+  })
 })
 
 function definition(): WorkflowDefinition {
@@ -101,6 +127,39 @@ function definition(): WorkflowDefinition {
     params: [],
     nodes: [],
     edges: [],
+  }
+}
+
+function definitionWithConnectedPrompt(): WorkflowDefinition {
+  return {
+    ...definition(),
+    nodes: [
+      {
+        id: "start-1",
+        name: "Start",
+        type: "prompt",
+        position: { x: 0, y: 0 },
+        config: {},
+      },
+      {
+        id: "prompt-1",
+        name: "Prompt",
+        type: "prompt",
+        position: { x: 100, y: 0 },
+        config: {},
+      },
+      {
+        id: "end-1",
+        name: "End",
+        type: "end",
+        position: { x: 200, y: 0 },
+        config: {},
+      },
+    ],
+    edges: [
+      { id: "edge-1", from: "start-1", to: "prompt-1" },
+      { id: "edge-2", from: "prompt-1", to: "end-1" },
+    ],
   }
 }
 

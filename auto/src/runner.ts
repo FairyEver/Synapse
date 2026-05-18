@@ -146,6 +146,14 @@ function eventText(record: Record<string, unknown>): string {
   return ''
 }
 
+function numberField(record: Record<string, unknown>, fields: string[]): number | undefined {
+  for (const field of fields) {
+    const value = record[field]
+    if (typeof value === 'number') return value
+  }
+  return undefined
+}
+
 export function createCodexEventAccumulator(): { read(event: unknown): string } {
   const reasoningById = new Map<string, string>()
 
@@ -177,6 +185,16 @@ export function createClaudeCodeEventAccumulator(): { read(event: unknown): stri
     read(event: unknown): string {
       if (!isRecord(event)) return ''
       const type = stringField(event, ['type'])
+
+      if (type === 'system' && stringField(event, ['subtype']) === 'api_retry') {
+        const attempt = numberField(event, ['attempt'])
+        const maxRetries = numberField(event, ['max_retries'])
+        const status = numberField(event, ['error_status'])
+        const error = stringField(event, ['error', 'message']) || 'request failed'
+        const retryLabel = attempt !== undefined && maxRetries !== undefined ? ` ${attempt}/${maxRetries}` : ''
+        const statusLabel = status !== undefined ? ` (${status})` : ''
+        return `API 重试${retryLabel}：${error}${statusLabel}`
+      }
 
       if (type === 'assistant') {
         const message = event.message
@@ -282,6 +300,29 @@ function runningWorker(workerId: number, logger: WorkerLogger, startedAt: number
   }
 }
 
+function splitOutputText(text: string): string[] {
+  return text.split(/\r?\n/)
+}
+
+function lastNonEmptyOutputLine(text: string): string {
+  const lines = splitOutputText(text)
+  for (let index = lines.length - 1; index >= 0; index--) {
+    if (lines[index].trim()) return lines[index]
+  }
+  return text
+}
+
+function publishOutputText(
+  onOutput: WorkerOutputCallback | undefined,
+  workerId: number,
+  stream: OutputLine['stream'],
+  text: string
+): void {
+  for (const line of splitOutputText(text)) {
+    onOutput?.({ workerId, stream, text: line, ts: Date.now() })
+  }
+}
+
 export async function runWorker(
   config: UiConfig,
   workerId: number,
@@ -337,9 +378,9 @@ export async function runWorker(
       if (event) {
         logger.writeEvent(event)
         const readable = eventAccumulator.read(event)
-        lastMessage = readable || lastMessage
+        lastMessage = readable ? lastNonEmptyOutputLine(readable) : lastMessage
         if (readable) {
-          onOutput?.({ workerId, stream: 'event', text: readable, ts: Date.now() })
+          publishOutputText(onOutput, workerId, 'event', readable)
         }
       } else {
         lastMessage = line
