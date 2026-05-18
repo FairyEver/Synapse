@@ -46,11 +46,15 @@ function useScanItemContent(filePath: string | null) {
 
 function useSkillFiles(dirPath: string | null) {
   const [files, setFiles] = useState<EditorScanSkillFileEntry[]>([])
+  const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const lastPathRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!dirPath) {
       setFiles([])
+      setError(null)
+      setLoading(false)
       lastPathRef.current = null
       return
     }
@@ -61,10 +65,19 @@ function useSkillFiles(dirPath: string | null) {
     const bridge = getSynapseBridge()
     if (!bridge) return
 
-    void bridge.editorScan.listSkillFiles(dirPath).then(setFiles).catch(() => setFiles([]))
+    setLoading(true)
+    setError(null)
+    void bridge.editorScan.listSkillFiles(dirPath)
+      .then(setFiles)
+      .catch((err) => {
+        logger.error("Failed to load skill files.", { path: dirPath, error: err })
+        setFiles([])
+        setError(err instanceof Error ? err.message : "读取关联文件失败")
+      })
+      .finally(() => setLoading(false))
   }, [dirPath])
 
-  return files
+  return { files, loading, error }
 }
 
 export { useScanItemContent, useSkillFiles }

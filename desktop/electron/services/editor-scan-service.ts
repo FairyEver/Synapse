@@ -447,8 +447,8 @@ async function listSkillFiles(dirPath: string): Promise<SkillFileEntry[]> {
     entries.sort((a, b) => a.name.localeCompare(b.name))
     return entries
   } catch (error) {
-    logger.warn("Failed to list skill files.", { path: dirPath, error })
-    return []
+    logger.warn("Failed to list skill files.", { error })
+    throw new Error("读取关联文件失败", { cause: error })
   }
 }
 

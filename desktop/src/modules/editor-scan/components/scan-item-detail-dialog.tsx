@@ -79,7 +79,11 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
   const { content: loadedContent, loading, error } = useScanItemContent(
     open && item?.content == null ? item?.path ?? null : null,
   )
-  const skillFiles = useSkillFiles(
+  const {
+    files: skillFiles,
+    loading: skillFilesLoading,
+    error: skillFilesError,
+  } = useSkillFiles(
     open && item?.type === "skill" ? item.path : null,
   )
   const activeRepository = useActiveRepository()
@@ -314,7 +318,9 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
         return
       }
 
-      const { content: _content, attachments: _attachments, ...metaFields } = detail
+      const { content: detailContent, attachments: detailAttachments, ...metaFields } = detail
+      void detailContent
+      void detailAttachments
       setReinstallMeta(metaFields as SynapseContentMeta)
       setReinstallEditor(adapter)
       setReinstallSelection({
@@ -660,6 +666,8 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
                     loading={loading}
                     viewMode={viewMode}
                     skillFiles={skillFiles}
+                    skillFilesLoading={skillFilesLoading}
+                    skillFilesError={skillFilesError}
                   />
                 </div>
               </div>
@@ -764,6 +772,8 @@ type ScanItemContentAreaProps = {
   loading: boolean
   viewMode: "rendered" | "source"
   skillFiles: EditorScanSkillFileEntry[]
+  skillFilesLoading: boolean
+  skillFilesError: string | null
 }
 
 function ScanItemContentArea({
@@ -772,6 +782,8 @@ function ScanItemContentArea({
   loading,
   viewMode,
   skillFiles,
+  skillFilesLoading,
+  skillFilesError,
 }: ScanItemContentAreaProps) {
   if (loading) {
     return (
@@ -813,6 +825,12 @@ function ScanItemContentArea({
   return (
     <>
       <MarkdownViewer content={content} mode={viewMode} showTabs={false} surface="plain" />
+      {skillFilesLoading ? (
+        <p className="mt-4 text-xs text-muted-foreground">正在加载关联文件</p>
+      ) : null}
+      {skillFilesError ? (
+        <p className="mt-4 text-xs text-destructive">{skillFilesError}</p>
+      ) : null}
       {skillFiles.length > 0 ? (
         <SkillFilesSection files={skillFiles} />
       ) : null}
