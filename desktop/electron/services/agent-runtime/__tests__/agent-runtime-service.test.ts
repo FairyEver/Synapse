@@ -180,6 +180,35 @@ describe("AgentRuntimeService", () => {
     expect(second.responses).toEqual([{ requestId: "conversation-b-permission-1", behavior: "deny" }])
   })
 
+  it("settles a pending permission when the permission guard denies allow", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new PermissionSession("conversation-a-permission-1", "guard denied")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      permissionGuard: {
+        check: vi.fn(async () => ({ allowed: false, reason: "blocked by policy", policyId: "policy-1" })),
+      } as never,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs permission"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    await expect(service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      actor: { kind: "user" },
+    })).rejects.toThrow("blocked by policy")
+
+    expect(service.listPendingPermissions()).toEqual([])
+    expect(session.responses).toEqual([{ requestId: "conversation-a-permission-1", behavior: "deny" }])
+    await expect(turn).resolves.toMatchObject({ resultText: "guard denied" })
+  })
+
   it("redacts permission response failure audit metadata", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const auditSink = { record: vi.fn() }
@@ -733,7 +762,9 @@ class ScriptedSession implements AgentLiveSession {
     this.events = [...events]
   }
 
-  async send(): Promise<void> {}
+  async send(): Promise<boolean> {
+    return true
+  }
   async respondPermission(): Promise<void> {}
 
   async nextEvent(): Promise<AgentEvent | null> {
@@ -760,8 +791,9 @@ class HangingSession implements AgentLiveSession {
   private waiter: ((event: AgentEvent | null) => void) | undefined
   private closed = false
 
-  async send(message: AgentMessage): Promise<void> {
+  async send(message: AgentMessage): Promise<boolean> {
     this.sent.push(message.content)
+    return true
   }
 
   async respondPermission(
@@ -822,8 +854,9 @@ class PermissionSession implements AgentLiveSession {
     private readonly resultText: string,
   ) {}
 
-  async send(): Promise<void> {
+  async send(): Promise<boolean> {
     this.sent = true
+    return true
   }
 
   async respondPermission(
@@ -895,8 +928,9 @@ class PermissionFailureSession implements AgentLiveSession {
     private readonly toolInput = "pwd",
   ) {}
 
-  async send(): Promise<void> {
+  async send(): Promise<boolean> {
     this.sent = true
+    return true
   }
 
   async respondPermission(): Promise<void> {

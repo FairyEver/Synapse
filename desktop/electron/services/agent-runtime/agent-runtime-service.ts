@@ -529,10 +529,12 @@ export class AgentRuntimeService {
 
     if (request.behavior === "allow") {
       if (request.actor.kind !== "user") {
+        const reason = "Only a user actor can allow an agent permission request"
         this.recordPermissionAudit(action, request.actor, resource, "denied", pending, {
           reason: "non-user actors cannot allow agent permission requests",
         })
-        throw new Error("Only a user actor can allow an agent permission request")
+        await this.denyAndSettlePendingPermission(pending, request, action, resource, reason)
+        throw new Error(reason)
       }
       if (this.deps.permissionGuard) {
         const permission = await this.deps.permissionGuard.check({
@@ -552,6 +554,7 @@ export class AgentRuntimeService {
             reason: permission.reason,
             policyId: permission.policyId,
           })
+          await this.denyAndSettlePendingPermission(pending, request, action, resource, permission.reason)
           throw new Error(permission.reason)
         }
       }
@@ -578,6 +581,29 @@ export class AgentRuntimeService {
         ...summarizePermissionResponseError(error),
       })
       throw error
+    }
+  }
+
+  private async denyAndSettlePendingPermission(
+    pending: PendingPermissionState,
+    request: AgentPermissionResponseRequest,
+    action: PermissionAction,
+    resource: string,
+    message: string,
+  ): Promise<void> {
+    try {
+      await pending.liveSession.respondPermission(request.requestId, {
+        behavior: "deny",
+        updatedInput: request.updatedInput ?? pending.toolInputRaw,
+        message,
+      })
+    } catch (error) {
+      this.recordPermissionAudit(action, request.actor, resource, "failed", pending, {
+        behavior: "deny",
+        ...summarizePermissionResponseError(error),
+      })
+    } finally {
+      this.sessionManager.settlePendingPermission(pending)
     }
   }
 
