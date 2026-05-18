@@ -60,6 +60,14 @@ type ContentInstallDialogProps = {
   projects: SynapseProjectConfig[]
 }
 
+async function detectInstallPlaceholders(
+  preloadedContent: string | null,
+  readCurrentContent: () => Promise<string>,
+): Promise<string[]> {
+  const content = preloadedContent ?? await readCurrentContent()
+  return detectPlaceholders(content)
+}
+
 function ContentInstallDialog({
   editor,
   initialSelection,
@@ -312,11 +320,24 @@ function ContentInstallDialog({
   }
 
   const handleInstall = async () => {
-    if (!variableConfirmPassedRef.current && preloadedContent) {
-      const placeholders = detectPlaceholders(preloadedContent)
-      if (placeholders.length > 0) {
-        setDetectedPlaceholders(placeholders)
-        setIsVariableConfirmOpen(true)
+    if (!variableConfirmPassedRef.current) {
+      try {
+        const placeholders = await detectInstallPlaceholders(preloadedContent, async () => {
+          const file = await readContent(item.type, item.id)
+          setPreloadedContent(file.content)
+          return file.content
+        })
+        if (placeholders.length > 0) {
+          setDetectedPlaceholders(placeholders)
+          setIsVariableConfirmOpen(true)
+          return
+        }
+      } catch (error) {
+        logger.warn("Failed to read content before install.", {
+          contentId: item.id,
+          error,
+        })
+        setInstallError("读取内容失败，请稍后重试。")
         return
       }
     }
@@ -583,4 +604,4 @@ function ContentInstallDialog({
   )
 }
 
-export { ContentInstallDialog }
+export { ContentInstallDialog, detectInstallPlaceholders }
