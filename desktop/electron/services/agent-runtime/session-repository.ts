@@ -144,7 +144,12 @@ export class AgentSessionRepository {
       updatedAt: now,
     }
     await this.conversations.upsert(conversation)
-    await this.deactivateActive(input.sessionKey, input.platform, conversation.id, input.workspaceKey)
+    try {
+      await this.deactivateActive(input.sessionKey, input.platform, conversation.id, input.workspaceKey)
+    } catch (e) {
+      await this.conversations.upsert({ ...conversation, active: false, updatedAt: this.isoNow() }).catch(() => {})
+      throw e
+    }
     return conversation
   }
 
@@ -192,12 +197,17 @@ export class AgentSessionRepository {
     }
     const updated = { ...target, active: true, updatedAt: this.isoNow() }
     await this.conversations.upsert(updated)
-    await this.deactivateActive(
-      sessionKey,
-      platform ?? target.platform,
-      conversationIdValue,
-      workspaceKey ?? target.workspaceKey,
-    )
+    try {
+      await this.deactivateActive(
+        sessionKey,
+        platform ?? target.platform,
+        conversationIdValue,
+        workspaceKey ?? target.workspaceKey,
+      )
+    } catch (e) {
+      await this.conversations.upsert({ ...target, active: false, updatedAt: this.isoNow() }).catch(() => {})
+      throw e
+    }
     return updated
   }
 
