@@ -220,8 +220,10 @@ export function createRunWorkflowHandler(deps: {
         nextNodeResults[event.nodeId] = event.result ?? nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: "failed", input: { variables: {} } }
       }
       runStatuses.set(runId, { ...current, nodeResults: nextNodeResults })
-      eventBus.emit({ domain: "workflow", type: event.type, payload: event, timestamp: new Date().toISOString() }, { backpressure: "block" })
-      if (event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled") {
+      const isTerminalEvt = event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled"
+      const emitPayload = isTerminalEvt ? { ...event, workflowId: id } : event
+      eventBus.emit({ domain: "workflow", type: event.type, payload: emitPayload, timestamp: new Date().toISOString() }, { backpressure: "block" })
+      if (isTerminalEvt) {
         runAborts.delete(runId)
         const endedAt = Date.now()
         const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
@@ -251,6 +253,7 @@ export function createRunWorkflowHandler(deps: {
           payload: {
             type: "workflow:failed",
             runId,
+            workflowId: id,
             error: "工作流引擎异常",
             result: { status: "failed", nodeResults: current.nodeResults, durationMs: endedAt - startedAt },
           },
