@@ -48,6 +48,7 @@ function ChoicesEditorDialog({
   const [inputValue, setInputValue] = useState("")
   const [usage, setUsage] = useState<Record<string, number>>({})
   const [usageLoading, setUsageLoading] = useState(false)
+  const [usageError, setUsageError] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState("")
 
@@ -61,6 +62,7 @@ function ChoicesEditorDialog({
     setError("")
     setSaving(false)
     setUsage({})
+    setUsageError(false)
     setUsageLoading(true)
 
     let cancelled = false
@@ -71,6 +73,7 @@ function ChoicesEditorDialog({
       .catch((err) => {
         if (cancelled) return
         logger.warn("Failed to load choice usage.", { err })
+        setUsageError(true)
       })
       .finally(() => {
         if (!cancelled) setUsageLoading(false)
@@ -223,6 +226,8 @@ function ChoicesEditorDialog({
                         ? "—"
                         : usageLoading
                         ? "…"
+                        : usageError
+                        ? "?"
                         : used > 0
                         ? `${used} 行使用`
                         : "未使用"}
@@ -246,9 +251,11 @@ function ChoicesEditorDialog({
                         data-track="database-column-choice-delete"
                         onClick={() => handleDelete(row.value)}
                         title={
-                          used > 0
-                            ? "删除此值。保存时后端会拒绝删除仍被使用的值"
-                            : "删除此值"
+                          usageError
+                            ? "使用量未知，删除操作由后端验证"
+                            : used > 0
+                              ? "删除此值。保存时后端会拒绝删除仍被使用的值"
+                              : "删除此值"
                         }
                       >
                         <Trash2 className="size-3.5" />
@@ -288,6 +295,10 @@ function ChoicesEditorDialog({
           </div>
 
           {error ? <p className="text-xs text-destructive">{error}</p> : null}
+
+          {usageError ? (
+            <p className="text-xs text-destructive">选项使用量加载失败，无法查看使用情况。保存后端会验证删除操作。</p>
+          ) : null}
 
           <p className="text-xs text-muted-foreground">
             删除正被使用的值会被拒绝。需要先改完相关行的数据再保存。
