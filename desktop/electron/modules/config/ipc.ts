@@ -242,7 +242,7 @@ export const configIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:config:reset-app",
       request: z.void(),
-      response: z.void(),
+      response: z.union([z.object({ success: z.literal(true) }), z.object({ success: z.literal(false), failedCount: z.number(), failedEntries: z.array(z.string()) })]),
       handler: async (_ctx) => {
         logger.info("Handling config.resetApp request. Wiping all user data except database files.")
 
@@ -286,6 +286,7 @@ export const configIpcModule: IpcModule = {
             failedCount: failedEntries.length,
             failedEntries,
           })
+          return { success: false as const, failedCount: failedEntries.length, failedEntries }
         }
 
         app.relaunch()
