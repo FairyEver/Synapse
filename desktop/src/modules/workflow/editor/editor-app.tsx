@@ -283,6 +283,11 @@ export function WorkflowEditorApp() {
       if ((e.metaKey || e.ctrlKey) && e.key === "s") {
         e.preventDefault()
         if (savingRef.current) return
+        // Flush any pending editor state (PromptEditor commits on blur, but
+        // the user might press Cmd+S while still focused in the textarea).
+        if (document.activeElement instanceof HTMLElement) {
+          document.activeElement.blur()
+        }
         if (!isDirtyRef.current) return
         const def = definitionRef.current
         if (def) void handleSave(def)
