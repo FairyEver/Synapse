@@ -343,7 +343,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       onCreateSession={(projectId, selection) => void chat.createSession(projectId, selection.providerId, undefined, selection.modelTier)}
       onSelect={(session) => void chat.selectSession(session)}
       onDelete={(session) => void chat.deleteSession(session)}
-      onDeleteOthers={(keep) => {
+      onDeleteOthers={async (keep) => {
         const inArchived = chat.archivedSessions.some(
           (s) => s.projectId === keep.projectId && s.id === keep.id,
         )
@@ -351,7 +351,9 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
         const others = inArchived
           ? source.filter((s) => !(s.projectId === keep.projectId && s.id === keep.id))
           : source.filter((s) => s.projectId === keep.projectId && s.id !== keep.id)
-        for (const session of others) void chat.deleteSession(session)
+        for (const session of others) {
+          await chat.deleteSession(session)
+        }
       }}
       onRename={(session, name) => void chat.renameSession(session, name)}
       onFollowFeishuChange={chat.setFollowFeishu}
