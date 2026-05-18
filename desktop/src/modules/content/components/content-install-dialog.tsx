@@ -30,6 +30,7 @@ import { getContentTypeDefinition } from "@/config/content-types"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { SynapseContentMeta } from "@/types/content"
 import type {
+  SynapseContentInstallResult,
   SynapseEditorAdapterSummary,
   SynapseEditorInstallFormValues,
 } from "@/types/editor"
@@ -219,7 +220,10 @@ function ContentInstallDialog({
         }),
         {
           loading: `正在安装到 ${editor.label}...`,
-          success: (value) => `已写入 ${value.targetPath}${replaceConfirmed ? "（旧 Skill 已备份为 -backup）" : ""}`,
+          success: (value: SynapseContentInstallResult) => {
+            const base = `已写入 ${value.targetPath}${replaceConfirmed ? "（旧 Skill 已备份为 -backup）" : ""}`
+            return value.warning ? `${base}（${value.warning}）` : base
+          },
           error: (error) => error instanceof Error ? error.message : "安装失败。",
         },
       )

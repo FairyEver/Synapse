@@ -96,6 +96,7 @@ export type SynapseContentInstallResult = {
   contentId: string
   targetKind: SynapseEditorInstallTargetKind
   targetPath: string
+  warning?: string
 }
 
 export type SynapseEditorGlobalDirectory = {

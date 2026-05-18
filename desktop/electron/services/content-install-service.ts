@@ -124,7 +124,10 @@ export class ContentInstallService {
 
     await checkEditorWritePermission(security, target.targetPath, auditMetadata)
 
+    let installWarning: string | undefined
+
     try {
+
       switch (definition.install.kind) {
         case "none":
           throw new Error(`${definition.singularLabel} 不支持安装到编辑器。`)
@@ -265,7 +268,12 @@ export class ContentInstallService {
             previousSkillDirectoryPath
             && previousSkillDirectoryPath !== target.targetPath
           ) {
-            await rm(previousSkillDirectoryPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up previous skill directory", err))
+            try {
+              await rm(previousSkillDirectoryPath, { recursive: true, force: true })
+            } catch (err) {
+              logger.warn("Failed to clean up previous skill directory", err)
+              installWarning = "旧 Skill 目录清理失败，编辑器可能残留旧文件。"
+            }
           }
 
           break
@@ -297,6 +305,7 @@ export class ContentInstallService {
       contentId: payload.contentId,
       targetKind: target.targetKind,
       targetPath: target.targetPath,
+      ...(installWarning ? { warning: installWarning } : {}),
     }
   }
 
