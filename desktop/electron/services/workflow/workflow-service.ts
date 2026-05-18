@@ -16,7 +16,18 @@ export class WorkflowService {
 
   private get repoPath(): string { return this.getRepoPath() }
 
-  private dir(id: string) { return path.join(this.repoPath, "workflows", id) }
+  private isSafeId(id: string): boolean {
+    return typeof id === "string" && id.length > 0 && !/[/\\]/.test(id) && id !== "." && id !== ".."
+  }
+
+  private dir(id: string) {
+    const base = path.join(this.repoPath, "workflows")
+    const resolved = path.resolve(base, id)
+    if (!resolved.startsWith(base + path.sep) && resolved !== base) {
+      throw new Error("工作流 ID 包含非法路径片段")
+    }
+    return resolved
+  }
 
   private versionHash(def: WorkflowDefinition): string {
     const ts = Date.now()
@@ -56,6 +67,10 @@ export class WorkflowService {
   }
 
   async save(def: WorkflowDefinition): Promise<WorkflowSaveResult | WorkflowSaveError> {
+    if (!this.isSafeId(def.id)) {
+      logger.warn("workflow save blocked — unsafe ID", { id: def.id })
+      return { errors: [{ type: "invalid_config", message: "工作流 ID 格式非法" }] }
+    }
     const validation = validateWorkflow(def)
     if (!validation.valid) {
       logger.warn("workflow save blocked by validation", { id: def.id, name: def.name, errorCount: validation.errors.length, errors: validation.errors })
@@ -94,6 +109,10 @@ export class WorkflowService {
   }
 
   async delete(id: string): Promise<void> {
+    if (!this.isSafeId(id)) {
+      logger.warn("workflow delete blocked — unsafe ID", { id })
+      return
+    }
     logger.info("workflow deleting", { id })
     try {
       await rm(this.dir(id), { recursive: true, force: true })
