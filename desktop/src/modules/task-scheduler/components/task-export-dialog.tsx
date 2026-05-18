@@ -20,11 +20,13 @@ function TaskExportDialog({
   onOpenChange,
   tasks,
   onExport,
+  isExporting = false,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   tasks: ScheduledTask[]
   onExport: (selectedIds: string[]) => void
+  isExporting?: boolean
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
@@ -114,14 +116,14 @@ function TaskExportDialog({
           </div>
         </ScrollArea>
         <DialogFooter>
-          <Button variant="outline" onClick={() => onOpenChange(false)}>
+          <Button variant="outline" disabled={isExporting} onClick={() => onOpenChange(false)}>
             取消
           </Button>
           <Button
-            disabled={selected.size === 0}
+            disabled={selected.size === 0 || isExporting}
             onClick={handleExport}
           >
-            导出
+            {isExporting ? "导出中..." : "导出"}
           </Button>
         </DialogFooter>
       </DialogContent>

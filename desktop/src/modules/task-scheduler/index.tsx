@@ -110,6 +110,7 @@ function TaskSchedulerModule() {
   const [busy, setBusy] = useState(false)
   const [runningTaskIds, setRunningTaskIds] = useState<Set<string>>(() => new Set())
   const [isExportOpen, setIsExportOpen] = useState(false)
+const [isExporting, setIsExporting] = useState(false)
   const [importEntries, setImportEntries] = useState<TaskExportEntry[] | null>(null)
   const [importing, setImporting] = useState(false)
 
@@ -178,10 +179,11 @@ function TaskSchedulerModule() {
   }
 
   async function handleExport(selectedIds: string[]) {
-    const selectedTasks = tasks.filter((t) => selectedIds.includes(t.id))
-    const exportData = serializeTasksForExport(selectedTasks)
-    const json = JSON.stringify(exportData, null, 2)
+    setIsExporting(true)
     try {
+      const selectedTasks = tasks.filter((t) => selectedIds.includes(t.id))
+      const exportData = serializeTasksForExport(selectedTasks)
+      const json = JSON.stringify(exportData, null, 2)
       const result = await exportTasksToFile(json)
       if (result.success) {
         setIsExportOpen(false)
@@ -190,13 +192,11 @@ function TaskSchedulerModule() {
       logger.warn("Task export failed.", {
         action: "exportTasks",
         boundary: "renderer.task-scheduler.export",
-        selectedCount: selectedTasks.length,
-        agentTaskCount: selectedTasks.filter((task) => task.action.type === "builtin.agent").length,
-        actionTypes: Array.from(new Set(selectedTasks.map((task) => task.action.type))).sort(),
-        triggerTypes: Array.from(new Set(selectedTasks.map((task) => task.trigger.type))).sort(),
         ...errorLogMeta(exportError),
       })
       notify({ message: "导出失败", tone: "destructive" })
+    } finally {
+      setIsExporting(false)
     }
   }
 
@@ -468,7 +468,8 @@ function TaskSchedulerModule() {
           open={isExportOpen}
           onOpenChange={setIsExportOpen}
           tasks={tasks}
-          onExport={(ids) => void handleExport(ids)}
+          isExporting={isExporting}
+          onExport={(ids) => { void handleExport(ids) }}
         />
         {importEntries ? (
           <TaskImportDialog
