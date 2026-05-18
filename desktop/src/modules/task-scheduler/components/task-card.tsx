@@ -3,6 +3,7 @@ import {
   MoreHorizontal,
   Pencil,
   Play,
+  Square,
   Trash2,
 } from "lucide-react"
 
@@ -106,6 +107,7 @@ function TaskCard({
   providers,
   busy,
   onRun,
+  onStop,
   onToggleEnabled,
   onEdit,
   onHistory,
@@ -181,20 +183,32 @@ function TaskCard({
       </div>
 
       <div className="mt-4 flex items-center justify-end gap-2">
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Button
-              variant={!activeRunning && (task.lastStatus === "failed" || task.lastStatus === "timeout") ? "default" : "secondary"}
-              size="sm"
-              disabled={disabled || busy || activeRunning}
-              onClick={onRun}
-            >
-              <Play className="size-3.5" />
-              {primaryLabel}
-            </Button>
-          </TooltipTrigger>
-          <TooltipContent>{primaryLabel}</TooltipContent>
-        </Tooltip>
+        {activeRunning ? (
+          <Button
+            variant="destructive"
+            size="sm"
+            disabled={busy}
+            onClick={onStop}
+          >
+            <Square className="size-3.5" />
+            停止
+          </Button>
+        ) : (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={task.lastStatus === "failed" || task.lastStatus === "timeout" ? "default" : "secondary"}
+                size="sm"
+                disabled={disabled || busy}
+                onClick={onRun}
+              >
+                <Play className="size-3.5" />
+                {primaryLabel}
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{primaryLabel}</TooltipContent>
+          </Tooltip>
+        )}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
