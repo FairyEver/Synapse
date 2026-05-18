@@ -414,10 +414,10 @@ export interface ConfigBackupContext {
 }
 
 class ConfigBackupService {
-  async exportBackup(
-    ctx?: ConfigBackupContext,
-  ): Promise<SynapseConfigBackupExportResult | null> {
-    const backup = await createConfigBackupPayload()
+  /**
+   * Show save dialog and return chosen path, or null if cancelled.
+   */
+  async selectExportTarget(ctx?: ConfigBackupContext): Promise<string | null> {
     const defaultPath = path.join(app.getPath("downloads"), createBackupFileName())
     const parentWindow = ctx?.getParentWindow?.()
     const result = parentWindow
@@ -434,14 +434,88 @@ class ConfigBackupService {
       return null
     }
 
-    await writeBackupFile(result.filePath, backup)
+    return result.filePath
+  }
+
+  /**
+   * Create backup payload and write to the given file path.
+   */
+  async writeExport(filePath: string): Promise<void> {
+    const backup = await createConfigBackupPayload()
+    await writeBackupFile(filePath, backup)
 
     logger.info("Config backup exported.", {
-      filePath: result.filePath,
+      filePath,
+    })
+  }
+
+  async exportBackup(
+    ctx?: ConfigBackupContext,
+  ): Promise<SynapseConfigBackupExportResult | null> {
+    const filePath = await this.selectExportTarget(ctx)
+    if (!filePath) return null
+
+    await this.writeExport(filePath)
+
+    return {
+      filePath,
+    }
+  }
+
+  /**
+   * Show open dialog and return chosen file path, or null if cancelled.
+   */
+  async selectImportSource(ctx?: ConfigBackupContext): Promise<string | null> {
+    const parentWindow = ctx?.getParentWindow?.()
+    const result = parentWindow
+      ? await dialog.showOpenDialog(parentWindow, {
+          properties: ["openFile"],
+        })
+      : await dialog.showOpenDialog({
+          properties: ["openFile"],
+        })
+
+    if (result.canceled) {
+      return null
+    }
+
+    return result.filePaths[0] ?? null
+  }
+
+  /**
+   * Read and import backup from the given file path.
+   * Returns success result with message on success.
+   * Returns null if cancelled (unreachable from code path where path is provided).
+   */
+  async readImport(filePath: string): Promise<SynapseConfigBackupImportResult> {
+    const fileContent = await readFile(filePath, "utf8")
+    let parsedValue: unknown
+
+    try {
+      parsedValue = JSON.parse(fileContent) as unknown
+    } catch {
+      throw new Error("备份文件不是有效的 JSON。")
+    }
+
+    const backup = parseBackup(parsedValue)
+
+    const previousConfig = await configStore.load()
+    await configStore.replace(backup.config)
+
+    try {
+      await userIdentityService.importIdentity(backup.identity)
+    } catch (identityError) {
+      logger.warn("Identity import failed, rolling back config.", { filePath })
+      await configStore.replace(previousConfig)
+      throw identityError
+    }
+
+    logger.info("Config backup imported.", {
+      filePath,
     })
 
     return {
-      filePath: result.filePath,
+      filePath,
     }
   }
 
