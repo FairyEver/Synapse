@@ -265,6 +265,52 @@ describe("AgentModule pending prompt sessions", () => {
     expect(JSON.stringify(mocks.rendererLogger.error.mock.calls)).not.toContain("secret pending prompt text")
   })
 
+  it("retries refresh when target session is still missing after successful refresh", async () => {
+    const refresh = vi.fn().mockResolvedValue(undefined)
+    mocks.chat = createChatState({ refresh })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentModule
+          pendingAgentSession={{
+            projectId: "project-1",
+            conversationId: "conversation-1",
+          }}
+        />,
+      )
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(refresh).toHaveBeenCalledTimes(1)
+
+    // Re-render with a new chat state (sessions still empty) to
+    // trigger the effect again. pendingSessionRefreshKeyRef should
+    // have been cleared by .finally(), allowing another refresh.
+    mocks.chat = createChatState({ refresh })
+    await act(async () => {
+      root.render(
+        <AgentModule
+          pendingAgentSession={{
+            projectId: "project-1",
+            conversationId: "conversation-1",
+          }}
+        />,
+      )
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(refresh).toHaveBeenCalledTimes(2)
+  })
+
   it("does not render an active session when no conversation is selected", async () => {
     mocks.chat = createChatState({
       sessions: [targetSession],
