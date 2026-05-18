@@ -7,7 +7,7 @@ export function installGlobalErrorListener(logger: RendererLogger): () => void {
     const diagnostic = errorDiagnostic(event.error, event.message)
     guardedLog(logger, "error", "Renderer uncaught error.", {
       boundary: "renderer.global-error",
-      filename: event.filename,
+      filename: event.filename.split("/").pop() ?? event.filename,
       lineno: event.lineno,
       colno: event.colno,
       ...diagnostic,

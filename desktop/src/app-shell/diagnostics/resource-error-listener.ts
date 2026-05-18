@@ -3,6 +3,14 @@ import { guardedLog } from "./guard"
 
 const RESOURCE_TAGS = new Set(["IMG", "SCRIPT", "LINK"])
 
+function getResourceName(src: string): string {
+  if (src.startsWith("data:")) {
+    return "data:..."
+  }
+
+  return src.split("/").pop() ?? src
+}
+
 export function installResourceErrorListener(logger: RendererLogger): () => void {
   const handler = (event: Event): void => {
     const target = event.target
@@ -14,10 +22,11 @@ export function installResourceErrorListener(logger: RendererLogger): () => void
       target.getAttribute("src") ||
       target.getAttribute("href") ||
       "(unknown)"
+    const resourceName = getResourceName(src)
 
-    guardedLog(logger, "error", `资源加载失败 <${tag} src="${src}">`, {
+    guardedLog(logger, "error", `资源加载失败 <${tag} src="${resourceName}">`, {
       tag,
-      src,
+      src: resourceName,
       timestamp: new Date().toISOString(),
     })
   }
