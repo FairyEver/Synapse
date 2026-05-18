@@ -430,7 +430,14 @@ export const workflowIpcModule: IpcModule = {
         const windowManager = ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager")
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         await ctx.resolve<WorkflowService>("core.workflow").delete(id)
-        await snapshots.deleteWorkflow(id)
+        try {
+          await snapshots.deleteWorkflow(id)
+        } catch {
+          logger.error("workflow:delete — snapshot cleanup failed", { id })
+          // Snapshot cleanup failure is non-fatal: the workflow definition has
+          // already been deleted, so proceeding with window close and event
+          // emission ensures the UI stays in a consistent state.
+        }
         windowManager.forceCloseAll(id)
         eventBus.emit({
           domain: "workflow",

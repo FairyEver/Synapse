@@ -109,12 +109,13 @@ export class RunSnapshotService {
       logger.info("run snapshots deleted for workflow", { workflowId })
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code
-      if (code !== "ENOENT") {
-        logger.warn("run snapshot deleteWorkflow failed", {
-          workflowId,
-          ...snapshotErrorMetadata(err),
-        })
-      }
+      // ENOENT means the snapshot directory doesn't exist — not an error
+      if (code === "ENOENT") return
+      logger.error("run snapshot deleteWorkflow failed", {
+        workflowId,
+        ...snapshotErrorMetadata(err),
+      })
+      throw err
     }
   }
 
