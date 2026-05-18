@@ -31,7 +31,7 @@ type ArchivedGroupProps = {
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
   onDeleteOthers: (session: SynapseAgentSessionSummary) => void
-  onRename: (session: SynapseAgentSessionSummary, name: string) => void
+  onRename: (session: SynapseAgentSessionSummary, name: string) => void | Promise<void>
 }
 
 function ArchivedGroup({
@@ -63,11 +63,15 @@ function ArchivedGroup({
     setRenameValue(sessionLabel(session))
   }
 
-  function handleRenameConfirm() {
+  async function handleRenameConfirm() {
     const trimmed = renameValue.trim()
     if (!trimmed || !renameTarget) return
-    onRename(renameTarget, trimmed)
-    setRenameTarget(null)
+    try {
+      await onRename(renameTarget, trimmed)
+      setRenameTarget(null)
+    } catch {
+      // Dialog stays open on failure for retry
+    }
   }
 
   return (

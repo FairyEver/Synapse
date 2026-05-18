@@ -371,7 +371,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
           await chat.deleteSession(session)
         }
       }}
-      onRename={(session, name) => void chat.renameSession(session, name)}
+      onRename={(session, name) => chat.renameSession(session, name)}
       onFollowFeishuChange={chat.setFollowFeishu}
     />
   )

@@ -41,7 +41,7 @@ type AgentSessionSidebarProps = {
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
   onDeleteOthers: (session: SynapseAgentSessionSummary) => void
-  onRename: (session: SynapseAgentSessionSummary, name: string) => void
+  onRename: (session: SynapseAgentSessionSummary, name: string) => void | Promise<void>
   onFollowFeishuChange: (follow: boolean) => void
 }
 
