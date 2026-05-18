@@ -16,6 +16,10 @@ import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
 import { useProviderLookup } from "../../../../workflow-nodes/provider-lookup-context"
 import { useUpstreamNodes } from "../hooks/use-upstream-nodes"
 import { ParamsEditorDialog } from "../components/params-editor-dialog"
+import { createRendererLogger } from "@/app-shell/logging"
+import { errorDiagnostic } from "../lib/error-utils"
+
+const logger = createRendererLogger("workflow.editor.node-config-panel")
 
 interface NodeConfigPanelProps {
   collapsed?: boolean
@@ -55,7 +59,7 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
 
   const node = nodeId ? definition.nodes.find((n) => n.id === nodeId) : null
   let manifest: ReturnType<typeof nodeTypeRegistry.getManifest> | null = null
-  try { manifest = node ? nodeTypeRegistry.getManifest(node.type) : null } catch (err) { console.warn("[node-config-panel] getManifest failed", node?.type, err); manifest = null }
+  try { manifest = node ? nodeTypeRegistry.getManifest(node.type) : null } catch (err) { logger.warn("getManifest failed", { nodeId: node?.id, nodeType: node?.type, boundary: "renderer.workflow.node-config-panel.getManifest", ...errorDiagnostic(err) }); manifest = null }
   const Icon = manifest?.icon
 
   const inCount = node ? definition.edges.filter((e) => e.to === node.id).length : 0
