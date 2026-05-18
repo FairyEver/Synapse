@@ -155,9 +155,6 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
                 <span className="text-xs text-muted-foreground shrink-0">
                   {Object.keys(s.nodeResults).length} 个节点
                 </span>
-                <Button size="sm" variant="ghost" className="shrink-0" onClick={(e) => { e.stopPropagation(); handleOpenRunner(s.runId) }}>
-                  查看
-                </Button>
               </div>
               )
             })}
