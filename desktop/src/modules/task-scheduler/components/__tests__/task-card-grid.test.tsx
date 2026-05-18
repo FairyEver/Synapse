@@ -13,6 +13,7 @@ describe("TaskCardGrid", () => {
         projects={[]}
         providers={[]}
         busy
+        runningTaskIds={new Set()}
         onRun={noopTaskHandler}
         onStop={noopTaskHandler}
         onToggleEnabled={noopTaskHandler}

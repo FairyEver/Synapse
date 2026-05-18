@@ -108,6 +108,7 @@ function TaskSchedulerModule() {
   const [historyTask, setHistoryTask] = useState<ScheduledTask | null>(null)
   const [deleteTarget, setDeleteTarget] = useState<ScheduledTask | null>(null)
   const [busy, setBusy] = useState(false)
+  const [runningTaskIds, setRunningTaskIds] = useState<Set<string>>(() => new Set())
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [importEntries, setImportEntries] = useState<TaskExportEntry[] | null>(null)
 
@@ -257,6 +258,8 @@ function TaskSchedulerModule() {
   }
 
   async function handleRunTask(task: ScheduledTask) {
+    if (runningTaskIds.has(task.id)) return
+    setRunningTaskIds((prev) => new Set(prev).add(task.id))
     const agentProjectId = task.action.type === "builtin.agent"
       ? task.action.config["projectId"]
       : undefined
@@ -303,6 +306,12 @@ function TaskSchedulerModule() {
         ...errorLogMeta(err),
       })
       notify({ message: "触发失败", tone: "destructive" })
+    } finally {
+      setRunningTaskIds((prev) => {
+        const next = new Set(prev)
+        next.delete(task.id)
+        return next
+      })
     }
   }
 
@@ -362,6 +371,7 @@ function TaskSchedulerModule() {
           {!loading && !error ? (
             <TaskCardGrid
               busy={busy}
+              runningTaskIds={runningTaskIds}
               projects={config.global.projects}
               providers={providers}
               tasks={tasks}

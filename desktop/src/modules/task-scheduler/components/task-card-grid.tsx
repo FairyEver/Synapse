@@ -19,6 +19,7 @@ type TaskCardGridProps = {
   projects: readonly SynapseProjectConfig[]
   providers: readonly SynapseAgentProvider[]
   busy: boolean
+  runningTaskIds: ReadonlySet<string>
   onRun: (task: ScheduledTask) => void
   onStop: (task: ScheduledTask) => void
   onToggleEnabled: (task: ScheduledTask, enabled: boolean) => void
@@ -33,6 +34,7 @@ function TaskCardGrid({
   projects,
   providers,
   busy,
+  runningTaskIds,
   onRun,
   onStop,
   onToggleEnabled,
@@ -69,7 +71,7 @@ function TaskCardGrid({
           task={task}
           projects={projects}
           providers={providers}
-          busy={busy}
+          busy={busy || runningTaskIds.has(task.id)}
           onRun={() => onRun(task)}
           onStop={() => onStop(task)}
           onToggleEnabled={(enabled) => onToggleEnabled(task, enabled)}
