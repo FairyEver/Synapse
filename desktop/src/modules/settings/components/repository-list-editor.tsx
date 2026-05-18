@@ -14,7 +14,6 @@ import { DelayedConfirmAlertDialog } from "@/components/delayed-confirm-alert-di
 import { FormDialog } from "@/components/form-dialog"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -92,6 +91,7 @@ function RepositoryListEditor({
   const [createRepositoryError, setCreateRepositoryError] = useState<string | null>(null)
   const [isCreatingRepository, setIsCreatingRepository] = useState(false)
   const [pendingRemovalUuid, setPendingRemovalUuid] = useState<string | null>(null)
+  const [isRemoving, setIsRemoving] = useState(false)
   const [editingRepository, setEditingRepository] = useState<SynapseRepositoryConfig | null>(null)
   const [editName, setEditName] = useState("")
   const [editPath, setEditPath] = useState("")
@@ -355,11 +355,11 @@ function RepositoryListEditor({
     }
   }
 
-  const handleRemoveRepository = async (repositoryUuid: string) => {
+  const handleRemoveRepository = async (repositoryUuid: string): Promise<boolean> => {
     const repository = repositories.find((itemValue) => itemValue.uuid === repositoryUuid)
 
     if (!repository) {
-      return
+      return false
     }
 
     const nextRepositories = repositories.filter((itemValue) => itemValue.uuid !== repositoryUuid)
@@ -373,9 +373,11 @@ function RepositoryListEditor({
 
     try {
       await onSave(nextRepositories, nextActiveRepoUuid)
+      return true
     } catch (error) {
       logger.error("Failed to remove repository.", { error, repositoryUuid })
       setFormError(error instanceof Error ? error.message : "删除失败。")
+      return false
     }
   }
 
@@ -444,7 +446,7 @@ function RepositoryListEditor({
       <AlertDialog
         open={pendingRemovalUuid !== null}
         onOpenChange={(open) => {
-          if (!open) {
+          if (!open && !isRemoving) {
             setPendingRemovalUuid(null)
           }
         }}
@@ -457,18 +459,22 @@ function RepositoryListEditor({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => {
-                if (pendingRemovalUuid) {
-                  void handleRemoveRepository(pendingRemovalUuid)
+            <AlertDialogCancel disabled={isRemoving}>取消</AlertDialogCancel>
+            <Button
+              variant="destructive"
+              disabled={isRemoving}
+              onClick={async () => {
+                if (!pendingRemovalUuid) return
+                setIsRemoving(true)
+                const success = await handleRemoveRepository(pendingRemovalUuid)
+                setIsRemoving(false)
+                if (success) {
+                  setPendingRemovalUuid(null)
                 }
-
-                setPendingRemovalUuid(null)
               }}
             >
               删除
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
