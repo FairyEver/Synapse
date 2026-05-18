@@ -439,6 +439,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
             variant="ghost"
             size="icon"
             className="size-7"
+            aria-label="表结构"
             data-track="database-schema-open"
             onClick={() => {
               void handleShowSchema().catch((error) => {
