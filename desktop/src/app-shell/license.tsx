@@ -36,6 +36,7 @@ export function LicenseProvider({ children }: { readonly children: ReactNode }) 
       setStatus(nextStatus)
       setError(null)
     } catch (caught) {
+      setStatus(null)
       setError(formatLicenseErrorMessage(caught, "无法读取授权状态。"))
     } finally {
       setIsReady(true)
