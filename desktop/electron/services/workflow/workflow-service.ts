@@ -76,7 +76,7 @@ export class WorkflowService {
         id,
         ...errorLogMeta(err),
       })
-      return null
+      throw err
     }
   }
 
