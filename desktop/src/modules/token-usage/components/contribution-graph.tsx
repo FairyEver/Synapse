@@ -63,7 +63,16 @@ export function ContributionGraph({ contributions, selectedDate, onDateClick }: 
                         onDateClick ? "cursor-pointer" : null,
                         isSelected ? "ring-primary ring-1" : null,
                       )}
+                      role={onDateClick ? "button" : undefined}
+                      tabIndex={onDateClick ? 0 : undefined}
+                      aria-label={`${day.date}, ${formatTokens(day.tokens)} Token`}
                       onClick={() => onDateClick?.(isSelected ? null : day.date)}
+                      onKeyDown={onDateClick ? (e) => {
+                        if (e.key === "Enter" || e.key === " ") {
+                          e.preventDefault()
+                          onDateClick(isSelected ? null : day.date)
+                        }
+                      } : undefined}
                     />
                   </TooltipTrigger>
                   <TooltipContent side="top" className="text-xs">
