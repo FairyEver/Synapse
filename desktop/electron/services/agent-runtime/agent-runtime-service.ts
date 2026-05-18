@@ -661,6 +661,9 @@ export class AgentRuntimeService {
       throw new Error(`Conversation "${input.conversationId}" was not found`)
     }
 
+    // Persist first — if it fails, the live session is never switched.
+    const updated = await this.repository.savePermissionMode(input.conversationId, input.mode)
+
     const liveSession = this.states.get(input.conversationId)?.liveSession
     if (liveSession?.alive()) {
       if (!liveSession.setPermissionMode) {
@@ -669,7 +672,6 @@ export class AgentRuntimeService {
       await liveSession.setPermissionMode(input.mode)
     }
 
-    const updated = await this.repository.savePermissionMode(input.conversationId, input.mode)
     this.emitConversationUpdated(updated)
     this.deps.logger?.info("Agent permission mode changed.", {
       boundary: "agent-runtime.permission-mode",
