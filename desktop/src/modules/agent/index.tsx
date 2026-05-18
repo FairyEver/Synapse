@@ -209,7 +209,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     ])
   }
 
-  const submitContent = (content: string) => {
+  const submitContent = async (content: string) => {
     if (!content || !selectedTarget) return
     setDraft("")
     stick.forcePin()
@@ -217,7 +217,10 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       queueMessage(content, selectedTarget)
       return
     }
-    void chat.sendMessage(content, selectedTarget)
+    const sent = await chat.sendMessage(content, selectedTarget)
+    if (!sent) {
+      setDraft(content)
+    }
   }
 
   const submitDraft = () => {
