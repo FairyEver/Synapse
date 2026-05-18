@@ -5,6 +5,13 @@ const electronMock = vi.hoisted(() => ({
     openPath: vi.fn(),
   },
 }))
+const childProcessMock = vi.hoisted(() => ({
+  execFile: vi.fn((_cmd: string, _args: readonly string[], _opts: unknown, cb?: (err: Error | null) => void) => {
+    if (cb) {
+      cb(new Error("ENOENT"))
+    }
+  }),
+}))
 const logStoreMock = vi.hoisted(() => ({
   logger: {
     warn: vi.fn(),
@@ -12,6 +19,7 @@ const logStoreMock = vi.hoisted(() => ({
 }))
 
 vi.mock("electron", () => electronMock)
+vi.mock("node:child_process", () => childProcessMock)
 vi.mock("../../../services/log-store", () => ({
   createMainLogger: vi.fn(() => logStoreMock.logger),
 }))

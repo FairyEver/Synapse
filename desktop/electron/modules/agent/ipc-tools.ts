@@ -1,4 +1,6 @@
+import { execFile } from "node:child_process"
 import path from "node:path"
+import { promisify } from "node:util"
 
 import { BrowserWindow, dialog, shell } from "electron"
 import type { OpenDialogOptions } from "electron"
@@ -30,6 +32,7 @@ import { createMainLogger } from "../../services/log-store"
 import { resolveProjectAgent } from "./ipc-shared"
 
 const logger = createMainLogger("agent.ipc")
+const execFileAsync = promisify(execFile)
 
 type CreateProviderIpcInput = Omit<CreateProviderInput, "env">
 type UpdateProviderIpcInput = Omit<UpdateProviderInput, "env">
@@ -669,9 +672,13 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
           })
           throw new Error(permission.reason)
         }
-        let error: string
+        let error: string | undefined
         try {
-          error = await shell.openPath(reference.path)
+          if (reference.line !== undefined && await openFileWithLine(reference.path, reference.line)) {
+            error = undefined
+          } else {
+            error = await shell.openPath(reference.path)
+          }
         } catch (openError) {
           auditSink.record({
             action: "fs.read.outside-userdata",
@@ -718,6 +725,20 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
       }
     },
   },
+}
+
+/** Try opening a file at a specific line using a known editor CLI. */
+async function openFileWithLine(filePath: string, line: number): Promise<boolean> {
+  const editors = ["cursor", "code", "code-insiders"]
+  for (const editor of editors) {
+    try {
+      await execFileAsync(editor, ["--goto", `${filePath}:${line}`], { timeout: 5000 })
+      return true
+    } catch {
+      continue
+    }
+  }
+  return false
 }
 
 function shellOpenErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
