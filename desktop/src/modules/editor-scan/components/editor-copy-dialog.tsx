@@ -175,7 +175,6 @@ function EditorCopyDialog({
       setIsRuleProjectInstallFormOpen(false)
       setOverwriteConfirmed(false)
       onOpenChange(false)
-      await onCopied?.()
     } catch (error) {
       const message = error instanceof Error ? error.message : "复制失败。"
       logger.error("Failed to copy scan item to editor.", {
@@ -186,6 +185,12 @@ function EditorCopyDialog({
       setCopyError(message)
     } finally {
       setIsCopying(false)
+    }
+
+    try {
+      await onCopied?.()
+    } catch (refreshError) {
+      logger.warn("Scan refresh after copy failed.", { error: refreshError })
     }
   }
 
