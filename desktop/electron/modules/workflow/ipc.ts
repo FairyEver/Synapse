@@ -304,6 +304,7 @@ function handleEngineRejection(options: {
     { backpressure: "block" },
   )
   saveRunSnapshot(snapshots, { runId, workflowId: def.id, version: def.version, startedAt, endedAt, status: "failed", params, nodeResults: current.nodeResults, definition: def, error: visibleError }, eventBus)
+  pruneTerminalStatuses(runStatuses, def.id)
 }
 
 async function resolveWorkflowProjectId(def: WorkflowDefinition): Promise<string | undefined> {
