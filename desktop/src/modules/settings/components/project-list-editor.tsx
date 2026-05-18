@@ -282,7 +282,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                   onClick={() => {
                     const bridge = window.synapse?.agent
                     if (!bridge) {
-                      void onSave(projects.filter((item) => item.id !== project.id))
+                      void onSave(projects.filter((item) => item.id !== project.id)).catch(() => {})
                       return
                     }
                     void bridge.listSessions(project.id).then((sessions) => {
@@ -294,7 +294,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                           .catch((err) => logger.error("Failed to remove project.", { projectId: project.id, error: err }))
                       }
                     }).catch(() => {
-                      void onSave(projects.filter((item) => item.id !== project.id))
+                      void onSave(projects.filter((item) => item.id !== project.id)).catch(() => {})
                     })
                   }}
                 >

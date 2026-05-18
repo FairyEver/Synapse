@@ -168,11 +168,14 @@ function SettingsModule() {
       logger.info("Saving project list from settings.", {
         projectCount: projects.length,
       })
-      await applyPatch({
+      const saved = await applyPatch({
         global: {
           projects,
         },
       })
+      if (!saved) {
+        throw new Error("保存项目列表失败，请重试。")
+      }
     },
     [applyPatch],
   )
