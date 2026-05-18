@@ -377,6 +377,7 @@ function DatabaseModule() {
       } catch (error) {
         logger.error("Delete failed.", { error })
         showError(error instanceof Error ? error.message : "删除失败，请稍后重试。")
+        throw error
       }
     },
     [selectedTable, rows.length, page, refreshQuery, refreshTables, showSuccess, showError],

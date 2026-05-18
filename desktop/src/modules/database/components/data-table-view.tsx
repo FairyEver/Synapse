@@ -223,14 +223,18 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     [onInsert, tableName],
   )
 
-  const handleConfirmDelete = useCallback(() => {
+  const handleConfirmDelete = useCallback(async () => {
     if (deleteId != null) {
       logger.info("Row delete confirmed.", {
         table: tableName,
         rowId: deleteId,
       })
-      onDelete(deleteId)
-      setDeleteId(null)
+      try {
+        await onDelete(deleteId)
+        setDeleteId(null)
+      } catch {
+        // Dialog stays open on failure for retry
+      }
     }
   }, [deleteId, onDelete, tableName])
 
