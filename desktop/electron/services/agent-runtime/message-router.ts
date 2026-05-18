@@ -324,6 +324,10 @@ export class MessageRouter {
               projectId: this.deps.projectId,
               sessionKey: turn.message.sessionKey,
             })
+            if (state.liveSession) {
+              try { await state.liveSession.close() } catch { /* best-effort */ }
+              state.liveSession = undefined
+            }
             turn.resolve(this.finishWithError(turn.message, turn.conversationId, messageText))
           }
         } finally {
