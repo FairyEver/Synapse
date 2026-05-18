@@ -1118,10 +1118,13 @@ export const coreTokenUsageDescriptor: ServiceDescriptor<{ initialized: true }> 
 export const coreHttpTestDescriptor: ServiceDescriptor<{ initialized: true }> = {
   id: "core.http-test",
   criticality: "degraded",
-  dependsOn: [],
-  async create() {
+  dependsOn: ["core.permission-guard", "core.audit-sink"],
+  async create(ctx) {
     const { registerHttpTestHandlers } = await import("../modules/http-test/ipc.js")
-    registerHttpTestHandlers()
+    registerHttpTestHandlers({
+      permissionGuard: ctx.permissionGuard,
+      auditSink: ctx.auditSink,
+    })
     return { initialized: true }
   },
 }
