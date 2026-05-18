@@ -305,6 +305,9 @@ export class AgentCommandRouter {
       return commandResult(conversation.id, formatPublishedCommands(commands))
     }
     if (subCommand === "add") {
+      if (!isMessageAdmin(message)) {
+        return commandResult(conversation.id, "Only admins can add commands.", true)
+      }
       const name = args[1]
       const prompt = args.slice(2).join(" ")
       if (!name || !prompt.trim()) return commandResult(conversation.id, "Use /commands add <name> <prompt>.", true)
