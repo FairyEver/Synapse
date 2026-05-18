@@ -329,7 +329,13 @@ export class ImportExportManager {
   }
 
   private readTableExportPayload(sourcePath: string): TableExportPayload {
-    return parsePayloadFromSql(readFileSync(sourcePath, "utf8"))
+    let contents: string
+    try {
+      contents = readFileSync(sourcePath, "utf8")
+    } catch {
+      throw new Error("无法读取导入文件，文件可能已被移动或删除")
+    }
+    return parsePayloadFromSql(contents)
   }
 
   private tableExists(name: string): boolean {
