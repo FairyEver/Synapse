@@ -2,18 +2,9 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import type { SynapseAgentProvider } from "@/types/bridge"
 import type { ModelTier } from "@/types/provider-model"
 import { createRendererLogger } from "@/app-shell/logging"
-import { truncateWithEllipsis } from "@/modules/workflow/lib/error-utils"
+import { errorDiagnostic } from "@/modules/workflow/lib/error-utils"
 
 const logger = createRendererLogger("workflow.provider-lookup")
-
-function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number; readonly errorMessage: string } {
-  const raw = error instanceof Error ? error.message : String(error)
-  return {
-    errorName: error instanceof Error ? error.name : typeof error,
-    errorLength: raw.length,
-    errorMessage: truncateWithEllipsis(raw, 200),
-  }
-}
 
 type ProviderLookup = {
   getProviderName: (providerId: string) => string | undefined
@@ -50,7 +41,7 @@ function ProviderLookupProvider({ children }: { children: ReactNode }) {
         if (!cancelled && list) setProviders(list)
       } catch (err) {
         logger.warn("provider list fetch failed — cards will show raw IDs", {
-          ...errorLogMeta(err),
+          ...errorDiagnostic(err),
         })
       } finally {
         if (!cancelled) setLoaded(true)
