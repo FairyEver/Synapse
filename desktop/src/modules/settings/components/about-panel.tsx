@@ -224,6 +224,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
 
       logger.error("App update action failed in settings.", error)
       setActionError(message)
+      setIsRestarting(false)
     }
   }
 
