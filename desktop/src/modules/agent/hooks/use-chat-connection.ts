@@ -1,4 +1,4 @@
-import { useCallback } from "react"
+import { useCallback, useRef } from "react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
@@ -78,6 +78,8 @@ function useChatConnection(
     selectRequestIdRef,
     timelineVersionRef,
   } = refs
+
+  const respondingPermissionIdsRef = useRef(new Set<string>())
 
   const replaceTimeline = useCallback((entries: SynapseAgentTimelineItem[]) => {
     timelineVersionRef.current += 1
@@ -672,9 +674,14 @@ function useChatConnection(
     requestId: string,
     behavior: "allow" | "deny",
   ) => {
+    if (respondingPermissionIdsRef.current.has(requestId)) return
+    respondingPermissionIdsRef.current.add(requestId)
     const projectId = state.pendingPermissions.find((permission) => permission.requestId === requestId)?.projectId
       ?? getDefaultProjectId()
-    if (!projectId) return
+    if (!projectId) {
+      respondingPermissionIdsRef.current.delete(requestId)
+      return
+    }
     const bridge = requireSynapseBridge()
     dispatch({ type: "SET_ERROR", error: null })
     try {
@@ -690,6 +697,8 @@ function useChatConnection(
         errorLength: errorMessage(rawError).length,
       })
       dispatch({ type: "SET_ERROR", error: "处理失败" })
+    } finally {
+      respondingPermissionIdsRef.current.delete(requestId)
     }
   }, [dispatch, getDefaultProjectId, refreshPendingPermissions, state.pendingPermissions])
 
