@@ -130,6 +130,7 @@ function TaskCard({
           size="sm"
           checked={task.enabled}
           disabled={busy}
+          aria-label={task.enabled ? `停用任务 ${task.name}` : `启用任务 ${task.name}`}
           onCheckedChange={onToggleEnabled}
         />
       </div>
