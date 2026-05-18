@@ -239,9 +239,10 @@ class BlockingSession implements AgentLiveSession {
 
   constructor(private readonly factory: BlockingSessionFactory) {}
 
-  async send(message: AgentMessage): Promise<void> {
+  async send(message: AgentMessage): Promise<boolean> {
     this.factory.started.push(message.content)
     this.pending = true
+    return true
   }
 
   async respondPermission(

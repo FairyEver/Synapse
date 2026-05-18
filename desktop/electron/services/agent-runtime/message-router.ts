@@ -614,9 +614,12 @@ export class MessageRouter {
     let error: string | undefined
     const deadline = Date.now() + timeoutMs
 
-    await liveSession.send(message)
+    const accepted = await liveSession.send(message)
+    if (!accepted) {
+      error = "Agent session ended before message could be sent."
+    }
 
-    while (liveSession.alive()) {
+    while (!error && liveSession.alive()) {
       const remaining = Math.max(1, deadline - Date.now())
       const event = await nextLiveEventWithTimeout(liveSession, remaining)
       if (!event) {
@@ -781,9 +784,12 @@ export class MessageRouter {
     let resultText = ""
     let error: string | undefined
 
-    await liveSession.send(message)
+    const accepted = await liveSession.send(message)
+    if (!accepted) {
+      error = "Agent session ended before message could be sent."
+    }
 
-    while (liveSession.alive()) {
+    while (!error && liveSession.alive()) {
       const event = await liveSession.nextEvent()
       if (!event) {
         error = "Agent session ended"
@@ -1092,13 +1098,16 @@ export class MessageRouter {
     const events: AgentEvent[] = []
     let resultText = ""
     let error: string | undefined
-    await input.liveSession.send({
+    const accepted = await input.liveSession.send({
       ...input.message,
       content: command,
       replyCtx: { ...(replyCtxRecord(input.message.replyCtx) ?? {}), muted: true },
     })
+    if (!accepted) {
+      error = "Agent session ended before compression could be sent."
+    }
 
-    while (input.liveSession.alive()) {
+    while (!error && input.liveSession.alive()) {
       const event = await nextLiveEventWithTimeout(input.liveSession, 5 * 60_000)
       if (!event) {
         error = "Compression timed out"

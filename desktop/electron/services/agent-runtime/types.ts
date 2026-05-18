@@ -217,7 +217,7 @@ export interface AgentPendingPermission {
 
 export interface AgentLiveSession {
   readonly agentType: string
-  send(message: AgentMessage): Promise<void>
+  send(message: AgentMessage): Promise<boolean>
   respondPermission(
     requestId: string,
     decision: AgentPermissionDecision,

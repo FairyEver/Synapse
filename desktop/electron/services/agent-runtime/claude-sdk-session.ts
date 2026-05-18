@@ -97,8 +97,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.pumpPromise = this.pumpQueryEvents()
   }
 
-  async send(message: AgentMessage): Promise<void> {
-    if (this.closed) return
+  async send(message: AgentMessage): Promise<boolean> {
+    if (this.closed) return false
     if (this.finished) {
       this.logger?.warn("Claude SDK send rejected after query finished.", {
         boundary: "claude-sdk-send",
@@ -107,7 +107,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
         providerId: this.providerId,
         sdkSessionId: this.sdkSessionId,
       })
-      return
+      return false
     }
     this.inputQueue.push({
       type: "user",
@@ -117,6 +117,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       },
       parent_tool_use_id: null,
     })
+    return true
   }
 
   async respondPermission(

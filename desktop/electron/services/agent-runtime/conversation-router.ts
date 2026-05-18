@@ -379,9 +379,13 @@ export class ConversationRouter {
     let streamedText = ""
     let error: string | undefined
 
-    await liveSession.send(message)
+    const accepted = await liveSession.send(message)
+    if (!accepted) {
+      await this.sessionManager.closeCurrentTurn(conversation.id)
+      error = "Agent session ended before message could be sent."
+    }
 
-    while (liveSession.alive()) {
+    while (!error && liveSession.alive()) {
       const event = await nextLiveEventWithTimeout(liveSession, DEFAULT_LIVE_EVENT_TIMEOUT_MS)
       if (!event) {
         error = liveSession.alive() ? "Agent session timed out." : "Agent session ended"
@@ -472,8 +476,12 @@ export class ConversationRouter {
         message,
         abortSignal,
       })
-      await liveSession.send(message)
-      while (liveSession.alive()) {
+      const accepted = await liveSession.send(message)
+      if (!accepted) {
+        await this.sessionManager.closeCurrentTurn(conversation.id)
+        error = "Agent session ended before message could be sent."
+      }
+      while (!error && liveSession.alive()) {
         const event = await nextLiveEventWithTimeout(liveSession, timeoutMs)
         if (!event) {
           const errorEvent: AgentEvent = {
@@ -639,9 +647,11 @@ export class ConversationRouter {
       }
       timeout = setTimeout(() => {
         if (settled) return
-        void liveSession.respondPermission(event.requestId, {
+        liveSession.respondPermission(event.requestId, {
           behavior: "deny",
           message: "Permission request timed out waiting for user response.",
+        }).then(() => {
+          this.sessionManager.settlePendingPermission(pending)
         }).catch((error) => {
           this.deps.logger?.warn("Permission timeout auto-deny failed.", {
             boundary: "agent-runtime.permission-timeout",
@@ -650,8 +660,8 @@ export class ConversationRouter {
             toolName: event.toolName,
             ...errorSummary(error),
           })
+          void this.sessionManager.closeCurrentTurn(conversationId)
         })
-        this.sessionManager.settlePendingPermission(pending)
       }, this.permissionTimeoutMs)
     })
   }
