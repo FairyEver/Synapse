@@ -22,3 +22,10 @@ export function formatPercent(value: number, total: number): string {
   if (total === 0) return "0%"
   return `${((value / total) * 100).toFixed(1)}%`
 }
+
+export function toLocalDateString(d: Date): string {
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}

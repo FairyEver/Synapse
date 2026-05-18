@@ -1,7 +1,7 @@
 import {
   Table, TableBody, TableCell, TableHeader, TableRow,
 } from "@/components/ui/table"
-import { formatTokens, formatCost, formatCacheRatio } from "../lib/format"
+import { formatTokens, formatCost, formatCacheRatio, toLocalDateString } from "../lib/format"
 import { useSort } from "../hooks/use-sort"
 import { SortableHeader } from "./sortable-header"
 import { useMemo } from "react"
@@ -28,7 +28,7 @@ interface DailyViewProps {
 }
 
 export function DailyView({ rows }: DailyViewProps) {
-  const today = new Date().toISOString().slice(0, 10)
+  const today = toLocalDateString(new Date())
 
   const sortRows = useMemo(() => rows.map((r) => {
     const paid = r.input + r.cacheWrite

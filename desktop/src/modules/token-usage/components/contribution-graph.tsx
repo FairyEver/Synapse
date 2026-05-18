@@ -1,6 +1,6 @@
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { cn } from "@/lib/utils"
-import { formatTokens } from "../lib/format"
+import { formatTokens, toLocalDateString } from "../lib/format"
 
 interface ContributionDay {
   date: string
@@ -39,7 +39,7 @@ export function ContributionGraph({ contributions, selectedDate, onDateClick }: 
         col.push(null)
         continue
       }
-      const dateStr = d.toISOString().slice(0, 10)
+      const dateStr = toLocalDateString(d)
       col.push(contribMap.get(dateStr) || { date: dateStr, tokens: 0, intensity: 0 })
     }
     grid.push(col)
