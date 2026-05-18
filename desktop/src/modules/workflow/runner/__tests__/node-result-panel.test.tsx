@@ -15,11 +15,18 @@ vi.mock("@/lib/ui-tracking", () => ({
   track,
 }))
 
+const warn = vi.hoisted(() => vi.fn())
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => ({ warn }),
+}))
+
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 afterEach(() => {
   document.body.innerHTML = ""
   track.mockClear()
+  warn.mockClear()
 })
 
 describe("NodeResultPanel", () => {
@@ -93,7 +100,7 @@ describe("NodeResultPanel", () => {
     })
 
     expect(container.textContent).toContain("1")
-    expect(container.textContent).toContain("[object Object]")
+    expect(container.textContent).toContain("[Circular]")
 
     await act(async () => {
       root.unmount()

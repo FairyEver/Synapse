@@ -3,8 +3,11 @@ import { Badge } from "@/components/ui/badge"
 import { X } from "lucide-react"
 import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
 import { track } from "@/lib/ui-tracking"
+import { createRendererLogger } from "@/app-shell/logging"
 import { NODE_STATUS_LABEL, NODE_STATUS_VARIANT } from "../lib/status-display"
 import { resolveBranchLabel } from "../lib/branch-label"
+
+const logger = createRendererLogger("workflow.runner")
 
 interface NodeResultPanelProps {
   result: NodeRunResult
@@ -130,11 +133,23 @@ function formatOutputValue(value: unknown): string {
   if (typeof value === "bigint") return value.toString()
   if (typeof value === "object") {
     try {
-      return JSON.stringify(value)
+      return JSON.stringify(value, getCircularReplacer())
     } catch (err) {
-      console.warn("[node-result-panel] JSON.stringify failed", err)
-      return String(value)
+      logger.warn("[node-result-panel] JSON.stringify failed", err)
+      return "[非序列化值]"
     }
   }
   return String(value)
+}
+
+/** JSON.stringify replacer that replaces circular references with a marker. */
+function getCircularReplacer(): (key: string, value: unknown) => unknown {
+  const seen = new WeakSet<object>()
+  return (_key: string, value: unknown) => {
+    if (typeof value === "object" && value !== null) {
+      if (seen.has(value)) return "[Circular]"
+      seen.add(value)
+    }
+    return value
+  }
 }
