@@ -337,6 +337,7 @@ export class AgentSessionRepository {
     const updated: ConversationEntryV1 = {
       ...conversation,
       name,
+      updatedAt: this.isoNow(),
     }
     await this.conversations.upsert(updated)
     return updated
