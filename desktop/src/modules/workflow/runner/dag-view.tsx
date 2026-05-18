@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useContext, useMemo } from "react"
 import {
   ReactFlow,
   Background,
@@ -6,29 +6,67 @@ import {
   ReactFlowProvider,
   PanOnScrollMode,
   SelectionMode,
+  EdgeLabelRenderer,
+  getBezierPath,
   type Node,
   type Edge,
+  type EdgeProps,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import type { WorkflowDefinition, NodeRunResult, WorkflowRunStatus } from "@/types/workflow"
+import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
+import { Badge } from "@/components/ui/badge"
 import { RunnerNodeResultsContext, runnerNodeTypes } from "./runner-node-wrappers"
-import { RunnerEdge } from "./runner-edge"
+import { resolveBranchLabel } from "../lib/branch-label"
 
 const edgeTypes = { default: RunnerEdge, branch: RunnerEdge }
+
+function RunnerEdge({
+  id, source, sourceX, sourceY, targetX, targetY, sourcePosition, targetPosition, data, sourceHandleId,
+}: EdgeProps) {
+  const nodeResults = useContext(RunnerNodeResultsContext)
+  const sourceResult = nodeResults[source]
+  const sourceStatus = sourceResult?.status
+  const activated = sourceStatus === "success" && (
+    !sourceHandleId || sourceResult?.activeBranch === sourceHandleId
+  )
+
+  const [edgePath, labelX, labelY] = getBezierPath({
+    sourceX, sourceY, sourcePosition, targetX, targetY, targetPosition,
+  })
+
+  const label = (data as { label?: string } | undefined)?.label
+
+  return (
+    <>
+      <path
+        id={id}
+        d={edgePath}
+        fill="none"
+        stroke={activated ? "var(--primary)" : "var(--border)"}
+        strokeWidth={2}
+        strokeOpacity={activated ? 0.6 : 1}
+        strokeDasharray={activated ? undefined : "4 4"}
+      />
+      {label && (
+        <EdgeLabelRenderer>
+          <Badge
+            variant="outline"
+            style={{ transform: `translate(-50%, -50%) translate(${labelX}px,${labelY}px)` }}
+            className="absolute bg-background text-xs pointer-events-none nodrag nopan"
+          >
+            {label}
+          </Badge>
+        </EdgeLabelRenderer>
+      )}
+    </>
+  )
+}
 
 interface DagViewProps {
   definition: WorkflowDefinition
   nodeResults: Record<string, NodeRunResult>
-  runState: WorkflowRunStatus["status"]
   selectedNodeId?: string | null
   onNodeSelect: (nodeId: string | null) => void
-}
-
-function resolveBranchLabel(def: WorkflowDefinition, fromId: string, branchId: string): string {
-  const node = def.nodes.find((n) => n.id === fromId)
-  if (!node || node.type !== "switch") return branchId
-  const branches = (node.config as { branches?: Array<{ id: string; label: string }> }).branches
-  return branches?.find((b) => b.id === branchId)?.label ?? branchId
 }
 
 function DagViewInner({ definition, nodeResults, selectedNodeId, onNodeSelect }: DagViewProps) {

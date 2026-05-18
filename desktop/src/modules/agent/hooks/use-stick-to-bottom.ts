@@ -1,5 +1,6 @@
 import type { RefObject } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
+import type { SynapseAgentTimelineItem } from "@/types/agent"
 
 export const PINNED_THRESHOLD_PX = 80
 
@@ -13,7 +14,7 @@ export function computeIsPinned(metrics: {
     return true
   }
   const distanceFromBottom = scrollHeight - clientHeight - scrollTop
-  return distanceFromBottom < PINNED_THRESHOLD_PX
+  return distanceFromBottom <= PINNED_THRESHOLD_PX
 }
 
 export function isLatestEntryNew(input: {
@@ -22,6 +23,33 @@ export function isLatestEntryNew(input: {
 }): boolean {
   if (!input.latestId) return false
   return input.previousId !== input.latestId
+}
+
+export function latestTimelineContentSignal(item: SynapseAgentTimelineItem | undefined): string {
+  if (!item) return "empty"
+  switch (item.kind) {
+    case "message":
+      return `${item.kind}:${item.role}:${item.content.length}`
+    case "thinking":
+    case "result":
+      return `${item.kind}:${item.content.length}`
+    case "toolResult":
+      return `${item.kind}:${item.toolName}:${item.status ?? "unknown"}:${String(item.success)}:${item.content?.length ?? 0}`
+    case "toolCall":
+      return `${item.kind}:${item.toolName}:${item.toolInput?.length ?? 0}`
+    case "permissionRequest":
+      return `${item.kind}:${item.requestId}:${item.toolName}:${item.toolInput?.length ?? 0}`
+    case "error":
+      return `${item.kind}:${item.message.length}`
+    case "phase":
+      return `${item.kind}:${item.runId}:${item.phase}:${item.status}:${item.errorMessage?.length ?? 0}`
+    case "sdkEvent":
+      return `${item.kind}:${item.sdkType}:${item.sdkSubtype ?? ""}:${item.summary?.length ?? 0}`
+    default: {
+      const exhaustive: never = item
+      return exhaustive
+    }
+  }
 }
 
 type ScrollOptions = { behavior?: ScrollBehavior }

@@ -63,6 +63,44 @@ describe("AgentPhaseRow", () => {
     expect(html).toContain("CLI exited 1")
   })
 
+  it("wraps long failed error text inside the phase row", () => {
+    const html = renderToStaticMarkup(
+      <AgentPhaseRow
+        item={mk({
+          phase: "failed",
+          status: "failed",
+          errorMessage: "sdk_error_" + "x".repeat(160),
+          completedAt: "2026-05-10T00:00:01.000Z",
+        })}
+        now={Date.parse("2026-05-10T00:00:02.000Z")}
+      />,
+    )
+
+    expect(html).toContain("whitespace-pre-wrap")
+    expect(html).toContain("break-words")
+    expect(html).toContain("sdk_error_")
+  })
+
+  it("renders cancellation labels instead of internal phase names", () => {
+    const stopping = renderToStaticMarkup(
+      <AgentPhaseRow
+        item={mk({ phase: "cancel_pending", status: "in-progress" })}
+        now={Date.parse("2026-05-10T00:00:00.500Z")}
+      />,
+    )
+    const stopped = renderToStaticMarkup(
+      <AgentPhaseRow
+        item={mk({ phase: "cancelled", status: "done", completedAt: "2026-05-10T00:00:00.500Z" })}
+        now={Date.parse("2026-05-10T00:00:01.000Z")}
+      />,
+    )
+
+    expect(stopping).toContain("正在停止")
+    expect(stopped).toContain("已停止")
+    expect(stopping).not.toMatch(/>cancel_pending</)
+    expect(stopped).not.toMatch(/>cancelled</)
+  })
+
   it("uses the destructive token color on failed", () => {
     const html = renderToStaticMarkup(
       <AgentPhaseRow
@@ -97,5 +135,22 @@ describe("AgentPhaseRow", () => {
       />,
     )
     expect(html).toContain("0.0s")
+  })
+
+  it("does not render NaNs when phase timestamps are malformed", () => {
+    const html = renderToStaticMarkup(
+      <AgentPhaseRow
+        item={mk({
+          phase: "streaming",
+          status: "done",
+          startedAt: "not-a-date",
+          completedAt: "also-not-a-date",
+        })}
+        now={Date.parse("2026-05-10T00:00:00.500Z")}
+      />,
+    )
+
+    expect(html).toContain("0.0s")
+    expect(html).not.toContain("NaNs")
   })
 })

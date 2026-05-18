@@ -28,8 +28,11 @@ function FormDialog({
   onSubmit,
   title,
 }: FormDialogProps) {
+  const contentAccessibilityProps = description ? {} : { "aria-describedby": undefined }
+
   return (
     <DialogContent
+      {...contentAccessibilityProps}
       className={cn("max-h-[calc(100vh-2rem)] overflow-hidden p-0", contentClassName)}
     >
       <form

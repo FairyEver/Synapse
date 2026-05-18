@@ -49,6 +49,10 @@ describe("migrateRepositoryScopedConnectorData", () => {
           recentlyViewed: { rule: [], skill: [], prompt: [] },
           contentSortOrder: "modified-desc",
         },
+        agent: {
+          defaultPermissionMode: "default",
+          defaultProviderModel: null,
+        },
       }, createNoopLogger())
     } finally {
       if (platformDescriptor) {

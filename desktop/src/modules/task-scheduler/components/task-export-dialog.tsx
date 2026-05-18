@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { track } from "@/lib/ui-tracking"
 import type { ScheduledTask } from "@/types/task-scheduler"
 import { formatTaskTrigger } from "../utils"
 
@@ -26,6 +27,14 @@ function TaskExportDialog({
   onExport: (selectedIds: string[]) => void
 }) {
   const [selected, setSelected] = useState<Set<string>>(new Set())
+
+  useEffect(() => {
+    const taskIds = new Set(tasks.map((task) => task.id))
+    setSelected((prev) => {
+      const next = new Set(Array.from(prev).filter((id) => taskIds.has(id)))
+      return next.size === prev.size ? prev : next
+    })
+  }, [tasks])
 
   const allSelected = selected.size === tasks.length && tasks.length > 0
   const someSelected = selected.size > 0 && selected.size < tasks.length
@@ -48,6 +57,24 @@ function TaskExportDialog({
       }
       return next
     })
+  }
+
+  function handleExport() {
+    const selectedTasks = tasks.filter((task) => selected.has(task.id))
+    track({
+      component: "task-scheduler",
+      name: "task-export-submit",
+      action: "submit",
+      metadata: {
+        boundary: "renderer.task-scheduler.export.dialog",
+        taskCount: tasks.length,
+        selectedCount: selectedTasks.length,
+        agentTaskCount: selectedTasks.filter((task) => task.action.type === "builtin.agent").length,
+        actionTypes: Array.from(new Set(selectedTasks.map((task) => task.action.type))).sort(),
+        triggerTypes: Array.from(new Set(selectedTasks.map((task) => task.trigger.type))).sort(),
+      },
+    })
+    onExport(selectedTasks.map((task) => task.id))
   }
 
   return (
@@ -91,7 +118,7 @@ function TaskExportDialog({
           </Button>
           <Button
             disabled={selected.size === 0}
-            onClick={() => onExport(Array.from(selected))}
+            onClick={handleExport}
           >
             导出
           </Button>

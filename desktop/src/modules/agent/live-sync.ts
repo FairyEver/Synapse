@@ -25,6 +25,10 @@ type TimelineSnapshotState = {
   readonly currentVersion: number
 }
 
+type PhaseUpdateState = {
+  readonly pendingConversationIds: ReadonlySet<string>
+}
+
 function isSelectedConversation(
   target: Pick<SynapseAgentConversationUpdatedPayload, "projectId" | "sessionKey"> & {
     readonly conversationId?: string
@@ -76,6 +80,7 @@ function shouldAutoFollowConversation(
   return state.followFeishu
     && !state.inputDirty
     && target.platform === "feishu"
+    && (!state.selectedProjectId || target.projectId === state.selectedProjectId)
     && !isSelectedConversation(target, {
       projectId: state.selectedProjectId,
       conversationId: state.selectedConversationId,
@@ -94,6 +99,20 @@ function shouldApplyTimelineSnapshot(
     && isSelectedConversation(target, selected)
 }
 
+function shouldApplyPhaseUpdate(
+  target: Pick<SynapseAgentConversationUpdatedPayload, "projectId" | "sessionKey"> & {
+    readonly conversationId?: string
+  },
+  selected: SelectedConversation,
+  state: PhaseUpdateState,
+): boolean {
+  const pendingBackground = selected.conversationId && target.conversationId
+    ? state.pendingConversationIds.has(target.conversationId)
+      && target.conversationId !== selected.conversationId
+    : false
+  return !pendingBackground && isSelectedConversation(target, selected)
+}
+
 function conversationUnreadKey(projectId: string, conversationId: string): string {
   return `${projectId}:${conversationId}`
 }
@@ -103,6 +122,7 @@ export {
   conversationUnreadKey,
   incrementUnreadForConversation,
   isSelectedConversation,
+  shouldApplyPhaseUpdate,
   shouldApplyTimelineSnapshot,
   shouldAutoFollowConversation,
 }

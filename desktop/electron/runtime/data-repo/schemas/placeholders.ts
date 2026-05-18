@@ -27,6 +27,10 @@ const isOptionalBoolean = (value: unknown): boolean =>
 const isOptionalNumber = (value: unknown): boolean =>
   value === undefined || typeof value === "number"
 
+const isPlainRecord = <T extends Record<string, unknown>>(value: unknown): value is T => {
+  return isAnyRecord<T>(value) && !Array.isArray(value)
+}
+
 const isOptionalRecord = (value: unknown): value is Record<string, unknown> | undefined =>
   value === undefined || isAnyRecord<Record<string, unknown>>(value)
 
@@ -85,6 +89,8 @@ export interface ProviderEntryV1 extends Record<string, unknown> {
   kind: string
   projectId?: string
   display?: string
+  note?: string
+  websiteUrl?: string
   baseUrl?: string
   secretRef?: string
   models?: ProviderModelEntryV1[]
@@ -95,6 +101,8 @@ export interface ProviderEntryV1 extends Record<string, unknown> {
   agentType?: string
   agentTypes?: string[]
   env?: Record<string, string>
+  settingsConfig?: Record<string, unknown>
+  secretEnvRefs?: Record<string, string>
   thinking?: string
   options?: ProviderOptionsV1
   createdAt?: string
@@ -113,6 +121,8 @@ export const providersSchema: NamespaceSchema<ProviderEntryV1> = {
     && ((v as ProviderEntryV1).scope === "global" || (v as ProviderEntryV1).scope === "project")
     && typeof (v as ProviderEntryV1).kind === "string"
     && isOptionalString((v as ProviderEntryV1).projectId)
+    && isOptionalString((v as ProviderEntryV1).note)
+    && isOptionalString((v as ProviderEntryV1).websiteUrl)
     && isOptionalString((v as ProviderEntryV1).baseUrl)
     && isOptionalString((v as ProviderEntryV1).secretRef)
     && isOptionalString((v as ProviderEntryV1).activeMode)
@@ -120,6 +130,8 @@ export const providersSchema: NamespaceSchema<ProviderEntryV1> = {
     && ((v as ProviderEntryV1).providerRefs === undefined || isStringArray((v as ProviderEntryV1).providerRefs))
     && ((v as ProviderEntryV1).agentTypes === undefined || isStringArray((v as ProviderEntryV1).agentTypes))
     && ((v as ProviderEntryV1).env === undefined || isStringRecord((v as ProviderEntryV1).env))
+    && ((v as ProviderEntryV1).settingsConfig === undefined || isAnyRecord((v as ProviderEntryV1).settingsConfig))
+    && ((v as ProviderEntryV1).secretEnvRefs === undefined || isStringRecord((v as ProviderEntryV1).secretEnvRefs))
     && isOptionalString((v as ProviderEntryV1).thinking)
     && ((v as ProviderEntryV1).options === undefined || isProviderOptions((v as ProviderEntryV1).options)),
 }
@@ -277,11 +289,21 @@ export interface ConversationUserMetaV1 extends Record<string, unknown> {
 
 export type ConversationResumePolicyV1 = "resume" | "fresh" | "continue"
 
+export interface ConversationUsageV1 extends Record<string, unknown> {
+  inputTokens?: number
+  outputTokens?: number
+  totalTokens?: number
+}
+
 export interface ConversationEntryV1 extends Record<string, unknown> {
   id: string
   schemaVersion: 1
   projectId: string
   sessionKey: string
+  providerId?: string
+  sdkSessionId?: string
+  usage?: ConversationUsageV1
+  costUsd?: number
   platform?: string
   channelKey?: string
   workspaceKey?: string
@@ -292,6 +314,7 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
   agentConfig?: {
     model?: string
     mode?: string
+    modelTier?: string
     env?: Record<string, string>
   }
   resumePolicy?: ConversationResumePolicyV1
@@ -314,6 +337,10 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && typeof (v as ConversationEntryV1).id === "string"
     && typeof (v as ConversationEntryV1).projectId === "string"
     && typeof (v as ConversationEntryV1).sessionKey === "string"
+    && isOptionalString((v as ConversationEntryV1).providerId)
+    && isOptionalString((v as ConversationEntryV1).sdkSessionId)
+    && ((v as ConversationEntryV1).usage === undefined || isConversationUsage((v as ConversationEntryV1).usage))
+    && isOptionalNonNegativeFiniteNumber((v as ConversationEntryV1).costUsd)
     && isOptionalString((v as ConversationEntryV1).channelKey)
     && isOptionalString((v as ConversationEntryV1).workspaceKey)
     && isOptionalString((v as ConversationEntryV1).workspacePath)
@@ -326,6 +353,34 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && isOptionalRecord((v as ConversationEntryV1).userMeta)
     && typeof (v as ConversationEntryV1).createdAt === "string"
     && typeof (v as ConversationEntryV1).updatedAt === "string",
+}
+
+export interface AgentEventEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  projectId: string
+  conversationId: string
+  turnId: string
+  eventType: string
+  payload: Record<string, unknown>
+  createdAt: string
+}
+
+export const agentEventsSchema: NamespaceSchema<AgentEventEntryV1> = {
+  name: "agent.events",
+  backend: "sqlite",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is AgentEventEntryV1 =>
+    isAnyRecord<AgentEventEntryV1>(v)
+    && (v as AgentEventEntryV1).schemaVersion === 1
+    && typeof (v as AgentEventEntryV1).id === "string"
+    && typeof (v as AgentEventEntryV1).projectId === "string"
+    && typeof (v as AgentEventEntryV1).conversationId === "string"
+    && typeof (v as AgentEventEntryV1).turnId === "string"
+    && typeof (v as AgentEventEntryV1).eventType === "string"
+    && isAnyRecord((v as AgentEventEntryV1).payload)
+    && typeof (v as AgentEventEntryV1).createdAt === "string",
 }
 
 export interface AuditActorV1 extends Record<string, unknown> {
@@ -994,12 +1049,27 @@ function isConnectorWorkspaceConfig(value: unknown): value is ConnectorWorkspace
     && isOptionalNumber(value.idleTimeoutMs)
 }
 
+function isOptionalNonNegativeFiniteNumber(value: unknown): boolean {
+  return value === undefined || (typeof value === "number" && Number.isFinite(value) && value >= 0)
+}
+
+function isOptionalNonNegativeInteger(value: unknown): boolean {
+  return value === undefined || (typeof value === "number" && Number.isInteger(value) && value >= 0)
+}
+
 function isConversationHistoryEntry(value: unknown): value is ConversationHistoryEntryV1 {
   return isAnyRecord<ConversationHistoryEntryV1>(value)
     && ["user", "assistant", "system", "tool"].includes(value.role)
     && typeof value.content === "string"
     && typeof value.timestamp === "string"
     && isOptionalRecord(value.metadata)
+}
+
+function isConversationUsage(value: unknown): value is ConversationUsageV1 {
+  return isPlainRecord<ConversationUsageV1>(value)
+    && isOptionalNonNegativeInteger(value.inputTokens)
+    && isOptionalNonNegativeInteger(value.outputTokens)
+    && isOptionalNonNegativeInteger(value.totalTokens)
 }
 
 function isConversationResumePolicy(value: unknown): value is ConversationResumePolicyV1 {

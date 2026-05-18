@@ -5,22 +5,30 @@ import {
   SCHEDULER_MCP_TOOL_ACTIONS,
   buildSchedulerTools,
 } from "./scheduler-domain"
+import {
+  WORKFLOW_DOMAIN,
+  WORKFLOW_MCP_TOOL_ACTIONS,
+  buildWorkflowTools,
+} from "./workflow-domain"
 import type { CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
   DATABASE_DOMAIN,
   SCHEDULER_DOMAIN,
+  WORKFLOW_DOMAIN,
 ]
 
 export const MCP_TOOL_ACTIONS: Record<string, string> = {
   ...buildDatabaseMcpToolActions(),
   ...SCHEDULER_MCP_TOOL_ACTIONS,
+  ...WORKFLOW_MCP_TOOL_ACTIONS,
 }
 
 export function buildAllMcpTools(): McpToolDefinition[] {
   return [
     ...buildDatabaseTools(),
     ...buildSchedulerTools(),
+    ...buildWorkflowTools(),
   ]
 }
 

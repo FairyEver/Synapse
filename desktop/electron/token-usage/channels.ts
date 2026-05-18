@@ -8,10 +8,4 @@ export const TOKEN_USAGE_CHANNELS = {
   getAgentReport: "synapse:token-usage:agent-report",
   getDetectedAgents: "synapse:token-usage:detected-agents",
   clearData: "synapse:token-usage:clear-data",
-  cursorAddAccount: "synapse:token-usage:cursor:add-account",
-  cursorRemoveAccount: "synapse:token-usage:cursor:remove-account",
-  cursorListAccounts: "synapse:token-usage:cursor:list-accounts",
-  cursorSetActive: "synapse:token-usage:cursor:set-active",
-  cursorSync: "synapse:token-usage:cursor:sync",
-  cursorValidate: "synapse:token-usage:cursor:validate",
 } as const

@@ -16,6 +16,27 @@ describe("diagnostics summary helpers", () => {
     expect(summary).toContain("## 异常项\n无")
   })
 
+  it("includes Agent runtime log health in key checks", () => {
+    const report = {
+      ...createReport(),
+      checks: [
+        ...createReport().checks,
+        {
+          id: "logs.agent-runtime",
+          group: "日志与配置",
+          name: "Agent 日志",
+          status: "ok",
+          severity: "info",
+          message: "未发现 Agent/SDK 风险日志",
+        },
+      ],
+    } satisfies SynapseDiagnosticsReport
+
+    const summary = buildDiagnosticsSummary(report)
+
+    expect(summary).toContain("通过 日志与配置/Agent 日志：未发现 Agent/SDK 风险日志")
+  })
+
   it("appends renderer-main roundtrip checks and refreshes report status", () => {
     const report = appendDiagnosticsCheck(
       createReport(),

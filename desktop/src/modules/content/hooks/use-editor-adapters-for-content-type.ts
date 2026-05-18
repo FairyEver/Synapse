@@ -40,12 +40,12 @@ function useEditorAdaptersForContentType({
     [adapters, contentType],
   )
 
-  const load = useCallback(async (): Promise<SynapseEditorAdapterSummary[]> => {
-    if (!enabled || adapters) {
+  const load = useCallback(async (force = false): Promise<SynapseEditorAdapterSummary[]> => {
+    if (!enabled || (adapters && !force)) {
       return filteredAdapters
     }
 
-    if (loadPromiseRef.current) {
+    if (loadPromiseRef.current && !force) {
       return loadPromiseRef.current
     }
 

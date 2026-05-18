@@ -3,6 +3,7 @@ packages:
   - website
   - server
   - auto
+  - auto/web
 
 onlyBuiltDependencies:
   - electron

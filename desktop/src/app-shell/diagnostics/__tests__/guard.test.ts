@@ -8,7 +8,7 @@ describe("guardedLog", () => {
     expect(logger.warn).toHaveBeenCalledWith("test message", { key: "value" })
   })
 
-  it("prevents recursive calls", () => {
+  it("queues recursive calls until the active write finishes", () => {
     const logger = {
       debug: vi.fn(),
       info: vi.fn(),
@@ -19,7 +19,7 @@ describe("guardedLog", () => {
     }
     guardedLog(logger, "error", "original")
     expect(logger.error).toHaveBeenCalledTimes(1)
-    expect(logger.warn).not.toHaveBeenCalled()
+    expect(logger.warn).toHaveBeenCalledWith("recursive call", undefined)
   })
 
   it("resets guard after error in logger", () => {

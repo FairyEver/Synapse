@@ -11,7 +11,10 @@
  * that should survive restarts.
  */
 
+import { ConsoleSink, createLogger } from "../logging"
 import type { ConfigScope, LayeredConfig } from "./types"
+
+const layeredConfigLogger = createLogger({ module: "runtime.data-repo.layered-config", sink: new ConsoleSink() })
 
 type ScopeLayer<T> =
   | { kind: "global"; value: Partial<T> }
@@ -104,8 +107,7 @@ export class InMemoryLayeredConfig<T extends Record<string, unknown>>
       try {
         entry.listener(value)
       } catch (err) {
-        // eslint-disable-next-line no-console
-        console.error("[LayeredConfig] listener threw", err)
+        layeredConfigLogger.error("LayeredConfig listener threw.", { error: err })
       }
     }
   }

@@ -4,6 +4,7 @@ const OPEN_SETTINGS_STORAGE_EVENT = "synapse:open-settings-storage"
 const APP_TAB_CHANGED_EVENT = "synapse:app-tab-changed"
 const OPEN_AGENT_SESSION_EVENT = "synapse:open-agent-session"
 const WATCH_NEXT_AGENT_SESSION_EVENT = "synapse:watch-next-agent-session"
+const CANCEL_WATCH_NEXT_AGENT_SESSION_EVENT = "synapse:cancel-watch-next-agent-session"
 
 type OpenAgentSessionPayload = {
   projectId: string
@@ -91,6 +92,10 @@ function requestWatchNextAgentSession(payload: WatchNextAgentSessionPayload): vo
   window.dispatchEvent(new CustomEvent(WATCH_NEXT_AGENT_SESSION_EVENT, { detail: payload }))
 }
 
+function cancelWatchNextAgentSession(payload: WatchNextAgentSessionPayload): void {
+  window.dispatchEvent(new CustomEvent(CANCEL_WATCH_NEXT_AGENT_SESSION_EVENT, { detail: payload }))
+}
+
 function subscribeWatchNextAgentSession(
   listener: (payload: WatchNextAgentSessionPayload) => void,
 ): () => void {
@@ -102,6 +107,20 @@ function subscribeWatchNextAgentSession(
 
   return () => {
     window.removeEventListener(WATCH_NEXT_AGENT_SESSION_EVENT, handleEvent)
+  }
+}
+
+function subscribeCancelWatchNextAgentSession(
+  listener: (payload: WatchNextAgentSessionPayload) => void,
+): () => void {
+  const handleEvent = (event: Event) => {
+    listener((event as CustomEvent<WatchNextAgentSessionPayload>).detail)
+  }
+
+  window.addEventListener(CANCEL_WATCH_NEXT_AGENT_SESSION_EVENT, handleEvent)
+
+  return () => {
+    window.removeEventListener(CANCEL_WATCH_NEXT_AGENT_SESSION_EVENT, handleEvent)
   }
 }
 
@@ -124,6 +143,7 @@ function subscribeOpenAgentSession(
 }
 
 export {
+  cancelWatchNextAgentSession,
   publishActiveAppTab,
   readCurrentAppTab,
   requestOpenAgentSession,
@@ -132,6 +152,7 @@ export {
   requestOpenSettingsTab,
   requestWatchNextAgentSession,
   subscribeActiveAppTab,
+  subscribeCancelWatchNextAgentSession,
   subscribeOpenAgentSession,
   subscribeOpenSettingsAbout,
   subscribeOpenSettingsStorage,

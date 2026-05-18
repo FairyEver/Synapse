@@ -10,6 +10,7 @@ export interface CompactProgressEntry {
 
 const DEFAULT_MAX_ENTRIES = 10
 const DEFAULT_MAX_CONTENT = 160
+const REDACTED = "[redacted]"
 
 export function progressEntryFromEvent(event: AgentEvent): CompactProgressEntry | null {
   switch (event.type) {
@@ -63,7 +64,7 @@ export function renderCompactProgress(
       : "Failed"
   const lines = [title]
   for (const entry of entries.slice(-DEFAULT_MAX_ENTRIES)) {
-    const content = truncateOneLine(entry.content ?? "", DEFAULT_MAX_CONTENT)
+    const content = truncateOneLine(redactSensitiveContent(entry.content ?? ""), DEFAULT_MAX_CONTENT)
     lines.push(content ? `- ${entry.label}: ${content}` : `- ${entry.label}`)
   }
   return lines.join("\n")
@@ -79,9 +80,19 @@ export function compactProgressPayload(
     entries: entries.slice(-DEFAULT_MAX_ENTRIES).map((entry) => ({
       kind: entry.kind,
       label: entry.label,
-      content: truncateOneLine(entry.content ?? "", DEFAULT_MAX_CONTENT),
+      content: truncateOneLine(redactSensitiveContent(entry.content ?? ""), DEFAULT_MAX_CONTENT),
     })),
   }
+}
+
+function redactSensitiveContent(value: string): string {
+  return value
+    .replace(/(["'])(authorization|cookie|set-cookie|token|[a-z0-9_-]*secret|api[_-]?key|password|credential)\1(\s*:\s*)(?:"[^"]*"|'[^']*'|[^\s,}]+)/gi, `$1$2$1$3$1${REDACTED}$1`)
+    .replace(/\b(authorization)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s'"]+(?:\s+[^\s'"]+)?)/gi, `$1$2${REDACTED}`)
+    .replace(/\b(cookie|set-cookie|token|[a-z0-9_-]*secret|api[_-]?key|password|credential)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;'"`]+)/gi, `$1$2${REDACTED}`)
+    .replace(/(--cookie(?:-jar)?\s+)(?:"[^"]*"|'[^']*'|[^\s]+)/gi, `$1${REDACTED}`)
+    .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, "[path redacted]")
+    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]")
 }
 
 function truncateOneLine(value: string, maxRunes: number): string {
@@ -90,4 +101,3 @@ function truncateOneLine(value: string, maxRunes: number): string {
   if (runes.length <= maxRunes) return normalized
   return `${runes.slice(0, maxRunes).join("")}...`
 }
-

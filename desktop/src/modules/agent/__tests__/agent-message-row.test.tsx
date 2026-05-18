@@ -1,5 +1,10 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { SynapseAgentDisplayProfile, SynapseAgentMessageTimelineItem } from "@/types/agent"
 import { AgentMessageEvent } from "../components/agent-message-event"
@@ -25,6 +30,21 @@ const mockProfile: SynapseAgentDisplayProfile = {
     denied: "Denied",
   },
 }
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+let roots: Root[] = []
+
+afterEach(() => {
+  for (const root of roots) {
+    act(() => {
+      root.unmount()
+    })
+  }
+  roots = []
+  document.body.innerHTML = ""
+  vi.clearAllMocks()
+})
 
 describe("AgentMessageEvent", () => {
   it("right-aligns user messages with a subtle outgoing bubble", () => {
@@ -124,5 +144,54 @@ describe("AgentMessageEvent", () => {
 
     expect(html).toContain("<a")
     expect(html).toContain("/Users/liyang/project/file.ts:12")
+  })
+
+  it("does not link slash-separated app labels in assistant messages", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageEvent
+        item={{
+          ...baseEntry,
+          role: "assistant",
+          content: "余额退款申请单(蛋鸡APP/PC)；养殖户模板(PC/APP)",
+        }}
+        profile={mockProfile}
+        onOpenReference={vi.fn()}
+      />,
+    )
+
+    expect(html).not.toContain("<a href")
+    expect(html).toContain("蛋鸡APP/PC")
+    expect(html).toContain("PC/APP")
+  })
+
+  it("opens wrapped relative file references through the reference bridge", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const onOpenReference = vi.fn()
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            ...baseEntry,
+            role: "assistant",
+            content: "desktop/src/modules/agent/index.tsx:12",
+          }}
+          profile={mockProfile}
+          onOpenReference={onOpenReference}
+        />,
+      )
+    })
+
+    const link = container.querySelector("a")
+    expect(link?.getAttribute("href")).toBe("desktop/src/modules/agent/index.tsx:12")
+
+    act(() => {
+      link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onOpenReference).toHaveBeenCalledWith("desktop/src/modules/agent/index.tsx:12")
   })
 })

@@ -5,17 +5,21 @@ import type {
   ScheduledTaskStatus,
   ScheduledTaskUpdateInput,
 } from "@/types/task-scheduler"
-import type { SynapseProjectConfig } from "@/types/config"
+import type { SynapseAgentGlobalConfig, SynapseProjectConfig } from "@/types/config"
+import { createRendererLogger } from "@/app-shell/logging"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
+import type { AgentActionConfig } from "../../../action-packages/builtin/agent"
 import type { TaskExportFile, TaskFormState } from "./types"
 
 const DEFAULT_ACTION_TYPE = "builtin.command"
+const logger = createRendererLogger("task-scheduler.utils")
 
 const DEFAULT_TASK_FORM_STATE: TaskFormState = {
   name: "",
   description: "",
   cwd: "",
   enabled: true,
+  activeDays: [0, 1, 2, 3, 4, 5, 6],
   triggerType: "cron",
   cronExpr: "0 9 * * *",
   everyMinutes: "60",
@@ -39,6 +43,7 @@ function createTaskFormState(
     description: task.description ?? "",
     cwd: task.cwd ?? "",
     enabled: task.enabled,
+    activeDays: task.activeDays ?? [0, 1, 2, 3, 4, 5, 6],
     triggerType: task.trigger.type === "builtin.cron" ? "cron" : "interval",
     cronExpr: task.trigger.type === "builtin.cron" ? task.trigger.config.expr : DEFAULT_TASK_FORM_STATE.cronExpr,
     everyMinutes: task.trigger.type === "builtin.interval"
@@ -50,6 +55,23 @@ function createTaskFormState(
     actionType: task.action.type,
     actionConfig: task.action.config,
     missedRunPolicy: task.missedRunPolicy,
+  }
+}
+
+function createDefaultAgentActionConfig(
+  agentDefaults: Pick<SynapseAgentGlobalConfig, "defaultPermissionMode" | "defaultProviderModel">,
+): AgentActionConfig {
+  const baseConfig = rendererActionRegistry.getDefaultConfig("builtin.agent") as AgentActionConfig
+  const defaultProviderModel = agentDefaults.defaultProviderModel
+  return {
+    ...baseConfig,
+    mode: agentDefaults.defaultPermissionMode,
+    ...(defaultProviderModel
+      ? {
+          providerId: defaultProviderModel.providerId,
+          modelTier: defaultProviderModel.modelTier,
+        }
+      : {}),
   }
 }
 
@@ -73,6 +95,10 @@ function buildTaskPayload(form: TaskFormState): ScheduledTaskCreateInput {
     ? { type: "project" as const, projectId: projectId.trim() }
     : { type: "global" as const }
 
+  if (form.activeDays.length === 0) {
+    throw new Error("请至少选择一个活跃日")
+  }
+
   return {
     name,
     description,
@@ -92,6 +118,7 @@ function buildTaskPayload(form: TaskFormState): ScheduledTaskCreateInput {
       config: actionConfig,
     },
     enabled: form.enabled,
+    activeDays: form.activeDays,
     missedRunPolicy: form.missedRunPolicy,
   }
 }
@@ -113,12 +140,43 @@ function formatTaskTrigger(task: Pick<ScheduledTask, "trigger">): string {
     : `每 ${task.trigger.config.everyMinutes} 分钟`
 }
 
+function formatTaskNextRun(
+  task: Pick<ScheduledTask, "activeRun" | "enabled" | "nextRunAt" | "trigger">,
+  now = new Date(),
+): string {
+  if (!task.enabled) return "停用中"
+  if (isCompletionAnchoredInterval(task) && task.activeRun?.status === "running") {
+    return "未知"
+  }
+  if (!task.nextRunAt) return "未知"
+  const nextRunAt = new Date(task.nextRunAt)
+  const nextRunAtTime = nextRunAt.getTime()
+  if (!Number.isFinite(nextRunAtTime)) return "未知"
+  if (nextRunAtTime <= now.getTime()) return "未知"
+  return formatTaskDate(task.nextRunAt, "未知")
+}
+
 function formatTaskAction(task: ScheduledTask): string {
   try {
     return rendererActionRegistry.summarize(task.action.type, task.action.config)
-  } catch {
+  } catch (error) {
+    logger.warn("Task action summary render failed.", {
+      boundary: "task-scheduler.action-summary",
+      taskId: task.id,
+      actionType: task.action.type,
+      configKeys: Object.keys(task.action.config).sort(),
+      errorName: getErrorName(error),
+      errorLength: getErrorLength(error),
+    })
     return task.action.type
   }
+}
+
+function isCompletionAnchoredInterval(
+  task: Pick<ScheduledTask, "trigger">,
+): boolean {
+  return task.trigger.type === "builtin.interval" &&
+    task.trigger.config.anchor === "last_completed_at"
 }
 
 function formatTaskDate(value: string | undefined, fallback: string): string {
@@ -170,6 +228,23 @@ function readPositiveInteger(value: string, label: string): number {
   return numberValue
 }
 
+function getErrorName(error: unknown): string {
+  if (error instanceof Error) {
+    return error.name
+  }
+  return typeof error
+}
+
+function getErrorLength(error: unknown): number {
+  if (error instanceof Error) {
+    return error.message.length
+  }
+  if (typeof error === "string") {
+    return error.length
+  }
+  return 0
+}
+
 function serializeTasksForExport(tasks: ScheduledTask[]): TaskExportFile {
   return {
     version: 1,
@@ -181,6 +256,7 @@ function serializeTasksForExport(tasks: ScheduledTask[]): TaskExportFile {
       cwd: task.cwd,
       trigger: task.trigger,
       action: task.action,
+      activeDays: task.activeDays,
       missedRunPolicy: task.missedRunPolicy,
     })),
   }
@@ -204,7 +280,9 @@ export {
   DEFAULT_TASK_FORM_STATE,
   buildTaskCreateInput,
   buildTaskUpdateInput,
+  createDefaultAgentActionConfig,
   createTaskFormState,
+  formatTaskNextRun,
   formatRunStatus,
   formatTaskAction,
   formatTaskDate,

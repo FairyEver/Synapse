@@ -149,8 +149,43 @@ function ContentImageField({
     )
   }
 
-  // --- Has-image state (Task 3 will implement this) ---
-  return null
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center gap-3 rounded-lg border p-3">
+        <img
+          src={iconImagePreview}
+          alt="内容图标"
+          className="size-16 rounded-md border object-cover"
+        />
+        <div className="flex flex-1 justify-end gap-2">
+          <ImageCropDialog ref={cropDialogRef} onCropped={handleCropped}>
+            <Button
+              variant="outline"
+              size="sm"
+              type="button"
+              data-track="content-icon-image-replace"
+            >
+              <ImageUp data-icon="inline-start" />
+              替换
+            </Button>
+          </ImageCropDialog>
+          <Button
+            variant="outline"
+            size="sm"
+            type="button"
+            data-track="content-icon-image-remove"
+            onClick={onIconImageRemove}
+          >
+            <Trash2 data-icon="inline-start" />
+            移除
+          </Button>
+        </div>
+      </div>
+      {iconImageError && (
+        <FieldError>{iconImageError}</FieldError>
+      )}
+    </div>
+  )
 }
 
 type ContentAppearanceFieldsProps = {

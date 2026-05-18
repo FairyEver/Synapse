@@ -9,11 +9,15 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
+import type { SynapseAgentProvider } from "@/types/bridge"
+import type { SynapseProjectConfig } from "@/types/config"
 import type { ScheduledTask } from "@/types/task-scheduler"
 import { TaskCard } from "./task-card"
 
 type TaskCardGridProps = {
   tasks: ScheduledTask[]
+  projects: readonly SynapseProjectConfig[]
+  providers: readonly SynapseAgentProvider[]
   busy: boolean
   onRun: (task: ScheduledTask) => void
   onStop: (task: ScheduledTask) => void
@@ -26,6 +30,8 @@ type TaskCardGridProps = {
 
 function TaskCardGrid({
   tasks,
+  projects,
+  providers,
   busy,
   onRun,
   onStop,
@@ -46,7 +52,7 @@ function TaskCardGrid({
           <EmptyDescription>新建任务后会按计划执行。</EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          <Button size="sm" onClick={onCreateNew}>
+          <Button size="sm" disabled={busy} onClick={onCreateNew}>
             <Plus />
             新建任务
           </Button>
@@ -56,11 +62,13 @@ function TaskCardGrid({
   }
 
   return (
-    <div className="grid grid-cols-3 gap-3">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
       {tasks.map((task) => (
         <TaskCard
           key={task.id}
           task={task}
+          projects={projects}
+          providers={providers}
           busy={busy}
           onRun={() => onRun(task)}
           onStop={() => onStop(task)}

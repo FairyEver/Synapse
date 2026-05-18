@@ -36,6 +36,26 @@ type DatabaseTableSchema = {
   updatedAt: string
 }
 
+type DatabaseOverviewColumn = {
+  name: string
+  kind: ColumnKind
+  description: string
+  choices?: string[]
+  system?: true
+}
+
+type DatabaseOverviewTable = {
+  name: string
+  description: string
+  rowCount: number
+  columns: DatabaseOverviewColumn[]
+}
+
+type DatabaseOverview = {
+  tableCount: number
+  tables: DatabaseOverviewTable[]
+}
+
 type DatabaseWhereCondition = {
   field: string
   op: "=" | "!=" | ">" | "<" | ">=" | "<=" | "LIKE" | "CONTAINS"
@@ -160,6 +180,9 @@ export type {
   Column,
   ColumnKind,
   DatabaseOrderBy,
+  DatabaseOverview,
+  DatabaseOverviewColumn,
+  DatabaseOverviewTable,
   DatabaseQueryParams,
   DatabaseQueryResult,
   DatabaseStatus,

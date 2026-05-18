@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import {
   MainActionRegistry,
@@ -8,6 +8,7 @@ import {
 } from "../../../action-runtime/action-registry"
 import type { DataChangeListener, DataNamespace } from "../../../runtime/data-repo"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
+import type { StructuredLogger } from "../../../runtime/service-registry"
 import { TaskSchedulerExecutionService } from "../execution-service"
 import { ScheduledTaskRunRepository } from "../run-repository"
 import { ScheduledTaskRepository } from "../task-repository"
@@ -32,16 +33,46 @@ describe("TaskSchedulerService", () => {
   })
 
   it("skips overlapping scheduled runs", async () => {
+    const logger = structuredLogger()
+    const harness = createHarness({ action: longRunningAction(), logger })
+    await harness.taskItems.upsert(createTask({ id: "task:1" }))
+
+    const runPromise = harness.service.runNow("task:1")
+    await waitFor(async () => harness.service.schedulerRuntimeInspect().runningTaskIds.includes("task:1"))
+    const skipped = await harness.service.triggerForTest("task:1", "schedule")
+
+    expect(await harness.runs.listByTask("task:1")).toEqual(expect.arrayContaining([
+      expect.objectContaining({ status: "skipped", error: "task is already running" }),
+    ]))
+    expect(skipped?.status).toBe("skipped")
+    expect(logger.info).toHaveBeenCalledWith("Scheduled task run skipped.", {
+      taskId: "task:1",
+      runId: skipped?.id,
+      triggeredBy: "schedule",
+      status: "skipped",
+      boundary: "task-scheduler-skip-run",
+      reason: "task is already running",
+    })
+    const running = (await harness.runs.listByTask("task:1")).find((run) => run.status === "running")
+    expect(running).toBeDefined()
+    await harness.service.stopRun(running!.id)
+    await runPromise
+  })
+
+  it("marks listed tasks that are currently running", async () => {
     const harness = createHarness({ action: longRunningAction() })
     await harness.taskItems.upsert(createTask({ id: "task:1" }))
 
     const runPromise = harness.service.runNow("task:1")
     await waitFor(async () => harness.service.schedulerRuntimeInspect().runningTaskIds.includes("task:1"))
-    await harness.service.triggerForTest("task:1", "schedule")
 
-    expect(await harness.runs.listByTask("task:1")).toEqual(expect.arrayContaining([
-      expect.objectContaining({ status: "skipped", error: "task is already running" }),
+    expect(await harness.service.schedulerTaskList()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: "task:1",
+        activeRun: { status: "running" },
+      }),
     ]))
+
     const running = (await harness.runs.listByTask("task:1")).find((run) => run.status === "running")
     expect(running).toBeDefined()
     await harness.service.stopRun(running!.id)
@@ -62,11 +93,74 @@ describe("TaskSchedulerService", () => {
 
     expect(await harness.runs.get(running!.id)).toEqual(expect.objectContaining({ status: "cancelled" }))
   })
+
+  it("logs stopRun requests with the run id and result", async () => {
+    const logger = structuredLogger()
+    const harness = createHarness({ action: longRunningAction(), logger })
+    await harness.taskItems.upsert(createTask({ id: "task:1" }))
+
+    const runPromise = harness.service.runNow("task:1")
+    await waitFor(async () => (await harness.runs.listByTask("task:1")).some((run) => run.status === "running"))
+    const running = (await harness.runs.listByTask("task:1")).find((run) => run.status === "running")
+    expect(running).toBeDefined()
+
+    await expect(harness.service.stopRun(running!.id)).resolves.toEqual({ stopped: true })
+    await runPromise
+
+    expect(logger.info).toHaveBeenCalledWith("Scheduled task stop requested.", {
+      taskId: "task:1",
+      runId: running!.id,
+      stopped: true,
+      runFound: true,
+      boundary: "task-scheduler-stop-run",
+    })
+  })
+
+  it("skips scheduled run when current day is not in activeDays", async () => {
+    // 2026-04-29 is a Wednesday (day 3). activeDays excludes Wednesday.
+    const harness = createHarness()
+    await harness.taskItems.upsert(createTask({
+      id: "task:1",
+      activeDays: [1, 2, 4, 5], // Mon, Tue, Thu, Fri — no Wednesday
+    }))
+
+    await harness.service.start()
+    const result = await harness.service.triggerForTest("task:1", "schedule")
+    expect(result!.status).toBe("skipped")
+    expect(result!.error).toBe("day not in activeDays")
+    harness.service.stop()
+  })
+
+  it("logs missed-run background failures with sanitized task context", async () => {
+    const logger = structuredLogger()
+    const harness = createHarness({ logger })
+    await harness.taskItems.upsert(createTask({
+      id: "task:1",
+      missedRunPolicy: "run_once",
+      nextRunAt: "2026-04-29T09:59:00.000Z",
+    }))
+    harness.tasks.markScheduled = async () => {
+      throw new Error("mark schedule failed")
+    }
+
+    await harness.service.start()
+    await waitFor(() => logger.warn.mock.calls.length > 0)
+
+    expect(logger.warn).toHaveBeenCalledWith("Scheduled task background run failed.", {
+      taskId: "task:1",
+      triggeredBy: "missed_run",
+      boundary: "task-scheduler-background-run",
+      errorName: "Error",
+      errorLength: "mark schedule failed".length,
+    })
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("mark schedule failed")
+  })
 })
 
 function createHarness(options: {
   readonly action?: MainActionDefinition
   readonly permissionGuard?: PermissionGuard
+  readonly logger?: StructuredLogger
 } = {}) {
   const taskItems = new MemoryNamespace<ScheduledTaskEntry>("task-scheduler.tasks")
   const runItems = new MemoryNamespace<ScheduledTaskRunEntry>("task-scheduler.runs")
@@ -90,15 +184,18 @@ function createHarness(options: {
     auditSink: auditSink(),
     defaultCwd: "/tmp",
   })
+  const serviceDeps = {
+    tasks,
+    runs,
+    execution,
+    defaultCwd: "/tmp",
+    now: () => new Date("2026-04-29T10:00:00.000Z"),
+    logger: options.logger,
+  }
   return {
-    service: new TaskSchedulerService({
-      tasks,
-      runs,
-      execution,
-      defaultCwd: "/tmp",
-      now: () => new Date("2026-04-29T10:00:00.000Z"),
-    }),
+    service: new TaskSchedulerService(serviceDeps),
     taskItems,
+    tasks,
     runs,
   }
 }
@@ -149,11 +246,13 @@ function createTask(overrides: Partial<ScheduledTaskEntry> = {}): ScheduledTaskE
     trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
     action: { type: "builtin.test", config: { message: "ok" } },
     enabled: true,
+    activeDays: [0, 1, 2, 3, 4, 5, 6],
     missedRunPolicy: "skip",
     overlapPolicy: "skip",
     createdAt: "2026-04-29T10:00:00.000Z",
     updatedAt: "2026-04-29T10:00:00.000Z",
     runCount: 0,
+    configVersion: 0,
     ...overrides,
   }
 }
@@ -171,6 +270,20 @@ function auditSink(): AuditSink {
     list: () => [],
     clearForTests: () => {},
   }
+}
+
+function structuredLogger(): StructuredLogger & { warn: ReturnType<typeof vi.fn> } {
+  const logger = {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn(),
+  }
+  logger.child.mockReturnValue(logger)
+  return logger
 }
 
 async function waitFor(predicate: () => boolean | Promise<boolean>): Promise<void> {

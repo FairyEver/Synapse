@@ -6,6 +6,7 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
 import { InputGroup, InputGroupAddon, InputGroupButton, InputGroupInput } from "@/components/ui/input-group"
 import { Label } from "@/components/ui/label"
+import { Skeleton } from "@/components/ui/skeleton"
 import { AdoptIdentityDialog } from "@/modules/settings/components/adopt-identity-dialog"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 
@@ -16,7 +17,14 @@ function IdentityPanel() {
   const [isAdoptDialogOpen, setIsAdoptDialogOpen] = useState(false)
 
   if (!localIdentityState || localIdentityState.status !== "ready") {
-    return null
+    return (
+      <SettingsGroup>
+        <div className="flex flex-col gap-3">
+          <Skeleton className="h-9 w-full" />
+          <Skeleton className="h-9 w-32" />
+        </div>
+      </SettingsGroup>
+    )
   }
 
   return (

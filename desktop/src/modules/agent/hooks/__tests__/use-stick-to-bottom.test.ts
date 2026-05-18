@@ -4,6 +4,7 @@ import {
   PINNED_THRESHOLD_PX,
   computeIsPinned,
   isLatestEntryNew,
+  latestTimelineContentSignal,
 } from "../use-stick-to-bottom"
 
 describe("computeIsPinned", () => {
@@ -16,6 +17,13 @@ describe("computeIsPinned", () => {
     const clientHeight = 600
     const scrollHeight = 2000
     const scrollTop = scrollHeight - clientHeight - (PINNED_THRESHOLD_PX - 1)
+    expect(computeIsPinned({ scrollTop, scrollHeight, clientHeight })).toBe(true)
+  })
+
+  it("treats the exact threshold distance as pinned", () => {
+    const clientHeight = 600
+    const scrollHeight = 2000
+    const scrollTop = scrollHeight - clientHeight - PINNED_THRESHOLD_PX
     expect(computeIsPinned({ scrollTop, scrollHeight, clientHeight })).toBe(true)
   })
 
@@ -47,5 +55,39 @@ describe("isLatestEntryNew", () => {
 
   it("returns true when the first entry appears after an empty timeline", () => {
     expect(isLatestEntryNew({ previousId: undefined, latestId: "a" })).toBe(true)
+  })
+})
+
+describe("latestTimelineContentSignal", () => {
+  it("changes when a streamed assistant message grows without a new item id", () => {
+    const first = latestTimelineContentSignal({
+      id: "event:stream:1",
+      kind: "message",
+      role: "assistant",
+      content: "Partial",
+      timestamp: "2026-05-15T00:00:00.000Z",
+    })
+    const next = latestTimelineContentSignal({
+      id: "event:stream:1",
+      kind: "message",
+      role: "assistant",
+      content: "Partial answer",
+      timestamp: "2026-05-15T00:00:00.000Z",
+    })
+
+    expect(next).not.toBe(first)
+    expect(next).toBe("message:assistant:14")
+  })
+
+  it("summarizes tool result changes by status and content length only", () => {
+    expect(latestTimelineContentSignal({
+      id: "event:tool:1",
+      kind: "toolResult",
+      toolName: "Read",
+      content: "secret file contents",
+      status: "success",
+      success: true,
+      timestamp: "2026-05-15T00:00:00.000Z",
+    })).toBe("toolResult:Read:success:true:20")
   })
 })

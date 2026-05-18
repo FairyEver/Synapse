@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { toast } from "sonner"
-import { AlertCircle, RefreshCw, X } from "lucide-react"
+import { AlertCircle, Loader2, RefreshCw, X } from "lucide-react"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import type { WorkflowDefinition, ValidationError } from "@/types/workflow"
 import { Alert, AlertDescription, AlertTitle, AlertAction } from "@/components/ui/alert"
+import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 // Side-effect: populate node type registry in the editor window's renderer process.
 // Without this, NodePalette.listTypes() returns [] and users cannot add nodes.
@@ -11,11 +12,14 @@ import { createRendererLogger } from "@/app-shell/logging"
 // Vite bundle (they import `electron`, `node:path`, etc.).
 import "../../../../workflow-nodes/register.renderer"
 import { Button } from "@/components/ui/button"
-import { WorkflowToolbar } from "./toolbar"
+import { CanvasFloatingToolbar } from "./canvas-floating-toolbar"
 import { WorkflowCanvas, type WorkflowCanvasHandle } from "./canvas"
 import { NodePalette } from "./node-palette"
 import { NodeConfigPanel } from "./node-config-panel"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+import { ProviderLookupProvider } from "../../../../workflow-nodes/provider-lookup-context"
+import { errorDiagnostic } from "../lib/error-utils"
+import { ErrorBoundary } from "@/components/error-boundary"
 
 const logger = createRendererLogger("workflow.editor")
 
@@ -34,7 +38,14 @@ export function WorkflowEditorApp() {
   const setShowCloseDialogRef = useRef(setShowCloseDialog)
   setShowCloseDialogRef.current = setShowCloseDialog
   const canvasRef = useRef<WorkflowCanvasHandle>(null)
+  const [leftCollapsed, setLeftCollapsed] = useState(false)
+  const [rightCollapsed, setRightCollapsed] = useState(false)
   const [renameSignal, setRenameSignal] = useState(0)
+  const { config: appConfig } = useAppConfig()
+  const projects = appConfig.global.projects
+  const defaultProjectName = definition?.defaultProjectId
+    ? projects.find((p) => p.id === definition.defaultProjectId)?.name
+    : undefined
   const definitionRef = useRef(definition)
   definitionRef.current = definition
   const isDirtyRef = useRef(false)
@@ -63,9 +74,12 @@ export function WorkflowEditorApp() {
         }
       } catch (err) {
         if (cancelled) return
-        const msg = err instanceof Error ? err.message : String(err)
-        setLoadError(`加载失败：${msg}`)
-        logger.error("editor definition load threw", { workflowId, error: msg })
+        setLoadError("无法加载工作流，请重试")
+        logger.error("editor definition load threw", {
+          workflowId,
+          boundary: "renderer.workflow.editor.load",
+          ...errorDiagnostic(err),
+        })
       }
     })()
     return () => { cancelled = true }
@@ -76,27 +90,40 @@ export function WorkflowEditorApp() {
   }, [loadDefinition])
 
   useEffect(() => {
+    const unsub = window.synapse?.workflow.onEditorRefocus(() => {
+      if (isDirtyRef.current) {
+        logger.info("editor-refocus received but has unsaved changes, skipping reload", { workflowId })
+        return
+      }
+      logger.info("editor-refocus received, reloading definition", { workflowId })
+      loadDefinition()
+    })
+    return unsub
+  }, [workflowId, loadDefinition])
+
+  useEffect(() => {
+    const unsub = window.synapse?.workflow.onDefinitionUpdated((payload) => {
+      if (payload.workflowId !== workflowId) return
+      if (payload.source !== "mcp") return
+      if (isDirtyRef.current) {
+        logger.warn("external definition update received but editor has unsaved changes, skipping reload", { workflowId })
+        toast.warning("工作流已被外部更新，当前有未保存的更改", { duration: 3000 })
+        return
+      }
+      loadDefinition()
+      toast.info("工作流已被外部更新", { duration: 2000 })
+    })
+    return unsub
+  }, [workflowId, loadDefinition])
+
+  useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
       if (!isDirtyRef.current) return
       e.preventDefault()
       e.returnValue = ""
-      setShowCloseDialogRef.current(true)
     }
     window.addEventListener("beforeunload", handler)
     return () => window.removeEventListener("beforeunload", handler)
-  }, [])
-
-  useEffect(() => {
-    const handler = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
-        e.preventDefault()
-        if (savingRef.current) return
-        const def = definitionRef.current
-        if (def) void handleSave(def)
-      }
-    }
-    window.addEventListener("keydown", handler)
-    return () => window.removeEventListener("keydown", handler)
   }, [])
 
   const handleDefinitionChange = useCallback((def: WorkflowDefinition) => {
@@ -104,6 +131,7 @@ export function WorkflowEditorApp() {
     setDirty(true)
     setRunErrors([])
     setDefinition(def)
+    definitionRef.current = def
   }, [])
 
   const handleConfigChange = useCallback((nodeId: string, config: Record<string, unknown>) => {
@@ -134,7 +162,9 @@ export function WorkflowEditorApp() {
         logger.debug("synced switch edge labels", { nodeId, branchCount: branches.length })
       }
 
-      return { ...def, nodes: updatedNodes, edges: updatedEdges }
+      const updated = { ...def, nodes: updatedNodes, edges: updatedEdges }
+      definitionRef.current = updated
+      return updated
     })
   }, [])
 
@@ -142,12 +172,12 @@ export function WorkflowEditorApp() {
     isDirtyRef.current = true
     setDirty(true)
     setRunErrors([])
+    canvasRef.current?.updateNodeName(nodeId, name)
     setDefinition((def) => {
       if (!def) return def
-      const node = def.nodes.find((n) => n.id === nodeId)
-      if (!node) return def
-      canvasRef.current?.updateNodeConfig(nodeId, { ...node.config, name })
-      return { ...def, nodes: def.nodes.map((n) => n.id === nodeId ? { ...n, name } : n) }
+      const updated = { ...def, nodes: def.nodes.map((n) => n.id === nodeId ? { ...n, name } : n) }
+      definitionRef.current = updated
+      return updated
     })
   }, [])
 
@@ -168,21 +198,36 @@ export function WorkflowEditorApp() {
 
   const handleCloseSave = async () => {
     const def = definitionRef.current
-    if (def) {
-      const result = await handleSave(def)
-      // If save failed (validation errors or IPC failure), abort the close —
-      // keep the window open so the user can fix the issues and retry.
-      if (!result || "errors" in result) {
-        setShowCloseDialog(false)
-        return
+    try {
+      if (def) {
+        const result = await handleSave(def)
+        // If save failed (validation errors or IPC failure), abort the close —
+        // keep the window open so the user can fix the issues and retry.
+        if (!result || "errors" in result) {
+          setShowCloseDialog(false)
+          toast.error("保存失败，请重试")
+          return
+        }
       }
+    } catch (err) {
+      logger.error("close-save failed", {
+        workflowId,
+        boundary: "renderer.workflow.editor.close-save",
+        ...errorDiagnostic(err),
+      })
+      setShowCloseDialog(false)
+      toast.error("保存失败，请重试")
+      return
     }
     isDirtyRef.current = false
     setShowCloseDialog(false)
     window.close()
   }
 
-  const handleSave = async (def: WorkflowDefinition, silent?: boolean) => {
+  const handleSave = useCallback(async (def: WorkflowDefinition, silent?: boolean) => {
+    // Short-circuit when nothing changed — avoid a pointless IPC round-trip
+    // and give clear feedback that no save is needed (no spinner, no toast).
+    if (!isDirtyRef.current) return { versionHash: def.version }
     savingRef.current = true
     setSaving(true)
     try {
@@ -190,7 +235,11 @@ export function WorkflowEditorApp() {
       try {
         result = await window.synapse?.workflow.save(def)
       } catch (err) {
-        logger.error("save IPC call threw", { workflowId: def.id, error: err instanceof Error ? err.message : String(err) })
+        logger.error("save IPC call threw", {
+          workflowId: def.id,
+          boundary: "renderer.workflow.editor.save",
+          ...errorDiagnostic(err),
+        })
         setRunErrors([{ type: "invalid_config", message: "保存失败：无法连接到主进程" }])
         return { errors: [{ type: "invalid_config" as const, message: "保存失败：无法连接到主进程" }] }
       }
@@ -220,7 +269,21 @@ export function WorkflowEditorApp() {
       savingRef.current = false
       setSaving(false)
     }
-  }
+  }, [])
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault()
+        if (savingRef.current) return
+        if (!isDirtyRef.current) return
+        const def = definitionRef.current
+        if (def) void handleSave(def)
+      }
+    }
+    window.addEventListener("keydown", handler)
+    return () => window.removeEventListener("keydown", handler)
+  }, [handleSave])
 
   const handleRun = async (params: Record<string, unknown>) => {
     const def = definitionRef.current
@@ -228,7 +291,10 @@ export function WorkflowEditorApp() {
     setRunning(true)
     try {
       const saveResult = await handleSave(def, true)
-      if (!saveResult || "errors" in saveResult) return null
+      if (!saveResult || "errors" in saveResult) {
+        toast.error("保存失败，运行已取消")
+        return null
+      }
       const saved = definitionRef.current
       if (!saved) return null
       const result = await window.synapse?.workflow.runDefinition(saved, params)
@@ -247,8 +313,12 @@ export function WorkflowEditorApp() {
       void window.synapse?.workflow.openRunner(saved.id, result.runId)
       return result.runId
     } catch (err) {
-      logger.error("handleRun failed", { error: err instanceof Error ? err.message : String(err) })
-      setRunErrors([{ type: "invalid_config", message: `运行失败：${err instanceof Error ? err.message : String(err)}` }])
+      logger.error("handleRun failed", {
+        workflowId: def.id,
+        boundary: "renderer.workflow.editor.run",
+        ...errorDiagnostic(err),
+      })
+      setRunErrors([{ type: "invalid_config", message: "运行失败：无法连接到主进程" }])
       return null
     } finally {
       setRunning(false)
@@ -276,6 +346,13 @@ export function WorkflowEditorApp() {
         return
       }
       void window.synapse?.workflow.openRunner(saved.id, forceResult.runId)
+    } catch (err) {
+      logger.error("force run failed", {
+        workflowId: saved.id,
+        boundary: "renderer.workflow.editor.force-run",
+        ...errorDiagnostic(err),
+      })
+      toast.error("运行失败：无法连接到主进程")
     } finally {
       setRunning(false)
     }
@@ -298,13 +375,13 @@ export function WorkflowEditorApp() {
         </div>
       )
     }
-    return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">加载中…</div>
+    return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground gap-2"><Loader2 className="h-4 w-4 animate-spin" />加载中…</div>
   }
 
   return (
-    <>
+    <ProviderLookupProvider>
+    <ErrorBoundary fallbackTitle="工作流编辑器出现问题">
     <div className="flex flex-col h-screen">
-      <WorkflowToolbar definition={definition} saving={saving} running={running} dirty={dirty} onSave={handleSave} onRun={handleRun} onChange={handleDefinitionChange} />
       {runErrors.length > 0 && (
         <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
           <AlertCircle className="h-4 w-4" />
@@ -315,7 +392,10 @@ export function WorkflowEditorApp() {
                 <li
                   key={i}
                   className={e.nodeId ? "cursor-pointer hover:underline" : undefined}
+                  role={e.nodeId ? "button" : undefined}
+                  tabIndex={e.nodeId ? 0 : undefined}
                   onClick={e.nodeId ? () => setSelectedNodeId(e.nodeId!) : undefined}
+                  onKeyDown={e.nodeId ? (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); setSelectedNodeId(e.nodeId!) } } : undefined}
                 >
                   {e.message}
                 </li>
@@ -323,37 +403,62 @@ export function WorkflowEditorApp() {
             </ul>
           </AlertDescription>
           <AlertAction>
-            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setRunErrors([])}>
+            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setRunErrors([])} aria-label="关闭错误提示">
               <X className="h-3.5 w-3.5" />
             </Button>
           </AlertAction>
         </Alert>
       )}
-      <div className="flex-1 flex min-h-0">
-        <NodePalette />
-        <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
-          <ResizablePanel>
+      <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
+        <ResizablePanel
+          id="node-palette"
+          defaultSize={176}
+          minSize={176}
+          maxSize={220}
+          collapsedSize={16}
+          collapsible
+          groupResizeBehavior="preserve-pixel-size"
+          onResize={(size) => {
+            setLeftCollapsed(size.inPixels <= 16)
+          }}
+        >
+          <NodePalette collapsed={leftCollapsed} />
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel>
+          <div className="relative h-full">
             <WorkflowCanvas ref={canvasRef} definition={definition} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} onRequestRename={handleRequestRename} />
-          </ResizablePanel>
-          <ResizableHandle withHandle />
-          <ResizablePanel
-            defaultSize={400}
-            minSize={300}
-            maxSize={600}
-            groupResizeBehavior="preserve-pixel-size"
-          >
-            <NodeConfigPanel
-              nodeId={selectedNodeId}
-              definition={definition}
-              onConfigChange={handleConfigChange}
-              onNameChange={handleNameChange}
-              onDeleteNode={(id) => { canvasRef.current?.deleteNodes([id]); setSelectedNodeId(null) }}
-              onCopyNode={(id) => canvasRef.current?.copyNodes([id])}
-              renameSignal={renameSignal}
-            />
-          </ResizablePanel>
-        </ResizablePanelGroup>
-      </div>
+            <CanvasFloatingToolbar definition={definition} saving={saving} running={running} dirty={dirty} onSave={handleSave} onRun={handleRun} />
+          </div>
+        </ResizablePanel>
+        <ResizableHandle withHandle />
+        <ResizablePanel
+          id="node-config"
+          defaultSize={400}
+          minSize={300}
+          maxSize={600}
+          collapsedSize={16}
+          collapsible
+          groupResizeBehavior="preserve-pixel-size"
+          onResize={(size) => {
+            setRightCollapsed(size.inPixels <= 16)
+          }}
+        >
+          <NodeConfigPanel
+            collapsed={rightCollapsed}
+            nodeId={selectedNodeId}
+            definition={definition}
+            onConfigChange={handleConfigChange}
+            onNameChange={handleNameChange}
+            onDeleteNode={(id) => { canvasRef.current?.deleteNodes([id]); setSelectedNodeId(null) }}
+            onCopyNode={(id) => canvasRef.current?.copyNodes([id])}
+            renameSignal={renameSignal}
+            projects={projects}
+            defaultProjectName={defaultProjectName}
+            onDefinitionChange={handleDefinitionChange}
+          />
+        </ResizablePanel>
+      </ResizablePanelGroup>
     </div>
     <AlertDialog open={showCloseDialog} onOpenChange={setShowCloseDialog}>
       <AlertDialogContent>
@@ -380,6 +485,7 @@ export function WorkflowEditorApp() {
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
-    </>
+    </ErrorBoundary>
+    </ProviderLookupProvider>
   )
 }

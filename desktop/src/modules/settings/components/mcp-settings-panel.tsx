@@ -4,6 +4,7 @@ import { Copy } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Card,
   CardAction,
@@ -41,12 +42,14 @@ function McpSettingsPanel() {
     Partial<Record<DatabaseMcpTarget, DatabaseMcpServerInfo>>
   >({})
   const [mcpHttpStatus, setMcpHttpStatus] = useState<DatabaseMcpHttpStatus | null>(null)
+  const [mcpServersLoading, setMcpServersLoading] = useState(true)
 
   useEffect(() => {
     void databaseMcpHttpStatusGet().then(setMcpHttpStatus).catch(() => setMcpHttpStatus(null))
   }, [])
 
   const refreshMcpServers = useCallback(async () => {
+    setMcpServersLoading(true)
     const result = await databaseMcpServersGet()
     setMcpServersByTarget(
       result.reduce<Partial<Record<DatabaseMcpTarget, DatabaseMcpServerInfo>>>((servers, server) => {
@@ -54,6 +57,7 @@ function McpSettingsPanel() {
         return servers
       }, {}),
     )
+    setMcpServersLoading(false)
     return result
   }, [])
 
@@ -61,6 +65,7 @@ function McpSettingsPanel() {
     void refreshMcpServers().catch((error) => {
       logger.error("Failed to load MCP status.", error)
       setMcpServersByTarget({})
+      setMcpServersLoading(false)
     })
   }, [refreshMcpServers])
 
@@ -140,6 +145,7 @@ function McpSettingsPanel() {
           </div>
         ) : null}
         <Separator />
+        {mcpServersLoading ? <Skeleton className="h-10 w-full" /> : null}
         {mcpServers.map((server) => (
           <div
             key={server.id}
@@ -153,7 +159,9 @@ function McpSettingsPanel() {
                 style={EDITOR_ICON_CLIP_STYLE}
               />
               <span className="truncate text-sm">{server.label}</span>
-              {server.registered && server.mode === "http" ? (
+              {mcpServersLoading ? (
+                <span className="text-xs text-muted-foreground">检测中...</span>
+              ) : server.registered && server.mode === "http" ? (
                 <StatusPill active activeLabel="已注册" inactiveLabel="" />
               ) : server.registered && server.mode === "stdio" ? (
                 <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">

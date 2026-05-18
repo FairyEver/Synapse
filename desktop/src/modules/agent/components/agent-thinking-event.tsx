@@ -1,5 +1,7 @@
 import { ChevronDown, Clipboard, Sparkles } from "lucide-react"
+import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
+import { track } from "@/lib/ui-tracking"
 import {
   Collapsible,
   CollapsibleContent,
@@ -10,6 +12,9 @@ import type {
   SynapseAgentThinkingTimelineItem,
 } from "@/types/agent"
 import { AgentAnnotation } from "./agent-annotation"
+import { errorLogMeta } from "../utils"
+
+const logger = createRendererLogger("agent")
 
 function AgentThinkingEvent({
   item,
@@ -18,6 +23,27 @@ function AgentThinkingEvent({
   readonly item: SynapseAgentThinkingTimelineItem
   readonly profile: SynapseAgentDisplayProfile
 }) {
+  const handleCopy = () => {
+    track({
+      component: "agent",
+      name: "agent-thinking-copy",
+      action: "click",
+      metadata: {
+        boundary: "renderer.agent.thinking-copy",
+        itemId: item.id,
+        contentLength: item.content.length,
+      },
+    })
+    void navigator.clipboard.writeText(item.content).catch((error: unknown) => {
+      logger.warn("Agent thinking copy failed.", {
+        boundary: "renderer.agent.thinking-copy",
+        itemId: item.id,
+        contentLength: item.content.length,
+        ...errorLogMeta(error),
+      })
+    })
+  }
+
   return (
     <AgentAnnotation>
       <Collapsible defaultOpen={!profile.thinkingDefaultCollapsed}>
@@ -37,7 +63,7 @@ function AgentThinkingEvent({
           </Button>
         </CollapsibleTrigger>
         <CollapsibleContent>
-          <div className="relative pb-2 pt-1">
+          <div className="group relative pb-2 pt-1">
             <pre data-allow-select="true" className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/50 px-2 py-1.5 text-xs leading-5 text-muted-foreground">
               {item.content}
             </pre>
@@ -45,8 +71,9 @@ function AgentThinkingEvent({
               type="button"
               variant="ghost"
               size="icon"
+              aria-label="复制思考过程"
               className="absolute right-1 top-2 size-6 opacity-0 transition-opacity hover:opacity-100 focus:opacity-100 group-hover:opacity-100"
-              onClick={() => void navigator.clipboard.writeText(item.content)}
+              onClick={handleCopy}
             >
               <Clipboard className="size-3.5" />
             </Button>

@@ -1,6 +1,7 @@
 import { Component, type ErrorInfo, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { createRendererLogger } from "@/app-shell/logging"
+import { getDiagnosticSnapshot } from "@/lib/diagnostic-context"
 
 const logger = createRendererLogger("app.error-boundary")
 
@@ -22,6 +23,7 @@ class AppErrorBoundary extends Component<Props, State> {
       error: error.message,
       stack: error.stack,
       componentStack: errorInfo.componentStack,
+      diagnostics: getDiagnosticSnapshot(),
     })
   }
 

@@ -50,7 +50,7 @@ function ScanItemCard({
             <TooltipTrigger asChild>
               <Badge
                 variant={source === "synapse" ? "default" : "secondary"}
-                className="shrink-0 text-[10px] px-1.5 py-0"
+                className="shrink-0 text-xs px-1.5 py-0"
               >
                 {source === "synapse" ? "Synapse" : "外部"}
               </Badge>

@@ -1,10 +1,47 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { TaskFormDialog } from "../components/task-form-dialog"
 import type { ScheduledTask } from "@/types/task-scheduler"
 
 const noop = vi.fn()
+
+const rendererLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  error: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+}))
+const track = vi.hoisted(() => vi.fn())
+const appConfig = vi.hoisted(() => ({
+  agent: {
+    defaultPermissionMode: "default",
+    defaultProviderModel: null,
+  },
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => rendererLogger,
+}))
+
+vi.mock("@/app-shell/config", () => ({
+  useAppConfig: () => ({
+    config: appConfig,
+  }),
+}))
+
+vi.mock("@/lib/ui-tracking", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/ui-tracking")>()
+  return {
+    ...actual,
+    track,
+  }
+})
 
 vi.mock("@/components/ui/dialog", () => ({
   Dialog: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
@@ -71,19 +108,50 @@ vi.mock("@/components/ui/toggle-group", () => ({
   ToggleGroupItem: ({
     children,
     className,
+    disabled,
     id,
     value,
   }: {
     children: React.ReactNode
     className?: string
+    disabled?: boolean
     id?: string
     value: string
   }) => (
-    <button className={className} data-slot="toggle-group-item" data-value={value} id={id} type="button">
+    <button
+      className={className}
+      data-slot="toggle-group-item"
+      data-value={value}
+      disabled={disabled}
+      id={id}
+      type="button"
+    >
       {children}
     </button>
   ),
 }))
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+;(globalThis as typeof globalThis & { ResizeObserver: typeof ResizeObserver }).ResizeObserver = class ResizeObserver {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+let roots: Root[] = []
+
+afterEach(() => {
+  for (const root of roots) {
+    act(() => {
+      root.unmount()
+    })
+  }
+  roots = []
+  document.body.innerHTML = ""
+  appConfig.agent.defaultPermissionMode = "default"
+  appConfig.agent.defaultProviderModel = null
+  vi.clearAllMocks()
+})
 
 describe("TaskFormDialog", () => {
   it("renders the four lightweight sections in create mode", () => {
@@ -190,13 +258,76 @@ describe("TaskFormDialog", () => {
     expect(html).toContain("HTTP 请求")
   })
 
-  it("keeps the action field as a select for registry-backed actions", () => {
+  it("renders action type as a toggle group for registry-backed actions", () => {
     const html = renderDialog()
 
-    expect(html).toContain('id="task-form-action-type"')
+    expect(html).toContain('aria-label="动作"')
+    expect(html).toContain('data-slot="toggle-group"')
+    expect(html).toContain('id="task-form-action-type-builtin.command"')
+    expect(html).toContain('id="task-form-action-type-builtin.script"')
+    expect(html).toContain('id="task-form-action-type-builtin.http-request"')
+    expect(html).toContain('id="task-form-action-type-builtin.agent"')
     expect(html).toContain("命令")
     expect(html).toContain("脚本")
     expect(html).toContain("HTTP 请求")
+    expect(html).toContain("Agent")
+  })
+
+  it("reuses the permission-mode dropdown for scheduled Agent tasks", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <TaskFormDialog
+          open
+          busy={false}
+          platform="darwin"
+          projects={[{ id: "project-1", name: "Project One", path: "/tmp/project-one" }]}
+          state={{
+            mode: "edit",
+            task: createTask({
+              scope: { type: "project", projectId: "project-1" },
+              action: {
+                type: "builtin.agent",
+                config: {
+                  projectId: "project-1",
+                  agentType: "claude-code",
+                  mode: "plan",
+                  prompt: "Run scheduled work",
+                  sessionPolicy: "fresh",
+                  timeoutMins: 30,
+                },
+              },
+            }),
+          }}
+          onCreate={async () => undefined}
+          onOpenChange={noop}
+          onUpdate={async () => undefined}
+        />,
+      )
+    })
+
+    const agentToggleItem = container.querySelector('[data-slot="toggle-group-item"][data-value="builtin.agent"]')
+    expect(agentToggleItem).toBeTruthy()
+    expect(agentToggleItem?.textContent).toBe("Agent")
+
+    const trigger = container.querySelector('button[aria-label="权限模式"]')
+    expect(trigger?.textContent).toContain("计划")
+
+    await act(async () => {
+      trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    for (const mode of ["default", "acceptEdits", "plan", "auto", "dontAsk", "bypassPermissions"]) {
+      expect(document.querySelector(`[data-mode="${mode}"]`)).toBeTruthy()
+    }
+
+    expect(container.textContent).not.toContain("执行模式")
+    expect(document.body.textContent).not.toContain("Bypass Permissions")
   })
 
   it("renders shell choices as single-value toggle groups", () => {
@@ -286,6 +417,192 @@ describe("TaskFormDialog", () => {
     )
   })
 
+  it("logs directory picker failures without exposing the raw error message", async () => {
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        repository: {
+          chooseDirectory: vi.fn().mockRejectedValue(
+            new Error("dialog failed for /Users/example/secret-agent-project"),
+          ),
+        },
+      },
+    })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <TaskFormDialog
+          open
+          busy={false}
+          platform="darwin"
+          projects={[{ id: "project-1", name: "Project One", path: "/tmp/project-one" }]}
+          state={{
+            mode: "edit",
+            task: createTask({
+              trigger: {
+                type: "builtin.interval",
+                config: { everyMinutes: 15, anchor: "created_at" },
+              },
+            }),
+          }}
+          onCreate={async () => undefined}
+          onOpenChange={noop}
+          onUpdate={async () => undefined}
+        />,
+      )
+    })
+
+    const chooseButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent === "选择")
+    expect(chooseButton).toBeTruthy()
+
+    await act(async () => {
+      chooseButton?.click()
+      await Promise.resolve()
+    })
+
+    expect(rendererLogger.error).toHaveBeenCalledWith(
+      "Failed to choose task working directory.",
+      expect.objectContaining({
+        boundary: "task-scheduler.form.cwd-picker",
+        action: "chooseDirectory",
+        errorName: "Error",
+        errorLength: "dialog failed for /Users/example/secret-agent-project".length,
+      }),
+    )
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret-agent-project")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example")
+  })
+
+  it("logs submit failures without exposing the raw error message", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const onUpdate = vi.fn().mockRejectedValue(
+      new Error("save failed for token=secret-agent-token in /Users/example/agent-task"),
+    )
+
+    await act(async () => {
+      root.render(
+        <TaskFormDialog
+          open
+          busy={false}
+          platform="darwin"
+          projects={[{ id: "project-1", name: "Project One", path: "/tmp/project-one" }]}
+          state={{ mode: "edit", task: createTask() }}
+          onCreate={async () => undefined}
+          onOpenChange={noop}
+          onUpdate={onUpdate}
+        />,
+      )
+    })
+
+    const form = container.querySelector("form")
+    expect(form).toBeTruthy()
+
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+
+    expect(rendererLogger.error).toHaveBeenCalledWith(
+      "Failed to save scheduled task.",
+      expect.objectContaining({
+        boundary: "task-scheduler.form.submit",
+        action: "update",
+        taskId: "task-1",
+        actionType: "builtin.command",
+        errorName: "Error",
+        errorLength: "save failed for token=secret-agent-token in /Users/example/agent-task".length,
+      }),
+    )
+    expect(container.textContent).toContain("保存任务失败。")
+    expect(container.textContent).not.toContain("secret-agent-token")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret-agent-token")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example")
+  })
+
+  it("tracks successful Agent task submits without recording prompt or paths", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const onUpdate = vi.fn().mockResolvedValue(undefined)
+
+    await act(async () => {
+      root.render(
+        <TaskFormDialog
+          open
+          busy={false}
+          platform="darwin"
+          projects={[{ id: "project-1", name: "Project One", path: "/Users/example/secret-project" }]}
+          state={{
+            mode: "edit",
+            task: createTask({
+              scope: { type: "project", projectId: "project-1" },
+              trigger: {
+                type: "builtin.interval",
+                config: { everyMinutes: 15, anchor: "last_completed_at" },
+              },
+              action: {
+                type: "builtin.agent",
+                config: {
+                  projectId: "project-1",
+                  agentType: "claude-code",
+                  providerId: "provider-1",
+                  modelTier: "sonnet",
+                  mode: "plan",
+                  prompt: "secret scheduled prompt",
+                  sessionPolicy: "fresh",
+                  timeoutMins: 30,
+                },
+              },
+            }),
+          }}
+          onCreate={async () => undefined}
+          onOpenChange={noop}
+          onUpdate={onUpdate}
+        />,
+      )
+    })
+
+    const form = container.querySelector("form")
+    expect(form).toBeTruthy()
+
+    await act(async () => {
+      form?.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+
+    expect(onUpdate).toHaveBeenCalledTimes(1)
+    expect(track).toHaveBeenCalledWith({
+      component: "task-scheduler",
+      name: "task-form-submit",
+      action: "submit",
+      metadata: expect.objectContaining({
+        boundary: "renderer.task-scheduler.form-submit",
+        mode: "edit",
+        taskId: "task-1",
+        actionType: "builtin.agent",
+        triggerType: "interval",
+        enabled: true,
+        missedRunPolicy: "skip",
+        hasCwd: false,
+        hasAgentProject: true,
+        agentType: "claude-code",
+        agentMode: "plan",
+        sessionPolicy: "fresh",
+      }),
+    })
+    expect(JSON.stringify(track.mock.calls)).not.toContain("secret scheduled prompt")
+    expect(JSON.stringify(track.mock.calls)).not.toContain("/Users/example")
+  })
+
   it("renders cron as an input group with an inline editor action", () => {
     const html = renderDialog()
 
@@ -348,6 +665,7 @@ function createTask(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
       },
     },
     enabled: true,
+    activeDays: [0, 1, 2, 3, 4, 5, 6],
     missedRunPolicy: "skip",
     overlapPolicy: "skip",
     createdAt: "2026-04-29T00:00:00.000Z",

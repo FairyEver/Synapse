@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import { getSynapseBridge } from "@/lib/electron-bridge"
+import { createRendererLogger } from "@/app-shell/logging"
 import type { DatabaseFolder, DatabaseChangeEvent } from "@/types/database"
+
+const folderLogger = createRendererLogger("database-folders")
 
 function useDatabaseFolders() {
   const [folders, setFolders] = useState<DatabaseFolder[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const bridgeRef = useRef(getSynapseBridge())
 
   const refresh = useCallback(async () => {
@@ -12,10 +16,13 @@ function useDatabaseFolders() {
     if (!bridge) return
 
     setLoading(true)
+    setError(null)
     try {
       const result = await bridge.database.databaseFolderList()
       setFolders(result)
-    } catch {
+    } catch (e) {
+      folderLogger.error("Failed to load database folders", e)
+      setError(e instanceof Error ? e.message : "Unknown error loading folders")
       setFolders([])
     } finally {
       setLoading(false)
@@ -87,6 +94,7 @@ function useDatabaseFolders() {
   return {
     folders,
     loading,
+    error,
     refresh,
     createFolder,
     renameFolder,

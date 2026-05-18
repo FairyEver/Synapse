@@ -16,6 +16,7 @@ export type ScheduledTaskActionRef = {
 export type ScheduledTaskStatus = "success" | "failed" | "timeout" | "cancelled" | "skipped"
 export type ScheduledTaskRunStatus = "running" | ScheduledTaskStatus
 export type ScheduledTaskRunTrigger = "schedule" | "manual" | "missed_run"
+export type ScheduledTaskActiveRun = { status: "running" }
 
 export type ScheduledTask = {
   id: string
@@ -27,6 +28,7 @@ export type ScheduledTask = {
   trigger: ScheduledTaskTrigger
   action: ScheduledTaskActionRef
   enabled: boolean
+  activeDays: number[]
   missedRunPolicy: "skip" | "run_once"
   overlapPolicy: "skip"
   createdAt: string
@@ -34,6 +36,7 @@ export type ScheduledTask = {
   nextRunAt?: string
   lastRunAt?: string
   lastStatus?: ScheduledTaskStatus
+  activeRun?: ScheduledTaskActiveRun
   runCount: number
 }
 
@@ -45,6 +48,7 @@ export type ScheduledTaskCreateInput = {
   trigger: ScheduledTaskTrigger
   action: ScheduledTaskActionRef
   enabled?: boolean
+  activeDays?: number[]
   missedRunPolicy?: "skip" | "run_once"
 }
 
@@ -56,6 +60,7 @@ export type ScheduledTaskUpdateInput = {
   trigger?: ScheduledTaskTrigger
   action?: ScheduledTaskActionRef
   enabled?: boolean
+  activeDays?: number[]
   missedRunPolicy?: "skip" | "run_once"
 }
 

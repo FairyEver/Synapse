@@ -163,6 +163,14 @@
     @apply bg-background text-foreground;
   }
 
+  html,
+  body,
+  #root {
+    height: 100%;
+    overflow: hidden;
+    overscroll-behavior: none;
+  }
+
   #root,
   #root * {
     @apply select-none;
@@ -202,18 +210,38 @@
   }
 
   #root {
-    min-height: 100vh;
+    min-height: 0;
   }
 
+}
+
+.react-flow__handle {
+  width: 20px;
+  height: 20px;
+  background: transparent;
+  border: none;
+  z-index: 1;
+}
+
+.react-flow__handle::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 8px;
+  height: 8px;
+  transform: translate(-50%, -50%);
+  border-radius: 9999px;
+  background: var(--foreground);
+  transition: transform 0.15s ease;
+}
+
+.react-flow__handle:hover::after {
+  transform: translate(-50%, -50%) scale(1.4);
 }
 
 @keyframes indeterminate-slide {
   0% { transform: translateX(-100%); }
   85% { transform: translateX(290%); }
   100% { transform: translateX(290%); }
-}
-
-@keyframes indeterminate-shimmer {
-  0% { background-position: 200% 0; }
-  100% { background-position: -200% 0; }
 }

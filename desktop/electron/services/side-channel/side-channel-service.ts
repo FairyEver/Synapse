@@ -100,7 +100,7 @@ export class SideChannelService implements ReplyTargetRuntime {
             role: event.role,
             bindAddress: event.binding?.bindAddress,
             port: event.binding?.port,
-            error: event.error,
+            ...networkAuditErrorDiagnostic(event.error),
           },
         })
       },
@@ -170,14 +170,30 @@ export class SideChannelService implements ReplyTargetRuntime {
 
   dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): void {
     const dispatcher = this.dispatchers.get(target.transport.kind)
-    if (!dispatcher) return
-    void dispatcher.dispatchAgentEvent(target, event).catch((error) => {
-      this.deps.logger?.warn("Reply target dispatch failed.", {
-        error: error instanceof Error ? error.message : String(error),
+    const conversationId = event.conversationId ?? target.conversationId
+    if (!dispatcher) {
+      this.deps.logger?.warn("Reply target dispatcher missing.", {
         projectId: target.projectId,
         sessionKey: target.sessionKey,
         transportKind: target.transport.kind,
         connectorId: target.transport.connectorId,
+        eventType: event.type,
+        conversationId,
+        sdkSessionId: event.sdkSessionId,
+      })
+      return
+    }
+    void dispatcher.dispatchAgentEvent(target, event).catch((error) => {
+      this.deps.logger?.warn("Reply target dispatch failed.", {
+        projectId: target.projectId,
+        sessionKey: target.sessionKey,
+        transportKind: target.transport.kind,
+        connectorId: target.transport.connectorId,
+        eventType: event.type,
+        conversationId,
+        sdkSessionId: event.sdkSessionId,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: errorMessage(error).length,
       })
     })
   }
@@ -196,14 +212,6 @@ export class SideChannelService implements ReplyTargetRuntime {
     if (!target) {
       throw new SideChannelError("session_not_found", "session reply target was not found", 404)
     }
-    if (isMutedTarget(target)) {
-      return {
-        ok: true,
-        projectId: project.projectId,
-        sessionKey,
-        outboxRecorded: true,
-      }
-    }
     const attachments = await prepareSideChannelAttachments({
       images: request.images,
       files: request.files,
@@ -213,11 +221,22 @@ export class SideChannelService implements ReplyTargetRuntime {
     const payload = outboxPayload(message, attachments)
     const dispatcher = this.dispatchers.get(target.transport.kind)
     const outbox = this.outbox(project.projectId)
+    if (isMutedTarget(target)) {
+      outbox.record({ target, payload, status: "sent" })
+      this.recordSendAudit("allowed", target, attachments.length)
+      return {
+        ok: true,
+        projectId: project.projectId,
+        sessionKey,
+        outboxRecorded: true,
+      }
+    }
 
     try {
-      if (dispatcher) {
-        await dispatcher.dispatchSideChannelSend(target, { message, attachments })
+      if (!dispatcher) {
+        throw new SideChannelError("dispatch_unavailable", "dispatcher is unavailable", 502)
       }
+      await dispatcher.dispatchSideChannelSend(target, { message, attachments })
       outbox.record({ target, payload, status: "sent" })
       this.recordSendAudit("allowed", target, attachments.length)
       return {
@@ -227,10 +246,18 @@ export class SideChannelService implements ReplyTargetRuntime {
         outboxRecorded: true,
       }
     } catch (error) {
-      const messageText = error instanceof Error ? error.message : String(error)
-      outbox.record({ target, payload, status: "failed", lastError: messageText })
-      this.recordSendAudit("failed", target, attachments.length, messageText)
-      throw new SideChannelError("dispatch_failed", messageText, 502)
+      const diagnostic = errorDiagnostic(error)
+      outbox.record({ target, payload, status: "failed", lastError: outboxLastError(error) })
+      this.recordSendAudit("failed", target, attachments.length, diagnostic)
+      this.deps.logger?.warn("Side-channel send dispatch failed.", {
+        projectId: target.projectId,
+        sessionKey: target.sessionKey,
+        transportKind: target.transport.kind,
+        connectorId: target.transport.connectorId,
+        attachmentCount: attachments.length,
+        ...diagnostic,
+      })
+      throw new SideChannelError("dispatch_failed", "dispatch failed", 502)
     }
   }
 
@@ -267,8 +294,9 @@ export class SideChannelService implements ReplyTargetRuntime {
       })
     }
     this.recordIngressAudit("allowed", url.pathname, { method: request.method })
+    let body: (SideChannelSendRequest & SideChannelRelaySendRequest) | undefined
     try {
-      const body = parseJsonBody(request.body)
+      body = parseJsonBody(request.body)
       if (url.pathname === this.relaySendPath) {
         const result = await this.handleRelaySend(body)
         return jsonResponse(200, true, result)
@@ -276,7 +304,9 @@ export class SideChannelService implements ReplyTargetRuntime {
       const result = await this.send(body)
       return jsonResponse(200, true, result)
     } catch (error) {
-      return responseForError(error)
+      const response = responseForError(error)
+      this.logHttpFailure(url.pathname, request.method, body, response.status, error)
+      return response
     }
   }
 
@@ -366,7 +396,7 @@ export class SideChannelService implements ReplyTargetRuntime {
     outcome: "allowed" | "failed",
     target: ReplyTarget,
     attachmentCount: number,
-    error?: string,
+    diagnostic: Record<string, unknown> = {},
   ): void {
     this.deps.auditSink?.record({
       action: "network.connect",
@@ -379,7 +409,7 @@ export class SideChannelService implements ReplyTargetRuntime {
         transportKind: target.transport.kind,
         connectorId: target.transport.connectorId,
         attachmentCount,
-        error,
+        ...diagnostic,
       },
     })
   }
@@ -395,6 +425,29 @@ export class SideChannelService implements ReplyTargetRuntime {
       resource: `side-channel:${path}`,
       outcome,
       metadata,
+    })
+  }
+
+  private logHttpFailure(
+    path: string,
+    method: string,
+    request: (SideChannelSendRequest & SideChannelRelaySendRequest) | undefined,
+    status: number,
+    error: unknown,
+  ): void {
+    this.deps.logger?.warn("Side-channel HTTP request failed.", {
+      path,
+      method,
+      projectId: stringValue(request?.projectId ?? request?.project ?? request?.sourceProjectId ?? request?.source_project),
+      sessionKey: stringValue(request?.sessionKey ?? request?.session_key ?? request?.sourceSessionKey ?? request?.source_session_key),
+      messageLength: typeof request?.message === "string" ? request.message.length : 0,
+      imageCount: arrayLength(request?.images),
+      fileCount: arrayLength(request?.files),
+      errorCode: sideChannelErrorCode(error),
+      status,
+      boundary: "side-channel-http",
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorLength: errorMessage(error).length,
     })
   }
 }
@@ -465,9 +518,55 @@ function responseForError(error: unknown): LocalHttpResponse {
     })
   }
   return jsonResponse(500, false, undefined, {
-    code: "internal_error",
-    message: error instanceof Error ? error.message : String(error),
+    code: sideChannelErrorCode(error),
+    message: "internal error",
   })
+}
+
+function sideChannelErrorCode(error: unknown): string {
+  if (error instanceof AttachmentPolicyError || error instanceof SideChannelError) return error.code
+  return "internal_error"
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function outboxLastError(error: unknown): string {
+  if (error instanceof SideChannelError) return error.message
+  const diagnostic = errorDiagnostic(error)
+  return `${diagnostic.errorName} (${diagnostic.errorLength} chars)`
+}
+
+function errorDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly errorCode?: string
+} {
+  const diagnostic = {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: errorMessage(error).length,
+  }
+  if (error instanceof AttachmentPolicyError || error instanceof SideChannelError) {
+    return { ...diagnostic, errorCode: error.code }
+  }
+  return diagnostic
+}
+
+function networkAuditErrorDiagnostic(error: string | undefined): {
+  readonly errorName?: string
+  readonly errorLength?: number
+} {
+  if (!error) return {}
+  return { errorName: "Error", errorLength: error.length }
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined
+}
+
+function arrayLength(value: unknown): number {
+  return Array.isArray(value) ? value.length : 0
 }
 
 function firstHeader(value: string | string[] | undefined): string | undefined {

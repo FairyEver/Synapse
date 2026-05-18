@@ -6,18 +6,23 @@ import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { ConversationEntryV1, DataRepository } from "../../runtime/data-repo"
 import type { AgentEvent } from "../../services/agent-runtime"
 import type { EventBus } from "../../runtime/event-bus"
+import { createMainLogger } from "../../services/log-store"
 import {
   DEFAULT_LOCAL_SESSION_KEY,
   LOCAL_RENDERER_PLATFORM,
   timelineRequestSchema,
   timelineItemSchema,
   agentEventSchema,
+  permissionModeSchema,
+  sessionSummary,
+  sessionSummarySchema,
   resolveProjectAgent,
   resolveTimelineSession,
   historyEntries,
 } from "./ipc-shared"
 
 const MAX_CLIENT_SKEW_MS = 60_000
+const logger = createMainLogger("agent.ipc")
 
 function clampClientSubmittedAt(clientIso: string | undefined, recvIso: string): string {
   if (!clientIso) return recvIso
@@ -33,14 +38,21 @@ function clampClientSubmittedAt(clientIso: string | undefined, recvIso: string):
 
 const sendRequestSchema = projectRequestSchema.extend({
   sessionKey: z.string().optional(),
+  conversationId: z.string().min(1).optional(),
   content: z.string().min(1),
   clientSubmittedAt: z.string().optional(),
+  providerId: z.string().min(1).optional(),
 })
 
 const respondPermissionRequestSchema = projectRequestSchema.extend({
   requestId: z.string().min(1),
   behavior: z.enum(["allow", "deny"]),
   message: z.string().optional(),
+})
+
+const setPermissionModeRequestSchema = projectRequestSchema.extend({
+  conversationId: z.string().min(1),
+  mode: permissionModeSchema,
 })
 
 const cancelTurnRequestSchema = projectRequestSchema.extend({
@@ -91,6 +103,7 @@ const respondPermissionResultSchema = z.object({
 type ProjectRequest = z.infer<typeof projectRequestSchema>
 type SendRequest = z.infer<typeof sendRequestSchema>
 type RespondPermissionRequest = z.infer<typeof respondPermissionRequestSchema>
+type SetPermissionModeRequest = z.infer<typeof setPermissionModeRequestSchema>
 
 // ─── Message method descriptors ───────────────────────────────────────────────
 
@@ -110,8 +123,16 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           conversationId: session?.id,
           entries: session ? historyEntries(session, request.limit) : [],
         }
-      } catch {
-        if (!request.conversationId) throw new Error("找不到当前项目。")
+      } catch (rawError) {
+        logger.warn("Agent timeline runtime lookup failed; trying repository fallback.", {
+          projectId: request.projectId,
+          sessionKey: request.sessionKey,
+          hasConversationId: Boolean(request.conversationId),
+          limit: request.limit,
+          boundary: "agent.timeline.runtime",
+          ...timelineLookupErrorMeta(rawError),
+        })
+        if (!request.conversationId) throw new Error("找不到当前项目。", { cause: rawError })
         const dataRepo = ctx.resolve<DataRepository>("core.data-repository")
         const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
         const session = await conversations.get(request.conversationId)
@@ -152,6 +173,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           runId,
           projectId: request.projectId,
           sessionKey,
+          conversationId: request.conversationId,
           phase: "submitted",
           status: "done",
           startedAt: submittedAt,
@@ -168,6 +190,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           runId,
           projectId: request.projectId,
           sessionKey,
+          conversationId: request.conversationId,
           phase: "received",
           status: "in-progress",
           startedAt: t_recv,
@@ -177,19 +200,23 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       })
 
       try {
-        const result = await agent.send({
+        const message = {
           projectId: request.projectId,
           sessionKey,
           platform: LOCAL_RENDERER_PLATFORM,
           userId: "renderer",
           userName: "Renderer",
           content: request.content,
+          providerId: request.providerId,
           replyCtx: {
             kind: LOCAL_RENDERER_PLATFORM,
             projectId: request.projectId,
             sessionKey,
           },
-        })
+        }
+        const result = request.conversationId
+          ? await agent.sendToConversation(message, request.conversationId)
+          : await agent.send(message)
         const t_done = new Date().toISOString()
         eventBus.emit({
           domain: "agent",
@@ -236,7 +263,14 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
         }
       } catch (rawError) {
         const t_fail = new Date().toISOString()
-        const message = rawError instanceof Error ? rawError.message : "发送失败"
+        logger.warn("Agent send IPC failed.", {
+          projectId: request.projectId,
+          sessionKey,
+          conversationId: request.conversationId,
+          providerId: request.providerId,
+          boundary: "agent.send.ipc",
+          ...sendFailureDiagnostic(rawError),
+        })
         eventBus.emit({
           domain: "agent",
           type: "phase.update",
@@ -244,11 +278,12 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
             runId,
             projectId: request.projectId,
             sessionKey,
+            conversationId: request.conversationId,
             phase: "failed",
             status: "failed",
             startedAt: t_recv,
             completedAt: t_fail,
-            errorMessage: message,
+            errorMessage: "发送失败",
           },
           scope: { projectId: request.projectId },
           timestamp: t_fail,
@@ -283,6 +318,21 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       return { ok: true }
     },
   },
+  setPermissionMode: {
+    kind: "invoke",
+    channel: "synapse:agent:set-permission-mode",
+    request: setPermissionModeRequestSchema,
+    response: sessionSummarySchema,
+    handler: async (ctx, request: SetPermissionModeRequest) => {
+      const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
+      const updated = await agent.setPermissionMode({
+        conversationId: request.conversationId,
+        mode: request.mode,
+        actor: { kind: "user" },
+      })
+      return sessionSummary(updated)
+    },
+  },
   cancelTurn: {
     kind: "invoke",
     channel: "synapse:agent:cancel-turn",
@@ -303,4 +353,32 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       return agent.forceKillTurn(request.conversationId)
     },
   },
+}
+
+function timelineLookupErrorMeta(rawError: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly errorCode?: string
+} {
+  const message = rawError instanceof Error ? rawError.message : String(rawError)
+  const code = (rawError as { readonly code?: unknown } | null)?.code
+  return {
+    errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+    errorLength: message.length,
+    errorCode: typeof code === "string" || typeof code === "number" ? String(code) : undefined,
+  }
+}
+
+function sendFailureDiagnostic(rawError: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly errorCode?: string
+} {
+  const message = rawError instanceof Error ? rawError.message : String(rawError)
+  const code = (rawError as { readonly code?: unknown } | null)?.code
+  return {
+    errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+    errorLength: message.length,
+    errorCode: typeof code === "string" || typeof code === "number" ? String(code) : undefined,
+  }
 }

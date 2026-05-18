@@ -1,7 +1,7 @@
 /**
  * @vitest-environment jsdom
  */
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest"
+import { describe, it, expect, vi, beforeEach } from "vitest"
 import { installGlobalErrorListener } from "../global-error-listener"
 
 describe("installGlobalErrorListener", () => {
@@ -22,10 +22,13 @@ describe("installGlobalErrorListener", () => {
     })
     window.dispatchEvent(event)
 
-    expect(logger.error).toHaveBeenCalledWith("Test error", expect.objectContaining({
+    expect(logger.error).toHaveBeenCalledWith("Renderer uncaught error.", expect.objectContaining({
+      boundary: "renderer.global-error",
       filename: "app.js",
       lineno: 42,
       colno: 10,
+      errorName: "Error",
+      errorLength: "Test error".length,
     }))
     cleanup()
   })
@@ -39,10 +42,14 @@ describe("installGlobalErrorListener", () => {
     })
     window.dispatchEvent(event)
 
-    expect(logger.error).toHaveBeenCalledWith("async failure", {
+    expect(logger.error).toHaveBeenCalledWith("Renderer unhandled promise rejection.", expect.objectContaining({
+      boundary: "renderer.global-error",
       type: "unhandledrejection",
-      stack: error.stack,
-    })
+      reasonType: "Error",
+      errorName: "Error",
+      errorLength: "async failure".length,
+      stackLength: error.stack?.length,
+    }))
     cleanup()
   })
 
@@ -54,10 +61,13 @@ describe("installGlobalErrorListener", () => {
     })
     window.dispatchEvent(event)
 
-    expect(logger.error).toHaveBeenCalledWith("string rejection", {
+    expect(logger.error).toHaveBeenCalledWith("Renderer unhandled promise rejection.", expect.objectContaining({
+      boundary: "renderer.global-error",
       type: "unhandledrejection",
-      stack: undefined,
-    })
+      reasonType: "string",
+      errorName: "string",
+      errorLength: "string rejection".length,
+    }))
     cleanup()
   })
 
@@ -69,10 +79,13 @@ describe("installGlobalErrorListener", () => {
     })
     window.dispatchEvent(event)
 
-    expect(logger.error).toHaveBeenCalledWith("Unhandled promise rejection", {
+    expect(logger.error).toHaveBeenCalledWith("Renderer unhandled promise rejection.", expect.objectContaining({
+      boundary: "renderer.global-error",
       type: "unhandledrejection",
-      stack: undefined,
-    })
+      reasonType: "object",
+      errorName: "object",
+      errorLength: 0,
+    }))
     cleanup()
   })
 
@@ -82,5 +95,32 @@ describe("installGlobalErrorListener", () => {
 
     window.dispatchEvent(new ErrorEvent("error", { message: "after cleanup" }))
     expect(logger.error).not.toHaveBeenCalled()
+  })
+
+  it("logs uncaught renderer errors without raw message or stack text", () => {
+    const cleanup = installGlobalErrorListener(logger)
+    const error = new Error("render failed token=sk-secret at /Users/liyang/private/file.ts")
+    const event = new ErrorEvent("error", {
+      message: error.message,
+      filename: "agent-panel.tsx",
+      lineno: 42,
+      colno: 10,
+      error,
+    })
+
+    window.dispatchEvent(event)
+
+    expect(logger.error).toHaveBeenCalledWith("Renderer uncaught error.", expect.objectContaining({
+      boundary: "renderer.global-error",
+      errorName: "Error",
+      errorLength: error.message.length,
+      stackLength: error.stack?.length,
+      filename: "agent-panel.tsx",
+      lineno: 42,
+      colno: 10,
+    }))
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("/Users/liyang/private")
+    cleanup()
   })
 })

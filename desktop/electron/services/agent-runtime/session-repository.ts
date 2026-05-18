@@ -23,6 +23,12 @@ export interface CreateAgentSessionInput {
   readonly userMeta?: ConversationEntryV1["userMeta"]
   readonly resumePolicy?: ConversationResumePolicyV1
   readonly agentType?: string
+  readonly providerId?: string
+  readonly mode?: string
+  readonly modelTier?: string
+  readonly sdkSessionId?: string
+  readonly usage?: ConversationEntryV1["usage"]
+  readonly costUsd?: number
 }
 
 export interface SaveAgentSessionInput {
@@ -30,6 +36,10 @@ export interface SaveAgentSessionInput {
   readonly agentType: string
   readonly agentSessionId?: string
   readonly resumePolicy?: ConversationResumePolicyV1
+  readonly providerId?: string
+  readonly sdkSessionId?: string
+  readonly usage?: ConversationEntryV1["usage"]
+  readonly costUsd?: number
 }
 
 export class AgentSessionRepository {
@@ -58,6 +68,8 @@ export class AgentSessionRepository {
         channelKey: message.channelKey ?? existing.channelKey,
         workspaceKey: message.workspaceKey ?? existing.workspaceKey,
         workspacePath: message.workspacePath ?? existing.workspacePath,
+        agentType: message.agentType ?? existing.agentType,
+        providerId: message.providerId ?? existing.providerId,
         userMeta: mergeUserMeta(existing.userMeta, message),
         updatedAt: this.isoNow(),
       }
@@ -75,6 +87,8 @@ export class AgentSessionRepository {
       workspaceKey: message.workspaceKey,
       workspacePath: message.workspacePath,
       resumePolicy: "resume",
+      agentType: message.agentType,
+      providerId: message.providerId,
     })
   }
 
@@ -115,6 +129,13 @@ export class AgentSessionRepository {
       workspaceKey: input.workspaceKey,
       workspacePath: input.workspacePath,
       agentType: input.agentType,
+      providerId: input.providerId,
+      agentConfig: input.mode || input.modelTier
+        ? { ...(input.mode ? { mode: input.mode } : {}), ...(input.modelTier ? { modelTier: input.modelTier } : {}) }
+        : undefined,
+      sdkSessionId: input.sdkSessionId,
+      usage: input.usage,
+      costUsd: input.costUsd,
       history: [],
       userMeta: input.userMeta,
       active: true,
@@ -140,6 +161,13 @@ export class AgentSessionRepository {
       workspaceKey: input.workspaceKey,
       workspacePath: input.workspacePath,
       agentType: input.agentType,
+      providerId: input.providerId,
+      agentConfig: input.mode || input.modelTier
+        ? { ...(input.mode ? { mode: input.mode } : {}), ...(input.modelTier ? { modelTier: input.modelTier } : {}) }
+        : undefined,
+      sdkSessionId: input.sdkSessionId,
+      usage: input.usage,
+      costUsd: input.costUsd,
       history: [],
       userMeta: input.userMeta,
       active: false,
@@ -201,8 +229,60 @@ export class AgentSessionRepository {
       agentType: input.agentType,
       agentSessionId: input.agentSessionId,
       resumePolicy: input.resumePolicy,
+      providerId: input.providerId,
+      sdkSessionId: input.sdkSessionId,
+      usage: input.usage,
+      costUsd: input.costUsd,
       updatedAt: this.isoNow(),
     })
+    await this.conversations.upsert(updated)
+    return updated
+  }
+
+  async saveSdkSession(input: {
+    readonly conversationId: string
+    readonly sdkSessionId: string
+  }): Promise<ConversationEntryV1> {
+    const conversation = await this.requireConversation(input.conversationId)
+    const updated: ConversationEntryV1 = {
+      ...conversation,
+      sdkSessionId: input.sdkSessionId,
+      agentSessionId: input.sdkSessionId,
+      updatedAt: this.isoNow(),
+    }
+    await this.conversations.upsert(updated)
+    return updated
+  }
+
+  async saveUsage(input: {
+    readonly conversationId: string
+    readonly usage?: ConversationEntryV1["usage"]
+    readonly costUsd?: number
+  }): Promise<ConversationEntryV1> {
+    const conversation = await this.requireConversation(input.conversationId)
+    const updated: ConversationEntryV1 = {
+      ...conversation,
+      usage: input.usage ?? conversation.usage,
+      costUsd: input.costUsd ?? conversation.costUsd,
+      updatedAt: this.isoNow(),
+    }
+    await this.conversations.upsert(updated)
+    return updated
+  }
+
+  async savePermissionMode(
+    conversationIdValue: string,
+    mode: string,
+  ): Promise<ConversationEntryV1> {
+    const conversation = await this.requireConversation(conversationIdValue)
+    const updated: ConversationEntryV1 = {
+      ...conversation,
+      agentConfig: {
+        ...(conversation.agentConfig ?? {}),
+        mode,
+      },
+      updatedAt: this.isoNow(),
+    }
     await this.conversations.upsert(updated)
     return updated
   }
@@ -212,11 +292,14 @@ export class AgentSessionRepository {
     agentType?: string,
   ): Promise<ConversationEntryV1> {
     const conversation = await this.requireConversation(conversationIdValue)
-    const updated = applyAgentSession(conversation, {
-      agentType: agentType ?? conversation.agentType,
-      agentSessionId: undefined,
-      updatedAt: this.isoNow(),
-    })
+    const updated = {
+      ...applyAgentSession(conversation, {
+        agentType: agentType ?? conversation.agentType,
+        agentSessionId: undefined,
+        updatedAt: this.isoNow(),
+      }),
+      sdkSessionId: undefined,
+    }
     await this.conversations.upsert(updated)
     return updated
   }
@@ -311,6 +394,10 @@ function applyAgentSession(
     readonly agentType?: string
     readonly agentSessionId?: string
     readonly resumePolicy?: ConversationResumePolicyV1
+    readonly providerId?: string
+    readonly sdkSessionId?: string
+    readonly usage?: ConversationEntryV1["usage"]
+    readonly costUsd?: number
     readonly updatedAt: string
   },
 ): ConversationEntryV1 {
@@ -320,6 +407,10 @@ function applyAgentSession(
     ...conversation,
     agentType: input.agentType ?? conversation.agentType,
     agentSessionId: next,
+    providerId: input.providerId ?? conversation.providerId,
+    sdkSessionId: input.sdkSessionId ?? conversation.sdkSessionId,
+    usage: input.usage ?? conversation.usage,
+    costUsd: input.costUsd ?? conversation.costUsd,
     pastAgentSessionIds: pastAgentSessionIds(conversation.pastAgentSessionIds, previous, next),
     resumePolicy: input.resumePolicy ?? conversation.resumePolicy ?? "resume",
     updatedAt: input.updatedAt,

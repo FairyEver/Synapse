@@ -8,13 +8,14 @@ import type {
 } from "@/types/agent"
 import { useActivePhaseTicker } from "../hooks/use-active-phase-ticker"
 import { AgentPhaseRow } from "./agent-phase-row"
+import { AgentRunStatus } from "./agent-run-status"
 import { AgentTimelineItem } from "./agent-timeline-item"
 
 function AgentTimeline({
   items,
   profile,
   agentIcon,
-  sending: _sending,
+  sending,
   pendingPermissions,
   onOpenReference,
   onRespondPermission,
@@ -41,7 +42,11 @@ function AgentTimeline({
       <ScrollArea className="min-h-0 min-w-0 flex-1" viewportRef={viewportRef}>
         <div data-allow-select="true" className="mx-auto flex min-w-0 max-w-4xl flex-col gap-2 pr-4 pb-24 pt-4">
           {items.length === 0 ? (
-            <p className="py-10 text-center text-sm text-muted-foreground">暂无消息</p>
+            sending ? (
+              <AgentRunStatus label="Agent 正在启动" />
+            ) : (
+              <p className="py-10 text-center text-sm text-muted-foreground">暂无消息</p>
+            )
           ) : items.map((item) => (
             item.kind === "phase" ? (
               <AgentPhaseRow key={item.id} item={item} now={now} />
@@ -66,6 +71,7 @@ function AgentTimeline({
           size="sm"
           onClick={onJumpToBottom}
           aria-label="跳到最新消息"
+          data-track="agent-timeline-jump-to-bottom"
           className="absolute bottom-4 right-4 rounded-full shadow-md"
         >
           ↓ 新消息

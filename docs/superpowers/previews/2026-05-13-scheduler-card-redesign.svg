@@ -1,0 +1,151 @@
+<svg width="1440" height="980" viewBox="0 0 1440 980" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <filter id="soft" x="-12" y="-12" width="420" height="300" filterUnits="userSpaceOnUse">
+      <feDropShadow dx="0" dy="1" stdDeviation="1.5" flood-color="#0f172a" flood-opacity="0.08"/>
+    </filter>
+    <style>
+      .bg { fill: #f8fafc; }
+      .panel { fill: #ffffff; stroke: #e2e8f0; }
+      .panel-muted { fill: #f1f5f9; stroke: #e2e8f0; }
+      .text { fill: #0f172a; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .muted { fill: #64748b; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .subtle { fill: #94a3b8; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+      .tiny { font-size: 12px; }
+      .small { font-size: 14px; }
+      .body { font-size: 15px; }
+      .title { font-size: 18px; font-weight: 650; }
+      .page-title { font-size: 22px; font-weight: 650; }
+      .label { font-size: 12px; font-weight: 600; letter-spacing: 0; }
+      .mono { font-family: "SFMono-Regular", ui-monospace, Menlo, Consolas, monospace; }
+      .button { fill: #0f172a; }
+      .button-text { fill: #ffffff; font-family: Inter, ui-sans-serif, system-ui; font-size: 14px; font-weight: 600; }
+      .ghost { fill: transparent; stroke: #e2e8f0; }
+      .badge { fill: #f1f5f9; stroke: #e2e8f0; }
+      .ok { fill: #16a34a; }
+      .warn { fill: #dc2626; }
+      .neutral { fill: #64748b; }
+      .line { stroke: #e2e8f0; }
+    </style>
+  </defs>
+  <rect class="bg" width="1440" height="980"/>
+
+  <rect x="40" y="36" width="1360" height="908" rx="16" class="panel-muted"/>
+  <text x="72" y="83" class="text page-title">定时任务</text>
+  <text x="72" y="109" class="muted small">卡片重设计预览：紧凑网格，突出状态、下次执行、主操作</text>
+
+  <rect x="1000" y="56" width="42" height="36" rx="8" class="ghost"/>
+  <text x="1014" y="79" class="muted small">↻</text>
+  <rect x="1052" y="56" width="42" height="36" rx="8" class="ghost"/>
+  <text x="1066" y="79" class="muted small">⇧</text>
+  <rect x="1104" y="56" width="42" height="36" rx="8" class="ghost"/>
+  <text x="1118" y="79" class="muted small">⇩</text>
+  <rect x="1162" y="56" width="126" height="36" rx="8" class="button"/>
+  <text x="1190" y="79" class="button-text">＋ 新建任务</text>
+
+  <g transform="translate(72 150)">
+    <rect width="394" height="252" rx="14" class="panel" filter="url(#soft)"/>
+    <rect x="18" y="18" width="72" height="24" rx="12" class="badge"/>
+    <circle cx="32" cy="30" r="4" class="ok"/>
+    <text x="44" y="34" class="text label">已启用</text>
+    <text x="316" y="34" class="muted tiny">开</text>
+    <rect x="342" y="20" width="34" height="18" rx="9" fill="#0f172a"/>
+    <circle cx="367" cy="29" r="7" fill="#ffffff"/>
+
+    <text x="18" y="75" class="text title">同步项目工作日志</text>
+    <text x="18" y="99" class="muted small">Codex 工作日志汇总</text>
+
+    <rect x="18" y="120" width="358" height="58" rx="10" class="panel-muted"/>
+    <text x="34" y="143" class="muted tiny">下次执行</text>
+    <text x="34" y="165" class="text body">今天 18:30</text>
+    <line x1="196" y1="132" x2="196" y2="166" class="line"/>
+    <text x="214" y="143" class="muted tiny">计划</text>
+    <text x="214" y="165" class="text body mono">0 18 * * *</text>
+
+    <text x="18" y="205" class="subtle tiny">上次</text>
+    <text x="56" y="205" class="muted tiny">今天 09:00 · 成功</text>
+    <text x="18" y="227" class="subtle tiny">范围</text>
+    <text x="56" y="227" class="muted tiny">Synapse</text>
+
+    <rect x="245" y="200" width="78" height="34" rx="8" class="button"/>
+    <text x="268" y="222" class="button-text">运行</text>
+    <rect x="331" y="200" width="34" height="34" rx="8" class="ghost"/>
+    <text x="342" y="222" class="muted small">⋯</text>
+  </g>
+
+  <g transform="translate(498 150)">
+    <rect width="394" height="252" rx="14" class="panel"/>
+    <rect x="18" y="18" width="84" height="24" rx="12" class="badge"/>
+    <circle cx="32" cy="30" r="4" class="warn"/>
+    <text x="44" y="34" class="text label">上次失败</text>
+    <text x="316" y="34" class="muted tiny">开</text>
+    <rect x="342" y="20" width="34" height="18" rx="9" fill="#0f172a"/>
+    <circle cx="367" cy="29" r="7" fill="#ffffff"/>
+
+    <text x="18" y="75" class="text title">仓库健康检查</text>
+    <text x="18" y="99" class="muted small">检测依赖、未推送提交与 CI 状态</text>
+
+    <rect x="18" y="120" width="358" height="58" rx="10" class="panel-muted"/>
+    <text x="34" y="143" class="muted tiny">下次执行</text>
+    <text x="34" y="165" class="text body">每 30 分钟</text>
+    <line x1="196" y1="132" x2="196" y2="166" class="line"/>
+    <text x="214" y="143" class="muted tiny">策略</text>
+    <text x="214" y="165" class="text body">完成后计时</text>
+
+    <text x="18" y="205" class="subtle tiny">上次</text>
+    <text x="56" y="205" class="muted tiny">10:12 · 失败</text>
+    <text x="18" y="227" class="subtle tiny">范围</text>
+    <text x="56" y="227" class="muted tiny">全局</text>
+
+    <rect x="245" y="200" width="78" height="34" rx="8" class="button"/>
+    <text x="268" y="222" class="button-text">重试</text>
+    <rect x="331" y="200" width="34" height="34" rx="8" class="ghost"/>
+    <text x="342" y="222" class="muted small">⋯</text>
+  </g>
+
+  <g transform="translate(924 150)">
+    <rect width="394" height="252" rx="14" fill="#ffffff" stroke="#e2e8f0" opacity="0.66"/>
+    <rect x="18" y="18" width="72" height="24" rx="12" class="badge"/>
+    <circle cx="32" cy="30" r="4" class="neutral"/>
+    <text x="44" y="34" class="muted label">已停用</text>
+    <text x="310" y="34" class="muted tiny">关</text>
+    <rect x="342" y="20" width="34" height="18" rx="9" fill="#e2e8f0"/>
+    <circle cx="351" cy="29" r="7" fill="#ffffff"/>
+
+    <text x="18" y="75" class="text title" opacity="0.72">夜间归档</text>
+    <text x="18" y="99" class="muted small">整理历史运行记录</text>
+
+    <rect x="18" y="120" width="358" height="58" rx="10" class="panel-muted"/>
+    <text x="34" y="143" class="muted tiny">下次执行</text>
+    <text x="34" y="165" class="muted body">停用中</text>
+    <line x1="196" y1="132" x2="196" y2="166" class="line"/>
+    <text x="214" y="143" class="muted tiny">计划</text>
+    <text x="214" y="165" class="muted body mono">0 2 * * *</text>
+
+    <text x="18" y="205" class="subtle tiny">上次</text>
+    <text x="56" y="205" class="muted tiny">5月12日 02:00 · 已停止</text>
+    <text x="18" y="227" class="subtle tiny">范围</text>
+    <text x="56" y="227" class="muted tiny">全局</text>
+
+    <rect x="245" y="200" width="78" height="34" rx="8" class="ghost"/>
+    <text x="268" y="222" class="muted small">运行</text>
+    <rect x="331" y="200" width="34" height="34" rx="8" class="ghost"/>
+    <text x="342" y="222" class="muted small">⋯</text>
+  </g>
+
+  <g transform="translate(72 440)">
+    <rect width="1246" height="202" rx="14" class="panel"/>
+    <text x="24" y="40" class="text title">交互细节</text>
+    <text x="24" y="75" class="muted small">1. 主按钮根据状态变化：正常显示“运行”，失败显示“重试”，运行中显示“停止”。</text>
+    <text x="24" y="106" class="muted small">2. 次级操作收进更多菜单：编辑、历史、删除，减少卡片底部噪音。</text>
+    <text x="24" y="137" class="muted small">3. 信息顺序固定：状态与开关、名称、下次执行、计划/策略、上次结果、范围。</text>
+    <text x="24" y="168" class="muted small">4. 停用卡片降低整体权重，但仍保留计划信息，方便判断是否重新启用。</text>
+  </g>
+
+  <g transform="translate(72 682)">
+    <rect width="1246" height="170" rx="14" class="panel"/>
+    <text x="24" y="40" class="text title">推荐方向</text>
+    <text x="24" y="76" class="muted small">采用“状态驱动卡片”。它比纯表格更易扫读，比大面积装饰卡片更克制，也最贴合 Synapse 当前 shadcn/Radix 基线。</text>
+    <text x="24" y="108" class="muted small">实现时只改 TaskCard 与必要的 formatter，不新增颜色体系，不改全局主题，不引入新依赖。</text>
+    <text x="24" y="140" class="muted small">网格仍保持三列；窄屏可自然退到两列或一列。</text>
+  </g>
+</svg>

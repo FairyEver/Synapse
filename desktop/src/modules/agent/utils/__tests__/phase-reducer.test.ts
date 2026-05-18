@@ -112,6 +112,52 @@ describe("reducePhaseEvent", () => {
     expect(findPhase(next, "failed")).toMatchObject({ status: "failed", errorMessage: "boom" })
   })
 
+  it("keeps duplicate failed terminal events idempotent for the same run", () => {
+    const start: SynapseAgentTimelineItem[] = [mkItem({ id: "p1", phase: "runtime_starting", status: "in-progress" })]
+    const failed = mkEvent({
+      phase: "failed",
+      status: "failed",
+      errorMessage: "first",
+      timestamp: "2026-05-10T00:00:04.000Z",
+    })
+    const next = reducePhaseEvent(reducePhaseEvent(start, failed), {
+      ...failed,
+      completedAt: "2026-05-10T00:00:05.000Z",
+      errorMessage: "second",
+      eventTimestamp: "2026-05-10T00:00:05.000Z",
+    })
+
+    const failedRows = next.filter(
+      (item): item is SynapseAgentPhaseTimelineItem => item.kind === "phase" && item.phase === "failed",
+    )
+    expect(failedRows).toHaveLength(1)
+    expect(failedRows[0]).toMatchObject({
+      status: "failed",
+      completedAt: "2026-05-10T00:00:05.000Z",
+      errorMessage: "second",
+    })
+  })
+
+  it("closes cancel escalation when the terminal event uses the turn runId", () => {
+    const start: SynapseAgentTimelineItem[] = [
+      mkItem({ id: "p1", runId: "run-1", phase: "streaming", status: "in-progress" }),
+      mkItem({ id: "p2", runId: "c", phase: "cancel_pending", status: "in-progress" }),
+    ]
+    const next = reducePhaseEvent(
+      start,
+      mkEvent({
+        runId: "run-1",
+        phase: "failed",
+        status: "failed",
+        errorMessage: "cancelled",
+        timestamp: "2026-05-10T00:00:04.000Z",
+      }),
+    )
+
+    expect(findPhase(next, "streaming")).toMatchObject({ status: "failed", errorMessage: "cancelled" })
+    expect(findPhase(next, "cancel_pending")).toMatchObject({ status: "failed", errorMessage: "cancelled" })
+  })
+
   it("is idempotent on duplicate in-progress events", () => {
     const start: SynapseAgentTimelineItem[] = [mkItem({ id: "p1", phase: "received", status: "in-progress" })]
     const next = reducePhaseEvent(start, mkEvent({ phase: "received", status: "in-progress" }))

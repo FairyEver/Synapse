@@ -31,7 +31,7 @@ interface TokenBreakdown {
 
 ```typescript
 interface UnifiedMessage {
-  client: string           // "claude" | "codex" | "cursor" | ... (21 种)
+  client: string           // "claude" | "codex" | ...
   modelId: string          // "claude-opus-4-6" | "gpt-5.5"
   providerId: string       // "anthropic" | "openai" | "google"
   sessionId: string
@@ -135,11 +135,11 @@ interface ClientDef {
   fallbackRelative?: string       // 环境变量未设置时的回退路径
   relativePath: string
   filePattern: string             // glob pattern
-  parseLocal: boolean             // 是否本地解析（Cursor 为 false）
+  parseLocal: boolean             // 是否本地解析
 }
 ```
 
-### 3.2 全部 21 个 Agent 定义
+### 3.2 支持的 Agent 定义
 
 直接翻译自 tokscale `clients.rs`：
 
@@ -148,24 +148,23 @@ interface ClientDef {
 | 0 | opencode | xdgData | — | opencode/storage/message | *.json |
 | 1 | claude | home | — | .claude/projects | *.jsonl |
 | 2 | codex | envVar | CODEX_HOME (.codex) | sessions | *.jsonl |
-| 3 | cursor | home | — | .config/tokscale/cursor-cache | usage*.csv |
-| 4 | gemini | home | — | .gemini/tmp | *.json\|*.jsonl |
-| 5 | amp | xdgData | — | amp/threads | T-*.json |
-| 6 | droid | home | — | .factory/sessions | *.settings.json |
-| 7 | openclaw | home | — | .openclaw/agents | *.jsonl* |
-| 8 | pi | home | — | .pi/agent/sessions | *.jsonl |
-| 9 | kimi | home | — | .kimi/sessions | wire.jsonl |
-| 10 | qwen | home | — | .qwen/projects | *.jsonl |
-| 11 | roocode | home | — | .config/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks | ui_messages.json |
-| 12 | kilocode | home | — | .config/Code/User/globalStorage/kilocode.kilo-code/tasks | ui_messages.json |
-| 13 | mux | home | — | .mux/sessions | session-usage.json |
-| 14 | kilo | xdgData | — | kilo/kilo.db | kilo.db |
-| 15 | crush | xdgData | — | crush/projects.json | projects.json |
-| 16 | hermes | envVar | HERMES_HOME (.hermes) | state.db | state.db |
-| 17 | copilot | home | — | .copilot/otel | *.jsonl |
-| 18 | goose | xdgData | — | goose/sessions/sessions.db | sessions.db |
-| 19 | codebuff | envVar | CODEBUFF_DATA_DIR (.config/manicode) | projects | chat-messages.json |
-| 20 | antigravity | config | — | antigravity-cache/sessions | *.jsonl |
+| 3 | gemini | home | — | .gemini/tmp | *.json\|*.jsonl |
+| 4 | amp | xdgData | — | amp/threads | T-*.json |
+| 5 | droid | home | — | .factory/sessions | *.settings.json |
+| 6 | openclaw | home | — | .openclaw/agents | *.jsonl* |
+| 7 | pi | home | — | .pi/agent/sessions | *.jsonl |
+| 8 | kimi | home | — | .kimi/sessions | wire.jsonl |
+| 9 | qwen | home | — | .qwen/projects | *.jsonl |
+| 10 | roocode | home | — | .config/Code/User/globalStorage/rooveterinaryinc.roo-cline/tasks | ui_messages.json |
+| 11 | kilocode | home | — | .config/Code/User/globalStorage/kilocode.kilo-code/tasks | ui_messages.json |
+| 12 | mux | home | — | .mux/sessions | session-usage.json |
+| 13 | kilo | xdgData | — | kilo/kilo.db | kilo.db |
+| 14 | crush | xdgData | — | crush/projects.json | projects.json |
+| 15 | hermes | envVar | HERMES_HOME (.hermes) | state.db | state.db |
+| 16 | copilot | home | — | .copilot/otel | *.jsonl |
+| 17 | goose | xdgData | — | goose/sessions/sessions.db | sessions.db |
+| 18 | codebuff | envVar | CODEBUFF_DATA_DIR (.config/manicode) | projects | chat-messages.json |
+| 19 | antigravity | config | — | antigravity-cache/sessions | *.jsonl |
 
 ### 3.3 特殊扫描逻辑
 
@@ -245,7 +244,6 @@ interface AgentParser {
 | Agent | 数据格式 | 特殊处理 |
 |-------|----------|----------|
 | Gemini | JSON/JSONL（3 种格式） | promptTokenCount 包含 cache，需减去 |
-| Cursor | CSV（3 种版本） | 无去重需求 |
 | Copilot | OpenTelemetry JSONL | traceId:spanId 去重 |
 | OpenCode | SQLite + legacy JSON | 双数据源 |
 | RooCode | JSON 数组 | 过滤 `say: "api_req_started"` |
@@ -358,7 +356,7 @@ CREATE TABLE scan_meta (
 desktop/electron/services/token-usage/
 ├── index.ts                    # service 入口，导出公共 API
 ├── scanner.ts                  # 文件扫描器
-├── clients.ts                  # 21 个 Agent 的 ClientDef 注册表
+├── clients.ts                  # Agent 的 ClientDef 注册表
 ├── db.ts                       # SQLite 操作
 ├── pricing.ts                  # LiteLLM 定价获取和计算
 ├── aggregator.ts               # 数据聚合（按天/月/小时/模型）
@@ -368,7 +366,6 @@ desktop/electron/services/token-usage/
     ├── claude.ts               # Claude Code 解析器
     ├── codex.ts                # Codex 解析器
     ├── gemini.ts               # Gemini 解析器
-    ├── cursor.ts               # Cursor CSV 解析器
     ├── copilot.ts              # Copilot OpenTelemetry 解析器
     ├── opencode.ts             # OpenCode SQLite + JSON 解析器
     ├── roocode.ts              # Roo Code 解析器
@@ -477,7 +474,6 @@ desktop/src/modules/token-usage/
 | DeepSeek | 青色 #06B6D4 |
 | xAI | 黄色 #EAB308 |
 | Meta | 靛蓝 #6366F1 |
-| Cursor | 紫色 #8B5CF6 |
 | Unknown | 灰色 #888888 |
 
 ### 10.4 数字格式化

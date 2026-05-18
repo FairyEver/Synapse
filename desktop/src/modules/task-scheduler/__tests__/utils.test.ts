@@ -1,13 +1,31 @@
-import { describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import {
   buildTaskCreateInput,
+  createDefaultAgentActionConfig,
   createTaskFormState,
   DEFAULT_TASK_FORM_STATE,
+  formatTaskAction,
+  formatTaskNextRun,
 } from "../utils"
 import type { ScheduledTask } from "@/types/task-scheduler"
 
+const rendererLogger = vi.hoisted(() => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => rendererLogger,
+}))
+
 describe("task scheduler utils", () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
+
   it("builds a cron command task payload", () => {
     const payload = buildTaskCreateInput({
       ...DEFAULT_TASK_FORM_STATE,
@@ -61,6 +79,17 @@ describe("task scheduler utils", () => {
     })
   })
 
+  it("uses the global Agent permission default for new Agent task config", () => {
+    expect(createDefaultAgentActionConfig({
+      defaultPermissionMode: "dontAsk",
+      defaultProviderModel: null,
+    })).toMatchObject({
+      agentType: "claude-code",
+      mode: "dontAsk",
+      sessionPolicy: "fresh",
+    })
+  })
+
   it("hydrates form state from an interval task", () => {
     const task: ScheduledTask = {
       id: "task-1",
@@ -81,6 +110,7 @@ describe("task scheduler utils", () => {
         },
       },
       enabled: false,
+      activeDays: [0, 1, 2, 3, 4, 5, 6],
       missedRunPolicy: "skip",
       overlapPolicy: "skip",
       createdAt: "2026-04-29T00:00:00.000Z",
@@ -115,6 +145,8 @@ describe("task scheduler utils", () => {
       actionConfig: {
         projectId: "project-1",
         agentType: "claude-code",
+        providerId: "provider-1",
+        modelTier: "sonnet",
         mode: "auto",
         prompt: "hello",
         sessionPolicy: "fresh",
@@ -123,4 +155,104 @@ describe("task scheduler utils", () => {
 
     expect(payload.scope).toEqual({ type: "project", projectId: "project-1" })
   })
+
+  it("logs action summary failures without config values", () => {
+    const task: ScheduledTask = {
+      id: "task-agent-1",
+      schemaVersion: 2,
+      name: "Agent Task",
+      scope: { type: "project", projectId: "project-1" },
+      trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
+      action: {
+        type: "builtin.agent.future",
+        config: {
+          projectId: "project-1",
+          agentType: "claude-code",
+          prompt: "run deployment with TOKEN=secret-value",
+          sessionPolicy: "fresh",
+        },
+      },
+      enabled: true,
+      activeDays: [0, 1, 2, 3, 4, 5, 6],
+      missedRunPolicy: "skip",
+      overlapPolicy: "skip",
+      createdAt: "2026-04-29T00:00:00.000Z",
+      updatedAt: "2026-04-29T00:00:00.000Z",
+      runCount: 0,
+    }
+
+    expect(formatTaskAction(task)).toBe("builtin.agent.future")
+    expect(rendererLogger.warn).toHaveBeenCalledWith(
+      "Task action summary render failed.",
+      expect.objectContaining({
+        taskId: "task-agent-1",
+        actionType: "builtin.agent.future",
+        boundary: "task-scheduler.action-summary",
+        configKeys: ["agentType", "projectId", "prompt", "sessionPolicy"],
+        errorName: "Error",
+        errorLength: expect.any(Number),
+      }),
+    )
+    expect(rendererLogger.warn).not.toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({
+        prompt: expect.any(String),
+      }),
+    )
+    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("secret-value")
+  })
+
+  it("shows unknown while a completion-anchored interval task is running", () => {
+    expect(formatTaskNextRun(createTask({
+      activeRun: { status: "running" },
+      nextRunAt: "2026-04-29T10:00:00.000Z",
+      trigger: {
+        type: "builtin.interval",
+        config: { everyMinutes: 60, anchor: "last_completed_at" },
+      },
+    }), new Date("2026-04-29T10:30:00.000Z"))).toBe("未知")
+  })
+
+  it("shows unknown when next run time cannot be trusted", () => {
+    expect(formatTaskNextRun(createTask({ nextRunAt: undefined }))).toBe("未知")
+    expect(formatTaskNextRun(createTask({ nextRunAt: "not-a-date" }))).toBe("未知")
+    expect(formatTaskNextRun(
+      createTask({ nextRunAt: "2026-04-29T09:59:00.000Z" }),
+      new Date("2026-04-29T10:00:00.000Z"),
+    )).toBe("未知")
+  })
+
+  it("shows disabled tasks as stopped instead of unknown", () => {
+    expect(formatTaskNextRun(createTask({
+      enabled: false,
+      nextRunAt: undefined,
+    }))).toBe("停用中")
+  })
 })
+
+function createTask(overrides: Partial<ScheduledTask> = {}): ScheduledTask {
+  return {
+    id: "task-agent-1",
+    schemaVersion: 2,
+    name: "Agent Task",
+    scope: { type: "project", projectId: "project-1" },
+    trigger: { type: "builtin.cron", config: { expr: "0 9 * * *" } },
+    action: {
+      type: "builtin.agent",
+      config: {
+        projectId: "project-1",
+        agentType: "claude-code",
+        prompt: "run",
+        sessionPolicy: "fresh",
+      },
+    },
+    enabled: true,
+    activeDays: [0, 1, 2, 3, 4, 5, 6],
+    missedRunPolicy: "skip",
+    overlapPolicy: "skip",
+    createdAt: "2026-04-29T00:00:00.000Z",
+    updatedAt: "2026-04-29T00:00:00.000Z",
+    runCount: 0,
+    ...overrides,
+  }
+}

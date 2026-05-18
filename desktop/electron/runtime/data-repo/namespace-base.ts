@@ -15,6 +15,9 @@ import type {
   DataChangeListener,
   DataNamespace,
 } from "./types"
+import { ConsoleSink, createLogger } from "../logging"
+
+const namespaceLogger = createLogger({ module: "runtime.data-repo.namespace", sink: new ConsoleSink() })
 
 export interface NamespaceBaseDeps<T> {
   readonly name: string
@@ -62,10 +65,7 @@ export abstract class AbstractDataNamespace<T> implements DataNamespace<T> {
       try {
         listener(event)
       } catch (error) {
-        // Listener errors must not poison sibling listeners; log via process
-        // stderr (StructuredLogger lands in Phase 0.6).
-        // eslint-disable-next-line no-console
-        console.error(`[data-repo:${this.name}] listener threw`, error)
+        namespaceLogger.error("Data repository listener threw.", { namespace: this.name, error })
       }
     }
   }

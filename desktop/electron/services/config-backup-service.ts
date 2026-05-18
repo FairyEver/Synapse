@@ -286,6 +286,10 @@ function validateConfig(
       },
       contentSortOrder: "modified-desc",
     },
+    agent: {
+      defaultPermissionMode: "default",
+      defaultProviderModel: null,
+    },
   }
 }
 

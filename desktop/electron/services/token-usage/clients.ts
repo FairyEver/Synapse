@@ -6,7 +6,6 @@ export const CLIENT_DEFS: ClientDef[] = [
   { id: "opencode", name: "OpenCode", root: "xdgData", relativePath: "opencode/storage/message", filePattern: "*.json", parseLocal: true },
   { id: "claude", name: "Claude Code", root: "home", relativePath: ".claude/projects", filePattern: "*.jsonl", parseLocal: true },
   { id: "codex", name: "Codex", root: "envVar", envVar: "CODEX_HOME", fallbackRelative: ".codex", relativePath: "sessions", filePattern: "*.jsonl", parseLocal: true },
-  { id: "cursor", name: "Cursor", root: "home", relativePath: ".config/tokscale/cursor-cache", filePattern: "usage*.csv", parseLocal: false },
   { id: "gemini", name: "Gemini", root: "home", relativePath: ".gemini/tmp", filePattern: "*.json|*.jsonl", parseLocal: true },
   { id: "amp", name: "Amp", root: "xdgData", relativePath: "amp/threads", filePattern: "T-*.json", parseLocal: true },
   { id: "droid", name: "Droid", root: "home", relativePath: ".factory/sessions", filePattern: "*.settings.json", parseLocal: true },

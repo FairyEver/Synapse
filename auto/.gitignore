@@ -1,3 +1,9 @@
-logs/*.md
+logs/**
+!logs/.gitkeep
+state/ui-config.json
+state/parallel/
+state/panel/data.js
+state/issue-backlog.jsonl
 node_modules/
 dist/
+*.tsbuildinfo

@@ -54,9 +54,15 @@ async function resolveActiveRepository(): Promise<SynapseRepositoryConfig | null
   return getActiveRepositoryConfig(config)
 }
 
-// Schemas - using z.any() for complex types to match original handler behavior
 const contentTypeSchema = z.enum(["rule", "skill", "prompt"])
-const anySchema = z.any()
+const contentRecordSchema = z.object({}).passthrough()
+const contentRecordListSchema = z.array(contentRecordSchema)
+const contentMutationResultSchema = z.object({
+  pendingPushCount: z.number().optional(),
+  status: z.string(),
+}).passthrough()
+const nullableContentRecordSchema = contentRecordSchema.nullable()
+const unknownRequestSchema = z.unknown()
 
 // Helper to notify pending pushes updated
 async function notifyPendingPushesUpdated(
@@ -217,7 +223,7 @@ export const contentIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:content:list",
       request: z.object({ contentType: contentTypeSchema }),
-      response: anySchema,
+      response: contentRecordListSchema,
       handler: async (_ctx, request: { contentType: SynapseContentType }) => {
         return contentService.listContent(request.contentType)
       },
@@ -226,7 +232,7 @@ export const contentIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:content:get-content",
       request: z.object({ contentType: contentTypeSchema, id: z.string() }),
-      response: anySchema,
+      response: nullableContentRecordSchema,
       handler: async (_ctx, request: { contentType: SynapseContentType; id: string }) => {
         return contentService.getContent(request.contentType, request.id)
       },
@@ -235,7 +241,7 @@ export const contentIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:content:get-detail",
       request: z.object({ contentType: contentTypeSchema, id: z.string() }),
-      response: anySchema,
+      response: contentRecordSchema,
       handler: async (_ctx, request: { contentType: SynapseContentType; id: string }) => {
         return contentService.getDetail(request.contentType, request.id)
       },
@@ -244,7 +250,7 @@ export const contentIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:content:get-history",
       request: z.object({ contentType: contentTypeSchema, id: z.string() }),
-      response: anySchema,
+      response: contentRecordListSchema,
       handler: async (_ctx, request: { contentType: SynapseContentType; id: string }) => {
         return contentService.getHistory(request.contentType, request.id)
       },
@@ -253,7 +259,7 @@ export const contentIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:content:get-history-version",
       request: z.object({ contentType: contentTypeSchema, id: z.string(), historyDirname: z.string() }),
-      response: anySchema,
+      response: contentRecordSchema,
       handler: async (_ctx, request: { contentType: SynapseContentType; id: string; historyDirname: string }) => {
         return contentService.getHistoryVersion(request.contentType, request.id, request.historyDirname)
       },
@@ -262,7 +268,7 @@ export const contentIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:content:get-editor-adapters",
       request: z.void(),
-      response: anySchema,
+      response: contentRecordListSchema,
       handler: async (_ctx) => {
         return editorAdapterService.listAdapters()
       },
@@ -270,8 +276,8 @@ export const contentIpcModule: IpcModule = {
     create: {
       kind: "invoke",
       channel: "synapse:content:create",
-      request: anySchema,
-      response: anySchema,
+      request: unknownRequestSchema,
+      response: contentMutationResultSchema,
       handler: async (ctx, request: SynapseCreateContentRequest) => {
         logger.info(`Handling content.create request. contentType: ${request.contentType}, title: ${request.payload?.title}`)
 
@@ -291,8 +297,8 @@ export const contentIpcModule: IpcModule = {
     update: {
       kind: "invoke",
       channel: "synapse:content:update",
-      request: anySchema,
-      response: anySchema,
+      request: unknownRequestSchema,
+      response: contentMutationResultSchema,
       handler: async (ctx, request: SynapseUpdateContentRequest) => {
         logger.info(`Handling content.update request. contentType: ${request.contentType}, contentId: ${request.payload?.id}`)
 
@@ -312,8 +318,8 @@ export const contentIpcModule: IpcModule = {
     deleteContent: {
       kind: "invoke",
       channel: "synapse:content:delete-content",
-      request: anySchema,
-      response: anySchema,
+      request: unknownRequestSchema,
+      response: contentMutationResultSchema,
       handler: async (ctx, payload: SynapseDeleteContentPayload) => {
         logger.info(`Handling content.deleteContent request. contentType: ${payload.type}, contentId: ${payload.id}`)
 
@@ -327,7 +333,7 @@ export const contentIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:content:list-deleted",
       request: z.object({ contentType: contentTypeSchema }),
-      response: anySchema,
+      response: contentRecordListSchema,
       handler: async (_ctx, request: { contentType: SynapseContentType }) => {
         return contentService.listDeletedContent(request.contentType)
       },
@@ -335,8 +341,8 @@ export const contentIpcModule: IpcModule = {
     restore: {
       kind: "invoke",
       channel: "synapse:content:restore",
-      request: anySchema,
-      response: anySchema,
+      request: unknownRequestSchema,
+      response: contentMutationResultSchema,
       handler: async (ctx, payload: SynapseRestoreContentPayload) => {
         logger.info(`Handling content.restore request. contentType: ${payload.type}, contentId: ${payload.id}`)
 
@@ -356,8 +362,8 @@ export const contentIpcModule: IpcModule = {
     purge: {
       kind: "invoke",
       channel: "synapse:content:purge",
-      request: anySchema,
-      response: anySchema,
+      request: unknownRequestSchema,
+      response: contentMutationResultSchema,
       handler: async (ctx, payload: SynapsePurgeContentPayload) => {
         logger.info(`Handling content.purge request. contentType: ${payload.type}, contentId: ${payload.id}`)
 
@@ -411,7 +417,7 @@ export const contentIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:content:read-icon-image",
       request: z.object({ contentType: contentTypeSchema, id: z.string() }),
-      response: anySchema,
+      response: z.string().nullable(),
       handler: async (_ctx, args: { contentType: SynapseContentType; id: string }) => {
         return contentService.readIconImage(args.contentType, args.id)
       },
@@ -419,7 +425,7 @@ export const contentIpcModule: IpcModule = {
     openDetailWindow: {
       kind: "invoke",
       channel: "synapse:content:open-detail-window",
-      request: anySchema,
+      request: unknownRequestSchema,
       response: z.void(),
       handler: async (_ctx, payload: SynapseOpenContentWindowPayload) => {
         await contentWindowService.openDetailWindow(payload)
@@ -428,8 +434,8 @@ export const contentIpcModule: IpcModule = {
     resolveEditorInstallTarget: {
       kind: "invoke",
       channel: "synapse:content:resolve-editor-install-target",
-      request: anySchema,
-      response: anySchema,
+      request: unknownRequestSchema,
+      response: contentRecordSchema,
       handler: async (_ctx, payload: SynapseResolveEditorTargetPayload) => {
         return editorAdapterService.resolveTarget(payload)
       },
@@ -437,8 +443,8 @@ export const contentIpcModule: IpcModule = {
     installToEditor: {
       kind: "invoke",
       channel: "synapse:content:install-to-editor",
-      request: anySchema,
-      response: anySchema,
+      request: unknownRequestSchema,
+      response: contentRecordSchema,
       handler: async (ctx, payload: SynapseInstallToEditorPayload) => {
         logger.info(`Handling content.installToEditor request. contentType: ${payload.contentType}, contentId: ${payload.contentId}, editorId: ${payload.editorId}, scope: ${payload.scope}`)
         const result = await contentInstallService.installToEditor(payload, {
@@ -464,8 +470,8 @@ export const contentIpcModule: IpcModule = {
     readEditorInstallFormValues: {
       kind: "invoke",
       channel: "synapse:content:read-editor-install-form-values",
-      request: anySchema,
-      response: anySchema,
+      request: unknownRequestSchema,
+      response: contentRecordSchema,
       handler: async (_ctx, payload: SynapseReadEditorInstallFormValuesPayload) => {
         return contentInstallService.readEditorInstallFormValues(payload)
       },
@@ -474,7 +480,7 @@ export const contentIpcModule: IpcModule = {
       kind: "invoke",
       channel: "synapse:content:get-icon-prompt-template",
       request: z.object({ contentType: contentTypeSchema, id: z.string() }),
-      response: anySchema,
+      response: z.string(),
       handler: async (_ctx, args: { contentType: SynapseContentType; id: string }) => {
         return contentService.getIconPromptTemplate(args.contentType, args.id)
       },

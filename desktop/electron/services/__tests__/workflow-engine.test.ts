@@ -1,23 +1,49 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { sanitizeError } from "../error-sanitize"
 
 vi.mock("electron", () => ({ app: { getPath: () => "/tmp", getAppPath: () => "/tmp" } }))
+const logger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}))
+vi.mock("../log-store", () => ({
+  createMainLogger: () => logger,
+}))
 
 import { WorkflowEngine } from "../workflow/workflow-engine"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { promptNodeManifest, promptNodeExecutor } from "../../../workflow-nodes/prompt"
 import { endNodeManifest, endNodeExecutor } from "../../../workflow-nodes/end"
+import { switchNodeManifest } from "../../../workflow-nodes/switch"
 import type { WorkflowDefinition, WorkflowEvent } from "../../../src/types/workflow"
 
 nodeTypeRegistry.register(promptNodeManifest, promptNodeExecutor)
 nodeTypeRegistry.register(endNodeManifest, endNodeExecutor)
+nodeTypeRegistry.register(switchNodeManifest, {
+  async execute(input) {
+    const start = Date.now()
+    const { config } = input
+    const branches = (config as Record<string, unknown>)["branches"] as Array<{ id: string }>
+    const defaultBranch = (config as Record<string, unknown>)["defaultBranch"] as string | undefined
+    const activeBranch = defaultBranch ?? branches[0]?.id ?? ""
+    return { status: "success", output: activeBranch, activeBranch, durationMs: Date.now() - start }
+  },
+})
 
-const nodeA = { id: "a", name: "A", type: "prompt", position: { x: 0, y: 0 }, config: { agent: "claude-code", variables: [], prompt: "hi" } }
-const nodeB = { id: "b", name: "B", type: "prompt", position: { x: 200, y: 0 }, config: { agent: "claude-code", variables: [], prompt: "{{prev}}" } }
-const nodeEnd = { id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "done: {{out}}", variables: [] } }
+const nodeA = { id: "a", name: "A", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "hi" } }
+const nodeB = { id: "b", name: "B", type: "prompt", position: { x: 200, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "bye" } }
+const nodeEnd = { id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "done", variables: [] } }
 
 function fakeAgent(response: string) {
   return { sendToAgent: vi.fn().mockResolvedValue({ status: "success" as const, response, durationMs: 5 }) }
 }
+
+afterEach(() => {
+  logger.info.mockClear()
+  logger.warn.mockClear()
+  logger.error.mockClear()
+})
 
 describe("WorkflowEngine", () => {
   it("runs a two-node chain with end node and emits events", async () => {
@@ -35,6 +61,28 @@ describe("WorkflowEngine", () => {
     expect(events.filter((e) => e.type === "node:completed")).toHaveLength(3)
   })
 
+  it("emits a sanitized workflow failure when preparation throws", async () => {
+    const def = {
+      id: "wf-bad",
+      name: "WF",
+      version: "v1",
+      createdAt: 0,
+      updatedAt: 0,
+      params: [],
+      nodes: [null],
+      edges: [],
+    } as unknown as WorkflowDefinition
+    const events: WorkflowEvent[] = []
+    const engine = new WorkflowEngine(fakeAgent("unused"))
+
+    const result = await engine.run(def, {}, "run-bad", (event) => events.push(event))
+
+    expect(result.status).toBe("failed")
+    const failed = events.find((event) => event.type === "workflow:failed")
+    expect(failed).toMatchObject({ type: "workflow:failed", runId: "run-bad" })
+    expect(JSON.stringify(failed)).not.toContain("/Users/")
+  })
+
   it("populates WorkflowRunResult.output from end node template", async () => {
     const def: WorkflowDefinition = {
       id: "wf-out", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
@@ -48,7 +96,7 @@ describe("WorkflowEngine", () => {
   })
 
   it("skips nodes not connected to end node", async () => {
-    const orphan = { id: "orphan", name: "Orphan", type: "prompt", position: { x: 0, y: 200 }, config: { agent: "claude-code", variables: [], prompt: "orphan" } }
+    const orphan = { id: "orphan", name: "Orphan", type: "prompt", position: { x: 0, y: 200 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "orphan" } }
     const def: WorkflowDefinition = {
       id: "wf-prune", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
       nodes: [nodeA, orphan, nodeEnd],
@@ -82,14 +130,490 @@ describe("WorkflowEngine", () => {
     expect(events.some((e) => e.type === "node:skipped")).toBe(true)
   })
 
-  it("does not run another start node after a failure", async () => {
+  it("does not run downstream nodes after parallel root failures", async () => {
     const def: WorkflowDefinition = { id: "wf4", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [], nodes: [nodeA, { ...nodeB, config: { ...nodeB.config, prompt: "second" } }, nodeEnd], edges: [{ id: "e1", from: "a", to: "end" }, { id: "e2", from: "b", to: "end" }] }
     const events: WorkflowEvent[] = []
     const agent = { sendToAgent: vi.fn().mockResolvedValue({ status: "failed" as const, response: "", error: "boom", durationMs: 0 }) }
     const engine = new WorkflowEngine(agent)
     const result = await engine.run(def, {}, "run4", (e) => events.push(e))
     expect(result.status).toBe("failed")
-    expect(agent.sendToAgent).toHaveBeenCalledTimes(1)
-    expect(result.nodeResults.b?.status).toBe("skipped")
+    // Both parallel roots are launched simultaneously
+    expect(agent.sendToAgent).toHaveBeenCalledTimes(2)
+    // End node should not have been reached
+    expect(result.nodeResults.end?.status).not.toBe("success")
+  })
+
+  it("logs runtime diagnostics without prompt, params, output, or raw errors", async () => {
+    const secretParam = "sk-secret-workflow-param"
+    const secretPrompt = `ask with ${secretParam}`
+    const secretOutput = "model output with token=raw-output"
+    const secretError = "agent failed with authorization=Bearer-secret"
+    const def: WorkflowDefinition = {
+      id: "wf-logs",
+      name: "WF",
+      version: "v1",
+      createdAt: 0,
+      updatedAt: 0,
+      params: [{ name: "apiToken", type: "text", default: null }],
+      nodes: [
+        {
+          ...nodeA,
+          config: {
+            providerId: "test-provider",
+            modelTier: "sonnet",
+            variables: [{ name: "secret", source: { type: "param", param: "apiToken" } }],
+            prompt: "ask with {{secret}}",
+          },
+        },
+        {
+          ...nodeEnd,
+          config: {
+            outputType: "text",
+            variables: [{ name: "out", source: { type: "node_output", node: "a" } }],
+            template: "done: {{out}}",
+          },
+        },
+      ],
+      edges: [{ id: "e1", from: "a", to: "end" }],
+    }
+
+    const successEngine = new WorkflowEngine(fakeAgent(secretOutput))
+    await successEngine.run(def, { apiToken: secretParam }, "run-logs-success", () => {})
+
+    const failedEngine = new WorkflowEngine({
+      sendToAgent: vi.fn().mockResolvedValue({ status: "failed" as const, response: "", error: secretError, durationMs: 0 }),
+    })
+    await failedEngine.run(def, { apiToken: secretParam }, "run-logs-failed", () => {})
+
+    const engineLogMessages = new Set([
+      "workflow run started",
+      "node started",
+      "node succeeded",
+      "node failed",
+      "workflow run failed",
+      "workflow run completed",
+    ])
+    const engineInfoCalls = logger.info.mock.calls.filter(([message]) => engineLogMessages.has(message))
+    const engineWarnCalls = logger.warn.mock.calls.filter(([message]) => engineLogMessages.has(message))
+    const engineErrorCalls = logger.error.mock.calls.filter(([message]) => engineLogMessages.has(message))
+    const logPayload = JSON.stringify([engineInfoCalls, engineWarnCalls, engineErrorCalls])
+    expect(logPayload).not.toContain(secretParam)
+    expect(logPayload).not.toContain(secretPrompt)
+    expect(logPayload).not.toContain(secretOutput)
+    expect(logPayload).not.toContain(secretError)
+    expect(logger.info).toHaveBeenCalledWith("workflow run started", expect.objectContaining({
+      paramKeys: ["apiToken"],
+      paramCount: 1,
+    }))
+    expect(logger.info).toHaveBeenCalledWith("node started", expect.objectContaining({
+      inputVariableKeys: ["secret"],
+      inputVariableCount: 1,
+      promptLength: secretPrompt.length,
+    }))
+    expect(logger.info).toHaveBeenCalledWith("node succeeded", expect.objectContaining({
+      outputLength: secretOutput.length,
+    }))
+    expect(logger.warn).toHaveBeenCalledWith("node failed", expect.objectContaining({
+      errorName: "agent",
+      errorLength: expect.any(Number),
+    }))
+    expect(logger.error).toHaveBeenCalledWith("workflow run failed", expect.objectContaining({
+      errorName: "workflow",
+      errorLength: expect.any(Number),
+    }))
+  })
+
+  it("logs triggerSource when provided, defaults to unknown otherwise", async () => {
+    const def: WorkflowDefinition = {
+      id: "wf-trigger", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeEnd],
+      edges: [{ id: "e1", from: "a", to: "end" }],
+    }
+    const engine = new WorkflowEngine(fakeAgent("ok"))
+    await engine.run(def, {}, "run-trigger-known", () => {}, undefined, undefined, "renderer")
+    expect(logger.info).toHaveBeenCalledWith("workflow run started", expect.objectContaining({
+      triggerSource: "renderer",
+    }))
+    logger.info.mockClear()
+    await engine.run(def, {}, "run-trigger-unknown", () => {})
+    expect(logger.info).toHaveBeenCalledWith("workflow run started", expect.objectContaining({
+      triggerSource: "unknown",
+    }))
+  })
+
+  it("summarizes executor exceptions before storing and emitting workflow failure results", async () => {
+    const rawError = "SDK error authorization=Bearer-secret prompt=raw-user-prompt"
+    nodeTypeRegistry.register(
+      { ...promptNodeManifest, type: "throwing-prompt" },
+      { execute: vi.fn().mockRejectedValue(new Error(rawError)) },
+    )
+    const throwingNode = {
+      ...nodeA,
+      id: "throwing",
+      type: "throwing-prompt",
+    }
+    const def: WorkflowDefinition = {
+      id: "wf-throw",
+      name: "WF",
+      version: "v1",
+      createdAt: 0,
+      updatedAt: 0,
+      params: [],
+      nodes: [throwingNode, nodeEnd],
+      edges: [{ id: "e1", from: "throwing", to: "end" }],
+    }
+    const events: WorkflowEvent[] = []
+
+    const result = await new WorkflowEngine(fakeAgent("unused"))
+      .run(def, {}, "run-throw", (event) => events.push(event))
+
+    const failedEvent = events.find((event) => event.type === "node:failed")
+    const summarizedError = `节点执行异常：${sanitizeError(rawError)}`
+    expect(result.nodeResults.throwing?.error).toBe(summarizedError)
+    expect(failedEvent).toEqual(expect.objectContaining({
+      type: "node:failed",
+      error: summarizedError,
+    }))
+    expect(JSON.stringify(result)).not.toContain(rawError)
+    expect(JSON.stringify(events)).not.toContain(rawError)
+    expect(logger.warn).toHaveBeenCalledWith("node threw exception", expect.objectContaining({
+      errorName: "Error",
+      errorLength: rawError.length,
+    }))
+  })
+
+  it("runs parallel roots A,B simultaneously before C (end node)", async () => {
+    const nodeC = { id: "c", name: "C", type: "prompt", position: { x: 100, y: 100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "c" } }
+    const def: WorkflowDefinition = {
+      id: "wf-par", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeC, nodeEnd],
+      edges: [{ id: "e1", from: "a", to: "end" }, { id: "e2", from: "c", to: "end" }],
+    }
+    const events: WorkflowEvent[] = []
+    const engine = new WorkflowEngine(fakeAgent("hi"))
+    const result = await engine.run(def, {}, "run-par", (e) => events.push(e))
+    expect(result.status).toBe("completed")
+    const startedEvents = events.filter((e) => e.type === "node:started")
+    // Both a and c should start before end
+    const aIdx = startedEvents.findIndex((e) => e.type === "node:started" && e.nodeId === "a")
+    const cIdx = startedEvents.findIndex((e) => e.type === "node:started" && e.nodeId === "c")
+    const endIdx = startedEvents.findIndex((e) => e.type === "node:started" && e.nodeId === "end")
+    expect(aIdx).toBeLessThan(endIdx)
+    expect(cIdx).toBeLessThan(endIdx)
+  })
+
+  it("resolves provider from workflow default when node omits it", async () => {
+    const nodeNoProvider = { id: "np", name: "NP", type: "prompt", position: { x: 0, y: 0 }, config: { variables: [], prompt: "test" } }
+    const def: WorkflowDefinition = {
+      id: "wf-default-provider", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      defaultProviderId: "resolved-provider", defaultModelTier: "opus" as const,
+      params: [],
+      nodes: [nodeNoProvider, nodeEnd],
+      edges: [{ id: "e1", from: "np", to: "end" }],
+    }
+    const agent = fakeAgent("ok")
+    const engine = new WorkflowEngine(agent)
+    await engine.run(def, {}, "run-resolve", () => {})
+    expect(agent.sendToAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "resolved-provider", modelTier: "opus" }),
+    )
+  })
+
+  it("node-level provider takes priority over workflow default", async () => {
+    const nodeWithProvider = { id: "wp", name: "WP", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "node-provider", modelTier: "haiku", variables: [], prompt: "test" } }
+    const def: WorkflowDefinition = {
+      id: "wf-override", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      defaultProviderId: "wf-provider", defaultModelTier: "opus" as const,
+      params: [],
+      nodes: [nodeWithProvider, nodeEnd],
+      edges: [{ id: "e1", from: "wp", to: "end" }],
+    }
+    const agent = fakeAgent("ok")
+    const engine = new WorkflowEngine(agent)
+    await engine.run(def, {}, "run-override", () => {})
+    expect(agent.sendToAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ providerId: "node-provider", modelTier: "haiku" }),
+    )
+  })
+
+  it("parallel root failure skips downstream but lets other running nodes finish", async () => {
+    const nodeC = { id: "c", name: "C", type: "prompt", position: { x: 100, y: 100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "c" } }
+    const def: WorkflowDefinition = {
+      id: "wf-par-fail", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeC, nodeEnd],
+      edges: [{ id: "e1", from: "a", to: "end" }, { id: "e2", from: "c", to: "end" }],
+    }
+    let callCount = 0
+    const agent = {
+      sendToAgent: vi.fn().mockImplementation(() => {
+        callCount++
+        // First call succeeds, second fails
+        if (callCount === 1) return Promise.resolve({ status: "success" as const, response: "ok", durationMs: 1 })
+        return Promise.resolve({ status: "failed" as const, response: "", error: "boom", durationMs: 1 })
+      }),
+    }
+    const engine = new WorkflowEngine(agent)
+    const result = await engine.run(def, {}, "run-par-fail", () => {})
+    expect(result.status).toBe("failed")
+    // Both roots should have been called (parallel — both started before either finished)
+    expect(agent.sendToAgent).toHaveBeenCalledTimes(2)
+  })
+
+  it("executes side-effect branches and waits for them before End", async () => {
+    const nodeA1 = { id: "a1", name: "A1", type: "prompt", position: { x: 100, y: -100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "side1" } }
+    const nodeA2 = { id: "a2", name: "A2", type: "prompt", position: { x: 100, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "main" } }
+    const nodeA3 = { id: "a3", name: "A3", type: "prompt", position: { x: 100, y: 100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "side2" } }
+    const nodeBB = { id: "bb", name: "BB", type: "prompt", position: { x: 200, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "after-main" } }
+    const def: WorkflowDefinition = {
+      id: "wf-side", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeA1, nodeA2, nodeA3, nodeBB, nodeEnd],
+      edges: [
+        { id: "e1", from: "a", to: "a1" },
+        { id: "e2", from: "a", to: "a2" },
+        { id: "e3", from: "a", to: "a3" },
+        { id: "e4", from: "a2", to: "bb" },
+        { id: "e5", from: "bb", to: "end" },
+      ],
+    }
+    const events: WorkflowEvent[] = []
+    const engine = new WorkflowEngine(fakeAgent("ok"))
+    const result = await engine.run(def, {}, "run-side", (e) => events.push(e))
+    expect(result.status).toBe("completed")
+    // A1 and A3 should have executed (not skipped)
+    expect(result.nodeResults["a1"]?.status).toBe("success")
+    expect(result.nodeResults["a3"]?.status).toBe("success")
+    // End should be the last node to start
+    const startedEvents = events.filter((e) => e.type === "node:started")
+    const endStartIdx = startedEvents.findIndex((e) => e.type === "node:started" && e.nodeId === "end")
+    const a1StartIdx = startedEvents.findIndex((e) => e.type === "node:started" && e.nodeId === "a1")
+    const a3StartIdx = startedEvents.findIndex((e) => e.type === "node:started" && e.nodeId === "a3")
+    expect(a1StartIdx).toBeLessThan(endStartIdx)
+    expect(a3StartIdx).toBeLessThan(endStartIdx)
+  })
+
+  it("executes multi-node side-effect chains and End waits for chain tail", async () => {
+    const nodeA1 = { id: "a1", name: "A1", type: "prompt", position: { x: 100, y: -100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "chain1" } }
+    const nodeA1a = { id: "a1a", name: "A1a", type: "prompt", position: { x: 200, y: -100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "chain2" } }
+    const nodeA1b = { id: "a1b", name: "A1b", type: "prompt", position: { x: 300, y: -100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "chain3" } }
+    const nodeA2 = { id: "a2", name: "A2", type: "prompt", position: { x: 100, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "main" } }
+    const def: WorkflowDefinition = {
+      id: "wf-chain", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeA1, nodeA1a, nodeA1b, nodeA2, nodeEnd],
+      edges: [
+        { id: "e1", from: "a", to: "a1" },
+        { id: "e2", from: "a1", to: "a1a" },
+        { id: "e3", from: "a1a", to: "a1b" },
+        { id: "e4", from: "a", to: "a2" },
+        { id: "e5", from: "a2", to: "end" },
+      ],
+    }
+    const engine = new WorkflowEngine(fakeAgent("ok"))
+    const result = await engine.run(def, {}, "run-chain", () => {})
+    expect(result.status).toBe("completed")
+    expect(result.nodeResults["a1"]?.status).toBe("success")
+    expect(result.nodeResults["a1a"]?.status).toBe("success")
+    expect(result.nodeResults["a1b"]?.status).toBe("success")
+  })
+
+  it("fails workflow when a side-effect branch node fails", async () => {
+    const nodeA1 = { id: "a1", name: "A1", type: "prompt", position: { x: 100, y: -100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "side" } }
+    const nodeA2 = { id: "a2", name: "A2", type: "prompt", position: { x: 100, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "main" } }
+    const def: WorkflowDefinition = {
+      id: "wf-side-fail", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeA1, nodeA2, nodeEnd],
+      edges: [
+        { id: "e1", from: "a", to: "a1" },
+        { id: "e2", from: "a", to: "a2" },
+        { id: "e3", from: "a2", to: "end" },
+      ],
+    }
+    let callCount = 0
+    const agent = {
+      sendToAgent: vi.fn().mockImplementation(() => {
+        callCount++
+        // A succeeds, A1 fails, A2 succeeds
+        if (callCount === 1) return Promise.resolve({ status: "success" as const, response: "ok", durationMs: 1 })
+        if (callCount === 2) return Promise.resolve({ status: "failed" as const, response: "", error: "side boom", durationMs: 1 })
+        return Promise.resolve({ status: "success" as const, response: "ok", durationMs: 1 })
+      }),
+    }
+    const engine = new WorkflowEngine(agent)
+    const result = await engine.run(def, {}, "run-side-fail", () => {})
+    expect(result.status).toBe("failed")
+  })
+
+  it("End node can reference side-effect branch output via variables", async () => {
+    const nodeA1 = { id: "a1", name: "A1", type: "prompt", position: { x: 100, y: -100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "side" } }
+    const nodeA2 = { id: "a2", name: "A2", type: "prompt", position: { x: 100, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "main" } }
+    const endWithRef = {
+      id: "end", name: "结束", type: "end", position: { x: 400, y: 0 },
+      config: {
+        outputType: "text",
+        template: "side={{sideOut}} main={{mainOut}}",
+        variables: [
+          { name: "sideOut", source: { type: "node_output", node: "a1" } },
+          { name: "mainOut", source: { type: "node_output", node: "a2" } },
+        ],
+      },
+    }
+    const def: WorkflowDefinition = {
+      id: "wf-side-ref", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeA1, nodeA2, endWithRef],
+      edges: [
+        { id: "e1", from: "a", to: "a1" },
+        { id: "e2", from: "a", to: "a2" },
+        { id: "e3", from: "a2", to: "end" },
+      ],
+    }
+    const engine = new WorkflowEngine(fakeAgent("side-result"))
+    const result = await engine.run(def, {}, "run-side-ref", () => {})
+    expect(result.status).toBe("completed")
+    expect(result.output).toBe("side=side-result main=side-result")
+  })
+
+  it("handles diamond side-effect branches (shared leaf)", async () => {
+    const nodeA1 = { id: "a1", name: "A1", type: "prompt", position: { x: 100, y: -100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "s1" } }
+    const nodeA3 = { id: "a3", name: "A3", type: "prompt", position: { x: 100, y: 100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "s2" } }
+    const nodeX = { id: "x", name: "X", type: "prompt", position: { x: 200, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "join" } }
+    const nodeA2 = { id: "a2", name: "A2", type: "prompt", position: { x: 100, y: 50 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "main" } }
+    const def: WorkflowDefinition = {
+      id: "wf-diamond", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeA1, nodeA3, nodeX, nodeA2, nodeEnd],
+      edges: [
+        { id: "e1", from: "a", to: "a1" },
+        { id: "e2", from: "a", to: "a3" },
+        { id: "e3", from: "a1", to: "x" },
+        { id: "e4", from: "a3", to: "x" },
+        { id: "e5", from: "a", to: "a2" },
+        { id: "e6", from: "a2", to: "end" },
+      ],
+    }
+    const engine = new WorkflowEngine(fakeAgent("ok"))
+    const result = await engine.run(def, {}, "run-diamond", () => {})
+    expect(result.status).toBe("completed")
+    expect(result.nodeResults["a1"]?.status).toBe("success")
+    expect(result.nodeResults["a3"]?.status).toBe("success")
+    expect(result.nodeResults["x"]?.status).toBe("success")
+  })
+
+  it("main path B starts immediately after A2 without waiting for slow side-effect A1", async () => {
+    const nodeA1 = { id: "a1", name: "A1", type: "prompt", position: { x: 100, y: -100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "slow-side" } }
+    const nodeA2 = { id: "a2", name: "A2", type: "prompt", position: { x: 100, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "fast-main" } }
+    const nodeBB = { id: "bb", name: "BB", type: "prompt", position: { x: 200, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "after" } }
+    const def: WorkflowDefinition = {
+      id: "wf-timing", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeA1, nodeA2, nodeBB, nodeEnd],
+      edges: [
+        { id: "e1", from: "a", to: "a1" },
+        { id: "e2", from: "a", to: "a2" },
+        { id: "e3", from: "a2", to: "bb" },
+        { id: "e4", from: "bb", to: "end" },
+      ],
+    }
+    const events: WorkflowEvent[] = []
+    const agent = {
+      sendToAgent: vi.fn().mockImplementation(({ prompt }: { prompt: string }) => {
+        if (prompt === "slow-side") {
+          return new Promise((r) => setTimeout(() => r({ status: "success" as const, response: "slow", durationMs: 80 }), 80))
+        }
+        return Promise.resolve({ status: "success" as const, response: "fast", durationMs: 1 })
+      }),
+    }
+    const engine = new WorkflowEngine(agent)
+    const result = await engine.run(def, {}, "run-timing", (e) => {
+      events.push(e)
+    })
+    expect(result.status).toBe("completed")
+    // BB should start before A1 finishes (BB depends on A2 only, not A1)
+    const startedOrder = events.filter((e) => e.type === "node:started").map((e) => (e as { nodeId: string }).nodeId)
+    const bbIdx = startedOrder.indexOf("bb")
+    const endIdx = startedOrder.indexOf("end")
+    // BB starts before End (obvious), and End starts after A1
+    expect(bbIdx).toBeLessThan(endIdx)
+    // A1 should be the last to complete (slow), so End starts last
+    expect(result.nodeResults["a1"]?.status).toBe("success")
+  })
+
+  it("behaves identically when no side-effect branches exist (regression)", async () => {
+    const def: WorkflowDefinition = {
+      id: "wf-no-side", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeB, nodeEnd],
+      edges: [{ id: "e1", from: "a", to: "b" }, { id: "e2", from: "b", to: "end" }],
+    }
+    const engine = new WorkflowEngine(fakeAgent("hello"))
+    const result = await engine.run(def, {}, "run-no-side", () => {})
+    expect(result.status).toBe("completed")
+    expect(result.nodeResults["a"]?.status).toBe("success")
+    expect(result.nodeResults["b"]?.status).toBe("success")
+    expect(result.nodeResults["end"]?.status).toBe("success")
+  })
+
+  it("routes switch branch to end node correctly", async () => {
+    const sw = {
+      id: "sw", name: "Switch", type: "switch", position: { x: 100, y: 0 },
+      config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "?", branches: [{ id: "yes", label: "Yes" }, { id: "no", label: "No" }], defaultBranch: "no" },
+    }
+    const def: WorkflowDefinition = {
+      id: "wf-sw-end", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [sw, nodeA, nodeEnd],
+      edges: [
+        { id: "e1", from: "sw", to: "a", branch: "yes" },
+        { id: "e2", from: "sw", to: "end", branch: "no" },
+        { id: "e3", from: "a", to: "end" },
+      ],
+    }
+    const engine = new WorkflowEngine(fakeAgent("unused"))
+    const result = await engine.run(def, {}, "run-sw-end", () => {})
+    expect(result.status).toBe("completed")
+    expect(result.nodeResults["sw"]?.activeBranch).toBe("no")
+    expect(result.nodeResults["end"]?.status).toBe("success")
+    expect(result.nodeResults["a"]?.status).toBe("skipped")
+  })
+
+  it("routes switch with both branches to same end node", async () => {
+    const sw = {
+      id: "sw", name: "Switch", type: "switch", position: { x: 100, y: 0 },
+      config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "?", branches: [{ id: "yes", label: "Yes" }, { id: "no", label: "No" }], defaultBranch: "no" },
+    }
+    const def: WorkflowDefinition = {
+      id: "wf-sw-both-end", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [sw, nodeEnd],
+      edges: [
+        { id: "e1", from: "sw", to: "end", branch: "yes" },
+        { id: "e2", from: "sw", to: "end", branch: "no" },
+      ],
+    }
+    const engine = new WorkflowEngine(fakeAgent("unused"))
+    const result = await engine.run(def, {}, "run-sw-both", () => {})
+    expect(result.status).toBe("completed")
+    expect(result.nodeResults["sw"]?.activeBranch).toBe("no")
+    expect(result.nodeResults["end"]?.status).toBe("success")
+  })
+
+  it("switch activates correct branch path in diamond graph", async () => {
+    const sw = {
+      id: "sw", name: "Switch", type: "switch", position: { x: 100, y: 0 },
+      config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "?", branches: [{ id: "yes", label: "Yes" }, { id: "no", label: "No" }], defaultBranch: "yes" },
+    }
+    const nodeX = { id: "x", name: "X", type: "prompt", position: { x: 200, y: -50 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "yes-path" } }
+    const nodeY = { id: "y", name: "Y", type: "prompt", position: { x: 200, y: 50 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "no-path" } }
+    const def: WorkflowDefinition = {
+      id: "wf-sw-diamond", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [sw, nodeX, nodeY, nodeEnd],
+      edges: [
+        { id: "e1", from: "sw", to: "x", branch: "yes" },
+        { id: "e2", from: "sw", to: "y", branch: "no" },
+        { id: "e3", from: "x", to: "end" },
+        { id: "e4", from: "y", to: "end" },
+      ],
+    }
+    const agent = fakeAgent("ok")
+    const engine = new WorkflowEngine(agent)
+    const result = await engine.run(def, {}, "run-sw-diamond", () => {})
+    expect(result.status).toBe("completed")
+    expect(result.nodeResults["sw"]?.activeBranch).toBe("yes")
+    expect(result.nodeResults["x"]?.status).toBe("success")
+    expect(result.nodeResults["y"]?.status).toBe("skipped")
+    expect(result.nodeResults["end"]?.status).toBe("success")
   })
 })

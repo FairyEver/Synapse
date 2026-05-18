@@ -40,6 +40,7 @@ import {
   coreSideChannelDescriptor,
   coreTaskSchedulerDescriptor,
   coreTokenUsageDescriptor,
+  coreHttpTestDescriptor,
   coreUpdateDescriptor,
   coreWindowManagerDescriptor,
   coreWorkflowServiceDescriptor,
@@ -48,6 +49,7 @@ import {
   coreWorkflowRunStatusesDescriptor,
   coreWorkflowEngineDescriptor,
   coreWorkflowWindowManagerDescriptor,
+  providerServiceDescriptor,
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,
   repoPendingPushesDescriptor,
@@ -73,6 +75,7 @@ export function buildServiceRegistry(
   registry.register(coreDataRepositoryDescriptor)
   registry.register(corePermissionGuardDescriptor)
   registry.register(coreAuditSinkDescriptor)
+  registry.register(providerServiceDescriptor)
   registry.register(coreLicenseDescriptor)
   registry.register(coreProcessRuntimeDescriptor)
   registry.register(coreNetworkRegistryDescriptor)
@@ -90,6 +93,7 @@ export function buildServiceRegistry(
   registry.register(coreBridgeAdapterDescriptor)
   registry.register(coreDatabaseDescriptor)
   registry.register(coreTokenUsageDescriptor)
+  registry.register(coreHttpTestDescriptor)
   registry.register(coreWorkflowServiceDescriptor)
   registry.register(coreWorkflowSnapshotsDescriptor)
   registry.register(coreWorkflowRunAbortsDescriptor)
@@ -128,7 +132,13 @@ function serviceProxy<T extends object>(
 ): T {
   return new Proxy({}, {
     get(_target, prop) {
-      const service = registry.get<T>(serviceId) as Record<PropertyKey, unknown>
+      let service: Record<PropertyKey, unknown>
+      try {
+        service = registry.get<T>(serviceId) as Record<PropertyKey, unknown>
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error)
+        throw new Error(`Service "${serviceId}" is unavailable while resolving "${String(prop)}": ${message}`)
+      }
       const value = service[prop]
       return typeof value === "function" ? value.bind(service) : value
     },

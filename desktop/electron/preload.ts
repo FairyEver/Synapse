@@ -90,6 +90,7 @@ const IPC_CHANNELS = {
     "createDirectory": "synapse:editor:create-directory",
   },
   "shell": {
+    "openExternal": "synapse:shell:open-external",
     "showItemInFolder": "synapse:shell:show-item-in-folder",
   },
   "repository": {
@@ -123,9 +124,24 @@ const IPC_CHANNELS = {
     "send": "synapse:agent:send",
     "listPendingPermissions": "synapse:agent:list-pending-permissions",
     "respondPermission": "synapse:agent:respond-permission",
+    "setPermissionMode": "synapse:agent:set-permission-mode",
     "cancelTurn": "synapse:agent:cancel-turn",
     "forceKillTurn": "synapse:agent:force-kill-turn",
     "getProviders": "synapse:agent:get-providers",
+    "listProviders": "synapse:agent:list-providers",
+    "listProviderPresets": "synapse:agent:list-provider-presets",
+    "createProvider": "synapse:agent:create-provider",
+    "createProviderFromPreset": "synapse:agent:create-provider-from-preset",
+    "previewCcSwitchClaudeProviders": "synapse:agent:preview-cc-switch-claude-providers",
+    "importCcSwitchClaudeProviders": "synapse:agent:import-cc-switch-claude-providers",
+    "chooseCcSwitchClaudeImportSource": "synapse:agent:choose-cc-switch-claude-import-source",
+    "updateProvider": "synapse:agent:update-provider",
+    "archiveProvider": "synapse:agent:archive-provider",
+    "deleteProvider": "synapse:agent:delete-provider",
+    "listAllProviders": "synapse:agent:list-all-providers",
+    "scanProviderReferences": "synapse:agent:scan-provider-references",
+    "migrateProviderReferences": "synapse:agent:migrate-provider-references",
+    "setActiveProvider": "synapse:agent:set-active-provider",
     "getRuntimeStatus": "synapse:agent:get-runtime-status",
     "listCommands": "synapse:agent:list-commands",
     "openReference": "synapse:agent:open-reference",
@@ -214,12 +230,6 @@ const IPC_CHANNELS = {
     "getAgentReport": "synapse:token-usage:agent-report",
     "getDetectedAgents": "synapse:token-usage:detected-agents",
     "clearData": "synapse:token-usage:clear-data",
-    "cursorAddAccount": "synapse:token-usage:cursor:add-account",
-    "cursorRemoveAccount": "synapse:token-usage:cursor:remove-account",
-    "cursorListAccounts": "synapse:token-usage:cursor:list-accounts",
-    "cursorSetActive": "synapse:token-usage:cursor:set-active",
-    "cursorSync": "synapse:token-usage:cursor:sync",
-    "cursorValidate": "synapse:token-usage:cursor:validate",
   },
 } as const satisfies IpcChannelMap
 
@@ -244,12 +254,18 @@ const EVENT_CHANNELS = {
   },
 }
 
+// HTTP test channels (not yet migrated to IpcModule)
+const HTTP_CHANNELS = {
+  testRequest: "synapse:http:test-request",
+} as const
+
 // Database channels (not yet migrated to IpcModule)
 const DATABASE_CHANNELS = {
   databaseTableList: "synapse:database:table:list",
   databaseTableCreate: "synapse:database:table:create",
   databaseTableDelete: "synapse:database:table:delete",
   databaseTableDescribe: "synapse:database:table:describe",
+  databaseOverviewGet: "synapse:database:overview:get",
   databaseTableUpdate: "synapse:database:table:update",
   databaseColumnCreate: "synapse:database:column:create",
   databaseColumnUpdate: "synapse:database:column:update",
@@ -331,8 +347,61 @@ function createRawPayloadSubscription<TPayload>(
     })
 }
 
+const SENSITIVE_IPC_FIELD_PATTERN =
+  /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization)/i
+
+function sanitizeIpcPayload(fieldName: string, value: unknown, depth = 0): unknown {
+  if (value === null || value === undefined) return value
+  if (typeof value === "number" || typeof value === "boolean") return value
+  if (typeof value === "string") {
+    if (SENSITIVE_IPC_FIELD_PATTERN.test(fieldName)) return "[redacted]"
+    return value.length > 300 ? `${value.slice(0, 120)}...[truncated ${value.length} chars]` : value
+  }
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map((item) => sanitizeIpcPayload(fieldName, item, depth + 1))
+  }
+  if (typeof value === "object") {
+    if (depth >= 3) return "[object]"
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, item]) => [
+        key,
+        sanitizeIpcPayload(key, item, depth + 1),
+      ]),
+    )
+  }
+  return String(value)
+}
+
+function describeIpcError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+function writeRendererIpcFailureLog(channel: string, args: unknown, error: unknown, durationMs: number): void {
+  void ipcRenderer.invoke(IPC_CHANNELS.log.write, {
+    level: "error",
+    category: "renderer.ipc",
+    message: "IPC invoke failed.",
+    details: {
+      channel,
+      durationMs,
+      error: describeIpcError(error),
+      request: sanitizeIpcPayload("request", args),
+    },
+  }).catch(() => undefined)
+}
+
 // Helper to create invoke wrapper
-const invoke = (channel: string) => (args?: unknown) => ipcRenderer.invoke(channel, args)
+const invoke = (channel: string) => async (args?: unknown) => {
+  const startedAt = performance.now()
+  try {
+    return await ipcRenderer.invoke(channel, args)
+  } catch (error) {
+    if (channel !== IPC_CHANNELS.log.write) {
+      writeRendererIpcFailureLog(channel, args, error, Math.round(performance.now() - startedAt))
+    }
+    throw error
+  }
+}
 
 // Helper to create subscription
 const subscribe = (channel: string) => (listener: (payload: unknown) => void) => {
@@ -397,9 +466,7 @@ const synapseBridge: SynapseBridge = {
     listFiles: invoke(IPC_CHANNELS.log.listFiles),
     readAll: invoke(IPC_CHANNELS.log.readAll),
     readFiles: (fileNames: string[]) => invoke(IPC_CHANNELS.log.readFiles)(fileNames),
-    write: (payload) => {
-      void invoke(IPC_CHANNELS.log.write)(payload)
-    },
+    write: (payload) => invoke(IPC_CHANNELS.log.write)(payload),
   },
   license: {
     activate: (payload) => invoke(IPC_CHANNELS.license.activate)(payload),
@@ -439,6 +506,9 @@ const synapseBridge: SynapseBridge = {
     ),
   },
   shell: {
+    openExternal: (url: string) => {
+      void invoke(IPC_CHANNELS.shell.openExternal)({ url })
+    },
     showItemInFolder: (filePath: string) => {
       void invoke(IPC_CHANNELS.shell.showItemInFolder)({ fullPath: filePath })
     },
@@ -502,6 +572,7 @@ const synapseBridge: SynapseBridge = {
     databaseTableCreate: (params) => invoke(DATABASE_CHANNELS.databaseTableCreate)(params),
     databaseTableDelete: (name) => invoke(DATABASE_CHANNELS.databaseTableDelete)(name),
     databaseTableDescribe: (name) => invoke(DATABASE_CHANNELS.databaseTableDescribe)(name),
+    databaseOverviewGet: invoke(DATABASE_CHANNELS.databaseOverviewGet),
     databaseTableUpdate: (params) =>
       invoke(DATABASE_CHANNELS.databaseTableUpdate)(params),
     databaseColumnCreate: (params) => invoke(DATABASE_CHANNELS.databaseColumnCreate)(params),
@@ -582,9 +653,27 @@ const synapseBridge: SynapseBridge = {
     listPendingPermissions: (projectId) =>
       invoke(IPC_CHANNELS.agent.listPendingPermissions)({ projectId }),
     respondPermission: (args) => invoke(IPC_CHANNELS.agent.respondPermission)(args),
+    setPermissionMode: (args) => invoke(IPC_CHANNELS.agent.setPermissionMode)(args),
     cancelTurn: (args) => invoke(IPC_CHANNELS.agent.cancelTurn)(args),
     forceKillTurn: (args) => invoke(IPC_CHANNELS.agent.forceKillTurn)(args),
-    getProviders: (projectId) => invoke(IPC_CHANNELS.agent.getProviders)({ projectId }),
+    getProviders: () => invoke(IPC_CHANNELS.agent.getProviders)({}),
+    listProviders: () => invoke(IPC_CHANNELS.agent.listProviders)({}),
+    listProviderPresets: () => invoke(IPC_CHANNELS.agent.listProviderPresets)({}),
+    createProvider: (args) => invoke(IPC_CHANNELS.agent.createProvider)(args),
+    createProviderFromPreset: (args) => invoke(IPC_CHANNELS.agent.createProviderFromPreset)(args),
+    previewCcSwitchClaudeProviders: (args) =>
+      invoke(IPC_CHANNELS.agent.previewCcSwitchClaudeProviders)(args ?? {}),
+    importCcSwitchClaudeProviders: (args) =>
+      invoke(IPC_CHANNELS.agent.importCcSwitchClaudeProviders)(args),
+    chooseCcSwitchClaudeImportSource: () =>
+      invoke(IPC_CHANNELS.agent.chooseCcSwitchClaudeImportSource)({}),
+    updateProvider: (args) => invoke(IPC_CHANNELS.agent.updateProvider)(args),
+    archiveProvider: (args) => invoke(IPC_CHANNELS.agent.archiveProvider)(args),
+    deleteProvider: (args) => invoke(IPC_CHANNELS.agent.deleteProvider)(args),
+    listAllProviders: () => invoke(IPC_CHANNELS.agent.listAllProviders)({}),
+    scanProviderReferences: (args) => invoke(IPC_CHANNELS.agent.scanProviderReferences)(args),
+    migrateProviderReferences: (args) => invoke(IPC_CHANNELS.agent.migrateProviderReferences)(args),
+    setActiveProvider: (args) => invoke(IPC_CHANNELS.agent.setActiveProvider)(args),
     getRuntimeStatus: invoke(IPC_CHANNELS.agent.getRuntimeStatus),
     listCommands: (projectId) => invoke(IPC_CHANNELS.agent.listCommands)({ projectId }),
     openReference: (args) => invoke(IPC_CHANNELS.agent.openReference)(args),
@@ -668,9 +757,18 @@ const synapseBridge: SynapseBridge = {
       subscribe("synapse:events:workflow")((domainEvent) => {
         listener((domainEvent as DomainEvent).payload as WorkflowEvent)
       }),
+    onDefinitionUpdated: createDomainEventPayloadSubscription<{ workflowId: string; source: string; versionHash: string }>(
+      subscribe,
+      "workflow",
+      "workflow:definition-updated",
+    ),
     onRunnerSwitchRun: createRawPayloadSubscription<{ runId: string }>(
       subscribe,
       "synapse:workflow:runner-switch-run",
+    ),
+    onEditorRefocus: createRawPayloadSubscription<{ runId?: string }>(
+      subscribe,
+      "synapse:workflow:editor-refocus",
     ),
   },
   tokenUsage: {
@@ -689,16 +787,9 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["token-usage"].getAgentReport)(options),
     getDetectedAgents: invoke(IPC_CHANNELS["token-usage"].getDetectedAgents),
     clearData: invoke(IPC_CHANNELS["token-usage"].clearData),
-    cursorAddAccount: (params: { sessionToken: string; label?: string }) =>
-      invoke(IPC_CHANNELS["token-usage"].cursorAddAccount)(params),
-    cursorRemoveAccount: (params: { accountId: string }) =>
-      invoke(IPC_CHANNELS["token-usage"].cursorRemoveAccount)(params),
-    cursorListAccounts: invoke(IPC_CHANNELS["token-usage"].cursorListAccounts),
-    cursorSetActive: (params: { accountId: string }) =>
-      invoke(IPC_CHANNELS["token-usage"].cursorSetActive)(params),
-    cursorSync: invoke(IPC_CHANNELS["token-usage"].cursorSync),
-    cursorValidate: (params: { sessionToken: string }) =>
-      invoke(IPC_CHANNELS["token-usage"].cursorValidate)(params),
+  },
+  http: {
+    testRequest: invoke(HTTP_CHANNELS.testRequest),
   },
   diagnostics: {
     onPing: (listener: () => void) => {

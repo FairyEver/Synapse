@@ -15,9 +15,13 @@ import {
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { createRendererLogger } from "@/app-shell/logging"
+import { track } from "@/lib/ui-tracking"
 import type { ScheduledTask, ScheduledTaskRun } from "@/types/task-scheduler"
 import { formatRunStatus, formatTaskDate } from "../utils"
 import { listRuns } from "../hooks/use-task-scheduler"
+
+const logger = createRendererLogger("task-scheduler.runs")
 
 type TaskRunsDialogProps = {
   open: boolean
@@ -45,6 +49,7 @@ function TaskRunsDialog({
 
     let cancelled = false
     setLoading(true)
+    setRuns([])
     listRuns(task.id)
       .then((nextRuns) => {
         if (!cancelled) {
@@ -54,7 +59,13 @@ function TaskRunsDialog({
       })
       .catch((loadError) => {
         if (!cancelled) {
-          setError(loadError instanceof Error ? loadError.message : "读取历史失败")
+          logger.warn("Task run history load failed.", {
+            taskId: task.id,
+            actionType: task.action.type,
+            boundary: "renderer.task-scheduler.runs.list",
+            ...errorDiagnostic(loadError),
+          })
+          setError("读取历史失败")
         }
       })
       .finally(() => {
@@ -68,10 +79,34 @@ function TaskRunsDialog({
     }
   }, [open, task])
 
-  async function handleStop(runId: string) {
-    await onStopRun(runId)
-    if (task) {
+  async function handleStop(run: ScheduledTaskRun) {
+    if (!task) return
+    track({
+      component: "task-scheduler",
+      name: "task-run-stop-submit",
+      action: "submit",
+      value: run.id,
+      metadata: {
+        boundary: "renderer.task-scheduler.runs.stop.submit",
+        taskId: task.id,
+        runId: run.id,
+        actionType: task.action.type,
+        triggeredBy: run.triggeredBy,
+      },
+    })
+    try {
+      await onStopRun(run.id)
       setRuns(await listRuns(task.id))
+      setError(null)
+    } catch (stopError) {
+      logger.warn("Task run stop failed.", {
+        taskId: task.id,
+        runId: run.id,
+        actionType: task.action.type,
+        boundary: "renderer.task-scheduler.runs.stop",
+        ...errorDiagnostic(stopError),
+      })
+      setError("停止失败")
     }
   }
 
@@ -91,7 +126,7 @@ function TaskRunsDialog({
               <p className="text-sm text-muted-foreground">暂无运行记录</p>
             ) : null}
 
-            {runs.map((run) => (
+            {!loading && runs.map((run) => (
               <RunItem key={run.id} run={run} task={task} busy={busy} onStop={handleStop} />
             ))}
           </div>
@@ -112,7 +147,7 @@ function RunItem({
   readonly run: ScheduledTaskRun
   readonly task: ScheduledTask | null
   readonly busy: boolean
-  readonly onStop: (runId: string) => void
+  readonly onStop: (run: ScheduledTaskRun) => void
 }) {
   const hasOutput = run.result || run.error
   const statusVariant = run.status === "failed" || run.status === "timeout" ? "destructive" : "secondary"
@@ -141,10 +176,11 @@ function RunItem({
           ) : null}
           {run.status === "running" ? (
             <Button
+              data-track="task-run-stop"
               disabled={busy}
               size="icon-sm"
               variant="outline"
-              onClick={() => { onStop(run.id) }}
+              onClick={() => { onStop(run) }}
             >
               <Square />
               <span className="sr-only">停止</span>
@@ -163,7 +199,7 @@ function RunItem({
           <Separator className="my-2" />
           <div className="min-w-0 overflow-hidden">
             {run.result ? (
-              <RunResult task={task} result={run.result} />
+              <RunResult runId={run.id} runStatus={run.status} task={task} result={run.result} />
             ) : null}
             {run.error && !run.result?.error ? <OutputBlock value={run.error} /> : null}
           </div>
@@ -174,9 +210,13 @@ function RunItem({
 }
 
 function RunResult({
+  runId,
+  runStatus,
   task,
   result,
 }: {
+  readonly runId: string
+  readonly runStatus: ScheduledTaskRun["status"]
   readonly task: ScheduledTask | null
   readonly result: ScheduledTaskRun["result"]
 }) {
@@ -185,7 +225,15 @@ function RunResult({
     try {
       const ResultView = rendererActionRegistry.get(task.action.type).ResultView
       if (ResultView) return <ResultView result={result} />
-    } catch {
+    } catch (renderError) {
+      logger.warn("Task run result renderer fallback.", {
+        taskId: task.id,
+        runId,
+        actionType: task.action.type,
+        runStatus,
+        boundary: "renderer.task-scheduler.runs.result-fallback",
+        ...errorDiagnostic(renderError),
+      })
       return <ActionResultView result={result} />
     }
   }
@@ -206,6 +254,13 @@ function formatDuration(ms: number): string {
   const mins = Math.floor(ms / 60_000)
   const secs = Math.round((ms % 60_000) / 1000)
   return secs > 0 ? `${mins}m${secs}s` : `${mins}m`
+}
+
+function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: (error instanceof Error ? error.message : String(error)).length,
+  }
 }
 
 export { TaskRunsDialog }

@@ -43,8 +43,29 @@ export function closeDialogThenNavigate(
   action: () => void,
 ): void {
   onClose()
-  setTimeout(() => {
+  let fired = false
+  const fire = () => {
+    if (fired) return
+    fired = true
     ensureBodyInteractable()
     action()
-  }, DIALOG_CLOSE_SETTLE_MS)
+  }
+
+  // Safety fallback: always fire after max expected settle time
+  setTimeout(fire, DIALOG_CLOSE_SETTLE_MS)
+
+  // Early-exit fast path: when Radix DismissableLayer cleanup restores
+  // body.pointerEvents, fire immediately instead of waiting the full timeout.
+  // In tests (fake timers without jsdom) this never fires, only the fallback
+  // fires — the 300ms window matches the original behavior exactly.
+  if (typeof requestAnimationFrame !== 'undefined' && document.body.style.pointerEvents) {
+    const poll = () => {
+      if (!document.body.style.pointerEvents) {
+        fire()
+      } else {
+        requestAnimationFrame(poll)
+      }
+    }
+    requestAnimationFrame(poll)
+  }
 }

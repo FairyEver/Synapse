@@ -1,5 +1,6 @@
 import type { ActionManifest } from "../../types"
 import { agentActionConfigSchema, type AgentActionConfig } from "./schema"
+import { SYNAPSE_AGENT_PERMISSION_MODES } from "../../../src/types/agent"
 
 export const agentActionManifest = {
   id: "builtin.agent",
@@ -8,6 +9,8 @@ export const agentActionManifest = {
   defaultConfig: {
     projectId: "",
     agentType: "claude-code",
+    providerId: "",
+    modelTier: "sonnet",
     mode: "bypassPermissions",
     prompt: "",
     sessionPolicy: "fresh",
@@ -25,14 +28,30 @@ export const agentActionManifest = {
       kind: "enum",
       required: true,
       description: "Agent type to use.",
-      choices: ["claude-code", "codex"],
+      choices: ["claude-code"],
       defaultValue: "claude-code",
     },
     {
-      name: "mode",
+      name: "providerId",
       kind: "string",
       required: true,
-      description: "Agent execution mode (must be unattended-capable).",
+      description: "Provider ID.",
+    },
+    {
+      name: "modelTier",
+      kind: "enum",
+      required: true,
+      description: "Model tier.",
+      choices: ["default", "haiku", "sonnet", "opus"],
+      defaultValue: "sonnet",
+    },
+    {
+      name: "mode",
+      kind: "enum",
+      required: true,
+      description: "Agent permission mode.",
+      choices: SYNAPSE_AGENT_PERMISSION_MODES,
+      defaultValue: "bypassPermissions",
     },
     {
       name: "prompt",

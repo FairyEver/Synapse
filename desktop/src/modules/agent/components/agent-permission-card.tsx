@@ -2,8 +2,10 @@ import { useState } from "react"
 import { ShieldAlert, ShieldCheck, ShieldX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import type { SynapseAgentPermissionRequestTimelineItem } from "@/types/agent"
+import { redactAgentPathLikeValue, sanitizeAgentRawInput } from "../utils"
 
 type AgentPermissionCardProps = {
   readonly item: SynapseAgentPermissionRequestTimelineItem
@@ -13,20 +15,35 @@ type AgentPermissionCardProps = {
 }
 
 function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: AgentPermissionCardProps) {
-  const [resolved, setResolved] = useState<"allow" | "deny" | null>(null)
   const [codeCollapsed, setCodeCollapsed] = useState(false)
-  const body = item.toolInput ?? formatRawInput(item.toolInputRaw)
-  const showActions = pending && resolved === null
-  const isAllowed = resolved === "allow"
-  const isDenied = resolved === "deny"
+  const body = item.toolInput ? redactAgentPathLikeValue(item.toolInput) : formatRawInput(item.toolInputRaw)
+  const showActions = pending
 
   function handleRespond(behavior: "allow" | "deny") {
-    setResolved(behavior)
+    track({
+      component: "agent",
+      name: "agent-permission-card-response",
+      action: "submit",
+      value: behavior,
+      metadata: {
+        boundary: "renderer.agent.permission-card-response",
+        itemId: item.id,
+        requestId: item.requestId,
+        toolName: item.toolName,
+        behavior,
+        inputLength: body.length,
+        hasRawInput: Boolean(item.toolInputRaw),
+        ...(item.sdkSessionId ? { sdkSessionId: item.sdkSessionId } : {}),
+        ...(item.agentSessionId ? { agentSessionId: item.agentSessionId } : {}),
+        ...(item.threadId ? { threadId: item.threadId } : {}),
+      },
+    })
     onRespond(item.requestId, behavior)
   }
 
   return (
     <div
+      data-agent-permission-request-id={item.requestId}
       className={cn(
         "my-1 overflow-hidden rounded-lg border border-border bg-card",
         isLatestPending && showActions && "ring-2 ring-primary",
@@ -37,26 +54,10 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
         className={cn("flex items-center gap-2 bg-muted/30 px-3 py-2", body && "cursor-pointer select-none")}
         onClick={body ? () => setCodeCollapsed(!codeCollapsed) : undefined}
       >
-        {isAllowed ? (
-          <ShieldCheck className="size-4 shrink-0 text-green-500" />
-        ) : isDenied ? (
-          <ShieldX className="size-4 shrink-0 text-destructive" />
-        ) : (
-          <ShieldAlert className="size-4 shrink-0 text-muted-foreground" />
-        )}
+        <ShieldAlert className="size-4 shrink-0 text-muted-foreground" />
         <span className="text-sm font-semibold">{item.toolName}</span>
         <div className="ml-auto flex items-center gap-1.5">
-          {isAllowed ? (
-            <Badge variant="secondary" className="gap-1 border-green-200 bg-green-50 text-green-600">
-              <ShieldCheck className="size-3" />
-              已允许
-            </Badge>
-          ) : isDenied ? (
-            <Badge variant="destructive" className="gap-1">
-              <ShieldX className="size-3" />
-              已拒绝
-            </Badge>
-          ) : !pending && resolved === null ? (
+          {!pending ? (
             <Badge variant="secondary">已处理</Badge>
           ) : null}
         </div>
@@ -96,7 +97,7 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
 }
 
 function formatRawInput(value: Record<string, unknown> | undefined): string {
-  return value ? JSON.stringify(value, null, 2) : ""
+  return value ? JSON.stringify(sanitizeAgentRawInput(value), null, 2) : ""
 }
 
 export { AgentPermissionCard }

@@ -10,6 +10,7 @@ import {
 } from "@/app-shell/content-navigation"
 import { closeDialogThenNavigate } from "@/app-shell/dialog-navigate"
 import { useCurrentRepoProfile } from "@/app-shell/identity-context"
+import { formatSkillAttachmentSize } from "@/modules/skills/utils"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -565,11 +566,11 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
                 <span className="truncate text-sm font-medium">{item.name}</span>
                 <Badge
                   variant={item.source === "synapse" ? "default" : "secondary"}
-                  className="shrink-0 text-[10px] px-1.5 py-0"
+                  className="shrink-0 text-xs px-1.5 py-0"
                 >
                   {item.source === "synapse" ? "Synapse" : "外部"}
                 </Badge>
-                <Badge variant="outline" className="shrink-0 text-[10px] px-1.5 py-0">
+                <Badge variant="outline" className="shrink-0 text-xs px-1.5 py-0">
                   {item.type === "skill" ? "Skill" : "Rule"}
                 </Badge>
               </div>
@@ -811,12 +812,6 @@ function ScanItemContentArea({
   )
 }
 
-function formatFileSize(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
-
 function SkillFilesSection({ files }: { files: EditorScanSkillFileEntry[] }) {
   return (
     <div className="mt-4 border-t pt-4">
@@ -831,7 +826,7 @@ function SkillFilesSection({ files }: { files: EditorScanSkillFileEntry[] }) {
           >
             <File className="size-3.5 shrink-0" />
             <span className="min-w-0 truncate">{f.name}</span>
-            <span className="ml-auto shrink-0 tabular-nums">{formatFileSize(f.size)}</span>
+            <span className="ml-auto shrink-0 tabular-nums">{formatSkillAttachmentSize(f.size)}</span>
           </div>
         ))}
       </div>

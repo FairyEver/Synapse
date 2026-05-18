@@ -1,0 +1,288 @@
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group"
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table"
+import { createRendererLogger } from "@/app-shell/logging"
+import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { track } from "@/lib/ui-tracking"
+import { resolveModelName } from "@/lib/provider-model"
+import type { SynapseAgentProvider } from "@/types/bridge"
+import type { ModelTier, ProviderModelSelection } from "@/types/provider-model"
+import { cn } from "@/lib/utils"
+
+const logger = createRendererLogger("agent")
+
+type ProviderModelSelectDialogProps = {
+  readonly open: boolean
+  readonly onOpenChange: (open: boolean) => void
+  readonly onSelect: (selection: ProviderModelSelection) => void
+  readonly defaultSelection?: ProviderModelSelection
+}
+
+const TIER_CONFIG: ReadonlyArray<{ tier: ModelTier; label: string }> = [
+  { tier: "default", label: "主模型" },
+  { tier: "haiku", label: "Haiku" },
+  { tier: "sonnet", label: "Sonnet" },
+  { tier: "opus", label: "Opus" },
+]
+
+function availableTiers(provider: SynapseAgentProvider) {
+  return TIER_CONFIG.flatMap((c) => resolveModelName(provider, c.tier) ? [c] : [])
+}
+
+function ProviderModelSelectDialog({
+  open,
+  onOpenChange,
+  onSelect,
+  defaultSelection,
+}: ProviderModelSelectDialogProps) {
+  const [providers, setProviders] = useState<SynapseAgentProvider[]>([])
+  const [selectedProviderId, setSelectedProviderId] = useState<string | undefined>(undefined)
+  const [selectedTier, setSelectedTier] = useState<ModelTier | undefined>(undefined)
+  const [loading, setLoading] = useState(false)
+  const [loaded, setLoaded] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const requestIdRef = useRef(0)
+
+  const visibleProviders = useMemo(
+    () => providers.filter((provider) => !provider.archived),
+    [providers],
+  )
+
+  const loadProviders = useCallback(async () => {
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
+    setLoading(true)
+    setLoaded(false)
+    setError(null)
+    setProviders([])
+    setSelectedProviderId(undefined)
+    setSelectedTier(undefined)
+    try {
+      const nextProviders = await requireSynapseBridge().agent.listProviders()
+      if (requestId !== requestIdRef.current) return
+      setProviders(nextProviders)
+      const visible = nextProviders.filter((p) => !p.archived)
+
+      const defaultProvider = defaultSelection
+        ? visible.find((p) => p.id === defaultSelection.providerId)
+        : undefined
+      const activeProvider = visible.find((p) => p.active)
+      const preselectedProvider = defaultProvider ?? activeProvider ?? visible[0]
+
+      if (preselectedProvider) {
+        setSelectedProviderId(preselectedProvider.id)
+        if (defaultSelection && defaultProvider) {
+          const defaultTierAvailable = resolveModelName(defaultProvider, defaultSelection.modelTier)
+          if (defaultTierAvailable) {
+            setSelectedTier(defaultSelection.modelTier)
+          } else {
+            setSelectedTier(pickDefaultTier(preselectedProvider))
+          }
+        } else {
+          setSelectedTier(pickDefaultTier(preselectedProvider))
+        }
+      }
+      setLoaded(true)
+    } catch (rawError) {
+      if (requestId !== requestIdRef.current) return
+      logger.warn("Agent provider list failed.", {
+        boundary: "renderer.provider-model-select",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessageLength(rawError),
+      })
+      setProviders([])
+      setSelectedProviderId(undefined)
+      setSelectedTier(undefined)
+      setError("读取 Provider 失败")
+      setLoaded(true)
+    } finally {
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
+    }
+  }, [defaultSelection])
+
+  useEffect(() => {
+    if (!open) {
+      requestIdRef.current += 1
+      setLoaded(false)
+      return
+    }
+    void loadProviders()
+  }, [loadProviders, open])
+
+  const selectedProviderAvailable = Boolean(
+    selectedProviderId && visibleProviders.some((p) => p.id === selectedProviderId),
+  )
+  const canConfirm = selectedProviderAvailable && selectedTier !== undefined && !loading && !error
+
+  const handleSelectProvider = (providerId: string) => {
+    setSelectedProviderId(providerId)
+    const provider = visibleProviders.find((p) => p.id === providerId)
+    if (provider) {
+      if (selectedTier && resolveModelName(provider, selectedTier)) {
+        return
+      }
+      setSelectedTier(pickDefaultTier(provider))
+    }
+  }
+
+  const handleSelectTier = (providerId: string, tier: ModelTier) => {
+    setSelectedProviderId(providerId)
+    setSelectedTier(tier)
+  }
+
+  const handleConfirm = useCallback(() => {
+    if (!selectedProviderId || !selectedTier || !canConfirm) return
+    track({
+      component: "agent",
+      name: "agent-provider-model-select",
+      action: "submit",
+      metadata: {
+        boundary: "renderer.provider-model-select",
+        providerId: selectedProviderId,
+        modelTier: selectedTier,
+        providerCount: visibleProviders.length,
+      },
+    })
+    const provider = visibleProviders.find((p) => p.id === selectedProviderId)
+    const providerName = provider?.name
+    const modelName = provider ? resolveModelName(provider, selectedTier) : undefined
+    onSelect({ providerId: selectedProviderId, modelTier: selectedTier, providerName, modelName })
+    onOpenChange(false)
+  }, [canConfirm, onOpenChange, onSelect, selectedProviderId, selectedTier, visibleProviders])
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-lg" aria-describedby={undefined}>
+        <DialogHeader>
+          <DialogTitle>选择供应商 + 模型</DialogTitle>
+        </DialogHeader>
+        <div className="flex flex-col gap-3">
+          {error ? (
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-destructive">{error}</p>
+              <Button type="button" variant="outline" size="sm" onClick={() => void loadProviders()}>
+                重试
+              </Button>
+            </div>
+          ) : (
+            <RadioGroup value={selectedProviderId ?? ""} onValueChange={handleSelectProvider}>
+              <Table className="table-fixed">
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="w-8" />
+                    <TableHead className="w-[120px]">名称</TableHead>
+                    <TableHead>模型</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {loading ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-muted-foreground">
+                        正在加载
+                      </TableCell>
+                    </TableRow>
+                  ) : visibleProviders.length === 0 ? (
+                    <TableRow>
+                      <TableCell colSpan={3} className="text-muted-foreground">
+                        暂无 Provider
+                      </TableCell>
+                    </TableRow>
+                  ) : visibleProviders.map((provider) => {
+                    const selected = provider.id === selectedProviderId
+                    const tiers = availableTiers(provider)
+                    return (
+                      <TableRow
+                        key={provider.id}
+                        data-state={selected ? "selected" : undefined}
+                        className="cursor-pointer"
+                        onClick={() => handleSelectProvider(provider.id)}
+                      >
+                        <TableCell className="pr-0 align-top">
+                          <RadioGroupItem value={provider.id} />
+                        </TableCell>
+                        <TableCell className="min-w-0 align-top">
+                          <span className="truncate font-medium">{provider.name}</span>
+                        </TableCell>
+                        <TableCell className="min-w-0">
+                          <div className="flex flex-col">
+                            {tiers.map((tierConfig) => {
+                              const modelName = resolveModelName(provider, tierConfig.tier)
+                              const isTierSelected = selected && selectedTier === tierConfig.tier
+                              return (
+                                <div
+                                  key={tierConfig.tier}
+                                  data-tier={tierConfig.tier}
+                                  className={cn(
+                                    "cursor-pointer rounded px-2 py-1 text-sm",
+                                    selected
+                                      ? isTierSelected
+                                        ? "bg-foreground font-medium text-background"
+                                        : "text-foreground hover:bg-muted/50"
+                                      : "text-muted-foreground hover:bg-muted/50",
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation()
+                                    handleSelectTier(provider.id, tierConfig.tier)
+                                  }}
+                                >
+                                  {tierConfig.label} ({modelName})
+                                </div>
+                              )
+                            })}
+                          </div>
+                        </TableCell>
+                      </TableRow>
+                    )
+                  })}
+                </TableBody>
+              </Table>
+            </RadioGroup>
+          )}
+        </div>
+        <DialogFooter>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+            取消
+          </Button>
+          <Button
+            type="button"
+            disabled={!canConfirm}
+            onClick={handleConfirm}
+          >
+            确认
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function pickDefaultTier(provider: SynapseAgentProvider): ModelTier | undefined {
+  if (resolveModelName(provider, "sonnet")) return "sonnet"
+  const tiers = availableTiers(provider)
+  return tiers[0]?.tier
+}
+
+function errorMessageLength(error: unknown): number {
+  if (error instanceof Error) return error.message.length
+  return String(error).length
+}
+
+export { ProviderModelSelectDialog }
+export type { ProviderModelSelectDialogProps }

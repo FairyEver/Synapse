@@ -33,14 +33,21 @@ export function resolveVariables(
 
   for (const { name, source } of bindings) {
     if (source.type === "param") {
-      resolved[name] = String(paramValues[source.param] ?? "")
+      if (!(source.param in paramValues)) {
+        logger.warn("variable resolved to empty: referenced parameter is missing", {
+          variableName: name, paramName: source.param,
+        })
+      }
+      const raw = paramValues[source.param]
+      const isNaN = typeof raw === "number" && Number.isNaN(raw)
+      resolved[name] = (raw != null && !isNaN) ? String(raw) : ""
     } else if (source.type === "node_output") {
       if (!(source.node in nodeOutputs)) {
         const displayName = nodeNames?.[source.node] ?? source.node
         // If the node exists in the workflow but has no output, it was skipped
         // by branch logic. Resolve gracefully to empty string.
         if (allNodeIds && allNodeIds.has(source.node)) {
-          logger.warn("variable resolved to empty: source node was skipped (branch inactive)", {
+          logger.warn("variable resolved to empty: source node not available", {
             variableName: name, sourceNodeId: source.node, sourceNodeName: displayName,
           })
           resolved[name] = ""
@@ -63,21 +70,14 @@ export function resolveVariables(
   return { resolved, skippedReferences }
 }
 
-/**
- * Legacy wrapper that returns only the resolved map (for backward compat with
- * callers that don't need skipped-reference info). Throws on broken references.
- */
-export function resolveVariablesSimple(
-  bindings: VariableBinding[],
-  paramValues: Record<string, unknown>,
-  nodeOutputs: Record<string, string>,
-  nodeNames?: Record<string, string>,
-): Record<string, string> {
-  const { resolved } = resolveVariables(bindings, paramValues, nodeOutputs, nodeNames)
-  return resolved
-}
 
 export function interpolatePrompt(template: string, vars: Record<string, string>): string {
-  // Supports both {{varName}} and {{$varName}} syntax (design spec uses $-prefix)
-  return template.replace(/\{\{\$?([a-zA-Z0-9_\u4e00-\u9fff]+)\}\}/g, (match, n) => vars[n] ?? match)
+  // Supports {{varName}} and {{$varName}} with spaces, dots, and hyphens.
+  return template.replace(/\{\{\s*\$?([\p{L}\p{N}_.-]+)\s*\}\}/gu, (match, n: string) => {
+    if (!(n in vars)) {
+      logger.warn("unbound template variable", { variable: n, match })
+      throw new Error(`模板变量「${n}」未绑定`)
+    }
+    return vars[n]
+  })
 }

@@ -1,5 +1,4 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { AgentRuntimePanel } from "@/modules/settings/components/agent-runtime-panel"
 import { EditorDirectoriesContent } from "@/modules/settings/components/editor-directories-panel"
 
 function ToolsPanel() {
@@ -13,8 +12,6 @@ function ToolsPanel() {
           <EditorDirectoriesContent />
         </CardContent>
       </Card>
-
-      <AgentRuntimePanel />
     </div>
   )
 }

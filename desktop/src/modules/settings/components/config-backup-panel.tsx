@@ -48,7 +48,7 @@ function ConfigBackupPanel() {
                     success: (result) => result ? "配置已导出。" : null,
                     error: (error) => error instanceof Error ? error.message : "导出配置失败。",
                   },
-                ).catch(() => {})
+                ).catch((err) => { logger.warn("config backup export failed", err) })
               }}
             >
               导出
@@ -89,7 +89,7 @@ function ConfigBackupPanel() {
                   .then(() => {
                     setIsImportOpen(false)
                   })
-                  .catch(() => {})
+                  .catch((err) => { logger.warn("config import close dialog failed", err) })
               }}
             >
               确认导入

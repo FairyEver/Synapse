@@ -15,6 +15,7 @@ export type ActionRuntimeContext = {
   readonly cwd: string
   readonly actor: ActorIdentity
   readonly abortSignal: AbortSignal
+  readonly configVersion?: number
 }
 
 export type ActionPermissionInput<TConfig extends ActionConfig = ActionConfig> = {

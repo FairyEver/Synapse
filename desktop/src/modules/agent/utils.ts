@@ -23,8 +23,10 @@ function defaultSessionId(sessions: readonly SynapseAgentSessionSummary[]): stri
     ?? sessions[0]?.id
 }
 
-function formatEntryTime(timestamp: string): string {
-  return new Date(timestamp).toLocaleTimeString([], {
+function formatEntryTime(timestamp: string): string | undefined {
+  const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return undefined
+  return date.toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
   })
@@ -32,9 +34,16 @@ function formatEntryTime(timestamp: string): string {
 
 function formatAgentTranscript(entries: readonly SynapseAgentTimelineItem[]): string {
   return entries.map((entry) => [
-    `${labelForTimelineItem(entry)} ${formatEntryTime(entry.timestamp)}`,
+    transcriptLabel(entry),
     timelineItemText(entry).trimEnd(),
   ].join("\n")).join("\n\n")
+}
+
+function transcriptLabel(entry: SynapseAgentTimelineItem): string {
+  const formattedTime = formatEntryTime(entry.timestamp)
+  return formattedTime
+    ? `${labelForTimelineItem(entry)} ${formattedTime}`
+    : labelForTimelineItem(entry)
 }
 
 function labelForRole(role: SynapseAgentMessageTimelineItem["role"]): string {
@@ -71,6 +80,8 @@ function labelForTimelineItem(entry: SynapseAgentTimelineItem): string {
       return "结果"
     case "phase":
       return "阶段"
+    case "sdkEvent":
+      return "SDK"
     default: {
       const exhaustive: never = entry
       return exhaustive
@@ -94,6 +105,10 @@ function timelineItemText(entry: SynapseAgentTimelineItem): string {
       return entry.message
     case "phase":
       return entry.errorMessage ?? entry.phase
+    case "sdkEvent":
+      return [entry.sdkType, entry.sdkSubtype, entry.summary]
+        .filter((part): part is string => Boolean(part))
+        .join(" ")
     default: {
       const exhaustive: never = entry
       return exhaustive
@@ -109,8 +124,63 @@ function thinkingIndicatorText(frame: number): string {
 function agentCliLabel(agentType: string | undefined): string | undefined {
   const normalized = agentType?.trim()
   if (!normalized) return undefined
-  if (normalized === "claude-code") return "claudecode"
+  if (normalized === "claude-code" || normalized === "claude-sdk" || normalized === "claude-agent-sdk") {
+    return "claudecode"
+  }
   return normalized
+}
+
+const REDACTED = "[redacted]"
+const MAX_RAW_INPUT_STRING_LENGTH = 160
+const SENSITIVE_RAW_INPUT_KEY_PATTERN = /token|secret|api[-_]?key|authorization|cookie|password|credential/i
+
+function errorLogMeta(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+} {
+  const named = error && typeof error === "object"
+    ? error as { readonly name?: unknown; readonly message?: unknown }
+    : undefined
+  const text = error instanceof Error
+    ? error.message
+    : typeof named?.message === "string"
+      ? named.message
+      : typeof error === "string"
+        ? error
+        : String(error)
+  const errorName = error instanceof Error
+    ? error.name
+    : typeof named?.name === "string"
+      ? named.name
+      : typeof error
+  return {
+    errorName,
+    errorLength: text.length,
+  }
+}
+
+function sanitizeAgentRawInput(value: unknown, key = ""): unknown {
+  if (SENSITIVE_RAW_INPUT_KEY_PATTERN.test(key)) return REDACTED
+  if (typeof value === "string") return truncateRawInputString(redactAgentPathLikeValue(value))
+  if (Array.isArray(value)) return value.map((item) => sanitizeAgentRawInput(item))
+  if (!value || typeof value !== "object") return value
+
+  const sanitized: Record<string, unknown> = {}
+  for (const [childKey, childValue] of Object.entries(value)) {
+    sanitized[childKey] = sanitizeAgentRawInput(childValue, childKey)
+  }
+  return sanitized
+}
+
+function redactAgentPathLikeValue(value: string): string {
+  return value
+    .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, "[path redacted]")
+    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]")
+}
+
+function truncateRawInputString(value: string): string {
+  if (value.length <= MAX_RAW_INPUT_STRING_LENGTH) return value
+  return `${value.slice(0, MAX_RAW_INPUT_STRING_LENGTH)}...[truncated]`
 }
 
 export {
@@ -118,8 +188,11 @@ export {
   agentCliLabel,
   defaultSessionId,
   defaultSessionKey,
+  errorLogMeta,
   formatAgentTranscript,
   formatEntryTime,
+  redactAgentPathLikeValue,
+  sanitizeAgentRawInput,
   sessionLabel,
   thinkingIndicatorText,
 }

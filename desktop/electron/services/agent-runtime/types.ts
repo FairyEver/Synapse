@@ -1,5 +1,4 @@
 import type { ActorIdentity } from "../../runtime/security"
-import type { ControlledProcessIsolationOptions } from "../../runtime/process"
 
 export const AGENT_RUNTIME_SERVICE_ID = "agent.runtime"
 
@@ -30,6 +29,8 @@ export interface AgentMessage {
   readonly replyCtx?: unknown
   readonly modeOverride?: string
   readonly agentType?: string
+  readonly providerId?: string
+  readonly modelTier?: string
 }
 
 interface AgentEventBase {
@@ -40,9 +41,21 @@ interface AgentEventBase {
     | "toolResult"
     | "permissionRequest"
     | "result"
+    | "sessionInit"
+    | "assistant"
+    | "stream"
+    | "status"
+    | "compactBoundary"
+    | "sdkEvent"
     | "error"
   readonly agentSessionId?: string
   readonly threadId?: string
+  readonly conversationId?: string
+  readonly turnId?: string
+  readonly providerId?: string
+  readonly projectId?: string
+  readonly sdkSessionId?: string
+  readonly timestamp?: string
 }
 
 export interface AgentTextEvent extends AgentEventBase {
@@ -105,11 +118,60 @@ export interface AgentResultEvent extends AgentEventBase {
   readonly content: string
   readonly done: true
   readonly metadata?: AgentResultMetadata
+  readonly costUsd?: number
+  readonly usage?: Record<string, unknown>
+  readonly payload?: Record<string, unknown>
 }
 
 export interface AgentErrorEvent extends AgentEventBase {
   readonly type: "error"
   readonly message: string
+  readonly payload?: Record<string, unknown>
+}
+
+export interface AgentSessionInitEvent extends AgentEventBase {
+  readonly type: "sessionInit"
+  readonly tools?: readonly string[]
+  readonly mcpServers?: readonly Record<string, unknown>[]
+  readonly model?: string
+  readonly payload?: Record<string, unknown>
+}
+
+export interface AgentAssistantEvent extends AgentEventBase {
+  readonly type: "assistant"
+  readonly message: Record<string, unknown>
+  readonly contentBlocks?: readonly unknown[]
+  readonly content?: string
+  readonly payload?: Record<string, unknown>
+}
+
+export interface AgentStreamEvent extends AgentEventBase {
+  readonly type: "stream"
+  readonly event: Record<string, unknown>
+  readonly blockIndex?: number
+  readonly deltaType?: string
+  readonly text?: string
+  readonly thinking?: string
+  readonly partialJson?: string
+  readonly payload?: Record<string, unknown>
+}
+
+export interface AgentStatusEvent extends AgentEventBase {
+  readonly type: "status"
+  readonly status?: string | null
+  readonly payload?: Record<string, unknown>
+}
+
+export interface AgentCompactBoundaryEvent extends AgentEventBase {
+  readonly type: "compactBoundary"
+  readonly payload: Record<string, unknown>
+}
+
+export interface AgentSdkEvent extends AgentEventBase {
+  readonly type: "sdkEvent"
+  readonly sdkType: string
+  readonly sdkSubtype?: string
+  readonly payload: Record<string, unknown>
 }
 
 export type AgentEvent =
@@ -120,39 +182,12 @@ export type AgentEvent =
   | AgentPermissionRequestEvent
   | AgentResultEvent
   | AgentErrorEvent
-
-export interface AgentExecutionContext {
-  readonly projectId: string
-  readonly workDir: string
-  readonly threadId?: string
-  readonly agentSessionId?: string
-  readonly sessionEnv?: Record<string, string>
-  readonly processIsolation?: ControlledProcessIsolationOptions
-  readonly actor: ActorIdentity
-  readonly modeOverride?: string
-  readonly abortSignal?: AbortSignal
-  onEvent?(event: AgentEvent): void
-}
-
-export interface AgentExecutionResult {
-  readonly events: readonly AgentEvent[]
-  readonly resultText: string
-  readonly agentSessionId?: string
-  readonly threadId?: string
-  readonly error?: string
-}
-
-export interface AgentAdapter {
-  readonly agentType: string
-  readonly compressionCommand?: string
-  execute(
-    message: AgentMessage,
-    context: AgentExecutionContext,
-  ): Promise<AgentExecutionResult>
-  startSession?(
-    context: AgentExecutionContext,
-  ): Promise<AgentLiveSession>
-}
+  | AgentSessionInitEvent
+  | AgentAssistantEvent
+  | AgentStreamEvent
+  | AgentStatusEvent
+  | AgentCompactBoundaryEvent
+  | AgentSdkEvent
 
 export type AgentPermissionBehavior = "allow" | "deny"
 
@@ -188,10 +223,12 @@ export interface AgentLiveSession {
     decision: AgentPermissionDecision,
   ): Promise<void>
   nextEvent(): Promise<AgentEvent | null>
+  nextEventWithTimeout?(timeoutMs: number): Promise<AgentEvent | null>
   currentSessionId(): string | undefined
   alive(): boolean
   close(): Promise<void>
   cancelCurrentTurn?(): Promise<boolean>
+  setPermissionMode?(mode: string): Promise<void>
 }
 
 export interface AgentRuntimeTurnResult {
@@ -217,6 +254,8 @@ export type ScheduledAgentSendInput = {
   readonly timeoutMs: number
   readonly lastConversationId?: string
   readonly abortSignal?: AbortSignal
+  readonly providerId?: string
+  readonly modelTier?: string
 }
 
 export type CancelTurnResult = {

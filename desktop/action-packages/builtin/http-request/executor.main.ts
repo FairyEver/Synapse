@@ -7,6 +7,19 @@ import type { MainActionDefinition } from "../../../electron/action-runtime/acti
 import { httpRequestActionManifest } from "./manifest"
 import type { HttpRequestActionConfig } from "./schema"
 
+function buildHeaders(config: HttpRequestActionConfig): Record<string, string> | undefined {
+  const headers = config.headers ? { ...config.headers } : {} as Record<string, string>
+
+  if (config.auth?.type === "bearer" && config.auth.bearerToken) {
+    headers["Authorization"] = `Bearer ${config.auth.bearerToken}`
+  } else if (config.auth?.type === "basic" && config.auth.basicUsername) {
+    const encoded = Buffer.from(`${config.auth.basicUsername}:${config.auth.basicPassword ?? ""}`).toString("base64")
+    headers["Authorization"] = `Basic ${encoded}`
+  }
+
+  return Object.keys(headers).length > 0 ? headers : undefined
+}
+
 export function createHttpRequestAction(deps: {
   readonly sendRequest?: (request: OutboundHttpRequest) => Promise<OutboundHttpResponse>
 } = {}): MainActionDefinition<HttpRequestActionConfig> {
@@ -33,7 +46,7 @@ export function createHttpRequestAction(deps: {
       const response = await sendRequest({
         method: config.method,
         url: buildUrl(config),
-        headers: config.headers,
+        headers: buildHeaders(config),
         body: buildBody(config),
         timeoutMs: config.timeoutMins === null ? undefined : (config.timeoutMins ?? 5) * 60_000,
         abortSignal: context.abortSignal,

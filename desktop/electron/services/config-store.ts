@@ -132,7 +132,9 @@ class ConfigStore {
 
     if (this.cachedConfig) {
       logger.debug("Returning cached config.")
-      return structuredClone(this.cachedConfig)
+      const normalizedConfig = sanitizeSynapseConfig(this.cachedConfig)
+      this.cachedConfig = normalizedConfig
+      return structuredClone(normalizedConfig)
     }
 
     logger.info("Loading config from DataRepository.")
@@ -148,8 +150,17 @@ class ConfigStore {
       return structuredClone(defaultConfig)
     }
 
-    this.cachedConfig = config
-    return structuredClone(config)
+    const normalizedConfig = sanitizeSynapseConfig(config)
+    if (JSON.stringify(normalizedConfig) !== JSON.stringify(config)) {
+      await namespace.setSingleton(normalizedConfig)
+      logger.info("Config normalized after load.", {
+        activeRepoUuid: normalizedConfig.activeRepoUuid,
+        repositoryCount: normalizedConfig.repositories.length,
+      })
+    }
+
+    this.cachedConfig = normalizedConfig
+    return structuredClone(normalizedConfig)
   }
 
   async update(patch: SynapseConfigPatch): Promise<SynapseConfig> {
@@ -259,21 +270,7 @@ class ConfigStore {
   }
 
   private async readCachedOrNamespace(): Promise<SynapseConfig> {
-    if (this.cachedConfig) {
-      return this.cachedConfig
-    }
-
-    const namespace = this.getNamespace()
-    const config = await namespace.getSingleton()
-
-    if (config === null) {
-      const defaultConfig = createDefaultConfig()
-      this.cachedConfig = defaultConfig
-      return defaultConfig
-    }
-
-    this.cachedConfig = config
-    return config
+    return this.load()
   }
 
   /**
@@ -285,7 +282,9 @@ class ConfigStore {
     if (!this.cachedConfig) {
       throw new Error("ConfigStore.loadSync() called before config was loaded — check service dependency ordering")
     }
-    return this.cachedConfig
+    const normalizedConfig = sanitizeSynapseConfig(this.cachedConfig)
+    this.cachedConfig = normalizedConfig
+    return normalizedConfig
   }
 }
 

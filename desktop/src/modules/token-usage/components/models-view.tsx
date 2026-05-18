@@ -2,7 +2,8 @@ import {
   Table, TableBody, TableCell, TableHeader, TableRow,
 } from "@/components/ui/table"
 import { formatTokens, formatCost, formatCacheRatio } from "../lib/format"
-import { getProviderColor } from "../lib/colors"
+import { getProviderColorClassName } from "../lib/colors"
+import { cn } from "@/lib/utils"
 import { useSort } from "../hooks/use-sort"
 import { SortableHeader } from "./sortable-header"
 import type { ModelRow } from "../hooks/use-token-usage"
@@ -63,7 +64,7 @@ export function ModelsView({ models }: ModelsViewProps) {
             <TableCell className="font-medium">{m.model}</TableCell>
             <TableCell>
               <span className="flex items-center gap-1.5">
-                <span className="h-2 w-2 rounded-full" style={{ backgroundColor: getProviderColor(m.provider) }} />
+                <span className={cn("size-2 rounded-full", getProviderColorClassName(m.provider))} />
                 {m.provider}
               </span>
             </TableCell>

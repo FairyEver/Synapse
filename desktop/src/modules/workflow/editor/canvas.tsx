@@ -21,37 +21,43 @@ import {
   type NodeChange,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { Clipboard } from "lucide-react"
+import { Clipboard, LayoutGrid } from "lucide-react"
 import { nodeTypes, NodeResultsContext } from "./node-wrappers"
 import { BranchEdge } from "./custom-edge"
 import { CanvasActionsContext, type NodeClipboard } from "./canvas-context"
 import type { WorkflowDefinition, WorkflowNode, WorkflowEdge, NodeRunResult } from "@/types/workflow"
 import { createRendererLogger } from "@/app-shell/logging"
+import { autoLayoutNodes } from "./auto-layout"
+import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
+import { resolveBranchLabel } from "../lib/branch-label"
 
 const logger = createRendererLogger("workflow.editor.canvas")
 
 const edgeTypes = { branch: BranchEdge }
+const CANVAS_FIT_VIEW_OPTIONS = { padding: 0.1, duration: 200 }
+const EMPTY_CANVAS_VIEWPORT = { x: 0, y: 0, zoom: 1 }
+const CONFIG_NAME_DATA_KEY = "__synapseConfigName"
 
 type WorkflowFlowNode = Node<Record<string, unknown>, string>
 type WorkflowFlowEdge = Edge<{ label?: string }, string>
 
 export interface WorkflowCanvasHandle {
   updateNodeConfig: (nodeId: string, config: Record<string, unknown>) => void
+  updateNodeName: (nodeId: string, name: string) => void
   removeEdgesByIds: (edgeIds: string[]) => void
   updateEdgeLabels: (sourceNodeId: string, branches: Array<{ id: string; label: string }>) => void
   deleteNodes: (nodeIds: string[]) => void
   copyNodes: (nodeIds: string[]) => void
 }
 
-function resolveBranchLabel(def: WorkflowDefinition, fromId: string, branchId: string): string | undefined {
-  const node = def.nodes.find((n) => n.id === fromId)
-  if (!node || node.type !== "switch") return undefined
-  const branches = (node.config as { branches?: Array<{ id: string; label: string }> }).branches
-  return branches?.find((b) => b.id === branchId)?.label ?? branchId
-}
-
 function defToFlow(def: WorkflowDefinition) {
-  const nodes: WorkflowFlowNode[] = def.nodes.map((n) => ({ id: n.id, type: n.type, position: n.position, data: { ...n.config, name: n.name }, selected: false, deletable: n.type !== "end" }))
+  const nodes: WorkflowFlowNode[] = def.nodes.map((n) => {
+    const data: Record<string, unknown> = { ...n.config, name: n.name }
+    if (Object.prototype.hasOwnProperty.call(n.config, "name")) {
+      data[CONFIG_NAME_DATA_KEY] = (n.config as { name?: unknown }).name
+    }
+    return { id: n.id, type: n.type, position: n.position, data, selected: false, deletable: n.type !== "end" }
+  })
   const edges: WorkflowFlowEdge[] = def.edges.map((e) => {
     const branchLabel = e.branch ? resolveBranchLabel(def, e.from, e.branch) : undefined
     return {
@@ -63,19 +69,20 @@ function defToFlow(def: WorkflowDefinition) {
 }
 
 function defaultConfig(type: string): Record<string, unknown> {
-  if (type === "switch") return { agent: "", prompt: "", variables: [], branches: [{ id: "branch1", label: "分支 1" }] }
-  if (type === "end") return { outputType: "text", template: "", variables: [] }
-  return { agent: "", prompt: "", variables: [] }
+  const manifest = nodeTypeRegistry.getManifest(type)
+  return (manifest?.defaultConfig ?? {}) as Record<string, unknown>
 }
 
 function defaultName(type: string): string {
   if (type === "switch") return "新分支"
   if (type === "end") return "结束"
-  return "新提示词"
+  const manifest = nodeTypeRegistry.getManifest(type)
+  return manifest?.title || "新提示词"
 }
 
 function flowNodeToWorkflowNode(node: WorkflowFlowNode): WorkflowNode {
-  const { name, ...config } = node.data
+  const { name, [CONFIG_NAME_DATA_KEY]: configName, ...config } = node.data
+  if (configName !== undefined) config.name = configName
   return {
     id: node.id,
     name: typeof name === "string" && name.trim() ? name : node.id,
@@ -103,9 +110,11 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
   const { nodes: initNodes, edges: initEdges } = defToFlow(definition)
   const [nodes, setNodes] = useNodesState(initNodes)
   const [edges, setEdges] = useEdgesState(initEdges)
-  const { screenToFlowPosition } = useReactFlow()
+  const { screenToFlowPosition, fitView, setViewport } = useReactFlow()
   const nodesRef = useRef(nodes)
   nodesRef.current = nodes
+  const edgesRef = useRef(edges)
+  edgesRef.current = edges
   // Synchronous definition ref — updated immediately on each onChange call so that
   // sequential handlers (e.g. node-delete + edge-delete in the same event) always
   // read the latest combined state instead of a stale closure capture.
@@ -122,8 +131,20 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
         if (n.id !== nodeId) return n
         const previousName = (n.data as { name?: unknown }).name
         const nextName = (config as { name?: unknown }).name ?? previousName
-        return { ...n, data: { ...config, ...(typeof nextName === "string" ? { name: nextName } : {}) } }
+        const nextData: Record<string, unknown> = {
+          ...config,
+          ...(typeof nextName === "string" ? { name: nextName } : {}),
+        }
+        if (Object.prototype.hasOwnProperty.call(config, "name")) {
+          nextData[CONFIG_NAME_DATA_KEY] = config.name
+        }
+        return { ...n, data: nextData }
       }))
+    },
+    updateNodeName: (nodeId, name) => {
+      setNodes((nds) => nds.map((n) =>
+        n.id !== nodeId ? n : { ...n, data: { ...n.data, name } },
+      ))
     },
     removeEdgesByIds: (edgeIds) => {
       if (edgeIds.length === 0) return
@@ -152,58 +173,66 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
   const handleNodesChange = useCallback((changes: NodeChange<WorkflowFlowNode>[]) => {
     const blockedEnd = changes.some((c) => c.type === "remove" && nodesRef.current.find((n) => n.id === c.id)?.type === "end")
     if (blockedEnd) toast("结束节点不能删除")
-    setNodes((currentNodes) => {
-      const filteredChanges = changes.filter((change) => {
-        if (change.type !== "remove") return true
-        const node = currentNodes.find((n) => n.id === change.id)
-        return node?.type !== "end"
-      })
-      const updated = applyNodeChanges(filteredChanges, currentNodes)
-      // Only propagate structural changes (add/remove) to the definition.
-      // Position changes are propagated on drag-end via onNodeDragStop to avoid
-      // excessive re-renders and premature dirty-marking during drag.
-      if (filteredChanges.some((change) => change.type !== "select" && change.type !== "dimensions" && change.type !== "position")) {
-        const newDef = { ...definitionRef.current, nodes: updated.map(flowNodeToWorkflowNode) }
-        definitionRef.current = newDef
-        onChange(newDef)
-      }
-      return updated
+    // Compute changes outside the setNodes updater — React docs say updater
+    // functions must be pure (no side effects), and calling onChange (a parent
+    // dispatch) inside the updater violates that contract.
+    const filteredChanges = changes.filter((change) => {
+      if (change.type !== "remove") return true
+      const node = nodesRef.current.find((n) => n.id === change.id)
+      return node?.type !== "end"
     })
+    const updated = applyNodeChanges(filteredChanges, nodesRef.current)
+    setNodes(updated)
+    // Only propagate structural changes (add/remove) to the definition.
+    // Position changes are propagated on drag-end via onNodeDragStop to avoid
+    // excessive re-renders and premature dirty-marking during drag.
+    if (filteredChanges.some((change) => change.type !== "select" && change.type !== "dimensions" && change.type !== "position")) {
+      const newDef = { ...definitionRef.current, nodes: updated.map(flowNodeToWorkflowNode) }
+      definitionRef.current = newDef
+      onChange(newDef)
+    }
   }, [onChange, setNodes])
 
   const handleEdgesChange = useCallback((changes: EdgeChange<WorkflowFlowEdge>[]) => {
-    setEdges((currentEdges) => {
-      const updated = applyEdgeChanges(changes, currentEdges)
-      if (changes.some((change) => change.type !== "select")) {
-        const newDef = { ...definitionRef.current, edges: updated.map(flowEdgeToWorkflowEdge) }
-        definitionRef.current = newDef
-        onChange(newDef)
-      }
-      return updated
-    })
+    const updated = applyEdgeChanges(changes, edgesRef.current)
+    setEdges(updated)
+    if (changes.some((change) => change.type !== "select")) {
+      const newDef = { ...definitionRef.current, edges: updated.map(flowEdgeToWorkflowEdge) }
+      definitionRef.current = newDef
+      onChange(newDef)
+    }
   }, [onChange, setEdges])
 
   const onConnect = useCallback((connection: Connection) => {
-    setEdges((eds) => {
-      const branchLabel = connection.sourceHandle
-        ? resolveBranchLabel(definitionRef.current, connection.source, connection.sourceHandle)
-        : undefined
-      const withBranch = branchLabel
-        ? { type: "branch", data: { label: branchLabel } }
-        : {}
-      const updated = addEdge({ ...connection, ...withBranch }, eds) as typeof eds
-      const wfEdges: WorkflowEdge[] = updated.map(flowEdgeToWorkflowEdge)
-      const newDef = { ...definitionRef.current, edges: wfEdges }
-      definitionRef.current = newDef
-      onChange(newDef)
-      return updated
+    const branchLabel = connection.sourceHandle
+      ? resolveBranchLabel(definitionRef.current, connection.source, connection.sourceHandle)
+      : undefined
+    const withBranch = branchLabel
+      ? { type: "branch", data: { label: branchLabel } }
+      : {}
+    const updated = addEdge({ ...connection, ...withBranch }, edgesRef.current) as WorkflowFlowEdge[]
+    setEdges(updated)
+    const wfEdges: WorkflowEdge[] = updated.map(flowEdgeToWorkflowEdge)
+    const newDef = { ...definitionRef.current, edges: wfEdges }
+    definitionRef.current = newDef
+    logger.info("edge connected", {
+      source: connection.source,
+      sourceHandle: connection.sourceHandle,
+      target: connection.target,
+      targetHandle: connection.targetHandle,
+      edgeCount: wfEdges.length,
     })
+    onChange(newDef)
   }, [onChange, setEdges])
 
   const onNodeDragStop = useCallback(() => {
     const wfNodes: WorkflowNode[] = nodesRef.current.map(flowNodeToWorkflowNode)
     const newDef = { ...definitionRef.current, nodes: wfNodes }
     definitionRef.current = newDef
+    logger.info("node drag stopped", {
+      nodeCount: wfNodes.length,
+      selectedNodeIds: nodesRef.current.filter((node) => node.selected).map((node) => node.id),
+    })
     onChange(newDef)
   }, [onChange])
 
@@ -222,16 +251,30 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     const name = defaultName(type)
     // Unselect existing nodes and add the new node as selected, matching pasteNodes
     // behaviour so the user can immediately configure the dropped node.
-    setNodes((nds) => nds.map((n) => ({ ...n, selected: false })).concat({ id, type, position, data: { ...config, name }, selected: true, deletable: true }))
+    const data: Record<string, unknown> = { ...config, name }
+    if (Object.prototype.hasOwnProperty.call(config, "name")) {
+      data[CONFIG_NAME_DATA_KEY] = config.name
+    }
+    setNodes((nds) => nds.map((n) => ({ ...n, selected: false })).concat({ id, type, position, data, selected: true, deletable: true }))
     const newWfNode: WorkflowNode = { id, name, type, position, config }
     const newDef = { ...definitionRef.current, nodes: [...definitionRef.current.nodes, newWfNode] }
     definitionRef.current = newDef
+    logger.info("node dropped", {
+      nodeId: id,
+      type,
+      position,
+      nodeCount: newDef.nodes.length,
+    })
     onChange(newDef)
     onNodeSelect?.(id)
   }, [screenToFlowPosition, onChange, setNodes, onNodeSelect])
 
   const selectionChangeHandler = useCallback(({ nodes: selectedNodes }: { nodes: WorkflowFlowNode[] }) => {
     if (runState && runState !== "idle") return
+    logger.info("selection changed", {
+      selectedNodeIds: selectedNodes.map((node) => node.id),
+      selectedCount: selectedNodes.length,
+    })
     onNodeSelect?.(selectedNodes.length === 1 ? selectedNodes[0].id : null)
   }, [runState, onNodeSelect])
 
@@ -257,6 +300,11 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     const copiedNodes = def.nodes.filter((n) => idSet.has(n.id))
     const copiedEdges = def.edges.filter((e) => idSet.has(e.from) && idSet.has(e.to))
     setClipboard({ nodes: copiedNodes, edges: copiedEdges })
+    logger.info("copy nodes", {
+      copiedNodeIds: copiedNodes.map((node) => node.id),
+      copiedNodeCount: copiedNodes.length,
+      copiedEdgeCount: copiedEdges.length,
+    })
     toast(`已复制 ${copiedNodes.length} 个节点`)
   }, [])
 
@@ -321,10 +369,16 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     // editor is reopened.
     definitionRef.current = newDef
 
-    const flowNodes = newNodes.map((n) => ({
-      id: n.id, type: n.type, position: n.position,
-      data: { ...n.config, name: n.name }, selected: true, deletable: n.type !== "end",
-    }))
+    const flowNodes = newNodes.map((n) => {
+      const data: Record<string, unknown> = { ...n.config, name: n.name }
+      if (Object.prototype.hasOwnProperty.call(n.config, "name")) {
+        data[CONFIG_NAME_DATA_KEY] = (n.config as { name?: unknown }).name
+      }
+      return {
+        id: n.id, type: n.type, position: n.position,
+        data, selected: true, deletable: n.type !== "end",
+      }
+    })
     setNodes((nds) => nds.map((n) => ({ ...n, selected: false })).concat(flowNodes))
 
     const flowEdges: WorkflowFlowEdge[] = newEdges.map((e) => {
@@ -345,6 +399,11 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
       const updated = currentEdges.filter((e) => !idSet.has(e.source) && !idSet.has(e.target))
       const newDef = { ...definitionRef.current, edges: updated.map(flowEdgeToWorkflowEdge) }
       definitionRef.current = newDef
+      logger.info("disconnect nodes", {
+        nodeIds,
+        removedEdgeCount: currentEdges.length - updated.length,
+        remainingEdgeCount: updated.length,
+      })
       onChange(newDef)
       return updated
     })
@@ -362,14 +421,61 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
     if (deletableIds.length < nodeIds.length) {
       toast("结束节点已跳过")
     }
-    const changes: NodeChange<WorkflowFlowNode>[] = deletableIds.map((id) => ({ type: "remove", id }))
-    handleNodesChange(changes)
-  }, [handleNodesChange])
+    logger.info("delete nodes", {
+      requestedNodeIds: nodeIds,
+      deletedNodeIds: deletableIds,
+    })
+    const idSet = new Set(deletableIds)
+    const previousEdges = edgesRef.current
+    const updatedNodes = nodesRef.current.filter((node) => !idSet.has(node.id))
+    const updatedEdges = previousEdges.filter((edge) => !idSet.has(edge.source) && !idSet.has(edge.target))
+    nodesRef.current = updatedNodes
+    edgesRef.current = updatedEdges
+    setNodes(updatedNodes)
+    setEdges(updatedEdges)
+
+    const newDef = {
+      ...definitionRef.current,
+      nodes: updatedNodes.map(flowNodeToWorkflowNode),
+      edges: updatedEdges.map(flowEdgeToWorkflowEdge),
+    }
+    definitionRef.current = newDef
+    logger.info("delete nodes complete", {
+      deletedNodeCount: deletableIds.length,
+      removedEdgeCount: previousEdges.length - updatedEdges.length,
+      remainingNodeCount: updatedNodes.length,
+      remainingEdgeCount: updatedEdges.length,
+    })
+    onChange(newDef)
+  }, [onChange, setEdges, setNodes])
 
   const requestRename = useCallback((nodeId: string) => {
     onNodeSelect?.(nodeId)
     onRequestRename?.(nodeId)
   }, [onNodeSelect, onRequestRename])
+
+  const handleAutoLayout = useCallback(() => {
+    const layouted = autoLayoutNodes(nodesRef.current, edges) as WorkflowFlowNode[]
+    setNodes(layouted)
+    const wfNodes: WorkflowNode[] = layouted.map(flowNodeToWorkflowNode)
+    const newDef = { ...definitionRef.current, nodes: wfNodes }
+    definitionRef.current = newDef
+    logger.info("auto layout applied", { nodeCount: layouted.length })
+    onChange(newDef)
+    requestAnimationFrame(() => {
+      void fitView(CANVAS_FIT_VIEW_OPTIONS)
+    })
+  }, [edges, onChange, setNodes, fitView])
+
+  const handleFitView = useCallback(() => {
+    if (nodesRef.current.length === 0) {
+      void setViewport(EMPTY_CANVAS_VIEWPORT, { duration: 200 })
+      return
+    }
+    requestAnimationFrame(() => {
+      void fitView(CANVAS_FIT_VIEW_OPTIONS)
+    })
+  }, [fitView, setViewport])
 
   const canvasActions = useMemo(() => ({
     clipboard, getSelectedNodeIds, copyNodes, pasteNodes, disconnectNodes, deleteNodes, requestRename,
@@ -419,6 +525,10 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
   const onPaneContextMenu = useCallback((event: MouseEvent | React.MouseEvent) => {
     event.preventDefault()
     const flowPos = screenToFlowPosition({ x: event.clientX, y: event.clientY })
+    logger.info("pane context menu opened", {
+      flowX: flowPos.x,
+      flowY: flowPos.y,
+    })
     setPaneMenu({ screenX: event.clientX, screenY: event.clientY, flowX: flowPos.x, flowY: flowPos.y })
   }, [screenToFlowPosition])
 
@@ -451,7 +561,7 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
           selectionOnDrag selectionMode={SelectionMode.Partial}
           fitView panOnScroll panOnScrollMode={PanOnScrollMode.Free}>
           <Background />
-          <Controls />
+          <Controls fitViewOptions={CANVAS_FIT_VIEW_OPTIONS} onFitView={handleFitView} />
         </ReactFlow>
         {paneMenu && (
           <div
@@ -459,6 +569,16 @@ function CanvasContent({ definition, nodeResults, runState, onChange, onNodeSele
             style={{ left: paneMenu.screenX, top: paneMenu.screenY }}
             onMouseDown={(e) => e.stopPropagation()}
           >
+            <button
+              className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+              onClick={() => {
+                handleAutoLayout()
+                setPaneMenu(null)
+              }}
+            >
+              <LayoutGrid className="size-4" />
+              自动布局
+            </button>
             <button
               className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0"
               disabled={!clipboard}
@@ -482,7 +602,7 @@ export const WorkflowCanvas = forwardRef<WorkflowCanvasHandle, WorkflowCanvasPro
 function WorkflowCanvas(props, ref) {
   return (
     <ReactFlowProvider>
-      <CanvasContent ref={ref} {...props} />
+      <CanvasContent key={`${props.definition.id}:${props.definition.version}`} ref={ref} {...props} />
     </ReactFlowProvider>
   )
 })

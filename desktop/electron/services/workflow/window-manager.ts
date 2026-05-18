@@ -17,7 +17,13 @@ export class WorkflowWindowManager {
     const existing = this.editorWindows.get(workflowId)
     if (existing && !existing.isDestroyed()) {
       logger.info("workflow editor window reused", { workflowId, runId })
+      try {
+        existing.webContents.send("synapse:workflow:editor-refocus", { runId })
+      } catch (err) {
+        logger.warn("workflow editor window refocus send failed", { workflowId, runId, error: err instanceof Error ? err.message : String(err) })
+      }
       existing.focus()
+      this.closeRunnerWindow(workflowId, "workflow runner window closed after editor opened")
       return existing
     }
 
@@ -29,7 +35,9 @@ export class WorkflowWindowManager {
     const params = new URLSearchParams({ window: "workflow-editor", workflowId })
     if (runId) params.set("runId", runId)
     const url = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${params.toString()}`
-    void win.loadURL(url)
+    void win.loadURL(url).catch((err: Error) => {
+      logger.error("workflow editor window URL load failed", { workflowId, url, error: err.message })
+    })
 
     const windowId = `workflow-editor:${workflowId}`
     if (this.mainWindowManager) {
@@ -49,6 +57,7 @@ export class WorkflowWindowManager {
       this.editorWindows.delete(workflowId)
     })
     this.editorWindows.set(workflowId, win)
+    this.closeRunnerWindow(workflowId, "workflow runner window closed after editor opened")
     logger.info("workflow editor window opened", { workflowId, runId })
     return win
   }
@@ -57,8 +66,13 @@ export class WorkflowWindowManager {
     const existing = this.runnerWindows.get(workflowId)
     if (existing && !existing.isDestroyed()) {
       logger.info("workflow runner window reused — switching run", { workflowId, newRunId: runId })
-      existing.webContents.send("synapse:workflow:runner-switch-run", { runId })
+      try {
+        existing.webContents.send("synapse:workflow:runner-switch-run", { runId })
+      } catch (err) {
+        logger.warn("workflow runner window switch-run send failed", { workflowId, newRunId: runId, error: err instanceof Error ? err.message : String(err) })
+      }
       existing.focus()
+      this.closeEditorWindow(workflowId, "workflow editor window closed after runner opened")
       return existing
     }
 
@@ -69,7 +83,9 @@ export class WorkflowWindowManager {
 
     const params = new URLSearchParams({ window: "workflow-runner", workflowId, runId })
     const url = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${params.toString()}`
-    void win.loadURL(url)
+    void win.loadURL(url).catch((err: Error) => {
+      logger.error("workflow runner window URL load failed", { workflowId, runId, url, error: err.message })
+    })
 
     const windowId = `workflow-runner:${workflowId}`
     if (this.mainWindowManager) {
@@ -89,41 +105,19 @@ export class WorkflowWindowManager {
       this.runnerWindows.delete(workflowId)
     })
     this.runnerWindows.set(workflowId, win)
+    this.closeEditorWindow(workflowId, "workflow editor window closed after runner opened")
     logger.info("workflow runner window opened", { workflowId, runId })
     return win
   }
 
-  focusEditor(workflowId: string): boolean {
-    const win = this.editorWindows.get(workflowId)
-    if (win && !win.isDestroyed()) { win.focus(); return true }
-    logger.info("workflow editor focus skipped — window not found or destroyed", { workflowId })
-    return false
-  }
-
   forceClose(workflowId: string): void {
-    const editor = this.editorWindows.get(workflowId)
-    if (editor && !editor.isDestroyed()) {
-      logger.info("workflow editor window force-closed", { workflowId })
-      const windowId = `workflow-editor:${workflowId}`
-      this.healthServices.get(windowId)?.detach()
-      this.healthServices.delete(windowId)
-      editor.destroy()
-    }
-    this.editorWindows.delete(workflowId)
+    this.closeEditorWindow(workflowId, "workflow editor window force-closed")
   }
 
   forceCloseAll(workflowId: string): void {
     logger.info("workflow force-close-all", { workflowId })
     this.forceClose(workflowId)
-    const runner = this.runnerWindows.get(workflowId)
-    if (runner && !runner.isDestroyed()) {
-      logger.info("workflow runner window force-closed", { workflowId })
-      const windowId = `workflow-runner:${workflowId}`
-      this.healthServices.get(windowId)?.detach()
-      this.healthServices.delete(windowId)
-      runner.destroy()
-    }
-    this.runnerWindows.delete(workflowId)
+    this.closeRunnerWindow(workflowId, "workflow runner window force-closed")
   }
 
   hasActiveRun(workflowId: string): boolean {
@@ -140,5 +134,29 @@ export class WorkflowWindowManager {
     return open.length > 0
       ? { canSync: false, blockers: open.map((id) => `Workflow editor open: ${id}`) }
       : { canSync: true, blockers: [] }
+  }
+
+  private closeEditorWindow(workflowId: string, message: string): void {
+    const editor = this.editorWindows.get(workflowId)
+    if (editor && !editor.isDestroyed()) {
+      logger.info(message, { workflowId })
+      const windowId = `workflow-editor:${workflowId}`
+      this.healthServices.get(windowId)?.detach()
+      this.healthServices.delete(windowId)
+      editor.destroy()
+    }
+    this.editorWindows.delete(workflowId)
+  }
+
+  private closeRunnerWindow(workflowId: string, message: string): void {
+    const runner = this.runnerWindows.get(workflowId)
+    if (runner && !runner.isDestroyed()) {
+      logger.info(message, { workflowId })
+      const windowId = `workflow-runner:${workflowId}`
+      this.healthServices.get(windowId)?.detach()
+      this.healthServices.delete(windowId)
+      runner.destroy()
+    }
+    this.runnerWindows.delete(workflowId)
   }
 }

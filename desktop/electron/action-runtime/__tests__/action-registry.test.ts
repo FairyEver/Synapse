@@ -87,7 +87,7 @@ describe("MainActionRegistry", () => {
       { id: "builtin.script", fields: ["script", "shell", "env", "pathStrategy", "posixLogin", "timeoutMins"] },
       {
         id: "builtin.http-request",
-        fields: ["method", "url", "headers", "query", "bodyType", "body", "timeoutMins"],
+        fields: ["method", "url", "headers", "query", "bodyType", "body", "timeoutMins", "auth"],
       },
     ]))
   })

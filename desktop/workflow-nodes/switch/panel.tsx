@@ -2,14 +2,19 @@ import { useRef, useState } from "react"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2 } from "lucide-react"
-import { agentDefinitions } from "@/definitions/generated/renderer-registry"
+import { AlertTriangle, ChevronDown, Plus, Trash2 } from "lucide-react"
+import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
+import type { ModelTier } from "@/types/provider-model"
+import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowParam } from "@/types/workflow"
 import type { SwitchNodeConfig, SwitchBranch } from "./schema"
 import { VariableBindingEditor } from "../variable-binding-editor"
 import { PromptEditor } from "../prompt-editor"
 import { CollapsibleSection } from "../collapsible-section"
-import { AgentIcon, getAgentLabel } from "../agent-icon"
+import { useProviderLookup } from "../provider-lookup-context"
+import { ProjectSelect } from "../project-select"
+
+const TIER_LABELS: Record<ModelTier, string> = { default: "主模型", haiku: "Haiku", sonnet: "Sonnet", opus: "Opus" }
 
 const NO_DEFAULT = "__none__"
 
@@ -18,13 +23,20 @@ export interface SwitchNodePanelProps {
   onChange: (config: SwitchNodeConfig) => void
   upstreamNodes: { id: string; name: string }[]
   workflowParams: WorkflowParam[]
+  projects: readonly SynapseProjectConfig[]
+  defaultProjectName?: string
+  defaultProviderId?: string
+  defaultModelTier?: string
 }
 
-export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParams }: SwitchNodePanelProps) {
+export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParams, projects, defaultProjectName, defaultProviderId, defaultModelTier }: SwitchNodePanelProps) {
   const [prompt, setPrompt] = useState(config.prompt)
   const [branches, setBranches] = useState<SwitchBranch[]>(config.branches)
   const [defaultBranch, setDefaultBranch] = useState<string>(config.defaultBranch ?? NO_DEFAULT)
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false)
   const lastCommittedRef = useRef<SwitchNodeConfig>(config)
+  const { getProviderName, getModelName, isProviderAvailable } = useProviderLookup()
+  const providerUnavailable = Boolean(config.providerId && !isProviderAvailable(config.providerId))
 
   const commit = (overrides?: Partial<SwitchNodeConfig>) => {
     const next: SwitchNodeConfig = {
@@ -67,28 +79,24 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
   return (
     <div className="grid gap-2">
       <CollapsibleSection title="执行配置">
-        <Select value={config.agent} onValueChange={(agent) => commit({ agent })}>
-          <SelectTrigger className="h-7 text-xs">
-            <SelectValue placeholder="选择 Agent">
-              {config.agent ? (
-                <span className="flex items-center gap-2">
-                  <AgentIcon agentId={config.agent} />
-                  {getAgentLabel(config.agent)}
-                </span>
-              ) : null}
-            </SelectValue>
-          </SelectTrigger>
-          <SelectContent>
-            {agentDefinitions.map((def) => (
-              <SelectItem key={def.id} value={def.id} className="text-xs">
-                <span className="flex items-center gap-2">
-                  <AgentIcon agentId={def.id} />
-                  {def.label}
-                </span>
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <Button variant="outline" className={`w-full justify-between h-7 text-xs${providerUnavailable ? " border-destructive" : ""}`} onClick={() => setProviderDialogOpen(true)}>
+          <span className="flex min-w-0 items-center gap-1 truncate">
+            {providerUnavailable && <AlertTriangle className="size-3 shrink-0 text-destructive" />}
+            {config.providerId
+              ? `${getProviderName(config.providerId) ?? config.providerId} · ${getModelName(config.providerId, config.modelTier ?? "default") ?? TIER_LABELS[config.modelTier ?? "default"]}`
+              : defaultProviderId
+                ? `继承: ${getProviderName(defaultProviderId) ?? defaultProviderId} · ${getModelName(defaultProviderId, (defaultModelTier as ModelTier) ?? "default") ?? TIER_LABELS[(defaultModelTier as ModelTier) ?? "default"]}`
+                : "选择供应商 + 模型"}
+          </span>
+          <ChevronDown className="size-3.5 text-muted-foreground" />
+        </Button>
+        {providerUnavailable && <p className="text-[11px] text-destructive">供应商不可用，请重新选择</p>}
+        <ProviderModelSelectDialog
+          open={providerDialogOpen}
+          onOpenChange={setProviderDialogOpen}
+          defaultSelection={config.providerId ? { providerId: config.providerId, modelTier: config.modelTier ?? "default" } : undefined}
+          onSelect={(s) => commit({ providerId: s.providerId, modelTier: s.modelTier })}
+        />
       </CollapsibleSection>
 
       <CollapsibleSection title="输入映射" summary={varSummary}>
@@ -97,6 +105,15 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
           onChange={(variables) => commit({ variables })}
           upstreamNodes={upstreamNodes}
           workflowParams={workflowParams}
+        />
+      </CollapsibleSection>
+
+      <CollapsibleSection title="项目">
+        <ProjectSelect
+          value={config.projectId}
+          onChange={(projectId) => commit({ projectId })}
+          projects={projects}
+          placeholder={defaultProjectName ? `继承: ${defaultProjectName}` : "继承默认"}
         />
       </CollapsibleSection>
 

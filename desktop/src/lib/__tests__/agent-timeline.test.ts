@@ -103,6 +103,85 @@ describe("agent timeline conversion", () => {
     expect(third[1]).toEqual(expect.objectContaining({ kind: "toolCall", toolName: "Bash" }))
   })
 
+  it("keeps thinking deltas separated across tool boundaries", () => {
+    const beforeTool = appendAgentTimelineEvent([], {
+      type: "stream",
+      deltaType: "thinking_delta",
+      thinking: "Inspect first.",
+    }, "2026-05-14T00:00:00.000Z", "claude")
+    const withTool = appendAgentTimelineEvent(beforeTool, {
+      type: "toolUse",
+      toolName: "Read",
+      toolInput: "package.json",
+    }, "2026-05-14T00:00:01.000Z", "claude")
+    const afterTool = appendAgentTimelineEvent(withTool, {
+      type: "stream",
+      deltaType: "thinking_delta",
+      thinking: "Summarize result.",
+    }, "2026-05-14T00:00:02.000Z", "claude")
+
+    expect(afterTool.map((item) => item.kind)).toEqual(["thinking", "toolCall", "thinking"])
+    expect(afterTool[0]).toEqual(expect.objectContaining({ content: "Inspect first." }))
+    expect(afterTool[2]).toEqual(expect.objectContaining({ content: "Summarize result." }))
+  })
+
+  it("ignores empty stream deltas", () => {
+    const afterEmptyText = appendAgentTimelineEvent([], {
+      type: "stream",
+      deltaType: "text_delta",
+      text: "",
+    }, "2026-05-14T00:00:03.000Z", "claude")
+    const afterEmptyThinking = appendAgentTimelineEvent(afterEmptyText, {
+      type: "stream",
+      deltaType: "thinking_delta",
+      thinking: "",
+    }, "2026-05-14T00:00:04.000Z", "claude")
+
+    expect(afterEmptyThinking).toEqual([])
+  })
+
+  it("keeps interleaved text and thinking stream blocks in event order", () => {
+    const textThenThinking = appendAgentTimelineEvent(appendAgentTimelineEvent([], {
+      type: "stream",
+      deltaType: "text_delta",
+      text: "Visible first.",
+    }, "2026-05-14T00:00:05.000Z", "claude"), {
+      type: "stream",
+      deltaType: "thinking_delta",
+      thinking: "Reason second.",
+    }, "2026-05-14T00:00:06.000Z", "claude")
+    const textAfterThinking = appendAgentTimelineEvent(textThenThinking, {
+      type: "stream",
+      deltaType: "text_delta",
+      text: " Visible third.",
+    }, "2026-05-14T00:00:07.000Z", "claude")
+
+    expect(textAfterThinking.map((item) => item.kind)).toEqual(["message", "thinking", "message"])
+    expect(textAfterThinking[0]).toEqual(expect.objectContaining({ content: "Visible first." }))
+    expect(textAfterThinking[1]).toEqual(expect.objectContaining({ content: "Reason second." }))
+    expect(textAfterThinking[2]).toEqual(expect.objectContaining({ content: " Visible third." }))
+
+    const thinkingThenText = appendAgentTimelineEvent(appendAgentTimelineEvent([], {
+      type: "stream",
+      deltaType: "thinking_delta",
+      thinking: "Reason first.",
+    }, "2026-05-14T00:00:08.000Z", "claude"), {
+      type: "stream",
+      deltaType: "text_delta",
+      text: "Visible second.",
+    }, "2026-05-14T00:00:09.000Z", "claude")
+    const thinkingAfterText = appendAgentTimelineEvent(thinkingThenText, {
+      type: "stream",
+      deltaType: "thinking_delta",
+      thinking: " Reason third.",
+    }, "2026-05-14T00:00:10.000Z", "claude")
+
+    expect(thinkingAfterText.map((item) => item.kind)).toEqual(["thinking", "message", "thinking"])
+    expect(thinkingAfterText[0]).toEqual(expect.objectContaining({ content: "Reason first." }))
+    expect(thinkingAfterText[1]).toEqual(expect.objectContaining({ content: "Visible second." }))
+    expect(thinkingAfterText[2]).toEqual(expect.objectContaining({ content: " Reason third." }))
+  })
+
   it("promotes a standalone result event to a visible message item", () => {
     const userMessage = [{
       id: "user:1",
@@ -123,6 +202,56 @@ describe("agent timeline conversion", () => {
       role: "assistant",
       content: "hermes reply",
       agentType: "hermes",
+    }))
+  })
+
+  it("keeps result text visible after tool boundaries", () => {
+    const assistant = appendAgentTimelineEvent([], {
+      type: "stream",
+      deltaType: "text_delta",
+      text: "I will inspect it.",
+    }, "2026-05-14T01:00:00.000Z", "claude")
+    const withTool = appendAgentTimelineEvent(assistant, {
+      type: "toolResult",
+      toolName: "Read",
+      content: "package contents",
+      success: true,
+    }, "2026-05-14T01:00:01.000Z", "claude")
+    const after = appendAgentTimelineEvent(withTool, {
+      type: "result",
+      content: "Final answer.",
+      done: true,
+      usage: { input_tokens: 1 },
+    }, "2026-05-14T01:00:02.000Z", "claude")
+
+    expect(after.map((item) => item.kind)).toEqual(["message", "toolResult", "message"])
+    expect(after[0]).toEqual(expect.objectContaining({ content: "I will inspect it." }))
+    expect(after[2]).toEqual(expect.objectContaining({
+      role: "assistant",
+      content: "Final answer.",
+      metadata: { usage: { input_tokens: 1 } },
+    }))
+  })
+
+  it("uses final result content to complete an existing streamed assistant message", () => {
+    const partial = appendAgentTimelineEvent([], {
+      type: "stream",
+      deltaType: "text_delta",
+      text: "Partial",
+    }, "2026-05-14T02:00:00.000Z", "claude")
+    const after = appendAgentTimelineEvent(partial, {
+      type: "result",
+      content: "Partial final answer.",
+      done: true,
+      usage: { output_tokens: 3 },
+    }, "2026-05-14T02:00:01.000Z", "claude")
+
+    expect(after).toHaveLength(1)
+    expect(after[0]).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      content: "Partial final answer.",
+      metadata: { usage: { output_tokens: 3 } },
     }))
   })
 })

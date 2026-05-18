@@ -2,6 +2,7 @@ import type {
   AgentCommandEntryV1,
   AgentCompressStateEntryV1,
   ConversationEntryV1,
+  AgentEventEntryV1,
   DataNamespace,
 } from "../../runtime/data-repo"
 import type {
@@ -20,11 +21,7 @@ import type { ReplyOutboxService } from "../reply-target"
 import type { ReplyTarget } from "../reply-target"
 import type { ProcessIsolationResolver } from "../execution-isolation"
 import { resolveShellCommand } from "../shell-exec"
-import {
-  prepareCodexRuntime,
-  type ProviderConfigService,
-  type ProviderRuntimeView,
-} from "../provider-config"
+import type { ProviderService } from "../provider"
 import { AgentCommandRouter } from "./command-router"
 import type {
   RegisteredPromptCommand,
@@ -41,14 +38,14 @@ import {
   AgentSessionRepository,
   conversationId,
 } from "./session-repository"
+import { SessionManager, type AgentLiveSessionFactory } from "./session-manager"
 import { SessionLifecycleManager } from "./session-lifecycle"
 import type {
   RuntimeSessionState,
   PendingPermissionState,
 } from "./session-lifecycle"
-import { MessageRouter } from "./message-router"
+import { ConversationRouter } from "./conversation-router"
 import type {
-  AgentAdapter,
   AgentEvent,
   AgentMessage,
   AgentPendingPermission,
@@ -60,8 +57,9 @@ import type {
   ScheduledAgentSendResult,
 } from "./types"
 import type { SkillRegistry } from "./skill-registry"
+import { sanitizeError } from "../error-sanitize"
 
-export interface AgentCommandProcessRunner {
+interface CommandExecutionRunner {
   run(request: ControlledProcessRunRequest): Promise<ControlledProcessResult>
 }
 
@@ -69,26 +67,27 @@ export interface AgentRuntimeServiceDeps {
   readonly projectId: string
   readonly workDir?: string
   readonly conversations: DataNamespace<ConversationEntryV1>
-  readonly adapter: AgentAdapter
-  readonly adapterFactory?: AgentAdapterFactory
+  readonly providerService: ProviderService
+  readonly createSession?: AgentLiveSessionFactory
   readonly agentType?: string
   readonly sessionRepository?: AgentSessionRepository
+  readonly agentEvents?: DataNamespace<AgentEventEntryV1>
   readonly eventBus?: ScopedEventBus
   readonly logger?: StructuredLogger
   readonly now?: () => Date
   readonly pendingQueueLimit?: number
+  readonly permissionTimeoutMs?: number
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
   readonly outbox?: ReplyOutboxService
   readonly governance?: AgentGovernanceService
-  readonly providerConfig?: ProviderConfigService
   readonly compressState?: DataNamespace<AgentCompressStateEntryV1>
   readonly registeredPromptCommands?: readonly RegisteredPromptCommand[]
   readonly agentNativeSlashAllowlist?: readonly string[]
   readonly unknownSlashBehavior?: "reject" | "passthrough"
   readonly customCommands?: CustomCommandRegistry
   readonly skills?: SkillRegistry
-  readonly commandRunner?: AgentCommandProcessRunner
+  readonly commandRunner?: CommandExecutionRunner
   readonly executionIsolation?: ProcessIsolationResolver
   readonly replyTargets?: {
     rememberReplyTarget(target: ReplyTarget): void
@@ -96,8 +95,6 @@ export interface AgentRuntimeServiceDeps {
     getAgentEnv(projectId: string, sessionKey: string): Record<string, string> | undefined
   }
 }
-
-export type AgentAdapterFactory = (view: ProviderRuntimeView) => AgentAdapter | Promise<AgentAdapter>
 
 export interface AgentRuntimeStatus {
   readonly projectId: string
@@ -111,9 +108,10 @@ export interface AgentRuntimeStatus {
 export class AgentRuntimeService {
   private readonly deps: AgentRuntimeServiceDeps
   private readonly repository: AgentSessionRepository
-  private readonly commandRouter: AgentCommandRouter | undefined
+  private readonly commandRouter: AgentCommandRouter
   private readonly sessionLifecycle: SessionLifecycleManager
-  private readonly messageRouter: MessageRouter
+  private readonly sessionManager: SessionManager
+  private readonly conversationRouter: ConversationRouter
   private readonly states = new Map<string, RuntimeSessionState>()
   private readonly pendingPermissions = new Map<string, PendingPermissionState>()
 
@@ -124,80 +122,88 @@ export class AgentRuntimeService {
       conversations: deps.conversations,
       now: deps.now,
     })
+    this.sessionManager = new SessionManager({
+      projectId: deps.projectId,
+      workDir: deps.workDir,
+      repository: this.repository,
+      providerService: deps.providerService,
+      states: this.states,
+      pendingPermissions: this.pendingPermissions,
+      logger: deps.logger,
+      now: deps.now,
+      createSession: deps.createSession,
+    })
     this.sessionLifecycle = new SessionLifecycleManager({
       projectId: deps.projectId,
       repository: this.repository,
       states: this.states,
       pendingPermissions: this.pendingPermissions,
+      sessionManager: this.sessionManager,
       logger: deps.logger,
       getActiveAgentType: () => this.getActiveAgentType(),
     })
-    this.commandRouter = deps.providerConfig
-      ? new AgentCommandRouter({
-        projectId: deps.projectId,
-        agentType: this.agentType(),
-        resolveAgentType: () => this.getActiveAgentType(),
-        providerConfig: deps.providerConfig,
-        registeredPromptCommands: deps.registeredPromptCommands,
-        agentNativeSlashAllowlist: deps.agentNativeSlashAllowlist,
-        unknownSlashBehavior: deps.unknownSlashBehavior,
-        customCommands: deps.customCommands,
-        skills: deps.skills,
-        resetSession: (message) => this.resetMessageSession(message),
-        showReference: (message, args) => this.showReferenceForMessage(message, args),
-        listCommands: (message) => this.listPublishedCommands(message.platform),
-        runCustomCommand: (command, args, message) =>
-          this.runCustomCommand(command, args, message),
-        compressSession: (message, conversation) =>
-          this.messageRouter.compressSession(message, conversation),
-      })
-      : undefined
-    this.messageRouter = new MessageRouter({
+    this.commandRouter = new AgentCommandRouter({
+      projectId: deps.projectId,
+      agentType: this.agentType(),
+      resolveAgentType: () => this.getActiveAgentType(),
+      providerService: deps.providerService,
+      registeredPromptCommands: deps.registeredPromptCommands,
+      agentNativeSlashAllowlist: deps.agentNativeSlashAllowlist,
+      unknownSlashBehavior: deps.unknownSlashBehavior,
+      customCommands: deps.customCommands,
+      skills: deps.skills,
+      logger: deps.logger,
+      resetSession: (message) => this.resetMessageSession(message),
+      setPermissionMode: (_message, conversation, mode) =>
+        this.setPermissionMode({
+          conversationId: conversation.id,
+          mode,
+          actor: { kind: "user" },
+        }),
+      showReference: (message, args) => this.showReferenceForMessage(message, args),
+      listCommands: (message) => this.listPublishedCommands(message.platform),
+      runCustomCommand: (command, args, message) =>
+        this.runCustomCommand(command, args, message),
+      compressSession: (message, conversation) =>
+        this.conversationRouter.compressSession(message, conversation),
+    })
+    this.conversationRouter = new ConversationRouter({
       deps: {
         projectId: deps.projectId,
         workDir: deps.workDir,
         eventBus: deps.eventBus,
         logger: deps.logger,
         governance: deps.governance,
-        compressState: deps.compressState,
         pendingQueueLimit: deps.pendingQueueLimit,
+        permissionTimeoutMs: deps.permissionTimeoutMs,
         outbox: deps.outbox,
-        auditSink: deps.auditSink,
-        executionIsolation: deps.executionIsolation,
         replyTargets: deps.replyTargets,
+        agentEvents: deps.agentEvents,
         now: deps.now,
       },
       repository: this.repository,
+      sessionManager: this.sessionManager,
       commandRouter: this.commandRouter,
       pendingPermissions: this.pendingPermissions,
-      callbacks: {
-        stateForConversation: (id, msg) => this.stateForConversation(id, msg),
-        resolveAdapter: (agentType) => this.resolveAdapter(agentType),
-        resolveProcessIsolation: (msg) => this.resolveProcessIsolation(msg),
-        workDirFor: (msg) => this.workDirFor(msg),
-        getOrCreateCompressionState: (agentType) => this.getOrCreateCompressionState(agentType),
-        markCompressionState: (agentType, status, error) =>
-          this.markCompressionState(agentType, status, error),
-      },
     })
   }
 
   async send(message: AgentMessage): Promise<AgentRuntimeTurnResult> {
-    return this.messageRouter.send(message)
+    return this.conversationRouter.send(message)
   }
 
   async sendToConversation(
     message: AgentMessage,
     conversationId: string,
   ): Promise<AgentRuntimeTurnResult> {
-    return this.messageRouter.sendToConversation(message, conversationId)
+    return this.conversationRouter.sendToConversation(message, conversationId)
   }
 
   async sendNewSession(
     message: AgentMessage,
     name: string,
   ): Promise<AgentRuntimeTurnResult> {
-    return this.messageRouter.sendNewSession(message, name)
+    return this.conversationRouter.sendNewSession(message, name)
   }
 
   async sendSideSessionWithTimeout(
@@ -205,7 +211,7 @@ export class AgentRuntimeService {
     name: string,
     timeoutMs: number,
   ): Promise<AgentRuntimeRelayResult> {
-    return this.messageRouter.sendSideSessionWithTimeout(message, name, timeoutMs)
+    return this.conversationRouter.sendSideSessionWithTimeout(message, name, timeoutMs)
   }
 
   async sendScheduled(input: ScheduledAgentSendInput): Promise<ScheduledAgentSendResult> {
@@ -218,72 +224,94 @@ export class AgentRuntimeService {
       content: input.prompt,
       modeOverride: input.mode,
       agentType: input.agentType,
+      providerId: input.providerId,
+      modelTier: input.modelTier,
     }
 
     const ac = new AbortController()
     const externalSignal = input.abortSignal
 
     if (externalSignal?.aborted) {
-      return {
+      const durationMs = Date.now() - startMs
+      const result: ScheduledAgentSendResult = {
         conversationId: "",
         status: "error",
         error: "Aborted before execution",
-        durationMs: Date.now() - startMs,
+        durationMs,
       }
+      this.logScheduledAgentFailure(input, message, result)
+      return result
     }
 
     const onExternalAbort = () => ac.abort()
     externalSignal?.addEventListener("abort", onExternalAbort, { once: true })
 
-    const timeout = setTimeout(() => ac.abort(), input.timeoutMs)
+    const timeout = input.timeoutMs > 0
+      ? setTimeout(() => ac.abort(), input.timeoutMs)
+      : undefined
 
     try {
       let result: AgentRuntimeTurnResult
 
       if (input.sessionPolicy === "fresh" || !input.lastConversationId) {
         const name = formatScheduledSessionName()
-        result = await this.sendNewSession(message, name)
+        result = await this.conversationRouter.sendNewSession(message, name, { abortSignal: ac.signal })
       } else {
         try {
-          result = await this.sendToConversation(message, input.lastConversationId)
+          result = await this.conversationRouter.sendToConversation(message, input.lastConversationId, {
+            abortSignal: ac.signal,
+          })
         } catch (resumeError) {
           const isNotFound = resumeError instanceof Error
             && resumeError.message.includes("not found")
           if (!isNotFound) throw resumeError
+          this.logScheduledResumeFallback(input, message, resumeError)
           const name = formatScheduledSessionName()
-          result = await this.sendNewSession(message, name)
+          result = await this.conversationRouter.sendNewSession(message, name, { abortSignal: ac.signal })
         }
       }
 
       const timedOut = ac.signal.aborted && !externalSignal?.aborted
       if (timedOut) {
-        return {
+        const scheduledResult: ScheduledAgentSendResult = {
           conversationId: result.conversationId,
           status: "timeout",
           error: `Execution exceeded ${input.timeoutMs}ms timeout`,
           durationMs: Date.now() - startMs,
         }
+        this.logScheduledAgentFailure(input, message, scheduledResult, undefined, result.agentSessionId)
+        return scheduledResult
       }
 
-      return {
+      const scheduledResult: ScheduledAgentSendResult = {
         conversationId: result.conversationId,
         status: result.error ? "error" : "success",
         summary: result.resultText || undefined,
-        error: result.error,
+        error: result.error ? sanitizeError(result.error) : undefined,
         durationMs: Date.now() - startMs,
       }
+      if (scheduledResult.status !== "success") {
+        this.logScheduledAgentFailure(input, message, scheduledResult, result.error?.length, result.agentSessionId)
+      } else {
+        this.logScheduledAgentCompletion(input, message, scheduledResult, result.agentSessionId)
+      }
+      return scheduledResult
     } catch (error) {
       const isTimeout = ac.signal.aborted && !externalSignal?.aborted
-      return {
+      const errorMessageText = errorMessage(error)
+      const errorLength = isTimeout ? undefined : errorMessageText.length
+      const scheduledResult: ScheduledAgentSendResult = {
         conversationId: "",
         status: isTimeout ? "timeout" : "error",
         error: isTimeout
           ? `Execution exceeded ${input.timeoutMs}ms timeout`
-          : error instanceof Error ? error.message : String(error),
+          : sanitizeError(errorMessageText),
         durationMs: Date.now() - startMs,
       }
+      this.logScheduledAgentFailure(input, message, scheduledResult, errorLength)
+      return scheduledResult
     } finally {
-      clearTimeout(timeout)
+      if (timeout) clearTimeout(timeout)
       externalSignal?.removeEventListener("abort", onExternalAbort)
     }
   }
@@ -291,78 +319,114 @@ export class AgentRuntimeService {
   async cancelTurn(conversationId: string): Promise<CancelTurnResult> {
     const state = this.states.get(conversationId)
     if (!state || !state.busy) {
-      return { status: "no-active-turn" }
+      const result: CancelTurnResult = { status: "no-active-turn" }
+      this.logTurnCancellation("cancel", conversationId, state, result)
+      return result
     }
     if (state.cancelState) {
-      return { status: state.cancelState.escalationTimer ? "graceful-pending" : "hard-killed" }
+      const result: CancelTurnResult = {
+        status: state.cancelState.escalationTimer ? "graceful-pending" : "hard-killed",
+      }
+      this.logTurnCancellation("cancel", conversationId, state, result, { alreadyRequested: true })
+      return result
     }
 
     state.cancelState = { requestedAt: Date.now() }
 
-    if (state.pending) {
-      this.pendingPermissions.delete(state.pending.requestId)
-      state.pending.resolve()
-      state.pending = undefined
-    }
+    this.sessionManager.settlePending(state)
 
-    const liveSession = state.liveSession
-    if (liveSession) {
-      let gracefulSent = false
-      if (liveSession.cancelCurrentTurn) {
-        try {
-          gracefulSent = await liveSession.cancelCurrentTurn()
-        } catch {
-          gracefulSent = false
-        }
-      }
+    if (state.liveSession) {
+      const gracefulSent = await this.sessionManager.interrupt(conversationId)
       if (!gracefulSent) {
         state.turnAbortController?.abort("user-cancel")
-        await liveSession.close()
-        state.liveSession = undefined
-        return { status: "hard-killed" }
+        const result: CancelTurnResult = { status: "hard-killed" }
+        this.logTurnCancellation("cancel", conversationId, state, result, { gracefulSent: false })
+        await this.sessionManager.closeCurrentTurn(conversationId)
+        return result
       }
-      state.cancelState.escalationTimer = setTimeout(() => {
-        this.emitCancelEscalation(conversationId)
+      const conversation = await this.repository.get(conversationId)
+      const sessionKey = conversation?.sessionKey ?? ""
+      const escalationTimer = setTimeout(() => {
+        if (state.cancelState?.escalationTimer !== escalationTimer || !state.busy) return
+        this.emitCancelEscalation(conversationId, sessionKey)
       }, 5000)
-      return { status: "graceful-pending" }
+      state.cancelState.escalationTimer = escalationTimer
+      const result: CancelTurnResult = { status: "graceful-pending" }
+      this.logTurnCancellation("cancel", conversationId, state, result, { gracefulSent: true })
+      return result
     }
 
     if (state.turnAbortController) {
       state.turnAbortController.abort("user-cancel")
-      return { status: "hard-killed" }
+      const result: CancelTurnResult = { status: "hard-killed" }
+      this.logTurnCancellation("cancel", conversationId, state, result)
+      return result
     }
 
-    return { status: "no-active-turn" }
+    const result: CancelTurnResult = { status: "no-active-turn" }
+    this.logTurnCancellation("cancel", conversationId, state, result)
+    return result
   }
 
   async forceKillTurn(conversationId: string): Promise<CancelTurnResult> {
     const state = this.states.get(conversationId)
     if (!state || !state.busy) {
-      return { status: "no-active-turn" }
+      const result: CancelTurnResult = { status: "no-active-turn" }
+      this.logTurnCancellation("force-kill", conversationId, state, result)
+      return result
     }
-    this.messageRouter.clearCancelState(state)
+    this.conversationRouter.clearCancelState(state)
     state.turnAbortController?.abort("force-kill")
-    if (state.liveSession) {
-      await state.liveSession.close()
-      state.liveSession = undefined
-    }
-    return { status: "hard-killed" }
+    const result: CancelTurnResult = { status: "hard-killed" }
+    this.logTurnCancellation("force-kill", conversationId, state, result)
+    await this.sessionManager.closeCurrentTurn(conversationId)
+    return result
   }
 
-  private emitCancelEscalation(conversationId: string): void {
+  private logTurnCancellation(
+    action: "cancel" | "force-kill",
+    conversationId: string,
+    state: RuntimeSessionState | undefined,
+    result: CancelTurnResult,
+    metadata: Record<string, unknown> = {},
+  ): void {
+    const liveSession = state?.liveSession
+    this.deps.logger?.info("Agent turn cancellation updated.", {
+      boundary: action === "cancel"
+        ? "agent-runtime.turn.cancel"
+        : "agent-runtime.turn.force-kill",
+      projectId: this.deps.projectId,
+      conversationId,
+      providerId: state?.providerId,
+      mode: state?.modeOverride,
+      sdkSessionId: liveSession?.currentSessionId(),
+      status: result.status,
+      busy: state?.busy ?? false,
+      activeTurns: state?.activeTurns ?? 0,
+      queuedTurns: state?.queue.length ?? 0,
+      hadLiveSession: Boolean(liveSession),
+      hadTurnAbortController: Boolean(state?.turnAbortController),
+      hadCancelState: Boolean(state?.cancelState),
+      ...metadata,
+    })
+  }
+
+  private emitCancelEscalation(conversationId: string, sessionKey: string): void {
+    const timestamp = this.isoNow()
     this.deps.eventBus?.emit({
       domain: "agent",
       type: "phase.update",
       payload: {
         runId: conversationId,
         projectId: this.deps.projectId,
-        sessionKey: "",
+        sessionKey,
+        conversationId,
         phase: "cancel_pending",
         status: "in-progress",
-        startedAt: new Date().toISOString(),
+        startedAt: timestamp,
       },
       scope: { sessionId: conversationId },
-      timestamp: new Date().toISOString(),
+      timestamp,
     })
   }
 
@@ -375,8 +439,8 @@ export class AgentRuntimeService {
       workspacePath: pending.workspacePath,
       conversationId: pending.conversationId,
       toolName: pending.toolName,
-      toolInput: pending.toolInput,
-      toolInputRaw: pending.toolInputRaw,
+      toolInput: sanitizePendingPermissionText(pending.toolInput),
+      toolInputRaw: sanitizePendingPermissionRawInput(pending.toolInputRaw),
       createdAt: pending.createdAt,
     }))
   }
@@ -406,8 +470,7 @@ export class AgentRuntimeService {
   }
 
   async getActiveAgentType(): Promise<string> {
-    if (!this.deps.providerConfig) return this.agentType()
-    return this.deps.providerConfig.getActiveAgentType(this.deps.projectId, this.agentType())
+    return this.agentType()
   }
 
   async listSessions(): Promise<readonly ConversationEntryV1[]> {
@@ -509,20 +572,45 @@ export class AgentRuntimeService {
         { behavior: request.behavior },
       )
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
       this.recordPermissionAudit(action, request.actor, resource, "failed", pending, {
         behavior: request.behavior,
-        error: message,
+        ...summarizePermissionResponseError(error),
       })
       throw error
+    } finally {
+      this.sessionManager.settlePendingPermission(pending)
+    }
+  }
+
+  async setPermissionMode(input: {
+    readonly conversationId: string
+    readonly mode: string
+    readonly actor: ActorIdentity
+  }): Promise<ConversationEntryV1> {
+    const conversation = await this.repository.get(input.conversationId)
+    if (!conversation) {
+      throw new Error(`Conversation "${input.conversationId}" was not found`)
     }
 
-    this.pendingPermissions.delete(request.requestId)
-    const pendingState = this.states.get(pending.stateKey)
-    if (pendingState?.pending?.requestId === request.requestId) {
-      pendingState.pending = undefined
+    const liveSession = this.states.get(input.conversationId)?.liveSession
+    if (liveSession?.alive()) {
+      if (!liveSession.setPermissionMode) {
+        throw new Error("当前会话不支持切换权限模式")
+      }
+      await liveSession.setPermissionMode(input.mode)
     }
-    pending.resolve()
+
+    const updated = await this.repository.savePermissionMode(input.conversationId, input.mode)
+    this.emitConversationUpdated(updated)
+    this.deps.logger?.info("Agent permission mode changed.", {
+      boundary: "agent-runtime.permission-mode",
+      projectId: this.deps.projectId,
+      conversationId: input.conversationId,
+      actorKind: input.actor.kind,
+      actorId: input.actor.id,
+      mode: input.mode,
+    })
+    return updated
   }
 
   async clearCurrentAgentSessionId(
@@ -549,6 +637,9 @@ export class AgentRuntimeService {
       readonly agentType?: string
       readonly workspaceKey?: string
       readonly workspacePath?: string
+      readonly providerId?: string
+      readonly mode?: string
+      readonly modelTier?: string
     },
   ): Promise<ConversationEntryV1> {
     return this.sessionLifecycle.createSession(input)
@@ -589,7 +680,7 @@ export class AgentRuntimeService {
     this.deps.auditSink?.record({
       action,
       actor,
-      resource,
+      resource: permissionAuditResource(resource, pending.toolName),
       outcome,
       metadata: {
         ...metadata,
@@ -775,32 +866,98 @@ export class AgentRuntimeService {
     )
   }
 
-  private async resolveAdapter(agentTypeOverride?: string): Promise<AgentAdapter> {
-    if (!this.deps.providerConfig || !this.deps.adapterFactory) {
-      return this.deps.adapter
-    }
-    const agentType = agentTypeOverride ?? await this.getActiveAgentType()
-    const view = await this.deps.providerConfig.resolveRuntimeConfig(
-      this.deps.projectId,
-      agentType,
-      { actor: { kind: "user" } },
-    )
-    if (view.agentType === "codex") {
-      await prepareCodexRuntime(view, {
-        permissionGuard: this.deps.permissionGuard,
-        auditSink: this.deps.auditSink,
-        actor: { kind: "user" },
-      })
-    }
-    return this.deps.adapterFactory(view)
+  private agentType(): string {
+    return this.deps.agentType ?? "claude-code"
   }
 
-  private agentType(): string {
-    return this.deps.agentType ?? this.deps.adapter.agentType
+  private emitConversationUpdated(conversation: ConversationEntryV1): void {
+    this.deps.eventBus?.emit({
+      domain: "agent",
+      type: "conversationUpdated",
+      payload: {
+        projectId: this.deps.projectId,
+        sessionKey: conversation.sessionKey,
+        platform: conversation.platform ?? "local",
+        conversationId: conversation.id,
+      },
+      scope: { sessionId: conversation.id },
+      timestamp: this.isoNow(),
+    })
   }
 
   private isoNow(): string {
     return (this.deps.now?.() ?? new Date()).toISOString()
+  }
+
+  private logScheduledAgentFailure(
+    input: ScheduledAgentSendInput,
+    message: AgentMessage,
+    result: ScheduledAgentSendResult,
+    errorLength?: number,
+    sdkSessionId?: string,
+  ): void {
+    this.deps.logger?.warn("Scheduled agent send failed.", {
+      boundary: "agent-runtime.scheduled-send",
+      source: "scheduled",
+      projectId: input.projectId,
+      sessionKey: message.sessionKey,
+      conversationId: result.conversationId || undefined,
+      sdkSessionId,
+      agentType: input.agentType,
+      mode: input.mode,
+      sessionPolicy: input.sessionPolicy,
+      resumeConversationId: input.lastConversationId,
+      status: result.status,
+      errorLength: errorLength ?? result.error?.length,
+      timeoutMs: input.timeoutMs,
+      durationMs: result.durationMs,
+      promptLength: input.prompt.length,
+    })
+  }
+
+  private logScheduledAgentCompletion(
+    input: ScheduledAgentSendInput,
+    message: AgentMessage,
+    result: ScheduledAgentSendResult,
+    sdkSessionId: string | undefined,
+  ): void {
+    this.deps.logger?.info("Scheduled agent send completed.", {
+      boundary: "agent-runtime.scheduled-send",
+      source: "scheduled",
+      projectId: input.projectId,
+      sessionKey: message.sessionKey,
+      conversationId: result.conversationId || undefined,
+      sdkSessionId,
+      agentType: input.agentType,
+      mode: input.mode,
+      sessionPolicy: input.sessionPolicy,
+      resumeConversationId: input.lastConversationId,
+      status: result.status,
+      timeoutMs: input.timeoutMs,
+      durationMs: result.durationMs,
+      promptLength: input.prompt.length,
+      summaryLength: result.summary?.length,
+    })
+  }
+
+  private logScheduledResumeFallback(
+    input: ScheduledAgentSendInput,
+    message: AgentMessage,
+    error: unknown,
+  ): void {
+    this.deps.logger?.warn("Scheduled agent resume fallback.", {
+      boundary: "agent-runtime.scheduled-resume",
+      source: "scheduled",
+      projectId: input.projectId,
+      sessionKey: message.sessionKey,
+      resumeConversationId: input.lastConversationId,
+      agentType: input.agentType,
+      mode: input.mode,
+      sessionPolicy: input.sessionPolicy,
+      fallback: "fresh-session",
+      ...summarizeScheduledResumeError(error),
+      promptLength: input.prompt.length,
+    })
   }
 }
 
@@ -827,6 +984,57 @@ function permissionActionForTool(toolName: string): PermissionAction {
   }
 }
 
+function permissionAuditResource(resource: string, toolName: string): string {
+  return resource === toolName ? toolName : `${toolName} input (${resource.length} chars)`
+}
+
+function sanitizePendingPermissionRawInput(
+  value: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  if (!value) return undefined
+  return sanitizePendingPermissionValue(value) as Record<string, unknown>
+}
+
+function sanitizePendingPermissionValue(value: unknown, key = ""): unknown {
+  if (isSensitivePendingPermissionKey(key)) return "[redacted]"
+  if (typeof value === "string") return sanitizePendingPermissionText(value)
+  if (Array.isArray(value)) return value.map((item) => sanitizePendingPermissionValue(item, key))
+  if (!value || typeof value !== "object") return value
+
+  const output: Record<string, unknown> = {}
+  for (const [childKey, childValue] of Object.entries(value)) {
+    output[childKey] = sanitizePendingPermissionValue(childValue, childKey)
+  }
+  return output
+}
+
+function sanitizePendingPermissionText(value: string | undefined): string | undefined {
+  if (!value) return value
+  return truncateRunes(
+    value
+      .replace(
+        /\b(api[-_]?key|authorization|cookie|password|credential|secret|token)\b(\s*[:=]\s*)(?:(Bearer)\s+)?[^\s,;'"`]+/gi,
+        (_match, key: string, separator: string, bearer: string | undefined) =>
+          `${key}${separator}${bearer ? `${bearer} ` : ""}[redacted]`,
+      )
+      .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
+      .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, "[path redacted]")
+      .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]"),
+    240,
+  )
+}
+
+function isSensitivePendingPermissionKey(key: string): boolean {
+  const normalized = key.toLowerCase().replace(/[-_]/g, "")
+  return normalized.includes("secret")
+    || normalized.includes("apikey")
+    || normalized.includes("authorization")
+    || normalized.includes("cookie")
+    || normalized.includes("password")
+    || normalized.includes("credential")
+    || (normalized.includes("token") && !normalized.endsWith("tokens"))
+}
+
 function compressionStateId(projectId: string, agentType: string): string {
   return `compress:${projectId}:${agentType}`
 }
@@ -842,6 +1050,40 @@ function formatCommandResult(name: string, result: ControlledProcessResult): str
       ? `Command completed: /${name}`
       : `Command failed: /${name} (${String(result.exitCode ?? result.signal ?? "unknown")})`
   return output ? `${status}\n\n${truncateRunes(output, 4000)}` : status
+}
+
+function summarizePermissionResponseError(error: unknown): { errorName: string; errorLength: number } {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name || "Error",
+      errorLength: error.message.length,
+    }
+  }
+  const message = String(error)
+  return {
+    errorName: typeof error,
+    errorLength: message.length,
+  }
+}
+
+function summarizeScheduledResumeError(error: unknown): { errorName: string; errorLength: number; errorMessage: string } {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name || "Error",
+      errorLength: error.message.length,
+      errorMessage: error.message,
+    }
+  }
+  const message = String(error)
+  return {
+    errorName: typeof error,
+    errorLength: message.length,
+    errorMessage: message,
+  }
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function truncateRunes(value: string, maxRunes: number): string {

@@ -87,6 +87,57 @@ function uniqueStrings(values: readonly unknown[]): string[] {
   return result
 }
 
+function referencesSystemTable(sql: string): boolean {
+  let inString = false
+  let inLineComment = false
+  let inBlockComment = false
+
+  for (let index = 0; index < sql.length; index += 1) {
+    const char = sql[index]
+    const next = sql[index + 1]
+
+    if (inLineComment) {
+      if (char === "\n") inLineComment = false
+      continue
+    }
+    if (inBlockComment) {
+      if (char === "*" && next === "/") {
+        inBlockComment = false
+        index += 1
+      }
+      continue
+    }
+    if (inString) {
+      if (char === "'" && next === "'") {
+        index += 1
+      } else if (char === "'") {
+        inString = false
+      }
+      continue
+    }
+
+    if (char === "-" && next === "-") {
+      inLineComment = true
+      index += 1
+      continue
+    }
+    if (char === "/" && next === "*") {
+      inBlockComment = true
+      index += 1
+      continue
+    }
+    if (char === "'") {
+      inString = true
+      continue
+    }
+    if (char === "_" && next && /[a-zA-Z]/.test(next)) {
+      return true
+    }
+  }
+
+  return false
+}
+
 function parseLegacyChoices(raw: unknown): string[] {
   if (typeof raw !== "string" || raw.length === 0) return []
   try {
@@ -305,10 +356,14 @@ class DatabaseService {
       this.db.exec("PRAGMA journal_mode=WAL")
     } catch (error) {
       logger.error("Failed to restore legacy database backup.", { error })
-      this.restoreMovedFiles(moved)
-      this.db = new DatabaseSync(this.dbPath)
-      this.db.exec("PRAGMA journal_mode=WAL")
-      throw error
+      try {
+        this.restoreMovedFiles(moved)
+        this.db = new DatabaseSync(this.dbPath)
+        this.db.exec("PRAGMA journal_mode=WAL")
+      } catch (restoreError) {
+        logger.error("Failed to reopen current database after legacy recovery failure. Creating a fresh database.", { restoreError })
+        this.backupAndReopenDatabase()
+      }
     }
   }
 
@@ -986,7 +1041,7 @@ class DatabaseService {
   databaseSqlExecute(sql: string, params?: unknown[]): { rows?: Record<string, unknown>[]; changes?: number; lastInsertRowid?: number } {
     const normalized = sql.trim().toLowerCase()
 
-    if (/\b_\w+/i.test(sql) && /\b_[a-zA-Z]\w*\b/.test(sql)) {
+    if (referencesSystemTable(sql)) {
       throw new Error("Cannot operate on system tables (prefixed with _)")
     }
     if (/\b(attach|detach)\b/i.test(normalized)) {
@@ -1149,6 +1204,7 @@ class DatabaseService {
     const backupPath = `${this.dbPath}.import-backup.${Date.now()}`
     const walPath = `${this.dbPath}-wal`
     const shmPath = `${this.dbPath}-shm`
+    let deleteBackup = false
 
     try {
       this.getDb().exec("PRAGMA wal_checkpoint(TRUNCATE)")
@@ -1173,6 +1229,7 @@ class DatabaseService {
       this.syncMetaTables()
       this.syncMetaColumns()
       this.refreshColumnMetaCache()
+      deleteBackup = true
     } catch (error) {
       try {
         copyFileSync(backupPath, this.dbPath)
@@ -1182,12 +1239,15 @@ class DatabaseService {
         this.syncMetaTables()
         this.syncMetaColumns()
         this.refreshColumnMetaCache()
+        deleteBackup = true
       } catch (restoreError) {
         logger.error("Failed to restore backup after import failure.", { restoreError })
       }
       throw error
     } finally {
-      try { unlinkSync(backupPath) } catch { /* ignore */ }
+      if (deleteBackup) {
+        try { unlinkSync(backupPath) } catch { /* ignore */ }
+      }
     }
   }
 

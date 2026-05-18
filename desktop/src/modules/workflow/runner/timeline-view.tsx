@@ -1,11 +1,9 @@
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Badge } from "@/components/ui/badge"
+import { track } from "@/lib/ui-tracking"
 import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
-
-const STATUS_LABEL: Record<string, string> = { running: "执行中", success: "完成", failed: "失败", skipped: "跳过", pending: "等待" }
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "outline"> = {
-  running: "default", success: "secondary", failed: "destructive", skipped: "outline", pending: "outline",
-}
+import { NODE_STATUS_LABEL, NODE_STATUS_VARIANT } from "../lib/status-display"
+import { useRunningTimer } from "./node-progress-bar"
 
 interface TimelineViewProps {
   definition: WorkflowDefinition
@@ -15,16 +13,43 @@ interface TimelineViewProps {
 }
 
 export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSelect }: TimelineViewProps) {
-  const nameOf = (nodeId: string) => definition.nodes.find((n) => n.id === nodeId)?.name ?? nodeId
+  const nodeMeta = useMemo(
+    () => new Map(definition.nodes.map((node) => [node.id, { name: node.name, type: node.type }])),
+    [definition.nodes],
+  )
+  const nameOf = (nodeId: string) => nodeMeta.get(nodeId)?.name ?? nodeId
+  const typeOf = (nodeId: string) => nodeMeta.get(nodeId)?.type ?? "unknown"
 
   // Combine active results (sorted by startedAt) with pending nodes (not yet in nodeResults)
-  const activeResults = Object.values(nodeResults)
-    .sort((a, b) => (a.startedAt ?? Infinity) - (b.startedAt ?? Infinity))
-  const activeNodeIds = new Set(activeResults.map((r) => r.nodeId))
-  const pendingNodes = definition.nodes
-    .filter((n) => !activeNodeIds.has(n.id))
-    .map((n) => ({ nodeId: n.id, status: "pending" as const, input: { variables: {} } }))
-  const results = [...activeResults, ...pendingNodes]
+  const results = useMemo(() => {
+    const activeResults = Object.values(nodeResults)
+      .sort((a, b) => (a.startedAt ?? Infinity) - (b.startedAt ?? Infinity))
+    const activeNodeIds = new Set(activeResults.map((r) => r.nodeId))
+    const pendingNodes = definition.nodes
+      .filter((n) => !activeNodeIds.has(n.id))
+      .map((n) => ({ nodeId: n.id, status: "pending" as const, input: { variables: {} } }))
+    return [...activeResults, ...pendingNodes]
+  }, [definition.nodes, nodeResults])
+
+  function handleNodeSelect(result: NodeRunResult) {
+    track({
+      component: "workflow.runner",
+      name: "workflow-runner-timeline-node-select",
+      action: "select",
+      value: result.nodeId,
+      metadata: {
+        boundary: "renderer.workflow.runner.timeline",
+        workflowId: definition.id,
+        nodeId: result.nodeId,
+        nodeType: typeOf(result.nodeId),
+        status: result.status,
+        hasError: Boolean(result.error),
+        hasOutput: (result.output != null && result.output !== "")
+          || (result.outputs != null && Object.keys(result.outputs).length > 0),
+      },
+    })
+    onNodeSelect(result.nodeId)
+  }
 
   // Tick every second while any node is still running so the elapsed-time
   // display stays up to date. Stops automatically once all nodes are terminal.
@@ -46,17 +71,18 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
         {results.map((r) => (
           <div
             key={r.nodeId}
-            className={`flex items-center gap-3 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors ${r.nodeId === selectedNodeId ? "bg-muted" : ""}`}
-            onClick={() => onNodeSelect(r.nodeId)}
+            className={`flex items-center gap-3 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${r.nodeId === selectedNodeId ? "bg-muted" : ""}`}
+            tabIndex={0}
+            role="button"
+            onClick={() => handleNodeSelect(r)}
+            onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); handleNodeSelect(r) } }}
           >
-            <Badge variant={STATUS_VARIANT[r.status] ?? "outline"} className="text-xs shrink-0">
-              {STATUS_LABEL[r.status] ?? r.status}
+            <Badge variant={NODE_STATUS_VARIANT[r.status] ?? "outline"} className="text-xs shrink-0">
+              {NODE_STATUS_LABEL[r.status] ?? r.status}
             </Badge>
-            <span className="text-sm truncate">{nameOf(r.nodeId)}</span>
+            <span className="text-sm truncate" title={nameOf(r.nodeId)}>{nameOf(r.nodeId)}</span>
             {r.status === "running" && r.startedAt && (
-              <span className="text-xs text-muted-foreground ml-auto">
-                已运行 {Math.round((Date.now() - r.startedAt) / 1000)}s
-              </span>
+              <TimelineElapsed startedAt={r.startedAt} />
             )}
             {r.status === "success" && r.durationMs != null && (
               <span className="text-xs text-muted-foreground ml-auto">
@@ -64,15 +90,31 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
               </span>
             )}
             {r.status === "failed" && (r.durationMs != null || r.error) && (
-              <span className="text-xs truncate ml-auto max-w-48">
+              <span className="text-xs truncate ml-auto max-w-48" title={r.error ?? undefined}>
                 {r.durationMs != null && <span className="text-muted-foreground">{r.durationMs < 1000 ? `${r.durationMs}ms` : `${(r.durationMs / 1000).toFixed(1)}s`}</span>}
                 {r.durationMs != null && r.error && <span className="text-muted-foreground mx-1">·</span>}
                 {r.error && <span className="text-destructive">{r.error}</span>}
+              </span>
+            )}
+            {r.status === "cancelled" && (
+              <span className="text-xs truncate ml-auto max-w-48 text-muted-foreground">
+                {r.durationMs != null && <span>{r.durationMs < 1000 ? `${r.durationMs}ms` : `${(r.durationMs / 1000).toFixed(1)}s`}</span>}
+                {r.durationMs != null && r.error && <span className="mx-1">·</span>}
+                {r.error && <span>{r.error}</span>}
               </span>
             )}
           </div>
         ))}
       </div>
     </div>
+  )
+}
+
+function TimelineElapsed({ startedAt }: { startedAt: number }) {
+  const elapsed = useRunningTimer(startedAt, true)
+  return (
+    <span className="text-xs text-muted-foreground ml-auto">
+      已运行 {elapsed}
+    </span>
   )
 }

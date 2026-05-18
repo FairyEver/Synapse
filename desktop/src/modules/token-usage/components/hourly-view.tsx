@@ -56,6 +56,10 @@ function HourlyTable({ rows }: { rows: HourlyRow[] }) {
   const hasReasoning = sortRows.some((r) => r.reasoning > 0)
   const hasTurns = sortRows.some((r) => r.turns > 0)
 
+  if (rows.length === 0) {
+    return <p className="py-8 text-center text-sm text-muted-foreground">暂无时段数据</p>
+  }
+
   return (
     <Table>
       <TableHeader>
@@ -145,7 +149,7 @@ function HourlyProfileView({ profile }: { profile: HourlyProfile | null }) {
             <XAxis type="number" tickFormatter={(v: number) => formatTokens(v)} />
             <YAxis type="category" dataKey="day" width={36} interval={0} />
             <Tooltip formatter={(value) => [formatTokens(Number(value)), "Token"]} />
-            <Bar dataKey="tokens" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
+            <Bar dataKey="tokens" fill="var(--primary)" radius={[0, 4, 4, 0]} />
           </BarChart>
         </ResponsiveContainer>
       </div>

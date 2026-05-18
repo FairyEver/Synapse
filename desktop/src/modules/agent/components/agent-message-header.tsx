@@ -11,6 +11,8 @@ function AgentMessageHeader({
   timestamp,
   className,
 }: AgentMessageHeaderProps) {
+  const formattedTimestamp = timestamp ? formatTimestamp(timestamp) : undefined
+
   return (
     <div
       className={cn(
@@ -25,17 +27,18 @@ function AgentMessageHeader({
           className="size-5 rounded"
         />
       ) : null}
-      {timestamp ? (
+      {formattedTimestamp ? (
         <time className="text-xs text-muted-foreground">
-          {formatTimestamp(timestamp)}
+          {formattedTimestamp}
         </time>
       ) : null}
     </div>
   )
 }
 
-function formatTimestamp(timestamp: string): string {
+function formatTimestamp(timestamp: string): string | undefined {
   const date = new Date(timestamp)
+  if (Number.isNaN(date.getTime())) return undefined
   const hours = date.getHours().toString().padStart(2, "0")
   const minutes = date.getMinutes().toString().padStart(2, "0")
   return `${hours}:${minutes}`

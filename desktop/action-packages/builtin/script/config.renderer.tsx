@@ -26,19 +26,21 @@ const PATH_STRATEGY_OPTIONS: Array<{ label: string; value: "merge" | "replace" }
 export function ScriptConfigForm({
   value,
   onChange,
+  idPrefix = "task-action-script",
 }: {
   readonly value: ScriptActionConfig
   readonly onChange: (value: ScriptActionConfig) => void
+  readonly idPrefix?: string
 }) {
   return (
     <FieldGroup>
       <Field>
-        <FieldLabel htmlFor="task-action-script-shell-posix">Shell</FieldLabel>
+        <FieldLabel htmlFor={`${idPrefix}-shell-posix`}>Shell</FieldLabel>
         <FieldContent>
           <ToggleGroup
             aria-label="Shell"
             className="w-full"
-            data-track="task-action-script-shell"
+            data-track={`${idPrefix}-shell`}
             type="single"
             value={value.shell}
             variant="outline"
@@ -49,7 +51,7 @@ export function ScriptConfigForm({
             {SHELL_OPTIONS.map((option) => (
               <ToggleGroupItem
                 key={option.value}
-                id={`task-action-script-shell-${option.value}`}
+                id={`${idPrefix}-shell-${option.value}`}
                 className="flex-1"
                 value={option.value}
               >
@@ -62,9 +64,9 @@ export function ScriptConfigForm({
       {value.shell === "posix" ? (
         <Field>
           <FieldContent>
-            <label htmlFor="task-action-script-posix-login" className="flex items-center gap-2">
+            <label htmlFor={`${idPrefix}-posix-login`} className="flex items-center gap-2">
               <Checkbox
-                id="task-action-script-posix-login"
+                id={`${idPrefix}-posix-login`}
                 checked={value.posixLogin !== false}
                 onCheckedChange={(checked) => onChange({ ...value, posixLogin: checked === true })}
               />
@@ -75,10 +77,10 @@ export function ScriptConfigForm({
         </Field>
       ) : null}
       <Field>
-        <FieldLabel htmlFor="task-action-script-content">脚本</FieldLabel>
+        <FieldLabel htmlFor={`${idPrefix}-content`}>脚本</FieldLabel>
         <FieldContent>
           <Textarea
-            id="task-action-script-content"
+            id={`${idPrefix}-content`}
             rows={6}
             value={value.script}
             onChange={(event) => onChange({ ...value, script: event.target.value })}
@@ -86,10 +88,10 @@ export function ScriptConfigForm({
         </FieldContent>
       </Field>
       <Field>
-        <FieldLabel htmlFor="task-action-script-env">环境变量</FieldLabel>
+        <FieldLabel htmlFor={`${idPrefix}-env`}>环境变量</FieldLabel>
         <FieldContent>
           <Textarea
-            id="task-action-script-env"
+            id={`${idPrefix}-env`}
             placeholder={"KEY=value\nANOTHER_KEY=value"}
             rows={3}
             value={stringifyRecordText(value.env)}
@@ -99,12 +101,12 @@ export function ScriptConfigForm({
         </FieldContent>
       </Field>
       <Field>
-        <FieldLabel htmlFor="task-action-script-path-strategy">PATH 模式</FieldLabel>
+        <FieldLabel htmlFor={`${idPrefix}-path-strategy`}>PATH 模式</FieldLabel>
         <FieldContent>
           <ToggleGroup
             aria-label="PATH strategy"
             className="w-full"
-            data-track="task-action-script-path-strategy"
+            data-track={`${idPrefix}-path-strategy`}
             type="single"
             value={value.pathStrategy ?? "merge"}
             variant="outline"
@@ -115,7 +117,7 @@ export function ScriptConfigForm({
             {PATH_STRATEGY_OPTIONS.map((option) => (
               <ToggleGroupItem
                 key={option.value}
-                id={`task-action-script-path-strategy-${option.value}`}
+                id={`${idPrefix}-path-strategy-${option.value}`}
                 className="flex-1"
                 value={option.value}
               >
@@ -127,10 +129,10 @@ export function ScriptConfigForm({
         </FieldContent>
       </Field>
       <Field>
-        <FieldLabel htmlFor="task-action-script-timeout">超时分钟</FieldLabel>
+        <FieldLabel htmlFor={`${idPrefix}-timeout`}>超时分钟</FieldLabel>
         <FieldContent>
           <Input
-            id="task-action-script-timeout"
+            id={`${idPrefix}-timeout`}
             type="number"
             min={1}
             value={value.timeoutMins ?? ""}

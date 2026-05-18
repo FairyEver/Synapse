@@ -59,12 +59,27 @@ export class DiagnosticsCollector {
 const SECRET_KEY_RE = /(key|token|secret|password|authorization)/i
 
 function defaultRedact(record: LogRecord): LogRecord {
-  if (!record.context) return record
-  const context: Record<string, unknown> = {}
-  for (const [k, v] of Object.entries(record.context)) {
-    context[k] = SECRET_KEY_RE.test(k) ? "[REDACTED]" : v
+  return {
+    ...record,
+    ...(record.context ? { context: redactContext(record.context) } : {}),
+    ...(record.error ? { error: redactLogError(record.error) } : {}),
   }
-  return { ...record, context }
+}
+
+function redactContext(context: Record<string, unknown>): Record<string, unknown> {
+  const redacted: Record<string, unknown> = {}
+  for (const [k, v] of Object.entries(context)) {
+    redacted[k] = SECRET_KEY_RE.test(k) ? "[REDACTED]" : v
+  }
+  return redacted
+}
+
+function redactLogError(error: NonNullable<LogRecord["error"]>): NonNullable<LogRecord["error"]> {
+  return {
+    name: error.name,
+    message: `[REDACTED ${error.message.length} chars]`,
+    ...(error.stack ? { stack: `[REDACTED ${error.stack.length} chars]` } : {}),
+  }
 }
 
 export function createDiagnosticsCollector(deps: DiagnosticsCollectorDeps): DiagnosticsCollector {

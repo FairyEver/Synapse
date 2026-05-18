@@ -24,11 +24,14 @@
  */
 
 import { app, safeStorage } from "electron"
+import os from "node:os"
 import path from "node:path"
+import { randomUUID } from "node:crypto"
 
 import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter } from "../capabilities/action-router"
+import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
 import { logStore, createMainLogger } from "../services/log-store"
 import { initializeAppIcon } from "../services/app-icon-service"
@@ -42,7 +45,14 @@ import { pendingPushesService } from "../services/pending-pushes-service"
 import { RepositorySyncCoordinator } from "../services/repository-sync-coordinator"
 import { createTray, destroyTray } from "../services/tray-service"
 import { createAgentRuntimeProjectService, AgentRuntimeService, AGENT_RUNTIME_SERVICE_ID } from "../services/agent-runtime"
-import { createProviderConfigProjectService } from "../services/provider-config"
+import {
+  createProviderProjectService,
+  createProviderServiceFromDataRepository,
+  PROVIDER_SERVICE_ID,
+  type ProviderService,
+} from "../services/provider"
+import { ProviderReferenceScanner } from "../services/provider/provider-reference-scanner"
+import type { ConversationEntryV1 } from "../runtime/data-repo"
 import { BridgeAdapterService } from "../services/bridge-adapter"
 import { FeishuConnectorService } from "../services/connectors"
 import { SideChannelService } from "../services/side-channel"
@@ -69,11 +79,11 @@ import { WindowBroadcaster } from "../runtime/event-bus/broadcaster"
 import type { DataRepository } from "../runtime/data-repo"
 import { createFileBackedDataRepository } from "../runtime/data-repo"
 import type { PermissionGuard, AuditSink } from "../runtime/security"
-import { DataRepositoryAuditSink, createPermissionGuard } from "../runtime/security"
+import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy } from "../runtime/security"
 import type { ProcessRuntime } from "../runtime/process"
 import { createControlledProcessRunner, createMainProcessRuntime } from "../runtime/process"
 import type { NetworkServiceRegistry } from "../runtime/network"
-import { createNetworkServiceRegistry } from "../runtime/network"
+import { createNetworkServiceRegistry, sendOutboundHttpRequest } from "../runtime/network"
 import type { ProjectContainerRegistry } from "../runtime/project-container"
 import { createProjectContainerRegistry } from "../runtime/project-container"
 import { migrateRepositoryScopedConnectorData } from "./project-scope-migration"
@@ -86,8 +96,11 @@ import { collectOpsStatus } from "../modules/ops/status"
 import { WorkflowService } from "../services/workflow/workflow-service"
 import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
+import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "../services/workflow/workflow-validator"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
-import type { WorkflowRunStatus } from "../../src/types/workflow"
+import { sanitizeError } from "../services/error-sanitize"
+import type { WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
+import { nodeTypeRegistry } from "../../workflow-nodes/registry"
 import "../../workflow-nodes/register.main"
 
 /**
@@ -172,6 +185,92 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
   },
 }
 
+export function createRunWorkflowHandler(deps: {
+  workflowService: Pick<WorkflowService, "get">
+  workflowEngine: WorkflowEngine
+  snapshotService: Pick<RunSnapshotService, "save">
+  eventBus: EventBus
+  runAborts: Map<string, AbortController>
+  runStatuses: Map<string, WorkflowRunStatus>
+  capabilityLogger: ReturnType<typeof createMainLogger>
+}) {
+  return async (id: string, params: Record<string, unknown>): Promise<{ runId: string } | { errors: ValidationError[] }> => {
+    const { workflowService, workflowEngine, snapshotService, eventBus, runAborts, runStatuses, capabilityLogger } = deps
+    const def = await workflowService.get(id)
+    if (!def) return { errors: [{ type: "invalid_config" as const, message: "Workflow not found" }] }
+    const validation = validateWorkflow(def)
+    if (!validation.valid) return { errors: validation.errors }
+    const paramErrors = validateRunParams(def, params)
+    if (paramErrors.length > 0) return { errors: paramErrors }
+    const effectiveParams = buildEffectiveRunParams(def, params)
+    const runId = randomUUID()
+    const ac = new AbortController()
+    const startedAt = Date.now()
+    runAborts.set(runId, ac)
+    runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt, params: effectiveParams, definition: def })
+    const appConfig = await configStore.load()
+    const activeRepo = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
+    const projectId = activeRepo?.uuid
+    workflowEngine.run(def, effectiveParams, runId, (event) => {
+      const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
+      const nextNodeResults = { ...current.nodeResults }
+      if (event.type === "node:started") {
+        nextNodeResults[event.nodeId] = { ...(nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, input: { variables: {} } }), status: "running", startedAt: event.startedAt ?? Date.now() }
+      } else if (event.type === "node:completed" || event.type === "node:failed" || event.type === "node:skipped") {
+        nextNodeResults[event.nodeId] = event.result ?? nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: "failed", input: { variables: {} } }
+      }
+      runStatuses.set(runId, { ...current, nodeResults: nextNodeResults })
+      eventBus.emit({ domain: "workflow", type: event.type, payload: event, timestamp: new Date().toISOString() }, { backpressure: "block" })
+      if (event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled") {
+        runAborts.delete(runId)
+        const endedAt = Date.now()
+        const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
+        runStatuses.set(runId, { ...current, runId, workflowId: id, status, nodeResults: event.result?.nodeResults ?? nextNodeResults, startedAt, endedAt, durationMs: event.result?.durationMs ?? endedAt - startedAt, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
+        Promise.resolve(snapshotService.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: event.result?.nodeResults ?? nextNodeResults, definition: def })).catch((err) => {
+          capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
+        })
+      }
+    }, ac.signal, projectId, "mcp").catch((err) => {
+      const diagnostic = capabilityRejectionDiagnostic(err)
+      capabilityLogger.error("workflow engine rejected (mcp dispatch)", { workflowId: id, runId, ...diagnostic })
+      runAborts.delete(runId)
+      const current = runStatuses.get(runId)
+      if (current && current.status === "running") {
+        const endedAt = Date.now()
+        runStatuses.set(runId, {
+          ...current, runId, workflowId: id,
+          status: "failed",
+          error: "工作流引擎异常",
+          nodeResults: current.nodeResults,
+          startedAt, endedAt,
+          durationMs: endedAt - startedAt,
+        })
+        eventBus.emit({
+          domain: "workflow",
+          type: "workflow:failed",
+          payload: {
+            type: "workflow:failed",
+            runId,
+            error: "工作流引擎异常",
+            result: { status: "failed", nodeResults: current.nodeResults, durationMs: endedAt - startedAt },
+          },
+          timestamp: new Date().toISOString(),
+        }, { backpressure: "block" })
+        Promise.resolve(snapshotService.save({
+          runId, workflowId: id, version: def.version,
+          startedAt, endedAt, status: "failed",
+          params: effectiveParams,
+          nodeResults: current.nodeResults,
+          definition: def,
+        })).catch((err) => {
+          capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
+        })
+      }
+    })
+    return { runId }
+  }
+}
+
 /**
  * core.database — opens SQLite, starts HTTP + MCP servers, registers IPC,
  * wires change dispatcher, attempts CLI install, attempts MCP registration.
@@ -183,14 +282,62 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
 export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = {
   id: "core.database",
   criticality: "degraded",
-  dependsOn: ["core.config", "core.event-bus", "core.task-scheduler", "core.action-runtime"],
+  dependsOn: [
+    "core.config",
+    "core.event-bus",
+    "core.task-scheduler",
+    "core.action-runtime",
+    "core.workflow",
+    "core.workflow.snapshots",
+    "core.workflow.run-aborts",
+    "core.workflow.run-statuses",
+    "core.workflow.engine",
+    PROVIDER_SERVICE_ID,
+  ],
   async create(ctx) {
     const eventBus = ctx.registry.get<EventBus>("core.event-bus")
     const taskScheduler = ctx.registry.get<TaskSchedulerService>("core.task-scheduler")
     const actionRuntime = ctx.registry.get<MainActionRegistry>("core.action-runtime")
+
+    const workflowService = ctx.registry.get<WorkflowService>("core.workflow")
+    const snapshotService = ctx.registry.get<RunSnapshotService>("core.workflow.snapshots")
+    const runAborts = ctx.registry.get<Map<string, AbortController>>("core.workflow.run-aborts")
+    const runStatuses = ctx.registry.get<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
+    const workflowEngine = ctx.registry.get<WorkflowEngine>("core.workflow.engine")
+    const providerService = ctx.registry.get<ProviderService>(PROVIDER_SERVICE_ID)
+    const capabilityLogger = createMainLogger("bootstrap.workflow-capability")
+
+    const workflowDispatcher = createWorkflowDispatcher({
+      workflowService,
+      snapshotService,
+      nodeTypeRegistry,
+      eventBus,
+      runWorkflow: createRunWorkflowHandler({
+        workflowService,
+        workflowEngine,
+        snapshotService,
+        eventBus,
+        runAborts,
+        runStatuses,
+        capabilityLogger,
+      }),
+      cancelRun: (runId: string) => { runAborts.get(runId)?.abort(); runAborts.delete(runId) },
+      cancelRunsForWorkflow: (workflowId: string) => {
+        for (const [runId, status] of runStatuses) {
+          if (status.workflowId === workflowId && status.status === "running") {
+            runAborts.get(runId)?.abort()
+            runAborts.delete(runId)
+          }
+        }
+      },
+      getRunStatus: async (runId: string) => runStatuses.get(runId) ?? null,
+      listProviders: () => providerService.listProviders(),
+    })
+
     const actionRouter = createSynapseActionRouter({
       databaseDispatch: dispatchDatabaseAction,
       schedulerDispatch: (action, params) => dispatchSchedulerAction(taskScheduler, actionRuntime, action, params),
+      workflowDispatch: (action, params, context) => workflowDispatcher.dispatch(action, params, context),
     })
     await initDatabase(eventBus, actionRouter)
     return { initialized: true }
@@ -386,6 +533,76 @@ export const coreDataRepositoryDescriptor: ServiceDescriptor<DataRepository> = {
   },
 }
 
+export const providerServiceDescriptor: ServiceDescriptor<ProviderService> = {
+  id: PROVIDER_SERVICE_ID,
+  criticality: "fatal",
+  dependsOn: [
+    "core.data-repository",
+    "core.permission-guard",
+    "core.audit-sink",
+    "core.task-scheduler",
+    "core.workflow",
+  ],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    return createProviderServiceFromDataRepository({
+      dataRepository,
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
+      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      scanReferences: async (providerId) => {
+        const taskScheduler = ctx.registry.get<TaskSchedulerService>("core.task-scheduler")
+        const workflowService = ctx.registry.get<WorkflowService>("core.workflow")
+        const scanner = new ProviderReferenceScanner({
+          listTasks: async () => {
+            const tasks = await taskScheduler.schedulerTaskList()
+            return tasks.map((t) => ({ id: t.id, name: t.name, action: t.action }))
+          },
+          updateTaskAction: async () => {},
+          listWorkflowNodes: async () => {
+            const metas = await workflowService.list()
+            const nodes: Array<{
+              workflowId: string; workflowName: string
+              nodeId: string; nodeName: string
+              providerId: string; modelTier: string
+            }> = []
+            for (const meta of metas) {
+              const def = await workflowService.get(meta.id) as Record<string, unknown> | null
+              if (!def) continue
+              const defNodes = (def as { nodes?: Array<{ id: string; name: string; config: Record<string, unknown> }> }).nodes
+              if (!defNodes) continue
+              for (const node of defNodes) {
+                const config = node.config
+                if (typeof config.providerId === "string" && config.providerId) {
+                  nodes.push({
+                    workflowId: (def as { id: string }).id,
+                    workflowName: (def as { name: string }).name,
+                    nodeId: node.id,
+                    nodeName: node.name,
+                    providerId: config.providerId,
+                    modelTier: typeof config.modelTier === "string" ? config.modelTier : "default",
+                  })
+                }
+              }
+            }
+            return nodes
+          },
+          updateWorkflowNodeProvider: async () => {},
+          listConversations: async () => {
+            const conversations = dataRepository.namespace<ConversationEntryV1>("conversations")
+            const all = await conversations.list()
+            return all.map((c) => ({
+              id: c.id,
+              name: c.name ?? c.id,
+              providerId: c.providerId,
+            }))
+          },
+        })
+        return scanner.scan(providerId)
+      },
+    })
+  },
+}
+
 export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = {
   id: "core.diagnostics",
   criticality: "degraded",
@@ -446,7 +663,7 @@ export const coreLicenseDescriptor: ServiceDescriptor<LicenseService> = {
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
     return new LicenseService({
       store: ctx.registry.get<DataRepository>("core.data-repository").namespace("core.license"),
-      client: new LicenseClient({ permissionGuard, auditSink }),
+      client: new LicenseClient({ permissionGuard, auditSink, logger: ctx.logger.child("license.http") }),
       appVersion: app.getVersion(),
       logger: ctx.logger.child("license"),
     })
@@ -493,7 +710,10 @@ export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> =
   id: "core.permission-guard",
   criticality: "fatal",
   create() {
-    return createPermissionGuard()
+    const guard = createPermissionGuard()
+    guard.registerPolicy(userInitiatedAllowPolicy)
+    guard.registerPolicy(systemShellExecPolicy)
+    return guard
   },
 }
 
@@ -541,7 +761,7 @@ export const coreProjectContainerRegistryDescriptor: ServiceDescriptor<ProjectCo
       globalDataRepo: ctx.registry.get<DataRepository>("core.data-repository"),
       buildLogger: (projectId) => ctx.logger.child(`project.${projectId}`),
     })
-    registry.registerService(createProviderConfigProjectService())
+    registry.registerService(createProviderProjectService())
     registry.registerService(createAgentRuntimeProjectService())
     return registry
   },
@@ -821,6 +1041,22 @@ export const coreTokenUsageDescriptor: ServiceDescriptor<{ initialized: true }> 
   },
 }
 
+/**
+ * core.http-test — registers IPC handler for ad-hoc HTTP request testing.
+ *
+ * Status: degraded — test requests are non-critical.
+ */
+export const coreHttpTestDescriptor: ServiceDescriptor<{ initialized: true }> = {
+  id: "core.http-test",
+  criticality: "degraded",
+  dependsOn: [],
+  async create() {
+    const { registerHttpTestHandlers } = await import("../modules/http-test/ipc.js")
+    registerHttpTestHandlers()
+    return { initialized: true }
+  },
+}
+
 export const coreWorkflowServiceDescriptor: ServiceDescriptor<WorkflowService> = {
   id: "core.workflow",
   criticality: "degraded",
@@ -858,34 +1094,101 @@ export const coreWorkflowRunStatusesDescriptor: ServiceDescriptor<Map<string, Wo
 export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
   id: "core.workflow.engine",
   criticality: "degraded",
-  dependsOn: ["core.project-containers"],
+  dependsOn: ["core.project-containers", "core.permission-guard", "core.audit-sink"],
   create(ctx) {
     const registry = ctx.registry
     const engineLogger = createMainLogger("service.workflow.engine.agent-deps")
-    const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({ agent, prompt, abortSignal }) => {
+    const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({ providerId, modelTier, prompt, projectId, abortSignal }) => {
       try {
         const config = await configStore.load()
-        const activeRepo = config.repositories.find((r) => r.uuid === config.activeRepoUuid) ?? config.repositories[0]
-        const projectId = activeRepo?.uuid ?? ""
+        const repo = projectId
+          ? config.repositories.find((r) => r.uuid === projectId)
+          : (config.repositories.find((r) => r.uuid === config.activeRepoUuid) ?? config.repositories[0])
+        const effectiveProjectId = repo?.uuid ?? ""
+        const workspacePath = repo?.localPath ?? os.homedir()
         const containers = registry.get<ProjectContainerRegistry>("core.project-containers")
-        const container = await containers.open(projectId, { name: "", workspacePath: activeRepo?.localPath ?? "" })
+        const container = await containers.open(effectiveProjectId, { name: "", workspacePath })
         const agentRuntime = container.get<import("../services/agent-runtime").AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
         const result = await agentRuntime.sendScheduled({
-          projectId, agentType: agent, mode: "default", prompt,
+          projectId: effectiveProjectId, agentType: "claude-code", mode: "bypassPermissions", prompt,
+          providerId, modelTier,
           sessionPolicy: "fresh", timeoutMs: 120_000, abortSignal,
         })
         return { status: result.status === "success" ? "success" : "failed", response: result.summary ?? "", error: result.error, durationMs: result.durationMs }
       } catch (err) {
+        const diagnostic = workflowAgentErrorDiagnostic(err)
         engineLogger.error("engine agent call failed (infrastructure)", {
-          agent,
-          error: err instanceof Error ? err.message : String(err),
-          stack: err instanceof Error ? err.stack : undefined,
+          boundary: "workflow-engine.agent-deps",
+          providerId, modelTier, projectId,
+          ...diagnostic,
         })
-        return { status: "failed", response: "", error: String(err), durationMs: 0 }
+        return { status: "failed", response: "", error: workflowAgentFailureMessage(diagnostic), durationMs: 0 }
       }
     }
-    return new WorkflowEngine({ sendToAgent })
+    const permissionGuard = registry.get<PermissionGuard>("core.permission-guard")
+    const auditSink = registry.get<AuditSink>("core.audit-sink")
+    const runtimeDeps: import("../../workflow-nodes/types").NodeRuntimeDeps = {
+      processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      sendHttpRequest: sendOutboundHttpRequest,
+    }
+    return new WorkflowEngine({ sendToAgent }, undefined, runtimeDeps)
   },
+}
+
+function workflowAgentErrorDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly errorMessage?: string
+  readonly stackLength?: number
+} {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name,
+      errorLength: error.message.length,
+      errorMessage: sanitizeDiagnosticMessage(error.message),
+      stackLength: error.stack?.length,
+    }
+  }
+  const message = String(error)
+  return {
+    errorName: typeof error,
+    errorLength: message.length,
+    errorMessage: sanitizeDiagnosticMessage(message),
+  }
+}
+
+function capabilityRejectionDiagnostic(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly errorMessage?: string
+  readonly stackLength?: number
+} {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name,
+      errorLength: error.message.length,
+      errorMessage: sanitizeDiagnosticMessage(error.message),
+      stackLength: error.stack?.length,
+    }
+  }
+  const message = String(error)
+  return {
+    errorName: typeof error,
+    errorLength: message.length,
+    errorMessage: sanitizeDiagnosticMessage(message),
+  }
+}
+
+function workflowAgentFailureMessage(diagnostic: { readonly errorName: string; readonly errorLength: number; readonly errorMessage?: string }): string {
+  if (!diagnostic.errorMessage) {
+    return `Agent call failed (${diagnostic.errorName})`
+  }
+  return `Agent call failed (${diagnostic.errorName}, ${diagnostic.errorLength} chars)`
+}
+
+function sanitizeDiagnosticMessage(message: string): string {
+  const safe = sanitizeError(message)
+  return safe.length > 200 ? safe.slice(0, 200) + "…" : safe
 }
 
 export const coreWorkflowWindowManagerDescriptor: ServiceDescriptor<WorkflowWindowManager> = {

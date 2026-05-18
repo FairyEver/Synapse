@@ -16,6 +16,7 @@ const PHASE_LABEL_IN_PROGRESS: Partial<Record<SynapseAgentPhaseValue, string>> =
   request_submitted: "已提交给模型",
   awaiting_first_token: "等待回复",
   streaming: "正在回复",
+  cancel_pending: "正在停止",
 }
 
 const PHASE_LABEL_DONE: Partial<Record<SynapseAgentPhaseValue, string>> = {
@@ -25,6 +26,9 @@ const PHASE_LABEL_DONE: Partial<Record<SynapseAgentPhaseValue, string>> = {
   request_submitted: "已提交",
   awaiting_first_token: "模型已回应",
   streaming: "回复完成",
+  completed: "已完成",
+  cancel_pending: "已停止",
+  cancelled: "已停止",
 }
 
 const PHASE_LABEL_FAILED: Partial<Record<SynapseAgentPhaseValue, string>> = {
@@ -34,6 +38,8 @@ const PHASE_LABEL_FAILED: Partial<Record<SynapseAgentPhaseValue, string>> = {
   request_submitted: "提交失败",
   awaiting_first_token: "等待超时",
   streaming: "回复中断",
+  cancel_pending: "已停止",
+  cancelled: "已停止",
   failed: "失败",
 }
 
@@ -44,14 +50,19 @@ function pickLabel(item: SynapseAgentPhaseTimelineItem): string {
 }
 
 function elapsedSeconds(item: SynapseAgentPhaseTimelineItem, now: number): number {
-  const start = Date.parse(item.startedAt)
-  const end = item.completedAt ? Date.parse(item.completedAt) : now
+  const start = parseTimestamp(item.startedAt) ?? now
+  const end = item.completedAt ? parseTimestamp(item.completedAt) ?? start : now
   const ms = Math.max(0, end - start)
   return ms / 1000
 }
 
 function formatElapsed(seconds: number): string {
   return `${seconds.toFixed(1)}s`
+}
+
+function parseTimestamp(value: string): number | undefined {
+  const timestamp = Date.parse(value)
+  return Number.isFinite(timestamp) ? timestamp : undefined
 }
 
 function AgentPhaseRow({
@@ -88,7 +99,7 @@ function AgentPhaseRow({
         <span className="tabular-nums">{formatElapsed(elapsed)}</span>
       </div>
       {failed && item.errorMessage ? (
-        <div className="pl-5 text-destructive">{item.errorMessage}</div>
+        <div className="whitespace-pre-wrap break-words pl-5 text-destructive">{item.errorMessage}</div>
       ) : null}
     </div>
   )

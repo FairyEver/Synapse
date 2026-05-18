@@ -1,15 +1,18 @@
-import { Fragment } from "react"
+import { Fragment, type ReactNode } from "react"
 import { RefreshCw } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
+import { Skeleton } from "@/components/ui/skeleton"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtime-status"
 import type { SynapseAgentRuntimeStatusItem } from "@/types/agent"
 
 type AgentRuntimePanelProps = {
+  readonly children?: ReactNode
   readonly projectId?: string
+  readonly onRefresh?: () => void
 }
 
 type AgentRuntimeRowProps = {
@@ -68,7 +71,7 @@ function AgentRuntimeRow({ item }: AgentRuntimeRowProps) {
   )
 }
 
-function AgentRuntimePanel({ projectId }: AgentRuntimePanelProps) {
+function AgentRuntimePanel({ children, projectId, onRefresh }: AgentRuntimePanelProps) {
   const { status, loading, error, refresh } = useAgentRuntimeStatus(projectId)
   const agents = status?.agents ?? []
 
@@ -76,12 +79,15 @@ function AgentRuntimePanel({ projectId }: AgentRuntimePanelProps) {
     <Card>
       <CardHeader>
         <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-base">Agent</CardTitle>
+          <CardTitle className="text-base">智能体</CardTitle>
           <Button
             variant="ghost"
             size="sm"
             disabled={loading}
-            onClick={refresh}
+            onClick={() => {
+              refresh()
+              onRefresh?.()
+            }}
           >
             <RefreshCw data-icon="inline-start" className={loading ? "animate-spin" : undefined} />
             重新检测
@@ -89,13 +95,18 @@ function AgentRuntimePanel({ projectId }: AgentRuntimePanelProps) {
         </div>
       </CardHeader>
       <CardContent className="p-0">
-        {error && agents.length === 0 ? (
+        {loading && agents.length === 0 ? (
+          <div className="flex flex-col gap-3 px-4 py-4">
+            <Skeleton className="h-10 w-full" />
+            <Skeleton className="h-10 w-full" />
+          </div>
+        ) : error && agents.length === 0 ? (
           <div className="px-4 py-6 text-center text-sm text-muted-foreground">
             {error}
           </div>
         ) : agents.length === 0 && !loading ? (
           <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-            未检测到 Agent 运行时
+            未检测到智能体运行时
           </div>
         ) : (
           agents.map((item, index) => (
@@ -105,6 +116,14 @@ function AgentRuntimePanel({ projectId }: AgentRuntimePanelProps) {
             </Fragment>
           ))
         )}
+        {children ? (
+          <>
+            {agents.length > 0 ? <Separator /> : null}
+            <div className="px-4 py-3">
+              {children}
+            </div>
+          </>
+        ) : null}
       </CardContent>
     </Card>
   )

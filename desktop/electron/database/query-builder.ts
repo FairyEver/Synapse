@@ -65,7 +65,7 @@ function buildWhere(
       if (typeof cond.value === "object") {
         throw new Error(`CONTAINS operator requires a scalar value (string, number, or boolean) for column "${cond.field}". Got ${Array.isArray(cond.value) ? "array" : "object"}. Example: { field: "${cond.field}", op: "CONTAINS", value: "<single item>" }`)
       }
-      conditions.push(`EXISTS (SELECT 1 FROM json_each(${q(cond.field)}) WHERE value = ?)`)
+      conditions.push(`EXISTS (SELECT 1 FROM json_each(CASE WHEN json_valid(${q(cond.field)}) THEN ${q(cond.field)} ELSE '[]' END) WHERE value = ?)`)
       params.push(toSqlValue(cond.value))
       return
     }

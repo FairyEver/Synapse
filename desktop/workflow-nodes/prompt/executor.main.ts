@@ -1,6 +1,7 @@
 import type { NodeExecutor, NodeExecutionInput, NodeExecutionResult } from "../types"
 import type { PromptNodeConfig } from "./schema"
 import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
+import { agentErrorDiagnostic, sanitizeAgentError, agentFailureMessage, agentProviderFailureFromResponse } from "../../electron/services/workflow/workflow-utils"
 import { createMainLogger } from "../../electron/services/log-store"
 
 const logger = createMainLogger("workflow.node.prompt-executor")
@@ -9,30 +10,50 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
   async execute(input: NodeExecutionInput<PromptNodeConfig>): Promise<NodeExecutionResult> {
     const start = Date.now()
     input.onProgress?.("resolving_variables", "解析变量…")
-    const prompt = interpolatePrompt(input.config.prompt, input.resolvedVariables)
+    let prompt: string
+    try {
+      prompt = interpolatePrompt(input.config.prompt, input.resolvedVariables)
+    } catch (err) {
+      return { status: "failed", output: "", error: `模板变量解析失败：${err instanceof Error ? err.message : String(err)}`, durationMs: Date.now() - start }
+    }
 
     input.onProgress?.("calling_model", "调用模型…")
     logger.info("prompt node executing", {
-      runId: input.context.runId, agent: input.config.agent,
-      promptPreview: prompt.slice(0, 200),
+      projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
+      promptLength: prompt.length,
     })
 
     input.onProgress?.("awaiting_response", "等待响应…")
-    const result = await input.agentDeps.sendToAgent({ agent: input.config.agent, prompt, abortSignal: input.context.abortSignal })
+    const result = await input.agentDeps.sendToAgent({ providerId: input.config.providerId ?? "", modelTier: input.config.modelTier ?? "default", prompt, projectId: input.context.projectId, abortSignal: input.context.abortSignal })
     const durationMs = Date.now() - start
 
     if (result.status === "failed") {
+      const sanitizedError = sanitizeAgentError(result.error)
       logger.warn("prompt node agent call failed", {
-        runId: input.context.runId, agent: input.config.agent,
-        error: result.error, durationMs,
+        projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
+        ...agentErrorDiagnostic(result.error),
+        sanitizedError,
+        durationMs,
       })
-      return { status: "failed", output: "", error: result.error, durationMs }
+      return { status: "failed", output: "", error: agentFailureMessage(result.error), durationMs }
+    }
+
+    const providerFailure = agentProviderFailureFromResponse(result.response)
+    if (providerFailure) {
+      const sanitizedError = sanitizeAgentError(providerFailure)
+      logger.warn("prompt node agent call failed", {
+        projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
+        ...agentErrorDiagnostic(providerFailure),
+        sanitizedError,
+        durationMs,
+      })
+      return { status: "failed", output: "", error: agentFailureMessage(providerFailure), durationMs }
     }
 
     input.onProgress?.("processing_output", "处理输出…")
     logger.info("prompt node succeeded", {
-      runId: input.context.runId, agent: input.config.agent,
-      outputPreview: result.response.slice(0, 200), durationMs,
+      projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
+      outputLength: result.response.length, durationMs,
     })
     return { status: "success", output: result.response, durationMs }
   },

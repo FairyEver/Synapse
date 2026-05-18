@@ -11,6 +11,7 @@ describe("settingsCategories", () => {
       "repositories",
       "projects",
       "tools",
+      "claude-code",
       "variables",
       "services",
       "troubleshooting",

@@ -1,5 +1,7 @@
 import type { MainActionRegistry } from "../../action-runtime/action-registry"
-import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import type { AuditSink, PermissionGuard, PermissionRequest } from "../../runtime/security"
+import { sanitizeError } from "../error-sanitize"
+import { createMainLogger } from "../log-store"
 import type { ScheduledTaskRunRepository } from "./run-repository"
 import type { ScheduledTaskRepository } from "./task-repository"
 import type {
@@ -15,12 +17,21 @@ export interface TaskSchedulerExecutionServiceDeps {
   readonly permissionGuard: PermissionGuard
   readonly auditSink: AuditSink
   readonly defaultCwd: string
+  readonly logger?: TaskSchedulerExecutionLogger
+}
+
+export interface TaskSchedulerExecutionLogger {
+  info?(message: string, metadata: Record<string, unknown>): void
+  warn(message: string, metadata: Record<string, unknown>): void
 }
 
 export class TaskSchedulerExecutionService {
   private readonly activeRuns = new Map<string, AbortController>()
+  private readonly logger: TaskSchedulerExecutionLogger
 
-  constructor(private readonly deps: TaskSchedulerExecutionServiceDeps) {}
+  constructor(private readonly deps: TaskSchedulerExecutionServiceDeps) {
+    this.logger = deps.logger ?? createMainLogger("service.task-scheduler.execution")
+  }
 
   async runTask(
     task: ScheduledTaskEntry,
@@ -29,6 +40,18 @@ export class TaskSchedulerExecutionService {
     const run = await this.deps.runs.start(task.id, triggeredBy)
     const controller = new AbortController()
     this.activeRuns.set(run.id, controller)
+    this.logger.info?.("Scheduled task execution started.", {
+      source: "task-scheduler",
+      taskId: task.id,
+      runId: run.id,
+      actionType: task.action.type,
+      triggeredBy,
+      boundary: "task-scheduler-execution-start",
+    })
+    let permissionRequest: PermissionRequest | undefined
+    let permissionAllowed = false
+    let permissionDenied = false
+    let actionExecutePending = false
     try {
       const action = this.deps.actions.get(task.action.type)
       const config = action.manifest.configSchema.parse(task.action.config)
@@ -39,8 +62,9 @@ export class TaskSchedulerExecutionService {
         cwd: resolveCwd(task, this.deps.defaultCwd),
         actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" } as const,
         abortSignal: controller.signal,
+        configVersion: task.configVersion ?? 0,
       }
-      const permissionRequest = action.buildPermissionRequest({ config, context })
+      permissionRequest = action.buildPermissionRequest({ config, context })
       const permission = await this.deps.permissionGuard.check(permissionRequest)
       if (!permission.allowed) {
         this.deps.auditSink.record({
@@ -57,6 +81,7 @@ export class TaskSchedulerExecutionService {
             reason: permission.reason,
           },
         })
+        permissionDenied = true
         throw new Error(permission.reason)
       }
       this.deps.auditSink.record({
@@ -72,41 +97,101 @@ export class TaskSchedulerExecutionService {
           triggeredBy,
         },
       })
+      permissionAllowed = true
       const previousOutputs = await this.getLastSuccessOutputs(task.id)
+      actionExecutePending = true
       const result = await action.execute({ config, context, previousOutputs })
+      if (controller.signal.aborted) {
+        throw new TaskRunCancelledError()
+      }
+      actionExecutePending = false
       if (result.status !== "success") {
+        const metadata = {
+          source: "task-scheduler",
+          taskId: task.id,
+          runId: run.id,
+          actionType: task.action.type,
+          triggeredBy,
+          boundary: "task-scheduler-action",
+          status: result.status,
+          ...resultErrorDiagnostic(result.error),
+        }
         this.deps.auditSink.record({
           action: permissionRequest.action,
           actor: permissionRequest.actor,
           resource: permissionRequest.resource,
           outcome: "failed",
-          metadata: {
-            source: "task-scheduler",
-            taskId: task.id,
-            runId: run.id,
-            actionType: task.action.type,
-            triggeredBy,
-            status: result.status,
-            error: result.error,
-          },
+          metadata,
         })
+        this.logger.warn("Scheduled task action failed.", metadata)
       }
+      const persistableResult = result.error
+        ? { ...result, error: persistableActionError(result.error) }
+        : result
       const finished = await this.deps.runs.finish(run.id, {
         status: result.status,
-        result,
-        error: result.error,
+        result: persistableResult,
+        error: persistableResult.error,
       })
       await this.deps.tasks.markRunResult(task.id, { status: result.status })
+      if (result.status === "success") {
+        this.logger.info?.("Scheduled task action completed.", {
+          source: "task-scheduler",
+          taskId: task.id,
+          runId: run.id,
+          actionType: task.action.type,
+          triggeredBy,
+          boundary: "task-scheduler-action",
+          status: result.status,
+          hasOutputs: Boolean(result.outputs),
+          summaryLength: result.summary?.length ?? 0,
+        })
+      }
       return finished
     } catch (error) {
       const message = errorMessage(error)
+      const diagnostic = errorDiagnostic(error)
       const status = controller.signal.aborted ? "cancelled" : "failed"
+      if (actionExecutePending && permissionAllowed && permissionRequest) {
+        const metadata = {
+          source: "task-scheduler",
+          taskId: task.id,
+          runId: run.id,
+          actionType: task.action.type,
+          triggeredBy,
+          boundary: "task-scheduler-action",
+          status,
+          ...diagnostic,
+        }
+        this.deps.auditSink.record({
+          action: permissionRequest.action,
+          actor: permissionRequest.actor,
+          resource: permissionRequest.resource,
+          outcome: "failed",
+          metadata,
+        })
+        this.logger.warn("Scheduled task action threw.", metadata)
+      } else {
+        this.logger.warn("Scheduled task preparation failed.", {
+          source: "task-scheduler",
+          boundary: "task-scheduler-pre-execution",
+          taskId: task.id,
+          runId: run.id,
+          actionType: task.action.type,
+          triggeredBy,
+          status,
+          ...diagnostic,
+        })
+      }
+      const visibleError = permissionDenied
+        ? message
+        : visibleFailureMessage(status, diagnostic.errorName)
       const finished = await this.deps.runs.finish(run.id, {
         status,
-        error: message,
+        error: visibleError,
         result: {
           status,
-          error: message,
+          error: visibleError,
           summary: status === "cancelled" ? "已停止" : "执行失败",
         },
       })
@@ -138,4 +223,45 @@ function resolveCwd(task: ScheduledTaskEntry, defaultCwd: string): string {
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: errorMessage(error).length,
+  }
+}
+
+function resultErrorDiagnostic(error: string | undefined): { readonly errorName?: string; readonly errorLength?: number; readonly diagnosticMessage?: string } {
+  if (!error) return {}
+  const sanitized = sanitizePersistableError(error)
+  if (sanitized) {
+    const truncated = sanitized.length <= 120 ? sanitized : sanitized.slice(0, 120) + "..."
+    return { errorName: "action_error", errorLength: error.length, diagnosticMessage: truncated }
+  }
+  return { errorName: "action_error", errorLength: error.length }
+}
+
+function persistableActionError(error: string | undefined): string | undefined {
+  if (!error) return undefined
+  const sanitized = sanitizePersistableError(error)
+  if (!sanitized) return `执行失败（${error.length} 字）`
+  const truncated = sanitized.length <= 120 ? sanitized : sanitized.slice(0, 120) + "..."
+  return `执行失败：${truncated}`
+}
+
+function sanitizePersistableError(value: string): string {
+  return sanitizeError(value)
+}
+
+class TaskRunCancelledError extends Error {
+  constructor() {
+    super("Scheduled task run was stopped")
+    this.name = "TaskRunCancelledError"
+  }
+}
+
+function visibleFailureMessage(status: "failed" | "cancelled", errorName: string): string {
+  if (status === "cancelled") return "已停止"
+  return `执行失败（${errorName}）`
 }

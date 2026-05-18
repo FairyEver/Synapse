@@ -1,6 +1,7 @@
 import type { WorkflowDefinition, ValidationResult, ValidationError, ValidationWarning } from "../../../src/types/workflow"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { createMainLogger } from "../log-store"
+import { computeEndReachable } from "./workflow-utils"
 
 const logger = createMainLogger("service.workflow.validator")
 
@@ -13,7 +14,10 @@ function buildReverseAdj(def: WorkflowDefinition): Map<string, string[]> {
 function topoSort(def: WorkflowDefinition): { order: string[]; hasCycle: boolean } {
   const inDeg = new Map(def.nodes.map((n) => [n.id, 0]))
   const adj = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
-  for (const e of def.edges) { adj.get(e.from)?.push(e.to); inDeg.set(e.to, (inDeg.get(e.to) ?? 0) + 1) }
+  for (const e of def.edges) {
+    if (!adj.has(e.from) || !inDeg.has(e.to)) continue
+    adj.get(e.from)?.push(e.to); inDeg.set(e.to, (inDeg.get(e.to) ?? 0) + 1)
+  }
   const queue = def.nodes.filter((n) => inDeg.get(n.id) === 0).map((n) => n.id)
   const order: string[] = []
   while (queue.length) {
@@ -23,32 +27,10 @@ function topoSort(def: WorkflowDefinition): { order: string[]; hasCycle: boolean
   return { order, hasCycle: order.length !== def.nodes.length }
 }
 
-function ancestors(nodeId: string, def: WorkflowDefinition): Set<string> {
-  const rev = buildReverseAdj(def)
+function ancestors(nodeId: string, rev: Map<string, string[]>): Set<string> {
   const visited = new Set<string>(); const stack = [nodeId]
   while (stack.length) { for (const p of rev.get(stack.pop()!) ?? []) { if (!visited.has(p)) { visited.add(p); stack.push(p) } } }
   return visited
-}
-
-/**
- * Compute which nodes can reach the End node via forward edge traversal.
- * Uses a reverse BFS from the End node (following edges backwards).
- * Used to validate that every Switch branch path eventually reaches End.
- */
-function computeEndReachable(def: WorkflowDefinition): Set<string> {
-  const endNode = def.nodes.find((n) => n.type === "end")
-  if (!endNode) return new Set()
-  const reachable = new Set<string>([endNode.id])
-  const revAdj = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
-  for (const e of def.edges) revAdj.get(e.to)?.push(e.from)
-  const queue = [endNode.id]
-  while (queue.length) {
-    const cur = queue.shift()!
-    for (const prev of revAdj.get(cur) ?? []) {
-      if (!reachable.has(prev)) { reachable.add(prev); queue.push(prev) }
-    }
-  }
-  return reachable
 }
 
 export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
@@ -58,11 +40,14 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
   const paramNamesSeen = new Set<string>()
   for (const p of def.params) {
     const trimmed = p.name.trim()
-    if (!trimmed) continue
+    if (!trimmed) {
+      errors.push({ type: "invalid_config", message: "工作流参数名称不能为空" })
+      continue
+    }
     if (paramNamesSeen.has(trimmed)) {
       errors.push({ type: "invalid_config", message: `工作流参数名称「${trimmed}」重复，请确保每个参数名称唯一` })
       logger.warn("duplicate param name detected", { workflowId: def.id, duplicateName: trimmed })
-      break
+      continue
     }
     paramNamesSeen.add(trimmed)
   }
@@ -72,12 +57,27 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
     errors.push({ type: "missing_end_node", message: "工作流必须包含一个结束节点" })
   if (endNodes.length > 1)
     errors.push({ type: "multiple_end_nodes", message: "结束节点只能有一个" })
+  for (const endNode of endNodes) {
+    if (def.edges.some((edge) => edge.from === endNode.id)) {
+      errors.push({ type: "invalid_config", nodeId: endNode.id, message: `结束节点「${endNode.name}」不能连接到下游节点` })
+    }
+  }
+  const nodeIdsSeen = new Set<string>()
+  for (const node of def.nodes) {
+    if (nodeIdsSeen.has(node.id)) {
+      errors.push({ type: "invalid_config", nodeId: node.id, message: `节点 ID「${node.id}」重复，请删除重复节点后重试` })
+      logger.warn("duplicate node id detected", { workflowId: def.id, nodeId: node.id })
+      continue
+    }
+    nodeIdsSeen.add(node.id)
+  }
 
   const { hasCycle } = topoSort(def)
   if (hasCycle) errors.push({ type: "cycle", message: "工作流包含循环依赖" })
 
   const byId = new Map(def.nodes.map((n) => [n.id, n]))
-  if (def.nodes.filter((n) => n.type !== "end" && !def.edges.some((e) => e.to === n.id)).length > 1)
+  const revAdj = buildReverseAdj(def)
+  if (def.nodes.filter((n) => n.type === "start").length > 1)
     warnings.push({ type: "multiple_start_nodes", message: "存在多个起始节点" })
 
   for (const node of def.nodes) {
@@ -93,6 +93,19 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
       errors.push({ type: "invalid_config", nodeId: node.id, message: `节点 "${node.name}" 类型无效：${message}` })
     }
 
+    // Provider resolution: prompt/switch nodes must have provider either on node or workflow default
+    if (node.type === "prompt" || node.type === "switch") {
+      const cfg = node.config as Record<string, unknown>
+      const hasProviderId = typeof cfg.providerId === "string" && cfg.providerId.length > 0
+      const hasModelTier = typeof cfg.modelTier === "string" && cfg.modelTier.length > 0
+      if (!hasProviderId && !def.defaultProviderId) {
+        errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」未配置供应商，且工作流未设置默认供应商` })
+      }
+      if (!hasModelTier && !def.defaultModelTier) {
+        errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」未配置模型层级，且工作流未设置默认模型` })
+      }
+    }
+
     // Switch node: validate branch ID uniqueness
     if (node.type === "switch") {
       const branches = (node.config as Record<string, unknown>)["branches"]
@@ -103,7 +116,7 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
           if (seen.has(bid)) {
             errors.push({ type: "invalid_config", nodeId: node.id, message: `Switch 节点 "${node.name}" 存在重复的分支 ID "${bid}"` })
             logger.warn("duplicate branch id detected", { workflowId: def.id, nodeId: node.id, nodeName: node.name, duplicateId: bid })
-            break
+            continue
           }
           seen.add(bid)
         }
@@ -111,7 +124,7 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
     }
 
     if (!hasCycle) {
-      const anc = ancestors(node.id, def)
+      const anc = ancestors(node.id, revAdj)
       const vars = (node.config as Record<string, unknown>)["variables"]
       for (const v of (Array.isArray(vars) ? vars : []) as Array<Record<string, unknown>>) {
         const src = v["source"] as Record<string, unknown> | undefined
@@ -127,9 +140,16 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
     }
   }
 
+  const edgeIdsSeen = new Set<string>()
   for (const edge of def.edges) {
     const from = byId.get(edge.from)
     const to = byId.get(edge.to)
+    if (edgeIdsSeen.has(edge.id)) {
+      errors.push({ type: "invalid_config", edgeId: edge.id, message: `连线 ID「${edge.id}」重复，请重新连线后重试` })
+      logger.warn("duplicate edge id detected", { workflowId: def.id, edgeId: edge.id })
+      continue
+    }
+    edgeIdsSeen.add(edge.id)
     if (!from || !to) {
       errors.push({ type: "invalid_config", edgeId: edge.id, message: `连线 "${edge.id}" 引用了不存在的节点` })
       continue
@@ -137,11 +157,11 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
     const branches = ((from.config as Record<string, unknown>)["branches"] as Array<{ id: string }> | undefined) ?? []
     if (from.type === "switch") {
       if (edge.branch === undefined)
-        errors.push({ type: "invalid_switch_edge", edgeId: edge.id, message: "Switch 节点出边必须设置 branch" })
+        errors.push({ type: "invalid_switch_edge", edgeId: edge.id, message: "Switch 节点出边必须设置分支 ID" })
       else if (!branches.some((b) => b.id === edge.branch))
-        errors.push({ type: "invalid_switch_edge", edgeId: edge.id, message: `edge branch "${edge.branch}" 不在分支列表中` })
+        errors.push({ type: "invalid_switch_edge", edgeId: edge.id, message: `连线分支 "${edge.branch}" 不在该 Switch 节点的分支列表中` })
     } else if (edge.branch !== undefined) {
-      errors.push({ type: "orphan_edge_branch", edgeId: edge.id, message: `非 Switch 节点出边不应设置 branch` })
+      errors.push({ type: "orphan_edge_branch", edgeId: edge.id, message: "非 Switch 节点出边不应设置分支 ID" })
     }
   }
 
@@ -198,4 +218,48 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
   }
 
   return { valid: errors.length === 0, errors, warnings }
+}
+
+export function validateRunParams(def: WorkflowDefinition, params: Record<string, unknown>): ValidationError[] {
+  const errors: ValidationError[] = []
+  for (const param of def.params) {
+    const value = params[param.name]
+    const hasValue = paramHasValue(params, param.name)
+    const hasDefault = paramHasDefault(param)
+    if (!hasValue) {
+      if (!hasDefault) {
+        errors.push({ type: "missing_param", message: `缺少必填参数「${param.name}」` })
+      }
+      continue
+    }
+    if (param.type === "text" && typeof value !== "string") {
+      errors.push({ type: "invalid_config", message: `参数「${param.name}」必须是文本` })
+    }
+    if (param.type === "number") {
+      const numberValue = typeof value === "number" ? value : typeof value === "string" ? Number(value) : Number.NaN
+      if (!Number.isFinite(numberValue)) {
+        errors.push({ type: "invalid_config", message: `参数「${param.name}」必须是数字` })
+      }
+    }
+  }
+  return errors
+}
+
+export function buildEffectiveRunParams(def: WorkflowDefinition, params: Record<string, unknown>): Record<string, unknown> {
+  const effective = { ...params }
+  for (const param of def.params) {
+    const hasValue = paramHasValue(effective, param.name)
+    const hasDefault = paramHasDefault(param)
+    if (!hasValue && hasDefault) effective[param.name] = param.default
+  }
+  return effective
+}
+
+function paramHasValue(params: Record<string, unknown>, name: string): boolean {
+  const value = params[name]
+  return Object.prototype.hasOwnProperty.call(params, name) && value !== undefined && value !== null
+}
+
+function paramHasDefault(param: { default?: unknown }): boolean {
+  return param.default !== undefined && param.default !== null
 }

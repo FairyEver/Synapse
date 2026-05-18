@@ -1,6 +1,8 @@
-import { useEffect, useMemo, useState } from "react"
-import { AlertCircle, LoaderCircle } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { LoaderCircle } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
+import { createRendererLogger } from "@/app-shell/logging"
+import { sanitizeError } from "@/lib/error-sanitize"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -18,12 +20,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
-import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtime-status"
 import { usePromptRun } from "@/modules/prompts/hooks/use-prompt-run"
+import { requireSynapseBridge } from "@/lib/electron-bridge"
+import type { SynapseAgentProvider } from "@/types/bridge"
 import type { SynapseContentMeta } from "@/types/content"
+
+const logger = createRendererLogger("prompts.run-dialog")
 
 type PromptRunDialogProps = {
   open: boolean
@@ -37,20 +40,43 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
   const { run, isRunning } = usePromptRun()
 
   const [selectedProjectId, setSelectedProjectId] = useState<string>("")
-  const [selectedAgentType, setSelectedAgentType] = useState<string>("")
+  const [providers, setProviders] = useState<SynapseAgentProvider[]>([])
+  const [selectedProviderId, setSelectedProviderId] = useState<string>("")
+  const [providersLoading, setProvidersLoading] = useState(false)
+  const [providersError, setProvidersError] = useState<string | null>(null)
+  const providerRequestIdRef = useRef(0)
 
-  const selectedProject = useMemo(
-    () => projects.find((p) => p.id === selectedProjectId),
-    [projects, selectedProjectId],
+  const visibleProviders = useMemo(
+    () => providers.filter((provider) => !provider.archived),
+    [providers],
   )
 
-  const { status: runtimeStatus } = useAgentRuntimeStatus(selectedProjectId || undefined)
-
-  const selectedAgentReady = useMemo(() => {
-    if (!runtimeStatus || !selectedAgentType) return null
-    const agent = runtimeStatus.agents.find((a) => a.id === selectedAgentType)
-    return agent?.cli.installed ?? false
-  }, [runtimeStatus, selectedAgentType])
+  const loadProviders = useCallback(async () => {
+    const requestId = providerRequestIdRef.current + 1
+    providerRequestIdRef.current = requestId
+    setProvidersLoading(true)
+    setProvidersError(null)
+    try {
+      const nextProviders = await requireSynapseBridge().agent.listProviders()
+      if (requestId !== providerRequestIdRef.current) return
+      const visible = nextProviders.filter((provider) => !provider.archived)
+      setProviders(nextProviders)
+      setSelectedProviderId(visible.find((provider) => provider.active)?.id ?? visible[0]?.id ?? "")
+    } catch (rawError) {
+      if (requestId !== providerRequestIdRef.current) return
+      logger.error("Prompt run: load providers failed.", {
+        boundary: "renderer.prompt-run.load-providers",
+        ...errorLogMeta(rawError),
+      })
+      setProviders([])
+      setSelectedProviderId("")
+      setProvidersError(rawError instanceof Error ? rawError.message : "读取 Provider 失败")
+    } finally {
+      if (requestId === providerRequestIdRef.current) {
+        setProvidersLoading(false)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!open) return
@@ -61,25 +87,32 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
   }, [open, projects])
 
   useEffect(() => {
-    if (!selectedProject) return
-    const defaultAgent = selectedProject.defaultAgentId
-    if (defaultAgent && agentDefinitions.some((d) => d.id === defaultAgent)) {
-      setSelectedAgentType(defaultAgent)
-    } else if (agentDefinitions.length > 0) {
-      setSelectedAgentType(agentDefinitions[0].id)
+    if (!open) {
+      providerRequestIdRef.current += 1
+      setProviders([])
+      setSelectedProviderId("")
+      setProvidersError(null)
+      setProvidersLoading(false)
+      return
     }
-  }, [selectedProject])
+    void loadProviders()
+  }, [loadProviders, open])
 
-  const canSubmit =
-    Boolean(item) &&
-    Boolean(selectedProjectId) &&
-    Boolean(selectedAgentType) &&
-    selectedAgentReady !== false &&
-    !isRunning
+  const canSubmit = Boolean(item)
+    && Boolean(selectedProjectId)
+    && Boolean(selectedProviderId)
+    && !providersLoading
+    && !isRunning
 
   const handleRun = async (navigate: boolean) => {
-    if (!item || !selectedProjectId || !selectedAgentType) return
-    const success = await run({ item, projectId: selectedProjectId, agentType: selectedAgentType, navigate })
+    if (!item || !selectedProjectId || !selectedProviderId) return
+    const success = await run({
+      item,
+      projectId: selectedProjectId,
+      agentType: "claude-code",
+      providerId: selectedProviderId,
+      navigate,
+    })
     if (success) {
       onOpenChange(false)
     }
@@ -130,30 +163,38 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
                 ))}
               </SelectContent>
             </Select>
+            {projects.length === 0 ? (
+              <p className="text-sm text-muted-foreground">请先在设置中添加项目</p>
+            ) : null}
           </div>
-
           <div className="flex flex-col gap-2">
-            <Label>Agent 类型</Label>
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              value={selectedAgentType}
-              onValueChange={(value) => {
-                if (value) setSelectedAgentType(value)
-              }}
-              className="w-full justify-start"
+            <Label>Provider</Label>
+            <Select
+              value={selectedProviderId}
+              onValueChange={setSelectedProviderId}
+              disabled={providersLoading || Boolean(providersError) || visibleProviders.length === 0}
             >
-              {agentDefinitions.map((agent) => (
-                <ToggleGroupItem key={agent.id} value={agent.id}>
-                  {agent.label}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-            {selectedAgentReady === false ? (
-              <p className="flex items-center gap-1.5 text-xs text-destructive">
-                <AlertCircle className="size-3.5 shrink-0" />
-                所选 Agent 未安装
-              </p>
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder={providersLoading ? "正在加载" : "选择 Provider"} />
+              </SelectTrigger>
+              <SelectContent>
+                {visibleProviders.map((provider) => (
+                  <SelectItem key={provider.id} value={provider.id}>
+                    {provider.name}{provider.model ? ` · ${provider.model}` : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {providersError ? (
+              <div className="flex items-center gap-2">
+                <p className="text-sm text-destructive">{providersError}</p>
+                <Button type="button" variant="outline" size="sm" onClick={() => void loadProviders()}>
+                  重试
+                </Button>
+              </div>
+            ) : null}
+            {!providersLoading && !providersError && visibleProviders.length === 0 ? (
+              <p className="text-sm text-muted-foreground">暂无 Provider</p>
             ) : null}
           </div>
         </div>
@@ -182,6 +223,15 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
       </DialogContent>
     </Dialog>
   )
+}
+
+function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number; readonly errorMessage?: string } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+    ...(message.length > 0 ? { errorMessage: message.length > 200 ? sanitizeError(message).slice(0, 200) + "…" : sanitizeError(message) } : {}),
+  }
 }
 
 export { PromptRunDialog }

@@ -20,6 +20,24 @@ describe("navigation watch-next-agent-session", () => {
     expect(source).toContain("subscribeWatchNextAgentSession,")
   })
 
+  it("exports cancelWatchNextAgentSession", async () => {
+    const source = await readFile(
+      new URL("../navigation.ts", import.meta.url),
+      "utf8",
+    )
+    expect(source).toContain("function cancelWatchNextAgentSession")
+    expect(source).toContain("cancelWatchNextAgentSession,")
+  })
+
+  it("exports subscribeCancelWatchNextAgentSession", async () => {
+    const source = await readFile(
+      new URL("../navigation.ts", import.meta.url),
+      "utf8",
+    )
+    expect(source).toContain("function subscribeCancelWatchNextAgentSession")
+    expect(source).toContain("subscribeCancelWatchNextAgentSession,")
+  })
+
   it("declares WatchNextAgentSessionPayload with projectId", async () => {
     const source = await readFile(
       new URL("../navigation.ts", import.meta.url),

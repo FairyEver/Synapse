@@ -215,6 +215,44 @@ describe("DiagnosticsService.collect", () => {
     ]))
   })
 
+  it("surfaces Agent runtime log signals without raw prompt or auth details", async () => {
+    const service = createService({
+      logStore: {
+        getLogDirectory: () => "/logs",
+        listLogFilesInfo: vi.fn(async () => [{ name: "synapse.log", sizeBytes: 100 }]),
+        readLogsByNames: vi.fn(async () => [
+          "[2026-04-29T03:11:18.063Z] [WARN ] [main:service.agent-runtime] AgentRuntime queued turn failed.",
+          "{ conversationId: 'conversation-1', sdkSessionId: 'sdk-1', taskId: 'task-1', runId: 'run-1', prompt: 'secret prompt', authorization: 'Bearer secret' }",
+          "[2026-04-29T03:11:19.000Z] [ERROR] [main:service.task-scheduler.execution] Scheduled Agent action failed. sdkSessionId=sdk-2",
+        ].join("\n")),
+        flush: vi.fn(async () => undefined),
+      },
+    })
+
+    const report = await service.collect()
+    const check = report.checks.find((item) => item.id === "logs.agent-runtime")
+
+    expect(check).toMatchObject({
+      status: "degraded",
+      details: {
+        signalCount: 3,
+        warningCount: 2,
+        errorCount: 1,
+        boundaries: expect.arrayContaining(["agent-runtime", "task-scheduler"]),
+        components: expect.arrayContaining(["main:service.agent-runtime", "main:service.task-scheduler.execution"]),
+        correlation: {
+          conversationId: 1,
+          sdkSessionId: 2,
+          taskId: 1,
+          runId: 1,
+        },
+      },
+    })
+    const details = JSON.stringify(check?.details)
+    expect(details).not.toContain("secret prompt")
+    expect(details).not.toContain("Bearer secret")
+  })
+
   it("adds Windows compatibility checks to the report", async () => {
     const service = createService({
       appInfo: {
@@ -320,6 +358,36 @@ describe("DiagnosticsService.exportBundle", () => {
     const report = await service.collect()
 
     await expect(service.exportBundle({ report })).resolves.toEqual({ success: false })
+  })
+
+  it("records failed exports without raw error text in audit metadata", async () => {
+    const rawError = "zip failed token=sk-secret at /Users/example/private/report.zip"
+    const auditSink = {
+      record: vi.fn(),
+      list: () => [],
+      clearForTests: vi.fn(),
+    }
+    const service = createService({
+      auditSink,
+      createZipArchive: vi.fn(async () => {
+        throw new Error(rawError)
+      }),
+    })
+    const report = await service.collect()
+
+    await expect(service.exportBundle({ report })).rejects.toThrow(rawError)
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        source: "ops.exportDiagnosticsBundle",
+        errorName: "Error",
+        errorLength: rawError.length,
+      }),
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("/Users/example/private")
   })
 })
 
@@ -460,6 +528,10 @@ function createConfig(): SynapseConfig {
       favorites: { rule: [], skill: [], prompt: [] },
       recentlyViewed: { rule: [], skill: [], prompt: [] },
       contentSortOrder: "modified-desc",
+    },
+    agent: {
+      defaultPermissionMode: "default",
+      defaultProviderModel: null,
     },
   }
 }

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useState } from "react"
+import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseBridge } from "@/types/bridge"
 
@@ -9,8 +10,18 @@ type HourlyRow = Awaited<ReturnType<SynapseBridge["tokenUsage"]["getHourlyReport
 type HourlyProfile = Awaited<ReturnType<SynapseBridge["tokenUsage"]["getHourlyProfile"]>>
 type ScanResult = Awaited<ReturnType<SynapseBridge["tokenUsage"]["scan"]>>
 
+const logger = createRendererLogger("token-usage.hooks")
+
 function toLoadError(error: unknown): Error {
   return error instanceof Error ? error : new Error("读取失败")
+}
+
+function logLoadError(operation: string, error: unknown, options?: unknown): void {
+  logger.error("Token usage load failed.", {
+    operation,
+    options,
+    error,
+  })
 }
 
 export function useTokenUsageScan() {
@@ -24,6 +35,7 @@ export function useTokenUsageScan() {
       const result = await requireSynapseBridge().tokenUsage.scan()
       return result
     } catch (e) {
+      logLoadError("scan", e)
       setError(toLoadError(e))
       return null
     } finally {
@@ -46,6 +58,7 @@ export function useGraphResult() {
       setData(result)
       setError(null)
     } catch (e) {
+      logLoadError("getGraphResult", e, options)
       setData(null)
       setError(toLoadError(e))
     } finally {
@@ -70,6 +83,7 @@ export function useModelReport() {
       setData(result)
       setError(null)
     } catch (e) {
+      logLoadError("getModelReport", e, options)
       setData([])
       setError(toLoadError(e))
     } finally {
@@ -92,6 +106,7 @@ export function useDailyReport() {
       setData(result)
       setError(null)
     } catch (e) {
+      logLoadError("getDailyReport", e, options)
       setData([])
       setError(toLoadError(e))
     } finally {
@@ -114,6 +129,7 @@ export function useAgentReport() {
       setData(result)
       setError(null)
     } catch (e) {
+      logLoadError("getAgentReport", e, options)
       setData([])
       setError(toLoadError(e))
     } finally {
@@ -136,6 +152,7 @@ export function useHourlyReport() {
       setData(result)
       setError(null)
     } catch (e) {
+      logLoadError("getHourlyReport", e, options)
       setData([])
       setError(toLoadError(e))
     } finally {
@@ -158,6 +175,7 @@ export function useHourlyProfile() {
       setData(result)
       setError(null)
     } catch (e) {
+      logLoadError("getHourlyProfile", e, options)
       setData(null)
       setError(toLoadError(e))
     } finally {
@@ -166,29 +184,6 @@ export function useHourlyProfile() {
   }, [])
 
   return { data, loading, error, refresh }
-}
-
-export function useDetectedAgents() {
-  const [agents, setAgents] = useState<{ id: string; name: string; fileCount: number }[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const refresh = useCallback(async () => {
-    setLoading(true)
-    try {
-      const result = await requireSynapseBridge().tokenUsage.getDetectedAgents()
-      setAgents(result)
-    } catch {
-      setAgents([])
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
-
-  return { agents, loading, refresh }
 }
 
 export type { GraphResult, ModelRow, AgentRow, HourlyRow, HourlyProfile, ScanResult }

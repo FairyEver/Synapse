@@ -1,15 +1,15 @@
 import { z } from "zod"
 
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
-import type { ConversationEntryV1, DataRepository } from "../../runtime/data-repo"
+import type { ConversationEntryV1 } from "../../runtime/data-repo"
 import {
   AgentRuntimeService,
   AGENT_RUNTIME_SERVICE_ID,
 } from "../../services/agent-runtime"
 import {
-  ProviderConfigService,
-  PROVIDER_CONFIG_SERVICE_ID,
-} from "../../services/provider-config"
+  ProviderService,
+  PROVIDER_SERVICE_ID,
+} from "../../services/provider"
 import { configStore } from "../../services/config-store"
 import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
@@ -29,15 +29,36 @@ export const timelineRequestSchema = projectRequestSchema.extend({
   limit: z.number().int().positive().max(200).optional(),
 })
 
+export const permissionModeSchema = z.enum([
+  "default",
+  "acceptEdits",
+  "plan",
+  "auto",
+  "dontAsk",
+  "bypassPermissions",
+])
+
 // ─── Shared response schemas ──────────────────────────────────────────────────
 
 const timelineBaseSchema = {
   id: z.string(),
   timestamp: z.string(),
   agentType: z.string().optional(),
+  sdkSessionId: z.string().optional(),
   agentSessionId: z.string().optional(),
   threadId: z.string().optional(),
 }
+
+const jsonRecordSchema = z.record(z.string(), z.unknown())
+const resultMetadataSchema = z.object({
+  model: z.string().optional(),
+  effort: z.string().optional(),
+  contextRemainingPercent: z.number().optional(),
+  workDir: z.string().optional(),
+  cancelled: z.boolean().optional(),
+  usage: jsonRecordSchema.optional(),
+  costUsd: z.number().optional(),
+})
 
 export const timelineItemSchema = z.discriminatedUnion("kind", [
   z.object({
@@ -46,6 +67,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     role: z.enum(["user", "assistant", "system", "tool"]),
     content: z.string(),
     legacy: z.boolean().optional(),
+    metadata: resultMetadataSchema.optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -57,7 +79,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     kind: z.literal("toolCall"),
     toolName: z.string(),
     toolInput: z.string().optional(),
-    toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+    toolInputRaw: jsonRecordSchema.optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -74,7 +96,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     requestId: z.string(),
     toolName: z.string(),
     toolInput: z.string().optional(),
-    toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+    toolInputRaw: jsonRecordSchema.optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -85,13 +107,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     ...timelineBaseSchema,
     kind: z.literal("result"),
     content: z.string(),
-    metadata: z.object({
-      model: z.string().optional(),
-      effort: z.string().optional(),
-      contextRemainingPercent: z.number().optional(),
-      workDir: z.string().optional(),
-      cancelled: z.boolean().optional(),
-    }).optional(),
+    metadata: resultMetadataSchema.optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -115,17 +131,27 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     completedAt: z.string().optional(),
     errorMessage: z.string().optional(),
   }),
+  z.object({
+    ...timelineBaseSchema,
+    kind: z.literal("sdkEvent"),
+    sdkType: z.string(),
+    sdkSubtype: z.string().optional(),
+    label: z.string(),
+    summary: z.string().optional(),
+  }),
 ])
 
 export const sessionSummarySchema = z.object({
   projectId: z.string(),
   id: z.string(),
   sessionKey: z.string(),
+  mode: permissionModeSchema.optional(),
   name: z.string().optional(),
   platform: z.string().optional(),
   sourceLabel: z.string().optional(),
   agentType: z.string().optional(),
   agentSessionId: z.string().optional(),
+  providerId: z.string().optional(),
   active: z.boolean(),
   historyCount: z.number(),
   createdAt: z.string(),
@@ -140,7 +166,7 @@ export async function resolveProjectAgent(
   projectId: string,
 ): Promise<{
   readonly agent: AgentRuntimeService
-  readonly providerConfig: ProviderConfigService
+  readonly providerService: ProviderService
   readonly project: { readonly uuid: string; readonly name: string; readonly localPath: string }
 }> {
   const config = await configStore.load()
@@ -156,7 +182,7 @@ export async function resolveProjectAgent(
   })
   return {
     agent: container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID),
-    providerConfig: container.get<ProviderConfigService>(PROVIDER_CONFIG_SERVICE_ID),
+    providerService: container.get<ProviderService>(PROVIDER_SERVICE_ID),
     project,
   }
 }
@@ -186,17 +212,28 @@ export function sessionSummary(session: ConversationEntryV1) {
     projectId: session.projectId,
     id: session.id,
     sessionKey: session.sessionKey,
+    mode: permissionModeFromConversation(session),
     name: session.name,
     platform: session.platform,
     sourceLabel: sessionSourceLabel(session),
     agentType: session.agentType,
     agentSessionId: session.agentSessionId,
+    providerId: session.providerId,
     active: session.active,
     historyCount: session.history.length,
     createdAt: session.createdAt,
     updatedAt: session.updatedAt,
     lastMessage: last ? historyEntry(session.id, last, session.history.length - 1, session.agentType) : undefined,
   }
+}
+
+function permissionModeFromConversation(
+  session: ConversationEntryV1,
+): z.infer<typeof permissionModeSchema> | undefined {
+  const mode = session.agentConfig?.mode
+  return permissionModeSchema.safeParse(mode).success
+    ? mode as z.infer<typeof permissionModeSchema>
+    : undefined
 }
 
 function sessionSourceLabel(session: ConversationEntryV1): string | undefined {
@@ -255,8 +292,11 @@ export function historyEntry(
 // ─── Shared event schemas (used in main ipc.ts) ───────────────────────────────
 
 const agentEventBaseSchema = {
+  sdkSessionId: z.string().optional(),
   agentSessionId: z.string().optional(),
   threadId: z.string().optional(),
+  timestamp: z.string().optional(),
+  payload: jsonRecordSchema.optional(),
 }
 
 export const agentEventTypeSchema = z.enum([
@@ -267,6 +307,12 @@ export const agentEventTypeSchema = z.enum([
   "permissionRequest",
   "result",
   "error",
+  "sessionInit",
+  "assistant",
+  "stream",
+  "status",
+  "compactBoundary",
+  "sdkEvent",
 ])
 
 export const agentEventSchema = z.discriminatedUnion("type", [
@@ -277,7 +323,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     type: z.literal("toolUse"),
     toolName: z.string(),
     toolInput: z.string().optional(),
-    toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+    toolInputRaw: jsonRecordSchema.optional(),
   }),
   z.object({
     ...agentEventBaseSchema,
@@ -294,22 +340,59 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     requestId: z.string(),
     toolName: z.string(),
     toolInput: z.string().optional(),
-    toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+    toolInputRaw: jsonRecordSchema.optional(),
   }),
   z.object({
     ...agentEventBaseSchema,
     type: z.literal("result"),
     content: z.string(),
     done: z.literal(true),
-    metadata: z.object({
-      model: z.string().optional(),
-      effort: z.string().optional(),
-      contextRemainingPercent: z.number().optional(),
-      workDir: z.string().optional(),
-      cancelled: z.boolean().optional(),
-    }).optional(),
+    metadata: resultMetadataSchema.optional(),
+    usage: jsonRecordSchema.optional(),
+    costUsd: z.number().optional(),
   }),
   z.object({ ...agentEventBaseSchema, type: z.literal("error"), message: z.string() }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("sessionInit"),
+    tools: z.array(z.string()).optional(),
+    mcpServers: z.array(jsonRecordSchema).optional(),
+    model: z.string().optional(),
+  }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("assistant"),
+    contentBlocks: z.array(z.unknown()).optional(),
+    content: z.string().optional(),
+    message: jsonRecordSchema.optional(),
+  }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("stream"),
+    blockIndex: z.number().optional(),
+    deltaType: z.string().optional(),
+    text: z.string().optional(),
+    thinking: z.string().optional(),
+    partialJson: z.string().optional(),
+    event: jsonRecordSchema.optional(),
+  }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("status"),
+    status: z.string().nullable().optional(),
+    message: z.string().optional(),
+  }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("compactBoundary"),
+  }),
+  z.object({
+    ...agentEventBaseSchema,
+    type: z.literal("sdkEvent"),
+    sdkType: z.string(),
+    sdkSubtype: z.string().optional(),
+    payload: jsonRecordSchema,
+  }),
 ])
 
 export const agentEventScopeSchema = z.object({

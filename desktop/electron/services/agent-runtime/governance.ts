@@ -90,9 +90,6 @@ export class AgentGovernanceService {
     const dedupe = this.checkDedupe(message)
     if (!dedupe.allowed) return dedupe
 
-    const rate = this.checkRateLimit(message)
-    if (!rate.allowed) return rate
-
     const command = slashCommand(message.content)
     const role = this.roleManager.resolve(message.userId)
     const disabledCommands = role?.disabledCommands ?? normalizeCommands(this.config.disabledCommands)
@@ -112,6 +109,9 @@ export class AgentGovernanceService {
       const banned = this.matchBannedWord(message.content)
       if (banned) return blocked("banned-word", `Message contains banned word "${banned}"`)
     }
+
+    const rate = this.checkRateLimit(message)
+    if (!rate.allowed) return rate
 
     return { allowed: true }
   }

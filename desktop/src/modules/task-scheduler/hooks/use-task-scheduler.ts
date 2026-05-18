@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
+import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
   ScheduledTask,
@@ -8,19 +9,29 @@ import type {
   ScheduledTaskUpdateInput,
 } from "@/types/task-scheduler"
 
+const logger = createRendererLogger("task-scheduler.hooks")
+
 function useTaskSchedulerTasks() {
   const [tasks, setTasks] = useState<ScheduledTask[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const hasLoadedRef = useRef(false)
 
   const refresh = useCallback(async () => {
     try {
-      setLoading(true)
+      if (!hasLoadedRef.current) setLoading(true)
       const nextTasks = await requireSynapseBridge().taskScheduler.listTasks()
+      hasLoadedRef.current = true
       setTasks(nextTasks)
       setError(null)
     } catch (refreshError) {
-      setError(refreshError instanceof Error ? refreshError.message : "读取任务失败")
+      logger.warn("Task scheduler list refresh failed.", {
+        action: "listTasks",
+        boundary: "renderer.task-scheduler.list",
+        errorType: refreshError instanceof Error ? refreshError.name : typeof refreshError,
+        errorLength: errorMessageLength(refreshError),
+      })
+      setError("读取任务失败")
     } finally {
       setLoading(false)
     }
@@ -72,6 +83,11 @@ async function exportTasksToFile(json: string): Promise<{ success: boolean; path
 
 async function importTasksFromFile(): Promise<{ success: boolean; content?: string }> {
   return requireSynapseBridge().taskScheduler.importTasksFromFile()
+}
+
+function errorMessageLength(error: unknown): number {
+  if (error instanceof Error) return error.message.length
+  return String(error).length
 }
 
 export {

@@ -4,7 +4,7 @@ import type { ZodType } from "zod"
 export interface PortDefinition { id: string; label: string }
 export interface ConfigFieldDescriptor {
   name: string
-  kind: "text" | "select" | "variable-binding-list" | "branch-list"
+  kind: "text" | "select" | "variable-binding-list" | "branch-list" | "record" | "number"
   label: string
   optional?: boolean
 }
@@ -14,6 +14,7 @@ export interface NodeManifest<TConfig = unknown> {
   title: string
   icon: LucideIcon
   color: string
+  defaultConfig: TConfig
   ports: { inputs: PortDefinition[]; outputs: PortDefinition[] | "dynamic" }
   resolveDynamicPorts?: (config: TConfig) => PortDefinition[]
   cardSummary: (config: TConfig) => { title: string; subtitle: string }
@@ -28,7 +29,7 @@ export interface WorkflowRuntimeContext {
 }
 
 export interface AgentSendDeps {
-  sendToAgent: (input: { agent: string; prompt: string; abortSignal: AbortSignal }) => Promise<{
+  sendToAgent: (input: { providerId: string; modelTier: string; prompt: string; projectId: string; abortSignal: AbortSignal }) => Promise<{
     status: "success" | "failed"
     response: string
     error?: string
@@ -36,16 +37,24 @@ export interface AgentSendDeps {
   }>
 }
 
+export interface NodeRuntimeDeps {
+  processRunner: {
+    run: (request: import("../electron/runtime/process").ControlledProcessRunRequest) => Promise<import("../electron/runtime/process").ControlledProcessResult>
+  }
+  sendHttpRequest: (request: import("../electron/runtime/network").OutboundHttpRequest) => Promise<import("../electron/runtime/network").OutboundHttpResponse>
+}
+
 export interface NodeExecutionInput<TConfig> {
   config: TConfig
   resolvedVariables: Record<string, string>
   context: WorkflowRuntimeContext
   agentDeps: AgentSendDeps
+  runtimeDeps?: NodeRuntimeDeps
   onProgress?: (phase: string, label: string) => void
 }
 
 export interface NodeExecutionResult {
-  status: "success" | "failed"
+  status: "success" | "failed" | "cancelled"
   output: string
   outputs?: Record<string, unknown>
   activeBranch?: string
@@ -56,3 +65,5 @@ export interface NodeExecutionResult {
 export interface NodeExecutor<TConfig = unknown> {
   execute(input: NodeExecutionInput<TConfig>): Promise<NodeExecutionResult>
 }
+
+

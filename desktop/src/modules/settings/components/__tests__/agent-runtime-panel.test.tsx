@@ -60,7 +60,7 @@ describe("AgentRuntimePanel", () => {
   it("renders agent runtime readiness without the legacy CLI tools title", () => {
     const html = renderToStaticMarkup(<AgentRuntimePanel projectId="project-1" />)
 
-    expect(html).toContain("Agent")
+    expect(html).toContain("智能体")
     expect(html).toContain("Codex")
     expect(html).toContain("codex-agent.png")
     expect(html).toContain("可用")

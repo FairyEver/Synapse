@@ -1,6 +1,8 @@
 import { randomUUID } from "node:crypto"
 
 import type { DataNamespace } from "../../runtime/data-repo"
+
+const ALL_DAYS: readonly number[] = [0, 1, 2, 3, 4, 5, 6]
 import { computeNextRunAt } from "./schedule-calculator"
 import type {
   ScheduledTaskEntry,
@@ -10,6 +12,13 @@ import type {
   TaskTrigger,
 } from "./types"
 import { validateCronExpression } from "./cron-expression"
+
+function hydrateActiveDays(task: ScheduledTaskEntry): ScheduledTaskEntry {
+  if (task.activeDays && Array.isArray(task.activeDays) && task.activeDays.length > 0) {
+    return task
+  }
+  return { ...task, activeDays: [...ALL_DAYS] }
+}
 
 export interface ScheduledTaskRepositoryDeps {
   readonly tasks: DataNamespace<ScheduledTaskEntry>
@@ -42,17 +51,19 @@ export class ScheduledTaskRepository {
       trigger,
       action: input.action,
       enabled,
+      activeDays: input.activeDays ? [...input.activeDays] : [...ALL_DAYS],
       missedRunPolicy: input.missedRunPolicy ?? "skip",
       overlapPolicy: "skip",
       createdAt: now,
       updatedAt: now,
       runCount: 0,
+      configVersion: 0,
     }
     validateTask(task)
     const next = {
       ...task,
       nextRunAt: enabled
-        ? computeNextRunAt({ trigger, from: this.now(), createdAt: now }).toISOString()
+        ? computeNextRunAt({ trigger, from: this.now(), createdAt: now, activeDays: task.activeDays }).toISOString()
         : undefined,
     }
     await this.tasks.upsert(next)
@@ -63,7 +74,7 @@ export class ScheduledTaskRepository {
     const existing = await this.require(id)
     const trigger = normalizeTrigger(patch.trigger ?? existing.trigger)
     const enabled = patch.enabled ?? existing.enabled
-    const next: ScheduledTaskEntry = {
+    const candidate: ScheduledTaskEntry = {
       ...existing,
       ...definedPatch({
         name: patch.name,
@@ -73,14 +84,19 @@ export class ScheduledTaskRepository {
         trigger,
         missedRunPolicy: patch.missedRunPolicy,
         enabled: patch.enabled,
+        activeDays: patch.activeDays,
       }),
       action: patch.action === undefined ? existing.action : patch.action,
-      nextRunAt: enabled
-        ? computeNextRunAt({ trigger, from: this.now(), createdAt: existing.createdAt }).toISOString()
-        : undefined,
+      configVersion: (existing.configVersion ?? 0) + 1,
       updatedAt: this.isoNow(),
     }
-    validateTask(next)
+    validateTask(candidate)
+    const next: ScheduledTaskEntry = {
+      ...candidate,
+      nextRunAt: enabled
+        ? computeNextRunAt({ trigger, from: this.now(), createdAt: existing.createdAt, activeDays: candidate.activeDays }).toISOString()
+        : undefined,
+    }
     await this.tasks.upsert(next)
     return next
   }
@@ -92,16 +108,29 @@ export class ScheduledTaskRepository {
     return true
   }
 
-  get(id: string): Promise<ScheduledTaskEntry | null> {
-    return this.tasks.get(id)
+  async get(id: string): Promise<ScheduledTaskEntry | null> {
+    const task = await this.tasks.get(id)
+    return task ? hydrateActiveDays(task) : null
   }
 
-  list(): Promise<ScheduledTaskEntry[]> {
-    return this.tasks.list()
+  async list(): Promise<ScheduledTaskEntry[]> {
+    const tasks = await this.tasks.list()
+    return tasks.map(hydrateActiveDays)
   }
 
   async setEnabled(id: string, enabled: boolean): Promise<ScheduledTaskEntry> {
-    return this.update(id, { enabled })
+    const existing = await this.require(id)
+    const trigger = normalizeTrigger(existing.trigger)
+    const next: ScheduledTaskEntry = {
+      ...existing,
+      enabled,
+      updatedAt: this.isoNow(),
+      nextRunAt: enabled
+        ? computeNextRunAt({ trigger, from: this.now(), createdAt: existing.createdAt, activeDays: existing.activeDays }).toISOString()
+        : undefined,
+    }
+    await this.tasks.upsert(next)
+    return next
   }
 
   async markScheduled(id: string, nextRunAt: string | undefined): Promise<ScheduledTaskEntry | null> {
@@ -139,6 +168,7 @@ export class ScheduledTaskRepository {
               trigger: existing.trigger,
               from: this.now(),
               createdAt: existing.createdAt,
+              activeDays: existing.activeDays,
             }).toISOString(),
           }
         : {}),
@@ -150,7 +180,7 @@ export class ScheduledTaskRepository {
   private async require(id: string): Promise<ScheduledTaskEntry> {
     const task = await this.tasks.get(id)
     if (!task) throw new Error(`Scheduled task "${id}" was not found`)
-    return task
+    return hydrateActiveDays(task)
   }
 
   private isoNow(): string {
@@ -185,6 +215,12 @@ function validateTask(task: ScheduledTaskEntry): void {
     throw new Error("everyMinutes must be >= 1")
   }
   if (!task.action.type.trim()) throw new Error("action type is required")
+  if (!Array.isArray(task.activeDays) || task.activeDays.length === 0) {
+    throw new Error("activeDays must contain at least one day (0-6)")
+  }
+  if (task.activeDays.some((d: number) => !Number.isInteger(d) || d < 0 || d > 6)) {
+    throw new Error("activeDays values must be integers 0-6")
+  }
 }
 
 function definedPatch<T extends Record<string, unknown>>(patch: T): Partial<T> {

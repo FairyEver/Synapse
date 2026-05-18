@@ -1,7 +1,9 @@
-import type { AgentCommandEntryV1, ConversationEntryV1, ProviderModelEntryV1 } from "../../runtime/data-repo"
+import type { AgentCommandEntryV1, ConversationEntryV1 } from "../../runtime/data-repo"
+import type { StructuredLogger } from "../../runtime/logging"
 import { isShellKind, type ShellKind } from "../shell-exec"
-import type { ProviderConfigService } from "../provider-config"
+import type { CCProvider, ProviderService } from "../provider"
 import { agentRuntimeDefinitionById } from "../definitions/generated/main-registry"
+import { errorCode } from "../error-utils"
 import type {
   AgentEvent,
   AgentMessage,
@@ -24,12 +26,13 @@ export interface AgentCommandRouterDeps {
   readonly projectId: string
   readonly agentType: string
   resolveAgentType?(): Promise<string> | string
-  readonly providerConfig: ProviderConfigService
+  readonly providerService: ProviderService
   readonly registeredPromptCommands?: readonly RegisteredPromptCommand[]
   readonly agentNativeSlashAllowlist?: readonly string[]
   readonly unknownSlashBehavior?: "reject" | "passthrough"
   readonly customCommands?: CustomCommandRegistry
   readonly skills?: SkillRegistry
+  readonly logger?: Pick<StructuredLogger, "warn">
   listCommands?(message: AgentMessage): Promise<readonly PublishedAgentCommand[]>
   runCustomCommand?(
     command: AgentCommandEntryV1,
@@ -38,6 +41,11 @@ export interface AgentCommandRouterDeps {
   ): Promise<string>
   compressSession?(message: AgentMessage, conversation: ConversationEntryV1): Promise<AgentRuntimeTurnResult>
   resetSession(message: AgentMessage): Promise<ConversationEntryV1 | null>
+  setPermissionMode?(
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+    mode: string,
+  ): Promise<ConversationEntryV1>
   showReference?(message: AgentMessage, args: readonly string[]): Promise<string>
 }
 
@@ -61,6 +69,11 @@ export type AgentCommandRouterResult = AgentRuntimeTurnResult | AgentPromptComma
 interface ModeOption {
   readonly key: string
   readonly label: string
+}
+
+interface ModelOption {
+  readonly id: string
+  readonly aliases: readonly string[]
 }
 
 export class AgentCommandRouter {
@@ -163,22 +176,28 @@ export class AgentCommandRouter {
     conversation: ConversationEntryV1,
     args: readonly string[],
   ): Promise<AgentRuntimeTurnResult> {
-    const agentType = await this.resolveAgentType()
-    const state = await this.deps.providerConfig.getProjectProviderState(
-      this.deps.projectId,
-      agentType,
-    )
+    const provider = await this.currentProviderForConversation(conversation, "/model")
+    const models = modelOptionsForProvider(provider)
     if (args.length === 0) {
-      return commandResult(conversation.id, formatModelList(state.activeModel, state.activeProvider?.models ?? []))
+      return commandResult(conversation.id, formatModelList(provider?.model, models))
     }
 
     const targetInput = parseModelSwitchArgs(args)
     if (!targetInput) {
       return commandResult(conversation.id, modelUsage(), true)
     }
+    if (!provider) {
+      return commandResult(
+        conversation.id,
+        conversation.providerId
+          ? `Provider not found: ${conversation.providerId}`
+          : "No active provider configured.",
+        true,
+      )
+    }
 
-    const target = resolveModelTarget(targetInput, state.activeProvider?.models ?? [])
-    await this.deps.providerConfig.setActiveModel(this.deps.projectId, target, agentType)
+    const target = resolveModelTarget(targetInput, models)
+    await this.deps.providerService.updateProvider(provider.id, { model: target })
     const reset = await this.deps.resetSession(message)
     return commandResult(
       reset?.id ?? conversation.id,
@@ -195,12 +214,8 @@ export class AgentCommandRouter {
   ): Promise<AgentRuntimeTurnResult> {
     const agentType = await this.resolveAgentType()
     const modes = modesForAgent(agentType)
-    const state = await this.deps.providerConfig.getProjectProviderState(
-      this.deps.projectId,
-      agentType,
-    )
     if (args.length === 0) {
-      return commandResult(conversation.id, formatModeList(state.activeMode, modes))
+      return commandResult(conversation.id, formatModeList(conversation.agentConfig?.mode, modes))
     }
 
     const target = resolveModeTarget(args[0] ?? "", modes)
@@ -208,13 +223,18 @@ export class AgentCommandRouter {
       return commandResult(conversation.id, modeUsage(modes), true)
     }
 
-    await this.deps.providerConfig.setActiveMode(this.deps.projectId, target, agentType)
-    const reset = await this.deps.resetSession(message)
+    if (requiresModeConfirmation(target)) {
+      return commandResult(conversation.id, "请使用权限模式选择器确认切换。", true)
+    }
+    if (!this.deps.setPermissionMode) {
+      return commandResult(conversation.id, "当前会话不支持切换权限模式", true)
+    }
+    const updated = await this.deps.setPermissionMode(message, conversation, target)
     return commandResult(
-      reset?.id ?? conversation.id,
+      updated.id,
       `Mode changed: ${target}`,
       false,
-      reset?.agentSessionId,
+      updated.agentSessionId,
     )
   }
 
@@ -233,19 +253,41 @@ export class AgentCommandRouter {
 
   private async handleStatus(conversation: ConversationEntryV1): Promise<AgentRuntimeTurnResult> {
     const agentType = await this.resolveAgentType()
-    const state = await this.deps.providerConfig.getProjectProviderState(
-      this.deps.projectId,
-      agentType,
-    )
+    const provider = await this.currentProviderForConversation(conversation, "/status")
     const lines = [
       `Agent: ${agentType}`,
-      `Provider: ${state.activeProvider?.id ?? "default"}`,
-      `Model: ${state.activeModel ?? "default"}`,
-      `Mode: ${state.activeMode ?? "default"}`,
+      `Provider: ${provider?.id ?? conversation.providerId ?? "default"}`,
+      `Model: ${provider?.model ?? "default"}`,
+      `Mode: ${conversation.agentConfig?.mode ?? "default"}`,
       `Conversation: ${conversation.id}`,
       `Agent session: ${conversation.agentSessionId ?? "none"}`,
     ]
     return commandResult(conversation.id, lines.join("\n"), false, conversation.agentSessionId)
+  }
+
+  private async currentProviderForConversation(
+    conversation: ConversationEntryV1,
+    command: string,
+  ): Promise<CCProvider | null> {
+    if (conversation.providerId) {
+      try {
+        return await this.deps.providerService.getProvider(conversation.providerId)
+      } catch (error) {
+        this.deps.logger?.warn("Agent command provider lookup failed.", {
+          projectId: this.deps.projectId,
+          conversationId: conversation.id,
+          sessionKey: conversation.sessionKey,
+          agentType: conversation.agentType ?? this.deps.agentType,
+          providerId: conversation.providerId,
+          command,
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorCode: errorCode(error),
+          error: errorMessage(error),
+        })
+        return null
+      }
+    }
+    return this.deps.providerService.getActiveProvider()
   }
 
   private async resolveAgentType(): Promise<string> {
@@ -329,9 +371,22 @@ export class AgentCommandRouter {
       const content = await this.deps.showReference(message, args)
       return commandResult(conversation.id, content)
     } catch (error) {
+      this.deps.logger?.warn("Agent command show reference failed.", {
+        projectId: this.deps.projectId,
+        conversationId: conversation.id,
+        sessionKey: conversation.sessionKey,
+        agentType: conversation.agentType ?? this.deps.agentType,
+        messageId: message.messageId,
+        userId: message.userId,
+        command: "/show",
+        argsCount: args.length,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorCode: errorCode(error),
+        error: errorMessage(error),
+      })
       return commandResult(
         conversation.id,
-        error instanceof Error ? error.message : String(error),
+        errorMessage(error),
         true,
       )
     }
@@ -355,6 +410,24 @@ export class AgentCommandRouter {
     const skills = await this.deps.skills?.listPublished() ?? []
     return [...BUILTIN_COMMANDS, ...custom, ...skills]
   }
+}
+
+function errorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+  return truncateRunes(
+    message
+      .replace(/[A-Za-z]:\\[^\s'"`]+/g, "[path redacted]")
+      .replace(/(?:[A-Za-z]:)?\/[^\s'"`]+/g, "[path redacted]")
+      .replace(
+        /\b(token|secret|api[_-]?key|apikey|authorization|cookie|password|credential)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|`[^`]*`|[^\s'",`;]+)/gi,
+        "$1$2[redacted]",
+      ),
+    240,
+  )
+}
+
+function truncateRunes(value: string, maxLength: number): string {
+  return [...value].slice(0, maxLength).join("")
 }
 
 export function parseCommand(content: string): ParsedCommand | null {
@@ -478,7 +551,7 @@ export function parseModelSwitchArgs(args: readonly string[]): string | null {
 
 export function resolveModelTarget(
   input: string,
-  models: readonly ProviderModelEntryV1[],
+  models: readonly ModelOption[],
 ): string {
   const trimmed = input.trim()
   const index = Number.parseInt(trimmed, 10)
@@ -486,7 +559,7 @@ export function resolveModelTarget(
     return models[index - 1]?.id ?? trimmed
   }
   const alias = models.find((model) =>
-    model.alias && model.alias.toLowerCase() === trimmed.toLowerCase())
+    model.aliases.some((value) => value.toLowerCase() === trimmed.toLowerCase()))
   if (alias) return alias.id
   const exact = models.find((model) => model.id.toLowerCase() === trimmed.toLowerCase())
   return exact?.id ?? trimmed
@@ -511,9 +584,13 @@ function resolveModeTarget(input: string, modes: readonly ModeOption[]): string 
   return exact?.key ?? null
 }
 
+function requiresModeConfirmation(mode: string): boolean {
+  return mode === "auto" || mode === "bypassPermissions"
+}
+
 function formatModelList(
   current: string | undefined,
-  models: readonly ProviderModelEntryV1[],
+  models: readonly ModelOption[],
 ): string {
   const lines = [`Current model: ${current ?? "default"}`, "Models:"]
   if (models.length === 0) {
@@ -522,13 +599,36 @@ function formatModelList(
     for (let index = 0; index < models.length; index += 1) {
       const model = models[index]
       if (!model) continue
-      const alias = model.alias ? ` (${model.alias})` : ""
+      const alias = model.aliases.length > 0 ? ` (${model.aliases.join(", ")})` : ""
       const marker = model.id === current ? "*" : "-"
       lines.push(`${marker} ${index + 1}. ${model.id}${alias}`)
     }
   }
   lines.push(modelUsage())
   return lines.join("\n")
+}
+
+function modelOptionsForProvider(provider: CCProvider | null): readonly ModelOption[] {
+  if (!provider) return []
+  const options = new Map<string, string[]>()
+  addModelOption(options, provider.model, [])
+  addModelOption(options, provider.haikuModel, ["haiku"])
+  addModelOption(options, provider.sonnetModel, ["sonnet"])
+  addModelOption(options, provider.opusModel, ["opus"])
+  return [...options.entries()].map(([id, aliases]) => ({ id, aliases }))
+}
+
+function addModelOption(
+  options: Map<string, string[]>,
+  id: string | undefined,
+  aliases: readonly string[],
+): void {
+  if (!id) return
+  const current = options.get(id) ?? []
+  for (const alias of aliases) {
+    if (!current.includes(alias)) current.push(alias)
+  }
+  options.set(id, current)
 }
 
 function formatModeList(current: string | undefined, modes: readonly ModeOption[]): string {
@@ -539,7 +639,6 @@ function formatModeList(current: string | undefined, modes: readonly ModeOption[
     const marker = mode.key === current ? "*" : "-"
     lines.push(`${marker} ${index + 1}. ${mode.key} - ${mode.label}`)
   }
-  lines.push(modeUsage(modes))
   return lines.join("\n")
 }
 

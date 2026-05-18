@@ -25,6 +25,55 @@ async function callTool(toolName: string, dispatcherResult: unknown): Promise<un
   return JSON.parse(result.content[0].text)
 }
 
+describe("Workflow MCP RPC", () => {
+  it("returns workflow list data without the internal dispatcher envelope", async () => {
+    const payload = await callTool("workflow_definition_list", {
+      ok: true,
+      data: [{ id: "wf-1", name: "Test", version: "v1", nodeCount: 2 }],
+    })
+    expect(payload).toEqual([{ id: "wf-1", name: "Test", version: "v1", nodeCount: 2 }])
+  })
+
+  it("returns workflow create data with id and versionHash", async () => {
+    const payload = await callTool("workflow_definition_create", {
+      ok: true,
+      data: { id: "wf-new", versionHash: "v_abc" },
+    })
+    expect(payload).toEqual({ id: "wf-new", versionHash: "v_abc" })
+  })
+
+  it("returns runId from workflow_run_execute", async () => {
+    const payload = await callTool("workflow_run_execute", {
+      ok: true,
+      data: { runId: "run-123" },
+    })
+    expect(payload).toEqual({ runId: "run-123" })
+  })
+
+  it("returns run status from workflow_run_get", async () => {
+    const status = { runId: "run-1", workflowId: "wf-1", status: "completed", nodeResults: {} }
+    const payload = await callTool("workflow_run_get", {
+      ok: true,
+      data: status,
+    })
+    expect(payload).toEqual(status)
+  })
+
+  it("returns node type summaries from workflow_node_type_list", async () => {
+    const summaries = [{ type: "prompt", title: "AI 对话", subtitle: "", color: "#000" }]
+    const payload = await callTool("workflow_node_type_list", {
+      ok: true,
+      data: summaries,
+    })
+    expect(payload).toEqual(summaries)
+  })
+
+  it("returns null for workflow actions with no data field (e.g. delete)", async () => {
+    const payload = await callTool("workflow_definition_delete", { ok: true })
+    expect(payload).toBeNull()
+  })
+})
+
 describe("Database MCP RPC", () => {
   it("returns list results without the internal dispatcher envelope", async () => {
     const payload = await callTool("database_table_list", {

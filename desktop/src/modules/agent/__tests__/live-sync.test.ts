@@ -4,6 +4,7 @@ import {
   clearConversationUnread,
   incrementUnreadForConversation,
   isSelectedConversation,
+  shouldApplyPhaseUpdate,
   shouldAutoFollowConversation,
   shouldApplyTimelineSnapshot,
 } from "../live-sync"
@@ -143,6 +144,21 @@ describe("agent live sync helpers", () => {
     })).toBe(false)
   })
 
+  it("does not auto-follow Feishu updates from another selected project", () => {
+    expect(shouldAutoFollowConversation({
+      conversationId: "other-project-conv",
+      projectId: "project-2",
+      sessionKey: "feishu:chat:user",
+      platform: "feishu",
+    }, {
+      followFeishu: true,
+      inputDirty: false,
+      selectedProjectId: "project-1",
+      selectedConversationId: "local-conv",
+      selectedSessionKey: "local:renderer",
+    })).toBe(false)
+  })
+
   it("applies timeline snapshots only for unchanged selected timelines", () => {
     expect(shouldApplyTimelineSnapshot({
       projectId: "project-1",
@@ -182,5 +198,46 @@ describe("agent live sync helpers", () => {
       capturedVersion: 2,
       currentVersion: 3,
     })).toBe(false)
+  })
+
+  it("does not apply pending phase updates for background conversations", () => {
+    expect(shouldApplyPhaseUpdate({
+      projectId: "project-1",
+      conversationId: "background-conv",
+      sessionKey: "feishu:chat:user",
+    }, {
+      projectId: "project-1",
+      conversationId: "local-conv",
+      sessionKey: "local:renderer",
+    }, {
+      pendingConversationIds: new Set(["background-conv"]),
+    })).toBe(false)
+  })
+
+  it("applies phase updates for the selected project while conversation id is still resolving", () => {
+    expect(shouldApplyPhaseUpdate({
+      projectId: "project-2",
+      conversationId: "shared-conv",
+      sessionKey: "local:renderer",
+    }, {
+      projectId: "project-2",
+      sessionKey: "local:renderer",
+    }, {
+      pendingConversationIds: new Set(["shared-conv"]),
+    })).toBe(true)
+  })
+
+  it("applies phase updates for the selected conversation", () => {
+    expect(shouldApplyPhaseUpdate({
+      projectId: "project-1",
+      conversationId: "local-conv",
+      sessionKey: "local:renderer",
+    }, {
+      projectId: "project-1",
+      conversationId: "local-conv",
+      sessionKey: "local:renderer",
+    }, {
+      pendingConversationIds: new Set<string>(),
+    })).toBe(true)
   })
 })

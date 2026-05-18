@@ -1,15 +1,32 @@
 import react from "@vitejs/plugin-react"
 import tailwindcss from "@tailwindcss/vite"
 import path from "node:path"
-import { defineConfig } from "vite"
+import { defineConfig, type Plugin } from "vite"
 
 const apiPort = process.env.SYNAPSE_SERVER_API_PORT ?? "3001"
 const apiTarget = `http://localhost:${apiPort}`
 
+export function createAdminBaseRedirectPlugin(): Plugin {
+  return {
+    name: "synapse-admin-base-redirect",
+    configureServer(server) {
+      server.middlewares.use((request, response, next) => {
+        if (request.url === "/admin") {
+          response.writeHead(302, { Location: "/admin/" })
+          response.end()
+          return
+        }
+
+        next()
+      })
+    },
+  }
+}
+
 export default defineConfig({
   root: __dirname,
   base: "/admin/",
-  plugins: [react(), tailwindcss()],
+  plugins: [createAdminBaseRedirectPlugin(), react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),

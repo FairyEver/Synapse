@@ -137,6 +137,8 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
     [tableName],
   )
   const lastTableScrollTopRef = useRef(0)
+  const resizePointerMoveRef = useRef<((e: PointerEvent) => void) | null>(null)
+  const resizePointerUpRef = useRef<((e: PointerEvent) => void) | null>(null)
 
   const editableColumns = useMemo(() => columns.filter((c) => !c.primaryKey && !c.system), [columns])
   const systemTimeColumns = useMemo(() => columns.filter((c) => c.system && !c.primaryKey), [columns])
@@ -179,6 +181,17 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
       return next
     })
   }, [visibleColumns])
+
+  useEffect(() => {
+    return () => {
+      if (resizePointerMoveRef.current) {
+        document.removeEventListener("pointermove", resizePointerMoveRef.current)
+      }
+      if (resizePointerUpRef.current) {
+        document.removeEventListener("pointerup", resizePointerUpRef.current)
+      }
+    }
+  }, [])
 
   const handleSaveEdit = useCallback(
     async (data: Record<string, unknown>) => {
@@ -368,6 +381,12 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
 
   const handleResizeColumn = useCallback(
     (columnName: string, startClientX: number) => {
+      if (resizePointerMoveRef.current) {
+        document.removeEventListener("pointermove", resizePointerMoveRef.current)
+      }
+      if (resizePointerUpRef.current) {
+        document.removeEventListener("pointerup", resizePointerUpRef.current)
+      }
       const startWidth = columnWidths[columnName]
       let nextWidth = startWidth
 
@@ -382,6 +401,8 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
       const handlePointerUp = () => {
         document.removeEventListener("pointermove", handlePointerMove)
         document.removeEventListener("pointerup", handlePointerUp)
+        resizePointerMoveRef.current = null
+        resizePointerUpRef.current = null
         logger.info("Column resized.", {
           table: tableName,
           column: columnName,
@@ -389,6 +410,9 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
           to: nextWidth,
         })
       }
+
+      resizePointerMoveRef.current = handlePointerMove
+      resizePointerUpRef.current = handlePointerUp
 
       document.addEventListener("pointermove", handlePointerMove)
       document.addEventListener("pointerup", handlePointerUp)

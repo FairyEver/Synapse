@@ -1,65 +1,91 @@
 # auto
 
-定时自动运行 Claude Agent 的轻量调度器。每隔固定时间读取一个 Prompt 文件，使用 `@anthropic-ai/claude-agent-sdk` 驱动 Agent 执行任务，并将运行日志保存到 `logs/` 目录。
+本地 Codex 并行运行控制台。启动后打开一个网页，在页面里编辑 Prompt、并行 Agent 数、间隔、超时和 Codex 参数，然后按批次并行运行 `codex exec`。
 
 ## 前置条件
 
-- 已安装 [Claude Code CLI](https://docs.anthropic.com/claude/claude-code) 并完成登录认证
+- 已安装 Codex CLI 并完成登录
 - Node.js >= 18
 - pnpm
 
-## 安装
-
-```bash
-pnpm install
-```
-
-## 配置
-
-编辑 `config.json`：
-
-```json
-{
-  "intervalMinutes": 1,
-  "workingDirectory": "/absolute/path/to/project",
-  "promptFile": "./prompt.md",
-  "maxLogs": 50
-}
-```
-
-| 字段 | 类型 | 说明 |
-|---|---|---|
-| `intervalMinutes` | number | 两次运行之间的间隔（分钟），最小为 `1`。计时从上一次运行**完成后**开始。 |
-| `workingDirectory` | string | Agent 执行任务时的工作目录（即 Agent 可以读写文件的根路径）。支持绝对路径或相对于 `auto/` 的相对路径。 |
-| `promptFile` | string | Prompt 文件路径，相对于 `auto/`。默认为 `./prompt.md`。 |
-| `maxLogs` | number | `logs/` 目录中最多保留的日志文件数，超出后自动删除最旧的文件。 |
-
-## 编写 Prompt
-
-`prompt.md` 是每次传给 Agent 的任务描述，纯 Markdown 格式。Agent 会以 `workingDirectory` 为根目录执行其中描述的任务。
-
-可以随时修改 `prompt.md`，下一次运行时自动生效，无需重启。
-
 ## 运行
-
-**持续循环模式**（推荐用于长期自动化）：
 
 ```bash
 pnpm start
 ```
 
-启动后按 `Ctrl+C` 停止。每次运行完成后等待 `intervalMinutes` 分钟再执行下一次。
+`start` 会启动本地 HTTP 服务并打开控制台页面。页面不会自动开始任务，需要点击 `Start`。
 
-**单次执行模式**（测试 Prompt 时使用）：
+单次批处理：
 
 ```bash
 pnpm once
 ```
 
-执行一次后自动退出。
+`once` 使用最近保存的页面配置运行一批任务。
+
+## 页面配置
+
+提示词库会保存到：
+
+```text
+prompts/
+  default.md
+  <提示词名称>.md
+```
+
+第一次启动时，如果 `prompts/` 为空且旧的 `prompt.md` 有内容，会迁移为 `prompts/default.md`。迁移后运行以提示词库中的当前选中项为准。
+
+运行参数会保存到：
+
+```text
+state/ui-config.json
+```
+
+运行参数包括：
+
+- 工作目录
+- 并行 Agent 数
+- 批次间隔
+- 单 worker 超时
+- 日志保留数量
+- Codex command / model / sandbox / approval policy / MCP 开关
+
+## 并行行为
+
+每一批会同时启动多个 `codex exec` 进程。所有 worker 使用同一个工作目录和当前选中的 Prompt。
+
+每个 worker 的 Prompt 前会追加运行约束：
+
+- worker 会知道自己是第几个并行进程
+- 不要回滚或覆盖自己没有明确修改的内容
+- 如果执行 `git commit`，只能 stage 和 commit 本轮亲自修改的文件
+- 不要使用 `git add .`
+- 提交前检查 `git diff` 和 `git status`
+
+runner 不做文件锁、不建 worktree、不自动合并冲突，也不禁止提交。
+
+## 停止
+
+页面里的 `Stop after current` 会让当前批次继续跑完，然后不再启动下一批。
 
 ## 日志
 
-每次运行会在 `logs/` 下生成一个以时间戳命名的 Markdown 文件，记录 Agent 的完整输出和工具调用。`logs/*.md` 已加入 `.gitignore`，不会提交到仓库。
+日志按批次写入：
 
-达到 `maxLogs` 上限时，最旧的日志文件会被自动删除。
+```text
+logs/
+  2026-05-13T12-00-00/
+    summary.md
+    worker-1.md
+    worker-2.md
+```
+
+`summary.md` 记录批次结果；`worker-N.md` 记录对应 worker 的 stdout、stderr、Codex JSONL 事件和退出状态。
+
+## 验证
+
+```bash
+pnpm test
+pnpm typecheck
+```

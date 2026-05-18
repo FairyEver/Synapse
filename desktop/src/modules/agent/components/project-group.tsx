@@ -17,9 +17,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { ModuleSidebarItem } from "@/components/module-sidebar"
-import { agentDefinitions } from "@/definitions/generated/renderer-registry"
-import type { SynapseAgentAvailability, SynapseAgentSessionSummary } from "@/types/agent"
-import { AgentPickerPopover } from "./agent-picker-popover"
+import type { SynapseAgentSessionSummary } from "@/types/agent"
 import { SessionTrailing } from "./session-trailing"
 import { sessionLabel } from "../utils"
 import { conversationUnreadKey } from "../live-sync"
@@ -27,11 +25,10 @@ import { conversationUnreadKey } from "../live-sync"
 type ProjectGroupProps = {
   project: { id: string; name: string; path: string }
   sessions: SynapseAgentSessionSummary[]
-  availableAgents: SynapseAgentAvailability[]
   selectedProjectId?: string
   selectedConversationId?: string
   unreadByConversationId: Record<string, number>
-  onCreateSession: (agentType: string) => void
+  onCreateSession: () => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
   onDeleteOthers: (session: SynapseAgentSessionSummary) => void
@@ -41,7 +38,6 @@ type ProjectGroupProps = {
 function ProjectGroup({
   project,
   sessions,
-  availableAgents,
   selectedProjectId,
   selectedConversationId,
   unreadByConversationId,
@@ -88,16 +84,17 @@ function ProjectGroup({
             )}
             <span className="truncate">{project.name}</span>
           </CollapsibleTrigger>
-          <AgentPickerPopover agents={availableAgents} onSelect={onCreateSession}>
-            <button
-              type="button"
-              className="rounded p-0.5 text-muted-foreground hover:text-foreground"
-              title="新建会话"
-            >
-              <Plus className="size-3.5" />
-              <span className="sr-only">新建会话</span>
-            </button>
-          </AgentPickerPopover>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            data-track="agent-project-new-session"
+            title="新建会话"
+            onClick={() => onCreateSession()}
+          >
+            <Plus className="size-3.5" />
+            <span className="sr-only">新建会话</span>
+          </Button>
         </div>
         <CollapsibleContent>
           <div className="flex flex-col pl-3">
@@ -105,9 +102,6 @@ function ProjectGroup({
               const unread = unreadByConversationId[conversationUnreadKey(session.projectId, session.id)] ?? 0
               const active = session.projectId === selectedProjectId
                 && session.id === selectedConversationId
-              const def = session.agentType
-                ? agentDefinitions.find((d) => d.id === session.agentType)
-                : undefined
               return (
                 <ContextMenu key={`${session.projectId}:${session.id}`}>
                   <ContextMenuTrigger asChild>
@@ -127,9 +121,6 @@ function ProjectGroup({
                         onClick={() => onSelect(session)}
                       >
                         <span className="flex items-center gap-1.5 text-xs font-normal">
-                          {def?.icon ? (
-                            <img src={def.icon} alt="" className="h-3.5 w-3.5 shrink-0" />
-                          ) : null}
                           <span className="truncate">{sessionLabel(session)}</span>
                         </span>
                       </ModuleSidebarItem>

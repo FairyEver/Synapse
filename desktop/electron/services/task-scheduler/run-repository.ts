@@ -51,7 +51,7 @@ export class ScheduledTaskRunRepository {
       error: input.error,
     }
     await this.runs.upsert(next)
-    await this.prune(existing.taskId)
+    await this.prune(existing.taskId, id)
     return next
   }
 
@@ -63,9 +63,14 @@ export class ScheduledTaskRunRepository {
     return this.runs.get(id)
   }
 
-  private async prune(taskId: string): Promise<void> {
+  private async prune(taskId: string, keepRunId?: string): Promise<void> {
     const runs = await this.listSorted(taskId)
-    const stale = runs.slice(MAX_RUNS_PER_TASK)
+    if (runs.length <= MAX_RUNS_PER_TASK) return
+    const hasKeepRun = keepRunId !== undefined && runs.some((run) => run.id === keepRunId)
+    const keepLimit = hasKeepRun ? MAX_RUNS_PER_TASK - 1 : MAX_RUNS_PER_TASK
+    const stale = runs
+      .filter((run) => run.id !== keepRunId)
+      .slice(keepLimit)
     await Promise.all(stale.map((run) => this.runs.remove(run.id)))
   }
 

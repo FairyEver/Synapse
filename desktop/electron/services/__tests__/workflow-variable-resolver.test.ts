@@ -30,9 +30,7 @@ describe("resolveVariables", () => {
     const allNodeIds = new Set(["other_node"])
     expect(() => resolveVariables(b, {}, {}, undefined, allNodeIds)).toThrow("不存在")
   })
-  it("resolves to empty string when allNodeIds not provided (legacy behavior — no throw)", () => {
-    // Without allNodeIds, the function cannot distinguish skipped from nonexistent.
-    // For backward compat when allNodeIds is omitted, it still throws (broken ref).
+  it("throws on missing node when allNodeIds is not provided", () => {
     const b: VariableBinding[] = [{ name: "x", source: { type: "node_output", node: "missing" } }]
     expect(() => resolveVariables(b, {}, {})).toThrow("不存在")
   })
@@ -48,6 +46,27 @@ describe("interpolatePrompt", () => {
     expect(interpolatePrompt("Hello {{name}}", { name: "world" })).toBe("Hello world")
   })
   it("leaves unresolved tokens unchanged", () => {
-    expect(interpolatePrompt("{{missing}}", {})).toBe("{{missing}}")
+    expect(() => interpolatePrompt("{{missing}}", {})).toThrow("未绑定")
+  })
+  it("replaces {{$prefixed}} tokens", () => {
+    expect(interpolatePrompt("{{$name}}", { name: "val" })).toBe("val")
+  })
+  it("replaces CJK variable name tokens", () => {
+    expect(interpolatePrompt("主题：{{主题}}", { 主题: "测试" })).toBe("主题：测试")
+  })
+  it("replaces Greek letter variable name tokens", () => {
+    expect(interpolatePrompt("{{α}}", { α: "alpha" })).toBe("alpha")
+  })
+  it("replaces Cyrillic variable name tokens", () => {
+    expect(interpolatePrompt("{{переменная}}", { переменная: "value" })).toBe("value")
+  })
+  it("replaces mixed Latin and CJK variable names", () => {
+    expect(interpolatePrompt("{{var变量}}", { "var变量": "val" })).toBe("val")
+  })
+  it("replaces digits in variable names", () => {
+    expect(interpolatePrompt("{{v2}}", { v2: "val" })).toBe("val")
+  })
+  it("replaces variable names with hyphens, dots, and surrounding spaces", () => {
+    expect(interpolatePrompt("{{ my-var }} {{obj.name}}", { "my-var": "a", "obj.name": "b" })).toBe("a b")
   })
 })

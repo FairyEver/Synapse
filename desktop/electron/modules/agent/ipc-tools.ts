@@ -1,14 +1,38 @@
-import { shell } from "electron"
+import path from "node:path"
+
+import { BrowserWindow, dialog, shell } from "electron"
+import type { OpenDialogOptions } from "electron"
 import { z } from "zod"
 
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
+import type { DataRepository, ConversationEntryV1 } from "../../runtime/data-repo"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { resolveLocalReference } from "../../services/agent-runtime/references"
-import { whichBin } from "../../services/agent-runtime/binary-detect-service"
-import { AgentAvailabilityService } from "../../services/agent-runtime/agent-availability-service"
-import { agentRuntimeDefinitions } from "../../services/definitions/generated/main-registry"
+import type {
+  CCProvider,
+  CcSwitchImportSource,
+  CreateProviderFromPresetInput,
+  CreateProviderInput,
+  ImportCcSwitchClaudeProvidersInput,
+  ProviderApiKeyField,
+  ProviderCategory,
+  ProviderService,
+  UpdateProviderInput,
+} from "../../services/provider"
+import { createProviderServiceFromDataRepository, PROVIDER_SERVICE_ID } from "../../services/provider"
+import { ProviderReferenceScanner } from "../../services/provider/provider-reference-scanner"
+import type { ProviderReferenceScannerDeps } from "../../services/provider/provider-reference-scanner"
+import type { TaskSchedulerService } from "../../services/task-scheduler/task-scheduler-service"
+import type { WorkflowService } from "../../services/workflow/workflow-service"
+import type { WorkflowDefinition } from "../../../src/types/workflow"
+import { createMainLogger } from "../../services/log-store"
 import { resolveProjectAgent } from "./ipc-shared"
+
+const logger = createMainLogger("agent.ipc")
+
+type CreateProviderIpcInput = Omit<CreateProviderInput, "env">
+type UpdateProviderIpcInput = Omit<UpdateProviderInput, "env">
 
 // ─── Request schemas ──────────────────────────────────────────────────────────
 
@@ -19,6 +43,101 @@ const openReferenceRequestSchema = projectRequestSchema.extend({
 const runtimeStatusRequestSchema = z.object({
   projectId: z.string().optional(),
 })
+
+const providerCategorySchema = z.enum([
+  "official",
+  "cn_official",
+  "cloud_provider",
+  "aggregator",
+  "third_party",
+  "custom",
+]) satisfies z.ZodType<ProviderCategory>
+
+const providerApiKeyFieldSchema = z.enum([
+  "ANTHROPIC_AUTH_TOKEN",
+  "ANTHROPIC_API_KEY",
+]) satisfies z.ZodType<ProviderApiKeyField>
+
+const providerEnvSchema = z.record(z.string(), z.string())
+const providerSettingsConfigSchema = z.record(z.string(), z.unknown())
+
+const ccSwitchImportSourceSchema = z.object({
+  kind: z.enum(["sqlite", "json"]),
+  path: z.string().min(1),
+}) satisfies z.ZodType<CcSwitchImportSource>
+
+const createProviderInputSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  note: z.string().optional(),
+  websiteUrl: z.string().optional(),
+  category: providerCategorySchema,
+  baseUrl: z.string().optional(),
+  apiKeyField: providerApiKeyFieldSchema,
+  apiKey: z.string().optional(),
+  active: z.boolean().optional(),
+  model: z.string().optional(),
+  haikuModel: z.string().optional(),
+  sonnetModel: z.string().optional(),
+  opusModel: z.string().optional(),
+  settingsConfig: providerSettingsConfigSchema.optional(),
+  secretEnv: providerEnvSchema.optional(),
+  sortIndex: z.number().optional(),
+}) satisfies z.ZodType<CreateProviderIpcInput>
+
+const updateProviderInputSchema = z.object({
+  name: z.string().min(1).optional(),
+  note: z.string().optional(),
+  websiteUrl: z.string().optional(),
+  category: providerCategorySchema.optional(),
+  baseUrl: z.string().optional(),
+  apiKeyField: providerApiKeyFieldSchema.optional(),
+  apiKey: z.string().optional(),
+  active: z.boolean().optional(),
+  model: z.string().optional(),
+  haikuModel: z.string().optional(),
+  sonnetModel: z.string().optional(),
+  opusModel: z.string().optional(),
+  settingsConfig: providerSettingsConfigSchema.optional(),
+  secretEnv: providerEnvSchema.optional(),
+  clearSecretEnv: z.array(z.string()).optional(),
+  archived: z.boolean().optional(),
+  sortIndex: z.number().optional(),
+}) satisfies z.ZodType<UpdateProviderIpcInput>
+
+const providerRequestSchema = z.object({})
+
+const createProviderRequestSchema = z.object({
+  provider: createProviderInputSchema,
+})
+
+const updateProviderRequestSchema = z.object({
+  providerId: z.string().min(1),
+  patch: updateProviderInputSchema,
+})
+
+const providerIdRequestSchema = z.object({
+  providerId: z.string().min(1),
+})
+
+const createProviderFromPresetRequestSchema = z.object({
+  presetName: z.string().min(1),
+  providerId: z.string().min(1).optional(),
+  name: z.string().min(1).optional(),
+  apiKey: z.string().optional(),
+  templateValues: z.record(z.string(), z.string()).optional(),
+  active: z.boolean().optional(),
+  sortIndex: z.number().optional(),
+})
+
+const previewCcSwitchClaudeProvidersRequestSchema = z.object({
+  source: ccSwitchImportSourceSchema.optional(),
+})
+
+const importCcSwitchClaudeProvidersRequestSchema = z.object({
+  source: ccSwitchImportSourceSchema,
+  providerIds: z.array(z.string().min(1)),
+}) satisfies z.ZodType<ImportCcSwitchClaudeProvidersInput>
 
 // ─── Response schemas ─────────────────────────────────────────────────────────
 
@@ -40,18 +159,100 @@ const providerSummarySchema = z.object({
   id: z.string(),
   display: z.string().optional(),
   active: z.boolean(),
+  readonly: z.boolean().optional(),
   model: z.string().optional(),
   baseUrl: z.string().optional(),
   scope: z.enum(["global", "project"]),
 })
 
 const providerStateSchema = z.object({
-  projectId: z.string(),
+  projectId: z.string().optional(),
   agentType: z.string(),
   providers: z.array(providerSummarySchema),
   activeProviderId: z.string().optional(),
   activeModel: z.string().optional(),
   activeMode: z.string().optional(),
+})
+
+const publicProviderSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  category: providerCategorySchema,
+  source: z.enum(["local", "user"]).optional(),
+  readonly: z.boolean().optional(),
+  configured: z.boolean().optional(),
+  configPath: z.string().optional(),
+  note: z.string().optional(),
+  websiteUrl: z.string().optional(),
+  baseUrl: z.string().optional(),
+  apiKeyField: providerApiKeyFieldSchema,
+  active: z.boolean().optional(),
+  model: z.string().optional(),
+  haikuModel: z.string().optional(),
+  sonnetModel: z.string().optional(),
+  opusModel: z.string().optional(),
+  settingsConfig: providerSettingsConfigSchema.optional(),
+  archived: z.boolean().optional(),
+  sortIndex: z.number().optional(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+})
+
+const providerPresetTemplateValueSchema = z.object({
+  key: z.string(),
+  label: z.string(),
+  placeholder: z.string(),
+  defaultValue: z.string().optional(),
+  sensitive: z.boolean(),
+})
+
+const publicProviderPresetSchema = z.object({
+  name: z.string(),
+  category: providerCategorySchema,
+  websiteUrl: z.string().optional(),
+  apiKeyUrl: z.string().optional(),
+  baseUrl: z.string().optional(),
+  apiKeyField: providerApiKeyFieldSchema,
+  model: z.string().optional(),
+  haikuModel: z.string().optional(),
+  sonnetModel: z.string().optional(),
+  opusModel: z.string().optional(),
+  templateValues: z.array(providerPresetTemplateValueSchema),
+})
+
+const ccSwitchImportPreviewItemSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  category: providerCategorySchema,
+  websiteUrl: z.string().optional(),
+  note: z.string().optional(),
+  baseUrl: z.string().optional(),
+  apiKeyField: providerApiKeyFieldSchema,
+  model: z.string().optional(),
+  haikuModel: z.string().optional(),
+  sonnetModel: z.string().optional(),
+  opusModel: z.string().optional(),
+  status: z.enum(["ready", "duplicate", "missing_api_key"]),
+  selectedByDefault: z.boolean(),
+})
+
+const ccSwitchImportPreviewResultSchema = z.object({
+  source: ccSwitchImportSourceSchema.optional(),
+  items: z.array(ccSwitchImportPreviewItemSchema),
+  error: z.string().optional(),
+})
+
+const ccSwitchImportResultSchema = z.object({
+  imported: z.array(publicProviderSchema),
+  skipped: z.array(ccSwitchImportPreviewItemSchema),
+})
+
+const chooseCcSwitchImportSourceResultSchema = z.object({
+  source: ccSwitchImportSourceSchema.optional(),
+})
+
+const okResultSchema = z.object({
+  ok: z.literal(true),
 })
 
 const runtimeStatusSchema = z.object({
@@ -80,6 +281,78 @@ const runtimeStatusSchema = z.object({
 
 type ProjectRequest = z.infer<typeof projectRequestSchema>
 type OpenReferenceRequest = z.infer<typeof openReferenceRequestSchema>
+type ProviderRequest = z.infer<typeof providerRequestSchema>
+type CreateProviderRequest = z.infer<typeof createProviderRequestSchema>
+type UpdateProviderRequest = z.infer<typeof updateProviderRequestSchema>
+type ProviderIdRequest = z.infer<typeof providerIdRequestSchema>
+type CreateProviderFromPresetRequest = z.infer<typeof createProviderFromPresetRequestSchema>
+type PreviewCcSwitchClaudeProvidersRequest = z.infer<typeof previewCcSwitchClaudeProvidersRequestSchema>
+type ImportCcSwitchClaudeProvidersRequest = z.infer<typeof importCcSwitchClaudeProvidersRequestSchema>
+
+function publicProvider(provider: CCProvider): z.infer<typeof publicProviderSchema> {
+  return {
+    id: provider.id,
+    name: provider.name,
+    category: provider.category,
+    source: provider.source,
+    readonly: provider.readonly,
+    configured: provider.configured,
+    configPath: provider.configPath,
+    note: provider.note,
+    websiteUrl: provider.websiteUrl,
+    baseUrl: provider.baseUrl,
+    apiKeyField: provider.apiKeyField,
+    active: provider.active,
+    model: provider.model,
+    haikuModel: provider.haikuModel,
+    sonnetModel: provider.sonnetModel,
+    opusModel: provider.opusModel,
+    settingsConfig: provider.settingsConfig,
+    archived: provider.archived,
+    sortIndex: provider.sortIndex,
+    createdAt: provider.createdAt,
+    updatedAt: provider.updatedAt,
+  }
+}
+
+function providerSummary(provider: CCProvider, activeProviderId?: string): z.infer<typeof providerSummarySchema> {
+  return {
+    id: provider.id,
+    display: provider.name,
+    active: provider.id === activeProviderId || Boolean(provider.active),
+    readonly: provider.readonly,
+    model: provider.model,
+    baseUrl: provider.baseUrl,
+    scope: "global",
+  }
+}
+
+function ccSwitchSourceFromPath(filePath: string): CcSwitchImportSource {
+  return {
+    kind: path.extname(filePath).toLowerCase() === ".json" ? "json" : "sqlite",
+    path: filePath,
+  }
+}
+
+function resolveGlobalProviderService(resolve: <T>(serviceId: string) => T) {
+  try {
+    return resolve<ProviderService>(PROVIDER_SERVICE_ID)
+  } catch (error) {
+    if (!(error instanceof Error) || !error.message.startsWith("Unknown service:")) {
+      throw error
+    }
+  }
+
+  return createProviderServiceFromDataRepository({
+    dataRepository: resolve<DataRepository>("core.data-repository"),
+    permissionGuard: resolve<PermissionGuard>("core.permission-guard"),
+    auditSink: resolve<AuditSink>("core.audit-sink"),
+    scanReferences: async (providerId) => {
+      const scanner = new ProviderReferenceScanner(buildScannerDeps(resolve))
+      return scanner.scan(providerId)
+    },
+  })
+}
 
 // ─── Tool/utility method descriptors ─────────────────────────────────────────
 
@@ -87,27 +360,214 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
   getProviders: {
     kind: "invoke",
     channel: "synapse:agent:get-providers",
-    request: projectRequestSchema,
+    request: providerRequestSchema,
     response: providerStateSchema,
-    handler: async (ctx, request: ProjectRequest) => {
-      const { providerConfig } = await resolveProjectAgent(ctx.resolve, request.projectId)
-      const agentType = await providerConfig.getActiveAgentType(request.projectId, "codex")
-      const state = await providerConfig.getProjectProviderState(request.projectId, agentType)
+    handler: async (ctx, _request: ProviderRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      const providers = await providerService.listProviders()
+      const activeProvider = await providerService.getActiveProvider()
       return {
-        projectId: state.projectId,
-        agentType: state.agentType,
-        activeProviderId: state.activeProviderId,
-        activeModel: state.activeModel,
-        activeMode: state.activeMode,
-        providers: state.providers.map((provider) => ({
-          id: provider.id,
-          display: provider.display,
-          active: provider.id === state.activeProviderId,
-          model: provider.model,
-          baseUrl: provider.baseUrl,
-          scope: provider.scope,
-        })),
+        agentType: "claude-code",
+        activeProviderId: activeProvider?.id,
+        activeModel: activeProvider?.model,
+        providers: providers.map((provider) => providerSummary(provider, activeProvider?.id)),
       }
+    },
+  },
+  listProviders: {
+    kind: "invoke",
+    channel: "synapse:agent:list-providers",
+    request: providerRequestSchema,
+    response: z.array(publicProviderSchema),
+    handler: async (ctx, _request: ProviderRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      return (await providerService.listProviders()).map(publicProvider)
+    },
+  },
+  listProviderPresets: {
+    kind: "invoke",
+    channel: "synapse:agent:list-provider-presets",
+    request: providerRequestSchema,
+    response: z.array(publicProviderPresetSchema),
+    handler: async (ctx, _request: ProviderRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      return providerService.listProviderPresets()
+    },
+  },
+  createProvider: {
+    kind: "invoke",
+    channel: "synapse:agent:create-provider",
+    request: createProviderRequestSchema,
+    response: publicProviderSchema,
+    handler: async (ctx, request: CreateProviderRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      return publicProvider(await providerService.createProvider(request.provider as CreateProviderInput))
+    },
+  },
+  createProviderFromPreset: {
+    kind: "invoke",
+    channel: "synapse:agent:create-provider-from-preset",
+    request: createProviderFromPresetRequestSchema,
+    response: publicProviderSchema,
+    handler: async (ctx, request: CreateProviderFromPresetRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      return publicProvider(await providerService.createProviderFromPreset(request as CreateProviderFromPresetInput))
+    },
+  },
+  previewCcSwitchClaudeProviders: {
+    kind: "invoke",
+    channel: "synapse:agent:preview-cc-switch-claude-providers",
+    request: previewCcSwitchClaudeProvidersRequestSchema,
+    response: ccSwitchImportPreviewResultSchema,
+    handler: async (ctx, request: PreviewCcSwitchClaudeProvidersRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      return providerService.previewCcSwitchClaudeProviders(request.source, {
+        actor: { kind: "user", id: "renderer" },
+      })
+    },
+  },
+  importCcSwitchClaudeProviders: {
+    kind: "invoke",
+    channel: "synapse:agent:import-cc-switch-claude-providers",
+    request: importCcSwitchClaudeProvidersRequestSchema,
+    response: ccSwitchImportResultSchema,
+    handler: async (ctx, request: ImportCcSwitchClaudeProvidersRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      const result = await providerService.importCcSwitchClaudeProviders(request, {
+        actor: { kind: "user", id: "renderer" },
+      })
+      return {
+        imported: result.imported.map(publicProvider),
+        skipped: result.skipped,
+      }
+    },
+  },
+  chooseCcSwitchClaudeImportSource: {
+    kind: "invoke",
+    channel: "synapse:agent:choose-cc-switch-claude-import-source",
+    request: z.object({}),
+    response: chooseCcSwitchImportSourceResultSchema,
+    handler: async () => {
+      const options: OpenDialogOptions = {
+        title: "选择 CC Switch 配置",
+        properties: ["openFile"],
+        filters: [
+          { name: "CC Switch", extensions: ["db", "json"] },
+        ],
+      }
+      const focusedWindow = BrowserWindow.getFocusedWindow()
+      const result = focusedWindow
+        ? await dialog.showOpenDialog(focusedWindow, options)
+        : await dialog.showOpenDialog(options)
+      const filePath = result.filePaths[0]
+      if (result.canceled || !filePath) return {}
+      return { source: ccSwitchSourceFromPath(filePath) }
+    },
+  },
+  updateProvider: {
+    kind: "invoke",
+    channel: "synapse:agent:update-provider",
+    request: updateProviderRequestSchema,
+    response: publicProviderSchema,
+    handler: async (ctx, request: UpdateProviderRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      return publicProvider(await providerService.updateProvider(request.providerId, request.patch))
+    },
+  },
+  archiveProvider: {
+    kind: "invoke",
+    channel: "synapse:agent:archive-provider",
+    request: providerIdRequestSchema,
+    response: okResultSchema,
+    handler: async (ctx, request: ProviderIdRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      await providerService.archiveProvider(request.providerId)
+      return { ok: true }
+    },
+  },
+  deleteProvider: {
+    kind: "invoke",
+    channel: "synapse:agent:delete-provider",
+    request: providerIdRequestSchema,
+    response: okResultSchema,
+    handler: async (ctx, request: ProviderIdRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      await providerService.deleteProvider(request.providerId)
+      return { ok: true }
+    },
+  },
+  listAllProviders: {
+    kind: "invoke",
+    channel: "synapse:agent:list-all-providers",
+    request: providerRequestSchema,
+    response: z.array(publicProviderSchema),
+    handler: async (ctx, _request: ProviderRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      return (await providerService.listAllProviders()).map(publicProvider)
+    },
+  },
+  scanProviderReferences: {
+    kind: "invoke",
+    channel: "synapse:agent:scan-provider-references",
+    request: providerIdRequestSchema,
+    response: z.object({
+      providerId: z.string(),
+      references: z.array(z.object({
+        kind: z.enum(["scheduled-task", "workflow-node", "conversation"]),
+        entityId: z.string(),
+        entityName: z.string(),
+        nodeId: z.string().optional(),
+        nodeName: z.string().optional(),
+        providerId: z.string(),
+        modelTier: z.string(),
+      })),
+      taskCount: z.number(),
+      workflowNodeCount: z.number(),
+      conversationCount: z.number(),
+    }),
+    handler: async (ctx, request: ProviderIdRequest) => {
+      const scanner = new ProviderReferenceScanner(buildScannerDeps(ctx.resolve))
+      return scanner.scan(request.providerId)
+    },
+  },
+  migrateProviderReferences: {
+    kind: "invoke",
+    channel: "synapse:agent:migrate-provider-references",
+    request: z.object({
+      sourceProviderId: z.string().min(1),
+      targetProviderId: z.string().min(1),
+      targetModelTier: z.string().min(1),
+      scope: z.array(z.enum(["scheduled-task", "workflow-node"])),
+    }),
+    response: z.object({
+      migratedTasks: z.number(),
+      migratedWorkflowNodes: z.number(),
+      errors: z.array(z.object({ entityId: z.string(), error: z.string() })),
+    }),
+    handler: async (ctx, request: {
+      sourceProviderId: string
+      targetProviderId: string
+      targetModelTier: string
+      scope: ("scheduled-task" | "workflow-node")[]
+    }) => {
+      const scanner = new ProviderReferenceScanner(buildScannerDeps(ctx.resolve))
+      return scanner.migrate({
+        sourceProviderId: request.sourceProviderId,
+        targetProviderId: request.targetProviderId,
+        targetModelTier: request.targetModelTier as "default" | "haiku" | "sonnet" | "opus",
+        scope: request.scope,
+      })
+    },
+  },
+  setActiveProvider: {
+    kind: "invoke",
+    channel: "synapse:agent:set-active-provider",
+    request: providerIdRequestSchema,
+    response: okResultSchema,
+    handler: async (ctx, request: ProviderIdRequest) => {
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      await providerService.setActiveProvider(request.providerId)
+      return { ok: true }
     },
   },
   getRuntimeStatus: {
@@ -116,47 +576,32 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     request: runtimeStatusRequestSchema,
     response: runtimeStatusSchema,
     handler: async (ctx, request: { projectId?: string }) => {
-      const providerConfig = request.projectId
-        ? (await resolveProjectAgent(ctx.resolve, request.projectId)).providerConfig
-        : undefined
-      const agents = await Promise.all(agentRuntimeDefinitions.map(async (definition) => {
-        const binary = definition.runtime.binaries[0]
-        const path = binary ? await whichBin(binary) : null
-        const provider = request.projectId && providerConfig
-          ? await providerConfig.getProjectProviderState(request.projectId, definition.id)
-          : undefined
-        const activeProvider = provider?.activeProvider
-        const providerConfigured = Boolean(provider && provider.providers.length > 0)
-        const issues: string[] = []
-        if (binary && !path) issues.push("cli-not-installed")
-        if (request.projectId && !providerConfigured) {
-          issues.push("provider-not-configured")
-        }
-        if (request.projectId && activeProvider && !provider.activeModel) {
-          issues.push("model-not-selected")
-        }
-        return {
-          id: definition.id,
-          label: definition.label,
+      const providerService = resolveGlobalProviderService(ctx.resolve)
+      const providers = await providerService.listProviders()
+      const activeProvider = await providerService.getActiveProvider()
+      const providerConfigured = Boolean(activeProvider && providers.length > 0)
+      const issues: string[] = []
+      if (!providerConfigured) issues.push("provider-not-configured")
+      if (activeProvider && !activeProvider.model) issues.push("model-not-selected")
+      return {
+        projectId: request.projectId,
+        agents: [{
+          id: "claude-code",
+          label: "Claude Code",
           ready: issues.length === 0,
           cli: {
-            required: definition.runtime.kind === "local-cli",
-            binary,
-            installed: path !== null,
-            path,
+            required: false,
+            installed: true,
+            path: null,
           },
-          provider: request.projectId ? {
+          provider: {
             projectId: request.projectId,
             configured: providerConfigured,
             activeProviderId: activeProvider?.id,
-            activeModel: activeProvider ? provider?.activeModel : undefined,
-          } : undefined,
+            activeModel: activeProvider?.model,
+          },
           issues,
-        }
-      }))
-      return {
-        projectId: request.projectId,
-        agents,
+        }],
       }
     },
   },
@@ -171,15 +616,11 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
       binaryPath: z.string().optional(),
     })),
     handler: async () => {
-      const service = new AgentAvailabilityService({
-        whichBin,
-        definitions: agentRuntimeDefinitions.map((def) => ({
-          id: def.id,
-          label: def.label,
-          runtime: def.runtime,
-        })),
-      })
-      return await service.detectAll()
+      return [{
+        agentType: "claude-code",
+        label: "Claude Code",
+        available: true,
+      }]
     },
   },
   listCommands: {
@@ -198,50 +639,152 @@ export const toolMethods: Record<string, IpcMethodDescriptor> = {
     request: openReferenceRequestSchema,
     response: openReferenceResultSchema,
     handler: async (ctx, request: OpenReferenceRequest) => {
-      const { project } = await resolveProjectAgent(ctx.resolve, request.projectId)
-      const reference = resolveLocalReference(request.reference, project.localPath)
-      if (!reference) throw new Error("Reference is outside the workspace or invalid.")
-      const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
-      const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
-      const actor = { kind: "user" as const, id: "renderer" }
-      const permission = await permissionGuard.check({
-        action: "fs.read.outside-userdata",
-        actor,
-        resource: reference.path,
-        context: {
-          projectId: request.projectId,
-          command: "open-reference",
-        },
-      })
-      if (!permission.allowed) {
+      try {
+        const { project } = await resolveProjectAgent(ctx.resolve, request.projectId)
+        const reference = resolveLocalReference(request.reference, project.localPath)
+        if (!reference) throw new Error("Reference is outside the workspace or invalid.")
+        const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+        const actor = { kind: "user" as const, id: "renderer" }
+        const permission = await permissionGuard.check({
+          action: "fs.read.outside-userdata",
+          actor,
+          resource: reference.path,
+          context: {
+            projectId: request.projectId,
+            command: "open-reference",
+          },
+        })
+        if (!permission.allowed) {
+          auditSink.record({
+            action: "fs.read.outside-userdata",
+            actor,
+            resource: reference.path,
+            outcome: "denied",
+            metadata: {
+              projectId: request.projectId,
+              reason: permission.reason,
+              policyId: permission.policyId,
+            },
+          })
+          throw new Error(permission.reason)
+        }
+        let error: string
+        try {
+          error = await shell.openPath(reference.path)
+        } catch (openError) {
+          auditSink.record({
+            action: "fs.read.outside-userdata",
+            actor,
+            resource: reference.path,
+            outcome: "failed",
+            metadata: {
+              projectId: request.projectId,
+              command: "open-reference",
+              line: reference.line,
+              boundary: "agent.ipc.open-reference.shell",
+              ...shellOpenErrorMetadata(openError),
+            },
+          })
+          throw openError
+        }
         auditSink.record({
           action: "fs.read.outside-userdata",
           actor,
           resource: reference.path,
-          outcome: "denied",
+          outcome: error ? "failed" : "allowed",
           metadata: {
             projectId: request.projectId,
-            reason: permission.reason,
-            policyId: permission.policyId,
+            command: "open-reference",
+            line: reference.line,
+            ...(error
+              ? {
+                  boundary: "agent.ipc.open-reference.shell",
+                  ...shellOpenErrorMetadata(error),
+                }
+              : {}),
           },
         })
-        throw new Error(permission.reason)
-      }
-      const error = await shell.openPath(reference.path)
-      auditSink.record({
-        action: "fs.read.outside-userdata",
-        actor,
-        resource: reference.path,
-        outcome: error ? "failed" : "allowed",
-        metadata: {
+        if (error) throw new Error(error)
+        return { ok: true, path: reference.path }
+      } catch (error) {
+        logger.warn("Agent open reference IPC failed.", {
           projectId: request.projectId,
-          command: "open-reference",
-          line: reference.line,
-          error: error || undefined,
-        },
-      })
-      if (error) throw new Error(error)
-      return { ok: true, path: reference.path }
+          boundary: "agent.open-reference.ipc",
+          referenceLength: request.reference.length,
+          ...shellOpenErrorMetadata(error),
+        })
+        throw error
+      }
     },
   },
+}
+
+function shellOpenErrorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
+}
+
+function buildScannerDeps(resolve: <T>(id: string) => T): ProviderReferenceScannerDeps {
+  return {
+    listTasks: async () => {
+      const scheduler = resolve<TaskSchedulerService>("core.task-scheduler")
+      const tasks = await scheduler.schedulerTaskList()
+      return tasks.map((t) => ({ id: t.id, name: t.name, action: t.action }))
+    },
+    updateTaskAction: async (id, action) => {
+      const scheduler = resolve<TaskSchedulerService>("core.task-scheduler")
+      await scheduler.schedulerTaskUpdate(id, { action })
+    },
+    listWorkflowNodes: async () => {
+      const workflowService = resolve<WorkflowService>("core.workflow")
+      const metas = await workflowService.list()
+      const nodes: Array<{
+        workflowId: string; workflowName: string
+        nodeId: string; nodeName: string
+        providerId: string; modelTier: string
+      }> = []
+      for (const meta of metas) {
+        const def = await workflowService.get(meta.id) as WorkflowDefinition | null
+        if (!def) continue
+        for (const node of def.nodes) {
+          const config = node.config as Record<string, unknown>
+          if (typeof config.providerId === "string" && config.providerId) {
+            nodes.push({
+              workflowId: def.id,
+              workflowName: def.name,
+              nodeId: node.id,
+              nodeName: node.name,
+              providerId: config.providerId,
+              modelTier: typeof config.modelTier === "string" ? config.modelTier : "default",
+            })
+          }
+        }
+      }
+      return nodes
+    },
+    updateWorkflowNodeProvider: async (workflowId, nodeId, providerId, modelTier) => {
+      const workflowService = resolve<WorkflowService>("core.workflow")
+      const def = await workflowService.get(workflowId) as WorkflowDefinition | null
+      if (!def) throw new Error(`Workflow not found: ${workflowId}`)
+      const updatedNodes = def.nodes.map((node) => {
+        if (node.id !== nodeId) return node
+        return { ...node, config: { ...node.config, providerId, modelTier } }
+      })
+      await workflowService.save({ ...def, nodes: updatedNodes })
+    },
+    listConversations: async () => {
+      const dataRepo = resolve<DataRepository>("core.data-repository")
+      const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
+      const all = await conversations.list()
+      return all.map((c) => ({
+        id: c.id,
+        name: c.name ?? c.id,
+        providerId: c.providerId,
+      }))
+    },
+  }
 }

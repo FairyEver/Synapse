@@ -1,4 +1,5 @@
 import {
+  DEFAULT_AGENT_GLOBAL_CONFIG,
   DEFAULT_CONFIG,
   DEFAULT_CONTENT_SORT_ORDER,
   DEFAULT_FAVORITES,
@@ -12,8 +13,12 @@ import {
   getContentTypeDefinition,
 } from "../config/content-types"
 import { SYNAPSE_CONTENT_SORT_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../types/config"
+import { SYNAPSE_AGENT_PERMISSION_MODES } from "../types/agent"
+import { MODEL_TIERS } from "../types/provider-model"
+import type { ModelTier } from "../types/provider-model"
 import type { SynapseContentType } from "../types/content"
 import type {
+  SynapseAgentGlobalConfig,
   SynapseConfig,
   SynapseConfigPatch,
   SynapseContentSortOrder,
@@ -25,6 +30,7 @@ import type {
   SynapseThemeMode,
   SynapseVariable,
 } from "../types/config"
+import type { SynapseAgentPermissionMode } from "../types/agent"
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value)
@@ -48,6 +54,11 @@ function isSynapseThemeMode(value: unknown): value is SynapseThemeMode {
 
 function isSynapseContentSortOrder(value: unknown): value is SynapseContentSortOrder {
   return typeof value === "string" && SYNAPSE_CONTENT_SORT_OPTIONS.includes(value as SynapseContentSortOrder)
+}
+
+function isSynapseAgentPermissionMode(value: unknown): value is SynapseAgentPermissionMode {
+  return typeof value === "string"
+    && SYNAPSE_AGENT_PERMISSION_MODES.includes(value as SynapseAgentPermissionMode)
 }
 
 function asTrimmedString(value: unknown, fallback = ""): string {
@@ -397,6 +408,33 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
   }
 }
 
+function normalizeAgentGlobalConfig(value: unknown): SynapseAgentGlobalConfig {
+  if (!isRecord(value)) {
+    return structuredClone(DEFAULT_AGENT_GLOBAL_CONFIG)
+  }
+
+  const defaultPermissionMode = isSynapseAgentPermissionMode(value.defaultPermissionMode)
+    ? value.defaultPermissionMode
+    : value.defaultBypassPermissions === true
+      ? "bypassPermissions"
+      : DEFAULT_AGENT_GLOBAL_CONFIG.defaultPermissionMode
+
+  const defaultProviderModel = isRecord(value.defaultProviderModel)
+    && isNonEmptyString(value.defaultProviderModel.providerId)
+    && typeof value.defaultProviderModel.modelTier === "string"
+    && (MODEL_TIERS as readonly string[]).includes(value.defaultProviderModel.modelTier)
+    ? {
+        providerId: value.defaultProviderModel.providerId.trim(),
+        modelTier: value.defaultProviderModel.modelTier as ModelTier,
+      }
+    : null
+
+  return {
+    defaultPermissionMode,
+    defaultProviderModel,
+  }
+}
+
 export function createDefaultConfig(): SynapseConfig {
   return structuredClone(DEFAULT_CONFIG)
 }
@@ -425,6 +463,7 @@ export function sanitizeSynapseConfig(value: unknown): SynapseConfig {
     activeRepoUuid,
     repositories,
     global: normalizeGlobalConfig(value.global),
+    agent: normalizeAgentGlobalConfig(value.agent),
   }
 }
 
@@ -456,8 +495,14 @@ export function applySynapseConfigPatch(
         ...config.global,
         ...patch.global,
         projects: patch.global.projects ?? config.global.projects,
-      }
+    }
     : config.global
+  const nextAgent = patch.agent
+    ? {
+        ...config.agent,
+        ...patch.agent,
+      }
+    : config.agent
 
   return sanitizeSynapseConfig({
     ...config,
@@ -465,5 +510,6 @@ export function applySynapseConfigPatch(
       patch.activeRepoUuid !== undefined ? patch.activeRepoUuid : config.activeRepoUuid,
     repositories: patch.repositories ?? config.repositories,
     global: nextGlobal,
+    agent: nextAgent,
   })
 }

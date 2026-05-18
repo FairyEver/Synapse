@@ -50,6 +50,7 @@ function initSchema(database: DatabaseSync): void {
       value TEXT NOT NULL
     )
   `)
+  purgeCursorUsage(database)
 }
 
 function migrateHourlySchema(database: DatabaseSync): void {
@@ -188,6 +189,12 @@ export function upsertHourlyUsage(messages: UnifiedMessage[]): void {
 
 export function clearHourlyUsageForClient(clientId: string): void {
   getDb().prepare("DELETE FROM usage_hourly WHERE client = ?").run(clientId)
+}
+
+function purgeCursorUsage(database: DatabaseSync): void {
+  database.exec("DELETE FROM usage_daily WHERE client = 'cursor'")
+  database.exec("DELETE FROM usage_hourly WHERE client = 'cursor'")
+  database.exec("DELETE FROM file_fingerprints WHERE client_id = 'cursor'")
 }
 
 export function queryHourlyRowsFiltered(since?: string, until?: string): Record<string, unknown>[] {

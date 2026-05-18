@@ -2,7 +2,7 @@ import fs from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   SkillRegistry,
@@ -10,6 +10,10 @@ import {
 } from "../skill-registry"
 
 describe("SkillRegistry", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it("discovers SKILL.md files and builds invocation prompts", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-skill-"))
     const skillDir = path.join(workspace, ".agents", "skills", "reviewer")
@@ -33,5 +37,95 @@ describe("SkillRegistry", () => {
     expect(buildSkillInvocationPrompt(skill!, ["src/app.ts"]))
       .toContain("## User Arguments:\nsrc/app.ts")
   })
-})
 
+  it("skips unreadable skill files with diagnostics", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-skill-"))
+    const goodDir = path.join(workspace, ".agents", "skills", "reviewer")
+    const brokenDir = path.join(workspace, ".agents", "skills", "broken")
+    const goodSkillPath = path.join(goodDir, "SKILL.md")
+    const brokenSkillPath = path.join(brokenDir, "SKILL.md")
+    await fs.mkdir(goodDir, { recursive: true })
+    await fs.mkdir(brokenDir, { recursive: true })
+    await fs.writeFile(goodSkillPath, [
+      "---",
+      "name: Reviewer",
+      "description: Review code",
+      "---",
+      "Inspect the diff.",
+    ].join("\n"))
+    await fs.writeFile(brokenSkillPath, "This file cannot be read.")
+
+    const originalReadFile = fs.readFile.bind(fs)
+    vi.spyOn(fs, "readFile").mockImplementation(async (filePath, options) => {
+      if (path.basename(path.dirname(String(filePath))) === "broken") {
+        const error = new Error(`EACCES: permission denied, open '${brokenSkillPath}'`)
+        Object.assign(error, { code: "EACCES" })
+        throw error
+      }
+      return originalReadFile(filePath, options)
+    })
+    const logger = { warn: vi.fn() }
+    const registry = new SkillRegistry({ projectId: "project-1", workspacePath: workspace, logger })
+
+    const skills = await registry.list()
+
+    expect(skills.map((skill) => skill.name)).toContain("reviewer")
+    expect(skills.map((skill) => skill.name)).not.toContain("broken")
+    expect(logger.warn).toHaveBeenCalledWith("Agent skill file skipped.", expect.objectContaining({
+      boundary: "agent.skill.file-read",
+      fileName: "SKILL.md",
+      projectId: "project-1",
+      skillName: "broken",
+      errorCode: "EACCES",
+      errorName: "Error",
+      errorLength: `EACCES: permission denied, open '${brokenSkillPath}'`.length,
+      error: expect.stringContaining("[path redacted]"),
+    }))
+  })
+
+  it("redacts unquoted absolute paths in skill file diagnostics", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-skill-"))
+    const brokenDir = path.join(workspace, ".agents", "skills", "broken")
+    const brokenSkillPath = path.join(brokenDir, "SKILL.md")
+    await fs.mkdir(brokenDir, { recursive: true })
+    await fs.writeFile(brokenSkillPath, "This file cannot be read.")
+
+    vi.spyOn(fs, "readFile").mockRejectedValue(
+      new Error("EACCES: permission denied, open /Users/example/.codex/skills/broken/SKILL.md"),
+    )
+    const logger = { warn: vi.fn() }
+    const registry = new SkillRegistry({ projectId: "project-1", workspacePath: workspace, logger })
+
+    await registry.list()
+
+    expect(logger.warn).toHaveBeenCalledWith("Agent skill file skipped.", expect.objectContaining({
+      skillName: "broken",
+      error: "EACCES: permission denied, open [path redacted]",
+    }))
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("/Users/example")
+  })
+
+  it("redacts secret-like values in skill file diagnostics", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-skill-"))
+    const brokenDir = path.join(workspace, ".agents", "skills", "broken")
+    const brokenSkillPath = path.join(brokenDir, "SKILL.md")
+    await fs.mkdir(brokenDir, { recursive: true })
+    await fs.writeFile(brokenSkillPath, "This file cannot be read.")
+
+    vi.spyOn(fs, "readFile").mockRejectedValue(
+      new Error("EACCES: token=sk-secret authorization=Bearer raw-token cookie=session=raw open /Users/example/.codex/skills/broken/SKILL.md"),
+    )
+    const logger = { warn: vi.fn() }
+    const registry = new SkillRegistry({ projectId: "project-1", workspacePath: workspace, logger })
+
+    await registry.list()
+
+    expect(logger.warn).toHaveBeenCalledWith("Agent skill file skipped.", expect.objectContaining({
+      skillName: "broken",
+      error: "EACCES: token=[redacted] authorization=[redacted] cookie=[redacted] open [path redacted]",
+    }))
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("raw-token")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("session=raw")
+  })
+})

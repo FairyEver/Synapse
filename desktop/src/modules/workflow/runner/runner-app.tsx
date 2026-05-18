@@ -3,13 +3,18 @@ import type { WorkflowDefinition, NodeRunResult, WorkflowRunStatus } from "@/typ
 import { createRendererLogger } from "@/app-shell/logging"
 import "../../../../workflow-nodes/register.renderer"
 import { useWorkflowEvents } from "../hooks/use-workflow-events"
+import { errorDiagnostic, truncateWithEllipsis } from "../lib/error-utils"
 import { RunnerToolbar } from "./runner-toolbar"
 import { DagView } from "./dag-view"
 import { TimelineView } from "./timeline-view"
 import { NodeResultPanel } from "./node-result-panel"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
-import { RefreshCw } from "lucide-react"
+import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
+import { ProviderLookupProvider } from "../../../../workflow-nodes/provider-lookup-context"
+import { sanitizeError } from "@/lib/error-sanitize"
+import { ErrorBoundary } from "@/components/error-boundary"
 
 const logger = createRendererLogger("workflow.runner")
 
@@ -44,17 +49,28 @@ export function WorkflowRunnerApp() {
     let cancelled = false
     setLoadError(null)
     void (async () => {
-      const status = await window.synapse?.workflow.runStatus(runId)
-      if (cancelled) return
-      if (!status) {
-        logger.warn("runner hydration failed: runStatus returned null, triggering fallback", { runId, workflowId })
+      try {
+        const status = await window.synapse?.workflow.runStatus(runId)
+        if (cancelled) return
+        if (!status) {
+          logger.warn("runner hydration failed: runStatus returned null, triggering fallback", { runId, workflowId })
+          setLoadError("无法加载运行记录（可能已被淘汰），显示最新工作流结构")
+          return
+        }
+        setLoadError(null)
+        logger.info("hydrated run metadata", { runId, hasDefinition: !!status.definition, hasParams: !!status.params })
+        if (status.definition) setDefinition(status.definition)
+        if (status.params) setRunParams(status.params)
+      } catch (err) {
+        if (cancelled) return
+        logger.warn("runner hydration failed: runStatus rejected, triggering fallback", {
+          workflowId,
+          runId,
+          boundary: "renderer.workflow.runner.hydration",
+          ...errorDiagnostic(err),
+        })
         setLoadError("无法加载运行记录（可能已被淘汰），显示最新工作流结构")
-        return
       }
-      setLoadError(null)
-      logger.info("hydrated run metadata", { runId, hasDefinition: !!status.definition, hasParams: !!status.params })
-      if (status.definition) setDefinition(status.definition)
-      if (status.params) setRunParams(status.params)
     })()
     return () => { cancelled = true }
   }, [runId, retrySignal])
@@ -73,13 +89,24 @@ export function WorkflowRunnerApp() {
     if (runId && !loadError) return
     let cancelled = false
     void (async () => {
-      const def = await window.synapse?.workflow.get(workflowId)
-      if (cancelled) return
-      if (def) {
-        setDefinition(def)
-        // Fallback succeeded: clear the loadError so the warning banner
-        // doesn't persist when the DAG is now correctly rendered.
-        setLoadError(null)
+      try {
+        const def = await window.synapse?.workflow.get(workflowId)
+        if (cancelled) return
+        if (def) {
+          setDefinition(def)
+          // Fallback succeeded: clear the loadError so the warning banner
+          // doesn't persist when the DAG is now correctly rendered.
+          setLoadError(null)
+        }
+      } catch (err) {
+        if (cancelled) return
+        logger.warn("runner fallback definition failed", {
+          workflowId,
+          runId,
+          boundary: "renderer.workflow.runner.fallback-definition",
+          ...errorDiagnostic(err),
+        })
+        setLoadError("无法加载工作流结构，请重试")
       }
     })()
     return () => { cancelled = true }
@@ -119,7 +146,7 @@ export function WorkflowRunnerApp() {
       }
     })
     return () => { unsubEvent?.(); unsubSwitch?.() }
-  }, [workflowId])
+  }, [workflowId, retrySignal])
 
   useWorkflowEvents(runId, {
     onNodeStarted: (nodeId, partial) => setNodeResults((r) => ({
@@ -162,7 +189,7 @@ export function WorkflowRunnerApp() {
     } catch (err) {
       logger.warn("cancel IPC call failed", {
         runId,
-        error: err instanceof Error ? err.message : String(err),
+        ...errorDiagnostic(err),
       })
       setRunError("取消失败：无法连接到主进程，请重试")
     } finally {
@@ -182,10 +209,12 @@ export function WorkflowRunnerApp() {
         return
       }
       if ("errors" in result) {
-        const errors = result.errors as Array<{ message?: string }>
-        const msg = errors[0]?.message ?? "重新运行失败：校验未通过"
-        logger.warn("rerun failed", { errors: result.errors })
-        setRunError(msg)
+        const errors = Array.isArray(result.errors) ? result.errors : []
+        logger.warn("rerun failed", {
+          runId,
+          ...validationErrorsDiagnostic(errors),
+        })
+        setRunError("重新运行失败：校验未通过")
         return
       }
       // Clear definition and params so the runner shows loading state until
@@ -201,7 +230,7 @@ export function WorkflowRunnerApp() {
     } catch (err) {
       logger.warn("rerun IPC call failed", {
         runId,
-        error: err instanceof Error ? err.message : String(err),
+        ...errorDiagnostic(err),
       })
       setRunError("重新运行失败：无法连接到主进程，请重试")
     } finally {
@@ -224,15 +253,28 @@ export function WorkflowRunnerApp() {
     ? nodeResults[selectedNodeId] ?? { nodeId: selectedNodeId, status: "pending" as const, input: { variables: {} } }
     : null
 
+  if (!workflowId && !runId) {
+    return (
+      <div className="flex h-screen items-center justify-center p-4">
+        <Alert variant="destructive" className="max-w-sm">
+          <AlertCircle data-icon="inline-start" />
+          <AlertTitle>缺少运行参数</AlertTitle>
+          <AlertDescription>请从工作流列表重新打开运行结果。</AlertDescription>
+        </Alert>
+      </div>
+    )
+  }
+
   if (!definition) {
     if (loadError) {
       return (
         <div className="flex items-center justify-center h-screen">
           <div className="text-center space-y-3 max-w-sm">
-            <div className="rounded-lg border bg-card p-4 space-y-2 text-left">
-              <p className="text-xs font-medium text-muted-foreground">无法加载运行结果</p>
-              <p className="text-xs text-muted-foreground">{loadError}</p>
-            </div>
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle className="text-xs font-medium">无法加载运行结果</AlertTitle>
+              <AlertDescription className="text-xs">{loadError}</AlertDescription>
+            </Alert>
             <Button size="sm" variant="outline" onClick={handleRetry}>
               <RefreshCw className="h-3.5 w-3.5 mr-1" />重试
             </Button>
@@ -240,10 +282,12 @@ export function WorkflowRunnerApp() {
         </div>
       )
     }
-    return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground">加载中…</div>
+    return <div className="flex items-center justify-center h-screen text-sm text-muted-foreground gap-2"><Loader2 className="h-4 w-4 animate-spin" />加载中…</div>
   }
 
   return (
+    <ProviderLookupProvider>
+    <ErrorBoundary fallbackTitle="运行结果出现问题">
     <div className="flex flex-col h-screen">
       <RunnerToolbar
         definition={definition}
@@ -268,7 +312,6 @@ export function WorkflowRunnerApp() {
             <DagView
               definition={definition}
               nodeResults={nodeResults}
-              runState={runState}
               selectedNodeId={selectedNodeId}
               onNodeSelect={setSelectedNodeId}
             />
@@ -301,5 +344,34 @@ export function WorkflowRunnerApp() {
         )}
       </ResizablePanelGroup>
     </div>
+    </ErrorBoundary>
+    </ProviderLookupProvider>
   )
+}
+
+function validationErrorsDiagnostic(errors: readonly unknown[]): {
+  readonly errorCount: number
+  readonly firstErrorType?: string
+  readonly firstErrorMessage?: string
+} {
+  const first = validationErrorRecord(errors[0])
+  const firstErrorType = typeof first?.type === "string" ? first.type : undefined
+  const rawMessage = typeof first?.message === "string" ? first.message : undefined
+  const firstErrorMessage = rawMessage
+    ? truncateWithEllipsis(sanitizeError(rawMessage), 200)
+    : undefined
+  return {
+    errorCount: errors.length,
+    firstErrorType,
+    firstErrorMessage,
+  }
+}
+
+function validationErrorRecord(value: unknown): {
+  readonly type?: unknown
+  readonly message?: unknown
+} | undefined {
+  return typeof value === "object" && value !== null
+    ? value as { readonly type?: unknown; readonly message?: unknown }
+    : undefined
 }

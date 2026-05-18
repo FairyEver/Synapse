@@ -8,6 +8,7 @@ import { IdentityProvider } from "@/app-shell/identity-context"
 import { LicenseProvider } from "@/app-shell/license"
 import { createRendererLogger, installRendererLogForwarding } from "@/app-shell/logging"
 import { installDiagnostics } from "@/app-shell/diagnostics"
+import { updateDiagnosticContext } from "@/lib/diagnostic-context"
 import { AppNotificationsProvider } from "@/app-shell/notifications"
 import { RepositoryManagerProvider } from "@/app-shell/repository"
 import "@/styles/globals.css"
@@ -26,13 +27,16 @@ if (import.meta.hot) {
 
 void (async () => {
   const windowType = new URLSearchParams(window.location.search).get("window")
+  updateDiagnosticContext({ windowType: windowType ?? "main" })
 
   if (windowType === "workflow-editor") {
     const { WorkflowEditorApp } = await import("@/modules/workflow/editor/editor-app")
     createRoot(document.getElementById("root")!).render(
       <StrictMode>
         <AppErrorBoundary>
-          <WorkflowEditorApp />
+          <AppConfigProvider>
+            <WorkflowEditorApp />
+          </AppConfigProvider>
         </AppErrorBoundary>
       </StrictMode>,
     )

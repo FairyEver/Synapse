@@ -2,6 +2,8 @@ import { Component, type ErrorInfo, type ReactNode } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { createRendererLogger } from "@/app-shell/logging"
+import { getDiagnosticSnapshot } from "@/lib/diagnostic-context"
+import { sanitizeError } from "@/lib/error-sanitize"
 
 const logger = createRendererLogger("error-boundary")
 
@@ -13,33 +15,36 @@ interface ErrorBoundaryProps {
 
 interface ErrorBoundaryState {
   error: Error | null
+  resetKey: number
 }
 
 class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
   constructor(props: ErrorBoundaryProps) {
     super(props)
-    this.state = { error: null }
+    this.state = { error: null, resetKey: 0 }
   }
 
-  static getDerivedStateFromError(error: Error): ErrorBoundaryState {
+  static getDerivedStateFromError(error: Error): Partial<ErrorBoundaryState> {
     return { error }
   }
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     logger.error("Uncaught render error.", {
       error: error.message,
+      stack: error.stack,
       componentStack: info.componentStack,
+      diagnostics: getDiagnosticSnapshot(),
     })
   }
 
   private handleReset = () => {
-    this.setState({ error: null })
+    this.setState((state) => ({ error: null, resetKey: state.resetKey + 1 }))
     this.props.onReset?.()
   }
 
   render() {
     if (!this.state.error) {
-      return this.props.children
+      return <div key={this.state.resetKey} className="contents">{this.props.children}</div>
     }
 
     return (
@@ -52,7 +57,7 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
           </CardHeader>
           <CardContent>
             <p className="text-sm text-muted-foreground">
-              {this.state.error.message}
+              {sanitizeError(this.state.error.message)}
             </p>
           </CardContent>
           <CardFooter>

@@ -6,6 +6,7 @@ import type { NodeManifest, NodeExecutor } from "../types"
 
 const stub: NodeManifest<{ t: string }> = {
   type: "stub", title: "Stub", icon: Square, color: "bg-muted",
+  defaultConfig: { t: "" },
   ports: { inputs: [{ id: "in", label: "In" }], outputs: [{ id: "out", label: "Out" }] },
   cardSummary: (c) => ({ title: c.t, subtitle: "" }),
   configFields: [],

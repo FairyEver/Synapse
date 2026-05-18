@@ -195,6 +195,29 @@ describe("DatabaseService table descriptions", () => {
       score_value: 1.25,
     })
   })
+
+  it("allows system-table-looking tokens inside SQL string literals", () => {
+    const result = service.databaseSqlExecute("SELECT 'contains _not_a_table in text' AS note")
+
+    expect(result.rows).toEqual([{ note: "contains _not_a_table in text" }])
+  })
+
+  it("treats malformed multi-choice JSON as not matching CONTAINS filters", () => {
+    service.databaseTableCreate("tasks", [
+      { name: "labels", kind: "multi_choice", choices: ["bug", "feature"] },
+    ])
+
+    service.databaseSqlExecute(`INSERT INTO "tasks" ("labels") VALUES (?)`, ["not-json"])
+
+    expect(() => service.databaseRowList({
+      table: "tasks",
+      where: [{ field: "labels", op: "CONTAINS", value: "bug" }],
+    })).not.toThrow()
+    expect(service.databaseRowList({
+      table: "tasks",
+      where: [{ field: "labels", op: "CONTAINS", value: "bug" }],
+    }).rows).toEqual([])
+  })
 })
 
 describe("DatabaseService legacy database migration", () => {

@@ -1,6 +1,8 @@
 import { fileURLToPath } from "node:url"
 import fs from "node:fs/promises"
 import path from "node:path"
+import type { Dirent, Stats } from "node:fs"
+import { errorCode } from "../error-utils"
 
 export interface LocalReference {
   readonly raw: string
@@ -65,7 +67,10 @@ export async function renderReferenceView(
 ): Promise<string> {
   const reference = resolveLocalReference(input, workspacePath)
   if (!reference) return "Reference is outside the workspace or invalid."
-  const stat = await fs.stat(reference.path)
+  const stat = await statReference(reference)
+  if (!await isResolvedInsideWorkspace(reference, workspacePath)) {
+    return "Reference is outside the workspace or invalid."
+  }
   if (stat.isDirectory()) {
     return renderDirectory(reference, options)
   }
@@ -107,7 +112,7 @@ async function renderDirectory(
   options: ReferenceViewOptions,
 ): Promise<string> {
   const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES
-  const entries = await fs.readdir(reference.path, { withFileTypes: true })
+  const entries = await readReferenceDirectory(reference)
   const lines = entries
     .sort((a, b) => {
       if (a.isDirectory() !== b.isDirectory()) return a.isDirectory() ? -1 : 1
@@ -127,7 +132,7 @@ async function renderFile(
   reference: LocalReference,
   options: ReferenceViewOptions,
 ): Promise<string> {
-  const bytes = await fs.readFile(reference.path)
+  const bytes = await readReferenceFile(reference)
   if (bytes.includes(0)) return `${reference.relativePath} is a binary file.`
   const text = bytes.toString("utf8")
   const allLines = text.split(/\r?\n/)
@@ -152,10 +157,74 @@ async function renderFile(
   ].join("\n"), MAX_OUTPUT_RUNES)
 }
 
+async function statReference(reference: LocalReference): Promise<Stats> {
+  try {
+    return await fs.stat(reference.path)
+  } catch (error) {
+    throw referenceReadError(reference, "stat", error)
+  }
+}
+
+async function readReferenceDirectory(
+  reference: LocalReference,
+): Promise<Dirent[]> {
+  try {
+    return await fs.readdir(reference.path, { withFileTypes: true })
+  } catch (error) {
+    throw referenceReadError(reference, "read", error)
+  }
+}
+
+async function readReferenceFile(reference: LocalReference): Promise<Buffer> {
+  try {
+    return await fs.readFile(reference.path)
+  } catch (error) {
+    throw referenceReadError(reference, "read", error)
+  }
+}
+
+async function isResolvedInsideWorkspace(
+  reference: LocalReference,
+  workspacePath: string,
+): Promise<boolean> {
+  try {
+    const [realReferencePath, realWorkspacePath] = await Promise.all([
+      fs.realpath(reference.path),
+      fs.realpath(workspacePath),
+    ])
+    return isInsideWorkspace(realReferencePath, realWorkspacePath)
+  } catch (error) {
+    throw referenceReadError(reference, "stat", error)
+  }
+}
+
+function referenceReadError(
+  reference: LocalReference,
+  operation: "read" | "stat",
+  error: unknown,
+): Error {
+  const code = errorCode(error)
+  if (code === "ENOENT") return new Error(`Reference not found: ${reference.relativePath}`)
+  if (code === "EACCES" || code === "EPERM") {
+    return new Error(`Reference is not readable: ${reference.relativePath}`)
+  }
+  const suffix = code ? ` (${code})` : ""
+  return new Error(`Reference ${operation} failed: ${reference.relativePath}${suffix}`)
+}
+
 function normalizeReferenceInput(input: string): string {
   const trimmed = input.trim().replace(/^["'`]+|["'`]+$/g, "")
-  const markdown = /^\[[^\]]+\]\(([^)]+)\)$/.exec(trimmed)
-  return (markdown?.[1] ?? trimmed).trim()
+  const reference = trimTrailingReferencePunctuation(trimmed)
+  const markdown = /^\[[^\]]+\]\(([^)]+)\)$/.exec(reference)
+  return (markdown?.[1] ?? reference).trim()
+}
+
+function trimTrailingReferencePunctuation(input: string): string {
+  let value = input.trim()
+  while (/[)\d][.,;]$/.test(value)) {
+    value = value.slice(0, -1).trimEnd()
+  }
+  return value
 }
 
 function splitLocationSuffix(input: string): {

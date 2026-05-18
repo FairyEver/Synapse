@@ -7,6 +7,7 @@ import type {
   DatabaseMcpServerInfo,
   DatabaseMcpStatus,
   DatabaseMcpTarget,
+  DatabaseOverview,
   Column,
   DatabaseQueryParams,
   DatabaseQueryResult,
@@ -27,6 +28,7 @@ import type {
   SynapseAgentSessionSummary,
   SynapseAgentStatus,
   SynapseAgentTimelineResult,
+  SynapseAgentPermissionMode,
 } from "./agent"
 import type {
   SynapseConfigBackupExportResult,
@@ -216,6 +218,132 @@ export type SynapseRunAsCheckResult = Record<string, unknown>
 export type SynapseWebhookStatus = NonNullable<SynapseOpsDiagnostics["webhook"]>
 export type SynapseOpsRecord = Record<string, unknown>
 
+export type SynapseAgentProviderCategory =
+  | "official"
+  | "cn_official"
+  | "cloud_provider"
+  | "aggregator"
+  | "third_party"
+  | "custom"
+
+export type SynapseAgentProviderApiKeyField = "ANTHROPIC_AUTH_TOKEN" | "ANTHROPIC_API_KEY"
+
+export type SynapseAgentProvider = {
+  readonly id: string
+  readonly name: string
+  readonly category: SynapseAgentProviderCategory
+  readonly source?: "local" | "user"
+  readonly readonly?: boolean
+  readonly configured?: boolean
+  readonly configPath?: string
+  readonly note?: string
+  readonly websiteUrl?: string
+  readonly baseUrl?: string
+  readonly apiKeyField: SynapseAgentProviderApiKeyField
+  readonly active?: boolean
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+  readonly env?: Record<string, string>
+  readonly settingsConfig?: Record<string, unknown>
+  readonly archived?: boolean
+  readonly sortIndex?: number
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export type SynapseCreateAgentProviderInput = {
+  readonly id: string
+  readonly name: string
+  readonly note?: string
+  readonly websiteUrl?: string
+  readonly category: SynapseAgentProviderCategory
+  readonly baseUrl?: string
+  readonly apiKeyField: SynapseAgentProviderApiKeyField
+  readonly apiKey?: string
+  readonly active?: boolean
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+  readonly env?: Record<string, string>
+  readonly settingsConfig?: Record<string, unknown>
+  readonly secretEnv?: Record<string, string>
+  readonly sortIndex?: number
+}
+
+export type SynapseUpdateAgentProviderInput = Partial<Omit<SynapseCreateAgentProviderInput, "id">> & {
+  readonly archived?: boolean
+  readonly clearSecretEnv?: readonly string[]
+}
+
+export type SynapseAgentProviderPresetTemplateValue = {
+  readonly key: string
+  readonly label: string
+  readonly placeholder: string
+  readonly defaultValue?: string
+  readonly sensitive: boolean
+}
+
+export type SynapseAgentProviderPreset = {
+  readonly name: string
+  readonly category: SynapseAgentProviderCategory
+  readonly websiteUrl?: string
+  readonly apiKeyUrl?: string
+  readonly baseUrl?: string
+  readonly apiKeyField: SynapseAgentProviderApiKeyField
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+  readonly templateValues: readonly SynapseAgentProviderPresetTemplateValue[]
+}
+
+export type SynapseCreateProviderFromPresetInput = {
+  readonly presetName: string
+  readonly providerId?: string
+  readonly name?: string
+  readonly apiKey?: string
+  readonly templateValues?: Record<string, string>
+  readonly active?: boolean
+  readonly sortIndex?: number
+}
+
+export type SynapseCcSwitchImportSource = {
+  readonly kind: "sqlite" | "json"
+  readonly path: string
+}
+
+export type SynapseCcSwitchImportPreviewStatus = "ready" | "duplicate" | "missing_api_key"
+
+export type SynapseCcSwitchClaudeProviderPreviewItem = {
+  readonly id: string
+  readonly name: string
+  readonly category: SynapseAgentProviderCategory
+  readonly websiteUrl?: string
+  readonly note?: string
+  readonly baseUrl?: string
+  readonly apiKeyField: SynapseAgentProviderApiKeyField
+  readonly model?: string
+  readonly haikuModel?: string
+  readonly sonnetModel?: string
+  readonly opusModel?: string
+  readonly status: SynapseCcSwitchImportPreviewStatus
+  readonly selectedByDefault: boolean
+}
+
+export type SynapseCcSwitchClaudeImportPreviewResult = {
+  readonly source?: SynapseCcSwitchImportSource
+  readonly items: readonly SynapseCcSwitchClaudeProviderPreviewItem[]
+  readonly error?: string
+}
+
+export type SynapseImportCcSwitchClaudeProvidersResult = {
+  readonly imported: readonly SynapseAgentProvider[]
+  readonly skipped: readonly SynapseCcSwitchClaudeProviderPreviewItem[]
+}
+
 export type SynapseBridge = {
   platform: string
   versions: {
@@ -292,7 +420,7 @@ export type SynapseBridge = {
     listFiles: () => Promise<SynapseLogFileInfo[]>
     readAll: () => Promise<string>
     readFiles: (fileNames: string[]) => Promise<string>
-    write: (payload: SynapseRendererLogPayload) => void
+    write: (payload: SynapseRendererLogPayload) => Promise<void>
   }
   license: {
     activate: (payload: SynapseLicenseActivationRequest) => Promise<SynapseLicenseStatus>
@@ -329,6 +457,7 @@ export type SynapseBridge = {
     onChanged: (listener: (payload: InstallStatusChangedEvent) => void) => () => void
   }
   shell: {
+    openExternal: (url: string) => void
     showItemInFolder: (filePath: string) => void
   }
   repository: {
@@ -369,6 +498,7 @@ export type SynapseBridge = {
     databaseTableCreate: (params: { name: string; description?: string; columns: Column[] }) => Promise<void>
     databaseTableDelete: (name: string) => Promise<void>
     databaseTableDescribe: (name: string) => Promise<DatabaseTableSchema>
+    databaseOverviewGet: () => Promise<DatabaseOverview>
     databaseTableUpdate: (params: { table: string; description: string }) => Promise<void>
     databaseColumnCreate: (params: { table: string; column: Column & { default?: unknown } }) => Promise<void>
     databaseColumnUpdate: (params: { table: string; column: string; description: string }) => Promise<void>
@@ -433,7 +563,15 @@ export type SynapseBridge = {
       args: { projectId: string; sessionKey?: string; conversationId?: string; limit?: number },
     ) => Promise<SynapseAgentTimelineResult>
     createSession: (
-      args: { projectId: string; sessionKey?: string; name?: string; agentType?: string },
+      args: {
+        projectId: string
+        sessionKey?: string
+        name?: string
+        agentType?: string
+        providerId?: string
+        mode?: SynapseAgentPermissionMode
+        modelTier?: string
+      },
     ) => Promise<SynapseAgentSessionSummary>
     switchSession: (
       args: { projectId: string; sessionKey?: string; conversationId: string },
@@ -445,19 +583,90 @@ export type SynapseBridge = {
       args: { projectId: string; conversationId: string; name: string },
     ) => Promise<{ ok: boolean }>
     send: (
-      args: { projectId: string; sessionKey?: string; content: string; clientSubmittedAt?: string },
+      args: {
+        projectId: string
+        sessionKey?: string
+        conversationId?: string
+        content: string
+        clientSubmittedAt?: string
+        providerId?: string
+      },
     ) => Promise<SynapseAgentSendResult>
     listPendingPermissions: (projectId: string) => Promise<SynapseAgentPendingPermission[]>
     respondPermission: (
       args: { projectId: string; requestId: string; behavior: "allow" | "deny"; message?: string },
     ) => Promise<{ ok: true }>
+    setPermissionMode: (
+      args: {
+        projectId: string
+        conversationId: string
+        mode: SynapseAgentPermissionMode
+      },
+    ) => Promise<SynapseAgentSessionSummary>
     cancelTurn: (
       args: { projectId: string; conversationId: string },
     ) => Promise<SynapseAgentCancelTurnResult>
     forceKillTurn: (
       args: { projectId: string; conversationId: string },
     ) => Promise<SynapseAgentCancelTurnResult>
-    getProviders: (projectId: string) => Promise<SynapseAgentProviderState>
+    getProviders: () => Promise<SynapseAgentProviderState>
+    listProviders: () => Promise<SynapseAgentProvider[]>
+    listProviderPresets: () => Promise<SynapseAgentProviderPreset[]>
+    createProvider: (
+      args: { provider: SynapseCreateAgentProviderInput },
+    ) => Promise<SynapseAgentProvider>
+    createProviderFromPreset: (
+      args: SynapseCreateProviderFromPresetInput,
+    ) => Promise<SynapseAgentProvider>
+    previewCcSwitchClaudeProviders: (
+      args?: { source?: SynapseCcSwitchImportSource },
+    ) => Promise<SynapseCcSwitchClaudeImportPreviewResult>
+    importCcSwitchClaudeProviders: (
+      args: { source: SynapseCcSwitchImportSource; providerIds: readonly string[] },
+    ) => Promise<SynapseImportCcSwitchClaudeProvidersResult>
+    chooseCcSwitchClaudeImportSource: () => Promise<{ source?: SynapseCcSwitchImportSource }>
+    updateProvider: (
+      args: { providerId: string; patch: SynapseUpdateAgentProviderInput },
+    ) => Promise<SynapseAgentProvider>
+    archiveProvider: (
+      args: { providerId: string },
+    ) => Promise<{ ok: true }>
+    deleteProvider: (
+      args: { providerId: string },
+    ) => Promise<{ ok: true }>
+    listAllProviders: () => Promise<SynapseAgentProvider[]>
+    scanProviderReferences: (
+      args: { providerId: string },
+    ) => Promise<{
+      providerId: string
+      references: Array<{
+        kind: "scheduled-task" | "workflow-node" | "conversation"
+        entityId: string
+        entityName: string
+        nodeId?: string
+        nodeName?: string
+        providerId: string
+        modelTier: string
+      }>
+      taskCount: number
+      workflowNodeCount: number
+      conversationCount: number
+    }>
+    migrateProviderReferences: (
+      args: {
+        sourceProviderId: string
+        targetProviderId: string
+        targetModelTier: string
+        scope: ("scheduled-task" | "workflow-node")[]
+      },
+    ) => Promise<{
+      migratedTasks: number
+      migratedWorkflowNodes: number
+      errors: Array<{ entityId: string; error: string }>
+    }>
+    setActiveProvider: (
+      args: { providerId: string },
+    ) => Promise<{ ok: true }>
     getRuntimeStatus: (
       request: { projectId?: string },
     ) => Promise<SynapseAgentRuntimeStatus>
@@ -558,7 +767,9 @@ export type SynapseBridge = {
     editorState: () => Promise<{ openEditors: string[] }>
     checkCanSync: () => Promise<{ canSync: boolean; blockers: string[] }>
     onEvent: (listener: (event: WorkflowEvent) => void) => () => void
+    onDefinitionUpdated: (listener: (payload: { workflowId: string; source: string; versionHash: string }) => void) => () => void
     onRunnerSwitchRun: (listener: (payload: { runId: string }) => void) => () => void
+    onEditorRefocus: (listener: (payload: { runId?: string }) => void) => () => void
   }
   tokenUsage: {
     scan: () => Promise<{
@@ -615,12 +826,15 @@ export type SynapseBridge = {
     }[]>
     getDetectedAgents: () => Promise<{ id: string; name: string; fileCount: number }[]>
     clearData: () => Promise<void>
-    cursorAddAccount: (params: { sessionToken: string; label?: string }) => Promise<{ accountId: string; error?: string }>
-    cursorRemoveAccount: (params: { accountId: string }) => Promise<void>
-    cursorListAccounts: () => Promise<{ id: string; label?: string; userId?: string; active: boolean; createdAt: string; lastSyncAt?: string }[]>
-    cursorSetActive: (params: { accountId: string }) => Promise<void>
-    cursorSync: () => Promise<{ synced: boolean; rows: number; error?: string }>
-    cursorValidate: (params: { sessionToken: string }) => Promise<{ valid: boolean; membershipType?: string; error?: string }>
+  }
+  http: {
+    testRequest: (config: Record<string, unknown>) => Promise<{
+      status: number
+      statusText: string
+      headers: Record<string, string>
+      body: string
+      durationMs: number
+    }>
   }
   diagnostics?: {
     onPing: (listener: () => void) => () => void

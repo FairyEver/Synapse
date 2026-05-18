@@ -174,6 +174,65 @@ describe("AgentSessionRepository", () => {
     expect(repoA.active).toBe(true)
     expect(repoB.active).toBe(true)
   })
+
+  it("refreshes providerId when restoring an active session", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+    })
+
+    const created = await repository.getOrCreateActive({
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      platform: "local",
+      providerId: "anthropic",
+      content: "hello",
+    })
+
+    const restored = await repository.getOrCreateActive({
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      platform: "local",
+      providerId: "deepseek",
+      content: "again",
+    })
+
+    expect(restored.id).toBe(created.id)
+    expect(restored.providerId).toBe("deepseek")
+    expect((await conversations.get(created.id))?.providerId).toBe("deepseek")
+  })
+
+  it("stores and refreshes agentType when restoring an active session", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const repository = new AgentSessionRepository({
+      projectId: "project-1",
+      conversations,
+      now: fixedNow,
+    })
+
+    const created = await repository.getOrCreateActive({
+      projectId: "project-1",
+      sessionKey: "scheduled:project-1:run-1",
+      platform: "scheduled",
+      agentType: "claude-code",
+      content: "hello",
+    })
+
+    const restored = await repository.getOrCreateActive({
+      projectId: "project-1",
+      sessionKey: "scheduled:project-1:run-1",
+      platform: "scheduled",
+      agentType: "claude-sdk",
+      content: "again",
+    })
+
+    expect(created.agentType).toBe("claude-code")
+    expect(restored.id).toBe(created.id)
+    expect(restored.agentType).toBe("claude-sdk")
+    expect((await conversations.get(created.id))?.agentType).toBe("claude-sdk")
+  })
 })
 
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {

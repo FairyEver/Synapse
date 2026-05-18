@@ -120,6 +120,7 @@ function buildDiagnosticsSummary(report: SynapseDiagnosticsReport): string {
     "logs.lifecycle",
     "ipc.renderer-main.roundtrip",
     "logs.recent-signals",
+    "logs.agent-runtime",
     "logs.windows-compatibility",
     "windows.environment",
     "windows.writable-data",

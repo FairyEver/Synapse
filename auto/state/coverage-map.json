@@ -1,266 +1,1805 @@
 {
   "version": 1,
-  "lastUpdated": "2026-05-14T01:00:00+08:00",
-  "totalIterations": 38,
+  "totalIterations": 255,
   "files": {
-    "desktop/electron/modules/workflow/ipc.ts": {
-      "lastReviewedIteration": 30,
-      "issuesFound": 5,
-      "issuesFixed": 5,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-13T18:20:00+08:00"
-    },
-    "desktop/electron/services/workflow/run-snapshot-service.ts": {
-      "lastReviewedIteration": 28,
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-13T17:45:00+08:00"
-    },
-    "desktop/electron/services/workflow/variable-resolver.ts": {
-      "lastReviewedIteration": 3,
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "healthScore": "stable"
-    },
-    "desktop/electron/services/workflow/window-manager.ts": {
-      "lastReviewedIteration": 31,
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-13T19:00:00+08:00"
-    },
-    "desktop/electron/services/workflow/workflow-engine.ts": {
-      "lastReviewedIteration": 24,
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-13T15:00:00+08:00"
-    },
-    "desktop/electron/services/workflow/workflow-service.ts": {
-      "lastReviewedIteration": 25,
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-13T16:00:00+08:00"
-    },
-    "desktop/electron/services/workflow/workflow-validator.ts": {
-      "lastReviewedIteration": 37,
+    "desktop/action-packages/builtin/agent/__tests__/executor.main.test.ts": {
+      "lastReviewedIteration": 189,
       "issuesFound": 4,
       "issuesFixed": 4,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T00:15:00+08:00"
+      "lastUpdated": "2026-05-15T06:22:00+08:00"
     },
-    "desktop/src/modules/workflow/components/params-editor-dialog.tsx": {
-      "lastReviewedIteration": 37,
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-14T00:15:00+08:00"
-    },
-    "desktop/src/modules/workflow/components/run-history-dialog.tsx": {
-      "lastReviewedIteration": 38,
-      "issuesFound": 3,
-      "issuesFixed": 3,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-14T01:00:00+08:00"
-    },
-    "desktop/src/modules/workflow/components/run-params-dialog.tsx": {
-      "lastReviewedIteration": 18,
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "healthScore": "active"
-    },
-    "desktop/src/modules/workflow/components/workflow-card.tsx": {
-      "lastReviewedIteration": 16,
+    "desktop/action-packages/builtin/agent/__tests__/manifest.test.ts": {
+      "lastReviewedIteration": 63,
       "issuesFound": 1,
       "issuesFixed": 1,
-      "healthScore": "active"
-    },
-    "desktop/src/modules/workflow/components/workflow-list.tsx": {
-      "lastReviewedIteration": 36,
-      "issuesFound": 8,
-      "issuesFixed": 8,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T23:00:00+08:00"
+      "lastUpdated": "2026-05-14T00:38:00+08:00"
+    },
+    "desktop/action-packages/builtin/agent/__tests__/schema.test.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 104,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:48:00+08:00"
+    },
+    "desktop/action-packages/builtin/agent/executor.main.ts": {
+      "lastReviewedIteration": 189,
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:22:00+08:00"
+    },
+    "desktop/action-packages/builtin/agent/manifest.ts": {
+      "lastReviewedIteration": 63,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T00:38:00+08:00"
+    },
+    "desktop/action-packages/builtin/agent/schema.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 104,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:48:00+08:00"
     },
     "desktop/electron/bootstrap/descriptors.ts": {
-      "lastReviewedIteration": 24,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T15:00:00+08:00"
+      "lastReviewedIteration": 197,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 18:15"
     },
-    "desktop/src/modules/workflow/editor/canvas-context.ts": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
+    "desktop/electron/capabilities/workflow-dispatcher.ts": {
+      "lastReviewedIteration": 251,
+      "issuesFound": 1,
+      "issuesFixed": 1,
       "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastUpdated": "2026-05-17 06:52"
     },
-    "desktop/src/modules/workflow/editor/canvas.tsx": {
-      "lastReviewedIteration": 36,
+    "desktop/electron/modules/agent/__tests__/ipc-schema.test.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 77,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-14T01:51:34+08:00"
+    },
+    "desktop/electron/modules/agent/__tests__/ipc-sessions.test.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 101,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T19:23:05.810Z"
+    },
+    "desktop/electron/modules/agent/__tests__/ipc-tools.test.ts": {
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 191,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:45:00+08:00"
+    },
+    "desktop/electron/modules/agent/__tests__/ipc.test.ts": {
+      "lastReviewedIteration": 142,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T11:58:00+08:00"
+    },
+    "desktop/electron/modules/agent/ipc-messages.ts": {
+      "lastReviewedIteration": 142,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T11:58:00+08:00"
+    },
+    "desktop/electron/modules/agent/ipc-sessions.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 101,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T19:23:05.810Z"
+    },
+    "desktop/electron/modules/agent/ipc-shared.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 77,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-14T01:51:34+08:00"
+    },
+    "desktop/electron/modules/agent/ipc-tools.ts": {
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 191,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:45:00+08:00"
+    },
+    "desktop/electron/modules/ops/__tests__/ipc.test.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 65,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T00:48:38+08:00"
+    },
+    "desktop/electron/modules/ops/__tests__/status.test.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 147,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T12:32:48+08:00"
+    },
+    "desktop/electron/modules/ops/ipc.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 65,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T00:48:38+08:00"
+    },
+    "desktop/electron/modules/ops/status.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 147,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T12:32:48+08:00"
+    },
+    "desktop/electron/modules/task-scheduler/__tests__/ipc.test.ts": {
+      "lastReviewedIteration": 105,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T20:00:47.077Z"
+    },
+    "desktop/electron/modules/task-scheduler/ipc.ts": {
+      "lastReviewedIteration": 105,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T20:00:47.077Z"
+    },
+    "desktop/electron/modules/workflow/__tests__/ipc.test.ts": {
+      "lastReviewedIteration": 191,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:43:00+08:00"
+    },
+    "desktop/electron/modules/workflow/ipc.ts": {
+      "lastReviewedIteration": 222,
       "issuesFound": 7,
       "issuesFixed": 7,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T23:00:00+08:00"
+      "lastUpdated": "2026-05-17 22:55"
     },
-    "desktop/src/modules/workflow/editor/custom-edge.tsx": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
-    },
-    "desktop/src/modules/workflow/editor/editor-app.tsx": {
-      "lastReviewedIteration": 38,
-      "issuesFound": 12,
-      "issuesFixed": 12,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-14T01:00:00+08:00"
-    },
-    "desktop/src/modules/workflow/editor/execution-overlay.tsx": {
-      "lastReviewedIteration": 33,
+    "desktop/electron/runtime/ipc/__tests__/electron-adapter.test.ts": {
       "issuesFound": 2,
       "issuesFixed": 2,
+      "lastReviewedIteration": 127,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T21:00:00+08:00"
+      "lastUpdated": "2026-05-14T05:28:01+08:00"
     },
-    "desktop/src/modules/workflow/editor/node-config-panel.tsx": {
-      "lastReviewedIteration": 38,
+    "desktop/electron/runtime/ipc/electron-adapter.ts": {
       "issuesFound": 2,
       "issuesFixed": 2,
+      "lastReviewedIteration": 127,
       "healthScore": "active",
-      "lastUpdated": "2026-05-14T01:00:00+08:00"
+      "lastUpdated": "2026-05-14T05:28:01+08:00"
     },
-    "desktop/src/modules/workflow/editor/node-context-menu.tsx": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+    "desktop/electron/runtime/observability/__tests__/observability.test.ts": {
+      "lastReviewedIteration": 157,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:10:00+08:00"
     },
-    "desktop/src/modules/workflow/editor/node-palette.tsx": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+    "desktop/electron/runtime/observability/diagnostics.ts": {
+      "lastReviewedIteration": 157,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:10:00+08:00"
     },
-    "desktop/src/modules/workflow/editor/node-wrappers.tsx": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+    "desktop/electron/services/__tests__/diagnostics-service.test.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 105,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T04:00:00+08:00"
     },
-    "desktop/src/modules/workflow/editor/toolbar.tsx": {
-      "lastReviewedIteration": 35,
+    "desktop/electron/services/__tests__/run-snapshot-service.test.ts": {
+      "lastReviewedIteration": 227,
+      "issuesFound": 1,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 02:03"
+    },
+    "desktop/electron/services/__tests__/workflow-engine.test.ts": {
+      "lastReviewedIteration": 204,
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-16T23:13:20+08:00"
+    },
+    "desktop/electron/services/__tests__/workflow-scheduler.test.ts": {
+      "lastReviewedIteration": 199,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-16 22:32"
+    },
+    "desktop/electron/services/__tests__/workflow-service.test.ts": {
+      "lastReviewedIteration": 187,
       "issuesFound": 3,
       "issuesFixed": 3,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T22:10:00+08:00"
+      "lastUpdated": "2026-05-15T05:58:00+08:00"
     },
-    "desktop/src/modules/workflow/hooks/use-upstream-nodes.ts": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
-    },
-    "desktop/src/modules/workflow/hooks/use-workflow-events.ts": {
-      "lastReviewedIteration": 14,
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "healthScore": "stable"
-    },
-    "desktop/src/modules/workflow/hooks/use-workflow-list.ts": {
-      "lastReviewedIteration": 21,
+    "desktop/electron/services/agent-runtime/__tests__/agent-runtime-cancel.test.ts": {
+      "lastReviewedIteration": 172,
       "issuesFound": 1,
       "issuesFixed": 1,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T03:50:00+08:00"
+      "lastUpdated": "2026-05-15T03:40:15+08:00"
     },
-    "desktop/src/modules/workflow/hooks/use-workflow-run.ts": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
-    },
-    "desktop/src/modules/workflow/index.tsx": {
-      "lastReviewedIteration": 29,
-      "issuesFound": 2,
-      "issuesFixed": 2,
+    "desktop/electron/services/agent-runtime/__tests__/agent-runtime-service.test.ts": {
+      "lastReviewedIteration": 189,
+      "issuesFound": 8,
+      "issuesFixed": 8,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T04:48:00+08:00"
+      "lastUpdated": "2026-05-15T06:22:00+08:00"
     },
-    "desktop/src/modules/workflow/runner/dag-view.tsx": {
-      "lastReviewedIteration": 17,
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "healthScore": "active"
+    "desktop/electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts": {
+      "issuesFound": 11,
+      "issuesFixed": 11,
+      "lastReviewedIteration": 185,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T05:37:00+08:00"
     },
-    "desktop/src/modules/workflow/runner/node-result-panel.tsx": {
-      "lastReviewedIteration": 36,
+    "desktop/electron/services/agent-runtime/__tests__/command-registry.test.ts": {
+      "issuesFound": 5,
+      "issuesFixed": 5,
+      "lastReviewedIteration": 147,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T12:31:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/__tests__/command-router.test.ts": {
+      "lastReviewedIteration": 142,
       "issuesFound": 5,
       "issuesFixed": 5,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T23:00:00+08:00"
+      "lastUpdated": "2026-05-14T12:03:04+08:00"
     },
-    "desktop/src/modules/workflow/runner/runner-app.tsx": {
-      "lastReviewedIteration": 34,
-      "issuesFound": 14,
-      "issuesFixed": 14,
+    "desktop/electron/services/agent-runtime/__tests__/conversation-router.test.ts": {
+      "issuesFound": 11,
+      "issuesFixed": 11,
+      "lastReviewedIteration": 190,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T21:40:00+08:00"
+      "lastUpdated": "2026-05-15T06:35:00+08:00"
     },
-    "desktop/src/modules/workflow/runner/runner-node-wrappers.tsx": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
-    },
-    "desktop/src/modules/workflow/runner/runner-toolbar.tsx": {
-      "lastReviewedIteration": 26,
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-13T16:30:00+08:00"
-    },
-    "desktop/src/modules/workflow/runner/runner-edge.tsx": {
-      "lastReviewedIteration": 37,
-      "issuesFound": 1,
-      "issuesFixed": 1,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-14T00:15:00+08:00"
-    },
-    "desktop/src/modules/workflow/runner/timeline-view.tsx": {
-      "lastReviewedIteration": 17,
+    "desktop/electron/services/agent-runtime/__tests__/preview-progress.test.ts": {
       "issuesFound": 4,
       "issuesFixed": 4,
-      "healthScore": "active"
+      "lastReviewedIteration": 188,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:08:00+08:00"
     },
-    "desktop/src/types/workflow.ts": {
-      "lastReviewedIteration": 1,
+    "desktop/electron/services/agent-runtime/__tests__/references.test.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 189,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:20:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts": {
+      "lastReviewedIteration": 190,
+      "issuesFound": 14,
+      "issuesFixed": 13,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:35:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/__tests__/session-lifecycle.test.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 158,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:21:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/__tests__/session-manager.test.ts": {
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "lastReviewedIteration": 187,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T05:59:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/__tests__/session-repository.test.ts": {
       "issuesFound": 1,
       "issuesFixed": 1,
-      "healthScore": "stable"
+      "lastReviewedIteration": 52,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T23:48:00+08:00"
     },
-    "desktop/workflow-nodes/end/card.tsx": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+    "desktop/electron/services/agent-runtime/__tests__/skill-registry.test.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 104,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:48:58+0800"
     },
-    "desktop/workflow-nodes/end/executor.main.ts": {
-      "lastReviewedIteration": 30,
+    "desktop/electron/services/agent-runtime/agent-runtime-service.ts": {
+      "lastReviewedIteration": 237,
+      "issuesFound": 12,
+      "issuesFixed": 12,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 23:30"
+    },
+    "desktop/electron/services/agent-runtime/claude-sdk-session.ts": {
+      "issuesFound": 11,
+      "issuesFixed": 11,
+      "lastReviewedIteration": 185,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T05:37:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/command-registry.ts": {
+      "issuesFound": 5,
+      "issuesFixed": 5,
+      "lastReviewedIteration": 147,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T12:31:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/command-router.ts": {
+      "lastReviewedIteration": 142,
+      "issuesFound": 5,
+      "issuesFixed": 5,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T12:03:04+08:00"
+    },
+    "desktop/electron/services/agent-runtime/conversation-router.ts": {
+      "issuesFound": 11,
+      "issuesFixed": 11,
+      "lastReviewedIteration": 190,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:35:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/index.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 52,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T23:53:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/preview-progress.ts": {
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "lastReviewedIteration": 188,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:08:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/references.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 189,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:20:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/sdk-event-bridge.ts": {
+      "lastReviewedIteration": 190,
+      "issuesFound": 14,
+      "issuesFixed": 13,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:35:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/session-lifecycle.ts": {
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 158,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:21:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/session-manager.ts": {
+      "issuesFound": 5,
+      "issuesFixed": 5,
+      "lastReviewedIteration": 187,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T05:59:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/session-repository.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 52,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T23:48:00+08:00"
+    },
+    "desktop/electron/services/agent-runtime/skill-registry.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 104,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:48:58+0800"
+    },
+    "desktop/electron/services/automation-ingress/__tests__/automation-ingress-service.test.ts": {
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 189,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:20:00+08:00"
+    },
+    "desktop/electron/services/automation-ingress/automation-ingress-service.ts": {
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 189,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:20:00+08:00"
+    },
+    "desktop/electron/services/bridge-adapter/__tests__/bridge-adapter-service.test.ts": {
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 102,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:33:05+0800"
+    },
+    "desktop/electron/services/bridge-adapter/__tests__/bridge-protocol.test.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 104,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:49:33+08:00"
+    },
+    "desktop/electron/services/bridge-adapter/bridge-adapter-service.ts": {
+      "issuesFound": 8,
+      "issuesFixed": 6,
+      "lastReviewedIteration": 242,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 04:07"
+    },
+    "desktop/electron/services/bridge-adapter/bridge-protocol.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 104,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:49:33+08:00"
+    },
+    "desktop/electron/services/diagnostics-service.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 105,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T04:00:00+08:00"
+    },
+    "desktop/electron/services/license/license-service.ts": {
+      "lastReviewedIteration": 202,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-16T22:55:00+08:00"
+    },
+    "desktop/electron/services/provider/__tests__/provider-service.test.ts": {
+      "lastReviewedIteration": 147,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T12:31:16+08:00"
+    },
+    "desktop/electron/services/provider/provider-service.ts": {
+      "lastReviewedIteration": 147,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T12:31:16+08:00"
+    },
+    "desktop/electron/services/relay/__tests__/agent-relay-service.test.ts": {
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 127,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T05:28:43+08:00"
+    },
+    "desktop/electron/services/relay/agent-relay-service.ts": {
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 127,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T05:28:43+08:00"
+    },
+    "desktop/electron/services/reply-target/__tests__/outbox-service.test.ts": {
+      "lastReviewedIteration": 102,
       "issuesFound": 2,
       "issuesFixed": 2,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T18:20:00+08:00"
+      "lastUpdated": "2026-05-14T03:31:44+0800"
+    },
+    "desktop/electron/services/reply-target/outbox-service.ts": {
+      "lastReviewedIteration": 102,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:31:44+0800"
+    },
+    "desktop/electron/services/side-channel/__tests__/attachment-policy.test.ts": {
+      "lastReviewedIteration": 101,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T19:18:20Z"
+    },
+    "desktop/electron/services/side-channel/__tests__/side-channel-service.test.ts": {
+      "lastReviewedIteration": 186,
+      "issuesFound": 10,
+      "issuesFixed": 10,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T05:48:00+08:00"
+    },
+    "desktop/electron/services/side-channel/attachment-policy.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 101,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T19:18:20Z"
+    },
+    "desktop/electron/services/side-channel/side-channel-service.ts": {
+      "lastReviewedIteration": 186,
+      "issuesFound": 9,
+      "issuesFixed": 9,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T05:48:00+08:00"
+    },
+    "desktop/electron/services/task-scheduler/__tests__/cron-expression.test.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 104,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:51:37+0800"
+    },
+    "desktop/electron/services/task-scheduler/__tests__/execution-service.test.ts": {
+      "issuesFound": 9,
+      "issuesFixed": 9,
+      "lastReviewedIteration": 196,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-16T17:35:00+08:00"
+    },
+    "desktop/electron/services/task-scheduler/__tests__/external-api.test.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 103,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:42:00+08:00"
+    },
+    "desktop/electron/services/task-scheduler/__tests__/run-repository.test.ts": {
+      "lastReviewedIteration": 71,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T01:22:30+08:00"
+    },
+    "desktop/electron/services/task-scheduler/__tests__/schedule-calculator.test.ts": {
+      "lastReviewedIteration": 73,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T01:39:00+08:00"
+    },
+    "desktop/electron/services/task-scheduler/__tests__/task-repository.test.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 73,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T01:36:19+08:00"
+    },
+    "desktop/electron/services/task-scheduler/__tests__/task-scheduler-service.test.ts": {
+      "lastReviewedIteration": 186,
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T05:47:00+08:00"
+    },
+    "desktop/electron/services/task-scheduler/cron-expression.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 104,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:51:37+0800"
+    },
+    "desktop/electron/services/task-scheduler/execution-service.ts": {
+      "issuesFound": 9,
+      "issuesFixed": 9,
+      "lastReviewedIteration": 196,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-16T17:35:00+08:00"
+    },
+    "desktop/electron/services/task-scheduler/external-capabilities.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 103,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:42:00+08:00"
+    },
+    "desktop/electron/services/task-scheduler/run-repository.ts": {
+      "lastReviewedIteration": 71,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T01:22:30+08:00"
+    },
+    "desktop/electron/services/task-scheduler/schedule-calculator.ts": {
+      "lastReviewedIteration": 73,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T01:39:00+08:00"
+    },
+    "desktop/electron/services/task-scheduler/task-repository.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 73,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T01:36:19+08:00"
+    },
+    "desktop/electron/services/task-scheduler/task-scheduler-service.ts": {
+      "lastReviewedIteration": 186,
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T05:47:00+08:00"
+    },
+    "desktop/electron/services/workflow/run-snapshot-service.ts": {
+      "lastReviewedIteration": 251,
+      "issuesFound": 7,
+      "issuesFixed": 6,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
+    },
+    "desktop/electron/services/workflow/variable-resolver.ts": {
+      "lastReviewedIteration": 251,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
+    },
+    "desktop/electron/services/workflow/window-manager.ts": {
+      "lastReviewedIteration": 251,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
+    },
+    "desktop/electron/services/workflow/workflow-engine.ts": {
+      "lastReviewedIteration": 254,
+      "issuesFound": 14,
+      "issuesFixed": 11,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 07:08"
+    },
+    "desktop/electron/services/workflow/workflow-scheduler.ts": {
+      "lastReviewedIteration": 251,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
+    },
+    "desktop/electron/services/workflow/workflow-service.ts": {
+      "lastReviewedIteration": 233,
+      "issuesFound": 7,
+      "issuesFixed": 6,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 03:05"
+    },
+    "desktop/electron/services/workflow/workflow-utils.ts": {
+      "lastReviewedIteration": 254,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 07:08"
+    },
+    "desktop/electron/services/workflow/workflow-validator.ts": {
+      "lastReviewedIteration": 254,
+      "issuesFound": 3,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 07:08"
+    },
+    "desktop/src/app-shell/__tests__/logging.test.ts": {
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 160,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:43:00+08:00"
+    },
+    "desktop/src/app-shell/__tests__/notifications.test.tsx": {
+      "lastReviewedIteration": 159,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:34:00+08:00"
+    },
+    "desktop/src/app-shell/active-project.tsx": {
+      "lastReviewedIteration": 216,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 08:15"
+    },
+    "desktop/src/app-shell/components/app-shell-layout.tsx": {
+      "lastReviewedIteration": 221,
+      "issuesFound": 1,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 17:40"
+    },
+    "desktop/src/app-shell/diagnostics/__tests__/global-error-listener.test.ts": {
+      "lastReviewedIteration": 156,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:00:00+08:00"
+    },
+    "desktop/src/app-shell/diagnostics/global-error-listener.ts": {
+      "lastReviewedIteration": 156,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:00:00+08:00"
+    },
+    "desktop/src/app-shell/logging.ts": {
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "lastReviewedIteration": 221,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 17:40"
+    },
+    "desktop/src/app-shell/notifications.tsx": {
+      "lastReviewedIteration": 251,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
+    },
+    "desktop/src/app-shell/repository-manager.ts": {
+      "lastReviewedIteration": 212,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-16 23:57"
+    },
+    "desktop/src/app-shell/use-active-project.ts": {
+      "lastReviewedIteration": 216,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 08:15"
+    },
+    "desktop/src/lib/__tests__/agent-timeline.test.ts": {
+      "issuesFound": 5,
+      "issuesFixed": 5,
+      "lastReviewedIteration": 159,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:34:00+08:00"
+    },
+    "desktop/src/lib/__tests__/diagnostics-summary.test.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 129,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T05:43:24+08:00"
+    },
+    "desktop/src/lib/agent-timeline.ts": {
+      "issuesFound": 6,
+      "issuesFixed": 6,
+      "lastReviewedIteration": 159,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:34:00+08:00"
+    },
+    "desktop/src/lib/diagnostics-summary.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 129,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T05:43:24+08:00"
+    },
+    "desktop/src/modules/agent/__tests__/agent-composer.test.tsx": {
+      "lastReviewedIteration": 102,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:32:49+08:00"
+    },
+    "desktop/src/modules/agent/__tests__/agent-session-sidebar.test.tsx": {
+      "lastReviewedIteration": 59,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T00:26:29+08:00"
+    },
+    "desktop/src/modules/agent/__tests__/live-sync.test.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 48,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T23:24:16+08:00"
+    },
+    "desktop/src/modules/agent/__tests__/pending-agent-session.test.tsx": {
+      "lastReviewedIteration": 141,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T11:52:59+08:00"
+    },
+    "desktop/src/modules/agent/__tests__/project-resolution.test.ts": {
+      "lastReviewedIteration": 65,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T00:50:18+08:00"
+    },
+    "desktop/src/modules/agent/__tests__/utils.test.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 143,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T12:08:00+08:00"
+    },
+    "desktop/src/modules/agent/components/__tests__/agent-message-bubble.test.tsx": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 147,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T12:33:12+08:00"
+    },
+    "desktop/src/modules/agent/components/__tests__/agent-message-event.test.tsx": {
+      "issuesFound": 7,
+      "issuesFixed": 7,
+      "lastReviewedIteration": 188,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:10:00+0800"
+    },
+    "desktop/src/modules/agent/components/__tests__/agent-message-header.test.tsx": {
+      "lastReviewedIteration": 104,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:51:01+0800"
+    },
+    "desktop/src/modules/agent/components/__tests__/agent-message-toolbar.test.tsx": {
+      "lastReviewedIteration": 149,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T23:22:00+08:00"
+    },
+    "desktop/src/modules/agent/components/__tests__/agent-permission-card.test.tsx": {
+      "lastReviewedIteration": 152,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T00:03:20+08:00"
+    },
+    "desktop/src/modules/agent/components/__tests__/agent-permission-panel.test.tsx": {
+      "lastReviewedIteration": 152,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T00:03:00+08:00"
+    },
+    "desktop/src/modules/agent/components/__tests__/agent-phase-row.test.tsx": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 148,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T23:08:00+08:00"
+    },
+    "desktop/src/modules/agent/components/__tests__/agent-thinking-event.test.tsx": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 156,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:01:00+08:00"
+    },
+    "desktop/src/modules/agent/components/__tests__/agent-timeline-item.test.tsx": {
+      "lastReviewedIteration": 104,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T19:49:38.701Z"
+    },
+    "desktop/src/modules/agent/components/__tests__/agent-timeline.test.tsx": {
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 153,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T00:22:00+08:00"
+    },
+    "desktop/src/modules/agent/components/__tests__/agent-tool-event.test.tsx": {
+      "lastReviewedIteration": 190,
+      "issuesFound": 7,
+      "issuesFixed": 7,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:32:00+08:00"
+    },
+    "desktop/src/modules/agent/components/__tests__/archived-group.test.tsx": {
+      "lastReviewedIteration": 135,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T06:32:00+08:00"
+    },
+    "desktop/src/modules/agent/components/__tests__/project-group.test.tsx": {
+      "lastReviewedIteration": 136,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T06:35:28+08:00"
+    },
+    "desktop/src/modules/agent/components/__tests__/provider-select-dialog.test.tsx": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 130,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T05:50:31+08:00"
+    },
+    "desktop/src/modules/agent/components/__tests__/session-trailing.test.tsx": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 105,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T19:57:46.347Z"
+    },
+    "desktop/src/modules/agent/components/agent-composer.tsx": {
+      "lastReviewedIteration": 102,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:32:49+08:00"
+    },
+    "desktop/src/modules/agent/components/agent-message-bubble.tsx": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 147,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T12:33:12+08:00"
+    },
+    "desktop/src/modules/agent/components/agent-message-event.tsx": {
+      "issuesFound": 7,
+      "issuesFixed": 7,
+      "lastReviewedIteration": 188,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:10:00+0800"
+    },
+    "desktop/src/modules/agent/components/agent-message-header.tsx": {
+      "lastReviewedIteration": 104,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T03:51:01+0800"
+    },
+    "desktop/src/modules/agent/components/agent-message-toolbar.tsx": {
+      "lastReviewedIteration": 246,
+      "issuesFound": 6,
+      "issuesFixed": 5,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-18T04:22:00+08:00"
+    },
+    "desktop/src/modules/agent/components/agent-permission-card.tsx": {
+      "lastReviewedIteration": 152,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T00:03:20+08:00"
+    },
+    "desktop/src/modules/agent/components/agent-permission-panel.tsx": {
+      "lastReviewedIteration": 152,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T00:03:00+08:00"
+    },
+    "desktop/src/modules/agent/components/agent-phase-row.tsx": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 148,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T23:08:00+08:00"
+    },
+    "desktop/src/modules/agent/components/agent-run-status.tsx": {
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "lastReviewedIteration": 136,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-14T06:33:00+08:00"
+    },
+    "desktop/src/modules/agent/components/agent-session-sidebar.tsx": {
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "lastReviewedIteration": 136,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-14T06:33:00+08:00"
+    },
+    "desktop/src/modules/agent/components/agent-thinking-event.tsx": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 156,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:01:00+08:00"
+    },
+    "desktop/src/modules/agent/components/agent-timeline-item.tsx": {
+      "lastReviewedIteration": 104,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T19:49:38.701Z"
+    },
+    "desktop/src/modules/agent/components/agent-timeline.tsx": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 153,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T00:22:00+08:00"
+    },
+    "desktop/src/modules/agent/components/agent-tool-event.tsx": {
+      "lastReviewedIteration": 190,
+      "issuesFound": 8,
+      "issuesFixed": 7,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:32:00+08:00"
+    },
+    "desktop/src/modules/agent/components/archived-group.tsx": {
+      "lastReviewedIteration": 135,
+      "issuesFound": 2,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T06:32:00+08:00"
+    },
+    "desktop/src/modules/agent/components/project-group.tsx": {
+      "lastReviewedIteration": 136,
+      "issuesFound": 2,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T06:35:28+08:00"
+    },
+    "desktop/src/modules/agent/components/provider-select-dialog.tsx": {
+      "lastReviewedIteration": 130,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T05:50:31+08:00"
+    },
+    "desktop/src/modules/agent/components/session-trailing.tsx": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 105,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T19:57:46.347Z"
+    },
+    "desktop/src/modules/agent/hooks/__tests__/use-agent-chat.test.tsx": {
+      "issuesFound": 12,
+      "issuesFixed": 12,
+      "lastReviewedIteration": 190,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:32:00+08:00"
+    },
+    "desktop/src/modules/agent/hooks/__tests__/use-chat-events.test.tsx": {
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "lastReviewedIteration": 133,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T22:24:30.000Z"
+    },
+    "desktop/src/modules/agent/hooks/__tests__/use-chat-reducer.test.tsx": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 152,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T00:04:55+08:00"
+    },
+    "desktop/src/modules/agent/hooks/__tests__/use-stick-to-bottom.test.ts": {
+      "lastReviewedIteration": 161,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:59:00+08:00"
+    },
+    "desktop/src/modules/agent/hooks/use-chat-connection.ts": {
+      "issuesFound": 13,
+      "issuesFixed": 12,
+      "lastReviewedIteration": 190,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T06:32:00+08:00"
+    },
+    "desktop/src/modules/agent/hooks/use-chat-events.ts": {
+      "issuesFound": 5,
+      "issuesFixed": 4,
+      "lastReviewedIteration": 159,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:31:57+08:00"
+    },
+    "desktop/src/modules/agent/hooks/use-chat-reducer.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 152,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T00:04:55+08:00"
+    },
+    "desktop/src/modules/agent/hooks/use-stick-to-bottom.ts": {
+      "lastReviewedIteration": 161,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:59:00+08:00"
+    },
+    "desktop/src/modules/agent/index.tsx": {
+      "lastReviewedIteration": 161,
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:59:00+08:00"
+    },
+    "desktop/src/modules/agent/live-sync.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 105,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T19:58:24.697Z"
+    },
+    "desktop/src/modules/agent/pending-message-queue.ts": {
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "lastReviewedIteration": 146,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-14T12:21:00+08:00"
+    },
+    "desktop/src/modules/agent/project-resolution.ts": {
+      "lastReviewedIteration": 65,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T00:50:18+08:00"
+    },
+    "desktop/src/modules/agent/utils.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 143,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T12:08:00+08:00"
+    },
+    "desktop/src/modules/agent/utils/__tests__/phase-reducer.test.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 54,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T23:58:25+08:00"
+    },
+    "desktop/src/modules/agent/utils/phase-reducer.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 73,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T17:37:46.873Z"
+    },
+    "desktop/src/modules/database/components/data-table-cell-choice.tsx": {
+      "lastReviewedIteration": 208,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:34:07+08:00"
+    },
+    "desktop/src/modules/database/components/data-table-filter-dialog.tsx": {
+      "lastReviewedIteration": 208,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:34:07+08:00"
+    },
+    "desktop/src/modules/database/components/data-table-layout.ts": {
+      "lastReviewedIteration": 208,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:34:07+08:00"
+    },
+    "desktop/src/modules/database/components/data-table-view.tsx": {
+      "lastReviewedIteration": 212,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-16 23:51"
+    },
+    "desktop/src/modules/database/components/database-sidebar-toolbar.tsx": {
+      "lastReviewedIteration": 208,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:34:07+08:00"
+    },
+    "desktop/src/modules/database/components/database-sidebar.tsx": {
+      "lastReviewedIteration": 208,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:34:07+08:00"
+    },
+    "desktop/src/modules/database/components/row-editor.tsx": {
+      "lastReviewedIteration": 208,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:34:07+08:00"
+    },
+    "desktop/src/modules/database/components/table-schema-sheet.tsx": {
+      "lastReviewedIteration": 208,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-16 23:34:07+08:00"
+    },
+    "desktop/src/modules/database/hooks/use-database-folders.ts": {
+      "lastReviewedIteration": 251,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
+    },
+    "desktop/src/modules/database/hooks/use-database.ts": {
+      "lastReviewedIteration": 208,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:34:07+08:00"
+    },
+    "desktop/src/modules/database/index.tsx": {
+      "lastReviewedIteration": 251,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
+    },
+    "desktop/src/modules/database/utils.ts": {
+      "lastReviewedIteration": 208,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:34:07+08:00"
+    },
+    "desktop/src/modules/prompts/components/__tests__/prompt-run-dialog.test.tsx": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 130,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T05:50:00+08:00"
+    },
+    "desktop/src/modules/prompts/components/prompt-run-dialog.tsx": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 130,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T05:50:00+08:00"
+    },
+    "desktop/src/modules/settings/components/__tests__/provider-panel.test.tsx": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 131,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T06:01:50+08:00"
+    },
+    "desktop/src/modules/settings/components/config-backup-panel.tsx": {
+      "lastReviewedIteration": 223,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 01:25"
+    },
+    "desktop/src/modules/settings/components/provider-panel.tsx": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 131,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T06:01:50+08:00"
+    },
+    "desktop/src/modules/settings/data.ts": {
+      "lastReviewedIteration": 208,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:34:07+08:00"
+    },
+    "desktop/src/modules/settings/hooks/__tests__/use-agent-runtime-status-refresh.test.tsx": {
+      "lastReviewedIteration": 220,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 12:05"
+    },
+    "desktop/src/modules/settings/hooks/use-agent-runtime-status.ts": {
+      "lastReviewedIteration": 220,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 12:05"
+    },
+    "desktop/src/modules/settings/index.tsx": {
+      "lastReviewedIteration": 253,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-16T23:06:20Z"
+    },
+    "desktop/src/modules/settings/types.ts": {
+      "lastReviewedIteration": 208,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:34:07+08:00"
+    },
+    "desktop/src/modules/settings/utils.ts": {
+      "lastReviewedIteration": 251,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
+    },
+    "desktop/src/modules/task-scheduler/__tests__/cron-input.test.tsx": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 158,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:24:00+08:00"
+    },
+    "desktop/src/modules/task-scheduler/__tests__/cron-utils.test.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 105,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T19:58:29.504Z"
+    },
+    "desktop/src/modules/task-scheduler/__tests__/task-form-dialog.test.tsx": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 138,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T11:35:10+08:00"
+    },
+    "desktop/src/modules/task-scheduler/__tests__/task-scheduler-module.test.tsx": {
+      "issuesFound": 7,
+      "issuesFixed": 7,
+      "lastReviewedIteration": 186,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T05:50:00+08:00"
+    },
+    "desktop/src/modules/task-scheduler/__tests__/utils.test.ts": {
+      "lastReviewedIteration": 127,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T05:32:15+08:00"
+    },
+    "desktop/src/modules/task-scheduler/components/__tests__/task-card-grid.test.tsx": {
+      "lastReviewedIteration": 134,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T06:35:04+08:00"
+    },
+    "desktop/src/modules/task-scheduler/components/__tests__/task-card.test.tsx": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 132,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T06:14:08+08:00"
+    },
+    "desktop/src/modules/task-scheduler/components/__tests__/task-export-dialog.test.tsx": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 151,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T23:53:00+08:00"
+    },
+    "desktop/src/modules/task-scheduler/components/__tests__/task-import-dialog.test.tsx": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 158,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:19:00+08:00"
+    },
+    "desktop/src/modules/task-scheduler/components/__tests__/task-runs-dialog.test.tsx": {
+      "lastReviewedIteration": 161,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:56:00+08:00"
+    },
+    "desktop/src/modules/task-scheduler/components/cron-editor-dialog.tsx": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 158,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:24:00+08:00"
+    },
+    "desktop/src/modules/task-scheduler/components/task-card-grid.tsx": {
+      "lastReviewedIteration": 134,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T06:35:04+08:00"
+    },
+    "desktop/src/modules/task-scheduler/components/task-card.tsx": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 132,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T06:14:08+08:00"
+    },
+    "desktop/src/modules/task-scheduler/components/task-export-dialog.tsx": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 151,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T23:53:00+08:00"
+    },
+    "desktop/src/modules/task-scheduler/components/task-form-dialog.tsx": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 138,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T11:35:10+08:00"
+    },
+    "desktop/src/modules/task-scheduler/components/task-import-dialog.tsx": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 158,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:19:00+08:00"
+    },
+    "desktop/src/modules/task-scheduler/components/task-runs-dialog.tsx": {
+      "lastReviewedIteration": 161,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:56:00+08:00"
+    },
+    "desktop/src/modules/task-scheduler/cron-utils.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 105,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T19:58:29.504Z"
+    },
+    "desktop/src/modules/task-scheduler/hooks/__tests__/use-task-scheduler.test.tsx": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 128,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T21:32:01.459Z"
+    },
+    "desktop/src/modules/task-scheduler/hooks/use-task-scheduler.ts": {
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "lastReviewedIteration": 128,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T21:32:01.459Z"
+    },
+    "desktop/src/modules/task-scheduler/index.tsx": {
+      "issuesFound": 8,
+      "issuesFixed": 7,
+      "lastReviewedIteration": 186,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T05:50:00+08:00"
+    },
+    "desktop/src/modules/task-scheduler/utils.ts": {
+      "lastReviewedIteration": 127,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T05:32:15+08:00"
+    },
+    "desktop/src/modules/workflow/components/__tests__/run-history-dialog.test.tsx": {
+      "lastReviewedIteration": 230,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 02:42"
+    },
+    "desktop/src/modules/workflow/components/__tests__/run-params-dialog.test.tsx": {
+      "lastReviewedIteration": 160,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:44:00+08:00"
+    },
+    "desktop/src/modules/workflow/components/__tests__/workflow-list.test.tsx": {
+      "lastReviewedIteration": 160,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:45:00+08:00"
+    },
+    "desktop/src/modules/workflow/components/params-editor-dialog.tsx": {
+      "lastReviewedIteration": 225,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 18:00"
+    },
+    "desktop/src/modules/workflow/components/run-history-dialog.tsx": {
+      "lastReviewedIteration": 245,
+      "issuesFound": 8,
+      "issuesFixed": 8,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 04:20"
+    },
+    "desktop/src/modules/workflow/components/run-params-dialog.tsx": {
+      "lastReviewedIteration": 160,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:44:00+08:00"
+    },
+    "desktop/src/modules/workflow/components/workflow-card.tsx": {
+      "lastReviewedIteration": 244,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 22:42"
+    },
+    "desktop/src/modules/workflow/components/workflow-list.tsx": {
+      "lastReviewedIteration": 252,
+      "issuesFound": 11,
+      "issuesFixed": 11,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 22:30"
+    },
+    "desktop/src/modules/workflow/editor/__tests__/editor-app.test.tsx": {
+      "lastReviewedIteration": 170,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T03:30:00+08:00"
+    },
+    "desktop/src/modules/workflow/editor/__tests__/toolbar.test.tsx": {
+      "lastReviewedIteration": 157,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:12:00+08:00"
+    },
+    "desktop/src/modules/workflow/editor/canvas-context.ts": {
+      "lastReviewedIteration": 233,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 03:05"
+    },
+    "desktop/src/modules/workflow/editor/canvas-floating-toolbar.tsx": {
+      "lastReviewedIteration": 199,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16T19:45:00+08:00"
+    },
+    "desktop/src/modules/workflow/editor/canvas.tsx": {
+      "lastReviewedIteration": 248,
+      "issuesFound": 7,
+      "issuesFixed": 7,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:36"
+    },
+    "desktop/src/modules/workflow/editor/custom-edge.tsx": {
+      "lastReviewedIteration": 233,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 03:05"
+    },
+    "desktop/src/modules/workflow/editor/editor-app.tsx": {
+      "lastReviewedIteration": 249,
+      "issuesFound": 15,
+      "issuesFixed": 15,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-18 03:36"
+    },
+    "desktop/src/modules/workflow/editor/execution-overlay.tsx": {
+      "lastReviewedIteration": 225,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 18:00"
+    },
+    "desktop/src/modules/workflow/editor/node-config-panel.tsx": {
+      "lastReviewedIteration": 248,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:36"
+    },
+    "desktop/src/modules/workflow/editor/node-context-menu.tsx": {
+      "lastReviewedIteration": 233,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 03:05"
+    },
+    "desktop/src/modules/workflow/editor/node-palette.tsx": {
+      "lastReviewedIteration": 233,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 03:05"
+    },
+    "desktop/src/modules/workflow/editor/node-wrappers.tsx": {
+      "lastReviewedIteration": 233,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 03:05"
+    },
+    "desktop/src/modules/workflow/editor/toolbar.tsx": {
+      "lastReviewedIteration": 157,
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T01:12:00+08:00"
+    },
+    "desktop/src/modules/workflow/hooks/__tests__/use-workflow-events.test.tsx": {
+      "lastReviewedIteration": 224,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 01:30"
+    },
+    "desktop/src/modules/workflow/hooks/__tests__/use-workflow-run.test.tsx": {
+      "lastReviewedIteration": 245,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 04:20"
+    },
+    "desktop/src/modules/workflow/hooks/use-upstream-nodes.ts": {
+      "lastReviewedIteration": 233,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 03:05"
+    },
+    "desktop/src/modules/workflow/hooks/use-workflow-events.ts": {
+      "lastReviewedIteration": 248,
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:36"
+    },
+    "desktop/src/modules/workflow/hooks/use-workflow-list.ts": {
+      "lastReviewedIteration": 245,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 04:20"
+    },
+    "desktop/src/modules/workflow/hooks/use-workflow-run.ts": {
+      "lastReviewedIteration": 245,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 04:20"
+    },
+    "desktop/src/modules/workflow/index.tsx": {
+      "lastReviewedIteration": 231,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 22:42"
+    },
+    "desktop/src/modules/workflow/runner/__tests__/runner-toolbar.test.tsx": {
+      "lastReviewedIteration": 155,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-15T00:50:00+08:00"
+    },
+    "desktop/src/modules/workflow/runner/dag-view.tsx": {
+      "lastReviewedIteration": 248,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:36"
+    },
+    "desktop/src/modules/workflow/runner/node-progress-bar.tsx": {
+      "lastReviewedIteration": 222,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 01:20"
+    },
+    "desktop/src/modules/workflow/runner/node-result-panel.tsx": {
+      "lastReviewedIteration": 255,
+      "issuesFound": 6,
+      "issuesFixed": 6,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 15:18"
+    },
+    "desktop/src/modules/workflow/runner/runner-app.tsx": {
+      "lastReviewedIteration": 249,
+      "issuesFound": 15,
+      "issuesFixed": 15,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-18 03:36"
+    },
+    "desktop/src/modules/workflow/runner/runner-edge.tsx": {
+      "lastReviewedIteration": 247,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:31"
+    },
+    "desktop/src/modules/workflow/runner/runner-node-wrappers.tsx": {
+      "lastReviewedIteration": 248,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:36"
+    },
+    "desktop/src/modules/workflow/runner/runner-toolbar.tsx": {
+      "lastReviewedIteration": 248,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:36"
+    },
+    "desktop/src/modules/workflow/runner/timeline-view.tsx": {
+      "lastReviewedIteration": 248,
+      "issuesFound": 4,
+      "issuesFixed": 4,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:36"
+    },
+    "desktop/src/runtime/__tests__/event-bus-client.test.ts": {
+      "lastReviewedIteration": 71,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T01:23:55+08:00"
+    },
+    "desktop/src/runtime/event-bus-client.ts": {
+      "lastReviewedIteration": 71,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-14T01:23:55+08:00"
+    },
+    "desktop/src/types/agent.ts": {
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "lastReviewedIteration": 44,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-13T23:00:27+08:00"
+    },
+    "desktop/src/types/workflow.ts": {
+      "lastReviewedIteration": 226,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 17:55"
+    },
+    "desktop/workflow-nodes/agent-icon.tsx": {
+      "lastReviewedIteration": 199,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-16T20:02:00+08:00"
+    },
+    "desktop/workflow-nodes/collapsible-section.tsx": {
+      "lastReviewedIteration": 207,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:30"
+    },
+    "desktop/workflow-nodes/end/card.tsx": {
+      "lastReviewedIteration": 237,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 04:32"
+    },
+    "desktop/workflow-nodes/end/executor.main.ts": {
+      "lastReviewedIteration": 236,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 03:15"
     },
     "desktop/workflow-nodes/end/index.ts": {
       "lastReviewedIteration": 20,
@@ -270,45 +1809,88 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/end/manifest.ts": {
-      "lastReviewedIteration": 20,
+      "lastReviewedIteration": 251,
       "issuesFound": 0,
       "issuesFixed": 0,
       "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastUpdated": "2026-05-17 06:52"
     },
     "desktop/workflow-nodes/end/panel.tsx": {
-      "lastReviewedIteration": 6,
+      "lastReviewedIteration": 207,
       "issuesFound": 1,
       "issuesFixed": 1,
-      "healthScore": "stable"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:30"
     },
     "desktop/workflow-nodes/end/schema.ts": {
-      "lastReviewedIteration": 20,
+      "lastReviewedIteration": 251,
       "issuesFound": 0,
       "issuesFixed": 0,
       "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastUpdated": "2026-05-17 06:52"
+    },
+    "desktop/workflow-nodes/http-request/card.tsx": {
+      "lastReviewedIteration": 243,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 09:30"
+    },
+    "desktop/workflow-nodes/http-request/executor.main.ts": {
+      "lastReviewedIteration": 236,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 03:15"
+    },
+    "desktop/workflow-nodes/http-request/panel.tsx": {
+      "lastReviewedIteration": 207,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:30"
     },
     "desktop/workflow-nodes/panel-registry.ts": {
-      "lastReviewedIteration": 20,
+      "lastReviewedIteration": 233,
       "issuesFound": 0,
       "issuesFixed": 0,
       "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastUpdated": "2026-05-17 03:05"
+    },
+    "desktop/workflow-nodes/project-select.tsx": {
+      "lastReviewedIteration": 207,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:30"
+    },
+    "desktop/workflow-nodes/prompt-editor.tsx": {
+      "lastReviewedIteration": 207,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:30"
+    },
+    "desktop/workflow-nodes/prompt/__tests__/executor.test.ts": {
+      "lastReviewedIteration": 194,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-16T17:20:00+08:00"
     },
     "desktop/workflow-nodes/prompt/card.tsx": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastReviewedIteration": 243,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 09:30"
     },
     "desktop/workflow-nodes/prompt/executor.main.ts": {
-      "lastReviewedIteration": 28,
-      "issuesFound": 2,
-      "issuesFixed": 2,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-13T17:45:00+08:00"
+      "lastReviewedIteration": 251,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
     },
     "desktop/workflow-nodes/prompt/index.ts": {
       "lastReviewedIteration": 20,
@@ -325,10 +1907,11 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/prompt/panel.tsx": {
-      "lastReviewedIteration": 6,
+      "lastReviewedIteration": 207,
       "issuesFound": 1,
       "issuesFixed": 1,
-      "healthScore": "stable"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:30"
     },
     "desktop/workflow-nodes/prompt/schema.ts": {
       "lastReviewedIteration": 20,
@@ -337,40 +1920,89 @@
       "healthScore": "stable",
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
-    "desktop/workflow-nodes/register.main.ts": {
-      "lastReviewedIteration": 20,
+    "desktop/workflow-nodes/provider-lookup-context.tsx": {
+      "lastReviewedIteration": 236,
       "issuesFound": 0,
       "issuesFixed": 0,
       "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastUpdated": "2026-05-17 03:15"
+    },
+    "desktop/workflow-nodes/register.main.ts": {
+      "lastReviewedIteration": 233,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 03:05"
     },
     "desktop/workflow-nodes/register.renderer.ts": {
-      "lastReviewedIteration": 20,
+      "lastReviewedIteration": 233,
       "issuesFound": 0,
       "issuesFixed": 0,
       "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastUpdated": "2026-05-17 03:05"
     },
     "desktop/workflow-nodes/registry.ts": {
-      "lastReviewedIteration": 20,
+      "lastReviewedIteration": 251,
       "issuesFound": 0,
       "issuesFixed": 0,
       "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastUpdated": "2026-05-17 06:52"
     },
     "desktop/workflow-nodes/schemas/variable-binding.ts": {
-      "lastReviewedIteration": 20,
+      "lastReviewedIteration": 233,
       "issuesFound": 0,
       "issuesFixed": 0,
       "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastUpdated": "2026-05-17 03:05"
+    },
+    "desktop/workflow-nodes/script/card.tsx": {
+      "lastReviewedIteration": 243,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 09:30"
+    },
+    "desktop/workflow-nodes/script/executor.main.ts": {
+      "lastReviewedIteration": 251,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
+    },
+    "desktop/workflow-nodes/script/manifest.ts": {
+      "lastReviewedIteration": 207,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:30"
+    },
+    "desktop/workflow-nodes/script/panel.tsx": {
+      "lastReviewedIteration": 207,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:30"
+    },
+    "desktop/workflow-nodes/script/schema.ts": {
+      "lastReviewedIteration": 207,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:30"
+    },
+    "desktop/workflow-nodes/switch/__tests__/executor.test.ts": {
+      "lastReviewedIteration": 194,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-16T19:15:00+08:00"
     },
     "desktop/workflow-nodes/switch/card.tsx": {
-      "lastReviewedIteration": 20,
-      "issuesFound": 0,
-      "issuesFixed": 0,
-      "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastReviewedIteration": 243,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 09:30"
     },
     "desktop/workflow-nodes/switch/constants.ts": {
       "lastReviewedIteration": 21,
@@ -380,11 +2012,11 @@
       "lastUpdated": "2026-05-13T03:50:00+08:00"
     },
     "desktop/workflow-nodes/switch/executor.main.ts": {
-      "lastReviewedIteration": 28,
-      "issuesFound": 4,
-      "issuesFixed": 4,
-      "healthScore": "active",
-      "lastUpdated": "2026-05-13T17:45:00+08:00"
+      "lastReviewedIteration": 251,
+      "issuesFound": 7,
+      "issuesFixed": 7,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
     },
     "desktop/workflow-nodes/switch/index.ts": {
       "lastReviewedIteration": 20,
@@ -401,10 +2033,11 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/switch/panel.tsx": {
-      "lastReviewedIteration": 6,
+      "lastReviewedIteration": 207,
       "issuesFound": 1,
       "issuesFixed": 1,
-      "healthScore": "stable"
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:30"
     },
     "desktop/workflow-nodes/switch/schema.ts": {
       "lastReviewedIteration": 20,
@@ -414,21 +2047,75 @@
       "lastUpdated": "2026-05-13T03:10:00+08:00"
     },
     "desktop/workflow-nodes/types.ts": {
-      "lastReviewedIteration": 20,
+      "lastReviewedIteration": 233,
+      "issuesFound": 3,
+      "issuesFixed": 3,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 03:05"
+    },
+    "desktop/workflow-nodes/variable-binding-editor.tsx": {
+      "lastReviewedIteration": 207,
+      "issuesFound": 2,
+      "issuesFixed": 2,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-16 23:30"
+    },
+    "desktop/src/modules/workflow/editor/auto-layout.ts": {
+      "lastReviewedIteration": 251,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
+    },
+    "desktop/src/modules/settings/components/setting-item-row.tsx": {
+      "lastReviewedIteration": 236,
       "issuesFound": 0,
       "issuesFixed": 0,
       "healthScore": "stable",
-      "lastUpdated": "2026-05-13T03:10:00+08:00"
+      "lastUpdated": "2026-05-17 03:15"
     },
-    "desktop/workflow-nodes/variable-binding-editor.tsx": {
-      "lastReviewedIteration": 34,
-      "issuesFound": 2,
-      "issuesFixed": 2,
+    "desktop/workflow-nodes/node-status-utils.ts": {
+      "lastReviewedIteration": 243,
+      "issuesFound": 1,
+      "issuesFixed": 1,
       "healthScore": "active",
-      "lastUpdated": "2026-05-13T21:40:00+08:00"
+      "lastUpdated": "2026-05-17 09:30"
+    },
+    "desktop/src/modules/workflow/lib/error-utils.ts": {
+      "lastReviewedIteration": 245,
+      "issuesFound": 1,
+      "issuesFixed": 1,
+      "healthScore": "active",
+      "lastUpdated": "2026-05-17 04:20"
+    },
+    "desktop/src/app-shell/dialog-navigate.ts": {
+      "lastReviewedIteration": 251,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
+    },
+    "desktop/src/components/delayed-confirm-alert-dialog.tsx": {
+      "lastReviewedIteration": 251,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
+    },
+    "desktop/electron/runtime/window/manager.ts": {
+      "lastReviewedIteration": 251,
+      "issuesFound": 0,
+      "issuesFixed": 0,
+      "healthScore": "stable",
+      "lastUpdated": "2026-05-17 06:52"
     }
   },
   "areas": {
+    "agent-live-events": {
+      "status": "active",
+      "lastIteration": 142,
+      "issuesCount": 4
+    },
     "editor-interactions": {
       "status": "active",
       "lastIteration": 38,
@@ -446,8 +2133,8 @@
     },
     "logging-coverage": {
       "status": "active",
-      "lastIteration": 31,
-      "issuesCount": 6
+      "lastIteration": 195,
+      "issuesCount": 22
     },
     "memory-management": {
       "status": "stable",
@@ -461,8 +2148,8 @@
     },
     "run-params": {
       "status": "active",
-      "lastIteration": 19,
-      "issuesCount": 5
+      "lastIteration": 160,
+      "issuesCount": 6
     },
     "runner-hydration": {
       "status": "stable",
@@ -491,8 +2178,9 @@
     },
     "variable-resolution": {
       "status": "stable",
-      "lastIteration": 8,
-      "issuesCount": 3
+      "lastIteration": 197,
+      "issuesCount": 1
     }
-  }
+  },
+  "lastUpdated": "2026-05-16T23:06:20Z"
 }

@@ -77,7 +77,11 @@ function DatabaseModule() {
         return
       }
 
-      await dataTableViewRef.current?.commitPendingChanges()
+      try {
+        await dataTableViewRef.current?.commitPendingChanges()
+      } catch (err) {
+        logger.warn("Failed to commit pending changes before table switch.", { from: selectedTable, to: name, error: err instanceof Error ? err.message : String(err) })
+      }
       logger.info("Table selected.", {
         from: selectedTable,
         to: name,
@@ -176,6 +180,7 @@ function DatabaseModule() {
       setPendingImport(null)
     } catch (error) {
       logger.error("Table import failed.", { error })
+      setPendingImport(null)
     }
   }, [pendingImport, promise, refreshTables])
 
@@ -312,7 +317,6 @@ function DatabaseModule() {
       } catch (error) {
         logger.error("Insert failed.", { error })
         showError(error instanceof Error ? error.message : "新增失败，请稍后重试。")
-        throw error
       }
     },
     [refreshQuery, refreshTables, selectedTable, showError, showSuccess],
@@ -333,7 +337,6 @@ function DatabaseModule() {
       } catch (error) {
         logger.error("Update failed.", { error })
         showError(error instanceof Error ? error.message : "保存失败，请稍后重试。")
-        throw error
       }
     },
     [refreshQuery, selectedTable, showError],
@@ -348,7 +351,11 @@ function DatabaseModule() {
           table: selectedTable,
           rowId: id,
         })
-        await refreshQuery()
+        if (rows.length === 1 && page > 1) {
+          setPage(page - 1)
+        } else {
+          await refreshQuery()
+        }
         await refreshTables()
         showSuccess("已删除一行")
       } catch (error) {
@@ -356,7 +363,7 @@ function DatabaseModule() {
         showError(error instanceof Error ? error.message : "删除失败，请稍后重试。")
       }
     },
-    [selectedTable, refreshQuery, refreshTables, showSuccess, showError],
+    [selectedTable, rows.length, page, refreshQuery, refreshTables, showSuccess, showError],
   )
 
   useEffect(() => {

@@ -674,12 +674,17 @@ class RepositoryManager {
       return
     }
 
-    const states = await bridge.getStates()
-    this.repositoryStates.clear()
-    for (const state of states) {
-      this.repositoryStates.set(state.repositoryUuid, state)
+    try {
+      const states = await bridge.getStates()
+      this.repositoryStates.clear()
+      for (const state of states) {
+        this.repositoryStates.set(state.repositoryUuid, state)
+      }
+      this.notifyRepositorySubscribers()
+    } catch {
+      // bridge.getStates() 可能因 IPC 断开或数据库查询异常抛出，
+      // 保留现有状态不变以避免 UI 闪白，等待下一次 onUpdated 回调重试
     }
-    this.notifyRepositorySubscribers()
   }
 
   private async refreshPendingPushes(uuid: string): Promise<void> {
@@ -807,12 +812,16 @@ class RepositoryManager {
   }
 
   private notifyContentSubscribers(contentType: SynapseContentType): void {
-    // 先更新快照缓存，确保订阅者获取到稳定的引用
-    const snapshot = {
-      items: this.getContentList(contentType),
-      isLoading: this.isContentLoading(contentType),
-      error: this.getContentError(contentType),
+    // 引用比较当前值与缓存快照，数据未变则跳过通知
+    const current = this.contentSnapshots.get(contentType)
+    const items = this.getContentList(contentType)
+    const isLoading = this.isContentLoading(contentType)
+    const error = this.getContentError(contentType)
+    if (current && current.items === items && current.isLoading === isLoading && current.error === error) {
+      return
     }
+
+    const snapshot = { items, isLoading, error }
     this.contentSnapshots.set(contentType, snapshot)
 
     const subscribers = this.contentSubscribers.get(contentType)

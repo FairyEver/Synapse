@@ -1,5 +1,5 @@
-import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useState } from "react"
-import { Clock, Command as CommandIcon, Copy, ShieldAlert } from "lucide-react"
+import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
+import { AlertTriangle, Clock, Command as CommandIcon, Copy, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
@@ -23,13 +23,22 @@ import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import type { OpenAgentSessionPayload } from "@/app-shell/navigation"
-import type { SynapseAgentAvailability, SynapseAgentDisplayProfile } from "@/types/agent"
-import { useAgentRuntimeStatus } from "@/modules/settings/hooks/use-agent-runtime-status"
+import type { SynapseAgentDisplayProfile } from "@/types/agent"
 
 import { AgentSessionSidebar, type ProjectOption } from "./components/agent-session-sidebar"
 import { AgentTimeline } from "./components/agent-timeline"
 import { useAgentChat } from "./hooks/use-agent-chat"
-import { useStickToBottom } from "./hooks/use-stick-to-bottom"
+import { latestTimelineContentSignal, useStickToBottom } from "./hooks/use-stick-to-bottom"
+import {
+  enqueuePendingMessage,
+  firstQueuedMessageForIdleTarget,
+  markPendingMessageFailed,
+  markPendingMessageSending,
+  pendingMessagesForTarget,
+  removePendingMessage,
+  replacePendingMessage,
+} from "./pending-message-queue"
+import type { PendingMessage, PendingMessageTarget } from "./pending-message-queue"
 import { resolveAgentProjectScope } from "./project-resolution"
 import {
   agentCliLabel,
@@ -41,7 +50,7 @@ const logger = createRendererLogger("agent")
 
 const DEFAULT_AGENT_DISPLAY_PROFILE: SynapseAgentDisplayProfile = {
   agentLabel: "Agent",
-  thinkingDefaultCollapsed: true,
+  thinkingDefaultCollapsed: false,
   toolDefaultCollapsed: "auto",
   toolPreviewLines: 6,
   toolPreviewChars: 1200,
@@ -66,21 +75,19 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const projectScope = useMemo(() =>
     resolveAgentProjectScope(activeRepository, config.global.projects, platform),
   [activeRepository, config.global.projects, platform])
-  const { status: runtimeStatus, loading: runtimeLoading } = useAgentRuntimeStatus()
-  const hasAvailableCli = useMemo(() => {
-    if (!runtimeStatus) return null
-    return runtimeStatus.agents.some((agent) => agent.cli.installed)
-  }, [runtimeStatus])
   const [draft, setDraft] = useState("")
-  const [availableAgents, setAvailableAgents] = useState<SynapseAgentAvailability[]>([])
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [paletteOpen, setPaletteOpen] = useState(false)
+  const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([])
+  const pendingSessionRefreshKeyRef = useRef<string | null>(null)
+  const pendingMessageIdRef = useRef(0)
   const latestEntry = chat.timeline.at(-1)
   const stick = useStickToBottom({
     contentSignal: [
       chat.timeline.length,
       latestEntry?.id,
       latestEntry?.timestamp,
+      latestTimelineContentSignal(latestEntry),
       chat.sending,
     ],
     latestEntryId: latestEntry?.id,
@@ -93,12 +100,16 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       path: project.path,
     })),
   [config.global.projects])
-
-  useEffect(() => {
-    const bridge = getSynapseBridge()
-    if (!bridge) return
-    void bridge.agent.getAvailableAgents().then(setAvailableAgents)
-  }, [])
+  const selectedSession = chat.sessions.find((session) =>
+    session.projectId === chat.selectedProjectId && session.id === chat.selectedConversationId)
+  const selectedTarget: PendingMessageTarget | undefined = selectedSession
+    ? {
+        projectId: selectedSession.projectId,
+        conversationId: selectedSession.id,
+        sessionKey: selectedSession.sessionKey,
+      }
+    : undefined
+  const selectedPendingMessages = pendingMessagesForTarget(pendingMessages, selectedTarget)
 
   useEffect(() => {
     stick.forcePin()
@@ -107,28 +118,103 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   }, [chat.selectedProjectId, chat.selectedConversationId, chat.selectedSessionKey])
 
   useEffect(() => {
-    if (!pendingAgentSession) return
+    if (!pendingAgentSession) {
+      pendingSessionRefreshKeyRef.current = null
+      return
+    }
     const target = chat.sessions.find(
       (s) => s.id === pendingAgentSession.conversationId
         && s.projectId === pendingAgentSession.projectId,
     )
     if (target) {
+      pendingSessionRefreshKeyRef.current = null
       const prompt = pendingAgentSession.prompt
-      void chat.selectSession(target).then(() => {
-        if (prompt) {
-          void chat.sendMessage(prompt)
+      void (async () => {
+        try {
+          await chat.selectSession(target)
+          if (prompt) {
+            await chat.sendMessage(prompt)
+          }
+          onPendingAgentSessionConsumed?.()
+        } catch (rawError) {
+          logger.error("Agent pending session handoff failed.", {
+            boundary: "renderer.agent.pending-session-handoff",
+            projectId: pendingAgentSession.projectId,
+            conversationId: pendingAgentSession.conversationId,
+            sessionKey: chat.selectedSessionKey,
+            targetSessionKey: target.sessionKey,
+            hasPrompt: Boolean(prompt),
+            promptLength: prompt?.length ?? 0,
+            ...errorDiagnostic(rawError),
+          })
         }
-      })
-      onPendingAgentSessionConsumed?.()
+      })()
+      return
     }
-  }, [pendingAgentSession, chat.sessions, chat.selectSession, chat.sendMessage, onPendingAgentSessionConsumed])
 
-  const submitDraft = () => {
-    const content = draft.trim()
-    if (!content || !chat.activeProjectId) return
+    const pendingKey = `${pendingAgentSession.projectId}:${pendingAgentSession.conversationId}`
+    if (chat.loading || pendingSessionRefreshKeyRef.current === pendingKey) {
+      return
+    }
+    pendingSessionRefreshKeyRef.current = pendingKey
+    void chat.refresh().catch((rawError) => {
+      pendingSessionRefreshKeyRef.current = null
+      logger.error("Agent pending session refresh failed.", {
+        boundary: "renderer.agent.pending-session-refresh",
+        projectId: pendingAgentSession.projectId,
+        conversationId: pendingAgentSession.conversationId,
+        sessionKey: chat.selectedSessionKey,
+        ...errorDiagnostic(rawError),
+      })
+    })
+  }, [
+    pendingAgentSession,
+    chat.loading,
+    chat.refresh,
+    chat.selectedSessionKey,
+    chat.sessions,
+    chat.selectSession,
+    chat.sendMessage,
+    onPendingAgentSessionConsumed,
+  ])
+  useEffect(() => {
+    const next = firstQueuedMessageForIdleTarget(pendingMessages, chat.sendingConversationIds)
+    if (!next) return
+    const sendingMessage = markPendingMessageSending(next)
+    setPendingMessages((current) => replacePendingMessage(current, sendingMessage))
+    void chat.sendMessage(sendingMessage.content, sendingMessage.target).then((sent) => {
+      setPendingMessages((current) => sent
+        ? removePendingMessage(current, sendingMessage.id)
+        : replacePendingMessage(current, markPendingMessageFailed(sendingMessage, "发送失败")))
+    })
+  }, [chat.sendMessage, chat.sendingConversationIds, pendingMessages])
+
+  const queueMessage = (content: string, target: PendingMessageTarget) => {
+    pendingMessageIdRef.current += 1
+    setPendingMessages((current) => [
+      ...current,
+      enqueuePendingMessage({
+        id: `pending:${Date.now()}:${pendingMessageIdRef.current}`,
+        content,
+        target,
+        createdAt: new Date().toISOString(),
+      }),
+    ])
+  }
+
+  const submitContent = (content: string) => {
+    if (!content || !selectedTarget) return
     setDraft("")
     stick.forcePin()
-    void chat.sendMessage(content)
+    if (chat.sending) {
+      queueMessage(content, selectedTarget)
+      return
+    }
+    void chat.sendMessage(content, selectedTarget)
+  }
+
+  const submitDraft = () => {
+    submitContent(draft.trim())
   }
 
   const handleSubmit = (event: FormEvent) => {
@@ -149,10 +235,18 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   }
 
   const handleCommandSelect = (name: string) => {
-    if (!chat.activeProjectId) return
     setDraft("")
     setPaletteOpen(false)
-    void chat.sendMessage(`/${name}`)
+    submitContent(`/${name}`)
+  }
+
+  const handleRemovePendingMessage = (id: string) => {
+    setPendingMessages((current) => removePendingMessage(current, id))
+  }
+
+  const handleRetryPendingMessage = (id: string) => {
+    setPendingMessages((current) => current.map((message) =>
+      message.id === id ? enqueuePendingMessage(message) : message))
   }
 
   const handleCopyTranscript = async () => {
@@ -169,34 +263,65 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       await window.navigator.clipboard.writeText(transcript)
       toast("已复制")
     } catch (rawError) {
-      logger.error("Agent transcript copy failed.", rawError)
+      logger.error("Agent transcript copy failed.", {
+        boundary: "renderer.agent.transcript-copy",
+        projectId,
+        conversationId: chat.selectedConversationId,
+        sessionKey: chat.selectedSessionKey,
+        ...errorDiagnostic(rawError),
+      })
       toast("复制失败")
     }
   }
 
+  const handlePendingPermissionsClick = () => {
+    const requestId = chat.pendingPermissions[0]?.requestId
+    if (!requestId) return
+    document
+      .querySelector(`[data-agent-permission-request-id="${CSS.escape(requestId)}"]`)
+      ?.scrollIntoView({ block: "center", behavior: "smooth" })
+  }
+
   const activeProvider = chat.providers?.providers.find((provider) => provider.active)
-  const selectedSession = chat.sessions.find((session) =>
-    session.projectId === chat.selectedProjectId && session.id === chat.selectedConversationId)
-    ?? chat.sessions.find((session) => session.active)
+  const selectedProvider = selectedSession?.providerId
+    ? chat.providers?.providers.find((provider) => provider.id === selectedSession.providerId)
+    : undefined
+  const providerMissing = Boolean(selectedSession?.providerId && !selectedProvider)
+  const headerProvider = selectedProvider ?? activeProvider
   const selectedAgentDefinition = agentDefinitions.find((definition) =>
     definition.id === selectedSession?.agentType)
   const selectedDisplayProfile = selectedAgentDefinition?.displayProfile
     ?? DEFAULT_AGENT_DISPLAY_PROFILE
   const selectedCliLabel = agentCliLabel(selectedSession?.agentType)
+  const selectedPermissionMode = selectedSession?.mode ?? "default"
   const openReference = (reference: string) => {
     const projectId = chat.selectedProjectId ?? chat.activeProjectId
     if (!projectId) return
-    void getSynapseBridge()?.agent.openReference({ projectId, reference })
-  }
-
-  if (!runtimeLoading && hasAvailableCli === false) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <p className="text-sm text-muted-foreground">
-          未检测到可用的 Agent CLI，请在设置中确认安装状态
-        </p>
-      </div>
-    )
+    const bridge = getSynapseBridge()
+    if (!bridge?.agent.openReference) {
+      logger.warn("Agent reference open failed.", {
+        boundary: "renderer.agent.open-reference",
+        projectId,
+        conversationId: chat.selectedConversationId,
+        sessionKey: chat.selectedSessionKey,
+        referenceLength: reference.length,
+        errorName: "BridgeUnavailable",
+        errorLength: 0,
+      })
+      toast("打开失败")
+      return
+    }
+    void bridge.agent.openReference({ projectId, reference }).catch((rawError: unknown) => {
+      logger.warn("Agent reference open failed.", {
+        boundary: "renderer.agent.open-reference",
+        projectId,
+        conversationId: chat.selectedConversationId,
+        sessionKey: chat.selectedSessionKey,
+        referenceLength: reference.length,
+        ...errorDiagnostic(rawError),
+      })
+      toast("打开失败")
+    })
   }
 
   const sidebar = (
@@ -204,18 +329,21 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       sessions={chat.sessions}
       archivedSessions={chat.archivedSessions}
       projects={projectOptions}
-      availableAgents={availableAgents}
       selectedProjectId={chat.selectedProjectId}
       selectedConversationId={chat.selectedConversationId}
       followFeishu={chat.followFeishu}
       unreadByConversationId={chat.unreadByConversationId}
-      onCreateSession={(projectId, agentType) => void chat.createSession(projectId, agentType)}
+      onCreateSession={(projectId, selection) => void chat.createSession(projectId, selection.providerId, undefined, selection.modelTier)}
       onSelect={(session) => void chat.selectSession(session)}
       onDelete={(session) => void chat.deleteSession(session)}
       onDeleteOthers={(keep) => {
-        const others = chat.sessions.filter(
-          (s) => s.projectId === keep.projectId && s.id !== keep.id,
+        const inArchived = chat.archivedSessions.some(
+          (s) => s.projectId === keep.projectId && s.id === keep.id,
         )
+        const source = inArchived ? chat.archivedSessions : chat.sessions
+        const others = inArchived
+          ? source.filter((s) => !(s.projectId === keep.projectId && s.id === keep.id))
+          : source.filter((s) => s.projectId === keep.projectId && s.id !== keep.id)
         for (const session of others) void chat.deleteSession(session)
       }}
       onRename={(session, name) => void chat.renameSession(session, name)}
@@ -245,15 +373,35 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
 
             {/* 右区：模型信息 · 权限 · 复制 · 命令 */}
             <div className="flex shrink-0 items-center gap-2">
-              {chat.currentConversationModel ? (
+              {providerMissing ? (
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <span className="flex items-center gap-1 text-xs text-destructive">
+                      <AlertTriangle className="size-3" />
+                      供应商不可用
+                    </span>
+                  </TooltipTrigger>
+                  <TooltipContent>该会话的供应商已删除或归档</TooltipContent>
+                </Tooltip>
+              ) : chat.currentConversationModel ? (
                 <span className="text-xs text-muted-foreground">
                   {chat.currentConversationModel}
-                  {activeProvider ? ` · ${activeProvider.id}` : ""}
+                  {headerProvider ? ` · ${headerProvider.display ?? headerProvider.id}` : ""}
+                </span>
+              ) : headerProvider ? (
+                <span className="text-xs text-muted-foreground">
+                  {headerProvider.display ?? headerProvider.id}
                 </span>
               ) : null}
 
               {chat.pendingPermissions.length > 0 ? (
-                <Button type="button" variant="outline" size="sm">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  data-track="agent-pending-permissions-focus"
+                  onClick={handlePendingPermissionsClick}
+                >
                   <ShieldAlert data-icon="inline-start" />
                   权限 {chat.pendingPermissions.length}
                 </Button>
@@ -267,6 +415,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                     size="icon"
                     disabled={!chat.activeProjectId || chat.timeline.length === 0}
                     onClick={() => void handleCopyTranscript()}
+                    aria-label="复制对话"
                   >
                     <Copy />
                   </Button>
@@ -278,7 +427,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <PopoverTrigger asChild>
-                      <Button type="button" variant="ghost" size="icon">
+                      <Button type="button" variant="ghost" size="icon" aria-label="命令">
                         <CommandIcon />
                       </Button>
                     </PopoverTrigger>
@@ -309,7 +458,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
           </div>
         </TooltipProvider>
 
-        {!selectedSession && chat.sessions.length === 0 && !chat.loading ? (
+        {!selectedSession && !chat.loading ? (
           <div className="flex flex-1 items-center justify-center">
             <p className="text-sm text-muted-foreground">请创建新的会话</p>
           </div>
@@ -340,17 +489,35 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               canSend={Boolean(draft.trim() && chat.activeProjectId)}
               sending={chat.sending}
               cancelPhase={chat.cancelPhase}
+              permissionMode={selectedPermissionMode}
+              onPermissionModeChange={(mode) => chat.setPermissionMode(mode)}
+              onCreatePermissionModeSession={(mode) => {
+                const projectId = chat.selectedProjectId ?? chat.activeProjectId
+                if (!projectId) return
+                void chat.createSession(projectId, selectedSession?.providerId, mode)
+              }}
               onDraftChange={setDraft}
               onInputKeyDown={handleInputKeyDown}
               onSubmit={handleSubmit}
               onCancelTurn={() => void chat.cancelTurn()}
               onForceKillTurn={() => void chat.forceKillTurn()}
+              pendingMessages={selectedPendingMessages}
+              onRemovePendingMessage={handleRemovePendingMessage}
+              onRetryPendingMessage={handleRetryPendingMessage}
             />
           </>
         )}
       </div>
     </SidebarContentLayout>
   )
+}
+
+function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
 }
 
 export { AgentComposer, AgentModule }

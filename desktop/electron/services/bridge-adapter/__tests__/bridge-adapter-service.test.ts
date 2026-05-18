@@ -1,11 +1,12 @@
 import { createServer } from "node:net"
 import type { AddressInfo } from "node:net"
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import WebSocket from "ws"
 
 import type { ConversationEntryV1 } from "../../../runtime/data-repo"
 import { createNetworkServiceRegistry } from "../../../runtime/network"
 import { InMemoryAuditSink } from "../../../runtime/security"
+import type { StructuredLogger } from "../../../runtime/service-registry"
 import type {
   AgentMessage,
   AgentPermissionResponseRequest,
@@ -95,6 +96,46 @@ describe("BridgeAdapterService", () => {
         capabilities: ["text", "typing"],
       }),
     }))
+    ws.close()
+    await service.stop()
+  })
+
+  it("logs inbound Agent message send failures without exposing raw SDK errors", async () => {
+    const logger = createLogger()
+    const agent = new FailingAgentRuntime("SDK failed for prompt secret-token at /Users/liyang/private")
+    const { service, port } = await startBridge(agent, { logger })
+    const ws = await registeredBridge(port, "tok", ["text"])
+
+    ws.send(JSON.stringify({
+      type: "message",
+      msg_id: "m-fail",
+      session_key: "bridge:room:user",
+      user_id: "u1",
+      content: "hello",
+      reply_ctx: "ctx-1",
+      project: "project-1",
+    }))
+
+    await expect(readJson(ws)).resolves.toEqual(expect.objectContaining({
+      type: "error",
+      session_key: "bridge:room:user",
+      reply_ctx: "ctx-1",
+      error: {
+        code: "message_failed",
+        message: "Agent message failed",
+      },
+    }))
+    expect(logger.warn).toHaveBeenCalledWith("Bridge inbound Agent message failed.", expect.objectContaining({
+      projectId: "project-1",
+      sessionKey: "bridge:room:user",
+      messageId: "m-fail",
+      platform: "bridge",
+      boundary: "agent.send",
+      errorName: "Error",
+      errorLength: "SDK failed for prompt secret-token at /Users/liyang/private".length,
+    }))
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret-token")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("/Users/liyang/private")
     ws.close()
     await service.stop()
   })
@@ -210,6 +251,39 @@ describe("BridgeAdapterService", () => {
     await service.stop()
   })
 
+  it("logs preview ack timeouts before falling back to a reply", async () => {
+    const logger = createLogger()
+    const { service, port } = await startBridge(new FakeAgentRuntime(), { logger })
+    const ws = await registeredBridge(port, "tok", ["text", "preview", "update_message"])
+    const target = bridgeTarget()
+
+    const stream = service.dispatchAgentEvent(target, { type: "text", content: "hello" })
+    await expect(readJson(ws)).resolves.toEqual(expect.objectContaining({
+      type: "preview_start",
+      content: "hello",
+    }))
+    await stream
+
+    const final = readJson(ws)
+    await service.dispatchAgentEvent(target, { type: "result", content: "hello world", done: true })
+
+    await expect(final).resolves.toEqual(expect.objectContaining({
+      type: "reply",
+      content: "hello world",
+    }))
+    expect(logger.warn).toHaveBeenCalledWith("Bridge preview ack failed; falling back to reply.", expect.objectContaining({
+      projectId: "project-1",
+      conversationId: "conv-1",
+      sessionKey: "bridge:s1",
+      adapterId: expect.any(String),
+      platform: "bridge",
+      stage: "preview_start",
+      failureType: "timeout",
+    }))
+    ws.close()
+    await service.stop()
+  })
+
   it("publishes command capabilities to control-plane adapters", async () => {
     const agent = new FakeAgentRuntime()
     const { service, port } = await startBridge(agent)
@@ -231,6 +305,46 @@ describe("BridgeAdapterService", () => {
         commands: [expect.objectContaining({ name: "status" })],
       })],
     }))
+    ws.close()
+    await service.stop()
+  })
+
+  it("redacts command capability listing failures", async () => {
+    const logger = createLogger()
+    const agent = new FakeAgentRuntime()
+    agent.listPublishedCommands = async () => {
+      throw new Error("SDK command failed for secret prompt /Users/liyang/private sk-test")
+    }
+    const { service, port } = await startBridge(agent, { logger })
+    const ws = await openBridge(port, "tok")
+    const messages = readJsonN(ws, 2)
+    ws.send(JSON.stringify({
+      type: "register",
+      platform: "bridge",
+      capabilities: ["text"],
+      metadata: { control_plane: ["capabilities_snapshot_v1"] },
+    }))
+
+    const received = await messages
+    expect(received[1]).toEqual(expect.objectContaining({
+      type: "capabilities_snapshot",
+      projects: [expect.objectContaining({
+        project: "project-1",
+        commands: [],
+      })],
+    }))
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Bridge capabilities command listing failed.",
+      expect.objectContaining({
+        projectId: "project-1",
+        platform: "bridge",
+        errorName: "Error",
+        errorLength: "SDK command failed for secret prompt /Users/liyang/private sk-test".length,
+      }),
+    )
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("/Users/liyang/private")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sk-test")
     ws.close()
     await service.stop()
   })
@@ -310,7 +424,10 @@ describe("BridgeAdapterService", () => {
   })
 })
 
-async function startBridge(agent = new FakeAgentRuntime()): Promise<{
+async function startBridge(
+  agent = new FakeAgentRuntime(),
+  options: { readonly logger?: StructuredLogger } = {},
+): Promise<{
   readonly service: BridgeAdapterService
   readonly port: number
   readonly sideChannel: FakeSideChannel
@@ -323,11 +440,29 @@ async function startBridge(agent = new FakeAgentRuntime()): Promise<{
     sideChannel: sideChannel as unknown as SideChannelService,
     listProjects: async () => [{ projectId: "project-1", name: "Project", workspacePath: "/repo" }],
     auditSink: new InMemoryAuditSink(),
+    logger: options.logger,
     token: "tok",
     preferredPort: port,
   })
   await service.start()
   return { service, port, sideChannel }
+}
+
+function createLogger(): StructuredLogger & {
+  readonly warn: ReturnType<typeof vi.fn>
+  readonly child: ReturnType<typeof vi.fn>
+} {
+  const logger = {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn(),
+  }
+  logger.child.mockReturnValue(logger)
+  return logger
 }
 
 async function registeredBridge(
@@ -489,6 +624,17 @@ class FakeAgentRuntime {
       kind: "builtin",
       adminOnly: false,
     }]
+  }
+}
+
+class FailingAgentRuntime extends FakeAgentRuntime {
+  constructor(private readonly failureMessage: string) {
+    super()
+  }
+
+  override async send(message: AgentMessage): Promise<AgentRuntimeTurnResult> {
+    this.messages.push(message)
+    throw new Error(this.failureMessage)
   }
 }
 

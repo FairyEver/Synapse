@@ -1,9 +1,18 @@
 import { nodeTypeRegistry } from "../../../../workflow-nodes/registry"
 
-export function NodePalette() {
+interface NodePaletteProps {
+  collapsed?: boolean
+}
+
+export function NodePalette({ collapsed }: NodePaletteProps) {
   const types = nodeTypeRegistry.listTypes().filter((t) => t !== "end")
+
+  if (collapsed) {
+    return <div className="h-full bg-muted" />
+  }
+
   return (
-    <div className="w-44 border-r bg-background flex flex-col gap-1 p-2">
+    <div className="h-full border-r bg-background flex flex-col gap-1 p-2">
       <p className="text-xs font-medium text-muted-foreground px-1 pb-1">节点</p>
       {types.map((type) => {
         const manifest = nodeTypeRegistry.getManifest(type)

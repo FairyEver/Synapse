@@ -1,5 +1,6 @@
 import { computeNextRunAt, resolveStartupSchedule } from "./schedule-calculator"
 import type { TaskSchedulerExecutionService } from "./execution-service"
+import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ScheduledTaskRunRepository } from "./run-repository"
 import type { ScheduledTaskRepository } from "./task-repository"
 import type {
@@ -17,6 +18,7 @@ export interface TaskSchedulerServiceDeps {
   readonly runs: ScheduledTaskRunRepository
   readonly execution: TaskSchedulerExecutionService
   readonly defaultCwd: string
+  readonly logger?: StructuredLogger
   readonly now?: () => Date
 }
 
@@ -43,12 +45,14 @@ export class TaskSchedulerService {
     this.started = false
   }
 
-  schedulerTaskList(): Promise<ScheduledTaskEntry[]> {
-    return this.deps.tasks.list()
+  async schedulerTaskList(): Promise<ScheduledTaskEntry[]> {
+    const tasks = await this.deps.tasks.list()
+    return tasks.map((task) => this.withRuntimeState(task))
   }
 
-  schedulerTaskGet(id: string): Promise<ScheduledTaskEntry | null> {
-    return this.deps.tasks.get(id)
+  async schedulerTaskGet(id: string): Promise<ScheduledTaskEntry | null> {
+    const task = await this.deps.tasks.get(id)
+    return task ? this.withRuntimeState(task) : null
   }
 
   async schedulerTaskCreate(input: ScheduledTaskCreateInput): Promise<ScheduledTaskEntry> {
@@ -94,8 +98,17 @@ export class TaskSchedulerService {
     return this.runNow(id)
   }
 
-  stopRun(runId: string): { readonly stopped: boolean } {
-    return { stopped: this.deps.execution.stopRun(runId) }
+  async stopRun(runId: string): Promise<{ readonly stopped: boolean }> {
+    const run = await this.deps.runs.get(runId)
+    const stopped = this.deps.execution.stopRun(runId)
+    this.deps.logger?.info("Scheduled task stop requested.", {
+      ...(run ? { taskId: run.taskId } : {}),
+      runId,
+      stopped,
+      runFound: Boolean(run),
+      boundary: "task-scheduler-stop-run",
+    })
+    return { stopped }
   }
 
   schedulerRunList(
@@ -128,9 +141,17 @@ export class TaskSchedulerService {
       createdAt: task.createdAt,
       now: this.now(),
     })
+    this.deps.logger?.info?.("Scheduled task startup decision.", {
+      taskId: task.id,
+      action: decision.action,
+      name: task.name,
+      taskEnabled: task.enabled,
+      ...(decision.action === "run_missed_once" ? { missedRunPolicy: task.missedRunPolicy } : {}),
+      boundary: "task-scheduler-startup-decision",
+    })
     if (decision.action === "none") return
     if (decision.action === "run_missed_once") {
-      void this.runScheduled(task.id, "missed_run")
+      this.runScheduledInBackground(task.id, "missed_run")
       return
     }
     await this.schedule(task.id, task.nextRunAt)
@@ -147,9 +168,26 @@ export class TaskSchedulerService {
       Math.max(0, nextRunAt.getTime() - this.now().getTime()),
     )
     const timer = setTimeout(() => {
-      void this.runScheduled(id, "schedule")
+      this.runScheduledInBackground(id, "schedule")
     }, delayMs)
     this.timers.set(id, timer)
+    this.deps.logger?.info?.("Scheduled task timer set.", {
+      taskId: id,
+      nextRunAt: nextRunAt.toISOString(),
+      delayMs,
+      boundary: "task-scheduler-schedule-timer",
+    })
+  }
+
+  private runScheduledInBackground(id: string, triggeredBy: ScheduledTaskRunTrigger): void {
+    void this.runScheduled(id, triggeredBy).catch((error) => {
+      this.deps.logger?.warn("Scheduled task background run failed.", {
+        taskId: id,
+        triggeredBy,
+        boundary: "task-scheduler-background-run",
+        ...errorMetadata(error),
+      })
+    })
   }
 
   private async runScheduled(
@@ -161,6 +199,14 @@ export class TaskSchedulerService {
     if (!task) return null
     if (!task.enabled) {
       return this.recordSkipped(task.id, triggeredBy, "task is disabled")
+    }
+    if (task.activeDays && task.activeDays.length < 7) {
+      const timezone = task.trigger.type === "builtin.cron" ? task.trigger.config.timezone : undefined
+      const currentDay = getWeekdayForDate(this.now(), timezone)
+      if (!task.activeDays.includes(currentDay)) {
+        await this.schedule(id)
+        return this.recordSkipped(task.id, triggeredBy, "day not in activeDays")
+      }
     }
     const deferSchedule =
       task.trigger.type === "builtin.interval" &&
@@ -202,6 +248,14 @@ export class TaskSchedulerService {
       error,
     })
     await this.deps.tasks.markRunResult(taskId, { status: "skipped" })
+    this.deps.logger?.info("Scheduled task run skipped.", {
+      taskId,
+      runId: run.id,
+      triggeredBy,
+      status: "skipped",
+      boundary: "task-scheduler-skip-run",
+      reason: error,
+    })
     return finished
   }
 
@@ -214,6 +268,7 @@ export class TaskSchedulerService {
       trigger: task.trigger,
       from: this.now(),
       createdAt: task.createdAt,
+      activeDays: task.activeDays,
     })
   }
 
@@ -227,4 +282,28 @@ export class TaskSchedulerService {
   private now(): Date {
     return this.deps.now?.() ?? new Date()
   }
+
+  private withRuntimeState(task: ScheduledTaskEntry): ScheduledTaskEntry {
+    if (!this.runningTaskIds.has(task.id)) return task
+    return {
+      ...task,
+      activeRun: { status: "running" },
+    }
+  }
+}
+
+function errorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
+}
+
+function getWeekdayForDate(date: Date, timezone?: string): number {
+  if (!timezone) return date.getDay()
+  const parts = new Intl.DateTimeFormat("en-US", { timeZone: timezone, weekday: "short" }).formatToParts(date)
+  const weekdayStr = parts.find((p) => p.type === "weekday")?.value ?? ""
+  const map: Record<string, number> = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 }
+  return map[weekdayStr] ?? date.getDay()
 }

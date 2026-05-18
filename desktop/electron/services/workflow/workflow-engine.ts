@@ -1,33 +1,46 @@
 import type { WorkflowDefinition, WorkflowRunResult, WorkflowEvent, NodeRunResult } from "../../../src/types/workflow"
-import type { AgentSendDeps } from "../../../workflow-nodes/types"
+import type { AgentSendDeps, NodeRuntimeDeps } from "../../../workflow-nodes/types"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { interpolatePrompt, resolveVariables } from "./variable-resolver"
+import { ReactiveScheduler } from "./workflow-scheduler"
+import type { NodeExecOutcome, NodeTask, SchedulerCallbacks } from "./workflow-scheduler"
 import { createMainLogger } from "../log-store"
+import { sanitizeError } from "../error-sanitize"
+import { computeFullExecutionSet } from "./workflow-utils"
 
 const logger = createMainLogger("service.workflow.engine")
+const DEFAULT_WORKFLOW_MAX_CONCURRENCY = 5
 
-function truncate(text: string | undefined, maxLen: number): string | undefined {
-  if (!text) return text
-  return text.length <= maxLen ? text : `${text.slice(0, maxLen)}...(truncated)`
+function stringDiagnostic(text: string | undefined, errorName: string): { readonly errorName: string; readonly errorMessage?: string; readonly errorLength: number } {
+  return {
+    errorName,
+    errorMessage: text ?? undefined,
+    errorLength: text?.length ?? 0,
+  }
+}
+
+function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorMessage: string; readonly errorLength: number; readonly stackLength?: number } {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name,
+      errorMessage: error.message,
+      errorLength: error.message.length,
+      stackLength: error.stack?.length,
+    }
+  }
+
+  const str = String(error)
+  return {
+    errorName: "Error",
+    errorMessage: str,
+    errorLength: str.length,
+  }
 }
 
 type EventCallback = (event: WorkflowEvent) => void
 
-function topoOrder(def: WorkflowDefinition): string[] {
-  const inDeg = new Map(def.nodes.map((n) => [n.id, 0]))
-  const adj = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
-  for (const e of def.edges) { adj.get(e.from)?.push(e.to); inDeg.set(e.to, (inDeg.get(e.to) ?? 0) + 1) }
-  const queue = def.nodes.filter((n) => inDeg.get(n.id) === 0).map((n) => n.id)
-  const order: string[] = []
-  while (queue.length) {
-    const id = queue.shift()!; order.push(id)
-    for (const next of adj.get(id) ?? []) { const d = (inDeg.get(next) ?? 0) - 1; inDeg.set(next, d); if (d === 0) queue.push(next) }
-  }
-  return order
-}
-
 export class WorkflowEngine {
-  constructor(private readonly agentDeps: AgentSendDeps, private readonly abortSignal?: AbortSignal) {}
+  constructor(private readonly agentDeps: AgentSendDeps, private readonly abortSignal?: AbortSignal, private readonly runtimeDeps?: NodeRuntimeDeps) {}
 
   async run(
     def: WorkflowDefinition,
@@ -36,6 +49,7 @@ export class WorkflowEngine {
     emit: EventCallback,
     abortSignal?: AbortSignal,
     projectId?: string,
+    triggerSource?: string,
   ): Promise<WorkflowRunResult> {
     const effectiveAbortSignal = abortSignal ?? this.abortSignal ?? new AbortController().signal
     if (effectiveAbortSignal.aborted) {
@@ -46,188 +60,307 @@ export class WorkflowEngine {
     }
     emit({ type: "workflow:started", runId, workflowId: def.id })
     const startMs = Date.now()
-    const order = topoOrder(def)
-    logger.info("workflow run started", { runId, workflowId: def.id, projectId: projectId ?? "(fallback to def.id)", nodeCount: def.nodes.length, executionOrder: order.length, params: paramValues })
+    const paramKeys = Object.keys(paramValues)
+    logger.info("workflow run started", {
+      runId,
+      workflowId: def.id,
+      projectId: projectId ?? "(fallback to def.id)",
+      nodeCount: def.nodes.length,
+      paramKeys,
+      paramCount: paramKeys.length,
+      triggerSource: triggerSource ?? "unknown",
+    })
+
     const nodeResults: Record<string, NodeRunResult> = {}
     const nodeOutputs: Record<string, string> = {}
-    let overallFailed = false
-    // Backward-reachability: compute which nodes have a path to the end node.
-    // Orphan subgraphs that can never reach the end node are pruned.
-    const endNodeForReach = def.nodes.find((n) => n.type === "end")
-    const canReachEnd = new Set<string>()
-    if (endNodeForReach) {
-      canReachEnd.add(endNodeForReach.id)
-      const revAdj = new Map(def.nodes.map((n) => [n.id, [] as string[]]))
-      for (const e of def.edges) { revAdj.get(e.to)?.push(e.from) }
-      const bfsQueue = [endNodeForReach.id]
-      while (bfsQueue.length) {
-        const cur = bfsQueue.shift()!
-        for (const prev of revAdj.get(cur) ?? []) {
-          if (!canReachEnd.has(prev)) { canReachEnd.add(prev); bfsQueue.push(prev) }
-        }
+
+    // --- Reachability pruning (includes side-effect branches) ---
+    let executionSet: ReturnType<typeof computeFullExecutionSet>
+    try {
+      executionSet = computeFullExecutionSet(def)
+    } catch (err) {
+      const diagnostic = errorDiagnostic(err)
+      const rawMessage = err instanceof Error ? err.message : String(err)
+      const visibleError = `工作流执行准备失败：${sanitizeError(rawMessage)}`
+      logger.warn("workflow preparation failed", {
+        runId,
+        workflowId: def.id,
+        triggerSource: triggerSource ?? "unknown",
+        ...diagnostic,
+      })
+      const result: WorkflowRunResult = { status: "failed", nodeResults, durationMs: Date.now() - startMs }
+      emit({ type: "workflow:failed", runId, error: visibleError, result })
+      return result
+    }
+    const { executableNodeIds, implicitEdges } = executionSet
+
+    if (executableNodeIds.size === 0) {
+      const hasEndNode = def.nodes.some((n) => n.type === "end")
+      const visibleError = hasEndNode ? "没有节点连接到结束节点，无法执行" : "工作流缺少结束节点，无法执行"
+      logger.warn("workflow has no executable nodes — aborting", { runId, workflowId: def.id, hasEndNode })
+      const result: WorkflowRunResult = { status: "failed", nodeResults, durationMs: Date.now() - startMs }
+      emit({ type: "workflow:failed", runId, error: visibleError, result })
+      return result
+    }
+    const executableNodes = def.nodes
+      .filter((n) => executableNodeIds.has(n.id))
+      .map((n) => n.id)
+    const executableSet = new Set(executableNodes)
+    const executableEdgesRaw = [
+      ...def.edges
+        .filter((e) => executableSet.has(e.from) && executableSet.has(e.to))
+        .map((e) => ({ from: e.from, to: e.to })),
+      ...implicitEdges,
+    ]
+    // Deduplicate by from+to to prevent inflated pending counts when
+    // multiple switch branch edges target the same node.
+    const edgeKeySeen = new Set<string>()
+    const executableEdges = executableEdgesRaw.filter((e) => {
+      const key = `${e.from}->${e.to}`
+      if (edgeKeySeen.has(key)) return false
+      edgeKeySeen.add(key)
+      return true
+    })
+
+    // Mark pruned nodes as skipped immediately
+    for (const node of def.nodes) {
+      if (!executableSet.has(node.id)) {
+        logger.info("node skipped", { runId, nodeId: node.id, nodeName: node.name, nodeType: node.type, reason: "not-reachable" })
+        const res: NodeRunResult = { nodeId: node.id, status: "skipped", input: { variables: {} } }
+        nodeResults[node.id] = res
+        emit({ type: "node:skipped", runId, nodeId: node.id, result: res })
       }
     }
 
-    const reachableNodes = new Set<string>(
-      def.nodes
-        .filter((n) => !def.edges.some((e) => e.to === n.id))
-        .filter((n) => canReachEnd.size === 0 || canReachEnd.has(n.id))
-        .map((n) => n.id)
-    )
+    // --- Build taskFactory ---
+    const nodeNames = Object.fromEntries(def.nodes.map((n) => [n.id, n.name]))
+    const allNodeIds = new Set(def.nodes.map((n) => n.id))
 
-    for (const nodeId of order) {
-      if (effectiveAbortSignal.aborted) {
-        logger.warn("workflow cancelled mid-run", { runId, workflowId: def.id, durationMs: Date.now() - startMs })
-        const result: WorkflowRunResult = { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
-        emit({ type: "workflow:cancelled", runId, result })
-        return result
-      }
-      const node = def.nodes.find((n) => n.id === nodeId)!
-      const incomingEdges = def.edges.filter((e) => e.to === nodeId)
-      const ancestors = incomingEdges.map((e) => e.from)
-
-      const shouldSkip =
-        overallFailed ||
-        (canReachEnd.size > 0 && !canReachEnd.has(nodeId)) ||
-        (ancestors.length > 0 && !reachableNodes.has(nodeId))
-      if (shouldSkip) {
-        const reason = overallFailed ? "overall-failed" : "not-reachable"
-        logger.info("node skipped", { runId, nodeId, nodeName: node.name, nodeType: node.type, reason })
-        const res: NodeRunResult = { nodeId, status: "skipped", input: { variables: {} } }
-        nodeResults[nodeId] = res
-        emit({ type: "node:skipped", runId, nodeId, result: res })
-        continue
-      }
-      const nodeStartedAt = Date.now()
-      emit({ type: "node:started", runId, nodeId, startedAt: nodeStartedAt })
-      const nr: NodeRunResult = { nodeId, status: "running", input: { variables: {} }, startedAt: nodeStartedAt }
-      nodeResults[nodeId] = nr
-
-      try {
-        const manifest = nodeTypeRegistry.getManifest(node.type)
-        const executor = nodeTypeRegistry.getExecutor(node.type)
-        const cfg = manifest.configSchema.parse(node.config)
-        const vars = (cfg as Record<string, unknown>)["variables"]
-        const nodeNames = Object.fromEntries(def.nodes.map((n) => [n.id, n.name]))
-        const allNodeIds = new Set(def.nodes.map((n) => n.id))
-        const { resolved, skippedReferences } = resolveVariables(Array.isArray(vars) ? vars as never : [], paramValues, nodeOutputs, nodeNames, allNodeIds)
-        if (skippedReferences.length > 0) {
-          logger.warn("node has variables referencing skipped upstream nodes (resolved to empty)", {
-            runId, nodeId, nodeName: node.name,
-            skippedReferences: skippedReferences.map((r) => `$${r.variableName} → ${r.sourceNodeName}`),
-          })
+    const taskFactory = (nodeId: string): NodeTask => ({
+      nodeId,
+      execute: async (): Promise<NodeExecOutcome> => {
+        const node = def.nodes.find((n) => n.id === nodeId)
+        if (!node) {
+          logger.warn("taskFactory: node ID not found in definition", { runId, nodeId })
+          return { nodeId, status: "failed", error: `节点 ID「${nodeId}」在工作流定义中不存在` }
         }
-        const prompt = (cfg as Record<string, unknown>)["prompt"]
-        const template = (cfg as Record<string, unknown>)["template"]
-        const interpolatable = typeof prompt === "string" ? prompt : (typeof template === "string" ? template : undefined)
-        nr.input = {
-          variables: resolved,
-          ...(interpolatable !== undefined ? { prompt: interpolatePrompt(interpolatable, resolved) } : {}),
-        }
-
-        logger.info("node started", {
-          runId, nodeId, nodeType: node.type, nodeName: node.name,
-          inputVariables: resolved,
-          ...(nr.input.prompt !== undefined ? { prompt: truncate(nr.input.prompt, 200) } : {}),
-        })
-
-        const execResult = await executor.execute({
-          config: cfg, resolvedVariables: resolved,
-          context: { projectId: projectId ?? def.id, runId, abortSignal: effectiveAbortSignal },
-          agentDeps: this.agentDeps,
-          onProgress: (phase, label) => {
-            emit({ type: "node:progress", runId, nodeId, phase, label })
-          },
-        })
-        if (effectiveAbortSignal.aborted) {
-          logger.warn("node aborted mid-execution", { runId, nodeId, nodeName: node.name })
-          // Mark the currently executing node as terminal so it doesn't appear as
-          // "running" in the cancelled workflow's results and timeline.
-          const currentNr = nodeResults[nodeId]
-          if (currentNr && currentNr.status === "running") {
-            currentNr.status = "failed"
-            currentNr.error = "运行被取消"
-            currentNr.endedAt = Date.now()
-            currentNr.durationMs = currentNr.startedAt ? currentNr.endedAt - currentNr.startedAt : undefined
+        try {
+          const manifest = nodeTypeRegistry.getManifest(node.type)
+          const executor = nodeTypeRegistry.getExecutor(node.type)
+          const rawCfg = manifest.configSchema.parse(node.config)
+          // Resolve provider/model from workflow defaults when node omits them
+          const cfg = (node.type === "prompt" || node.type === "switch")
+            ? {
+                ...(rawCfg as Record<string, unknown>),
+                providerId: (rawCfg as Record<string, unknown>).providerId ?? def.defaultProviderId,
+                modelTier: (rawCfg as Record<string, unknown>).modelTier ?? def.defaultModelTier,
+              }
+            : rawCfg
+          const vars = (cfg as Record<string, unknown>)["variables"]
+          const { resolved, skippedReferences } = resolveVariables(
+            Array.isArray(vars) ? vars as never : [], paramValues, nodeOutputs, nodeNames, allNodeIds,
+          )
+          if (skippedReferences.length > 0) {
+            logger.warn("node has variables referencing skipped upstream nodes (resolved to empty)", {
+              runId, nodeId, nodeName: node.name,
+              skippedReferences: skippedReferences.map((r) => `$${r.variableName} → ${r.sourceNodeName}`),
+            })
           }
-          const result: WorkflowRunResult = { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
-          emit({ type: "workflow:cancelled", runId, result })
-          return result
-        }
-        nr.status = execResult.status; nr.output = execResult.output; nr.outputs = execResult.outputs
-        nr.activeBranch = execResult.activeBranch; nr.error = execResult.error
-        nr.endedAt = Date.now(); nr.durationMs = execResult.durationMs
+          const prompt = (cfg as Record<string, unknown>)["prompt"]
+          const template = (cfg as Record<string, unknown>)["template"]
+          const interpolatable = typeof prompt === "string" ? prompt : (typeof template === "string" ? template : undefined)
+          const resolvedPrompt = interpolatable !== undefined ? interpolatePrompt(interpolatable, resolved) : undefined
 
-        if (execResult.status === "success") {
+          // Update NodeRunResult input for this node
+          const nr = nodeResults[nodeId]
+          if (nr) {
+            nr.input = { variables: resolved, ...(resolvedPrompt !== undefined ? { prompt: resolvedPrompt } : {}) }
+          }
+          emit({ type: "node:started", runId, nodeId, startedAt: nr?.startedAt, result: nr ? { ...nr } : undefined })
+
+          const inputVariableKeys = Object.keys(resolved)
+          logger.info("node started", {
+            runId, nodeId, nodeType: node.type, nodeName: node.name,
+            triggerSource: triggerSource ?? "unknown",
+            inputVariableKeys,
+            inputVariableCount: inputVariableKeys.length,
+            ...(resolvedPrompt !== undefined ? { promptLength: resolvedPrompt.length } : {}),
+          })
+
+          const nodeProjectId = (cfg as Record<string, unknown>)["projectId"] as string | undefined
+          const effectiveProjectId = nodeProjectId ?? projectId ?? def.id
+
+          const execResult = await executor.execute({
+            config: cfg, resolvedVariables: resolved,
+            context: { projectId: effectiveProjectId, runId, abortSignal: effectiveAbortSignal },
+            agentDeps: this.agentDeps,
+            runtimeDeps: this.runtimeDeps,
+            onProgress: (phase, label) => {
+              emit({ type: "node:progress", runId, nodeId, phase, label })
+            },
+          })
+
+          if (effectiveAbortSignal.aborted && execResult.status !== "failed") {
+            return { nodeId, status: "cancelled", error: "运行被取消", durationMs: execResult.durationMs }
+          }
+
+          return {
+            nodeId, status: execResult.status, output: execResult.output,
+            outputs: execResult.outputs, activeBranch: execResult.activeBranch,
+            error: execResult.error, durationMs: execResult.durationMs,
+          }
+        } catch (err) {
+          if (effectiveAbortSignal.aborted) {
+            return { nodeId, status: "cancelled", error: "运行被取消" }
+          }
+          const diagnostic = errorDiagnostic(err)
+          const rawMessage = err instanceof Error ? err.message : String(err)
+          const visibleError = `节点执行异常：${sanitizeError(rawMessage)}`
+          logger.warn("node threw exception", {
+            runId, nodeId, nodeName: node.name, nodeType: node.type,
+            ...diagnostic,
+          })
+          const throwDurationMs = nodeResults[nodeId]?.startedAt != null ? Date.now() - nodeResults[nodeId].startedAt! : undefined
+          return { nodeId, status: "failed", error: visibleError, durationMs: throwDurationMs }
+        }
+      },
+    })
+
+    // --- Build callbacks ---
+    const callbacks: SchedulerCallbacks = {
+      onNodeReady: (nodeId) => {
+        const nodeStartedAt = Date.now()
+        const nr: NodeRunResult = { nodeId, status: "running", input: { variables: {} }, startedAt: nodeStartedAt }
+        nodeResults[nodeId] = nr
+      },
+      onNodeDone: (outcome) => {
+        let nr = nodeResults[outcome.nodeId]
+        if (!nr) {
+          // taskFactory threw before onNodeReady — no entry exists yet.
+          // Initialize from the outcome so the failure is recorded correctly
+          // instead of being silently dropped and later marked as "skipped".
+          if (outcome.status === "failed") {
+            nr = { nodeId: outcome.nodeId, status: "failed", input: { variables: {} }, error: outcome.error, endedAt: Date.now() }
+            nodeResults[outcome.nodeId] = nr
+          } else {
+            return
+          }
+        }
+        nr.status = outcome.status
+        nr.output = outcome.output
+        nr.outputs = outcome.outputs
+        nr.activeBranch = outcome.activeBranch
+        nr.error = outcome.error
+        nr.endedAt = Date.now()
+        nr.durationMs = outcome.durationMs
+
+        if (outcome.status === "success") {
           logger.info("node succeeded", {
-            runId, nodeId, nodeName: node.name, durationMs: nr.durationMs,
-            ...(nr.output !== undefined ? { outputPreview: truncate(nr.output, 500) } : {}),
+            runId, nodeId: outcome.nodeId, nodeName: nodeNames[outcome.nodeId], durationMs: nr.durationMs,
+            triggerSource: triggerSource ?? "unknown",
+            ...(nr.output !== undefined ? { outputLength: nr.output.length } : {}),
             ...(nr.activeBranch !== undefined ? { activeBranch: nr.activeBranch } : {}),
           })
-          nodeOutputs[nodeId] = execResult.output
-          emit({ type: "node:completed", runId, nodeId, output: execResult.output, result: { ...nr } })
-          for (const e of def.edges.filter((e) => e.from === nodeId)) {
-            if (!execResult.activeBranch || e.branch === execResult.activeBranch) {
-              reachableNodes.add(e.to)
-              logger.info("edge activated", { runId, from: nodeId, to: e.to, branch: e.branch ?? null })
-              emit({ type: "edge:activated", runId, from: e.from, to: e.to })
+          if (outcome.output !== undefined) nodeOutputs[outcome.nodeId] = outcome.output
+          emit({ type: "node:completed", runId, nodeId: outcome.nodeId, output: outcome.output, result: { ...nr } })
+        } else if (outcome.status === "cancelled") {
+          logger.info("node cancelled", {
+            runId, nodeId: outcome.nodeId, nodeName: nodeNames[outcome.nodeId],
+            triggerSource: triggerSource ?? "unknown",
+          })
+        } else {
+          const node = def.nodes.find((n) => n.id === outcome.nodeId)
+          logger.warn("node failed", {
+            runId, nodeId: outcome.nodeId, nodeName: node?.name, nodeType: node?.type,
+            triggerSource: triggerSource ?? "unknown",
+            ...stringDiagnostic(outcome.error, "agent"),
+            durationMs: nr.durationMs,
+          })
+          emit({ type: "node:failed", runId, nodeId: outcome.nodeId, error: outcome.error ?? "Unknown error", result: { ...nr } })
+        }
+      },
+      resolveActivatedDownstream: (nodeId, outcome) => {
+        const activated: string[] = []
+        // Iterate def.edges directly to preserve branch info and avoid
+        // find()-by-from+to ambiguity when multiple branch edges share a target.
+        for (const defEdge of def.edges.filter((e) => e.from === nodeId && executableSet.has(e.to))) {
+          if (!outcome.activeBranch || !defEdge.branch || defEdge.branch === outcome.activeBranch) {
+            if (!activated.includes(defEdge.to)) {
+              activated.push(defEdge.to)
+              logger.info("edge activated", { runId, from: nodeId, to: defEdge.to, branch: defEdge.branch ?? null })
+              emit({ type: "edge:activated", runId, from: defEdge.from, to: defEdge.to })
             }
           }
-        } else {
-          logger.warn("node failed", {
-            runId, nodeId, nodeName: node.name, nodeType: node.type, error: execResult.error, durationMs: nr.durationMs,
-            inputVariables: nr.input.variables,
-            ...(nr.input.prompt !== undefined ? { prompt: truncate(nr.input.prompt, 200) } : {}),
-          })
-          overallFailed = true
-          emit({ type: "node:failed", runId, nodeId, error: execResult.error ?? "Unknown error", result: { ...nr } })
         }
-      } catch (err) {
-        if (effectiveAbortSignal.aborted) {
-          logger.warn("node aborted mid-execution (exception path)", { runId, nodeId, nodeName: node.name })
-          // Mark the currently executing node as terminal so it doesn't appear as
-          // "running" in the cancelled workflow's results and timeline.
-          const currentNr = nodeResults[nodeId]
-          if (currentNr && currentNr.status === "running") {
-            currentNr.status = "failed"
-            currentNr.error = "运行被取消"
-            currentNr.endedAt = Date.now()
-            currentNr.durationMs = currentNr.startedAt ? currentNr.endedAt - currentNr.startedAt : undefined
+        // Implicit edges (side-effect leaf → End) only activate on success
+        if (outcome.status === "success") {
+          for (const ie of implicitEdges.filter((e) => e.from === nodeId)) {
+            if (!activated.includes(ie.to)) {
+              activated.push(ie.to)
+              logger.info("edge activated", { runId, from: nodeId, to: ie.to, branch: null })
+              emit({ type: "edge:activated", runId, from: ie.from, to: ie.to })
+            }
           }
-          const result: WorkflowRunResult = { status: "cancelled", nodeResults, durationMs: Date.now() - startMs }
-          emit({ type: "workflow:cancelled", runId, result })
-          return result
         }
-        const msg = err instanceof Error ? err.message : String(err)
-        logger.warn("node threw exception", {
-          runId, nodeId, nodeName: node.name, nodeType: node.type, error: msg,
-          ...(err instanceof Error && err.stack ? { stack: err.stack } : {}),
-        })
-        nr.status = "failed"; nr.error = msg; nr.endedAt = Date.now()
-        nr.durationMs = nr.startedAt ? nr.endedAt - nr.startedAt : undefined
-        overallFailed = true
-        emit({ type: "node:failed", runId, nodeId, error: msg, result: { ...nr } })
+        return activated
+      },
+    }
+
+    // --- Execute via scheduler ---
+    const scheduler = new ReactiveScheduler({ runId, maxConcurrency: DEFAULT_WORKFLOW_MAX_CONCURRENCY })
+    const schedulerResults = await scheduler.execute(
+      executableNodes, executableEdges, taskFactory, callbacks, effectiveAbortSignal,
+    )
+
+    // Mark scheduler-skipped nodes
+    for (const [nodeId, outcome] of schedulerResults) {
+      if (!(nodeId in nodeResults)) {
+        const node = def.nodes.find((n) => n.id === nodeId)
+        logger.info("node skipped", { runId, nodeId, nodeName: node?.name, nodeType: node?.type, reason: "scheduler-skipped", error: outcome.error })
+        const res: NodeRunResult = { nodeId, status: "skipped", input: { variables: {} }, ...(outcome.error ? { error: outcome.error } : {}) }
+        nodeResults[nodeId] = res
+        emit({ type: "node:skipped", runId, nodeId, result: res })
       }
     }
 
+    // --- Post-processing (unchanged) ---
     const durationMs = Date.now() - startMs
+    let overallFailed = Object.values(nodeResults).some((nr) => nr.status === "failed")
     const endNode = def.nodes.find((n) => n.type === "end")
     const endNodeId = endNode?.id
 
-    // Detect skipped End node: workflow structurally completed but the End node
-    // was never reached (e.g. active Switch branch has no path to End).
+    if (effectiveAbortSignal.aborted) {
+      // Mark any still-running or scheduler-skipped nodes as cancelled
+      const runningNodes: string[] = []
+      for (const nr of Object.values(nodeResults)) {
+        if (nr.status === "running" || nr.status === "skipped") {
+          nr.status = "cancelled"; nr.error = "运行被取消"
+          nr.endedAt = nr.endedAt ?? Date.now()
+          nr.durationMs = nr.startedAt ? (nr.endedAt ?? Date.now()) - nr.startedAt : undefined
+          runningNodes.push(nr.nodeId)
+        }
+      }
+      logger.info("workflow cancelled mid-run", {
+        runId,
+        workflowId: def.id,
+        durationMs,
+        triggerSource: triggerSource ?? "unknown",
+        runningNodeCount: runningNodes.length,
+        runningNodeIds: runningNodes,
+      })
+      const result: WorkflowRunResult = { status: "cancelled", nodeResults, durationMs }
+      emit({ type: "workflow:cancelled", runId, result })
+      return result
+    }
+
     if (!overallFailed && endNodeId && !(endNodeId in nodeOutputs)) {
       const endResult = nodeResults[endNodeId]
       if (!endResult || endResult.status === "skipped") {
         overallFailed = true
         const errorMsg = `工作流结束节点「${endNode!.name}」未被执行（当前分支路径未连接到结束节点）`
         logger.warn("end node skipped — treating as failure", { runId, workflowId: def.id, endNodeId, durationMs })
-        if (endResult) {
-          endResult.status = "failed"
-          endResult.error = errorMsg
-        } else {
-          nodeResults[endNodeId] = { nodeId: endNodeId, status: "failed", input: { variables: {} }, error: errorMsg }
-        }
+        if (endResult) { endResult.status = "failed"; endResult.error = errorMsg }
+        else { nodeResults[endNodeId] = { nodeId: endNodeId, status: "failed", input: { variables: {} }, error: errorMsg } }
         emit({ type: "node:failed", runId, nodeId: endNodeId, error: errorMsg, result: { ...nodeResults[endNodeId] } })
       }
     }
@@ -238,18 +371,25 @@ export class WorkflowEngine {
       output: endNodeId ? nodeOutputs[endNodeId] : undefined,
     }
     if (overallFailed) {
-      // Build a user-facing error that includes the first failing node's message
       const failedNode = Object.values(nodeResults).find((nr) => nr.status === "failed" && nr.error)
       const failedNodeName = failedNode ? def.nodes.find((n) => n.id === failedNode.nodeId)?.name : undefined
       const detailedError = failedNode?.error
         ? (failedNodeName ? `节点「${failedNodeName}」失败：${failedNode.error}` : failedNode.error)
         : "One or more nodes failed"
-      logger.error("workflow run failed", { runId, workflowId: def.id, durationMs, firstFailedNode: failedNode?.nodeId, error: detailedError })
+      logger.error("workflow run failed", {
+        runId,
+        workflowId: def.id,
+        durationMs,
+        triggerSource: triggerSource ?? "unknown",
+        firstFailedNode: failedNode?.nodeId,
+        ...stringDiagnostic(detailedError, "workflow"),
+      })
       emit({ type: "workflow:failed", runId, error: detailedError, result })
     } else {
       logger.info("workflow run completed", {
         runId, workflowId: def.id, durationMs,
-        ...(result.output !== undefined ? { outputPreview: truncate(result.output, 500) } : {}),
+        triggerSource: triggerSource ?? "unknown",
+        ...(result.output !== undefined ? { outputLength: result.output.length } : {}),
       })
       emit({ type: "workflow:completed", runId, result })
     }

@@ -3,7 +3,10 @@ import { readFile, writeFile } from "node:fs/promises"
 import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
+import { createMainLogger } from "../../services/log-store"
 import type { TaskSchedulerService } from "../../services/task-scheduler"
+
+const logger = createMainLogger("task-scheduler.ipc")
 
 const taskScopeSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("global") }),
@@ -35,6 +38,10 @@ const taskActionSchema = z.object({
 const taskStatusSchema = z.enum(["success", "failed", "timeout", "cancelled", "skipped"])
 const runStatusSchema = z.enum(["running", "success", "failed", "timeout", "cancelled", "skipped"])
 const runTriggerSchema = z.enum(["schedule", "manual", "missed_run"])
+const activeDaysSchema = z.array(z.number().int().min(0).max(6)).min(1)
+const activeRunSchema = z.object({
+  status: z.literal("running"),
+})
 const actionRunResultSchema = z.object({
   status: z.enum(["success", "failed", "timeout", "cancelled"]),
   summary: z.string().optional(),
@@ -58,6 +65,7 @@ const taskSchema = z.object({
   trigger: taskTriggerSchema,
   action: taskActionSchema,
   enabled: z.boolean(),
+  activeDays: activeDaysSchema,
   missedRunPolicy: z.enum(["skip", "run_once"]),
   overlapPolicy: z.literal("skip"),
   createdAt: z.string(),
@@ -65,6 +73,7 @@ const taskSchema = z.object({
   nextRunAt: z.string().optional(),
   lastRunAt: z.string().optional(),
   lastStatus: taskStatusSchema.optional(),
+  activeRun: activeRunSchema.optional(),
   runCount: z.number(),
 })
 
@@ -88,6 +97,7 @@ const createTaskInputSchema = z.object({
   trigger: taskTriggerSchema,
   action: taskActionSchema,
   enabled: z.boolean().optional(),
+  activeDays: activeDaysSchema.optional(),
   missedRunPolicy: z.enum(["skip", "run_once"]).optional(),
 })
 
@@ -99,6 +109,7 @@ const updateTaskPatchSchema = z.object({
   trigger: taskTriggerSchema.optional(),
   action: taskActionSchema.optional(),
   enabled: z.boolean().optional(),
+  activeDays: activeDaysSchema.optional(),
   missedRunPolicy: z.enum(["skip", "run_once"]).optional(),
 })
 
@@ -175,8 +186,21 @@ export const taskSchedulerIpcModule: IpcModule = {
       kind: "invoke",
       request: taskIdRequestSchema,
       response: runSchema.nullable(),
-      handler: async (ctx, request: TaskIdRequest) =>
-        ctx.resolve<TaskSchedulerService>("core.task-scheduler").runTaskNow(request.taskId),
+      handler: async (ctx, request: TaskIdRequest) => {
+        const startedAt = Date.now()
+        try {
+          return await ctx.resolve<TaskSchedulerService>("core.task-scheduler").runTaskNow(request.taskId)
+        } catch (rawError) {
+          logger.warn("Task scheduler manual run IPC failed.", {
+            boundary: "task-scheduler.ipc.run-task",
+            channel: "synapse:task-scheduler:tasks:run",
+            taskId: request.taskId,
+            durationMs: Date.now() - startedAt,
+            ...errorDiagnostic(rawError),
+          })
+          throw rawError
+        }
+      },
     },
     stopRun: {
       channel: "synapse:task-scheduler:runs:stop",
@@ -241,4 +265,15 @@ export const taskSchedulerIpcModule: IpcModule = {
     },
   },
   events: {},
+}
+
+function errorDiagnostic(rawError: unknown): Record<string, unknown> {
+  const message = rawError instanceof Error ? rawError.message : String(rawError)
+  const errorLike = rawError as { readonly code?: unknown } | null
+  const code = typeof errorLike?.code === "string" ? errorLike.code : undefined
+  return {
+    errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+    errorLength: message.length,
+    ...(code ? { errorCode: code } : {}),
+  }
 }

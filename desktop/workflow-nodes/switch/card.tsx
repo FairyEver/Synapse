@@ -1,23 +1,10 @@
 import { cn } from "@/lib/utils"
 import { switchNodeManifest } from "./manifest"
-import { AgentIcon, getAgentLabel } from "../agent-icon"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "./constants"
 import type { SwitchNodeConfig } from "./schema"
-import type { NodeRunResult } from "@/types/workflow"
 import { NodeProgressBar, useRunningTimer } from "@/modules/workflow/runner/node-progress-bar"
-
-type NodeStatus = NodeRunResult["status"]
-
-function statusClass(status?: NodeStatus): string {
-  switch (status) {
-    case "pending": return "border-dashed border-muted-foreground"
-    case "running": return "border-primary"
-    case "success": return "border-primary"
-    case "failed": return "border-destructive"
-    case "skipped": return "opacity-40 border-dashed"
-    default: return ""
-  }
-}
+import { useProviderLookup } from "../provider-lookup-context"
+import { statusClass, type NodeStatus } from "../node-status-utils"
 
 export function SwitchNodeCard({ config, name, selected, status, progressLabel, startedAt }: {
   config: SwitchNodeConfig; name?: string; selected?: boolean; status?: NodeStatus
@@ -25,6 +12,9 @@ export function SwitchNodeCard({ config, name, selected, status, progressLabel, 
 }) {
   const Icon = switchNodeManifest.icon
   const timer = useRunningTimer(startedAt, status === "running")
+  const { getProviderName, getModelName } = useProviderLookup()
+  const providerDisplay = config.providerId ? (getProviderName(config.providerId) ?? config.providerId) : undefined
+  const modelDisplay = config.providerId ? (getModelName(config.providerId, config.modelTier ?? "default") ?? config.modelTier ?? "default") : undefined
   const progressPadding = status === "running" ? 12 : 0
   const totalHeight = SWITCH_HEADER_H + config.branches.length * SWITCH_BRANCH_H + progressPadding
   return (
@@ -42,16 +32,19 @@ export function SwitchNodeCard({ config, name, selected, status, progressLabel, 
         </div>
         {status === "running" && progressLabel ? (
           <p className="text-[11px] text-muted-foreground truncate">{progressLabel}</p>
+        ) : config.providerId ? (
+          <div className="grid grid-cols-[3rem_minmax(0,1fr)] gap-1 text-[11px] text-muted-foreground">
+            <span>供应商</span>
+            <span className="truncate">{providerDisplay}</span>
+            <span>模型</span>
+            <span className="truncate flex items-center justify-between">
+              {modelDisplay}
+              <span className="ml-auto shrink-0 pl-2">{config.branches.length} 分支</span>
+            </span>
+          </div>
         ) : (
           <div className="flex items-center gap-1.5">
-            {config.agent ? (
-              <>
-                <AgentIcon agentId={config.agent} />
-                <span className="text-[11px] text-muted-foreground truncate">{getAgentLabel(config.agent)}</span>
-              </>
-            ) : (
-              <span className="text-[11px] text-muted-foreground">未选择 Agent</span>
-            )}
+            <span className="text-[11px] text-muted-foreground truncate">未选择供应商</span>
             <span className="text-[11px] text-muted-foreground ml-auto shrink-0">{config.branches.length} 分支</span>
           </div>
         )}

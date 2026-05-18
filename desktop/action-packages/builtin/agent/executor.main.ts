@@ -1,5 +1,6 @@
 import type { MainActionDefinition } from "../../../electron/action-runtime/action-registry"
 import type { AgentRuntimeService } from "../../../electron/services/agent-runtime/agent-runtime-service"
+import { sanitizeError } from "../../../electron/services/error-sanitize"
 import { agentActionManifest } from "./manifest"
 import type { AgentActionConfig } from "./schema"
 
@@ -25,6 +26,7 @@ export function createAgentAction(deps: {
       },
     }),
     async execute(input) {
+      const startMs = Date.now()
       const runtime = await deps.getAgentRuntime(input.config.projectId)
       if (!runtime) {
         return {
@@ -38,24 +40,64 @@ export function createAgentAction(deps: {
         ? input.previousOutputs.conversationId
         : undefined
 
-      const result = await runtime.sendScheduled({
-        projectId: input.config.projectId,
-        agentType: input.config.agentType,
-        mode: input.config.mode,
-        prompt: input.config.prompt,
-        sessionPolicy: input.config.sessionPolicy,
-        timeoutMs: (input.config.timeoutMins ?? 30) * 60_000,
-        lastConversationId,
-        abortSignal: input.context.abortSignal,
-      })
+      const currentConfigVersion = input.context.configVersion ?? 0
+      const previousConfigVersion = typeof input.previousOutputs?.configVersion === "number"
+        ? input.previousOutputs.configVersion
+        : undefined
+      const configChanged = previousConfigVersion !== undefined
+        && previousConfigVersion !== currentConfigVersion
 
-      return {
-        status: result.status === "success" ? "success" : "failed",
-        summary: result.summary,
-        error: result.error,
-        outputs: { conversationId: result.conversationId },
-        metrics: { durationMs: result.durationMs },
+      try {
+        const result = await runtime.sendScheduled({
+          projectId: input.config.projectId,
+          agentType: input.config.agentType,
+          mode: input.config.mode,
+          prompt: input.config.prompt,
+          sessionPolicy: input.config.sessionPolicy,
+          timeoutMs: scheduledTimeoutMs(input.config.timeoutMins),
+          lastConversationId: configChanged ? undefined : lastConversationId,
+          abortSignal: input.context.abortSignal,
+          providerId: input.config.providerId,
+          modelTier: input.config.modelTier,
+        })
+        const status = result.status === "error"
+          ? input.context.abortSignal.aborted ? "cancelled" : "failed"
+          : result.status
+
+        return {
+          status,
+          summary: result.summary,
+          error: persistableAgentError(status, result.error),
+          outputs: { conversationId: result.conversationId, configVersion: currentConfigVersion },
+          metrics: { durationMs: result.durationMs },
+        }
+      } catch (rawError) {
+        const message = rawError instanceof Error ? rawError.message : String(rawError)
+        const isProviderError = message.includes("Provider not found") || message.includes("not found")
+        return {
+          status: "failed",
+          error: isProviderError
+            ? "供应商已删除或不可用，请重新配置"
+            : `Agent runtime error (${message.length} chars)`,
+          metrics: { durationMs: Date.now() - startMs },
+        }
       }
     },
   }
+}
+
+function persistableAgentError(
+  status: "success" | "failed" | "timeout" | "cancelled",
+  error: string | undefined,
+): string | undefined {
+  if (!error) return undefined
+  if (status !== "failed") return error
+  const sanitized = sanitizeError(error)
+  const truncated = sanitized.length > 120 ? sanitized.slice(0, 120) + "…" : sanitized
+  return `Agent runtime error: ${truncated}`
+}
+
+function scheduledTimeoutMs(timeoutMins: number | null | undefined): number {
+  if (timeoutMins === null) return 0
+  return (timeoutMins ?? 30) * 60_000
 }

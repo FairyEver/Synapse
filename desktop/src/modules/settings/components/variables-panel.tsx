@@ -179,10 +179,10 @@ function VariablesPanel() {
       await updateRepository(activeRepository.uuid, {
         variables: nextVariables.length > 0 ? nextVariables : undefined,
       })
+      setDeletingVariable(null)
     } catch {
-      // best effort
+      setFormError("删除失败，请重试。")
     }
-    setDeletingVariable(null)
   }, [activeRepository, deletingVariable, updateRepository, variables])
 
   if (!activeRepository) {
@@ -232,7 +232,7 @@ function VariablesPanel() {
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
-          在内容中使用 <code className="rounded bg-muted px-1 py-0.5 font-mono text-[11px]">{"${{ NAME }}"}</code> 占位符，安装时自动替换。
+          在内容中使用 <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{"${{ NAME }}"}</code> 占位符，安装时自动替换。
         </p>
         <Button variant="outline" size="sm" className="shrink-0" onClick={handleAdd}>
           <Plus className="size-3.5" />
@@ -247,11 +247,16 @@ function VariablesPanel() {
               key={variable.name}
               variable={variable}
               onEdit={handleEdit}
-              onDelete={setDeletingVariable}
+              onDelete={(nextVariable) => {
+                setFormError(null)
+                setDeletingVariable(nextVariable)
+              }}
             />
           ))}
         </div>
-      ) : null}
+      ) : (
+        <p className="py-6 text-center text-sm text-muted-foreground">还没有变量</p>
+      )}
 
       <Dialog open={isAddOpen} onOpenChange={setIsAddOpen}>
         <FormDialog
@@ -296,6 +301,7 @@ function VariablesPanel() {
             <AlertDialogDescription>
               确定删除变量 <span className="font-mono">{deletingVariable?.name}</span> 吗？
             </AlertDialogDescription>
+            {formError ? <p className="text-sm text-destructive">{formError}</p> : null}
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>

@@ -32,7 +32,7 @@ import { workflowIpcModule } from "../modules/workflow/ipc"
  */
 export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   const registry = new IpcRegistryImpl({
-    install: createElectronTransportInstall(),
+    install: createElectronTransportInstall({ logger: ctx.logger?.child("ipc") }),
   })
 
   // Register migrated IpcModules (Phase 0.3)

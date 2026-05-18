@@ -593,6 +593,9 @@ class ContentWriteService {
         path.join(tempDirectoryPath, HISTORY_DIRECTORY_NAME, historyDirname, CONTENT_ATTACHMENTS_FILE_NAME),
         createAttachmentsRecord(attachmentsResult.attachments),
       )
+      if (payload.iconImageBytes) {
+        await writeIconImageFile(tempDirectoryPath, payload.iconImageBytes)
+      }
 
       await rename(tempDirectoryPath, targetDirectoryPath)
     } catch (error) {
@@ -600,12 +603,9 @@ class ContentWriteService {
       throw error
     }
 
-    const extraGitPaths: string[] = []
-
-    if (payload.iconImageBytes) {
-      const iconPath = await writeIconImageFile(targetDirectoryPath, payload.iconImageBytes)
-      extraGitPaths.push(iconPath)
-    }
+    const extraGitPaths = payload.iconImageBytes
+      ? [path.join(targetDirectoryPath, ICON_IMAGE_FILE_NAME)]
+      : []
 
     logger.info("Created new content snapshot.", {
       contentId,
@@ -647,13 +647,36 @@ class ContentWriteService {
     const contentDirectoryPath = resolveContentDirectoryPath(context.repository, contentType, contentId)
     const snapshot = createSnapshotRecord(payload, identity, modifiedAt, deleted)
     const attachmentsResult = await resolveAttachmentRecords(context, contentType, payload, baseline)
-    const historyPath = await stageHistoryDirectory(
-      contentDirectoryPath,
-      historyDirname,
-      snapshot,
-      payload.content.trim(),
-      attachmentsResult.attachments,
-    )
+    const stagedIconPath = payload.iconImageBytes
+      ? path.join(contentDirectoryPath, `.synapse-icon-${randomUUID()}.tmp`)
+      : null
+
+    try {
+      if (payload.iconImageBytes && stagedIconPath) {
+        await writeFile(stagedIconPath, payload.iconImageBytes)
+      }
+    } catch (error) {
+      if (stagedIconPath) await rm(stagedIconPath, { force: true })
+      throw error
+    }
+
+    let historyPath: string | null = null
+    try {
+      historyPath = await stageHistoryDirectory(
+        contentDirectoryPath,
+        historyDirname,
+        snapshot,
+        payload.content.trim(),
+        attachmentsResult.attachments,
+      )
+      if (stagedIconPath) {
+        await rename(stagedIconPath, path.join(contentDirectoryPath, ICON_IMAGE_FILE_NAME))
+      }
+    } catch (error) {
+      if (historyPath) await rm(historyPath, { recursive: true, force: true })
+      if (stagedIconPath) await rm(stagedIconPath, { force: true })
+      throw error
+    }
 
     logger.info("Wrote content history snapshot.", {
       contentId,
@@ -662,12 +685,9 @@ class ContentWriteService {
       repositoryUuid: context.repository.uuid,
     })
 
-    const extraGitPaths: string[] = []
-
-    if (payload.iconImageBytes) {
-      const iconPath = await writeIconImageFile(contentDirectoryPath, payload.iconImageBytes)
-      extraGitPaths.push(iconPath)
-    }
+    const extraGitPaths = payload.iconImageBytes
+      ? [path.join(contentDirectoryPath, ICON_IMAGE_FILE_NAME)]
+      : []
 
     return {
       gitPaths: [historyPath, ...attachmentsResult.createdPaths, ...extraGitPaths],

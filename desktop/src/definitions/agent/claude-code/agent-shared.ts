@@ -19,7 +19,7 @@ export const agentBaseDefinition = {
   ],
   commands: [
     { name: "model", description: "Switch model" },
-    { name: "mode", description: "Switch mode" },
+    { name: "mode", description: "List modes" },
     { name: "new", description: "Start a new session" },
     { name: "status", description: "Show agent status" },
     { name: "show", description: "Show a workspace reference" },
@@ -35,7 +35,7 @@ export const agentBaseDefinition = {
   },
   displayProfile: {
     agentLabel: "Claude Code",
-    thinkingDefaultCollapsed: true,
+    thinkingDefaultCollapsed: false,
     toolDefaultCollapsed: "auto",
     toolPreviewLines: 6,
     toolPreviewChars: 1200,

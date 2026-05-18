@@ -1,6 +1,9 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
+import { createRendererLogger } from "@/app-shell/logging"
 import type { SynapseEditorId } from "@/types/editor"
 import type { InstallStatusMap } from "@/types/install-status"
+
+const logger = createRendererLogger("content.install-status")
 
 type InstallStatusContextValue = {
   statusMap: InstallStatusMap
@@ -15,7 +18,12 @@ function InstallStatusProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (!window.synapse) return
 
-    window.synapse.installStatus.getAll().then(setStatusMap)
+    window.synapse.installStatus.getAll().then(setStatusMap).catch((error) => {
+      logger.error("Failed to load install status.", {
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: (error instanceof Error ? error.message : String(error)).length,
+      })
+    })
 
     const unsubscribe = window.synapse.installStatus.onChanged((event) => {
       setStatusMap((prev) => {

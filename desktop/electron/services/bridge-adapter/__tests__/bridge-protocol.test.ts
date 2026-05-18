@@ -76,4 +76,24 @@ describe("bridge protocol schema", () => {
       nested: { ok: true },
     })
   })
+
+  it("redacts token-like metadata string values", () => {
+    const sanitized = sanitizeBridgeMetadata({
+      note: "authorization=Bearer sk-live token:sk-token cookie=session-id",
+      nested: {
+        detail: "apiKey=sk-api credential:super-secret",
+      },
+    })
+
+    expect(sanitized).toEqual({
+      note: "authorization=[redacted] token:[redacted] cookie=[redacted]",
+      nested: {
+        detail: "apiKey=[redacted] credential:[redacted]",
+      },
+    })
+    expect(JSON.stringify(sanitized)).not.toContain("sk-live")
+    expect(JSON.stringify(sanitized)).not.toContain("sk-token")
+    expect(JSON.stringify(sanitized)).not.toContain("session-id")
+    expect(JSON.stringify(sanitized)).not.toContain("super-secret")
+  })
 })

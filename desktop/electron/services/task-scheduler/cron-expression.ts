@@ -4,6 +4,8 @@ export interface ParsedCronExpression {
   readonly day: ReadonlySet<number>
   readonly month: ReadonlySet<number>
   readonly weekday: ReadonlySet<number>
+  readonly dayWildcard: boolean
+  readonly weekdayWildcard: boolean
 }
 
 interface FieldSpec {
@@ -58,12 +60,16 @@ export function parseCronExpression(expr: string): ParsedCronExpression {
   if (parts.length !== 5) {
     throw new Error("cron expression must contain 5 fields")
   }
+  const day = parseField(parts[2] ?? "", FIELD_SPECS[2])
+  const weekday = parseField(parts[4] ?? "", FIELD_SPECS[4])
   return {
     minute: parseField(parts[0] ?? "", FIELD_SPECS[0]),
     hour: parseField(parts[1] ?? "", FIELD_SPECS[1]),
-    day: parseField(parts[2] ?? "", FIELD_SPECS[2]),
+    day,
     month: parseField(parts[3] ?? "", FIELD_SPECS[3]),
-    weekday: parseField(parts[4] ?? "", FIELD_SPECS[4]),
+    weekday,
+    dayWildcard: isFullField(day, FIELD_SPECS[2]),
+    weekdayWildcard: isFullField(weekday, FIELD_SPECS[4]),
   }
 }
 
@@ -96,9 +102,8 @@ function nextCronRunLocal(parsed: ParsedCronExpression, from: Date): Date {
 function matchesLocalCron(parsed: ParsedCronExpression, date: Date): boolean {
   return parsed.minute.has(date.getMinutes())
     && parsed.hour.has(date.getHours())
-    && parsed.day.has(date.getDate())
     && parsed.month.has(date.getMonth() + 1)
-    && parsed.weekday.has(date.getDay())
+    && matchesDayFields(parsed, date.getDate(), date.getDay())
 }
 
 interface WallClock {
@@ -187,9 +192,8 @@ function nextCronRunInTimezone(
     if (
       parsed.minute.has(wc.minute)
       && parsed.hour.has(wc.hour)
-      && parsed.day.has(wc.day)
       && parsed.month.has(wc.month)
-      && parsed.weekday.has(dow)
+      && matchesDayFields(parsed, wc.day, dow)
     ) {
       return candidate
     }
@@ -219,6 +223,13 @@ function normalizeWallClock(wc: WallClock): void {
   }
 }
 
+function matchesDayFields(parsed: ParsedCronExpression, day: number, weekday: number): boolean {
+  const dayMatches = parsed.day.has(day)
+  const weekdayMatches = parsed.weekday.has(weekday)
+  if (!parsed.dayWildcard && !parsed.weekdayWildcard) return dayMatches || weekdayMatches
+  return dayMatches && weekdayMatches
+}
+
 function parseField(field: string, spec: FieldSpec): ReadonlySet<number> {
   const values = new Set<number>()
   for (const segment of field.split(",")) {
@@ -228,6 +239,13 @@ function parseField(field: string, spec: FieldSpec): ReadonlySet<number> {
   }
   if (values.size === 0) throw new Error(`${spec.name} field is empty`)
   return values
+}
+
+function isFullField(values: ReadonlySet<number>, spec: FieldSpec): boolean {
+  for (let value = spec.min; value <= spec.max; value += 1) {
+    if (!values.has(spec.normalize?.(value) ?? value)) return false
+  }
+  return true
 }
 
 function addSegment(values: Set<number>, segment: string, spec: FieldSpec): void {

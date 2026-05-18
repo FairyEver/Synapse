@@ -1,23 +1,36 @@
-export type SynapseAgentEvent =
+export interface SynapseAgentEventBase {
+  readonly sdkSessionId?: string
+  readonly agentSessionId?: string
+  readonly threadId?: string
+  readonly timestamp?: string
+  readonly payload?: Record<string, unknown>
+}
+
+export const SYNAPSE_AGENT_PERMISSION_MODES = [
+  "default",
+  "acceptEdits",
+  "plan",
+  "auto",
+  "dontAsk",
+  "bypassPermissions",
+] as const
+
+export type SynapseAgentPermissionMode = typeof SYNAPSE_AGENT_PERMISSION_MODES[number]
+
+export type SynapseAgentEvent = SynapseAgentEventBase & (
   | {
       type: "text"
       content: string
-      agentSessionId?: string
-      threadId?: string
     }
   | {
       type: "thinking"
       content: string
-      agentSessionId?: string
-      threadId?: string
     }
   | {
       type: "toolUse"
       toolName: string
       toolInput?: string
       toolInputRaw?: Record<string, unknown>
-      agentSessionId?: string
-      threadId?: string
     }
   | {
       type: "toolResult"
@@ -26,8 +39,6 @@ export type SynapseAgentEvent =
       status?: string
       exitCode?: number
       success?: boolean
-      agentSessionId?: string
-      threadId?: string
     }
   | {
       type: "permissionRequest"
@@ -35,8 +46,6 @@ export type SynapseAgentEvent =
       toolName: string
       toolInput?: string
       toolInputRaw?: Record<string, unknown>
-      agentSessionId?: string
-      threadId?: string
     }
   | {
       type: "result"
@@ -48,16 +57,52 @@ export type SynapseAgentEvent =
         contextRemainingPercent?: number
         workDir?: string
         cancelled?: boolean
+        usage?: Record<string, unknown>
+        costUsd?: number
       }
-      agentSessionId?: string
-      threadId?: string
+      usage?: Record<string, unknown>
+      costUsd?: number
     }
   | {
       type: "error"
       message: string
-      agentSessionId?: string
-      threadId?: string
     }
+  | {
+      type: "assistant"
+      contentBlocks?: unknown[]
+      content?: string
+      message?: Record<string, unknown>
+    }
+  | {
+      type: "stream"
+      blockIndex?: number
+      deltaType?: string
+      text?: string
+      thinking?: string
+      partialJson?: string
+      event?: Record<string, unknown>
+    }
+  | {
+      type: "sessionInit"
+      tools?: string[]
+      mcpServers?: Record<string, unknown>[]
+      model?: string
+    }
+  | {
+      type: "status"
+      status?: string | null
+      message?: string
+    }
+  | {
+      type: "compactBoundary"
+    }
+  | {
+      type: "sdkEvent"
+      sdkType: string
+      sdkSubtype?: string
+      payload: Record<string, unknown>
+    }
+)
 
 export type SynapseAgentPhaseValue =
   | "submitted"
@@ -83,14 +128,26 @@ export type SynapseAgentTimelineKind =
   | "error"
   | "result"
   | "phase"
+  | "sdkEvent"
 
 interface SynapseAgentTimelineBase {
   readonly id: string
   readonly kind: SynapseAgentTimelineKind
   readonly timestamp: string
   readonly agentType?: string
+  readonly sdkSessionId?: string
   readonly agentSessionId?: string
   readonly threadId?: string
+}
+
+export interface SynapseAgentResultMetadata {
+  readonly model?: string
+  readonly effort?: string
+  readonly contextRemainingPercent?: number
+  readonly workDir?: string
+  readonly cancelled?: boolean
+  readonly usage?: Record<string, unknown>
+  readonly costUsd?: number
 }
 
 export interface SynapseAgentMessageTimelineItem extends SynapseAgentTimelineBase {
@@ -98,6 +155,7 @@ export interface SynapseAgentMessageTimelineItem extends SynapseAgentTimelineBas
   readonly role: "user" | "assistant" | "system" | "tool"
   readonly content: string
   readonly legacy?: boolean
+  readonly metadata?: SynapseAgentResultMetadata
 }
 
 export interface SynapseAgentThinkingTimelineItem extends SynapseAgentTimelineBase {
@@ -137,13 +195,7 @@ export interface SynapseAgentErrorTimelineItem extends SynapseAgentTimelineBase 
 export interface SynapseAgentResultTimelineItem extends SynapseAgentTimelineBase {
   readonly kind: "result"
   readonly content: string
-  readonly metadata?: {
-    readonly model?: string
-    readonly effort?: string
-    readonly contextRemainingPercent?: number
-    readonly workDir?: string
-    readonly cancelled?: boolean
-  }
+  readonly metadata?: SynapseAgentResultMetadata
 }
 
 export type SynapseAgentCancelTurnResult = {
@@ -160,6 +212,14 @@ export interface SynapseAgentPhaseTimelineItem extends SynapseAgentTimelineBase 
   readonly errorMessage?: string
 }
 
+export interface SynapseAgentSdkEventTimelineItem extends SynapseAgentTimelineBase {
+  readonly kind: "sdkEvent"
+  readonly sdkType: string
+  readonly sdkSubtype?: string
+  readonly label: string
+  readonly summary?: string
+}
+
 export type SynapseAgentTimelineItem =
   | SynapseAgentMessageTimelineItem
   | SynapseAgentThinkingTimelineItem
@@ -169,13 +229,7 @@ export type SynapseAgentTimelineItem =
   | SynapseAgentErrorTimelineItem
   | SynapseAgentResultTimelineItem
   | SynapseAgentPhaseTimelineItem
-
-export interface SynapseAgentAvailability {
-  readonly agentType: string
-  readonly label: string
-  readonly available: boolean
-  readonly binaryPath?: string
-}
+  | SynapseAgentSdkEventTimelineItem
 
 export type SynapseAgentToolCollapseDefault = "expanded" | "collapsed" | "auto"
 
@@ -209,11 +263,13 @@ export interface SynapseAgentSessionSummary {
   readonly projectId: string
   readonly id: string
   readonly sessionKey: string
+  readonly mode?: SynapseAgentPermissionMode
   readonly name?: string
   readonly platform?: string
   readonly sourceLabel?: string
   readonly agentType?: string
   readonly agentSessionId?: string
+  readonly providerId?: string
   readonly active: boolean
   readonly historyCount: number
   readonly createdAt: string
@@ -235,13 +291,14 @@ export interface SynapseAgentProviderSummary {
   readonly id: string
   readonly display?: string
   readonly active: boolean
+  readonly readonly?: boolean
   readonly model?: string
   readonly baseUrl?: string
   readonly scope: "global" | "project"
 }
 
 export interface SynapseAgentProviderState {
-  readonly projectId: string
+  readonly projectId?: string
   readonly agentType: string
   readonly providers: SynapseAgentProviderSummary[]
   readonly activeProviderId?: string

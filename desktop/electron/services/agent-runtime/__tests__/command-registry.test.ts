@@ -1,17 +1,31 @@
+import fs from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+
 import type {
   AgentCommandEntryV1,
   DataChangeEvent,
   DataChangeListener,
   DataNamespace,
 } from "../../../runtime/data-repo"
-import { describe, expect, it } from "vitest"
+import { createRecordingLogger } from "../../../runtime/lib/test-helpers"
+import { describe, expect, it, vi } from "vitest"
 
 import {
+  BUILTIN_COMMANDS,
   CustomCommandRegistry,
   expandCustomCommandPrompt,
 } from "../command-registry"
 
 describe("CustomCommandRegistry", () => {
+  it("publishes /mode as a list-only command", () => {
+    expect(BUILTIN_COMMANDS.find((command) => command.name === "mode")).toEqual(
+      expect.objectContaining({
+        description: "List modes",
+      }),
+    )
+  })
+
   it("stores prompt and exec commands", async () => {
     const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
     const registry = new CustomCommandRegistry({
@@ -41,6 +55,178 @@ describe("CustomCommandRegistry", () => {
       .toBe("A one two three one two three")
     expect(expandCustomCommandPrompt({ prompt: "Review" }, ["src/app.ts"]))
       .toBe("Review\n\nsrc/app.ts")
+  })
+
+  it("skips unreadable file commands and logs a diagnostic", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-command-"))
+    const commandDir = path.join(workspace, ".agents", "commands")
+    await fs.mkdir(commandDir, { recursive: true })
+    const goodPath = path.join(commandDir, "good.md")
+    const badPath = path.join(commandDir, "bad.md")
+    await fs.writeFile(goodPath, "Good command")
+    await fs.writeFile(badPath, "Bad command")
+
+    const logger = createRecordingLogger()
+    const originalReadFile = fs.readFile.bind(fs)
+    const readFileSpy = vi.spyOn(fs, "readFile").mockImplementation(async (filePath, options) => {
+      if (filePath.toString() === badPath) {
+        throw new Error("EACCES: permission denied, open '/secret/bad.md'")
+      }
+      return originalReadFile(filePath, options)
+    })
+
+    try {
+      const registry = new CustomCommandRegistry({
+        projectId: "project-1",
+        commands: new MemoryNamespace<AgentCommandEntryV1>("agent.commands"),
+        workspacePath: workspace,
+        now: fixedNow,
+        logger,
+      })
+
+      const commands = await registry.list()
+
+      expect(commands.map((command) => command.name)).toContain("good")
+      expect(commands.map((command) => command.name)).not.toContain("bad")
+      expect(logger.records).toContainEqual(expect.objectContaining({
+        level: "warn",
+        message: "Agent command file skipped.",
+        meta: expect.objectContaining({
+          boundary: "agent.command.file-read",
+          projectId: "project-1",
+          commandName: "bad",
+          fileName: "bad.md",
+          error: "EACCES: permission denied, open '[path redacted]'",
+          errorName: "Error",
+          errorLength: "EACCES: permission denied, open '/secret/bad.md'".length,
+        }),
+      }))
+    } finally {
+      readFileSpy.mockRestore()
+      await fs.rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it("logs command directory discovery failures with a runtime boundary", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-command-"))
+    const commandDir = path.join(workspace, ".agents", "commands")
+    await fs.mkdir(commandDir, { recursive: true })
+
+    const logger = createRecordingLogger()
+    const originalReadDir = fs.readdir.bind(fs)
+    const readDirSpy = vi.spyOn(fs, "readdir").mockImplementation(async (dir, options) => {
+      if (dir.toString() === commandDir) {
+        throw new Error("EACCES: permission denied, scandir '/secret/commands'")
+      }
+      return originalReadDir(dir, options)
+    })
+
+    try {
+      const registry = new CustomCommandRegistry({
+        projectId: "project-1",
+        commands: new MemoryNamespace<AgentCommandEntryV1>("agent.commands"),
+        workspacePath: workspace,
+        now: fixedNow,
+        logger,
+      })
+
+      await registry.list()
+
+      expect(logger.records).toContainEqual(expect.objectContaining({
+        level: "warn",
+        message: "Agent command directory skipped.",
+        meta: expect.objectContaining({
+          boundary: "agent.command.directory-discovery",
+          projectId: "project-1",
+          directoryName: "commands",
+          rootName: "commands",
+          error: "EACCES: permission denied, scandir '[path redacted]'",
+          errorName: "Error",
+          errorLength: "EACCES: permission denied, scandir '/secret/commands'".length,
+        }),
+      }))
+    } finally {
+      readDirSpy.mockRestore()
+      await fs.rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it("redacts unquoted absolute paths in file command diagnostics", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-command-"))
+    const commandDir = path.join(workspace, ".agents", "commands")
+    await fs.mkdir(commandDir, { recursive: true })
+    const badPath = path.join(commandDir, "bad.md")
+    await fs.writeFile(badPath, "Bad command")
+
+    const logger = createRecordingLogger()
+    const readFileSpy = vi.spyOn(fs, "readFile").mockRejectedValue(
+      new Error("EACCES: permission denied, open /Users/example/.claude/commands/bad.md"),
+    )
+
+    try {
+      const registry = new CustomCommandRegistry({
+        projectId: "project-1",
+        commands: new MemoryNamespace<AgentCommandEntryV1>("agent.commands"),
+        workspacePath: workspace,
+        now: fixedNow,
+        logger,
+      })
+
+      await registry.list()
+
+      expect(logger.records).toContainEqual(expect.objectContaining({
+        level: "warn",
+        message: "Agent command file skipped.",
+        meta: expect.objectContaining({
+          commandName: "bad",
+          error: "EACCES: permission denied, open [path redacted]",
+        }),
+      }))
+      expect(JSON.stringify(logger.records)).not.toContain("/Users/example")
+    } finally {
+      readFileSpy.mockRestore()
+      await fs.rm(workspace, { recursive: true, force: true })
+    }
+  })
+
+  it("redacts secret-like values in file command diagnostics", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-command-"))
+    const commandDir = path.join(workspace, ".agents", "commands")
+    await fs.mkdir(commandDir, { recursive: true })
+    const badPath = path.join(commandDir, "bad.md")
+    await fs.writeFile(badPath, "Bad command")
+
+    const logger = createRecordingLogger()
+    const readFileSpy = vi.spyOn(fs, "readFile").mockRejectedValue(
+      new Error("EACCES: token=sk-secret authorization=Bearer-secret cookie=session-secret"),
+    )
+
+    try {
+      const registry = new CustomCommandRegistry({
+        projectId: "project-1",
+        commands: new MemoryNamespace<AgentCommandEntryV1>("agent.commands"),
+        workspacePath: workspace,
+        now: fixedNow,
+        logger,
+      })
+
+      await registry.list()
+
+      expect(logger.records).toContainEqual(expect.objectContaining({
+        level: "warn",
+        message: "Agent command file skipped.",
+        meta: expect.objectContaining({
+          commandName: "bad",
+          error: "EACCES: token=[redacted] authorization=[redacted] cookie=[redacted]",
+        }),
+      }))
+      expect(JSON.stringify(logger.records)).not.toContain("sk-secret")
+      expect(JSON.stringify(logger.records)).not.toContain("Bearer-secret")
+      expect(JSON.stringify(logger.records)).not.toContain("session-secret")
+    } finally {
+      readFileSpy.mockRestore()
+      await fs.rm(workspace, { recursive: true, force: true })
+    }
   })
 })
 

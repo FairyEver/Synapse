@@ -1,13 +1,17 @@
-import { useEffect, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type FormEvent, type ReactNode } from "react"
+import { ChevronDown } from "lucide-react"
 
 import { FormDialog } from "@/components/form-dialog"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
+import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
   ModuleSidebar,
   ModuleSidebarItem,
   ModuleSidebarList,
 } from "@/components/module-sidebar"
+import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
+import { useProviderModelLabel } from "@/lib/provider-model"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import {
@@ -33,17 +37,25 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Switch } from "@/components/ui/switch"
+import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { ScheduledTaskCreateInput, ScheduledTaskUpdateInput } from "@/types/task-scheduler"
+import { AgentPermissionModeMenu } from "@/modules/agent/components/permission-mode-menu"
+import { permissionModeLabels } from "@/modules/agent/permission-mode-options"
+import type { SynapseAgentPermissionMode } from "@/types/agent"
+import type { AgentActionConfig } from "../../../../action-packages/builtin/agent/schema"
 import type { TaskFormDialogState, TaskFormState } from "../types"
 import {
   buildTaskCreateInput,
   buildTaskUpdateInput,
+  createDefaultAgentActionConfig,
   createTaskFormState,
 } from "../utils"
 import { CronInput } from "./cron-input"
+import { ActiveDaysInput } from "./active-days-input"
 
 type TaskFormDialogProps = {
   open: boolean
@@ -77,6 +89,7 @@ function TaskFormDialog({
   onCreate,
   onUpdate,
 }: TaskFormDialogProps) {
+  const { config: appConfig } = useAppConfig()
   const defaultProjectId = projects[0]?.id ?? ""
   const [form, setForm] = useState<TaskFormState>(() =>
     createTaskFormState(state.task, defaultProjectId, platform),
@@ -102,10 +115,14 @@ function TaskFormDialog({
   }
 
   const updateActionType = (actionType: string) => {
+    const baseConfig = rendererActionRegistry.getDefaultConfig(actionType)
+    const actionConfig = actionType === "builtin.agent"
+      ? createDefaultAgentActionConfig(appConfig.agent)
+      : baseConfig
     setForm((current) => ({
       ...current,
       actionType,
-      actionConfig: rendererActionRegistry.getDefaultConfig(actionType),
+      actionConfig,
     }))
   }
 
@@ -142,9 +159,22 @@ function TaskFormDialog({
       } else {
         await onCreate(buildTaskCreateInput(form))
       }
+      track({
+        component: "task-scheduler",
+        name: "task-form-submit",
+        action: "submit",
+        metadata: taskFormSubmitMetadata(state, form),
+      })
       onOpenChange(false)
     } catch (submitError) {
-      setError(submitError instanceof Error ? submitError.message : "保存失败")
+      logger.error("Failed to save scheduled task.", {
+        boundary: "task-scheduler.form.submit",
+        action: state.mode === "edit" ? "update" : "create",
+        actionType: form.actionType,
+        ...(state.mode === "edit" ? { taskId: state.task.id } : {}),
+        ...errorDiagnostic(submitError),
+      })
+      setError("保存任务失败。")
     }
   }
 
@@ -166,7 +196,11 @@ function TaskFormDialog({
       updateField("cwd", selectedPath)
       setError(null)
     } catch (chooseError) {
-      logger.error("Failed to choose task working directory.", { error: chooseError })
+      logger.error("Failed to choose task working directory.", {
+        boundary: "task-scheduler.form.cwd-picker",
+        action: "chooseDirectory",
+        ...errorDiagnostic(chooseError),
+      })
       setError("打开目录选择器失败。")
     }
   }
@@ -326,6 +360,13 @@ function TaskFormDialog({
                     </TaskField>
                   ) : null}
                 </div>
+                <TaskField label="活跃日" htmlFor="task-form-active-days">
+                  <ActiveDaysInput
+                    value={form.activeDays}
+                    onChange={(days) => updateField("activeDays", days)}
+                    error={form.activeDays.length === 0 ? "请至少选择一个活跃日" : undefined}
+                  />
+                </TaskField>
               </TaskFormSection>
 
               <TaskFormSection
@@ -333,55 +374,39 @@ function TaskFormDialog({
                 sectionRef={setSectionRef("task-form-section-action")}
                 title="执行内容"
               >
-                <div className="grid gap-3 md:grid-cols-2">
-                  <TaskField label="动作" htmlFor="task-form-action-type">
-                    <Select
-                      value={form.actionType}
-                      onValueChange={updateActionType}
-                    >
-                      <SelectTrigger id="task-form-action-type" className="w-full">
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectGroup>
-                          {rendererActionRegistry.list().map((action) => (
-                            <SelectItem key={action.manifest.id} value={action.manifest.id}>
-                              {action.manifest.title}
-                            </SelectItem>
-                          ))}
-                        </SelectGroup>
-                      </SelectContent>
-                    </Select>
-                  </TaskField>
-                  {form.actionType === "builtin.agent" ? (
-                    <TaskField label="项目" htmlFor="task-form-agent-project">
-                      <Select
-                        value={(form.actionConfig as Record<string, unknown>).projectId as string ?? ""}
-                        onValueChange={(projectId) => {
-                          const project = projects.find((p) => p.id === projectId)
-                          const currentConfig = form.actionConfig as Record<string, unknown>
-                          const patch: Record<string, unknown> = { ...currentConfig, projectId }
-                          if (project?.defaultAgentId) {
-                            patch.agentType = project.defaultAgentId
-                          }
-                          updateField("actionConfig", patch)
-                        }}
+                <TaskField label="动作" htmlFor="task-form-action-type-builtin.command">
+                  <ToggleGroup
+                    aria-label="动作"
+                    className="w-full"
+                    data-track="task-form-action-type"
+                    type="single"
+                    value={form.actionType}
+                    variant="outline"
+                    onValueChange={(value) => {
+                      if (value) updateActionType(value)
+                    }}
+                  >
+                    {rendererActionRegistry.list().map((action) => (
+                      <ToggleGroupItem
+                        key={action.manifest.id}
+                        id={`task-form-action-type-${action.manifest.id}`}
+                        className="flex-1"
+                        value={action.manifest.id}
                       >
-                        <SelectTrigger id="task-form-agent-project" className="w-full">
-                          <SelectValue placeholder="选择项目" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectGroup>
-                            {projects.map((project) => (
-                              <SelectItem key={project.id} value={project.id}>
-                                {project.name}
-                              </SelectItem>
-                            ))}
-                          </SelectGroup>
-                        </SelectContent>
-                      </Select>
-                    </TaskField>
-                  ) : (
+                        {action.manifest.title}
+                      </ToggleGroupItem>
+                    ))}
+                  </ToggleGroup>
+                </TaskField>
+
+                {form.actionType === "builtin.agent" ? (
+                  <AgentActionFields
+                    config={form.actionConfig as AgentActionConfig}
+                    projects={projects}
+                    onConfigChange={(actionConfig) => updateField("actionConfig", actionConfig)}
+                  />
+                ) : (
+                  <>
                     <TaskField label="工作目录" htmlFor="task-form-cwd">
                       <InputGroup>
                         <InputGroupInput
@@ -400,15 +425,14 @@ function TaskFormDialog({
                         </InputGroupAddon>
                       </InputGroup>
                     </TaskField>
-                  )}
-                </div>
-
-                {ActionConfigForm ? (
-                  <ActionConfigForm
-                    value={form.actionConfig}
-                    onChange={(actionConfig) => updateField("actionConfig", actionConfig)}
-                  />
-                ) : null}
+                    {ActionConfigForm ? (
+                      <ActionConfigForm
+                        value={form.actionConfig}
+                        onChange={(actionConfig) => updateField("actionConfig", actionConfig)}
+                      />
+                    ) : null}
+                  </>
+                )}
               </TaskFormSection>
 
               <TaskFormSection
@@ -513,6 +537,151 @@ function TaskField({
   )
 }
 
+function AgentActionFields({
+  config,
+  projects,
+  onConfigChange,
+}: {
+  config: AgentActionConfig
+  projects: readonly SynapseProjectConfig[]
+  onConfigChange: (config: AgentActionConfig) => void
+}) {
+  const [providerDialogOpen, setProviderDialogOpen] = useState(false)
+  const providerSelection = useMemo(
+    () => config.providerId
+      ? { providerId: config.providerId, modelTier: config.modelTier, providerName: config.providerName, modelName: config.modelName }
+      : null,
+    [config.providerId, config.modelTier, config.providerName, config.modelName],
+  )
+  const resolvedProviderLabel = useProviderModelLabel(providerSelection)
+
+  return (
+    <>
+      <div className="grid gap-3 md:grid-cols-2">
+        <TaskField label="项目" htmlFor="task-form-agent-project">
+          <Select
+            value={config.projectId ?? ""}
+            onValueChange={(projectId) => {
+              onConfigChange({ ...config, agentType: "claude-code", projectId })
+            }}
+          >
+            <SelectTrigger id="task-form-agent-project" className="w-full">
+              <SelectValue placeholder="选择项目" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectGroup>
+                {projects.map((project) => (
+                  <SelectItem key={project.id} value={project.id}>
+                    {project.name}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
+        </TaskField>
+
+        <TaskField label="权限模式" htmlFor="task-action-agent-mode">
+          <AgentPermissionModeMenu
+            selectedMode={config.mode}
+            contentClassName="w-56"
+            onSelect={(mode: SynapseAgentPermissionMode) => {
+              onConfigChange({ ...config, agentType: "claude-code", mode })
+            }}
+            trigger={(
+              <Button
+                id="task-action-agent-mode"
+                type="button"
+                variant="outline"
+                className="w-full justify-between"
+                aria-label="权限模式"
+              >
+                <span className="truncate">{permissionModeLabels[config.mode]}</span>
+                <ChevronDown className="size-4 text-muted-foreground" />
+              </Button>
+            )}
+          />
+        </TaskField>
+      </div>
+
+      <TaskField label="供应商 + 模型" htmlFor="task-action-agent-provider">
+        <Button
+          id="task-action-agent-provider"
+          type="button"
+          variant="outline"
+          className="w-full justify-between"
+          onClick={() => setProviderDialogOpen(true)}
+        >
+          <span className="truncate">
+            {resolvedProviderLabel || "选择供应商 + 模型"}
+          </span>
+          <ChevronDown className="size-4 text-muted-foreground" />
+        </Button>
+        <ProviderModelSelectDialog
+          open={providerDialogOpen}
+          onOpenChange={setProviderDialogOpen}
+          defaultSelection={config.providerId ? { providerId: config.providerId, modelTier: config.modelTier } : undefined}
+          onSelect={(s) => onConfigChange({
+            ...config,
+            agentType: "claude-code",
+            providerId: s.providerId,
+            modelTier: s.modelTier,
+            providerName: s.providerName,
+            modelName: s.modelName,
+          })}
+        />
+      </TaskField>
+
+      <TaskField label="提示词" htmlFor="task-action-agent-prompt">
+        <Textarea
+          id="task-action-agent-prompt"
+          rows={5}
+          placeholder="输入要发送给 Agent 的提示词..."
+          value={config.prompt}
+          onChange={(e) => onConfigChange({ ...config, prompt: e.target.value })}
+        />
+      </TaskField>
+
+      <div className="grid gap-3 md:grid-cols-2">
+        <TaskField label="会话策略" htmlFor="task-action-agent-session-fresh">
+          <ToggleGroup
+            aria-label="Session policy"
+            className="w-full"
+            type="single"
+            value={config.sessionPolicy}
+            variant="outline"
+            onValueChange={(policy) => {
+              if (policy) onConfigChange({ ...config, sessionPolicy: policy as "fresh" | "resume" })
+            }}
+          >
+            <ToggleGroupItem id="task-action-agent-session-fresh" className="flex-1" value="fresh">
+              每次新建
+            </ToggleGroupItem>
+            <ToggleGroupItem id="task-action-agent-session-resume" className="flex-1" value="resume">
+              复用上次
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </TaskField>
+
+        <TaskField label="超时分钟" htmlFor="task-action-agent-timeout">
+          <Input
+            id="task-action-agent-timeout"
+            type="number"
+            min={1}
+            max={120}
+            value={config.timeoutMins ?? ""}
+            onChange={(e) =>
+              onConfigChange({
+                ...config,
+                timeoutMins: e.target.value ? Number(e.target.value) : null,
+              })
+            }
+          />
+        </TaskField>
+      </div>
+    </>
+  )
+}
+
 function ToggleField({
   checked,
   id,
@@ -534,6 +703,46 @@ function ToggleField({
       </div>
     </Field>
   )
+}
+
+function errorDiagnostic(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
+}
+
+function taskFormSubmitMetadata(
+  state: TaskFormDialogState,
+  form: TaskFormState,
+): Record<string, unknown> {
+  const actionConfig = form.actionConfig as Record<string, unknown>
+  const isAgentAction = form.actionType === "builtin.agent"
+  return compactMetadata({
+    boundary: "renderer.task-scheduler.form-submit",
+    mode: state.mode,
+    taskId: state.mode === "edit" ? state.task.id : undefined,
+    actionType: form.actionType,
+    triggerType: form.triggerType,
+    enabled: form.enabled,
+    missedRunPolicy: form.missedRunPolicy,
+    hasCwd: form.cwd.trim().length > 0,
+    hasAgentProject: isAgentAction && stringValue(actionConfig.projectId) !== undefined,
+    agentType: isAgentAction ? stringValue(actionConfig.agentType) : undefined,
+    agentMode: isAgentAction ? stringValue(actionConfig.mode) : undefined,
+    sessionPolicy: isAgentAction ? stringValue(actionConfig.sessionPolicy) : undefined,
+  })
+}
+
+function compactMetadata(input: Record<string, unknown>): Record<string, unknown> {
+  return Object.fromEntries(
+    Object.entries(input).filter(([, value]) => value !== undefined),
+  )
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined
 }
 
 export { TaskFormDialog }

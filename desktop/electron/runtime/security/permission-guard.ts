@@ -100,6 +100,15 @@ export const userInitiatedAllowPolicy: PermissionPolicy = {
   decide: (req) => (req.actor.kind === "user" ? "allow" : "defer-to-next"),
 }
 
+/** Allow system actors to execute shells (workflow engine, scheduler, etc.). */
+export const systemShellExecPolicy: PermissionPolicy = {
+  id: "system-shell-exec-allow",
+  decide: (req) =>
+    req.actor.kind === "system" && req.action === "shell.exec"
+      ? "allow"
+      : "defer-to-next",
+}
+
 // ----- AuditSink ----------------------------------------------------
 
 export interface AuditEvent {

@@ -97,10 +97,7 @@ function AppResetPanel() {
               logger.info("User ID copied to clipboard before reset.")
             } catch (error) {
               logger.error("Failed to copy user ID before reset.", error)
-              notifications.error("复制用户 ID 失败，请手动复制后再试。")
-              // Radix 会在点击 Action 时自动关闭对话框，重新打开以便用户重试。
-              window.setTimeout(() => setIsOpen(true), 0)
-              return
+              notifications.warning("复制用户 ID 失败，但仍将执行重置。请手动复制上方用户 ID 后再继续。")
             }
 
             logger.info("App reset confirmed after copying user ID. Initiating full reset.")

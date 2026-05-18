@@ -21,10 +21,12 @@ const baseTask: ScheduledTaskEntry = {
   enabled: true,
   missedRunPolicy: "skip",
   overlapPolicy: "skip",
+  activeDays: [0, 1, 2, 3, 4, 5, 6],
   createdAt: "2026-05-02T00:00:00.000Z",
   updatedAt: "2026-05-02T00:00:00.000Z",
   nextRunAt: "2026-05-02T00:30:00.000Z",
   runCount: 0,
+  configVersion: 0,
 }
 
 const baseRun: ScheduledTaskRunEntry = {
@@ -99,11 +101,81 @@ describe("task scheduler external api", () => {
     await expect(dispatchSchedulerAction(service, actions, "scheduler.task.list", { enabled: true }))
       .resolves.toEqual({ ok: true, data: [toPublicTaskSummary(baseTask)], total: 1 })
     await expect(dispatchSchedulerAction(service, actions, "scheduler.task.get", { taskId: "task:1" }))
-      .resolves.toEqual({ ok: true, data: baseTask })
+      .resolves.toEqual({ ok: true, data: toPublicTaskSummary(baseTask) })
     await dispatchSchedulerAction(service, actions, "scheduler.task.enable", { taskId: "task:1" })
     await dispatchSchedulerAction(service, actions, "scheduler.task.disable", { taskId: "task:1" })
     expect(service.schedulerTaskEnable).toHaveBeenCalledWith("task:1")
     expect(service.schedulerTaskDisable).toHaveBeenCalledWith("task:1")
+  })
+
+  it("does not expose scheduled agent prompt config from task get", async () => {
+    const service = serviceMock()
+    const agentTask: ScheduledTaskEntry = {
+      ...baseTask,
+      action: {
+        type: "builtin.agent",
+        config: {
+          projectId: "project:1",
+          agentType: "claude-code",
+          mode: "plan",
+          prompt: "summarize private repository context",
+        },
+      },
+    }
+    vi.mocked(service.schedulerTaskGet).mockResolvedValueOnce(agentTask)
+
+    const result = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.get", {
+      taskId: "task:1",
+    })
+
+    expect(result).toEqual({ ok: true, data: toPublicTaskSummary(agentTask) })
+    expect(JSON.stringify(result)).not.toContain("summarize private repository context")
+  })
+
+  it("does not expose scheduled agent prompt config from task mutations", async () => {
+    const service = serviceMock()
+    const action = {
+      type: "builtin.agent",
+      config: {
+        projectId: "project:1",
+        agentType: "claude-code",
+        mode: "plan",
+        prompt: "summarize private repository context",
+      },
+    }
+    const agentTask: ScheduledTaskEntry = { ...baseTask, action }
+    vi.mocked(service.schedulerTaskUpdate).mockResolvedValueOnce(agentTask)
+    vi.mocked(service.schedulerTaskEnable).mockResolvedValueOnce(agentTask)
+    vi.mocked(service.schedulerTaskDisable).mockResolvedValueOnce(agentTask)
+
+    const createResult = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.create", {
+      name: "Agent task",
+      description: "Send summary",
+      scope: { type: "global" },
+      schedule: { type: "interval", everyMinutes: 30, anchor: "created_at" },
+      action,
+      enabled: true,
+    })
+    const enableResult = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.enable", {
+      taskId: "task:1",
+    })
+    const disableResult = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.disable", {
+      taskId: "task:1",
+    })
+    const updateResult = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.update", {
+      taskId: "task:1",
+      name: "Updated Agent task",
+    })
+
+    expect(createResult).toEqual({
+      ok: true,
+      data: toPublicTaskSummary({ ...baseTask, name: "Agent task", action, id: "task:new" }),
+    })
+    expect(enableResult).toEqual({ ok: true, data: toPublicTaskSummary(agentTask) })
+    expect(disableResult).toEqual({ ok: true, data: toPublicTaskSummary(agentTask) })
+    expect(updateResult).toEqual({ ok: true, data: toPublicTaskSummary(agentTask) })
+    expect(JSON.stringify([createResult, enableResult, disableResult, updateResult]))
+      .not.toContain("summarize private repository context")
   })
 
   it("lists run summaries without log payloads", async () => {
@@ -200,5 +272,51 @@ describe("task scheduler external api", () => {
   it("rejects hidden external actions", async () => {
     await expect(dispatchSchedulerAction(serviceMock(), actionRegistry(), "scheduler.task.delete", { taskId: "task:1" }))
       .rejects.toThrow(/Unknown scheduler action/)
+  })
+
+  it("scheduler.task.create accepts activeDays and passes to service", async () => {
+    const service = serviceMock()
+    const result = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.create", {
+      name: "Weekday task",
+      scope: { type: "global" },
+      schedule: { type: "cron", expr: "0 9 * * *" },
+      action: { type: "builtin.command", config: { command: "echo hi" } },
+      activeDays: [1, 2, 3, 4, 5],
+    })
+    expect(result.ok).toBe(true)
+    expect((result.data as { activeDays: number[] }).activeDays).toEqual([1, 2, 3, 4, 5])
+  })
+
+  it("scheduler.task.create defaults activeDays to all days when omitted", async () => {
+    const service = serviceMock()
+    const result = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.create", {
+      name: "All days task",
+      scope: { type: "global" },
+      schedule: { type: "cron", expr: "0 9 * * *" },
+      action: { type: "builtin.command", config: { command: "echo hi" } },
+    })
+    expect(result.ok).toBe(true)
+    expect((result.data as { activeDays: number[] }).activeDays).toEqual([0, 1, 2, 3, 4, 5, 6])
+  })
+
+  it("scheduler.task.create rejects empty activeDays", async () => {
+    const service = serviceMock()
+    await expect(dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.create", {
+      name: "No days",
+      scope: { type: "global" },
+      schedule: { type: "cron", expr: "0 9 * * *" },
+      action: { type: "builtin.command", config: { command: "echo hi" } },
+      activeDays: [],
+    })).rejects.toThrow(/activeDays/)
+  })
+
+  it("scheduler.task.update can change activeDays", async () => {
+    const service = serviceMock()
+    const result = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.update", {
+      taskId: "task:1",
+      activeDays: [6, 0],
+    })
+    expect(result.ok).toBe(true)
+    expect((result.data as { activeDays: number[] }).activeDays).toEqual([6, 0])
   })
 })

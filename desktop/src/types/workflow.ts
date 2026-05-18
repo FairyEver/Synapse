@@ -8,6 +8,9 @@ export interface WorkflowEdge { id: string; from: string; to: string; branch?: s
 export interface WorkflowDefinition {
   id: string; name: string; description?: string; version: string
   createdAt: number; updatedAt: number
+  defaultProjectId?: string
+  defaultProviderId?: string
+  defaultModelTier?: "default" | "haiku" | "sonnet" | "opus"
   params: WorkflowParam[]; nodes: WorkflowNode[]; edges: WorkflowEdge[]
 }
 export interface WorkflowMeta {
@@ -16,7 +19,7 @@ export interface WorkflowMeta {
 }
 export interface NodeRunResult {
   nodeId: string
-  status: "pending" | "running" | "success" | "failed" | "skipped"
+  status: "pending" | "running" | "success" | "failed" | "cancelled" | "skipped"
   input: { variables: Record<string, string>; prompt?: string }
   output?: string; outputs?: Record<string, unknown>; activeBranch?: string; error?: string
   startedAt?: number; endedAt?: number; durationMs?: number
@@ -42,7 +45,7 @@ export interface WorkflowRunStatus {
 }
 export type WorkflowEvent =
   | { type: "workflow:started"; runId: string; workflowId: string }
-  | { type: "node:started"; runId: string; nodeId: string; startedAt?: number }
+  | { type: "node:started"; runId: string; nodeId: string; startedAt?: number; result?: NodeRunResult }
   | { type: "node:progress"; runId: string; nodeId: string; phase: string; label: string }
   | { type: "node:completed"; runId: string; nodeId: string; output: unknown; result?: NodeRunResult }
   | { type: "node:failed"; runId: string; nodeId: string; error: string; result?: NodeRunResult }
@@ -52,7 +55,7 @@ export type WorkflowEvent =
   | { type: "workflow:failed"; runId: string; error: string; result?: WorkflowRunResult }
   | { type: "workflow:cancelled"; runId: string; result?: WorkflowRunResult }
 export interface ValidationError {
-  type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch" | "missing_end_node" | "multiple_end_nodes"
+  type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch" | "missing_end_node" | "multiple_end_nodes" | "missing_param"
   nodeId?: string; edgeId?: string; message: string
 }
 export interface ValidationWarning { type: "disconnected_node" | "multiple_start_nodes"; nodeId?: string; message: string }
@@ -61,5 +64,6 @@ export interface WorkflowRunSnapshot {
   runId: string; workflowId: string; version: string; startedAt: number; endedAt?: number
   status: "completed" | "failed" | "cancelled"; params: Record<string, unknown>
   nodeResults: Record<string, NodeRunResult>
+  error?: string
   definition?: WorkflowDefinition
 }

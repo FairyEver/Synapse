@@ -1,12 +1,18 @@
 import { useState } from "react"
 import { toast } from "sonner"
+import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
+import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { WorkflowList } from "./components/workflow-list"
 import { Loader2, Plus } from "lucide-react"
 // Renderer-side registration: manifests only. Executors live in `*.main.ts`
 // files that import main-process modules (electron, node:fs, ...) and must not
 // be pulled into the Vite renderer bundle.
 import "../../../workflow-nodes/register.renderer"
+
+import { errorDiagnostic } from "./lib/error-utils"
+
+const logger = createRendererLogger("workflow")
 
 export function WorkflowModule() {
   const [listKey, setListKey] = useState(0)
@@ -16,19 +22,20 @@ export function WorkflowModule() {
     if (creating) return
     setCreating(true)
     try {
-      const result = await window.synapse?.workflow.create()
-      if (!result) {
-        toast.error("创建工作流失败：无法连接到主进程")
-        return
-      }
+      const workflowApi = requireBridgeDomain("workflow")
+      const result = await workflowApi.create()
       if ("errors" in result) {
         toast.error(result.errors[0]?.message ?? "创建工作流失败：校验未通过")
         return
       }
-      await window.synapse?.workflow.openEditor(result.id)
+      await workflowApi.openEditor(result.id)
       setListKey((k) => k + 1)
     } catch (err) {
-      toast.error(`创建工作流失败：${err instanceof Error ? err.message : String(err)}`)
+      logger.warn("Workflow create failed.", {
+        boundary: "renderer.workflow.create",
+        ...errorDiagnostic(err),
+      })
+      toast.error("创建工作流失败，请重试")
     } finally {
       setCreating(false)
     }
@@ -41,7 +48,7 @@ export function WorkflowModule() {
           {creating ? <Loader2 className="h-4 w-4 mr-1.5 animate-spin" /> : <Plus className="h-4 w-4 mr-1.5" />}新建
         </Button>
       </div>
-      <div className="flex-1 overflow-auto"><WorkflowList key={listKey} /></div>
+      <div className="flex-1 overflow-auto"><WorkflowList key={listKey} onCreate={handleCreate} /></div>
     </div>
   )
 }

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import {
   Download,
   LoaderCircle,
@@ -9,9 +9,11 @@ import {
 
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
-import { requestWatchNextAgentSession } from "@/app-shell/navigation"
+import { cancelWatchNextAgentSession, requestWatchNextAgentSession } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
+import type { SynapseAgentProvider } from "@/types/bridge"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -32,6 +34,7 @@ import {
 import type {
   ScheduledTask,
   ScheduledTaskCreateInput,
+  ScheduledTaskRun,
   ScheduledTaskUpdateInput,
 } from "@/types/task-scheduler"
 import { TaskCardGrid } from "./components/task-card-grid"
@@ -58,11 +61,48 @@ import {
 
 const logger = createRendererLogger("task-scheduler")
 
+type AcceptedManualRun = ScheduledTaskRun & {
+  status: Extract<ScheduledTaskRun["status"], "running" | "success">
+}
+
+function isAcceptedManualRun(run: ScheduledTaskRun | null): run is AcceptedManualRun {
+  return run !== null && (run.status === "running" || run.status === "success")
+}
+
+function errorLogMeta(error: unknown): { readonly errorName: string; readonly errorLength: number } {
+  const message = error instanceof Error ? error.message : String(error)
+  return {
+    errorName: error instanceof Error ? error.name : typeof error,
+    errorLength: message.length,
+  }
+}
+
+async function stopRunOrThrow(runId: string): Promise<{ readonly stopped: boolean }> {
+  const result = await stopRun(runId)
+  if (!result.stopped) throw new Error("Task run was not active")
+  return result
+}
+
 function TaskSchedulerModule() {
   const { config } = useAppConfig()
   const platform = getRendererPlatform()
   const { tasks, loading, error, refresh } = useTaskSchedulerTasks()
   const { notify, promise } = useAppNotifications()
+  const [providers, setProviders] = useState<readonly SynapseAgentProvider[]>([])
+  const providerRequestRef = useRef(0)
+  const loadProviders = useCallback(async () => {
+    const requestId = ++providerRequestRef.current
+    try {
+      const list = await requireSynapseBridge().agent.listProviders()
+      if (requestId === providerRequestRef.current) setProviders(list)
+    } catch (err) {
+      logger.warn("Provider list failed.", {
+        boundary: "renderer.task-scheduler.providers",
+        ...errorLogMeta(err),
+      })
+    }
+  }, [])
+  useEffect(() => { void loadProviders() }, [loadProviders])
   const [formState, setFormState] = useState<TaskFormDialogState>({ mode: "create" })
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [historyTask, setHistoryTask] = useState<ScheduledTask | null>(null)
@@ -85,7 +125,10 @@ function TaskSchedulerModule() {
       await refresh()
       return result
     } catch (mutationError) {
-      logger.error("Task scheduler mutation failed.", { error: mutationError })
+      logger.error("Task scheduler mutation failed.", {
+        boundary: "renderer.task-scheduler.mutation",
+        ...errorLogMeta(mutationError),
+      })
       return null
     } finally {
       setBusy(false)
@@ -96,7 +139,7 @@ function TaskSchedulerModule() {
     await runMutation(
       async () => {
         const task = await createTask(input)
-        logger.info("Task created.", { taskId: task.id, name: task.name })
+        logger.info("Task created.", { taskId: task.id, taskNameLength: task.name.length })
         return task
       },
       { loading: "正在保存任务...", success: "任务已保存。", error: "保存任务失败。" },
@@ -107,7 +150,7 @@ function TaskSchedulerModule() {
     await runMutation(
       async () => {
         const task = await updateTask(id, patch)
-        logger.info("Task updated.", { taskId: task.id, name: task.name })
+        logger.info("Task updated.", { taskId: task.id, taskNameLength: task.name.length })
         return task
       },
       { loading: "正在保存任务...", success: "任务已保存。", error: "保存任务失败。" },
@@ -122,7 +165,7 @@ function TaskSchedulerModule() {
     await runMutation(
       async () => {
         const result = await deleteTask(task.id)
-        logger.info("Task deleted.", { taskId: task.id, name: task.name })
+        logger.info("Task deleted.", { taskId: task.id, taskNameLength: task.name.length })
         return result
       },
       { loading: "正在删除任务...", success: "任务已删除。", error: "删除任务失败。" },
@@ -134,9 +177,22 @@ function TaskSchedulerModule() {
     const selectedTasks = tasks.filter((t) => selectedIds.includes(t.id))
     const exportData = serializeTasksForExport(selectedTasks)
     const json = JSON.stringify(exportData, null, 2)
-    const result = await exportTasksToFile(json)
-    if (result.success) {
-      setIsExportOpen(false)
+    try {
+      const result = await exportTasksToFile(json)
+      if (result.success) {
+        setIsExportOpen(false)
+      }
+    } catch (exportError) {
+      logger.warn("Task export failed.", {
+        action: "exportTasks",
+        boundary: "renderer.task-scheduler.export",
+        selectedCount: selectedTasks.length,
+        agentTaskCount: selectedTasks.filter((task) => task.action.type === "builtin.agent").length,
+        actionTypes: Array.from(new Set(selectedTasks.map((task) => task.action.type))).sort(),
+        triggerTypes: Array.from(new Set(selectedTasks.map((task) => task.trigger.type))).sort(),
+        ...errorLogMeta(exportError),
+      })
+      notify({ message: "导出失败", tone: "destructive" })
     }
   }
 
@@ -146,11 +202,14 @@ function TaskSchedulerModule() {
     try {
       const parsed = parseTaskImportFile(result.content)
       setImportEntries(parsed.tasks)
-    } catch {
-      void promise(
-        () => Promise.reject(new Error("文件格式无效")),
-        { loading: "", success: "", error: "文件格式无效" },
-      )
+    } catch (importError) {
+      logger.warn("Task import parse failed.", {
+        action: "importTasks",
+        boundary: "renderer.task-scheduler.import.parse",
+        contentLength: result.content.length,
+        ...errorLogMeta(importError),
+      })
+      notify({ message: "文件格式无效", tone: "destructive" })
     }
   }
 
@@ -159,7 +218,7 @@ function TaskSchedulerModule() {
     const selected = indices.map((i) => importEntries[i])
     let successCount = 0
     let failCount = 0
-    for (const entry of selected) {
+    for (const [entryIndex, entry] of selected.entries()) {
       try {
         await createTask({
           name: entry.name,
@@ -172,7 +231,16 @@ function TaskSchedulerModule() {
           missedRunPolicy: entry.missedRunPolicy,
         })
         successCount++
-      } catch {
+      } catch (importError) {
+        logger.warn("Task import entry create failed.", {
+          action: "importTasks",
+          boundary: "renderer.task-scheduler.import.create",
+          selectedCount: selected.length,
+          entryIndex,
+          actionType: entry.action.type,
+          taskNameLength: entry.name.length,
+          ...errorLogMeta(importError),
+        })
         failCount++
       }
     }
@@ -185,6 +253,56 @@ function TaskSchedulerModule() {
       () => Promise.resolve(null),
       { loading: "", success: msg, error: "" },
     )
+  }
+
+  async function handleRunTask(task: ScheduledTask) {
+    const agentProjectId = task.action.type === "builtin.agent"
+      ? task.action.config["projectId"]
+      : undefined
+    const shouldWatchAgentSession = typeof agentProjectId === "string" && agentProjectId.length > 0
+    try {
+      if (shouldWatchAgentSession) {
+        requestWatchNextAgentSession({ projectId: agentProjectId })
+      }
+      const run = await runTask(task.id)
+      if (!isAcceptedManualRun(run)) {
+        if (shouldWatchAgentSession) {
+          cancelWatchNextAgentSession({ projectId: agentProjectId })
+        }
+        logger.warn("Task run was not accepted.", {
+          action: "runTask",
+          boundary: "renderer.task-scheduler.runTask",
+          taskId: task.id,
+          taskNameLength: task.name.length,
+          actionType: task.action.type,
+          runId: run?.id,
+          runStatus: run?.status ?? "missing",
+        })
+        notify({ message: "触发失败", tone: "destructive" })
+        return
+      }
+      logger.info("Task run triggered.", {
+        taskId: task.id,
+        taskNameLength: task.name.length,
+        actionType: task.action.type,
+        runId: run?.id,
+        runStatus: run?.status,
+      })
+      notify({ message: "任务已触发", tone: "success" })
+    } catch (err) {
+      if (shouldWatchAgentSession) {
+        cancelWatchNextAgentSession({ projectId: agentProjectId })
+      }
+      logger.error("Failed to run task.", {
+        action: "runTask",
+        boundary: "renderer.task-scheduler.runTask",
+        taskId: task.id,
+        taskNameLength: task.name.length,
+        actionType: task.action.type,
+        ...errorLogMeta(err),
+      })
+      notify({ message: "触发失败", tone: "destructive" })
+    }
   }
 
   return (
@@ -225,8 +343,8 @@ function TaskSchedulerModule() {
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto p-0.5">
-          {error ? (
+        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-0.5">
+          {error && !loading ? (
             <div className="flex items-center gap-3 p-4">
               <p className="text-sm text-destructive">{error}</p>
               <Button variant="outline" size="sm" onClick={() => void refresh()}>
@@ -243,6 +361,8 @@ function TaskSchedulerModule() {
           {!loading && !error ? (
             <TaskCardGrid
               busy={busy}
+              projects={config.global.projects}
+              providers={providers}
               tasks={tasks}
               onCreateNew={() => {
                 setFormState({ mode: "create" })
@@ -255,20 +375,11 @@ function TaskSchedulerModule() {
               }}
               onHistory={(task) => setHistoryTask(task)}
               onRun={(task) => {
-                if (task.action.type === "builtin.agent") {
-                  const projectId = task.action.config["projectId"]
-                  if (typeof projectId === "string" && projectId) {
-                    requestWatchNextAgentSession({ projectId })
-                  }
-                }
-                runTask(task.id).catch((err) => {
-                  logger.error("Failed to run task.", { error: err, taskId: task.id })
-                })
-                notify({ message: "任务已触发", tone: "success" })
+                void handleRunTask(task)
               }}
               onStop={(task) => {
                 void runMutation(
-                  () => stopRun(task.id),
+                  () => stopRunOrThrow(task.id),
                   { loading: "正在停止运行...", success: "运行已停止。", error: "停止运行失败。" },
                 )
               }}
@@ -308,7 +419,7 @@ function TaskSchedulerModule() {
           }}
           onStopRun={async (runId) => {
             await runMutation(
-              () => stopRun(runId),
+              () => stopRunOrThrow(runId),
               { loading: "正在停止运行...", success: "运行已停止。", error: "停止运行失败。" },
             )
           }}

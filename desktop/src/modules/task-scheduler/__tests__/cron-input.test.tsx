@@ -1,12 +1,44 @@
+/**
+ * @vitest-environment jsdom
+ */
+import { act } from "react"
+import { createRoot, type Root } from "react-dom/client"
 import { renderToStaticMarkup } from "react-dom/server"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { CronEditorFields } from "../components/cron-editor-dialog"
+import { CronEditorDialog, CronEditorFields } from "../components/cron-editor-dialog"
 import { CronInput } from "../components/cron-input"
 import {
   createDefaultCronTemplateDraft,
   validateCronExpression,
 } from "../cron-utils"
+
+const { track } = vi.hoisted(() => ({
+  track: vi.fn(),
+}))
+
+vi.mock("@/lib/ui-tracking", async () => {
+  const actual = await vi.importActual<typeof import("@/lib/ui-tracking")>("@/lib/ui-tracking")
+  return {
+    ...actual,
+    track,
+  }
+})
+
+;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+
+let roots: Root[] = []
+
+afterEach(() => {
+  for (const root of roots) {
+    act(() => {
+      root.unmount()
+    })
+  }
+  roots = []
+  document.body.innerHTML = ""
+  track.mockClear()
+})
 
 describe("CronInput", () => {
   it("renders as an input group with an embedded edit button", () => {
@@ -22,6 +54,48 @@ describe("CronInput", () => {
     expect(html).toContain('id="task-form-cron"')
     expect(html).toContain('data-align="inline-end"')
     expect(html).toContain(">编辑</button>")
+  })
+})
+
+describe("CronEditorDialog", () => {
+  it("tracks cron apply submits without recording the expression", async () => {
+    const onApply = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <CronEditorDialog
+          open
+          value="0 9 * * *"
+          onApply={onApply}
+          onOpenChange={vi.fn()}
+        />,
+      )
+    })
+
+    const form = document.body.querySelector("form")
+    expect(form).toBeInstanceOf(HTMLFormElement)
+
+    await act(async () => {
+      form?.dispatchEvent(new SubmitEvent("submit", { bubbles: true, cancelable: true }))
+    })
+
+    expect(onApply).toHaveBeenCalledWith("0 9 * * *")
+    expect(track).toHaveBeenCalledWith({
+      component: "task-scheduler",
+      name: "task-scheduler-cron-apply",
+      action: "submit",
+      metadata: {
+        boundary: "renderer.task-scheduler.cron-editor",
+        activeTab: "common",
+        expressionLength: 9,
+        previewCount: 5,
+      },
+    })
+    expect(JSON.stringify(track.mock.calls)).not.toContain("0 9 * * *")
   })
 })
 

@@ -1,6 +1,7 @@
 import type {
   AgentCommandEntryV1,
   AgentCompressStateEntryV1,
+  AgentEventEntryV1,
   ConversationEntryV1,
   DataRepository,
   OutboxEntryV1,
@@ -10,34 +11,20 @@ import {
   createControlledProcessRunner,
 } from "../../runtime/process"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import { ServiceNotFoundError } from "../../runtime/service-registry"
 import type { ProcessIsolationResolver } from "../execution-isolation"
 import {
-  createProviderConfigServiceFromDataRepository,
-  type ProviderRuntimeView,
-} from "../provider-config"
-import {
-  agentRuntimeDefinitionById,
-} from "../definitions/generated/main-registry"
-import type {
-  AgentRuntimeDefinition,
-  AgentRuntimeProcessRunner,
-} from "../../../src/definitions/main-types"
+  createProviderServiceFromDataRepository,
+} from "../provider"
 import { ReplyOutboxService } from "../reply-target"
-import type { AgentAdapter } from "./types"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
-import { whichBin } from "./binary-detect-service"
 import { CustomCommandRegistry } from "./command-registry"
 import { SkillRegistry } from "./skill-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
 
-const agentRuntimeDefinitionsByStringId: ReadonlyMap<string, AgentRuntimeDefinition> = new Map(
-  agentRuntimeDefinitionById,
-)
-
 export {
   AgentRuntimeService,
   conversationId,
-  type AgentAdapterFactory,
   type AgentRuntimeStatus,
   type AgentRuntimeServiceDeps,
 } from "./agent-runtime-service"
@@ -79,34 +66,23 @@ export {
   type SaveAgentSessionInput,
 } from "./session-repository"
 export {
+  SessionManager,
+  type AgentLiveSessionFactory,
+  type CreateAgentLiveSessionInput,
+} from "./session-manager"
+export {
+  ConversationRouter,
+  type ConversationRouterDeps,
+} from "./conversation-router"
+export {
   SkillRegistry,
   buildSkillInvocationPrompt,
   type AgentSkill,
 } from "./skill-registry"
 export {
-  CodexExecAdapter,
-  CodexJsonLineParser,
-  buildCodexExecArgs,
-  parseCodexJsonLines,
-  type CodexExecArgsOptions,
-  type CodexExecOptions,
-  type CodexParseResult,
-  type CodexProcessRunner,
-} from "./adapters/codex-exec"
-export {
-  ClaudeCodeAdapter,
-  buildClaudeCodeArgs,
-  type ClaudeCodeArgsOptions,
-  type ClaudeCodeOptions,
-  type ClaudeProcessRunner,
-} from "./adapters/claude-code"
-export {
   AGENT_RUNTIME_SERVICE_ID,
-  type AgentAdapter,
   type AgentAttachment,
   type AgentEvent,
-  type AgentExecutionContext,
-  type AgentExecutionResult,
   type AgentLiveSession,
   type AgentMessage,
   type AgentPendingPermission,
@@ -135,7 +111,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         outbox: ctx.dataRepo.namespace<OutboxEntryV1>("outbox"),
         logger: ctx.logger,
       })
-      const providerConfig = createProviderConfigServiceFromDataRepository({
+      const providerService = createProviderServiceFromDataRepository({
         dataRepository,
         permissionGuard,
         auditSink,
@@ -152,31 +128,26 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         projectId: ctx.projectId,
         commands: ctx.dataRepo.namespace<AgentCommandEntryV1>("agent.commands"),
         workspacePath: ctx.projectMeta.workspacePath,
+        logger: ctx.logger,
       })
       const skills = new SkillRegistry({
+        projectId: ctx.projectId,
         workspacePath: ctx.projectMeta.workspacePath,
+        logger: ctx.logger,
       })
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
         conversations: ctx.dataRepo.namespace<ConversationEntryV1>("conversations"),
         compressState: ctx.dataRepo.namespace<AgentCompressStateEntryV1>("agent.compress_state"),
-        adapter: createAdapterFromRuntimeDefinition({
-          projectId: ctx.projectId,
-          agentType: "codex",
-          providers: [],
-          env: {},
-          envAllowlist: [],
-        }, runner),
-        agentType: "codex",
-        adapterFactory: async (view) =>
-          createAdapterFromRuntimeDefinition(await resolveRuntimeCommand(view), runner),
+        agentEvents: ctx.dataRepo.namespace<AgentEventEntryV1>("agent.events"),
+        providerService,
+        agentType: "claude-code",
         eventBus: ctx.eventBus,
         logger: ctx.logger,
         permissionGuard,
         auditSink,
         outbox,
-        providerConfig,
         replyTargets,
         executionIsolation,
         customCommands,
@@ -189,29 +160,13 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
   }
 }
 
-export function createAdapterFromRuntimeDefinition(
-  view: ProviderRuntimeView,
-  runner: AgentRuntimeProcessRunner,
-): AgentAdapter {
-  const definition = agentRuntimeDefinitionsByStringId.get(view.agentType)
-  if (!definition) {
-    throw new Error(`Unknown agent runtime: ${view.agentType}`)
-  }
-  return definition.createAdapter(view, runner)
-}
-
-async function resolveRuntimeCommand(view: ProviderRuntimeView): Promise<ProviderRuntimeView> {
-  const definition = agentRuntimeDefinitionsByStringId.get(view.agentType)
-  const binary = definition?.runtime.binaries[0]
-  if (!binary) return view
-  const runtimeCommand = await whichBin(binary)
-  return runtimeCommand ? { ...view, runtimeCommand } : view
-}
-
 function optionalService<T>(registry: { get<U>(id: string): U }, id: string): T | undefined {
   try {
     return registry.get<T>(id)
-  } catch {
+  } catch (error) {
+    if (!(error instanceof ServiceNotFoundError)) {
+      throw error
+    }
     return undefined
   }
 }

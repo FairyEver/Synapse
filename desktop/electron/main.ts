@@ -66,6 +66,7 @@ if (!gotSingleInstanceLock) {
       // Register new IpcModules (Phase 0.3)
       const ipcCtx: IpcHandlerContext = {
         moduleId: "main",
+        logger,
         resolve: (serviceId) => registry.get(serviceId),
       }
       createIpcRegistry(ipcCtx)
@@ -81,6 +82,13 @@ if (!gotSingleInstanceLock) {
             error: failure.error,
           })
         }
+        void dialog.showMessageBox({
+          type: "warning",
+          title: "部分功能不可用",
+          message: "部分服务启动失败。",
+          detail: result.degraded.map((failure) => failure.id).join("\n"),
+          buttons: ["知道了"],
+        })
       }
 
       logger.info("Service registry started. Creating main window.")
@@ -125,5 +133,7 @@ if (!gotSingleInstanceLock) {
 }
 
 app.on("window-all-closed", () => {
-  // 托盘保持运行，不退出
+  if (process.platform !== "darwin") {
+    app.quit()
+  }
 })

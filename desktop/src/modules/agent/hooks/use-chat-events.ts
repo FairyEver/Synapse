@@ -8,10 +8,12 @@ import {
   clearConversationUnread,
   incrementUnreadForConversation,
   isSelectedConversation,
+  shouldApplyPhaseUpdate,
   shouldAutoFollowConversation,
 } from "../live-sync"
 import type { ChatAction, ChatState } from "./use-chat-reducer"
-import type { ChatConnectionRefs, ChatConnectionResult, TimelineTarget } from "./use-chat-connection"
+import type { ChatConnectionRefs, ChatConnectionResult } from "./use-chat-connection"
+import { errorLogMeta } from "../utils"
 
 const logger = createRendererLogger("agent")
 
@@ -59,24 +61,36 @@ function useChatEvents(
       }
       if (domainEvent.type === "phase.update") {
         const payload = domainEvent.payload
+        if (isTerminalPhase(payload.phase, payload.status) && payload.conversationId) {
+          dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: payload.conversationId })
+        }
         const selectedProject = selectedProjectIdRef.current
         const selectedConv = selectedConversationIdRef.current
         const selectedSession = selectedSessionKeyRef.current
-        const sameProject = payload.projectId === selectedProject
-        const sameSessionKey = payload.sessionKey === selectedSession
-        const inPendingConv = payload.conversationId != null
-          && pendingConversationIdsRef.current.has(payload.conversationId)
-        const sameConv = payload.conversationId
-          ? payload.conversationId === selectedConv
-            || inPendingConv
-          : sameSessionKey
-        if (!inPendingConv && (!sameProject || !sameConv)) {
+        const shouldApplyPhase = shouldApplyPhaseUpdate({
+          projectId: payload.projectId,
+          conversationId: payload.conversationId,
+          sessionKey: payload.sessionKey,
+        }, {
+          projectId: selectedProject,
+          conversationId: selectedConv,
+          sessionKey: selectedSession,
+        }, {
+          pendingConversationIds: pendingConversationIdsRef.current,
+        })
+        if (!shouldApplyPhase) {
           logger.debug("Phase event ignored for inactive conversation.", {
             projectId: payload.projectId,
             sessionKey: payload.sessionKey,
             conversationId: payload.conversationId,
             phase: payload.phase,
             status: payload.status,
+            selectedProjectId: selectedProject,
+            selectedConversationId: selectedConv,
+            selectedSessionKey: selectedSession,
+            pendingConversation: payload.conversationId
+              ? pendingConversationIdsRef.current.has(payload.conversationId)
+              : false,
           })
           return
         }
@@ -99,9 +113,6 @@ function useChatEvents(
           // All terminal phases reset cancelPhase back to idle so the next
           // turn starts with a clean state.
           dispatch({ type: "CANCEL_RESET" })
-          if (payload.conversationId) {
-            dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: payload.conversationId })
-          }
         }
         return
       }
@@ -150,9 +161,17 @@ function useChatEvents(
             domainEvent.payload.conversationId,
           ) })
           void loadTimeline(domainEvent.payload).catch((rawError: unknown) => {
-            const message = rawError instanceof Error ? rawError.message : "加载会话失败"
-            logger.error("Agent live timeline refresh failed.", rawError)
-            dispatch({ type: "SET_ERROR", error: message })
+            logger.error("Agent live timeline refresh failed.", {
+              projectId: domainEvent.payload.projectId,
+              conversationId: domainEvent.payload.conversationId,
+              sessionKey: domainEvent.payload.sessionKey,
+              platform: domainEvent.payload.platform,
+              boundary: "renderer.agent.live-timeline",
+              selectedUpdate,
+              autoFollow,
+              ...errorLogMeta(rawError),
+            })
+            dispatch({ type: "SET_ERROR", error: "加载会话失败" })
           })
           return
         }
@@ -161,11 +180,6 @@ function useChatEvents(
           domainEvent.payload,
           selected,
         ) })
-        // Track this conversationId so subsequent phase.update events for it
-        // are accepted before selectSession has finished updating the refs.
-        const pendingId = domainEvent.payload.conversationId
-        pendingConversationIdsRef.current.add(pendingId)
-        setTimeout(() => { pendingConversationIdsRef.current.delete(pendingId) }, 30_000)
         return
       }
       if (!matchesSelectedEvent(domainEvent, {
@@ -176,6 +190,7 @@ function useChatEvents(
         logger.debug("Agent stream event ignored for inactive conversation.", {
           projectId: domainEvent.payload.projectId,
           eventType: domainEvent.type,
+          ...streamEventLogMeta(domainEvent),
           sessionKey: domainEvent.payload.sessionKey,
           platform: domainEvent.payload.platform,
           selectedProjectId: selectedProjectIdRef.current,
@@ -187,6 +202,7 @@ function useChatEvents(
       logger.debug("Agent stream event applied.", {
         projectId: domainEvent.payload.projectId,
         eventType: domainEvent.type,
+        ...streamEventLogMeta(domainEvent),
         sessionKey: domainEvent.payload.sessionKey,
         platform: domainEvent.payload.platform,
         selectedProjectId: selectedProjectIdRef.current,
@@ -200,10 +216,21 @@ function useChatEvents(
       updateTimeline((current) =>
         appendAgentTimelineEvent(current, domainEvent.payload.event, domainEvent.timestamp, agentType))
       const event = domainEvent.payload.event
-      if (event.type === "result" && event.metadata?.model) {
-        dispatch({ type: "SET_CURRENT_CONVERSATION_MODEL", model: event.metadata.model })
+      const resultModel = event.type === "result" ? event.metadata?.model : undefined
+      if (resultModel) {
+        dispatch({ type: "SET_CURRENT_CONVERSATION_MODEL", model: resultModel })
       }
-      void refreshPendingPermissions()
+      void refreshPendingPermissions().catch((rawError: unknown) => {
+        logger.error("Agent pending permissions refresh failed.", {
+          projectId: domainEvent.payload.projectId,
+          conversationId: streamEventConversationId(domainEvent),
+          sessionKey: domainEvent.payload.sessionKey,
+          platform: domainEvent.payload.platform,
+          eventType: domainEvent.type,
+          boundary: "renderer.agent.pending-permissions",
+          ...errorLogMeta(rawError),
+        })
+      })
     })
   }, [
     dispatch,
@@ -227,6 +254,10 @@ function useChatEvents(
 export { useChatEvents }
 export type { ChatEventRefs }
 
+function isTerminalPhase(phase: string, status: string): boolean {
+  return phase === "cancelled" || phase === "failed" || (phase === "completed" && status === "done")
+}
+
 function matchesSelectedEvent(
   domainEvent: SynapseAgentDomainEvent,
   selected: {
@@ -237,7 +268,35 @@ function matchesSelectedEvent(
 ): boolean {
   return isSelectedConversation({
     projectId: domainEvent.payload.projectId,
-    conversationId: domainEvent.scope?.sessionId,
+    conversationId: streamEventConversationId(domainEvent),
     sessionKey: domainEvent.payload.sessionKey,
   }, selected)
+}
+
+function streamEventConversationId(domainEvent: SynapseAgentDomainEvent): string | undefined {
+  if (domainEvent.scope?.sessionId) return domainEvent.scope.sessionId
+  if (!("event" in domainEvent.payload)) return undefined
+
+  const event = domainEvent.payload.event
+  if (!("conversationId" in event)) return undefined
+
+  const conversationId = event.conversationId
+  return typeof conversationId === "string" && conversationId.length > 0
+    ? conversationId
+    : undefined
+}
+
+function streamEventLogMeta(domainEvent: SynapseAgentDomainEvent): {
+  readonly conversationId?: string
+  readonly agentEventType?: string
+  readonly sdkSessionId?: string
+} {
+  if (!("event" in domainEvent.payload)) {
+    return { conversationId: streamEventConversationId(domainEvent) }
+  }
+  return {
+    conversationId: streamEventConversationId(domainEvent),
+    agentEventType: domainEvent.payload.event.type,
+    sdkSessionId: domainEvent.payload.event.sdkSessionId,
+  }
 }

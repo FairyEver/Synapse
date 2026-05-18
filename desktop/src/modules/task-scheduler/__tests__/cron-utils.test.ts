@@ -61,6 +61,15 @@ describe("cron-utils", () => {
     ])
   })
 
+  it("matches either day-of-month or weekday when both fields are restricted", () => {
+    const runs = listNextCronRuns("0 9 1 * mon", new Date("2026-06-02T00:00:00.000Z"), 2)
+
+    expect(runs.map((run) => run.toISOString())).toEqual([
+      new Date("2026-06-08T09:00:00").toISOString(),
+      new Date("2026-06-15T09:00:00").toISOString(),
+    ])
+  })
+
   it("infers templates and initial tab from existing values", () => {
     expect(inferCronTemplate("0 9 * * 1-5")).toMatchObject({
       kind: "weekdays",

@@ -1,4 +1,5 @@
 import { createRendererLogger } from "@/app-shell/logging"
+import { recordDiagnosticBreadcrumb } from "@/lib/diagnostic-context"
 
 const logger = createRendererLogger("ui.tracking")
 
@@ -47,9 +48,27 @@ const SENSITIVE_TRACK_FIELD_PATTERN =
   /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization|owner[-_ ]?id|user[-_ ]?id)/i
 const PATH_TRACK_FIELD_PATTERN =
   /(path|dir|directory|folder|file|base[-_ ]?dir|source[-_ ]?path|target[-_ ]?path|export[-_ ]?path)/i
+const SENSITIVE_TRACK_TEXT_PATTERN =
+  /\b(api[-_]?key|authorization|cookie|password|credential|secret|token)\b\s*[:=]\s*(?:Bearer\s+)?[^\s,;]+/i
+const POSIX_ABSOLUTE_TRACK_PATH_PATTERN = /^\/(?:[^/\s"')]+\/)+[^/\s"'),;]+$/
+const WINDOWS_ABSOLUTE_TRACK_PATH_PATTERN = /^[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+$/
 
 export function track(details: TrackDetails): void {
-  logger.info(`${details.name}:${details.action}`, details)
+  const safeDetails = sanitizeTrackRecord({
+    ...details,
+    value: details.value,
+    metadata: details.metadata,
+  })
+  recordDiagnosticBreadcrumb({
+    action: details.action,
+    component: details.component,
+    name: details.name,
+    value: safeDetails.value,
+    metadata: typeof safeDetails.metadata === "object" && safeDetails.metadata !== null && !Array.isArray(safeDetails.metadata)
+      ? safeDetails.metadata
+      : undefined,
+  })
+  logger.info(`${details.name}:${details.action}`, safeDetails)
 }
 
 export function sanitizeTrackValue(fieldName: string, value: unknown): SanitizedTrackValue {
@@ -75,7 +94,15 @@ export function sanitizeTrackValue(fieldName: string, value: unknown): Sanitized
     return "[redacted]"
   }
 
+  if (looksSensitiveTrackText(text)) {
+    return "[redacted]"
+  }
+
   if (PATH_TRACK_FIELD_PATTERN.test(fieldName)) {
+    return redactPathValue(text)
+  }
+
+  if (looksAbsolutePathTrackValue(text)) {
     return redactPathValue(text)
   }
 
@@ -146,4 +173,13 @@ function redactPathValue(value: string): string {
   const basename = normalized.split("/").filter(Boolean).at(-1)
 
   return basename ? `[path redacted]/${basename}` : "[path redacted]"
+}
+
+function looksSensitiveTrackText(value: string): boolean {
+  return SENSITIVE_TRACK_TEXT_PATTERN.test(value)
+}
+
+function looksAbsolutePathTrackValue(value: string): boolean {
+  return POSIX_ABSOLUTE_TRACK_PATH_PATTERN.test(value)
+    || WINDOWS_ABSOLUTE_TRACK_PATH_PATTERN.test(value)
 }

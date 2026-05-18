@@ -28,10 +28,28 @@ function shouldPreserveOnReset(entryName: string): boolean {
 }
 
 // Schemas
+const permissionModeSchema = z.enum([
+  "default",
+  "acceptEdits",
+  "plan",
+  "auto",
+  "dontAsk",
+  "bypassPermissions",
+])
+
+const providerModelSchema = z.object({
+  providerId: z.string(),
+  modelTier: z.string(),
+}).nullable()
+
 const configSchema = z.object({
   activeRepoUuid: z.union([z.string(), z.null()]),
   repositories: z.array(z.any()),
   global: z.any(),
+  agent: z.object({
+    defaultPermissionMode: permissionModeSchema,
+    defaultProviderModel: providerModelSchema,
+  }),
 })
 
 const configPatchSchema = z.any()

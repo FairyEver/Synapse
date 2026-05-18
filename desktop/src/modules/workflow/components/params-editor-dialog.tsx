@@ -6,33 +6,70 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Trash2 } from "lucide-react"
+import { Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react"
 import type { WorkflowParam } from "@/types/workflow"
+
+type DraftParam = WorkflowParam & { _key: string }
+function toDraft(p: WorkflowParam): DraftParam {
+  return { ...p, _key: crypto.randomUUID() }
+}
+function fromDraft(d: DraftParam): WorkflowParam {
+  const { _key, ...rest } = d
+  return rest
+}
 
 // ─── WorkflowParamCard ────────────────────────────────────────────────────────
 
 interface WorkflowParamCardProps {
   param: WorkflowParam
   index: number
+  total: number
   isDuplicate?: boolean
   onChange: (patch: Partial<WorkflowParam>) => void
   onDelete: () => void
+  onMoveUp: () => void
+  onMoveDown: () => void
 }
 
-function WorkflowParamCard({ param, index, isDuplicate, onChange, onDelete }: WorkflowParamCardProps) {
+function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelete, onMoveUp, onMoveDown }: WorkflowParamCardProps) {
   return (
     <div className={`rounded-lg bg-muted/50 p-3 grid gap-3 ${isDuplicate ? "ring-1 ring-destructive" : ""}`}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">参数 {index + 1}</span>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="h-6 w-6 text-muted-foreground hover:text-destructive"
-          onClick={onDelete}
-        >
-          <Trash2 className="size-3" />
-        </Button>
+        <div className="flex items-center gap-0.5">
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 text-muted-foreground"
+            disabled={index === 0}
+            onClick={onMoveUp}
+            aria-label="上移参数"
+          >
+            <ChevronUp className="size-3" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 text-muted-foreground"
+            disabled={index === total - 1}
+            onClick={onMoveDown}
+            aria-label="下移参数"
+          >
+            <ChevronDown className="size-3" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            className="h-6 w-6 text-muted-foreground hover:text-destructive"
+            onClick={onDelete}
+            aria-label="删除参数"
+          >
+            <Trash2 className="size-3" />
+          </Button>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="grid gap-1.5">
@@ -43,7 +80,7 @@ function WorkflowParamCard({ param, index, isDuplicate, onChange, onDelete }: Wo
             placeholder="param_name"
             className={isDuplicate ? "border-destructive" : undefined}
           />
-          {isDuplicate && <p className="text-[11px] text-destructive">参数名称重复</p>}
+          {isDuplicate && <p className="text-xs text-destructive">参数名称重复</p>}
         </div>
         <div className="grid gap-1.5">
           <Label className="text-xs">类型</Label>
@@ -103,14 +140,14 @@ function paramsEqual(a: WorkflowParam[], b: WorkflowParam[]): boolean {
 }
 
 export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEditorDialogProps) {
-  const [draft, setDraft] = useState<WorkflowParam[]>(params)
+  const [draft, setDraft] = useState<DraftParam[]>(() => params.map(toDraft))
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
 
   useEffect(() => {
-    if (open) setDraft(params)
+    if (open) setDraft(params.map(toDraft))
   }, [open, params])
 
-  const isDirty = useMemo(() => !paramsEqual(draft, params), [draft, params])
+  const isDirty = useMemo(() => !paramsEqual(draft.map(fromDraft), params), [draft, params])
 
   // Compute duplicate param names for real-time feedback
   const duplicateNames = useMemo(() => {
@@ -140,7 +177,7 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
   }
 
   const addParam = () => {
-    setDraft((d) => [...d, { name: "", type: "text", default: null }])
+    setDraft((d) => [...d, toDraft({ name: "", type: "text", default: null })])
   }
 
   const removeParam = (i: number) => {
@@ -151,8 +188,19 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
     setDraft((d) => d.map((p, j) => j === i ? { ...p, ...patch } : p))
   }
 
+  const moveParam = (from: number, to: number) => {
+    setDraft((d) => {
+      const next = [...d]
+      const [item] = next.splice(from, 1)
+      next.splice(to, 0, item)
+      return next
+    })
+  }
+
   const handleSave = () => {
-    onChange(draft.filter((p) => p.name.trim() !== ""))
+    onChange(draft
+      .map((p) => ({ ...fromDraft(p), name: p.name.trim() }))
+      .filter((p) => p.name !== ""))
     onClose()
   }
 
@@ -167,12 +215,15 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
           )}
           {draft.map((p, i) => (
             <WorkflowParamCard
-              key={i}
+              key={p._key}
               param={p}
               index={i}
+              total={draft.length}
               isDuplicate={!!p.name.trim() && duplicateNames.has(p.name.trim())}
               onChange={(patch) => updateParam(i, patch)}
               onDelete={() => removeParam(i)}
+              onMoveUp={() => moveParam(i, i - 1)}
+              onMoveDown={() => moveParam(i, i + 1)}
             />
           ))}
           <Button

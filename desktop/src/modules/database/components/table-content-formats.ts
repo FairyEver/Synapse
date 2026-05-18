@@ -58,8 +58,13 @@ function normalizeCellValue(value: unknown): string {
 }
 
 function escapeCsvValue(value: string): string {
-  if (!/[",\n\r]/.test(value)) return value
-  return `"${value.replaceAll("\"", "\"\"")}"`
+  const safeValue = escapeCsvFormulaValue(value)
+  if (!/[",\n\r]/.test(safeValue)) return safeValue
+  return `"${safeValue.replaceAll("\"", "\"\"")}"`
+}
+
+function escapeCsvFormulaValue(value: string): string {
+  return /^[=+\-@\t\r]/.test(value) ? `'${value}` : value
 }
 
 function escapeMarkdownCell(value: string): string {

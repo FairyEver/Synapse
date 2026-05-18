@@ -8,12 +8,18 @@
 import { z } from "zod"
 import { mkdir } from "node:fs/promises"
 import { shell } from "electron"
-import type { IpcModule } from "../../runtime/ipc/types"
+import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import { editorAdapterService } from "../../services/editor-adapter-service"
+import { runGuardedShellOperation } from "../shell/guarded-shell"
 
-async function createAndOpenDirectory(dirPath: string): Promise<void> {
+async function createAndOpenDirectory(ctx: IpcHandlerContext, dirPath: string): Promise<void> {
   await mkdir(dirPath, { recursive: true })
-  shell.showItemInFolder(dirPath)
+  await runGuardedShellOperation({
+    ctx,
+    resource: dirPath,
+    source: "editor.createDirectory",
+    run: () => shell.showItemInFolder(dirPath),
+  })
 }
 
 const globalDirectorySchema = z.object({
@@ -42,8 +48,8 @@ export const editorIpcModule: IpcModule = {
       channel: "synapse:editor:create-directory",
       request: z.object({ dirPath: z.string() }),
       response: z.void(),
-      handler: async (_ctx, request: { dirPath: string }) => {
-        await createAndOpenDirectory(request.dirPath)
+      handler: async (ctx, request: { dirPath: string }) => {
+        await createAndOpenDirectory(ctx, request.dirPath)
       },
     },
   },

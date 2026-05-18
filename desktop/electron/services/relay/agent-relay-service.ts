@@ -87,16 +87,29 @@ export class AgentRelayService {
         : result.error
           ? "failed"
           : "success"
+      const failure = result.error ? relayFailureMetadata(result.error) : undefined
+      if (failure) {
+        this.deps.logger?.warn("Agent relay runtime failed.", {
+          boundary: "agent-relay.agent-runtime",
+          runId: run.id,
+          sourceProjectId: request.sourceProjectId,
+          sourceSessionKey: request.sourceSessionKey,
+          targetProjectId: request.targetProjectId,
+          targetSessionKey,
+          errorName: failure.errorName,
+          errorLength: failure.errorLength,
+        })
+      }
       await this.finishRun(run, status, {
         resultText: result.timedOut ? undefined : result.resultText,
         partialText: result.partialText,
-        lastError: result.error,
+        lastError: failure?.summary,
       })
-      this.recordAudit(status === "success" || status === "timeout" ? "allowed" : "failed", request, run.id, result.error)
+      this.recordAudit(status === "success" || status === "timeout" ? "allowed" : "failed", request, run.id, failure?.summary)
       if (request.visible && sourceTarget) {
         const visibleText = result.timedOut
           ? result.partialText || "Relay is still running."
-          : result.resultText || result.error || "Relay completed."
+          : result.resultText || (failure ? "Relay failed. Check diagnostics." : "Relay completed.")
         await this.trySendVisible(sourceTarget, `Relay result: ${truncate(visibleText)}`)
       }
       return {
@@ -108,14 +121,24 @@ export class AgentRelayService {
         timedOut: result.timedOut,
         resultText: result.timedOut ? undefined : result.resultText,
         partialText: result.partialText,
-        error: result.error,
+        error: failure?.summary,
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      await this.finishRun(run, "failed", { lastError: message })
-      this.recordAudit("failed", request, run.id, message)
+      const failure = relayFailureMetadata(error)
+      this.deps.logger?.warn("Agent relay runtime failed.", {
+        boundary: "agent-relay.agent-runtime",
+        runId: run.id,
+        sourceProjectId: request.sourceProjectId,
+        sourceSessionKey: request.sourceSessionKey,
+        targetProjectId: request.targetProjectId,
+        targetSessionKey,
+        errorName: failure.errorName,
+        errorLength: failure.errorLength,
+      })
+      await this.finishRun(run, "failed", { lastError: failure.summary })
+      this.recordAudit("failed", request, run.id, failure.summary)
       if (request.visible && sourceTarget) {
-        await this.trySendVisible(sourceTarget, `Relay failed: ${truncate(message)}`)
+        await this.trySendVisible(sourceTarget, "Relay failed. Check diagnostics.")
       }
       throw error
     }
@@ -168,16 +191,6 @@ export class AgentRelayService {
     return projectId
       ? runs.filter((run) => run.sourceProjectId === projectId || run.targetProjectId === projectId)
       : runs
-  }
-
-  getStatus(): {
-    readonly bindingCount: number
-    readonly recentRunCount: number
-  } {
-    return {
-      bindingCount: 0,
-      recentRunCount: 0,
-    }
   }
 
   private async createRun(
@@ -235,10 +248,13 @@ export class AgentRelayService {
     try {
       await this.deps.feishuConnector.sendAutomationMessage(target, content)
     } catch (error) {
+      const failure = relayFailureMetadata(error)
       this.deps.logger?.warn("Relay visible record failed.", {
-        error: error instanceof Error ? error.message : String(error),
+        boundary: "agent-relay.visible-reply",
         projectId: target.projectId,
         sessionKey: target.sessionKey,
+        errorName: failure.errorName,
+        errorLength: failure.errorLength,
       })
     }
   }
@@ -280,3 +296,20 @@ function truncate(value: string): string {
     : `${value.slice(0, MAX_VISIBLE_CHARS)}\n...`
 }
 
+function relayFailureMetadata(error: unknown): {
+  readonly errorName: string
+  readonly errorLength: number
+  readonly summary: string
+} {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : String(error)
+  const errorName = error instanceof Error ? error.name : typeof error
+  return {
+    errorName,
+    errorLength: message.length,
+    summary: `${errorName} (${message.length} chars)`,
+  }
+}

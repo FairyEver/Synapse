@@ -7,16 +7,16 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import {
   useActiveRepository,
   useRepositoryActions,
-  useRepositoryList,
 } from "@/app-shell/use-repository-manager"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { Button } from "@/components/ui/button"
-import { Card, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardHeader } from "@/components/ui/card"
 import { settingsCategories, settingsItems } from "@/modules/settings/data"
 import { AboutPanel } from "@/modules/settings/components/about-panel"
 import type { SettingsCategory } from "@/modules/settings/types"
 import { ConfigBackupPanel } from "@/modules/settings/components/config-backup-panel"
 import { AppResetPanel } from "@/modules/settings/components/app-reset-panel"
+import { ClaudeCodePanel } from "@/modules/settings/components/claude-code-panel"
 import { ToolsPanel } from "@/modules/settings/components/tools-panel"
 import { IdentityPanel } from "@/modules/settings/components/identity-panel"
 import { RepositoryMaintenancePanel } from "@/modules/settings/components/repository-maintenance-panel"
@@ -30,21 +30,19 @@ import { TroubleshootingPanel } from "@/modules/settings/components/troubleshoot
 import { VariablesPanel } from "@/modules/settings/components/variables-panel"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
 import { createSettingPatch, getSettingValue } from "@/modules/settings/utils"
+import type { SynapseRepositoryConfig } from "@/types/config"
 
 const logger = createRendererLogger("settings")
-
-let sessionAdminMode = false
 
 function SettingsModule() {
   const { config, error, isReady, refreshConfig, updateConfig } = useAppConfig()
   const activeRepository = useActiveRepository()
-  const repositories = useRepositoryList()
   const { replaceRepositories } = useRepositoryActions()
-  const { promise } = useAppNotifications()
+  const { promise, warning } = useAppNotifications()
   const [activeCategory, setActiveCategoryRaw] = useState<SettingsCategoryId>("general")
   const activeCategoryRef = useRef(activeCategory)
   activeCategoryRef.current = activeCategory
-  const [isAdminMode, setIsAdminModeState] = useState(sessionAdminMode)
+  const [isAdminMode, setIsAdminModeState] = useState(false)
 
   const setActiveCategory = useCallback((nextCategory: SettingsCategoryId) => {
     const prev = activeCategoryRef.current
@@ -55,7 +53,6 @@ function SettingsModule() {
   }, [])
 
   const setIsAdminMode = useCallback((enabled: boolean) => {
-    sessionAdminMode = enabled
     setIsAdminModeState(enabled)
   }, [])
 
@@ -121,7 +118,7 @@ function SettingsModule() {
         return false
       }
     },
-    [promise, updateConfig],
+    [promise, warning, updateConfig],
   )
 
   const handleSaveItem = useCallback(
@@ -129,6 +126,7 @@ function SettingsModule() {
       const patch = createSettingPatch(item, nextValue, context)
 
       if (!patch) {
+        warning("无法保存设置：不支持的设置项。")
         return
       }
 
@@ -137,11 +135,11 @@ function SettingsModule() {
       })
       await applyPatch(patch)
     },
-    [applyPatch, context],
+    [applyPatch, context, warning],
   )
 
   const handleSaveRepositories = useCallback(
-    async (nextRepositories: typeof repositories, activeRepoUuid: string | null) => {
+    async (nextRepositories: SynapseRepositoryConfig[], activeRepoUuid: string | null) => {
       logger.info("Saving repository list from settings.", {
         activeRepoUuid,
         repositoryCount: nextRepositories.length,
@@ -162,7 +160,7 @@ function SettingsModule() {
         return false
       }
     },
-    [promise, replaceRepositories, repositories],
+    [promise, replaceRepositories],
   )
 
   const handleSaveProjects = useCallback(
@@ -211,7 +209,7 @@ function SettingsModule() {
           </div>
         ) : null}
 
-        {!isReady ? (
+        {!isReady && !error ? (
           <Card>
             <CardHeader>
               <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -261,6 +259,7 @@ function SettingsModule() {
         ) : null}
 
         {isReady && activeCategory === "tools" ? <ToolsPanel /> : null}
+        {isReady && activeCategory === "claude-code" ? <ClaudeCodePanel /> : null}
         {isReady && activeCategory === "variables" ? <VariablesPanel /> : null}
         {isReady && activeCategory === "services" ? <ServicesPanel /> : null}
         {isReady && activeCategory === "troubleshooting" ? <TroubleshootingPanel /> : null}

@@ -128,6 +128,32 @@ describe("preload bridge", () => {
     )
   })
 
+  it("writes a renderer IPC failure log when bridge invoke rejects", async () => {
+    const bridge = await loadPreloadBridge()
+    const failure = new Error("main failed")
+    electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
+      if (channel === "synapse:config:get") {
+        return Promise.reject(failure)
+      }
+      return Promise.resolve(undefined)
+    })
+
+    await expect(bridge.config.get()).rejects.toThrow("main failed")
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:log:write",
+      expect.objectContaining({
+        level: "error",
+        category: "renderer.ipc",
+        message: "IPC invoke failed.",
+        details: expect.objectContaining({
+          channel: "synapse:config:get",
+          error: "main failed",
+        }),
+      }),
+    )
+  })
+
   it("passes direct update event payloads through", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()

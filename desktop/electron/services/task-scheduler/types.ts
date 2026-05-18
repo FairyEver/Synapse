@@ -30,6 +30,7 @@ export type TaskActionRef = {
 export type ScheduledTaskStatus = "success" | "failed" | "timeout" | "cancelled" | "skipped"
 export type ScheduledTaskRunStatus = "running" | ScheduledTaskStatus
 export type ScheduledTaskRunTrigger = "schedule" | "manual" | "missed_run"
+export type ScheduledTaskActiveRun = { readonly status: "running" }
 
 export interface ScheduledTaskEntryV2 extends Record<string, unknown> {
   readonly id: string
@@ -41,6 +42,7 @@ export interface ScheduledTaskEntryV2 extends Record<string, unknown> {
   readonly trigger: TaskTrigger
   readonly action: TaskActionRef
   readonly enabled: boolean
+  readonly activeDays: readonly number[]
   readonly missedRunPolicy: "skip" | "run_once"
   readonly overlapPolicy: "skip"
   readonly createdAt: string
@@ -48,7 +50,9 @@ export interface ScheduledTaskEntryV2 extends Record<string, unknown> {
   readonly nextRunAt?: string
   readonly lastRunAt?: string
   readonly lastStatus?: ScheduledTaskStatus
+  readonly activeRun?: ScheduledTaskActiveRun
   readonly runCount: number
+  readonly configVersion: number
 }
 
 export type ScheduledTaskEntry = ScheduledTaskEntryV2
@@ -61,6 +65,7 @@ export interface ScheduledTaskCreateInput {
   readonly trigger: TaskTrigger
   readonly action: TaskActionRef
   readonly enabled?: boolean
+  readonly activeDays?: readonly number[]
   readonly missedRunPolicy?: "skip" | "run_once"
 }
 
@@ -72,6 +77,7 @@ export interface ScheduledTaskUpdateInput {
   readonly trigger?: TaskTrigger
   readonly action?: TaskActionRef
   readonly enabled?: boolean
+  readonly activeDays?: readonly number[]
   readonly missedRunPolicy?: "skip" | "run_once"
 }
 

@@ -1,44 +1,265 @@
-import { readFile } from 'fs/promises'
+import { mkdir, readFile, writeFile } from 'fs/promises'
 import { resolve, dirname } from 'path'
 import { fileURLToPath } from 'url'
+import { ensurePromptLibrary, listPromptNames, writePrompt, PROMPTS_DIR } from './prompt-library.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
-const PACKAGE_ROOT = resolve(__dirname, '..')
+export const PACKAGE_ROOT = resolve(__dirname, '..')
+export const STATE_DIR = resolve(PACKAGE_ROOT, 'state')
+export const UI_CONFIG_PATH = resolve(STATE_DIR, 'ui-config.json')
+export const PROMPT_PATH = resolve(PACKAGE_ROOT, 'prompt.md')
 
-export interface Config {
-  intervalMinutes: number
-  timeoutMinutes: number
+export type SandboxMode = 'read-only' | 'workspace-write' | 'danger-full-access'
+export type ApprovalPolicy = 'untrusted' | 'on-failure' | 'on-request' | 'never'
+export type Provider = 'codex' | 'claude-code'
+
+export interface CodexConfig {
+  command: string
+  model: string
+  sandbox: SandboxMode
+  approvalPolicy: ApprovalPolicy
+  json: boolean
+  disableMcp?: boolean
+}
+
+export interface ClaudeCodeConfig {
+  command: string
+  model: string
+  dangerouslySkipPermissions: boolean
+  outputFormat: 'json' | 'stream-json' | 'text'
+  maxTurns: number
+  systemPrompt: string
+}
+
+export interface UiConfig {
+  prompt: string
+  activePromptName: string
+  prompts: string[]
   workingDirectory: string
-  promptFile: string
+  concurrency: number
+  intervalSeconds: number
+  timeoutMinutes: number
   maxLogs: number
+  provider: Provider
+  codex: CodexConfig
+  claudeCode: ClaudeCodeConfig
 }
 
-const DEFAULTS: Config = {
-  intervalMinutes: 30,
-  timeoutMinutes: 30,
+export const DEFAULT_UI_CONFIG: UiConfig = {
+  prompt: '',
+  activePromptName: 'default',
+  prompts: [],
   workingDirectory: PACKAGE_ROOT,
-  promptFile: './prompt.md',
+  concurrency: 1,
+  intervalSeconds: 600,
+  timeoutMinutes: 30,
   maxLogs: 50,
+  provider: 'codex',
+  codex: {
+    command: 'codex',
+    model: 'gpt-5.5',
+    sandbox: 'danger-full-access',
+    approvalPolicy: 'never',
+    json: true,
+    disableMcp: true,
+  },
+  claudeCode: {
+    command: 'claude',
+    model: 'sonnet',
+    dangerouslySkipPermissions: true,
+    outputFormat: 'stream-json',
+    maxTurns: 30,
+    systemPrompt: '',
+  },
 }
 
-export async function loadConfig(): Promise<Config> {
-  const configPath = resolve(PACKAGE_ROOT, 'config.json')
-  let raw: Partial<Config> = {}
-  try {
-    raw = JSON.parse(await readFile(configPath, 'utf-8'))
-  } catch {
-    throw new Error(`Failed to load config from ${configPath}`)
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function positiveInteger(value: unknown, name: string): number {
+  if (!Number.isInteger(value) || Number(value) < 1) {
+    throw new Error(`${name} must be an integer >= 1`)
+  }
+  return Number(value)
+}
+
+function stringValue(value: unknown, name: string): string {
+  if (typeof value !== 'string') throw new Error(`${name} must be a string`)
+  return value
+}
+
+function booleanValue(value: unknown, name: string): boolean {
+  if (typeof value !== 'boolean') throw new Error(`${name} must be a boolean`)
+  return value
+}
+
+function sandboxValue(value: unknown): SandboxMode {
+  if (value === 'read-only' || value === 'workspace-write' || value === 'danger-full-access') {
+    return value
+  }
+  throw new Error('codex.sandbox must be read-only, workspace-write, or danger-full-access')
+}
+
+function approvalValue(value: unknown): ApprovalPolicy {
+  if (value === 'untrusted' || value === 'on-failure' || value === 'on-request' || value === 'never') {
+    return value
+  }
+  throw new Error('codex.approvalPolicy must be untrusted, on-failure, on-request, or never')
+}
+
+function resolveFromPackageRoot(pathValue: string): string {
+  return resolve(PACKAGE_ROOT, pathValue)
+}
+
+function providerValue(value: unknown): Provider {
+  if (value === 'codex' || value === 'claude-code') return value
+  return 'codex'
+}
+
+function outputFormatValue(value: unknown): ClaudeCodeConfig['outputFormat'] {
+  if (value === 'json' || value === 'stream-json' || value === 'text') return value
+  return 'stream-json'
+}
+
+export function validateUiConfig(raw: unknown): UiConfig {
+  if (!isRecord(raw)) throw new Error('config must be an object')
+  const codexRaw = isRecord(raw.codex) ? raw.codex : {}
+  const claudeCodeRaw = isRecord(raw.claudeCode) ? raw.claudeCode : {}
+  const merged = {
+    ...DEFAULT_UI_CONFIG,
+    ...raw,
+    codex: {
+      ...DEFAULT_UI_CONFIG.codex,
+      ...codexRaw,
+    },
+    claudeCode: {
+      ...DEFAULT_UI_CONFIG.claudeCode,
+      ...claudeCodeRaw,
+    },
   }
 
-  const config: Config = { ...DEFAULTS, ...raw }
+  const prompt = stringValue(merged.prompt, 'prompt')
+  const activePromptName = stringValue(merged.activePromptName, 'activePromptName').trim() || DEFAULT_UI_CONFIG.activePromptName
+  const prompts = Array.isArray(merged.prompts)
+    ? merged.prompts.filter((name): name is string => typeof name === 'string')
+    : []
+  const workingDirectory = stringValue(merged.workingDirectory, 'workingDirectory')
+  const provider = providerValue(merged.provider)
+  const codexCommand = stringValue(merged.codex.command, 'codex.command').trim()
+  if (!codexCommand) throw new Error('codex.command is required')
+  const claudeCommand = stringValue(merged.claudeCode.command, 'claudeCode.command').trim()
+  if (!claudeCommand) throw new Error('claudeCode.command is required')
 
-  if (config.intervalMinutes < 1) throw new Error('intervalMinutes must be >= 1')
-  if (config.timeoutMinutes < 1) throw new Error('timeoutMinutes must be >= 1')
-  if (!config.workingDirectory) throw new Error('workingDirectory is required')
-  if (!config.promptFile) throw new Error('promptFile is required')
-
-  config.workingDirectory = resolve(PACKAGE_ROOT, config.workingDirectory)
-  config.promptFile = resolve(PACKAGE_ROOT, config.promptFile)
-
-  return config
+  return {
+    prompt,
+    activePromptName,
+    prompts,
+    workingDirectory: resolveFromPackageRoot(workingDirectory),
+    concurrency: positiveInteger(merged.concurrency, 'concurrency'),
+    intervalSeconds: positiveInteger(
+      typeof merged.intervalSeconds === 'number' && merged.intervalSeconds >= 1
+        ? merged.intervalSeconds
+        : typeof (raw as Record<string, unknown>).intervalMinutes === 'number'
+          ? Number((raw as Record<string, unknown>).intervalMinutes) * 60
+          : DEFAULT_UI_CONFIG.intervalSeconds,
+      'intervalSeconds',
+    ),
+    timeoutMinutes: positiveInteger(merged.timeoutMinutes, 'timeoutMinutes'),
+    maxLogs: positiveInteger(merged.maxLogs, 'maxLogs'),
+    provider,
+    codex: {
+      command: codexCommand,
+      model: stringValue(merged.codex.model, 'codex.model').trim() || DEFAULT_UI_CONFIG.codex.model,
+      sandbox: sandboxValue(merged.codex.sandbox),
+      approvalPolicy: approvalValue(merged.codex.approvalPolicy),
+      json: booleanValue(merged.codex.json, 'codex.json'),
+      disableMcp: booleanValue(merged.codex.disableMcp, 'codex.disableMcp'),
+    },
+    claudeCode: {
+      command: claudeCommand,
+      model: stringValue(merged.claudeCode.model, 'claudeCode.model').trim() || DEFAULT_UI_CONFIG.claudeCode.model,
+      dangerouslySkipPermissions: typeof merged.claudeCode.dangerouslySkipPermissions === 'boolean'
+        ? merged.claudeCode.dangerouslySkipPermissions
+        : DEFAULT_UI_CONFIG.claudeCode.dangerouslySkipPermissions,
+      outputFormat: outputFormatValue(merged.claudeCode.outputFormat),
+      maxTurns: typeof merged.claudeCode.maxTurns === 'number' && merged.claudeCode.maxTurns >= 1
+        ? merged.claudeCode.maxTurns
+        : DEFAULT_UI_CONFIG.claudeCode.maxTurns,
+      systemPrompt: typeof merged.claudeCode.systemPrompt === 'string'
+        ? merged.claudeCode.systemPrompt
+        : DEFAULT_UI_CONFIG.claudeCode.systemPrompt,
+    },
+  }
 }
+
+function uiConfigFile(config: UiConfig): Omit<UiConfig, 'prompt' | 'prompts'> {
+  return {
+    activePromptName: config.activePromptName,
+    workingDirectory: config.workingDirectory,
+    concurrency: config.concurrency,
+    intervalSeconds: config.intervalSeconds,
+    timeoutMinutes: config.timeoutMinutes,
+    maxLogs: config.maxLogs,
+    provider: config.provider,
+    codex: config.codex,
+    claudeCode: config.claudeCode,
+  }
+}
+
+async function writeFileIfChanged(path: string, content: string): Promise<void> {
+  try {
+    if (await readFile(path, 'utf-8') === content) return
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+  }
+  await writeFile(path, content, 'utf-8')
+}
+
+export async function loadUiConfig(
+  path = UI_CONFIG_PATH,
+  promptPath = PROMPT_PATH,
+  promptsDir = PROMPTS_DIR
+): Promise<UiConfig> {
+  try {
+    const raw = JSON.parse(await readFile(path, 'utf-8'))
+    const activePromptName = isRecord(raw) && typeof raw.activePromptName === 'string' ? raw.activePromptName : ''
+    const library = await ensurePromptLibrary({ promptsDir, legacyPromptPath: promptPath }, activePromptName)
+    return validateUiConfig({
+      ...raw,
+      prompt: library.prompt,
+      activePromptName: library.activePromptName,
+      prompts: library.prompts,
+    })
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err
+    const library = await ensurePromptLibrary({ promptsDir, legacyPromptPath: promptPath })
+    return validateUiConfig({
+      ...DEFAULT_UI_CONFIG,
+      prompt: library.prompt,
+      activePromptName: library.activePromptName,
+      prompts: library.prompts,
+    })
+  }
+}
+
+export async function saveUiConfig(
+  config: unknown,
+  path = UI_CONFIG_PATH,
+  promptPath = PROMPT_PATH,
+  promptsDir = PROMPTS_DIR
+): Promise<UiConfig> {
+  const validated = validateUiConfig(config)
+  const existingPrompts = await listPromptNames(promptsDir)
+  if (!existingPrompts.includes(validated.activePromptName)) {
+    throw new Error('Active prompt not found')
+  }
+  await mkdir(dirname(path), { recursive: true })
+  await writePrompt(validated.activePromptName, validated.prompt, { promptsDir, legacyPromptPath: promptPath })
+  const prompts = await listPromptNames(promptsDir)
+  const saved = validateUiConfig({ ...validated, prompts })
+  await writeFileIfChanged(path, `${JSON.stringify(uiConfigFile(saved), null, 2)}\n`)
+  return saved
+}
+
+export const loadConfig = loadUiConfig

@@ -9,32 +9,30 @@ import type {
   ProviderEntryV1,
   SecretEntryV1,
 } from "../../../runtime/data-repo"
-import { ProviderConfigService } from "../../provider-config"
+import { ProviderService } from "../../provider"
 import { AgentCommandRouter, modesForAgent } from "../command-router"
 import { CustomCommandRegistry } from "../command-registry"
 import type { AgentMessage } from "../types"
 
 describe("AgentCommandRouter", () => {
   it("lists and switches models by alias and index, then resets the session", async () => {
-    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
-    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
-    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
-    await providerConfig.upsertGlobalProvider({
-      id: "openai",
-      model: "gpt-5.4",
-      models: [
-        { id: "gpt-5.4", alias: "main" },
-        { id: "gpt-5.3-codex", alias: "codex" },
-      ],
-      agentTypes: ["codex"],
+    const { providerService } = makeProviderService()
+    await providerService.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      active: true,
+      model: "claude-sonnet-4.5",
+      haikuModel: "claude-haiku-3.5",
+      sonnetModel: "claude-sonnet-4.5",
+      env: {},
     })
-    await providerConfig.setProjectProviderRefs("project-1", ["openai"])
-    await providerConfig.setActiveProvider("project-1", "openai")
     const resets: string[] = []
     const router = new AgentCommandRouter({
       projectId: "project-1",
-      agentType: "codex",
-      providerConfig,
+      agentType: "claude-code",
+      providerService,
       resetSession: async (message) => {
         resets.push(message.sessionKey)
         return { ...conversation, agentSessionId: undefined }
@@ -43,66 +41,310 @@ describe("AgentCommandRouter", () => {
     const conversation = baseConversation()
 
     const list = expectRuntimeResult(await router.handle(baseMessage("/model"), conversation))
-    expect(list.resultText).toContain("gpt-5.4")
-    expect(list.resultText).toContain("gpt-5.3-codex (codex)")
+    expect(list.resultText).toContain("claude-sonnet-4.5")
+    expect(list.resultText).toContain("claude-haiku-3.5 (haiku)")
 
     const byAlias = expectRuntimeResult(
-      await router.handle(baseMessage("/model switch codex"), conversation),
+      await router.handle(baseMessage("/model switch haiku"), conversation),
     )
-    expect(byAlias.resultText).toBe("Model changed: gpt-5.3-codex")
-    expect((await providerConfig.getProjectProviderState("project-1", "codex")).activeModel)
-      .toBe("gpt-5.3-codex")
+    expect(byAlias.resultText).toBe("Model changed: claude-haiku-3.5")
+    await expect(providerService.getActiveProvider()).resolves.toMatchObject({
+      model: "claude-haiku-3.5",
+    })
 
-    const byIndex = expectRuntimeResult(await router.handle(baseMessage("/model 1"), conversation))
-    expect(byIndex.resultText).toBe("Model changed: gpt-5.4")
+    const byIndex = expectRuntimeResult(await router.handle(baseMessage("/model 2"), conversation))
+    expect(byIndex.resultText).toBe("Model changed: claude-sonnet-4.5")
     expect(resets).toEqual(["s1", "s1"])
   })
 
-  it("lists and switches modes, handles /new and /status, and rejects unknown commands", async () => {
-    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
-    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
-    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
-    const resets: string[] = []
+  it("switches the conversation-bound provider model instead of the active provider", async () => {
+    const { providerService } = makeProviderService()
+    await providerService.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      active: true,
+      model: "claude-sonnet-4.5",
+      env: {},
+    })
+    await providerService.createProvider({
+      id: "deepseek",
+      name: "DeepSeek",
+      category: "third_party",
+      apiKeyField: "ANTHROPIC_AUTH_TOKEN",
+      active: false,
+      model: "deepseek-chat",
+      haikuModel: "deepseek-fast",
+      env: {},
+    })
     const router = new AgentCommandRouter({
       projectId: "project-1",
       agentType: "claude-code",
-      providerConfig,
+      providerService,
+      resetSession: async () => baseConversation(),
+    })
+    const conversation = { ...baseConversation(), providerId: "deepseek" }
+
+    const list = expectRuntimeResult(await router.handle(baseMessage("/model"), conversation))
+    expect(list.resultText).toContain("deepseek-chat")
+    expect(list.resultText).toContain("deepseek-fast (haiku)")
+
+    const switched = expectRuntimeResult(await router.handle(baseMessage("/model haiku"), conversation))
+
+    expect(switched.resultText).toBe("Model changed: deepseek-fast")
+    await expect(providerService.getProvider("deepseek")).resolves.toMatchObject({
+      model: "deepseek-fast",
+    })
+    await expect(providerService.getActiveProvider()).resolves.toMatchObject({
+      id: "anthropic",
+      model: "claude-sonnet-4.5",
+    })
+  })
+
+  it("logs conversation provider lookup failures with command context", async () => {
+    const records: Array<{ readonly message: string, readonly meta?: Record<string, unknown> }> = []
+    const providerService = {
+      getProvider: async () => {
+        throw Object.assign(new Error("provider store unavailable"), { code: "EIO" })
+      },
+      getActiveProvider: async () => null,
+      updateProvider: async () => {
+        throw new Error("unexpected update")
+      },
+    } as unknown as ProviderService
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      logger: {
+        warn: (message, meta) => records.push({ message, meta: meta as Record<string, unknown> }),
+      },
+      resetSession: async () => baseConversation(),
+    })
+
+    const result = expectRuntimeResult(
+      await router.handle(baseMessage("/model haiku"), { ...baseConversation(), providerId: "anthropic" }),
+    )
+
+    expect(result.error).toBe("Provider not found: anthropic")
+    expect(records).toEqual([{
+      message: "Agent command provider lookup failed.",
+      meta: expect.objectContaining({
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "s1",
+        agentType: "claude-code",
+        providerId: "anthropic",
+        command: "/model",
+        errorName: "Error",
+        errorCode: "EIO",
+        error: "provider store unavailable",
+      }),
+    }])
+  })
+
+  it("redacts Windows paths in provider lookup diagnostics", async () => {
+    const records: Array<{ readonly message: string, readonly meta?: Record<string, unknown> }> = []
+    const providerService = {
+      getProvider: async () => {
+        throw Object.assign(
+          new Error("EACCES: permission denied, open C:\\Users\\liyang\\secret\\providers.json"),
+          { code: "EACCES" },
+        )
+      },
+      getActiveProvider: async () => null,
+      updateProvider: async () => {
+        throw new Error("unexpected update")
+      },
+    } as unknown as ProviderService
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      logger: {
+        warn: (message, meta) => records.push({ message, meta: meta as Record<string, unknown> }),
+      },
+      resetSession: async () => baseConversation(),
+    })
+
+    const result = expectRuntimeResult(
+      await router.handle(baseMessage("/model haiku"), { ...baseConversation(), providerId: "anthropic" }),
+    )
+
+    expect(result.error).toBe("Provider not found: anthropic")
+    expect(records[0]?.meta).toEqual(expect.objectContaining({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "s1",
+      providerId: "anthropic",
+      command: "/model",
+      errorName: "Error",
+      errorCode: "EACCES",
+      error: "EACCES: permission denied, open [path redacted]",
+    }))
+    expect(JSON.stringify(records)).not.toContain("C:\\Users\\liyang")
+  })
+
+  it("redacts secret-shaped values in provider lookup diagnostics", async () => {
+    const records: Array<{ readonly message: string, readonly meta?: Record<string, unknown> }> = []
+    const providerService = {
+      getProvider: async () => {
+        throw Object.assign(
+          new Error("request failed token=sk-secret authorization=BearerSecret cookie=session-id"),
+          { code: "EAUTH" },
+        )
+      },
+      getActiveProvider: async () => null,
+      updateProvider: async () => {
+        throw new Error("unexpected update")
+      },
+    } as unknown as ProviderService
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      logger: {
+        warn: (message, meta) => records.push({ message, meta: meta as Record<string, unknown> }),
+      },
+      resetSession: async () => baseConversation(),
+    })
+
+    const result = expectRuntimeResult(
+      await router.handle(baseMessage("/status"), { ...baseConversation(), providerId: "anthropic" }),
+    )
+
+    expect(result.resultText).toContain("Provider: anthropic")
+    expect(records[0]?.meta).toEqual(expect.objectContaining({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "s1",
+      providerId: "anthropic",
+      command: "/status",
+      errorName: "Error",
+      errorCode: "EAUTH",
+      error: "request failed token=[redacted] authorization=[redacted] cookie=[redacted]",
+    }))
+    expect(JSON.stringify(records)).not.toContain("sk-secret")
+    expect(JSON.stringify(records)).not.toContain("BearerSecret")
+    expect(JSON.stringify(records)).not.toContain("session-id")
+  })
+
+  it("logs /show failures without exposing raw reference errors to the conversation", async () => {
+    const { providerService } = makeProviderService()
+    const records: Array<{ readonly message: string, readonly meta?: Record<string, unknown> }> = []
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      logger: {
+        warn: (message, meta) => records.push({ message, meta: meta as Record<string, unknown> }),
+      },
+      resetSession: async () => baseConversation(),
+      showReference: async () => {
+        throw Object.assign(
+          new Error("open /Users/liyang/secret/token.txt token=sk-secret authorization=BearerSecret"),
+          { code: "EACCES" },
+        )
+      },
+    })
+
+    const result = expectRuntimeResult(
+      await router.handle(baseMessage("/show token.txt"), baseConversation()),
+    )
+
+    expect(result.error).toBe("open [path redacted] token=[redacted] authorization=[redacted]")
+    expect(result.error).not.toContain("/Users/liyang")
+    expect(result.error).not.toContain("sk-secret")
+    expect(result.error).not.toContain("BearerSecret")
+    expect(records).toEqual([{
+      message: "Agent command show reference failed.",
+      meta: expect.objectContaining({
+        projectId: "project-1",
+        conversationId: "conversation-1",
+        sessionKey: "s1",
+        agentType: "claude-code",
+        command: "/show",
+        argsCount: 1,
+        errorName: "Error",
+        errorCode: "EACCES",
+        error: "open [path redacted] token=[redacted] authorization=[redacted]",
+      }),
+    }])
+    expect(JSON.stringify(records)).not.toContain("/Users/liyang")
+    expect(JSON.stringify(records)).not.toContain("sk-secret")
+    expect(JSON.stringify(records)).not.toContain("BearerSecret")
+  })
+
+  it("lists modes, switches safe modes, handles /new and /status, and routes dangerous modes to the selector", async () => {
+    const { providerService } = makeProviderService()
+    await providerService.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      active: true,
+      model: "claude-sonnet-4.5",
+      env: {},
+    })
+    const resets: string[] = []
+    const modeSwitches: string[] = []
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
       resetSession: async (message) => {
         resets.push(message.sessionKey)
         return { ...baseConversation(), agentSessionId: undefined }
       },
+      setPermissionMode: async (_message, _conversation, mode) => {
+        modeSwitches.push(mode)
+        return { ...baseConversation(), agentConfig: { mode } }
+      },
     })
 
-    const list = expectRuntimeResult(await router.handle(baseMessage("/mode"), baseConversation()))
+    const list = expectRuntimeResult(await router.handle(baseMessage("/mode"), {
+      ...baseConversation(),
+      agentConfig: { mode: "plan" },
+    }))
+    expect(list.resultText).toContain("Current mode: plan")
     expect(list.resultText).toContain("acceptEdits")
 
     const switched = expectRuntimeResult(
       await router.handle(baseMessage("/mode acceptEdits"), baseConversation()),
     )
     expect(switched.resultText).toBe("Mode changed: acceptEdits")
-    expect((await providerConfig.getProjectProviderState("project-1", "claude-code")).activeMode)
-      .toBe("acceptEdits")
+    expect(modeSwitches).toEqual(["acceptEdits"])
+
+    const dangerous = expectRuntimeResult(
+      await router.handle(baseMessage("/mode bypassPermissions"), baseConversation()),
+    )
+    expect(dangerous.error).toBe("请使用权限模式选择器确认切换。")
 
     const next = expectRuntimeResult(await router.handle(baseMessage("/new"), baseConversation()))
     expect(next.resultText).toBe("New session will start on the next message.")
 
-    const status = expectRuntimeResult(await router.handle(baseMessage("/status"), baseConversation()))
+    const status = expectRuntimeResult(await router.handle(baseMessage("/status"), {
+      ...baseConversation(),
+      agentConfig: { mode: "acceptEdits" },
+    }))
     expect(status.resultText).toContain("Agent: claude-code")
+    expect(status.resultText).toContain("Provider: anthropic")
+    expect(status.resultText).toContain("Model: claude-sonnet-4.5")
+    expect(status.resultText).toContain("Mode: acceptEdits")
     expect(status.resultText).toContain("Agent session: thread-1")
 
     const unknown = expectRuntimeResult(await router.handle(baseMessage("/unknown"), baseConversation()))
     expect(unknown.error).toBe("Unsupported command: /unknown")
-    expect(resets).toEqual(["s1", "s1"])
+    expect(resets).toEqual(["s1"])
   })
 
   it("routes registered prompt commands and explicit agent-native slash passthrough", async () => {
-    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
-    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
-    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    const { providerService } = makeProviderService()
     const router = new AgentCommandRouter({
       projectId: "project-1",
-      agentType: "codex",
-      providerConfig,
+      agentType: "claude-code",
+      providerService,
       registeredPromptCommands: [{
         name: "explain",
         buildPrompt: (args) => `Explain: ${args.join(" ")}`,
@@ -119,9 +361,7 @@ describe("AgentCommandRouter", () => {
   })
 
   it("routes custom prompt and exec commands", async () => {
-    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
-    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
-    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    const { providerService } = makeProviderService()
     const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
     const registry = new CustomCommandRegistry({
       projectId: "project-1",
@@ -132,8 +372,8 @@ describe("AgentCommandRouter", () => {
     await registry.addExec({ name: "local-build", exec: "pnpm build" })
     const router = new AgentCommandRouter({
       projectId: "project-1",
-      agentType: "codex",
-      providerConfig,
+      agentType: "claude-code",
+      providerService,
       customCommands: registry,
       resetSession: async () => baseConversation(),
       runCustomCommand: async (command, args) => `${command.name}:${args.join(",")}`,
@@ -150,9 +390,7 @@ describe("AgentCommandRouter", () => {
   })
 
   it("stores the requested shell for admin exec commands", async () => {
-    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
-    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
-    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    const { providerService } = makeProviderService()
     const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
     const registry = new CustomCommandRegistry({
       projectId: "project-1",
@@ -161,8 +399,8 @@ describe("AgentCommandRouter", () => {
     })
     const router = new AgentCommandRouter({
       projectId: "project-1",
-      agentType: "codex",
-      providerConfig,
+      agentType: "claude-code",
+      providerService,
       customCommands: registry,
       resetSession: async () => baseConversation(),
     })
@@ -182,13 +420,11 @@ describe("AgentCommandRouter", () => {
   })
 
   it("routes builtin /compress to the runtime callback", async () => {
-    const providers = new MemoryNamespace<ProviderEntryV1>("providers")
-    const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
-    const providerConfig = new ProviderConfigService({ providers, secrets, now: fixedNow })
+    const { providerService } = makeProviderService()
     const router = new AgentCommandRouter({
       projectId: "project-1",
       agentType: "claude-code",
-      providerConfig,
+      providerService,
       resetSession: async () => baseConversation(),
       compressSession: async (_message, conversation) => ({
         conversationId: conversation.id,
@@ -201,19 +437,40 @@ describe("AgentCommandRouter", () => {
 
     expect(result.resultText).toBe("Context compressed.")
   })
+
+  it("redacts raw /show command failure text before returning it", async () => {
+    const { providerService } = makeProviderService()
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      resetSession: async () => baseConversation(),
+      showReference: async () => {
+        throw new Error("read failed /Users/liyang/secret/repo token=sk-secret")
+      },
+    })
+
+    const result = expectRuntimeResult(await router.handle(baseMessage("/show secret.ts"), baseConversation()))
+
+    expect(result.error).toBe("read failed [path redacted] token=[redacted]")
+    expect(result.error).not.toContain("/Users/liyang/secret")
+    expect(result.error).not.toContain("sk-secret")
+  })
 })
 
 describe("modesForAgent", () => {
-  it("reads Codex modes from Agent definitions", () => {
-    expect(modesForAgent("codex").map((mode) => mode.key)).toEqual([
-      "suggest",
-      "auto-edit",
-      "full-auto",
-      "yolo",
+  it("reads Claude Code modes from Agent definitions", () => {
+    expect(modesForAgent("claude-code").map((mode) => mode.key)).toEqual([
+      "default",
+      "acceptEdits",
+      "plan",
+      "auto",
+      "bypassPermissions",
+      "dontAsk",
     ])
   })
 
-  it("reads Claude Code modes from Agent definitions", () => {
+  it("normalizes underscore variant to claude-code", () => {
     expect(modesForAgent("claude_code").map((mode) => mode.key)).toEqual([
       "default",
       "acceptEdits",
@@ -254,12 +511,20 @@ function baseConversation(): ConversationEntryV1 {
     projectId: "project-1",
     sessionKey: "s1",
     platform: "local",
-    agentType: "codex",
+    agentType: "claude-code",
     agentSessionId: "thread-1",
     history: [],
     active: true,
     createdAt: "2026-04-26T00:00:00.000Z",
     updatedAt: "2026-04-26T00:00:00.000Z",
+  }
+}
+
+function makeProviderService(): { providerService: ProviderService } {
+  const providers = new MemoryNamespace<ProviderEntryV1>("providers")
+  const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
+  return {
+    providerService: new ProviderService({ providers, secrets, now: fixedNow }),
   }
 }
 

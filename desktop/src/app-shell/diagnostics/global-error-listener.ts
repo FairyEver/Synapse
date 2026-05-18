@@ -1,26 +1,29 @@
 import type { RendererLogger } from "./types"
 import { guardedLog } from "./guard"
+import { getDiagnosticSnapshot } from "@/lib/diagnostic-context"
 
 export function installGlobalErrorListener(logger: RendererLogger): () => void {
   const handleError = (event: ErrorEvent) => {
-    guardedLog(logger, "error", event.message || "Uncaught error", {
+    const diagnostic = errorDiagnostic(event.error, event.message)
+    guardedLog(logger, "error", "Renderer uncaught error.", {
+      boundary: "renderer.global-error",
       filename: event.filename,
       lineno: event.lineno,
       colno: event.colno,
-      stack: event.error?.stack,
+      ...diagnostic,
+      diagnostics: getDiagnosticSnapshot(),
     })
   }
 
   const handleRejection = (event: PromiseRejectionEvent) => {
     const reason = event.reason
-    const message =
-      reason instanceof Error
-        ? reason.message
-        : typeof reason === "string"
-          ? reason
-          : "Unhandled promise rejection"
-    const stack = reason instanceof Error ? reason.stack : undefined
-    guardedLog(logger, "error", message, { type: "unhandledrejection", stack })
+    guardedLog(logger, "error", "Renderer unhandled promise rejection.", {
+      boundary: "renderer.global-error",
+      type: "unhandledrejection",
+      reasonType: reason instanceof Error ? reason.name : typeof reason,
+      ...errorDiagnostic(reason),
+      diagnostics: getDiagnosticSnapshot(),
+    })
   }
 
   window.addEventListener("error", handleError)
@@ -29,5 +32,24 @@ export function installGlobalErrorListener(logger: RendererLogger): () => void {
   return () => {
     window.removeEventListener("error", handleError)
     window.removeEventListener("unhandledrejection", handleRejection)
+  }
+}
+
+function errorDiagnostic(
+  error: unknown,
+  fallbackMessage = "",
+): { errorName: string; errorLength: number; stackLength?: number } {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name,
+      errorLength: error.message.length,
+      stackLength: error.stack?.length,
+    }
+  }
+
+  const message = typeof error === "string" ? error : fallbackMessage
+  return {
+    errorName: error === undefined || error === null ? "unknown" : typeof error,
+    errorLength: message.length,
   }
 }
