@@ -695,7 +695,6 @@ function useChatConnection(
         errorLength: errorMessage(rawError).length,
       })
       dispatch({ type: "SET_ERROR", error: message })
-      throw rawError
     }
   }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef])
 

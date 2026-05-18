@@ -514,6 +514,38 @@ describe("useAgentChat", () => {
     })
   })
 
+  it("keeps permission mode switch failures handled in hook state", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          setPermissionMode: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.setPermissionMode.mockRejectedValue(new Error("mode switch failed"))
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await expect(chat?.setPermissionMode("plan")).resolves.toBeUndefined()
+    })
+
+    expect(chat?.error).toBe("mode switch failed")
+  })
+
   it("creates an Agent session with an explicit permission mode", async () => {
     let chat: ReturnType<typeof useAgentChat> | undefined
     const container = document.createElement("div")
