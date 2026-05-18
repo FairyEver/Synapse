@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { toast } from "sonner"
 import {
   AlertDialog,
@@ -99,6 +99,8 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
   }, [provider, onDeleted, onOpenChange])
 
   const hasReferences = scan.status === "loaded" && (scan.taskCount + scan.workflowNodeCount + scan.conversationCount) > 0
+  const hasConversationReferences = scan.status === "loaded" && scan.conversationCount > 0
+  const excludedProviderIds = useMemo(() => provider ? [provider.id] : [], [provider])
 
   return (
     <>
@@ -167,6 +169,7 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
         open={migrationOpen}
         onOpenChange={setMigrationOpen}
         onSelect={handleMigrate}
+        excludeProviderIds={excludedProviderIds}
       />
     </>
   )

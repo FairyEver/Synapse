@@ -31,6 +31,7 @@ type ProviderModelSelectDialogProps = {
   readonly onOpenChange: (open: boolean) => void
   readonly onSelect: (selection: ProviderModelSelection) => void | Promise<void>
   readonly defaultSelection?: ProviderModelSelection
+  readonly excludeProviderIds?: readonly string[]
 }
 
 const TIER_CONFIG: ReadonlyArray<{ tier: ModelTier; label: string }> = [
@@ -39,6 +40,8 @@ const TIER_CONFIG: ReadonlyArray<{ tier: ModelTier; label: string }> = [
   { tier: "sonnet", label: "Sonnet" },
   { tier: "opus", label: "Opus" },
 ]
+
+const EMPTY_EXCLUDED_PROVIDERS: readonly string[] = []
 
 function availableTiers(provider: SynapseAgentProvider) {
   return TIER_CONFIG.flatMap((c) => resolveModelName(provider, c.tier) ? [c] : [])
@@ -49,26 +52,26 @@ function ProviderModelSelectDialog({
   onOpenChange,
   onSelect,
   defaultSelection,
+  excludeProviderIds = EMPTY_EXCLUDED_PROVIDERS,
 }: ProviderModelSelectDialogProps) {
   const [providers, setProviders] = useState<SynapseAgentProvider[]>([])
   const [selectedProviderId, setSelectedProviderId] = useState<string | undefined>(undefined)
   const [selectedTier, setSelectedTier] = useState<ModelTier | undefined>(undefined)
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const requestIdRef = useRef(0)
 
   const visibleProviders = useMemo(
-    () => providers.filter((provider) => !provider.archived),
-    [providers],
+    () => providers.filter((provider) =>
+      !provider.archived && !excludeProviderIds.includes(provider.id)),
+    [excludeProviderIds, providers],
   )
 
   const loadProviders = useCallback(async () => {
     const requestId = requestIdRef.current + 1
     requestIdRef.current = requestId
     setLoading(true)
-    setLoaded(false)
     setError(null)
     setProviders([])
     setSelectedProviderId(undefined)
@@ -77,7 +80,8 @@ function ProviderModelSelectDialog({
       const nextProviders = await requireSynapseBridge().agent.listProviders()
       if (requestId !== requestIdRef.current) return
       setProviders(nextProviders)
-      const visible = nextProviders.filter((p) => !p.archived)
+      const visible = nextProviders.filter((p) =>
+        !p.archived && !excludeProviderIds.includes(p.id))
 
       const defaultProvider = defaultSelection
         ? visible.find((p) => p.id === defaultSelection.providerId)
@@ -98,7 +102,6 @@ function ProviderModelSelectDialog({
           setSelectedTier(pickDefaultTier(preselectedProvider))
         }
       }
-      setLoaded(true)
     } catch (rawError) {
       if (requestId !== requestIdRef.current) return
       logger.warn("Agent provider list failed.", {
@@ -110,18 +113,16 @@ function ProviderModelSelectDialog({
       setSelectedProviderId(undefined)
       setSelectedTier(undefined)
       setError("读取 Provider 失败")
-      setLoaded(true)
     } finally {
       if (requestId === requestIdRef.current) {
         setLoading(false)
       }
     }
-  }, [defaultSelection])
+  }, [defaultSelection, excludeProviderIds])
 
   useEffect(() => {
     if (!open) {
       requestIdRef.current += 1
-      setLoaded(false)
       return
     }
     void loadProviders()
