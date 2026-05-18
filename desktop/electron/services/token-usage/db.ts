@@ -2,6 +2,7 @@ import { DatabaseSync } from "node:sqlite"
 import path from "node:path"
 import { app } from "electron"
 import type { FileFingerprint, UnifiedMessage } from "./parsers/types"
+import { timestampToLocalHour } from "./parsers/utils"
 
 let db: DatabaseSync | null = null
 
@@ -180,7 +181,7 @@ export function upsertHourlyUsage(messages: UnifiedMessage[]): void {
        cost_usd = cost_usd + excluded.cost_usd`,
   )
   for (const msg of messages) {
-    const hour = new Date(msg.timestamp).toISOString().slice(0, 13).replace("T", " ")
+    const hour = timestampToLocalHour(msg.timestamp)
     stmt.run(hour, msg.client, msg.modelId, msg.providerId,
       msg.tokens.input, msg.tokens.output, msg.tokens.cacheRead, msg.tokens.cacheWrite,
       msg.tokens.reasoning, msg.messageCount, msg.isTurnStart ? 1 : 0, msg.cost)

@@ -94,6 +94,15 @@ export function timestampToLocalDate(ms: number): string {
   return `${year}-${month}-${day}`
 }
 
+export function timestampToLocalHour(ms: number): string {
+  const d = new Date(ms)
+  const year = d.getFullYear()
+  const month = String(d.getMonth() + 1).padStart(2, "0")
+  const day = String(d.getDate()).padStart(2, "0")
+  const hour = String(d.getHours()).padStart(2, "0")
+  return `${year}-${month}-${day} ${hour}`
+}
+
 export function normalizeAgentName(raw: string): string {
   let name = raw.replace(/[​‌‍﻿]/g, "").trim()
   name = name.replace(/^(astrape|oh-my-claudecode|oh-my-codex):/, "")
