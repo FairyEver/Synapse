@@ -10,18 +10,6 @@ export interface TemplateValueConfig {
   editorValue: string;
 }
 
-/**
- * 预设供应商的视觉主题配置
- */
-export interface PresetTheme {
-  /** 图标类型：'claude' | 'codex' | 'gemini' | 'generic' */
-  icon?: "claude" | "codex" | "gemini" | "generic";
-  /** 背景色（选中状态），支持 Tailwind 类名或 hex 颜色 */
-  backgroundColor?: string;
-  /** 文字色（选中状态），支持 Tailwind 类名或 hex 颜色 */
-  textColor?: string;
-}
-
 export interface ProviderPreset {
   name: string;
   nameKey?: string; // i18n key for localized display name
@@ -39,11 +27,6 @@ export interface ProviderPreset {
   templateValues?: Record<string, TemplateValueConfig>; // editorValue 存储编辑器中的实时输入值
   // 新增：请求地址候选列表（用于地址管理/测速）
   endpointCandidates?: string[];
-  // 新增：视觉主题配置
-  theme?: PresetTheme;
-  // 图标配置
-  icon?: string; // 图标名称
-  iconColor?: string; // 图标颜色
 
   // Claude API 格式（仅 Claude 供应商使用）
   // - "anthropic" (默认): Anthropic Messages API 格式，直接透传
@@ -81,13 +64,6 @@ export const providerPresets: ProviderPreset[] = [
     },
     isOfficial: true, // 明确标识为官方预设
     category: "official",
-    theme: {
-      icon: "claude",
-      backgroundColor: "#D97757",
-      textColor: "#FFFFFF",
-    },
-    icon: "anthropic",
-    iconColor: "#D4915D",
   },
   {
     name: "Shengsuanyun",
@@ -103,7 +79,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "aggregator",
     isPartner: true,
     partnerPromotionKey: "shengsuanyun",
-    icon: "shengsuanyun",
   },
   {
     name: "Gemini Native",
@@ -123,8 +98,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "third_party",
     apiFormat: "gemini_native",
     endpointCandidates: ["https://generativelanguage.googleapis.com"],
-    icon: "gemini",
-    iconColor: "#4285F4",
   },
   {
     name: "DeepSeek",
@@ -142,8 +115,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "cn_official",
     // Anthropic 兼容层挂在 /anthropic 子路径；/models 是根上独立端点
     modelsUrl: "https://api.deepseek.com/models",
-    icon: "deepseek",
-    iconColor: "#1E88E5",
   },
   {
     name: "Zhipu GLM",
@@ -160,8 +131,6 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "cn_official",
-    icon: "zhipu",
-    iconColor: "#0F62FE",
   },
   {
     name: "Zhipu GLM en",
@@ -178,8 +147,6 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "cn_official",
-    icon: "zhipu",
-    iconColor: "#0F62FE",
   },
   {
     name: "Baidu Qianfan Coding Plan",
@@ -198,8 +165,6 @@ export const providerPresets: ProviderPreset[] = [
     },
     category: "cn_official",
     endpointCandidates: ["https://qianfan.baidubce.com/anthropic/coding"],
-    icon: "baidu",
-    iconColor: "#2932E1",
   },
   {
     name: "Bailian",
@@ -211,8 +176,6 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "cn_official",
-    icon: "bailian",
-    iconColor: "#624AFF",
   },
   {
     name: "Bailian For Coding",
@@ -225,8 +188,6 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "cn_official",
-    icon: "bailian",
-    iconColor: "#624AFF",
   },
   {
     name: "Kimi",
@@ -242,8 +203,6 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "cn_official",
-    icon: "kimi",
-    iconColor: "#6366F1",
   },
   {
     name: "Kimi For Coding",
@@ -255,8 +214,6 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "cn_official",
-    icon: "kimi",
-    iconColor: "#6366F1",
   },
   {
     name: "StepFun",
@@ -274,8 +231,6 @@ export const providerPresets: ProviderPreset[] = [
     },
     category: "cn_official",
     endpointCandidates: ["https://api.stepfun.com/step_plan"],
-    icon: "stepfun",
-    iconColor: "#16D6D2",
   },
   {
     name: "StepFun en",
@@ -293,8 +248,6 @@ export const providerPresets: ProviderPreset[] = [
     },
     category: "cn_official",
     endpointCandidates: ["https://api.stepfun.ai/step_plan"],
-    icon: "stepfun",
-    iconColor: "#16D6D2",
   },
   {
     name: "ModelScope",
@@ -310,8 +263,6 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    icon: "modelscope",
-    iconColor: "#624AFF",
   },
   {
     name: "KAT-Coder",
@@ -337,7 +288,6 @@ export const providerPresets: ProviderPreset[] = [
         editorValue: "",
       },
     },
-    icon: "catcoder",
   },
   {
     name: "Longcat",
@@ -356,8 +306,6 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "cn_official",
-    icon: "longcat",
-    iconColor: "#29E154",
   },
   {
     name: "MiniMax",
@@ -378,12 +326,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "cn_official",
     isPartner: true,
     partnerPromotionKey: "minimax_cn",
-    theme: {
-      backgroundColor: "#f64551",
-      textColor: "#FFFFFF",
-    },
-    icon: "minimax",
-    iconColor: "#FF6B6B",
   },
   {
     name: "MiniMax en",
@@ -404,12 +346,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "cn_official",
     isPartner: true,
     partnerPromotionKey: "minimax_en",
-    theme: {
-      backgroundColor: "#f64551",
-      textColor: "#FFFFFF",
-    },
-    icon: "minimax",
-    iconColor: "#FF6B6B",
   },
   {
     name: "DouBaoSeed",
@@ -427,8 +363,6 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "cn_official",
-    icon: "doubao",
-    iconColor: "#3370FF",
   },
   {
     name: "BaiLing",
@@ -460,8 +394,6 @@ export const providerPresets: ProviderPreset[] = [
     // 请求地址候选（用于地址管理/测速），用户可自行选择/覆盖
     endpointCandidates: ["https://aihubmix.com", "https://api.aihubmix.com"],
     category: "aggregator",
-    icon: "aihubmix",
-    iconColor: "#006FFB",
   },
   {
     name: "SiliconFlow",
@@ -480,8 +412,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "aggregator",
     isPartner: true,
     partnerPromotionKey: "siliconflow",
-    icon: "siliconflow",
-    iconColor: "#6E29F6",
   },
   {
     name: "SiliconFlow en",
@@ -500,8 +430,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "aggregator",
     isPartner: true,
     partnerPromotionKey: "siliconflow",
-    icon: "siliconflow",
-    iconColor: "#000000",
   },
   {
     name: "DMXAPI",
@@ -537,7 +465,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "third_party",
     isPartner: true, // 合作伙伴
     partnerPromotionKey: "packycode", // 促销信息 i18n key
-    icon: "packycode",
   },
   {
     name: "Cubence",
@@ -558,8 +485,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "third_party",
     isPartner: true, // 合作伙伴
     partnerPromotionKey: "cubence", // 促销信息 i18n key
-    icon: "cubence",
-    iconColor: "#000000",
   },
   {
     name: "AIGoCode",
@@ -576,8 +501,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "third_party",
     isPartner: true, // 合作伙伴
     partnerPromotionKey: "aigocode", // 促销信息 i18n key
-    icon: "aigocode",
-    iconColor: "#5B7FFF",
   },
   {
     name: "RightCode",
@@ -592,8 +515,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "third_party",
     isPartner: true,
     partnerPromotionKey: "rightcode",
-    icon: "rc",
-    iconColor: "#E96B2C",
   },
   {
     name: "AICodeMirror",
@@ -612,8 +533,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "third_party",
     isPartner: true, // 合作伙伴
     partnerPromotionKey: "aicodemirror", // 促销信息 i18n key
-    icon: "aicodemirror",
-    iconColor: "#000000",
   },
   {
     name: "AICoding",
@@ -629,8 +548,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "third_party",
     isPartner: true, // 合作伙伴
     partnerPromotionKey: "aicoding", // 促销信息 i18n key
-    icon: "aicoding",
-    iconColor: "#000000",
   },
   {
     name: "CrazyRouter",
@@ -646,8 +563,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "third_party",
     isPartner: true, // 合作伙伴
     partnerPromotionKey: "crazyrouter", // 促销信息 i18n key
-    icon: "crazyrouter",
-    iconColor: "#000000",
   },
   {
     name: "SSSAiCode",
@@ -667,8 +582,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "third_party",
     isPartner: true, // 合作伙伴
     partnerPromotionKey: "sssaicode", // 促销信息 i18n key
-    icon: "sssaicode",
-    iconColor: "#000000",
   },
   {
     name: "Compshare",
@@ -686,8 +599,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "aggregator",
     isPartner: true, // 合作伙伴
     partnerPromotionKey: "ucloud", // 促销信息 i18n key
-    icon: "ucloud",
-    iconColor: "#000000",
   },
   {
     name: "Compshare Coding Plan",
@@ -705,8 +616,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "aggregator",
     isPartner: true, // 合作伙伴
     partnerPromotionKey: "ucloud", // 促销信息 i18n key（复用）
-    icon: "ucloud",
-    iconColor: "#000000",
   },
   {
     name: "Micu",
@@ -722,8 +631,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "third_party",
     isPartner: true, // 合作伙伴
     partnerPromotionKey: "micu", // 促销信息 i18n key
-    icon: "micu",
-    iconColor: "#000000",
   },
   {
     name: "CTok.ai",
@@ -738,8 +645,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "third_party",
     isPartner: true, // 合作伙伴
     partnerPromotionKey: "ctok", // 促销信息 i18n key
-    icon: "ctok",
-    iconColor: "#000000",
   },
   {
     name: "DDSHub",
@@ -754,8 +659,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "third_party",
     isPartner: true, // 合作伙伴
     partnerPromotionKey: "ddshub", // 促销信息 i18n key
-    icon: "dds",
-    iconColor: "#000000",
   },
   {
     name: "E-FlowCode",
@@ -776,8 +679,6 @@ export const providerPresets: ProviderPreset[] = [
     },
     category: "third_party",
     endpointCandidates: ["https://e-flowcode.cc"],
-    icon: "eflowcode",
-    iconColor: "#000000",
   },
   {
     name: "LionCCAPI",
@@ -791,7 +692,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "third_party",
     isPartner: true,
     partnerPromotionKey: "lionccapi",
-    icon: "lioncc",
   },
   {
     name: "OpenRouter",
@@ -808,8 +708,6 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "aggregator",
-    icon: "openrouter",
-    iconColor: "#6566F1",
   },
   {
     name: "TheRouter",
@@ -845,8 +743,6 @@ export const providerPresets: ProviderPreset[] = [
     },
     category: "aggregator",
     endpointCandidates: ["https://api.novita.ai/anthropic"],
-    icon: "novita",
-    iconColor: "#000000",
   },
   {
     name: "GitHub Copilot",
@@ -864,8 +760,6 @@ export const providerPresets: ProviderPreset[] = [
     apiFormat: "openai_chat",
     providerType: "github_copilot",
     requiresOAuth: true,
-    icon: "github",
-    iconColor: "#000000",
   },
   {
     name: "Codex",
@@ -885,8 +779,6 @@ export const providerPresets: ProviderPreset[] = [
     apiFormat: "openai_responses",
     providerType: "codex_oauth",
     requiresOAuth: true,
-    icon: "openai",
-    iconColor: "#000000",
   },
   {
     name: "LemonData",
@@ -902,7 +794,6 @@ export const providerPresets: ProviderPreset[] = [
     category: "third_party",
     isPartner: true,
     partnerPromotionKey: "lemondata",
-    icon: "lemondata",
   },
   {
     name: "Nvidia",
@@ -920,8 +811,6 @@ export const providerPresets: ProviderPreset[] = [
     },
     category: "aggregator",
     apiFormat: "openai_chat",
-    icon: "nvidia",
-    iconColor: "#000000",
   },
   {
     name: "PIPELLM",
@@ -939,7 +828,6 @@ export const providerPresets: ProviderPreset[] = [
       includeCoAuthoredBy: false,
     },
     category: "aggregator",
-    icon: "pipellm",
   },
   {
     name: "Xiaomi MiMo",
@@ -956,8 +844,6 @@ export const providerPresets: ProviderPreset[] = [
       },
     },
     category: "cn_official",
-    icon: "xiaomimimo",
-    iconColor: "#000000",
   },
   {
     name: "AWS Bedrock (AKSK)",
@@ -995,8 +881,6 @@ export const providerPresets: ProviderPreset[] = [
         editorValue: "",
       },
     },
-    icon: "aws",
-    iconColor: "#FF9900",
   },
   {
     name: "AWS Bedrock (API Key)",
@@ -1023,8 +907,6 @@ export const providerPresets: ProviderPreset[] = [
         editorValue: "us-west-2",
       },
     },
-    icon: "aws",
-    iconColor: "#FF9900",
   },
 ];
 
