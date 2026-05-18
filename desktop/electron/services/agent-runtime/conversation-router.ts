@@ -217,8 +217,11 @@ export class ConversationRouter {
     if (commandResult && isPromptCommandRoute(commandResult)) {
       message = { ...message, content: commandResult.content }
     } else if (commandResult) {
-      for (const event of commandResult.events) {
+      const turnId = randomUUID()
+      for (const [index, event] of commandResult.events.entries()) {
         this.emitEvent(message, commandResult.conversationId, event)
+        await this.persistAgentEvent(commandResult.conversationId, turnId, index + 1, event).catch(() => {})
+        await this.saveEventHistory(commandResult.conversationId, event).catch(() => {})
       }
       return commandResult
     }
