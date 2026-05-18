@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process"
 import { watch, type FSWatcher } from "node:fs"
-import { isFileNotFoundError, pathExists } from "./fs-utils"
+import { isFileNotFoundError, isPermissionError, pathExists } from "./fs-utils"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type { SynapseRepositoryLocalState } from "../../src/types/repository"
 import { createMainLogger } from "./log-store"
@@ -130,17 +130,31 @@ class RepositoryStore {
   }
 
   private async checkDirectoryExists(repository: SynapseRepositoryConfig): Promise<void> {
-    const exists = await pathExists(repository.localPath)
+    try {
+      const exists = await pathExists(repository.localPath)
 
-    if (!exists) {
-      logger.warn("Watched repository directory disappeared.", {
-        repositoryUuid: repository.uuid,
-      })
-      this.unwatchRepository(repository.uuid)
+      if (!exists) {
+        logger.warn("Watched repository directory disappeared.", {
+          repositoryUuid: repository.uuid,
+        })
+        this.unwatchRepository(repository.uuid)
 
-      for (const listener of this.disappearedListeners) {
-        listener(repository.uuid)
+        for (const listener of this.disappearedListeners) {
+          listener(repository.uuid)
+        }
       }
+    } catch (error) {
+      if (isPermissionError(error)) {
+        logger.warn("Watched repository directory permission denied, watcher retained.", {
+          repositoryUuid: repository.uuid,
+        })
+        // Directory still exists but is temporarily inaccessible — keep watcher
+        return
+      }
+      logger.error("Watched repository directory check failed.", {
+        repositoryUuid: repository.uuid,
+        error,
+      })
     }
   }
 
