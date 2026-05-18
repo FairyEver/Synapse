@@ -50,6 +50,13 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
       continue
     }
     paramNamesSeen.add(trimmed)
+
+    // Validate that number-type param defaults are finite numbers
+    if (p.type === "number" && p.default !== null) {
+      if (typeof p.default !== "number" || !Number.isFinite(p.default)) {
+        errors.push({ type: "invalid_config", message: `参数「${trimmed}」是数字类型，默认值必须是有效数字` })
+      }
+    }
   }
 
   const endNodes = def.nodes.filter((n) => n.type === "end")
@@ -260,6 +267,11 @@ export function validateRunParams(def: WorkflowDefinition, params: Record<string
     if (!hasValue) {
       if (!hasDefault) {
         errors.push({ type: "missing_param", message: `缺少必填参数「${param.name}」` })
+      } else if (param.type === "number") {
+        const dv = param.default
+        if (typeof dv !== "number" || !Number.isFinite(dv)) {
+          errors.push({ type: "invalid_config", message: `参数「${param.name}」的数字默认值无效` })
+        }
       }
       continue
     }
