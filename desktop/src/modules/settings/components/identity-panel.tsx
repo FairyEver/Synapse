@@ -52,7 +52,7 @@ function IdentityPanel() {
                         success: "已复制到剪贴板。",
                         error: (error) => error instanceof Error ? error.message : "复制失败。",
                       },
-                    )
+                    ).catch(() => undefined)
                   }}
                 >
                   <Copy data-icon="inline-start" />

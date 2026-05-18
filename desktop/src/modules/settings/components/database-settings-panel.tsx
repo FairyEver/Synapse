@@ -208,7 +208,7 @@ function DatabaseSettingsPanel() {
         success: "调试信息已复制。",
         error: (error) => error instanceof Error ? error.message : "复制失败。",
       },
-    )
+    ).catch(() => undefined)
   }, [cliDebugInfo, promise, refreshCliDebugInfo])
 
   const handleCopyCliTestCommand = useCallback(() => {
@@ -223,7 +223,7 @@ function DatabaseSettingsPanel() {
         success: "测试命令已复制。",
         error: (error) => error instanceof Error ? error.message : "复制失败。",
       },
-    )
+    ).catch(() => undefined)
   }, [cliDebugInfo, promise, refreshCliDebugInfo])
 
   const handleExport = useCallback(async () => {
