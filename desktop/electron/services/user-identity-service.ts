@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto"
 import { app } from "electron"
-import { mkdir, readFile, writeFile } from "node:fs/promises"
+import { mkdir, rename, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
+import { existsSync } from "node:fs"
 import type {
   SynapseLocalIdentity,
   SynapseLocalIdentityState,
@@ -15,8 +16,10 @@ import {
   resolveUserProfilePath,
 } from "./user-profile-cache"
 import { repositoryStore } from "./repository-store"
+import { JsonNamespace } from "../runtime/data-repo/backends/json"
 
 const USER_IDENTITY_FILE_NAME = "user-identity.json"
+const CORE_IDENTITY_NAMESPACE = "core.identity"
 const USER_IDENTITY_SCHEMA_VERSION = 2 as const
 import { isFileNotFoundError } from "./fs-utils"
 
@@ -80,63 +83,138 @@ function runIdentityGitCommand(cwd: string, args: string[], fallbackMessage: str
 }
 
 class UserIdentityService {
-  getFilePath(): string {
+  private readonly identityNamespace: JsonNamespace<SynapseLocalIdentity>
+
+  constructor() {
+    const userDataPath = app.getPath("userData")
+    const dataV1Path = path.join(userDataPath, "data-v1")
+    const filePath = path.join(dataV1Path, `${CORE_IDENTITY_NAMESPACE}.json`)
+    this.identityNamespace = new JsonNamespace({
+      name: CORE_IDENTITY_NAMESPACE,
+      schemaVersion: USER_IDENTITY_SCHEMA_VERSION,
+      backend: "json",
+      filePath,
+    })
+  }
+
+  private getLegacyFilePath(): string {
     return path.join(app.getPath("userData"), USER_IDENTITY_FILE_NAME)
   }
 
-  async loadLocalIdentity(): Promise<SynapseLocalIdentityState> {
-    const filePath = this.getFilePath()
-
-    await mkdir(path.dirname(filePath), { recursive: true })
+  /**
+   * Migrate identity from legacy user-identity.json to the namespace store.
+   * Called once during loadLocalIdentity when the namespace is empty and the
+   * legacy file exists. After successful migration the legacy file is renamed
+   * to prevent re-migration.
+   */
+  private async migrateFromLegacy(): Promise<SynapseLocalIdentity | null> {
+    const legacyPath = this.getLegacyFilePath()
+    if (!existsSync(legacyPath)) return null
 
     try {
-      const fileContent = await readFile(filePath, "utf8")
-      const parsedValue = JSON.parse(fileContent) as unknown
-      const identity = normalizeIdentity(parsedValue)
+      const content = await readFile(legacyPath, "utf8")
+      const parsed = JSON.parse(content) as unknown
+      const identity = normalizeIdentity(parsed)
+      if (!identity) return null
+
+      // Ensure directory exists before writing
+      const userDataPath = app.getPath("userData")
+      const nsDir = path.join(userDataPath, "data-v1")
+      await mkdir(nsDir, { recursive: true })
+      await this.identityNamespace.setSingleton(identity)
+
+      // Rename legacy file to prevent re-migration
+      try {
+        await rename(legacyPath, `${legacyPath}.migrated`)
+      } catch {
+        // Non-critical; the next launch will attempt migration again
+      }
+
+      logger.info("Migrated identity from legacy file to namespace store.", { userId: identity.userId })
+      return identity
+    } catch {
+      return null
+    }
+  }
+
+  async loadLocalIdentity(): Promise<SynapseLocalIdentityState> {
+    try {
+      // Try reading from namespace store first
+      let identity = await this.identityNamespace.getSingleton()
 
       if (!identity) {
-        logger.warn("User identity file is invalid.", { filePath })
-        const invalidUserId =
-          isRecord(parsedValue) && typeof parsedValue.userId === "string"
-            ? parsedValue.userId
-            : null
-
-        return {
-          status: "needs-recovery",
-          invalidUserId,
-        }
+        // Namespace is empty — try migrating from legacy file
+        identity = await this.migrateFromLegacy()
       }
 
-      await this.persist(identity)
-
-      return {
-        status: "ready",
-        identity,
-      }
-    } catch (error) {
-      if (isFileNotFoundError(error)) {
-        const identity = createIdentity()
-        await this.persist(identity)
-
+      if (!identity) {
+        // No existing identity — create a new one
+        identity = createIdentity()
+        await this.identityNamespace.setSingleton(identity)
         logger.info("Generated new user identity for first launch.", {
           userId: identity.userId,
         })
-
         return {
           status: "ready",
           identity,
         }
       }
 
-      if (error instanceof SyntaxError) {
-        logger.warn("User identity file contains invalid JSON.", { filePath })
-        return {
-          status: "needs-recovery",
-          invalidUserId: null,
-        }
-      }
+      // Re-persist to ensure data integrity on each load
+      await this.identityNamespace.setSingleton(identity)
 
-      throw error
+      return {
+        status: "ready",
+        identity,
+      }
+    } catch (error) {
+      // If the namespace data is corrupt, try to read as raw JSON for recovery
+      try {
+        const legacyPath = this.getLegacyFilePath()
+        const fileContent = await readFile(legacyPath, "utf8")
+        const parsedValue = JSON.parse(fileContent) as unknown
+        const recovered = normalizeIdentity(parsedValue)
+
+        if (!recovered) {
+          const invalidUserId =
+            isRecord(parsedValue) && typeof parsedValue.userId === "string"
+              ? parsedValue.userId
+              : null
+          return {
+            status: "needs-recovery",
+            invalidUserId,
+          }
+        }
+
+        await this.identityNamespace.setSingleton(recovered)
+        return {
+          status: "ready",
+          identity: recovered,
+        }
+      } catch {
+        const filePath = this.getLegacyFilePath()
+        if (isFileNotFoundError(error)) {
+          const identity = createIdentity()
+          await this.identityNamespace.setSingleton(identity)
+          logger.info("Generated new user identity for first launch.", {
+            userId: identity.userId,
+          })
+          return {
+            status: "ready",
+            identity,
+          }
+        }
+
+        if (error instanceof SyntaxError) {
+          logger.warn("User identity file contains invalid JSON.", { filePath })
+          return {
+            status: "needs-recovery",
+            invalidUserId: null,
+          }
+        }
+
+        throw error
+      }
     }
   }
 
@@ -238,7 +316,7 @@ class UserIdentityService {
       generatedAt: new Date().toISOString(),
     }
 
-    await this.persist(nextIdentity)
+    await this.identityNamespace.setSingleton(nextIdentity)
 
     return {
       status: "ready",
@@ -249,7 +327,7 @@ class UserIdentityService {
   async generateNewIdentity(): Promise<SynapseLocalIdentityState> {
     const nextIdentity = createIdentity()
 
-    await this.persist(nextIdentity)
+    await this.identityNamespace.setSingleton(nextIdentity)
 
     return {
       status: "ready",
@@ -264,22 +342,12 @@ class UserIdentityService {
       throw new Error("备份文件里的身份格式不对。")
     }
 
-    await this.persist(nextIdentity)
+    await this.identityNamespace.setSingleton(nextIdentity)
 
     return {
       status: "ready",
       identity: nextIdentity,
     }
-  }
-
-  private async persist(identity: SynapseLocalIdentity): Promise<void> {
-    const filePath = this.getFilePath()
-
-    await mkdir(path.dirname(filePath), { recursive: true })
-    await writeFile(filePath, `${JSON.stringify(identity, null, 2)}\n`, {
-      encoding: "utf8",
-      mode: 0o600,
-    })
   }
 }
 
