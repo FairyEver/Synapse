@@ -186,6 +186,9 @@ export class ContentInstallService {
             const targetExists = await pathExists(target.targetPath)
             if (targetExists && target.targetPath !== previousSkillDirectoryPath) {
               const backupPath = `${target.targetPath}-backup`
+              if (await pathExists(backupPath)) {
+                await rm(backupPath, { recursive: true, force: true }).catch(() => {})
+              }
               try {
                 await rename(target.targetPath, backupPath)
                 backupPathForRestore = backupPath
@@ -263,10 +266,6 @@ export class ContentInstallService {
             && previousSkillDirectoryPath !== target.targetPath
           ) {
             await rm(previousSkillDirectoryPath, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up previous skill directory", err))
-          }
-
-          if (backupPathForRestore) {
-            await rm(backupPathForRestore, { recursive: true, force: true }).catch((err) => logger.warn("Failed to clean up conflict backup directory", err))
           }
 
           break
