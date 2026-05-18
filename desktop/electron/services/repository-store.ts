@@ -106,7 +106,6 @@ class RepositoryStore {
       this.watchers.set(repository.uuid, watcher)
       logger.debug("Started watching repository directory.", {
         repositoryUuid: repository.uuid,
-        localPath: repository.localPath,
       })
     } catch {
       // Directory may already be gone at watch time
@@ -136,7 +135,6 @@ class RepositoryStore {
     if (!exists) {
       logger.warn("Watched repository directory disappeared.", {
         repositoryUuid: repository.uuid,
-        localPath: repository.localPath,
       })
       this.unwatchRepository(repository.uuid)
 
@@ -158,7 +156,6 @@ class RepositoryStore {
     if (!repositoryExists) {
       logger.warn("Repository path does not exist.", {
         repositoryUuid: repository.uuid,
-        localPath,
       })
       return {
         repositoryUuid: repository.uuid,
@@ -172,7 +169,7 @@ class RepositoryStore {
     const tGit = Date.now()
     logger.info("getRepositoryState: calling runGitProbe.", { repositoryUuid: repository.uuid })
     const gitRootPath = await resolveGitRootPath(localPath)
-    logger.info("getRepositoryState: runGitProbe done.", { gitRootPath, durationMs: Date.now() - tGit, totalDurationMs: Date.now() - t0, repositoryUuid: repository.uuid })
+    logger.info("getRepositoryState: runGitProbe done.", { durationMs: Date.now() - tGit, totalDurationMs: Date.now() - t0, repositoryUuid: repository.uuid })
 
     return {
       repositoryUuid: repository.uuid,
