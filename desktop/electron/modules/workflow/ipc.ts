@@ -16,6 +16,7 @@ import { sanitizeError } from "../../services/error-sanitize"
 const logger = createMainLogger("workflow.ipc")
 const DELETE_ABORT_WAIT_MS = 5_000
 const runCompletions = new Map<string, Promise<unknown>>()
+const deletedWorkflows = new Set<string>()
 
 /**
  * Maximum number of terminal (completed/failed/cancelled) run statuses to keep
@@ -81,6 +82,10 @@ function saveRunSnapshot(
   snapshot: Parameters<RunSnapshotService["save"]>[0],
   eventBus?: EventBus,
 ): void {
+  // If the workflow has been deleted (tombstone is set), skip snapshot writes
+  // to prevent a late-finishing engine run from re-creating the deleted
+  // workflow-runs directory via RunSnapshotService.save() → mkdir().
+  if (deletedWorkflows.has(snapshot.workflowId)) return
   void snapshots.save(snapshot).catch((error) => {
     logger.warn("workflow snapshot save failed", {
       runId: snapshot.runId,
@@ -400,6 +405,10 @@ export const workflowIpcModule: IpcModule = {
       channel: "synapse:workflow:delete", kind: "invoke", request: z.object({ id: z.string() }), response: z.void(),
       handler: async (ctx, { id }: { id: string }) => {
         logger.info("workflow:delete requested", { id })
+        // Mark the workflow as deleted before any cleanup to prevent
+        // late-finishing engine runs from re-creating snapshot files
+        // (saveRunSnapshot checks this tombstone and skips writes).
+        deletedWorkflows.add(id)
         // Abort any running runs for this workflow before deleting to prevent
         // orphaned engine processes (which would otherwise continue running,
         // leak abort controllers / run statuses in memory, and write ghost
@@ -448,6 +457,7 @@ export const workflowIpcModule: IpcModule = {
           timestamp: new Date().toISOString(),
         })
         logger.info("workflow:delete done", { id })
+        deletedWorkflows.delete(id)
       },
     },
     validate: {
@@ -588,12 +598,13 @@ export const workflowIpcModule: IpcModule = {
     },
     rerun: {
       channel: "synapse:workflow:rerun", kind: "invoke",
-      request: z.object({ previousRunId: z.string(), params: z.record(z.string(), z.unknown()) }),
+      request: z.object({ previousRunId: z.string(), params: z.record(z.string(), z.unknown()), force: z.boolean().optional() }),
       response: z.union([
         z.object({ runId: z.string() }),
         z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) }),
+        z.object({ conflict: z.literal(true), activeRunId: z.string() }),
       ]),
-      handler: async (ctx, { previousRunId, params }: { previousRunId: string; params: Record<string, unknown> }) => {
+      handler: async (ctx, { previousRunId, params, force }: { previousRunId: string; params: Record<string, unknown>; force?: boolean }) => {
         logger.info("workflow:rerun requested", { previousRunId })
         const runStatuses = ctx.resolve<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
         const snapshots = ctx.resolve<RunSnapshotService>("core.workflow.snapshots")
@@ -641,6 +652,15 @@ export const workflowIpcModule: IpcModule = {
           return { errors: paramErrors }
         }
         const validatedParams = buildEffectiveRunParams(def, effectiveParams)
+
+        // Check for conflicting active runs before auto-aborting
+        if (!force) {
+          for (const [existingRunId, status] of runStatuses) {
+            if (status.workflowId === workflowId && status.status === "running") {
+              return { conflict: true as const, activeRunId: existingRunId }
+            }
+          }
+        }
 
         const abortedRunIds: string[] = []
         for (const [existingRunId, status] of runStatuses) {
