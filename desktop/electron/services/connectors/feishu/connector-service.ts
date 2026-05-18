@@ -832,11 +832,13 @@ export class FeishuConnectorService {
     const reply = (content: string) =>
       running?.client.replyText(message.replyCtx as FeishuReplyContext, content)
     const isAdmin = isFeishuAdmin(connector, message.userId ?? "")
-    if (this.relayService && await this.handleRelayCommand(connector, message, isAdmin, reply)) {
-      this.recordAudit("allowed", connector.projectId, connector.id, "relay_command", undefined, {
-        sessionKey: message.sessionKey,
-        userId: message.userId,
-      })
+    const relayResult = this.relayService
+      ? await this.handleRelayCommand(connector, message, isAdmin, reply)
+      : false
+    if (relayResult) {
+      const outcome = relayResult === "denied" || relayResult === "failed" ? relayResult : "allowed"
+      const relayAuditCtx = { sessionKey: message.sessionKey, userId: message.userId }
+      this.recordAudit(outcome, connector.projectId, connector.id, "relay_command", undefined, relayAuditCtx)
       return true
     }
     await reply("Relay 不可用。")
@@ -848,7 +850,7 @@ export class FeishuConnectorService {
     message: AgentMessage,
     isAdmin: boolean,
     reply: (content: string) => Promise<void> | void | undefined,
-  ): Promise<boolean> {
+  ): Promise<"allowed" | "denied" | false> {
     const parsed = parseRelayCommand(message.content)
     if (!parsed) return false
     if (!this.relayService) {
@@ -906,6 +908,16 @@ export class FeishuConnectorService {
         if (!targetProjectId || !relayMessage) {
           await reply("用法：/relay send <project-id> <message>")
           return true
+        }
+        if (!isAdmin) {
+          const bindings = await this.relayService.listBindings(connector.projectId)
+          const hasBinding = bindings.some(
+            (b) => b.targetProjectId === targetProjectId && b.enabled,
+          )
+          if (!hasBinding) {
+            await reply("未找到目标项目的 Relay 绑定，请联系管理员先执行 /relay bind。")
+            return true
+          }
         }
         const result = await this.relayService.send({
           sourceProjectId: connector.projectId,
