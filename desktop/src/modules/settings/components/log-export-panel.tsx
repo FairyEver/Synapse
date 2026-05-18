@@ -89,7 +89,7 @@ function LogExportPanel() {
             "导出日志超时，请稍后重试。",
           )
           if (result.filePath) {
-            window.synapse?.shell.showItemInFolder(result.filePath)
+            window.synapse?.shell.showItemInFolder(result.filePath).catch(() => {})
           }
           return result
         },

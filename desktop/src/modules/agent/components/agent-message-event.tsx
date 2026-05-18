@@ -94,7 +94,7 @@ function AssistantMessageBody({
     }
   }, [renderedHtml])
 
-  const handleClick = (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleClick = async (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target
     if (!(target instanceof HTMLElement)) return
 
@@ -154,7 +154,7 @@ function AssistantMessageBody({
         // External link — open in system browser via shell.openExternal
         event.preventDefault()
         try {
-          requireBridgeDomain("shell").openExternal(href)
+          await requireBridgeDomain("shell").openExternal(href)
         } catch (error) {
           logger.warn("agent.external-link.open.failed", {
             boundary: "renderer.agent.external-link",

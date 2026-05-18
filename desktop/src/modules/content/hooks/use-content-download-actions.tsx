@@ -158,7 +158,7 @@ function useContentDownloadActions({
           })
 
           if (!result.canceled && result.filePath) {
-            window.synapse?.shell.showItemInFolder(result.filePath)
+            window.synapse?.shell.showItemInFolder(result.filePath).catch(() => {})
           }
 
           return result

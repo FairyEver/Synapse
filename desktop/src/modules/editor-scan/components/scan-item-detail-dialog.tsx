@@ -140,7 +140,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
 
   const handleOpenInFinder = useCallback(() => {
     if (!item) return
-    getSynapseBridge()?.shell.showItemInFolder(item.path)
+    getSynapseBridge()?.shell.showItemInFolder(item.path).catch(() => {})
   }, [item])
 
   const trashDisabledReason = item?.trash.mode === "unsupported"

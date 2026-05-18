@@ -210,7 +210,7 @@ function ProviderPresetRow({
           aria-label={`打开 ${option.preset.name} 链接`}
           onClick={(event) => {
             event.stopPropagation()
-            window.synapse?.shell.openExternal(link)
+            window.synapse?.shell.openExternal(link).catch(() => {})
           }}
         >
           <ExternalLinkIcon data-icon="inline-start" />

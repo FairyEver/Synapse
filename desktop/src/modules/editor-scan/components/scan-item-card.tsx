@@ -29,7 +29,7 @@ function ScanItemCard({
   const handleOpenInFinder = (e: React.MouseEvent) => {
     e.stopPropagation()
     const bridge = getSynapseBridge()
-    bridge?.shell.showItemInFolder(itemPath)
+    bridge?.shell.showItemInFolder(itemPath).catch(() => {})
   }
 
   const metaEntries = metadata

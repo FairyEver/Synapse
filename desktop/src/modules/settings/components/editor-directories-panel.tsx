@@ -93,7 +93,7 @@ function useEditorDirectories() {
 
   const handleOpen = useCallback((dirPath: string) => {
     logger.info("Opening editor directory.", { dirName: dirPath.split(/[/\\]/).pop() ?? dirPath })
-    window.synapse?.shell.showItemInFolder(dirPath)
+    window.synapse?.shell.showItemInFolder(dirPath).catch(() => {})
   }, [])
 
   const handleCreate = useCallback(

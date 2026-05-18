@@ -506,10 +506,10 @@ const synapseBridge: SynapseBridge = {
   },
   shell: {
     openExternal: (url: string) => {
-      void invoke(IPC_CHANNELS.shell.openExternal)({ url })
+      return invoke(IPC_CHANNELS.shell.openExternal)({ url })
     },
     showItemInFolder: (filePath: string) => {
-      void invoke(IPC_CHANNELS.shell.showItemInFolder)({ fullPath: filePath })
+      return invoke(IPC_CHANNELS.shell.showItemInFolder)({ fullPath: filePath })
     },
   },
   repository: {

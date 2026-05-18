@@ -457,8 +457,8 @@ export type SynapseBridge = {
     onChanged: (listener: (payload: InstallStatusChangedEvent) => void) => () => void
   }
   shell: {
-    openExternal: (url: string) => void
-    showItemInFolder: (filePath: string) => void
+    openExternal: (url: string) => Promise<void>
+    showItemInFolder: (filePath: string) => Promise<void>
   }
   repository: {
     checkInitializationPreview: (

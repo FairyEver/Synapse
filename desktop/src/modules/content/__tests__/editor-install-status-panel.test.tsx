@@ -15,7 +15,7 @@ import type { SynapseEditorInstallStatusEntry } from "@/types/editor-install-sta
 
 type DropdownMenuItemProps = ComponentProps<typeof DropdownMenuItem>
 
-const showItemInFolder = vi.hoisted(() => vi.fn())
+const showItemInFolder = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 
 vi.mock("@/lib/electron-bridge", () => ({
   getSynapseBridge: () => ({

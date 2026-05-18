@@ -17,7 +17,7 @@ vi.mock("@/lib/electron-bridge", () => ({
       ping: vi.fn(),
     },
     shell: {
-      showItemInFolder: vi.fn(),
+      showItemInFolder: vi.fn().mockResolvedValue(undefined),
     },
   }),
 }))

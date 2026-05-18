@@ -95,7 +95,7 @@ function MarkdownViewer({
     ? "border-0 rounded-none bg-transparent p-0"
     : "rounded-lg border border-border bg-muted/20 px-4 py-4"
 
-  const handleRenderedClickCapture = (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleRenderedClickCapture = async (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target
 
     if (!(target instanceof HTMLElement)) {
@@ -120,7 +120,7 @@ function MarkdownViewer({
 
     if (href.startsWith("http://") || href.startsWith("https://")) {
       try {
-        requireBridgeDomain("shell").openExternal(href)
+        await requireBridgeDomain("shell").openExternal(href)
       } catch {
         toast.error("无法打开链接")
       }

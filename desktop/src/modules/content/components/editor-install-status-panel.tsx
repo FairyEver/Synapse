@@ -109,7 +109,7 @@ function getStatusVariant(status: SynapseEditorInstallStatusValue): ComponentPro
 }
 
 function openTargetPath(path: string) {
-  getSynapseBridge()?.shell.showItemInFolder(path)
+  getSynapseBridge()?.shell.showItemInFolder(path).catch(() => {})
 }
 
 function groupEntriesByEditor(entries: SynapseEditorInstallStatusEntry[]): EditorInstallStatusGroup[] {
