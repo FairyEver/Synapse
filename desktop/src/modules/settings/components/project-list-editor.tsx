@@ -58,7 +58,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   const [isSavingEdit, setIsSavingEdit] = useState(false)
   const [connectorDialog, setConnectorDialog] = useState<ConnectorDialogState | null>(null)
   const [connectorRefreshToken, setConnectorRefreshToken] = useState(0)
-  const [deleteTarget, setDeleteTarget] = useState<{ project: SynapseProjectConfig; sessionCount: number } | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<{ project: SynapseProjectConfig; sessionCount: number | null } | null>(null)
   const hasDirectoryPicker = Boolean(window.synapse?.repository)
 
   const resetForm = () => {
@@ -219,10 +219,10 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
     setEditError(null)
 
     try {
-      const {
-        defaultAgentId: _ignoredDefaultAgentId,
-        ...projectWithoutLegacyAgent
-      } = editingProject as SynapseProjectConfig & { defaultAgentId?: string }
+      const projectWithoutLegacyAgent = {
+        ...editingProject,
+      } as SynapseProjectConfig & { defaultAgentId?: string }
+      delete projectWithoutLegacyAgent.defaultAgentId
       const updatedProject: SynapseProjectConfig = {
         ...projectWithoutLegacyAgent,
         name: trimmedName,
@@ -282,7 +282,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                   onClick={() => {
                     const bridge = window.synapse?.agent
                     if (!bridge) {
-                      void onSave(projects.filter((item) => item.id !== project.id)).catch(() => {})
+                      setDeleteTarget({ project, sessionCount: null })
                       return
                     }
                     void bridge.listSessions(project.id).then((sessions) => {
@@ -293,8 +293,9 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                           .then(() => logger.info("Project removed.", { projectId: project.id }))
                           .catch((err) => logger.error("Failed to remove project.", { projectId: project.id, error: err }))
                       }
-                    }).catch(() => {
-                      void onSave(projects.filter((item) => item.id !== project.id)).catch(() => {})
+                    }).catch((err) => {
+                      logger.error("Failed to list project sessions before deletion.", { projectId: project.id, error: err })
+                      setDeleteTarget({ project, sessionCount: null })
                     })
                   }}
                 >
@@ -451,7 +452,9 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
           <AlertDialogHeader>
             <AlertDialogTitle>删除项目</AlertDialogTitle>
             <AlertDialogDescription>
-              「{deleteTarget?.project.name}」下有 {deleteTarget?.sessionCount} 条 Agent 对话，删除项目后这些对话将移入「已归档」分组，不会被删除。
+              {deleteTarget?.sessionCount === null
+                ? `无法确认「${deleteTarget.project.name}」下的 Agent 对话。删除项目后，相关对话将移入「已归档」分组，不会被删除。`
+                : `「${deleteTarget?.project.name}」下有 ${deleteTarget?.sessionCount} 条 Agent 对话，删除项目后这些对话将移入「已归档」分组，不会被删除。`}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
