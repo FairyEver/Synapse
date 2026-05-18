@@ -401,12 +401,29 @@ export const coreUpdateDescriptor: ServiceDescriptor<typeof updateService> = {
 export const repoWatchDescriptor: ServiceDescriptor<typeof repositoryStore> = {
   id: "repo.watch",
   criticality: "degraded",
-  dependsOn: ["core.config"],
-  async create() {
+  dependsOn: ["core.config", "core.event-bus"],
+  async create(ctx) {
     const config = await configStore.load()
+    const eventBus = ctx.registry.get<EventBus>("core.event-bus")
+
     for (const repository of config.repositories) {
       repositoryStore.watchRepository(repository)
     }
+
+    repositoryStore.onRepositoryDisappeared((repositoryUuid) => {
+      eventBus.emit({
+        domain: "repository",
+        type: "repository.updated",
+        payload: {
+          repositoryUuid,
+          operation: "disappeared",
+          completedAt: new Date().toISOString(),
+          message: "仓库目录已不存在",
+        },
+        timestamp: new Date().toISOString(),
+      })
+    })
+
     return repositoryStore
   },
   stop() {

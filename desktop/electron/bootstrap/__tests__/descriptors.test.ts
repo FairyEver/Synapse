@@ -331,7 +331,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     const { repoWatchDescriptor } = await importBootstrap()
     expect(repoWatchDescriptor.id).toBe("repo.watch")
     expect(repoWatchDescriptor.criticality).toBe("degraded")
-    expect(repoWatchDescriptor.dependsOn).toEqual(["core.config"])
+    expect(repoWatchDescriptor.dependsOn).toEqual(["core.config", "core.event-bus"])
     expect(repoWatchDescriptor.stop).toBeTypeOf("function")
   })
 
