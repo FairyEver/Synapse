@@ -115,11 +115,6 @@ export class WorkflowWindowManager {
     this.closeRunnerWindow(workflowId, "workflow runner window force-closed")
   }
 
-  hasActiveRun(workflowId: string): boolean {
-    const win = this.runnerWindows.get(workflowId)
-    return !!win && !win.isDestroyed()
-  }
-
   getOpenEditorIds(): string[] {
     return [...this.editorWindows.entries()].filter(([, w]) => !w.isDestroyed()).map(([id]) => id)
   }

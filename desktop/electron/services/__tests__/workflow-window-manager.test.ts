@@ -145,7 +145,6 @@ describe("WorkflowWindowManager", () => {
     expect(editor.isDestroyed()).toBe(true)
     expect(runner.isDestroyed()).toBe(false)
     expect(manager.getOpenEditorIds()).toEqual([])
-    expect(manager.hasActiveRun("workflow-1")).toBe(true)
   })
 
   it("closes the runner window when opening the editor for the same workflow", async () => {
@@ -157,7 +156,6 @@ describe("WorkflowWindowManager", () => {
     expect(runner).not.toBe(editor)
     expect(runner.isDestroyed()).toBe(true)
     expect(editor.isDestroyed()).toBe(false)
-    expect(manager.hasActiveRun("workflow-1")).toBe(false)
     expect(manager.getOpenEditorIds()).toEqual(["workflow-1"])
   })
 
@@ -171,6 +169,5 @@ describe("WorkflowWindowManager", () => {
     await expect(openPromise).rejects.toThrow("load failed")
 
     expect(editor.isDestroyed()).toBe(false)
-    expect(manager.hasActiveRun("workflow-1")).toBe(false)
   })
 })
