@@ -1,4 +1,5 @@
-import { ChevronDown, Clipboard, Sparkles } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { Check, ChevronDown, Clipboard, Sparkles, X } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import { track } from "@/lib/ui-tracking"
@@ -34,15 +35,37 @@ function AgentThinkingEvent({
         contentLength: item.content.length,
       },
     })
-    void navigator.clipboard.writeText(item.content).catch((error: unknown) => {
+    void navigator.clipboard.writeText(item.content).then(() => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+      setCopyState("success")
+      copyTimerRef.current = setTimeout(() => {
+        copyTimerRef.current = undefined
+        setCopyState("idle")
+      }, 1500)
+    }).catch((error: unknown) => {
       logger.warn("Agent thinking copy failed.", {
         boundary: "renderer.agent.thinking-copy",
         itemId: item.id,
         contentLength: item.content.length,
         ...errorLogMeta(error),
       })
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+      setCopyState("error")
+      copyTimerRef.current = setTimeout(() => {
+        copyTimerRef.current = undefined
+        setCopyState("idle")
+      }, 1500)
     })
   }
+
+  const [copyState, setCopyState] = useState<"idle" | "success" | "error">("idle")
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+    }
+  }, [])
 
   return (
     <AgentAnnotation>
@@ -75,7 +98,13 @@ function AgentThinkingEvent({
               className="absolute right-1 top-2 size-6 opacity-0 transition-opacity hover:opacity-100 focus:opacity-100 group-hover:opacity-100"
               onClick={handleCopy}
             >
-              <Clipboard className="size-3.5" />
+              {copyState === "success" ? (
+                <Check className="size-3.5" />
+              ) : copyState === "error" ? (
+                <X className="size-3.5 text-destructive" />
+              ) : (
+                <Clipboard className="size-3.5" />
+              )}
             </Button>
           </div>
         </CollapsibleContent>

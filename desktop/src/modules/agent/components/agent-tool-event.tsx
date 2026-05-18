@@ -1,4 +1,5 @@
-import { ChevronDown, Clipboard, Terminal } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
+import { Check, ChevronDown, Clipboard, Terminal, X } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -41,6 +42,15 @@ function AgentToolEvent({
     rule?.defaultCollapsed ?? profile.toolDefaultCollapsed,
   )
   const status = statusLabel(item, profile)
+  const [copyState, setCopyState] = useState<"idle" | "success" | "error">("idle")
+  const copyTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+    }
+  }, [])
+
   const handleCopy = () => {
     track({
       component: "agent",
@@ -54,7 +64,14 @@ function AgentToolEvent({
         bodyLength: body.length,
       },
     })
-    void navigator.clipboard.writeText(body).catch((error: unknown) => {
+    void navigator.clipboard.writeText(body).then(() => {
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+      setCopyState("success")
+      copyTimerRef.current = setTimeout(() => {
+        copyTimerRef.current = undefined
+        setCopyState("idle")
+      }, 1500)
+    }).catch((error: unknown) => {
       logger.warn("Agent tool body copy failed.", {
         boundary: "renderer.agent.tool-copy",
         itemId: item.id,
@@ -63,6 +80,12 @@ function AgentToolEvent({
         bodyLength: body.length,
         ...errorLogMeta(error),
       })
+      if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
+      setCopyState("error")
+      copyTimerRef.current = setTimeout(() => {
+        copyTimerRef.current = undefined
+        setCopyState("idle")
+      }, 1500)
     })
   }
 
@@ -107,7 +130,13 @@ function AgentToolEvent({
                   className="absolute right-1 top-1 size-6 opacity-0 transition-opacity hover:opacity-100 focus:opacity-100 group-hover:opacity-100"
                   onClick={handleCopy}
                 >
-                  <Clipboard className="size-3.5" />
+                  {copyState === "success" ? (
+                    <Check className="size-3.5" />
+                  ) : copyState === "error" ? (
+                    <X className="size-3.5 text-destructive" />
+                  ) : (
+                    <Clipboard className="size-3.5" />
+                  )}
                 </Button>
               </>
             ) : null}
