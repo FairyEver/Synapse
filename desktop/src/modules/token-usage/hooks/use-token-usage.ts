@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react"
+import { useCallback, useRef, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { SynapseBridge } from "@/types/bridge"
@@ -12,7 +12,7 @@ type ScanResult = Awaited<ReturnType<SynapseBridge["tokenUsage"]["scan"]>>
 
 const logger = createRendererLogger("token-usage.hooks")
 
-function toLoadError(error: unknown): Error {
+function toLoadError(_error: unknown): Error {
   return new Error("读取失败")
 }
 
@@ -53,19 +53,24 @@ export function useGraphResult() {
   const [data, setData] = useState<GraphResult | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const requestIdRef = useRef(0)
 
   const refresh = useCallback(async (options?: { since?: string; until?: string }) => {
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
     setLoading(true)
     try {
       const result = await requireSynapseBridge().tokenUsage.getGraphResult(options)
+      if (requestId !== requestIdRef.current) return
       setData(result)
       setError(null)
     } catch (e) {
+      if (requestId !== requestIdRef.current) return
       logLoadError("getGraphResult", e, options)
       setData(null)
       setError(toLoadError(e))
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }, [])
 
@@ -78,19 +83,24 @@ export function useModelReport() {
   const [data, setData] = useState<ModelRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const requestIdRef = useRef(0)
 
   const refresh = useCallback(async (options?: DateRange & { groupBy?: string }) => {
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
     setLoading(true)
     try {
       const result = await requireSynapseBridge().tokenUsage.getModelReport(options)
+      if (requestId !== requestIdRef.current) return
       setData(result)
       setError(null)
     } catch (e) {
+      if (requestId !== requestIdRef.current) return
       logLoadError("getModelReport", e, options)
       setData([])
       setError(toLoadError(e))
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }, [])
 
@@ -101,19 +111,24 @@ export function useDailyReport() {
   const [data, setData] = useState<Record<string, unknown>[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const requestIdRef = useRef(0)
 
   const refresh = useCallback(async (options?: DateRange) => {
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
     setLoading(true)
     try {
       const result = await requireSynapseBridge().tokenUsage.getDailyReport(options)
+      if (requestId !== requestIdRef.current) return
       setData(result)
       setError(null)
     } catch (e) {
+      if (requestId !== requestIdRef.current) return
       logLoadError("getDailyReport", e, options)
       setData([])
       setError(toLoadError(e))
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }, [])
 
@@ -124,19 +139,24 @@ export function useAgentReport() {
   const [data, setData] = useState<AgentRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const requestIdRef = useRef(0)
 
   const refresh = useCallback(async (options?: DateRange) => {
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
     setLoading(true)
     try {
       const result = await requireSynapseBridge().tokenUsage.getAgentReport(options)
+      if (requestId !== requestIdRef.current) return
       setData(result)
       setError(null)
     } catch (e) {
+      if (requestId !== requestIdRef.current) return
       logLoadError("getAgentReport", e, options)
       setData([])
       setError(toLoadError(e))
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }, [])
 
@@ -147,19 +167,24 @@ export function useHourlyReport() {
   const [data, setData] = useState<HourlyRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const requestIdRef = useRef(0)
 
   const refresh = useCallback(async (options?: DateRange) => {
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
     setLoading(true)
     try {
       const result = await requireSynapseBridge().tokenUsage.getHourlyReport(options)
+      if (requestId !== requestIdRef.current) return
       setData(result)
       setError(null)
     } catch (e) {
+      if (requestId !== requestIdRef.current) return
       logLoadError("getHourlyReport", e, options)
       setData([])
       setError(toLoadError(e))
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }, [])
 
@@ -170,19 +195,24 @@ export function useHourlyProfile() {
   const [data, setData] = useState<HourlyProfile | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const requestIdRef = useRef(0)
 
   const refresh = useCallback(async (options?: DateRange) => {
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
     setLoading(true)
     try {
       const result = await requireSynapseBridge().tokenUsage.getHourlyProfile(options)
+      if (requestId !== requestIdRef.current) return
       setData(result)
       setError(null)
     } catch (e) {
+      if (requestId !== requestIdRef.current) return
       logLoadError("getHourlyProfile", e, options)
       setData(null)
       setError(toLoadError(e))
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) setLoading(false)
     }
   }, [])
 
