@@ -15,6 +15,8 @@ import {
 } from "@/modules/content/lib/content-payload"
 
 const MAX_SKILL_ATTACHMENT_SIZE = 10 * 1024 * 1024
+const MAX_SKILL_ATTACHMENT_COUNT = 100
+const MAX_SKILL_ATTACHMENT_TOTAL_SIZE = 50 * 1024 * 1024
 
 const SKILL_CONFIG = {
   labels: {
@@ -152,6 +154,8 @@ function mergeCreateSkillFiles(
   const duplicateNames: string[] = []
   const oversizedNames: string[] = []
   const invalidNames: string[] = []
+  let countLimitReached = false
+  let totalSizeLimitReached = false
 
   for (const incomingFile of incomingFiles) {
     const normalizedFile = normalizeCreateSkillFilePayload(incomingFile)
@@ -171,6 +175,17 @@ function mergeCreateSkillFiles(
       continue
     }
 
+    if (nextFilesByPath.size >= MAX_SKILL_ATTACHMENT_COUNT) {
+      countLimitReached = true
+      break
+    }
+
+    const currentTotalSize = Array.from(nextFilesByPath.values()).reduce((sum, f) => sum + f.size, 0)
+    if (currentTotalSize + normalizedFile.size > MAX_SKILL_ATTACHMENT_TOTAL_SIZE) {
+      totalSizeLimitReached = true
+      break
+    }
+
     nextFilesByPath.set(normalizedFile.originalName, normalizedFile)
   }
 
@@ -188,6 +203,14 @@ function mergeCreateSkillFiles(
     rejectedMessages.push(`以下附件超过 10MB，已跳过：${formatAttachmentList(oversizedNames)}。`)
   }
 
+  if (countLimitReached) {
+    rejectedMessages.push(`附件数量已达上限（${MAX_SKILL_ATTACHMENT_COUNT} 个），多余文件已跳过。`)
+  }
+
+  if (totalSizeLimitReached) {
+    rejectedMessages.push(`附件总大小已达上限（50MB），多余文件已跳过。`)
+  }
+
   return {
     files: Array.from(nextFilesByPath.values()).sort(compareCreateSkillFiles),
     rejectedMessages,
@@ -197,16 +220,18 @@ function mergeCreateSkillFiles(
 async function serializeCreateSkillFiles(
   files: SkillCreateFilePayloadDraft[],
 ): Promise<SynapseCreateSkillFilePayload[]> {
-  return Promise.all(
-    files.map(async (file) => ({
+  const results: SynapseCreateSkillFilePayload[] = []
+  for (const file of files) {
+    results.push({
       originalName: file.originalName,
       sha256: file.sha256,
       size: file.size,
       bytes: file.file
         ? new Uint8Array(await file.file.arrayBuffer())
         : file.bytes,
-    })),
-  )
+    })
+  }
+  return results
 }
 
 export {
