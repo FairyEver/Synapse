@@ -65,6 +65,12 @@ export function WorkflowEditorApp() {
       try {
         const def = await workflowApi.get(workflowId)
         if (cancelled) return
+        // Re-check dirty state: the user may have started editing while
+        // the IPC call was in flight. Overwriting would lose their work.
+        if (isDirtyRef.current) {
+          logger.info("definition loaded but editor has unsaved changes, skipping overwrite", { workflowId })
+          return
+        }
         if (def) {
           setDefinition(def)
           setLoadError(null)
