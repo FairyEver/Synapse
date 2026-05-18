@@ -168,7 +168,7 @@ async function writeIconImageFile(
   const filePath = path.join(contentDirectoryPath, ICON_IMAGE_FILE_NAME)
   await mkdir(contentDirectoryPath, { recursive: true })
   await writeFile(filePath, imageBytes)
-  logger.info("Wrote icon image file.", { filePath })
+  logger.info("Wrote icon image file.", { filePath: path.basename(filePath) })
   return filePath
 }
 
@@ -194,19 +194,19 @@ async function stageHistoryDirectory(
 
     const snapshotFilePath = path.join(tempHistoryPath, SNAPSHOT_FILE_NAME)
     await writeJsonFile(snapshotFilePath, snapshot)
-    logger.info("Staged history snapshot file.", { filePath: snapshotFilePath })
+    logger.info("Staged history snapshot file.", { filePath: path.basename(snapshotFilePath) })
 
     const mainFilePath = path.join(tempHistoryPath, CONTENT_MAIN_FILE_NAME)
     await writeFile(mainFilePath, normalizeMarkdownContent(mainContent), "utf8")
-    logger.info("Staged history main content file.", { filePath: mainFilePath })
+    logger.info("Staged history main content file.", { filePath: path.basename(mainFilePath) })
 
     const attachmentsFilePath = path.join(tempHistoryPath, CONTENT_ATTACHMENTS_FILE_NAME)
     await writeJsonFile(attachmentsFilePath, createAttachmentsRecord(attachments))
-    logger.info("Staged history attachments file.", { filePath: attachmentsFilePath })
+    logger.info("Staged history attachments file.", { filePath: path.basename(attachmentsFilePath) })
 
     const targetHistoryPath = path.join(historyRootPath, historyDirname)
     await rename(tempHistoryPath, targetHistoryPath)
-    logger.info("Committed history directory.", { targetHistoryPath })
+    logger.info("Committed history directory.", { targetHistoryPath: path.basename(targetHistoryPath) })
     await rm(tempDirectoryPath, { recursive: true, force: true })
 
     return targetHistoryPath
@@ -530,11 +530,11 @@ class ContentWriteService {
     logger.info("Purging content directory.", {
       contentId,
       contentType,
-      contentDirectoryPath,
+      contentDirectoryPath: path.basename(contentDirectoryPath),
       repositoryUuid: context.repository.uuid,
     })
     await rm(contentDirectoryPath, { recursive: true, force: true })
-    logger.info("Content directory purged.", { contentId, contentType, contentDirectoryPath })
+    logger.info("Content directory purged.", { contentId, contentType, contentDirectoryPath: path.basename(contentDirectoryPath) })
 
     return {
       gitPaths: [contentDirectoryPath],
