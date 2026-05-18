@@ -8,7 +8,7 @@ import "../../../workflow-nodes/register.main"
 
 const nodeA = { id: "a", name: "A", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "hi" } }
 const nodeB = { id: "b", name: "B", type: "prompt", position: { x: 200, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "bye" } }
-const nodeEnd = { id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "{{result}}", variables: [] } }
+const nodeEnd = { id: "end", name: "结束", type: "end", position: { x: 400, y: 0 }, config: { outputType: "text", template: "{{result}}", variables: [{ name: "result", source: { type: "node_output", node: "b" } }] } }
 
 // base now includes an End Node so existing tests keep passing
 const base: WorkflowDefinition = {
@@ -118,7 +118,8 @@ describe("validateWorkflow", () => {
 
   it("passes when node omits provider but workflow has defaultProviderId + defaultModelTier", () => {
     const nodeNoProvider = { id: "np", name: "NP", type: "prompt", position: { x: 0, y: 0 }, config: { variables: [], prompt: "hi" } }
-    const defWithDefault = { ...base, defaultProviderId: "test-provider", defaultModelTier: "sonnet" as const, nodes: [nodeNoProvider, nodeEnd], edges: [{ id: "e1", from: "np", to: "end" }] }
+    const endWithBinding = { ...nodeEnd, config: { ...nodeEnd.config, variables: [{ name: "result", source: { type: "node_output", node: "np" } }] } }
+    const defWithDefault = { ...base, defaultProviderId: "test-provider", defaultModelTier: "sonnet" as const, nodes: [nodeNoProvider, endWithBinding], edges: [{ id: "e1", from: "np", to: "end" }] }
     const r = validateWorkflow(defWithDefault)
     expect(r.valid).toBe(true)
   })
@@ -153,7 +154,8 @@ describe("validateWorkflow", () => {
 
   // Edge case: end node exists but nothing connects to it
   it("warns when end node has no incoming edges", () => {
-    const r = validateWorkflow({ ...base, edges: [{ id: "e1", from: "a", to: "b" }] })
+    const endNoIncoming = { ...nodeEnd, config: { ...nodeEnd.config, variables: [{ name: "result", source: { type: "static", value: "" } }] } }
+    const r = validateWorkflow({ ...base, nodes: [nodeA, nodeB, endNoIncoming], edges: [{ id: "e1", from: "a", to: "b" }] })
     expect(r.valid).toBe(true)
     expect(r.warnings.some((w) => w.type === "disconnected_node" && w.nodeId === "end")).toBe(true)
   })

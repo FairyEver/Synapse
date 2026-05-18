@@ -137,6 +137,37 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
           logger.warn("variable references non-existent param", { workflowId: def.id, nodeId: node.id, nodeName: node.name, missingParam: missingParamName })
         }
       }
+
+      // Template variable validation: check that {{...}} placeholders in template
+      // fields are covered by the node's bound variable names.
+      const TEMPLATE_FIELDS: ReadonlyArray<{ kind: string; field: string }> = [
+        { kind: "prompt", field: "prompt" },
+        { kind: "switch", field: "prompt" },
+        { kind: "end", field: "template" },
+      ]
+      const templateField = TEMPLATE_FIELDS.find((tf) => node.type === tf.kind)
+      if (templateField) {
+        const text = (node.config as Record<string, unknown>)[templateField.field]
+        if (typeof text === "string") {
+          const placeholders = new Set(
+            [...text.matchAll(/\{\{\s*\$?([\p{L}\p{N}_.-]+)\s*\}\}/gu)].map((m) => m[1]),
+          )
+          if (placeholders.size > 0) {
+            const boundNames = new Set(
+              (Array.isArray(vars) ? vars : []).map((v) => (v as Record<string, unknown>).name as string).filter(Boolean),
+            )
+            for (const placeholder of placeholders) {
+              if (!boundNames.has(placeholder)) {
+                errors.push({
+                  type: "invalid_config",
+                  nodeId: node.id,
+                  message: `节点「${node.name}」的模板变量「${placeholder}」未绑定，请在节点变量中添加绑定`,
+                })
+              }
+            }
+          }
+        }
+      }
     }
   }
 
