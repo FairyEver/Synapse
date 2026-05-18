@@ -2,6 +2,9 @@ import fs from "node:fs"
 import path from "node:path"
 import { CLIENT_DEFS, resolveClientBasePath, getExtraScanPaths } from "./clients"
 import type { ClientDef, ScanResult } from "./parsers/types"
+import { createMainLogger } from "../log-store"
+
+const logger = createMainLogger("service.token-usage.scanner")
 
 function matchesPattern(fileName: string, pattern: string): boolean {
   const patterns = pattern.split("|")
@@ -32,7 +35,7 @@ function collectFiles(dir: string, pattern: string, result: string[], maxDepth =
       }
     }
   } catch {
-    // directory doesn't exist or not readable
+    logger.warn("Failed to read directory for token usage scan.", { dirName: path.basename(dir) })
   }
 }
 
@@ -62,6 +65,7 @@ export function scanAllClients(): ScanResult[] {
           uniqueFiles.push(f)
         }
       } catch {
+        logger.warn("Failed to resolve realpath for token usage scan file.", { fileName: path.basename(f) })
         if (!seen.has(f)) {
           seen.add(f)
           uniqueFiles.push(f)
