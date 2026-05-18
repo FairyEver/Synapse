@@ -241,6 +241,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       await bridge.cancelDownload()
     } catch (error) {
       logger.error("Failed to cancel download.", error)
+      setActionError(error instanceof Error ? error.message : "取消下载失败。")
     }
   }
 
