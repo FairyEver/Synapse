@@ -172,18 +172,13 @@ function isNonFastForwardError(message: string): boolean {
 }
 
 async function getAheadCount(cwd: string): Promise<number> {
-  try {
-    const result = await runGitCommand({
-      args: ["rev-list", "@{u}..HEAD", "--count"],
-      cwd,
-      fallbackMessage: "",
-      formatFailureMessage: () => "",
-    })
-
-    return parseInt(result.stdout.trim(), 10) || 0
-  } catch {
-    return 0
-  }
+  const result = await runGitCommand({
+    args: ["rev-list", "@{u}..HEAD", "--count"],
+    cwd,
+    fallbackMessage: "",
+    formatFailureMessage: () => "",
+  })
+  return parseInt(result.stdout.trim(), 10) || 0
 }
 
 async function isRebaseInProgress(localPath: string): Promise<boolean> {
