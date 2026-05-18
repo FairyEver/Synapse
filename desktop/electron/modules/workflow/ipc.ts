@@ -678,10 +678,6 @@ export const workflowIpcModule: IpcModule = {
       channel: "synapse:workflow:run-history", kind: "invoke", request: z.object({ workflowId: z.string() }), response: z.array(workflowRunSnapshotSchema),
       handler: async (ctx, { workflowId }: { workflowId: string }) => ctx.resolve<RunSnapshotService>("core.workflow.snapshots").list(workflowId),
     },
-    runSnapshot: {
-      channel: "synapse:workflow:run-snapshot", kind: "invoke", request: z.object({ runId: z.string(), workflowId: z.string() }), response: workflowRunSnapshotSchema.nullable(),
-      handler: async (ctx, { runId, workflowId }: { runId: string; workflowId: string }) => ctx.resolve<RunSnapshotService>("core.workflow.snapshots").get(runId, workflowId),
-    },
     runStatus: {
       channel: "synapse:workflow:run-status", kind: "invoke", request: z.object({ runId: z.string() }), response: workflowRunStatusSchema.nullable(),
       handler: async (ctx, { runId }: { runId: string }) => {
