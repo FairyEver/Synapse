@@ -32,7 +32,15 @@ export function CanvasFloatingToolbar({ definition, saving, running, dirty, onSa
         open={runParamsOpen}
         params={definition.params}
         lastValues={lastRunValues}
-        onConfirm={(params, rawValues) => { setRunParamsOpen(false); setLastRunValues(rawValues); void onRun(params) }}
+        onConfirm={async (params, rawValues) => {
+          setLastRunValues(rawValues)
+          try {
+            await onRun(params)
+            setRunParamsOpen(false)
+          } catch {
+            // Dialog stays open, submitting will be reset
+          }
+        }}
         onCancel={() => setRunParamsOpen(false)}
       />
     </div>

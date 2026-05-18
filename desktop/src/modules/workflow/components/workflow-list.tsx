@@ -123,7 +123,6 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
   const handleConfirmRun = async (params: Record<string, unknown>) => {
     if (!runTarget) return
     const def = runTarget
-    setRunTarget(null)
     setRunningId(def.id)
     try {
       const workflowApi = requireBridgeDomain("workflow")
@@ -136,9 +135,11 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
       }
       if ("conflict" in result) {
         setConflictState({ def, params })
+        setRunTarget(null)
         return
       }
       openRunner(workflowApi, def.id, result.runId)
+      setRunTarget(null)
       void refresh()
     } catch (err) {
       showRunFailure(def, params, false, err)
@@ -232,7 +233,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
             onDelete={() => void handleDelete(meta.id)} />
         ))}
       </div>
-      <RunParamsDialog open={!!runTarget} params={runTarget?.params ?? []} lastValues={lastRunValues} onConfirm={(params, rawValues) => { setLastRunValues(rawValues); void handleConfirmRun(params) }} onCancel={() => setRunTarget(null)} />
+      <RunParamsDialog open={!!runTarget} params={runTarget?.params ?? []} lastValues={lastRunValues} onConfirm={async (params, rawValues) => { setLastRunValues(rawValues); await handleConfirmRun(params).catch(() => {}) }} onCancel={() => setRunTarget(null)} />
       <RunHistoryDialog open={!!historyWorkflowId} workflowId={historyWorkflowId ?? ""} onClose={() => setHistoryWorkflowId(null)} />
       <AlertDialog open={!!conflictState} onOpenChange={(o) => { if (!o) setConflictState(null) }}>
         <AlertDialogContent>

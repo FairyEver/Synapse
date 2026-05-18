@@ -11,9 +11,58 @@ import { shell } from "electron"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import { editorAdapterService } from "../../services/editor-adapter-service"
 import { runGuardedShellOperation } from "../shell/guarded-shell"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
 
 async function createAndOpenDirectory(ctx: IpcHandlerContext, dirPath: string): Promise<void> {
-  await mkdir(dirPath, { recursive: true })
+  const actor = { kind: "user" } as const
+  const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+  const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+
+  const permission = await permissionGuard.check({
+    action: "fs.write",
+    actor,
+    resource: dirPath,
+    context: { source: "editor.createDirectory" },
+  })
+  if (!permission.allowed) {
+    auditSink.record({
+      action: "fs.write",
+      actor,
+      resource: dirPath,
+      outcome: "denied",
+      metadata: {
+        source: "editor.createDirectory",
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    throw new Error(permission.reason)
+  }
+
+  try {
+    await mkdir(dirPath, { recursive: true })
+    auditSink.record({
+      action: "fs.write",
+      actor,
+      resource: dirPath,
+      outcome: "allowed",
+      metadata: { source: "editor.createDirectory" },
+    })
+  } catch (error) {
+    auditSink.record({
+      action: "fs.write",
+      actor,
+      resource: dirPath,
+      outcome: "failed",
+      metadata: {
+        source: "editor.createDirectory",
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: String(error).length,
+      },
+    })
+    throw error
+  }
+
   await runGuardedShellOperation({
     ctx,
     resource: dirPath,

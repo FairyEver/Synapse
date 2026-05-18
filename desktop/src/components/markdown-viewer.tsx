@@ -1,8 +1,10 @@
 import { useMemo } from "react"
+import { toast } from "sonner"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CodeIcon, EyeIcon } from "lucide-react"
 import { renderMarkdown } from "@/lib/markdown"
 import { cn } from "@/lib/utils"
+import { requireBridgeDomain } from "@/lib/electron-bridge"
 
 // highlight.js 基础样式（颜色变量由下面的 CSS 定义）
 import "highlight.js/styles/github.css"
@@ -106,7 +108,26 @@ function MarkdownViewer({
       return
     }
 
+    const href = link.getAttribute("href")
+    if (!href) return
+
+    // Anchor links: let browser handle naturally (same-page navigation)
+    if (href.startsWith("#")) {
+      return
+    }
+
     event.preventDefault()
+
+    if (href.startsWith("http://") || href.startsWith("https://")) {
+      try {
+        requireBridgeDomain("shell").openExternal(href)
+      } catch {
+        toast.error("无法打开链接")
+      }
+      return
+    }
+
+    toast.error("不支持打开此链接")
   }
 
   const renderedContent = (

@@ -10,7 +10,7 @@ interface RunParamsDialogProps {
   open: boolean
   params: WorkflowParam[]
   lastValues?: Record<string, string>
-  onConfirm: (values: Record<string, unknown>, rawValues: Record<string, string>) => void
+  onConfirm: (values: Record<string, unknown>, rawValues: Record<string, string>) => Promise<void>
   onCancel: () => void
 }
 
@@ -29,7 +29,7 @@ export function RunParamsDialog({ open, params, lastValues, onConfirm, onCancel 
     }
   }, [open, params, lastValues])
 
-  const handleSubmit = (e?: React.FormEvent) => {
+  const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
     if (submitting) return
     setSubmitting(true)
@@ -55,10 +55,14 @@ export function RunParamsDialog({ open, params, lastValues, onConfirm, onCancel 
         hasLastValues: Boolean(lastValues),
       },
     })
-    onConfirm(parsed, values)
+    try {
+      await onConfirm(parsed, values)
+    } finally {
+      setSubmitting(false)
+    }
   }
   return (
-    <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
+    <Dialog open={open} onOpenChange={(o) => { if (!o && !submitting) onCancel() }}>
       <DialogContent>
         <form onSubmit={handleSubmit}>
           <DialogHeader><DialogTitle>设置运行参数</DialogTitle></DialogHeader>

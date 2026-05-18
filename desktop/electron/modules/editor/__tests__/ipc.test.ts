@@ -35,6 +35,12 @@ describe("editorIpcModule", () => {
       dirPath: "/Users/test/.claude/rules",
     })
 
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "/Users/test/.claude/rules",
+      context: { source: "editor.createDirectory" },
+    })
     expect(fsMock.mkdir).toHaveBeenCalledWith("/Users/test/.claude/rules", { recursive: true })
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "shell.exec",
@@ -44,6 +50,13 @@ describe("editorIpcModule", () => {
     })
     expect(electronMock.shell.showItemInFolder).toHaveBeenCalledWith("/Users/test/.claude/rules")
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "/Users/test/.claude/rules",
+      outcome: "allowed",
+      metadata: { source: "editor.createDirectory" },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "shell.exec",
       actor: { kind: "user" },
       resource: "/Users/test/.claude/rules",
@@ -52,7 +65,7 @@ describe("editorIpcModule", () => {
     }))
   })
 
-  it("does not show created directories when shell permission is denied", async () => {
+  it("does not create directories when fs.write permission is denied", async () => {
     const { harness, auditSink } = createHarness({
       permission: { allowed: false, reason: "denied by test-policy", policyId: "test-policy" },
     })
@@ -61,10 +74,10 @@ describe("editorIpcModule", () => {
       dirPath: "/Users/test/.claude/skills",
     })).rejects.toThrow("denied by test-policy")
 
-    expect(fsMock.mkdir).toHaveBeenCalledWith("/Users/test/.claude/skills", { recursive: true })
+    expect(fsMock.mkdir).not.toHaveBeenCalled()
     expect(electronMock.shell.showItemInFolder).not.toHaveBeenCalled()
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
-      action: "shell.exec",
+      action: "fs.write",
       actor: { kind: "user" },
       resource: "/Users/test/.claude/skills",
       outcome: "denied",
@@ -75,6 +88,7 @@ describe("editorIpcModule", () => {
       },
     }))
   })
+})
 })
 
 function createHarness(options: {
