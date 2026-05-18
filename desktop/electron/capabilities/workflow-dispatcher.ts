@@ -158,7 +158,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
         await deps.workflowService.save(def)
       }
     }
-    emitDefinitionUpdated(deps.eventBus, result.id)
+    emitDefinitionUpdated(deps.eventBus, result.id, "mcp", result.versionHash)
     return { ok: true, data: result }
   },
 
@@ -185,7 +185,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     }
     const saveResult = await deps.workflowService.save(definition)
     if ("errors" in saveResult) throw new Error(`Save failed: ${(saveResult as WorkflowSaveError).errors.map((e) => e.message).join("; ")}`)
-    emitDefinitionUpdated(deps.eventBus, definition.id)
+    emitDefinitionUpdated(deps.eventBus, definition.id, "mcp", (saveResult as WorkflowSaveResult).versionHash)
     return { ok: true, data: saveResult }
   },
 
@@ -194,7 +194,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     await deps.cancelRunsForWorkflow(workflowId)
     await deps.workflowService.delete(workflowId)
     await deps.snapshotService.deleteWorkflow(workflowId)
-    emitDefinitionUpdated(deps.eventBus, workflowId)
+    emitDefinitionUpdated(deps.eventBus, workflowId, "mcp", "")
     return { ok: true }
   },
 
