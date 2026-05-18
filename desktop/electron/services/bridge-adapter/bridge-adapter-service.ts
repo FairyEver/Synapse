@@ -590,6 +590,10 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       })
     }
     if (request.method === "DELETE") {
+      const session = await agent.getSession(sub)
+      if (!session || session.sessionKey !== sessionKey) {
+        throw new BridgeAdapterError("session_not_found", "session not found", 404)
+      }
       const removed = await agent.deleteSession(sub)
       if (!removed) throw new BridgeAdapterError("session_not_found", "session not found", 404)
       return bridgeResponse(200, true, { message: "session deleted" })
