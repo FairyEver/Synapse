@@ -482,7 +482,7 @@ export class ConversationRouter {
         await this.sessionManager.closeCurrentTurn(conversation.id)
         error = "Agent session ended before message could be sent."
       }
-      while (!error && liveSession.alive()) {
+      while (!error && liveSession.alive() && !abortSignal.aborted) {
         const event = await nextLiveEventWithTimeout(liveSession, timeoutMs)
         if (!event) {
           const errorEvent: AgentEvent = {
@@ -534,6 +534,32 @@ export class ConversationRouter {
         if (event.type === "error") {
           error = event.message
           break
+        }
+      }
+      if (abortSignal.aborted && !error) {
+        const errorEvent: AgentEvent = {
+          type: "error",
+          message: "Agent relay timed out.",
+          conversationId: conversation.id,
+          providerId: message.providerId ?? conversation.providerId,
+          sdkSessionId: liveSession.currentSessionId(),
+          timestamp: this.isoNow(),
+        }
+        events.push(errorEvent)
+        this.emitEvent(message, conversation.id, errorEvent)
+        await this.persistAgentEvent(conversation.id, turnId, events.length, errorEvent)
+        await this.saveEventSdkSession(conversation.id, errorEvent, liveSession)
+        await this.saveEventHistory(conversation.id, errorEvent)
+        await this.sessionManager.closeCurrentTurn(conversation.id)
+        return {
+          conversationId: conversation.id,
+          events,
+          resultText: partialText,
+          partialText,
+          agentSessionId: liveSession.currentSessionId(),
+          threadId: liveSession.currentSessionId(),
+          error: errorEvent.message,
+          timedOut: true,
         }
       }
       if (error && events[events.length - 1]?.type !== "error") {
