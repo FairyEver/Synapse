@@ -202,11 +202,24 @@ function RepoOnboardingDialog() {
               type="button"
               variant="ghost"
               disabled={isSubmitting}
-              onClick={() => {
+              onClick={async () => {
                 logger.info("Remove repository requested from onboarding.", {
                   repositoryUuid: activeRepository.uuid,
                 })
-                void manager.removeRepository(activeRepository.uuid)
+                setIsSubmitting(true)
+                try {
+                  await manager.removeRepository(activeRepository.uuid)
+                } catch (removeError) {
+                  logger.error("Failed to remove repository from onboarding.", {
+                    error: removeError,
+                    repositoryUuid: activeRepository.uuid,
+                  })
+                  setError(
+                    removeError instanceof Error ? removeError.message : "移除此目录失败。",
+                  )
+                } finally {
+                  setIsSubmitting(false)
+                }
               }}
             >
               移除此目录
