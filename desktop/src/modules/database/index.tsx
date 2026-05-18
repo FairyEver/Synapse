@@ -54,7 +54,15 @@ function getStoredDisplayMode(): DisplayMode {
 function DatabaseModule() {
   const { tables, loading: tablesLoading, error: tablesError, refresh: refreshTables } = useDatabaseTables()
   const { error: showError, success: showSuccess, promise } = useAppNotifications()
-  const { folders, createFolder, renameFolder, deleteFolder, moveTable } = useDatabaseFolders()
+  const {
+    folders,
+    error: foldersError,
+    refresh: refreshFolders,
+    createFolder,
+    renameFolder,
+    deleteFolder,
+    moveTable,
+  } = useDatabaseFolders()
   const [displayMode, setDisplayMode] = useState<DisplayMode>(getStoredDisplayMode)
 
   const [activeTable, setActiveTable] = useState<string | null>(null)
@@ -68,7 +76,7 @@ function DatabaseModule() {
   const selectedTable = activeTable ?? tables[0]?.name ?? null
   const { rows, total, error: queryError, refresh: refreshQuery, pageSize } = useDatabaseQuery(selectedTable, page, filter)
   const { schema, error: schemaError, refresh: refreshSchema } = useDatabaseSchema(selectedTable)
-  const loadError = tablesError ?? queryError ?? schemaError
+  const loadError = tablesError ?? queryError ?? schemaError ?? (foldersError ? new Error(foldersError) : null)
   const isLoadingSelection = tablesLoading || Boolean(selectedTable && !schema && !loadError)
 
   const handleTableSelect = useCallback(
@@ -424,6 +432,7 @@ function DatabaseModule() {
     void refreshTables()
     void refreshQuery()
     void refreshSchema()
+    void refreshFolders()
   }
 
   return (
