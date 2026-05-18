@@ -642,13 +642,12 @@ export class AgentRuntimeService {
         updatedInput: request.updatedInput ?? pending.toolInputRaw,
         message,
       })
+      this.sessionManager.settlePendingPermission(pending)
     } catch (error) {
       this.recordPermissionAudit(action, request.actor, resource, "failed", pending, {
         behavior: "deny",
         ...summarizePermissionResponseError(error),
       })
-    } finally {
-      this.sessionManager.settlePendingPermission(pending)
     }
   }
 
@@ -859,7 +858,9 @@ export class AgentRuntimeService {
     if (!command.exec?.trim()) throw new Error("Command is missing exec body")
     const workDir = command.workDir ?? this.workDirFor(message)
     if (!workDir) throw new Error("Project workspace path is required")
-    const shell = resolveShellCommand(command.shell, `${command.exec} ${args.join(" ")}`.trim(), {
+    const shellKind = command.shell ?? "posix"
+    const escapedArgs = args.map((a) => escapeShellArg(a, shellKind)).join(" ")
+    const shell = resolveShellCommand(command.shell, `${command.exec} ${escapedArgs}`.trim(), {
       windowsDefault: "powershell",
       posixLogin: false,
     })
@@ -1173,6 +1174,22 @@ function formatScheduledSessionName(): string {
   const minutes = String(now.getMinutes()).padStart(2, "0")
   const seconds = String(now.getSeconds()).padStart(2, "0")
   return `⏱ ${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+}
+
+function escapeShellArg(arg: string, shell: string): string {
+  if (shell === "powershell") {
+    // PowerShell single-quoted strings are literal (no interpolation)
+    return `'${arg.replace(/'/g, "''")}'`
+  }
+  if (shell === "cmd") {
+    // cmd.exe: wrap in quotes if contains special chars, escape inner quotes
+    if (/[\s&|<>^()"]/.test(arg)) {
+      return `"${arg.replace(/"/g, '\\"')}"`
+    }
+    return arg
+  }
+  // POSIX shell: single-quote wrapping, escape embedded single quotes
+  return `'${arg.replace(/'/g, "'\\''")}'`
 }
 
 export type { AgentGovernanceDecision }

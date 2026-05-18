@@ -58,7 +58,7 @@ export const MARKDOWN_BODY_CLASSNAME = cn(
   "dark:[&_.hljs-variable]:text-[var(--hljs-variable)]",
   "dark:[&_.hljs-attr]:text-[var(--hljs-attr)]",
   "dark:[&_.hljs-attribute]:text-[var(--hljs-attribute)]",
-  "dark:[&_.hljs-built_in]:text-[var(--hljs-built_in)]",
+  "dark:[&_.hljs-built_in]:text-[var(--hljs-built-in)]",
   "dark:[&_.hljs-bullet]:text-[var(--hljs-bullet)]",
   "dark:[&_.hljs-class]:text-[var(--hljs-class)]",
   "dark:[&_.hljs-code]:text-[var(--hljs-code)]",
