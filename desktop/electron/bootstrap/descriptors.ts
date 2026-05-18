@@ -203,6 +203,13 @@ export function createRunWorkflowHandler(deps: {
     if (!validation.valid) return { errors: validation.errors }
     const paramErrors = validateRunParams(def, params)
     if (paramErrors.length > 0) return { errors: paramErrors }
+
+    for (const [, status] of runStatuses) {
+      if (status.workflowId === id && status.status === "running") {
+        return { errors: [{ type: "invalid_config" as const, message: "已有运行中的实例，请先取消或等待完成" }] }
+      }
+    }
+
     const effectiveParams = buildEffectiveRunParams(def, params)
     const runId = randomUUID()
     const ac = new AbortController()
