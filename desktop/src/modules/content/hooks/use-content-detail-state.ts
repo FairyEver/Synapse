@@ -90,10 +90,7 @@ function useContentDetailState<T extends SynapseContentType>({
       const startedAt = performance.now()
       logger.info("Content detail load started.", { contentId, contentType })
       try {
-        const [nextDetail, nextHistory] = await Promise.all([
-          readDetail(contentType, contentId),
-          readHistory(contentType, contentId),
-        ])
+        const nextDetail = await readDetail(contentType, contentId)
 
         if (nextDetail.type !== contentType) {
           throw new Error(invalidTypeMessage)
@@ -107,10 +104,24 @@ function useContentDetailState<T extends SynapseContentType>({
 
         setDetail(typedDetail)
         setDisplayedVersion(buildCurrentVersion(typedDetail))
-        setHistory(nextHistory)
         setSelectedHistoryDirname(initialHistoryDirname ?? typedDetail.latestHistoryDirname)
         setPreviewError(null)
-        logger.info("Content detail loaded.", { contentId, contentType, historyCount: nextHistory.length, elapsedMs: Math.round(performance.now() - startedAt) })
+
+        // History is best-effort — failure must not block the preview.
+        try {
+          const nextHistory = await readHistory(contentType, contentId)
+          if (!cancelled) {
+            setHistory(nextHistory)
+            logger.info("Content detail loaded.", { contentId, contentType, historyCount: nextHistory.length, elapsedMs: Math.round(performance.now() - startedAt) })
+          }
+        } catch (historyError) {
+          logger.warn("Failed to load content history.", {
+            contentId,
+            contentType,
+            elapsedMs: Math.round(performance.now() - startedAt),
+            historyError,
+          })
+        }
       } catch (loadError) {
         logger.error("Failed to load content detail.", {
           contentId,
