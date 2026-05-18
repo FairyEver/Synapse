@@ -10,6 +10,7 @@ type UseContentIconImageOptions = {
   iconType: SynapseContentIconType
   iconImage: string
   mode?: "create" | "edit"
+  open?: boolean
   setErrors?: Dispatch<SetStateAction<Partial<Record<string, string>>>>
   updateField?: (field: "iconImage", value: string) => void
 }
@@ -27,6 +28,7 @@ function useContentIconImage({
   iconType,
   iconImage,
   mode,
+  open,
   setErrors,
   updateField,
 }: UseContentIconImageOptions): UseContentIconImageReturn {
@@ -85,6 +87,20 @@ function useContentIconImage({
       canceled = true
     }
   }, [contentId, contentType, iconImage, iconType, logger, mode])
+
+  const prevOpenRef = useRef(false)
+
+  useEffect(() => {
+    if (prevOpenRef.current && !open) {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current)
+        blobUrlRef.current = null
+      }
+      iconImageBytesRef.current = null
+      setIconImagePreview(null)
+    }
+    prevOpenRef.current = !!open
+  }, [open])
 
   const handleIconImageChange = useCallback((blob: Blob) => {
     void blob.arrayBuffer()

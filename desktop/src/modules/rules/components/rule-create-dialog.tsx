@@ -102,6 +102,7 @@ function RuleCreateDialog({
     iconType: form.iconType,
     iconImage: form.iconImage,
     mode,
+    open,
     setErrors,
     updateField,
   })

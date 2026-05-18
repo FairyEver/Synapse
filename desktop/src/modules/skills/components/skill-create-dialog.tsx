@@ -220,6 +220,7 @@ function SkillCreateDialog({
     iconType: form.iconType,
     iconImage: form.iconImage,
     mode,
+    open,
     setErrors,
     updateField,
   })
