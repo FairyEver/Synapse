@@ -79,7 +79,13 @@ export class RendererHealthService {
   private sendPing(): void {
     if (!this.webContents || this.webContents.isDestroyed()) return
 
-    this.webContents.send(DIAGNOSTICS_PING_CHANNEL)
+    try {
+      this.webContents.send(DIAGNOSTICS_PING_CHANNEL)
+    } catch (err) {
+      this.logger.warn("心跳发送失败，停止健康检查", { error: String(err) })
+      this.detach()
+      return
+    }
 
     this.timeoutTimer = setTimeout(() => {
       this.handleTimeout()

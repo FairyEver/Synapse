@@ -105,6 +105,26 @@ describe("RendererHealthService", () => {
     )
   })
 
+  it("catches send exception and detaches gracefully", () => {
+    const wc = createMockWebContents()
+    const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+
+    const service = new RendererHealthService({ logger })
+    service.attach(wc as never)
+
+    wc.send.mockImplementation(() => { throw new Error("Object has been destroyed") })
+
+    vi.advanceTimersByTime(30_000)
+
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("心跳发送失败"),
+      expect.anything(),
+    )
+    wc.send.mockClear()
+    vi.advanceTimersByTime(60_000)
+    expect(wc.send).not.toHaveBeenCalled()
+  })
+
   it("stops on detach", () => {
     const wc = createMockWebContents()
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
