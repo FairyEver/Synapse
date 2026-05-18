@@ -235,11 +235,13 @@ function handleRunEvent(options: {
   }
   runStatuses.set(runId, { ...current, nodeResults: nextNodeResults })
 
+  const isTerminal = event.type === "workflow:completed" || event.type === "workflow:failed" || event.type === "workflow:cancelled"
+  const payload = isTerminal ? { ...event, workflowId: def.id } : event
   eventBus.emit(
-    { domain: "workflow", type: event.type, payload: event, timestamp: new Date().toISOString() },
+    { domain: "workflow", type: event.type, payload, timestamp: new Date().toISOString() },
     { backpressure: "block" },
   )
-  if (event.type !== "workflow:completed" && event.type !== "workflow:failed" && event.type !== "workflow:cancelled") return
+  if (!isTerminal) return
 
   abortMap.delete(runId)
   const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
@@ -298,7 +300,7 @@ function handleEngineRejection(options: {
   const durationMs = endedAt - startedAt
   runStatuses.set(runId, { runId, workflowId: def.id, status: "failed", nodeResults: current.nodeResults, startedAt, endedAt, durationMs, error: visibleError, params, definition: def })
   eventBus.emit(
-    { domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, error: visibleError, result: { status: "failed", nodeResults: current.nodeResults, durationMs } }, timestamp: new Date().toISOString() },
+    { domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, workflowId: def.id, error: visibleError, result: { status: "failed", nodeResults: current.nodeResults, durationMs } }, timestamp: new Date().toISOString() },
     { backpressure: "block" },
   )
   saveRunSnapshot(snapshots, { runId, workflowId: def.id, version: def.version, startedAt, endedAt, status: "failed", params, nodeResults: current.nodeResults, definition: def, error: visibleError }, eventBus)

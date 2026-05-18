@@ -50,13 +50,13 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
           runIdToWfId.current[event.runId] = event.workflowId
           setRunStates((s) => ({ ...s, [event.workflowId]: "running" }))
         } else if (event.type === "workflow:completed") {
-          const wfId = runIdToWfId.current[event.runId]
+          const wfId = event.workflowId ?? runIdToWfId.current[event.runId]
           if (wfId) setRunStates((s) => ({ ...s, [wfId]: "completed" }))
         } else if (event.type === "workflow:failed") {
-          const wfId = runIdToWfId.current[event.runId]
+          const wfId = event.workflowId ?? runIdToWfId.current[event.runId]
           if (wfId) setRunStates((s) => ({ ...s, [wfId]: "failed" }))
         } else if (event.type === "workflow:cancelled") {
-          const wfId = runIdToWfId.current[event.runId]
+          const wfId = event.workflowId ?? runIdToWfId.current[event.runId]
           if (wfId) setRunStates((s) => ({ ...s, [wfId]: "cancelled" }))
         }
       })
