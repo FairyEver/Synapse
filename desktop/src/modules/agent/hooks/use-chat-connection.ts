@@ -707,7 +707,17 @@ function useChatConnection(
     dispatch({ type: "SET_ERROR", error: null })
     try {
       await bridge.agent.respondPermission({ projectId, requestId, behavior })
-      await refreshPendingPermissions()
+      try {
+        await refreshPendingPermissions()
+      } catch (refreshError) {
+        logger.warn("Permission list refresh failed after responding; permission response itself succeeded.", {
+          projectId,
+          requestId,
+          behavior,
+          errorName: refreshError instanceof Error ? refreshError.name : typeof refreshError,
+          errorLength: errorMessage(refreshError).length,
+        })
+      }
     } catch (rawError) {
       logger.error("Agent permission response failed.", {
         projectId,
