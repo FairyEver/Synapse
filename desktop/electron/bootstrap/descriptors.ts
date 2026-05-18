@@ -269,6 +269,7 @@ export function createRunWorkflowHandler(deps: {
           params: effectiveParams,
           nodeResults: current.nodeResults,
           definition: def,
+          error: "工作流引擎异常",
         })).catch((err) => {
           capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
         })
