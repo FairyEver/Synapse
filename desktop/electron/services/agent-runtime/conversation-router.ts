@@ -47,6 +47,7 @@ const DEFAULT_PERMISSION_TIMEOUT_MS = 5 * 60 * 1000
 const DEFAULT_LIVE_EVENT_TIMEOUT_MS = 5 * 60 * 1000
 const MAX_EVENT_PAYLOAD_BYTES = 8192
 const MAX_SUMMARY_LENGTH = 1000
+const MAX_HISTORY_CONTENT_LENGTH = 10_000
 const SENSITIVE_ERROR_ASSIGNMENT_PATTERN = /\b(secret|token|api[-_]?key|authorization|cookie|password|credential)\b\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)/gi
 const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
 const WINDOWS_PATH_PATTERN = /\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g
@@ -923,7 +924,7 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
     case "toolResult":
       return {
         role: "tool",
-        content: event.content?.trim() || event.toolName,
+        content: truncateString(event.content?.trim(), MAX_HISTORY_CONTENT_LENGTH) || event.toolName,
         metadata: compactMetadata({
           agentEventType: event.type,
           sdkSessionId: event.sdkSessionId,
