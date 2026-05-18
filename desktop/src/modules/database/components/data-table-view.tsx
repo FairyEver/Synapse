@@ -334,30 +334,40 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
 
   const handleCopyContent = useCallback(
     async (format: TableContentFormat) => {
-      await commitPendingChanges()
-      await navigator.clipboard.writeText(formatTableContent(tableContentData, format))
-      logger.info("Table content copied.", {
-        table: tableName,
-        format,
-        rowCount: rows.length,
-        columnCount: contentColumns.length,
-      })
-      toast(format === "csv" ? "已复制 CSV" : "已复制 Markdown 表格")
+      try {
+        await commitPendingChanges()
+        await navigator.clipboard.writeText(formatTableContent(tableContentData, format))
+        logger.info("Table content copied.", {
+          table: tableName,
+          format,
+          rowCount: rows.length,
+          columnCount: contentColumns.length,
+        })
+        toast(format === "csv" ? "已复制 CSV" : "已复制 Markdown 表格")
+      } catch (error) {
+        logger.error("Failed to copy table content.", { error, table: tableName, format })
+        toast("复制失败。")
+      }
     },
     [commitPendingChanges, contentColumns.length, rows.length, tableContentData, tableName],
   )
 
   const handleDownloadContent = useCallback(
     async (format: TableDownloadFormat) => {
-      await commitPendingChanges()
-      downloadTableContent(tableContentData, format)
-      logger.info("Table content downloaded.", {
-        table: tableName,
-        format,
-        rowCount: rows.length,
-        columnCount: contentColumns.length,
-      })
-      toast(format === "csv" ? "已下载 CSV" : "已下载 Excel")
+      try {
+        await commitPendingChanges()
+        downloadTableContent(tableContentData, format)
+        logger.info("Table content downloaded.", {
+          table: tableName,
+          format,
+          rowCount: rows.length,
+          columnCount: contentColumns.length,
+        })
+        toast(format === "csv" ? "已下载 CSV" : "已下载 Excel")
+      } catch (error) {
+        logger.error("Failed to download table content.", { error, table: tableName, format })
+        toast("下载失败。")
+      }
     },
     [commitPendingChanges, contentColumns.length, rows.length, tableContentData, tableName],
   )
