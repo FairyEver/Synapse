@@ -7,6 +7,20 @@ import type { MainActionDefinition } from "../../../electron/action-runtime/acti
 import { httpRequestActionManifest } from "./manifest"
 import type { HttpRequestActionConfig } from "./schema"
 
+function sanitizeUrl(urlStr: string): string {
+  try {
+    const url = new URL(urlStr)
+    for (const [key] of url.searchParams) {
+      if (/token|secret|authorization|api[_-]?key|password|bearer|auth/i.test(key)) {
+        url.searchParams.set(key, "[redacted]")
+      }
+    }
+    return url.toString()
+  } catch {
+    return urlStr
+  }
+}
+
 function buildHeaders(config: HttpRequestActionConfig): Record<string, string> | undefined {
   const headers = config.headers ? { ...config.headers } : {} as Record<string, string>
 
@@ -29,7 +43,7 @@ export function createHttpRequestAction(deps: {
     buildPermissionRequest: ({ config, context }) => ({
       action: "network.connect",
       actor: context.actor,
-      resource: config.url,
+      resource: sanitizeUrl(config.url),
       context: {
         source: "task-scheduler",
         actionType: httpRequestActionManifest.id,
@@ -37,7 +51,7 @@ export function createHttpRequestAction(deps: {
         runId: context.runId,
         triggeredBy: context.triggeredBy,
         method: config.method,
-        url: config.url,
+        url: sanitizeUrl(config.url),
         headerKeys: config.headers ? Object.keys(config.headers).sort() : [],
         timeoutMins: config.timeoutMins,
       },
