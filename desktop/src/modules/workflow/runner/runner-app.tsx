@@ -11,6 +11,15 @@ import { NodeResultPanel } from "./node-result-panel"
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
+import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
 import { ProviderLookupProvider } from "../../../../workflow-nodes/provider-lookup-context"
 import { sanitizeError } from "@/lib/error-sanitize"
@@ -37,6 +46,7 @@ export function WorkflowRunnerApp() {
   const [cancelling, setCancelling] = useState(false)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [retrySignal, setRetrySignal] = useState(0)
+  const [confirmRerunActiveRunId, setConfirmRerunActiveRunId] = useState<string | null>(null)
 
   const runIdRef = useRef(runId)
   runIdRef.current = runId
@@ -208,6 +218,11 @@ export function WorkflowRunnerApp() {
         setRunError("重新运行失败：IPC 通道不可用")
         return
       }
+      if ("conflict" in result) {
+        logger.info("rerun conflict — active run found", { runId, activeRunId: result.activeRunId })
+        setConfirmRerunActiveRunId(result.activeRunId)
+        return
+      }
       if ("errors" in result) {
         const errors = Array.isArray(result.errors) ? result.errors : []
         logger.warn("rerun failed", {
@@ -237,6 +252,36 @@ export function WorkflowRunnerApp() {
       setRerunning(false)
     }
   }, [runId, runParams])
+
+  const handleConfirmRerun = useCallback(async () => {
+    if (!runId || !confirmRerunActiveRunId) return
+    setConfirmRerunActiveRunId(null)
+    setRerunning(true)
+    logger.info("confirmed rerun with force", { runId, activeRunId: confirmRerunActiveRunId })
+    try {
+      const result = await window.synapse?.workflow.rerun(runId, runParams, true)
+      if (!result || "conflict" in result || "errors" in result) {
+        setRunError("重新运行失败，请重试")
+        return
+      }
+      setDefinition(null)
+      setRunParams({})
+      setRunId(result.runId)
+      setRunState("running")
+      setNodeResults({})
+      setRunError(null)
+      setLoadError(null)
+      setSelectedNodeId(null)
+    } catch (err) {
+      logger.warn("forced rerun IPC call failed", {
+        runId,
+        ...errorDiagnostic(err),
+      })
+      setRunError("重新运行失败：无法连接到主进程，请重试")
+    } finally {
+      setRerunning(false)
+    }
+  }, [runId, runParams, confirmRerunActiveRunId])
 
   const handleOpenEditor = useCallback(() => {
     void window.synapse?.workflow.openEditor(workflowId).catch((err) => {
@@ -352,6 +397,20 @@ export function WorkflowRunnerApp() {
       </ResizablePanelGroup>
     </div>
     </ErrorBoundary>
+    <AlertDialog open={confirmRerunActiveRunId !== null} onOpenChange={(open) => { if (!open) setConfirmRerunActiveRunId(null) }}>
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>确认重新运行</AlertDialogTitle>
+          <AlertDialogDescription>
+            当前工作流仍有运行中的任务，重新运行将取消当前运行。是否继续？
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <Button variant="destructive" onClick={() => void handleConfirmRerun()}>继续重新运行</Button>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
     </ProviderLookupProvider>
   )
 }

@@ -15,7 +15,7 @@ function SkillVersionView({ mode, surface, version }: SkillVersionViewProps) {
     <div className="flex flex-col gap-4">
       {version.description ? (
         <div className="rounded-lg bg-muted px-3 py-2.5">
-          <p className="text-[11px] font-medium text-muted-foreground">description</p>
+          <p className="text-xs font-medium text-muted-foreground">描述</p>
           <p className="mt-1 text-sm leading-relaxed text-foreground whitespace-pre-wrap break-words">
             {version.description}
           </p>

@@ -741,8 +741,8 @@ const synapseBridge: SynapseBridge = {
     run: (id: string, params: Record<string, unknown>) => invoke(IPC_CHANNELS.workflow.run)({ id, params }),
     runDefinition: (def: unknown, params: Record<string, unknown>, force?: boolean) =>
       invoke(IPC_CHANNELS.workflow.runDefinition)({ definition: def, params, force }),
-    rerun: (previousRunId: string, params: Record<string, unknown>) =>
-      invoke(IPC_CHANNELS.workflow.rerun)({ previousRunId, params }),
+    rerun: (previousRunId: string, params: Record<string, unknown>, force?: boolean) =>
+      invoke(IPC_CHANNELS.workflow.rerun)({ previousRunId, params, force }),
     openRunner: (workflowId: string, runId: string) =>
       invoke(IPC_CHANNELS.workflow.openRunner)({ workflowId, runId }),
     cancel: (runId: string) => invoke(IPC_CHANNELS.workflow.cancel)({ runId }),
