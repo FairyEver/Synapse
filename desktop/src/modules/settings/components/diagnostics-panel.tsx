@@ -106,6 +106,8 @@ function DiagnosticsPanel() {
       if (result.success && result.filePath) {
         requireSynapseBridge().shell.showItemInFolder(result.filePath)
       }
+    } catch (error) {
+      logger.error("Diagnostics bundle export failed.", error)
     } finally {
       setIsExporting(false)
     }
