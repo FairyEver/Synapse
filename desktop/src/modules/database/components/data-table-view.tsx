@@ -519,7 +519,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                   void handleCopyContent("csv")
                 }}
               >
-                复制为 CSV
+                复制为 CSV（当前页）
               </DropdownMenuItem>
               <DropdownMenuItem
                 data-track="database-copy-content-markdown"
@@ -527,7 +527,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                   void handleCopyContent("markdown")
                 }}
               >
-                复制为 Markdown 表格
+                复制为 Markdown 表格（当前页）
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -544,7 +544,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                   void handleDownloadContent("csv")
                 }}
               >
-                下载为 CSV
+                下载为 CSV（当前页）
               </DropdownMenuItem>
               <DropdownMenuItem
                 data-track="database-download-xlsx"
@@ -552,7 +552,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                   void handleDownloadContent("xlsx")
                 }}
               >
-                下载为 XLSX
+                下载为 XLSX（当前页）
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
