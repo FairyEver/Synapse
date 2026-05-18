@@ -510,7 +510,6 @@ export class FeishuConnectorService {
             workspaceResolution: resolved.status,
             resolvedChannelKey: resolved.channelKey,
             resolvedChannelName: resolved.channelName,
-            resolvedWorkspacePath: resolved.workspacePath,
             bindingScope: resolved.bindingScope,
           })
           normalized = {
@@ -1455,7 +1454,6 @@ function feishuMessageLogContext(
     threadId: stringValue(replyCtx.threadId),
     userId: message.userId,
     workspaceKey: message.workspaceKey,
-    workspacePath: message.workspacePath,
     replyInThread: typeof replyCtx.replyInThread === "boolean" ? replyCtx.replyInThread : undefined,
     contentLength: message.content.length,
     attachmentCount: message.attachments?.length ?? 0,
