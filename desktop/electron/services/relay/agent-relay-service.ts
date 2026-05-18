@@ -105,7 +105,7 @@ export class AgentRelayService {
         partialText: result.partialText,
         lastError: failure?.summary,
       })
-      this.recordAudit(status === "success" || status === "timeout" ? "allowed" : "failed", request, run.id, failure?.summary)
+      this.recordAudit(status === "success" ? "allowed" : "failed", request, run.id, failure?.summary)
       if (request.visible && sourceTarget) {
         const visibleText = result.timedOut
           ? result.partialText || "Relay is still running."
