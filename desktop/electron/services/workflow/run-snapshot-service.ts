@@ -131,8 +131,7 @@ export class RunSnapshotService {
       wfDirs = await readdir(path.join(this.dataDir, "workflow-runs"), { withFileTypes: true })
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === "ENOENT") return null
-      logger.warn("findByRunId readdir failed", { runId, ...snapshotErrorMetadata(err) })
-      return null
+      throw err
     }
     for (const dirent of wfDirs) {
       if (!dirent.isDirectory()) continue
@@ -146,7 +145,7 @@ export class RunSnapshotService {
         return raw as WorkflowRunSnapshot
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-          logger.warn("findByRunId readFile failed", { runId, workflowId: dirent.name, ...snapshotErrorMetadata(err) })
+          throw err
         }
       }
     }
