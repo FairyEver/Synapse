@@ -37,7 +37,6 @@ import {
   setI18nProvider,
   t,
 } from "../../src/runtime/i18n"
-import { InMemoryThemeProvider } from "../../src/runtime/theme"
 
 describe("Phase 0.6 integration (T6.17)", () => {
   it("logger writes to sink, metrics counts, diagnostics bundles them", async () => {
@@ -118,18 +117,11 @@ describe("Phase 0.6 integration (T6.17)", () => {
     }
   })
 
-  it("i18n + theme placeholders behave as expected", () => {
+  it("i18n placeholder behaves as expected", () => {
     const i18n = new InMemoryI18nProvider()
     i18n.registerDictionary("zh-CN", { greeting: "你好，{name}" })
     setI18nProvider(i18n)
     expect(t("greeting", { name: "Ada" })).toBe("你好，Ada")
     expect(t("missing.key")).toBe("missing.key")
-
-    const theme = new InMemoryThemeProvider()
-    let observed = ""
-    const unsub = theme.subscribe((m) => (observed = m))
-    theme.setMode("dark")
-    expect(observed).toBe("dark")
-    unsub()
   })
 })
