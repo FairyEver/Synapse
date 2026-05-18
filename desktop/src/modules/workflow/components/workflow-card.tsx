@@ -23,7 +23,7 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onHistory
       tabIndex={0}
       role="button"
       onClick={() => { if (!suppressClickRef.current) onOpen() }}
-      onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !suppressClickRef.current) { e.preventDefault(); onOpen() } }}>
+      onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !suppressClickRef.current) { if (e.target !== e.currentTarget) return; e.preventDefault(); onOpen() } }}>
       <CardHeader className="pb-2">
         <CardTitle className="text-sm font-medium flex items-center gap-2">
           <GitBranch className="h-4 w-4 text-muted-foreground" />
