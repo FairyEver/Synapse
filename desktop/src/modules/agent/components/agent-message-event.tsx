@@ -126,6 +126,7 @@ function AssistantMessageBody({
             codeLength: codeText.length,
             ...errorLogMeta(error),
           })
+          toast("复制失败")
         })
       }
       return

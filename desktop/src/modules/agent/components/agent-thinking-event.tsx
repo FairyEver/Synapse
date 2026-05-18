@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Check, ChevronDown, Clipboard, Sparkles, X } from "lucide-react"
+import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import { track } from "@/lib/ui-tracking"
@@ -49,6 +50,7 @@ function AgentThinkingEvent({
         contentLength: item.content.length,
         ...errorLogMeta(error),
       })
+      toast("复制失败")
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
       setCopyState("error")
       copyTimerRef.current = setTimeout(() => {

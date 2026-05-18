@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Check, ChevronDown, Clipboard, Terminal, X } from "lucide-react"
+import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -80,6 +81,7 @@ function AgentToolEvent({
         bodyLength: body.length,
         ...errorLogMeta(error),
       })
+      toast("复制失败")
       if (copyTimerRef.current) clearTimeout(copyTimerRef.current)
       setCopyState("error")
       copyTimerRef.current = setTimeout(() => {

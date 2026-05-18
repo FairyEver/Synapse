@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { Check, Clipboard } from "lucide-react"
+import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
@@ -52,6 +53,7 @@ function AgentMessageToolbar({ timestamp, content, messageId, role, className }:
         ...metadata,
         ...errorLogMeta(rawError),
       })
+      toast("复制失败")
     })
   }
 
