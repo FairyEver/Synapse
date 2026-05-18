@@ -82,10 +82,17 @@ export function createMainWindow(deps: MainWindowDeps): BrowserWindow {
   const devServerUrl = process.env.VITE_DEV_SERVER_URL
   if (devServerUrl) {
     logger.info("Loading renderer from Vite dev server.", { devServerUrl })
-    void window.loadURL(devServerUrl)
+    window.loadURL(devServerUrl).catch((error) => {
+      logger.error("Failed to load renderer from dev server.", { error })
+      window.loadURL(`data:text/html;charset=utf-8,<h2>加载失败</h2><p>${encodeURIComponent(String(error))}</p>`).catch(() => {})
+    })
   } else {
-    logger.info("Loading renderer from built files.")
-    void window.loadFile(path.join(__dirname, "../../../dist/index.html"))
+    const indexPath = path.join(__dirname, "../../../dist/index.html")
+    logger.info("Loading renderer from built files.", { indexPath })
+    window.loadFile(indexPath).catch((error) => {
+      logger.error("Failed to load renderer from built files.", { error })
+      window.loadURL(`data:text/html;charset=utf-8,<h2>加载失败</h2><p>${encodeURIComponent(String(error))}</p>`).catch(() => {})
+    })
   }
 
   return window
