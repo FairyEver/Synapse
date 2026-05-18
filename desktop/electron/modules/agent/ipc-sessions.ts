@@ -174,6 +174,9 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
         )
         return sessionSummary(session)
       } catch (rawError) {
+        const isNotFound = rawError instanceof Error
+          && (rawError.message.includes("not available for this session key")
+            || rawError.message.includes("不存在"))
         logger.warn("Agent session switch failed.", {
           projectId: request.projectId,
           conversationId: request.conversationId,
@@ -181,7 +184,10 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
           boundary: "agent.ipc.switch-session",
           ...errorDiagnostic(rawError),
         })
-        throw new Error("切换 Agent 会话失败。", { cause: rawError })
+        throw Object.assign(
+          new Error("切换 Agent 会话失败。", { cause: rawError }),
+          { code: isNotFound ? "AGENT_SESSION_NOT_FOUND" : undefined },
+        )
       }
     },
   },

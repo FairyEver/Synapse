@@ -443,7 +443,7 @@ function useChatConnection(
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
         errorLength: errorMessage(rawError).length,
       })
-      const isNotFound = rawError instanceof Error && rawError.message.includes("不存在")
+      const isNotFound = (rawError as { code?: string })?.code === "AGENT_SESSION_NOT_FOUND"
       if (isNotFound) {
         const remaining = state.sessions.filter((item) => !isSameSession(item, target))
         dispatch({ type: "UPDATE_SESSIONS", updater: () => remaining })

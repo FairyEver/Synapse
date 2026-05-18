@@ -147,5 +147,13 @@ function interpolateConfig(config: HttpRequestNodeConfig, vars: Record<string, s
       )
     : undefined
   const body = config.body ? interpolatePrompt(config.body, vars) : undefined
-  return { ...config, url, headers, query, body }
+  const auth = config.auth
+    ? {
+        ...config.auth,
+        bearerToken: config.auth.bearerToken ? interpolatePrompt(config.auth.bearerToken, vars) : undefined,
+        basicUsername: config.auth.basicUsername ? interpolatePrompt(config.auth.basicUsername, vars) : undefined,
+        basicPassword: config.auth.basicPassword ? interpolatePrompt(config.auth.basicPassword, vars) : undefined,
+      }
+    : undefined
+  return { ...config, url, headers, query, body, auth }
 }
