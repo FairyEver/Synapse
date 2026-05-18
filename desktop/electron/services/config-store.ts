@@ -38,13 +38,18 @@ function createConfigNamespace(): JsonNamespace<SynapseConfig> {
 }
 
 // Migrate legacy config.json to DataRepository
-async function migrateConfigIfNeeded(namespace: JsonNamespace<SynapseConfig>): Promise<void> {
+// Returns { legacyExisted, migrated } to inform caller whether a legacy config was found
+// and whether migration succeeded. When legacyExisted=true and migrated=false, the caller
+// should NOT create default config — user data remains in the legacy file on disk.
+async function migrateConfigIfNeeded(
+  namespace: JsonNamespace<SynapseConfig>,
+): Promise<{ legacyExisted: boolean; migrated: boolean }> {
   const userDataPath = app.getPath("userData")
   const legacyConfigPath = path.join(userDataPath, LEGACY_CONFIG_FILE_NAME)
 
   if (!existsSync(legacyConfigPath)) {
     // No legacy config to migrate
-    return
+    return { legacyExisted: false, migrated: false }
   }
 
   // Check if config already exists in DataRepository with actual user data
@@ -58,7 +63,7 @@ async function migrateConfigIfNeeded(namespace: JsonNamespace<SynapseConfig>): P
     } catch {
       // Ignore errors
     }
-    return
+    return { legacyExisted: true, migrated: true }
   }
 
   logger.info("[migration] Found legacy config.json, starting migration to DataRepository")
@@ -87,9 +92,12 @@ async function migrateConfigIfNeeded(namespace: JsonNamespace<SynapseConfig>): P
     logger.info("[migration] Legacy config renamed to config.json.migrated")
 
     logger.info("[migration] config v0 → v1, backup: config.json.v0.bak")
+
+    return { legacyExisted: true, migrated: true }
   } catch (error) {
     logger.error("[migration] Failed to migrate legacy config", { error })
-    // Continue with default config - migration failure shouldn't block startup
+    // Legacy file remains on disk — user data is preserved for recovery
+    return { legacyExisted: true, migrated: false }
   }
 }
 
@@ -113,11 +121,20 @@ class ConfigStore {
     const namespace = this.getNamespace()
 
     // Run migration from legacy config.json if needed
-    await migrateConfigIfNeeded(namespace)
+    const { legacyExisted, migrated } = await migrateConfigIfNeeded(namespace)
 
     // Ensure namespace has data (create default if empty)
     const existing = await namespace.getSingleton()
     if (existing === null) {
+      // If legacy config existed but migration failed, don't create default config —
+      // the original file remains on disk and user data is preserved.
+      // Fail startup so the error surfaces instead of silently losing configuration.
+      if (legacyExisted && !migrated) {
+        throw new Error(
+          "旧配置迁移失败，请检查日志后重试。原始配置文件保留在磁盘上，手动恢复后可重启应用。",
+        )
+      }
+
       logger.info("No existing config found, creating default config")
       const defaultConfig = createDefaultConfig()
       await namespace.setSingleton(defaultConfig)
