@@ -220,6 +220,28 @@ function useChatEvents(
       if (resultModel) {
         dispatch({ type: "SET_CURRENT_CONVERSATION_MODEL", model: resultModel })
       }
+      // Immediately upsert permission request into local pending state so the
+      // permission card shows approve/deny buttons even if the async refresh
+      // (listPendingPermissions IPC) fails. A subsequent successful refresh
+      // will overwrite with the authoritative server state.
+      if (event.type === "permissionRequest") {
+        dispatch({
+          type: "UPDATE_PENDING_PERMISSIONS",
+          updater: (current) => {
+            if (current.some((p) => p.requestId === event.requestId)) return current
+            return current.concat({
+              requestId: event.requestId,
+              projectId: domainEvent.payload.projectId,
+              sessionKey: domainEvent.payload.sessionKey,
+              conversationId: streamEventConversationId(domainEvent),
+              toolName: event.toolName,
+              toolInput: event.toolInput,
+              toolInputRaw: event.toolInputRaw,
+              createdAt: domainEvent.timestamp,
+            })
+          },
+        })
+      }
       void refreshPendingPermissions().catch((rawError: unknown) => {
         logger.error("Agent pending permissions refresh failed.", {
           projectId: domainEvent.payload.projectId,
