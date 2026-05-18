@@ -144,7 +144,7 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
                     {scan.conversationCount > 0 && (
                       <div>
                         <p className="font-medium">Agent 会话 ({scan.conversationCount})</p>
-                        <p className="ml-4 text-sm text-muted-foreground">不迁移，仅标记失效</p>
+                        <p className="ml-4 text-sm text-muted-foreground">先处理会话后再删除</p>
                       </div>
                     )}
                   </>
@@ -154,13 +154,13 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={busy}>取消</AlertDialogCancel>
-            {hasReferences && (
+            {hasReferences && !hasConversationReferences && (
               <Button variant="outline" disabled={busy} onClick={() => setMigrationOpen(true)}>
                 迁移到其他供应商
               </Button>
             )}
-            <Button variant="destructive" disabled={busy || scan.status === "loading" || scan.status === "error"} onClick={handleDelete}>
-              {scan.status === "error" ? "扫描失败" : hasReferences ? "仍然删除" : "确认删除"}
+            <Button variant="destructive" disabled={busy || scan.status === "loading" || scan.status === "error" || hasConversationReferences} onClick={handleDelete}>
+              {scan.status === "error" ? "扫描失败" : hasConversationReferences ? "无法删除" : hasReferences ? "仍然删除" : "确认删除"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
