@@ -135,7 +135,13 @@ function DatabaseModule() {
   }, [promise, selectedTable])
 
   const handleChooseImportTable = useCallback(async () => {
-    await dataTableViewRef.current?.commitPendingChanges()
+    try {
+      await dataTableViewRef.current?.commitPendingChanges()
+    } catch (error) {
+      logger.error("Failed to commit pending changes before import.", { error })
+      showError(error instanceof Error ? error.message : "保存当前编辑失败")
+      return
+    }
     logger.info("Table import picker opened.")
     try {
       const result = await databaseTableImportInspect()
