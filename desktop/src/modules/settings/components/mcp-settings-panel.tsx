@@ -164,9 +164,7 @@ function McpSettingsPanel() {
               ) : server.registered && server.mode === "http" ? (
                 <StatusPill active activeLabel="已注册" inactiveLabel="" />
               ) : server.registered && server.mode === "stdio" ? (
-                <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
-                  需更新
-                </span>
+                <StatusPill active activeLabel="需更新" inactiveLabel="" variant="warning" />
               ) : (
                 <StatusPill active={false} activeLabel="" inactiveLabel="未注册" />
               )}

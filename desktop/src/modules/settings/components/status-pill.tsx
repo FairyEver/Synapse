@@ -2,9 +2,18 @@ type StatusPillProps = {
   active: boolean
   activeLabel: string
   inactiveLabel: string
+  variant?: "default" | "warning"
 }
 
-function StatusPill({ active, activeLabel, inactiveLabel }: StatusPillProps) {
+function StatusPill({ active, activeLabel, inactiveLabel, variant = "default" }: StatusPillProps) {
+  if (variant === "warning") {
+    return (
+      <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-secondary-foreground">
+        {activeLabel || inactiveLabel}
+      </span>
+    )
+  }
+
   return active ? (
     <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
       {activeLabel}
