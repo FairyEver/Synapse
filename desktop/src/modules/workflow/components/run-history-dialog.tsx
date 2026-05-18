@@ -82,7 +82,7 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
     return `${(ms / 1000).toFixed(1)}s`
   }
 
-  const handleOpenRunner = (runId: string) => {
+  const handleOpenRunner = async (runId: string) => {
     track({
       component: "workflow",
       name: "workflow-run-history-open-runner",
@@ -93,7 +93,10 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
         runId,
       },
     })
-    window.synapse?.workflow.openRunner(workflowId, runId).catch((err) => {
+    try {
+      await window.synapse?.workflow.openRunner(workflowId, runId)
+      onClose()
+    } catch (err) {
       logger.warn("Workflow runner open failed from run history.", {
         boundary: "renderer.workflow.run-history.open-runner",
         workflowId,
@@ -101,14 +104,13 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
         ...errorDiagnostic(err),
       })
       toast.error("打开运行窗口失败，请重试")
-    })
-    onClose()
+    }
   }
 
   const handleKeyDown = (e: React.KeyboardEvent, runId: string) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault()
-      handleOpenRunner(runId)
+      void handleOpenRunner(runId)
     }
   }
 
