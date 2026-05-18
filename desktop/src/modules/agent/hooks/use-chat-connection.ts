@@ -322,7 +322,9 @@ function useChatConnection(
       })
       dispatch({ type: "SET_ERROR", error: "加载失败" })
     } finally {
-      dispatch({ type: "SET_LOADING", loading: false })
+      if (requestId === selectRequestIdRef.current) {
+        dispatch({ type: "SET_LOADING", loading: false })
+      }
     }
   }, [
     clearTimeline,
