@@ -509,11 +509,16 @@ function RepositoryListEditor({
         )}
         confirmLabel="确定初始化"
         delaySeconds={3}
-        onConfirm={() => {
+        onConfirm={async () => {
           if (initializationTarget) {
-            void runInitialization(initializationTarget.repository)
+            try {
+              await runInitialization(initializationTarget.repository)
+            } catch {
+              // Error already logged and notified by runInitialization
+            }
           }
         }}
+        confirmLoadingLabel="初始化中..."
       />
 
       <Dialog open={isCreateDialogOpen} onOpenChange={handleCreateDialogOpenChange}>

@@ -2,7 +2,6 @@ import { isValidElement, useEffect, useMemo, useState } from "react"
 import type { ReactNode } from "react"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -10,6 +9,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
+import { Button } from "@/components/ui/button"
 
 type DelayedConfirmAlertDialogProps = {
   open: boolean
@@ -19,7 +19,8 @@ type DelayedConfirmAlertDialogProps = {
   confirmLabel: string
   cancelLabel?: string
   delaySeconds: number
-  onConfirm: () => void
+  onConfirm: () => void | Promise<void>
+  confirmLoadingLabel?: string
 }
 
 function DelayedConfirmAlertDialog({
@@ -31,8 +32,10 @@ function DelayedConfirmAlertDialog({
   cancelLabel = "取消",
   delaySeconds,
   onConfirm,
+  confirmLoadingLabel,
 }: DelayedConfirmAlertDialogProps) {
   const [secondsLeft, setSecondsLeft] = useState(delaySeconds)
+  const [isConfirming, setIsConfirming] = useState(false)
 
   useEffect(() => {
     if (!open) {
@@ -63,6 +66,17 @@ function DelayedConfirmAlertDialog({
     [confirmLabel, secondsLeft],
   )
 
+  const handleConfirm = async () => {
+    if (isConfirming) return
+    setIsConfirming(true)
+    try {
+      await onConfirm()
+    } finally {
+      setIsConfirming(false)
+      onOpenChange(false)
+    }
+  }
+
   return (
     <AlertDialog open={open} onOpenChange={onOpenChange}>
       <AlertDialogContent>
@@ -75,13 +89,15 @@ function DelayedConfirmAlertDialog({
           )}
         </AlertDialogHeader>
         <AlertDialogFooter>
-          <AlertDialogCancel>{cancelLabel}</AlertDialogCancel>
-          <AlertDialogAction
-            disabled={secondsLeft > 0}
-            onClick={onConfirm}
+          <AlertDialogCancel disabled={isConfirming}>{cancelLabel}</AlertDialogCancel>
+          <Button
+            disabled={secondsLeft > 0 || isConfirming}
+            onClick={() => {
+              void handleConfirm()
+            }}
           >
-            {resolvedConfirmLabel}
-          </AlertDialogAction>
+            {isConfirming ? (confirmLoadingLabel ?? "处理中...") : resolvedConfirmLabel}
+          </Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
