@@ -192,7 +192,7 @@ function useChatConnection(
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
         errorLength: errorMessage(rawError).length,
       })
-      dispatch({ type: "SET_ARCHIVED_SESSIONS", archivedSessions: [] })
+      toast.error("归档会话加载失败，请重试")
     }
   }, [dispatch, projectIdsRef])
 
@@ -764,8 +764,12 @@ function useChatConnection(
     if (!projectId || !conversationId) return
     const bridge = requireSynapseBridge()
     try {
-      await bridge.agent.forceKillTurn({ projectId, conversationId })
-      dispatch({ type: "SET_CANCEL_PHASE", cancelPhase: "cancelled" })
+      const result = await bridge.agent.forceKillTurn({ projectId, conversationId })
+      if (result.status === "hard-killed") {
+        dispatch({ type: "SET_CANCEL_PHASE", cancelPhase: "cancelled" })
+      } else if (result.status === "no-active-turn") {
+        dispatch({ type: "CANCEL_RESET" })
+      }
     } catch (rawError) {
       logger.error("Agent force kill turn failed.", {
         projectId,
