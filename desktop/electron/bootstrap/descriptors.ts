@@ -1191,10 +1191,47 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
     const auditSink = registry.get<AuditSink>("core.audit-sink")
     const runtimeDeps: import("../../workflow-nodes/types").NodeRuntimeDeps = {
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
-      sendHttpRequest: sendOutboundHttpRequest,
+      sendHttpRequest: createHttpSendHandler({ permissionGuard, auditSink }),
     }
     return new WorkflowEngine({ sendToAgent }, undefined, runtimeDeps)
   },
+}
+
+function createHttpSendHandler(deps: {
+  permissionGuard: PermissionGuard
+  auditSink: AuditSink
+}): typeof sendOutboundHttpRequest {
+  return async (request) => {
+    const permission = await deps.permissionGuard.check({
+      action: "network.connect",
+      actor: { kind: "system" },
+      resource: request.url,
+      context: { source: "workflow" },
+    })
+    if (!permission.allowed) {
+      throw new Error(`HTTP request denied by workflow engine: ${permission.reason}`)
+    }
+    try {
+      const response = await sendOutboundHttpRequest(request)
+      deps.auditSink.record({
+        action: "network.connect",
+        actor: { kind: "system" },
+        resource: request.url,
+        outcome: "allowed",
+        metadata: { status: response.status, source: "workflow" },
+      })
+      return response
+    } catch (error) {
+      deps.auditSink.record({
+        action: "network.connect",
+        actor: { kind: "system" },
+        resource: request.url,
+        outcome: "failed",
+        metadata: { source: "workflow", error: error instanceof Error ? error.message : String(error) },
+      })
+      throw error
+    }
+  }
 }
 
 function workflowAgentErrorDiagnostic(error: unknown): {
