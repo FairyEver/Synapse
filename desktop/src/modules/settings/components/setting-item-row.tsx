@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -16,7 +16,7 @@ type SettingItemRowProps = {
   item: SettingItem
   value: unknown
   context: SettingsContext
-  onSave: (item: SettingItem, value: unknown) => Promise<void>
+  onSave: (item: SettingItem, value: unknown) => Promise<boolean>
 }
 
 function toInputValue(value: unknown, type: SettingItem["type"]): string {
@@ -45,12 +45,20 @@ function SettingItemRow({ item, value, context, onSave }: SettingItemRowProps) {
   const [draftValue, setDraftValue] = useState(currentInputValue)
   const pendingSaveRef = useRef<number | null>(null)
   const hasLocalEditRef = useRef(false)
+  const currentInputValueRef = useRef(currentInputValue)
+  const latestDraftValueRef = useRef(draftValue)
   const controlClassName = "border-border/70"
   const trackName = `settings.${item.key}`
 
   useEffect(() => {
+    currentInputValueRef.current = currentInputValue
+    latestDraftValueRef.current = currentInputValue
     setDraftValue(currentInputValue)
   }, [currentInputValue, item.key])
+
+  useEffect(() => {
+    latestDraftValueRef.current = draftValue
+  }, [draftValue])
 
   useEffect(() => {
     return () => {
@@ -62,6 +70,34 @@ function SettingItemRow({ item, value, context, onSave }: SettingItemRowProps) {
 
   const candidateValue = supportsDraftInput ? parseDraftValue(draftValue, item.type) : value
   const validationMessage = item.validation?.(candidateValue, context) ?? null
+
+  const handleFailedDraftSave = useCallback((submittedDraftValue: string) => {
+    if (latestDraftValueRef.current !== submittedDraftValue) {
+      hasLocalEditRef.current = true
+      return
+    }
+
+    const nextDraftValue = currentInputValueRef.current
+    latestDraftValueRef.current = nextDraftValue
+    hasLocalEditRef.current = false
+    setDraftValue(nextDraftValue)
+  }, [])
+
+  const saveDraftValue = useCallback(
+    (submittedDraftValue: string, submittedValue: unknown) => {
+      hasLocalEditRef.current = false
+      void onSave(item, submittedValue)
+        .then((saved) => {
+          if (!saved) {
+            handleFailedDraftSave(submittedDraftValue)
+          }
+        })
+        .catch(() => {
+          handleFailedDraftSave(submittedDraftValue)
+        })
+    },
+    [handleFailedDraftSave, item, onSave],
+  )
 
   const commitDraftValue = () => {
     if (!supportsDraftInput || item.readOnly) {
@@ -77,8 +113,7 @@ function SettingItemRow({ item, value, context, onSave }: SettingItemRowProps) {
       pendingSaveRef.current = null
     }
 
-    hasLocalEditRef.current = false
-    void onSave(item, candidateValue)
+    saveDraftValue(draftValue, candidateValue)
   }
 
   useEffect(() => {
@@ -106,8 +141,7 @@ function SettingItemRow({ item, value, context, onSave }: SettingItemRowProps) {
 
     pendingSaveRef.current = window.setTimeout(() => {
       pendingSaveRef.current = null
-      hasLocalEditRef.current = false
-      void onSave(item, candidateValue)
+      saveDraftValue(draftValue, candidateValue)
     }, 300)
 
     return () => {
@@ -116,7 +150,7 @@ function SettingItemRow({ item, value, context, onSave }: SettingItemRowProps) {
         pendingSaveRef.current = null
       }
     }
-  }, [candidateValue, currentInputValue, draftValue, item, item.readOnly, onSave, supportsDraftInput, validationMessage])
+  }, [candidateValue, currentInputValue, draftValue, item.readOnly, saveDraftValue, supportsDraftInput, validationMessage])
 
   return (
     <SettingsFieldRow

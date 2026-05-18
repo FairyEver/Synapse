@@ -127,13 +127,13 @@ function SettingsModule() {
 
       if (!patch) {
         warning("无法保存设置：不支持的设置项。")
-        return
+        return false
       }
 
       logger.info("Saving settings item.", {
         itemKey: item.key,
       })
-      await applyPatch(patch)
+      return applyPatch(patch)
     },
     [applyPatch, context, warning],
   )
