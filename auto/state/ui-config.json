@@ -1,0 +1,25 @@
+{
+  "activePromptName": "夜间健壮性与品质巡检",
+  "workingDirectory": "/Users/liyang/Documents/code/github/Synapse",
+  "concurrency": 4,
+  "intervalSeconds": 10,
+  "timeoutMinutes": 30,
+  "maxLogs": 200,
+  "provider": "codex",
+  "codex": {
+    "command": "codex",
+    "model": "gpt-5.5",
+    "sandbox": "danger-full-access",
+    "approvalPolicy": "never",
+    "json": true,
+    "disableMcp": true
+  },
+  "claudeCode": {
+    "command": "claude",
+    "model": "opus",
+    "dangerouslySkipPermissions": true,
+    "outputFormat": "text",
+    "maxTurns": 200,
+    "systemPrompt": ""
+  }
+}

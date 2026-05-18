@@ -86,6 +86,7 @@ function ContentInstallDialog({
   const [isSavingVariables, setIsSavingVariables] = useState(false)
   const pendingSubstitutionsRef = useRef<Record<string, string> | undefined>(undefined)
   const variableConfirmPassedRef = useRef(false)
+  const skipVariableSaveLockRef = useRef(false)
   const [selection, setSelection] = useState<EditorWriteTargetSelection | null>(null)
   const [installError, setInstallError] = useState<string | null>(null)
   const [isInstalling, setIsInstalling] = useState(false)
@@ -122,6 +123,7 @@ function ContentInstallDialog({
     setIsSavingVariables(false)
     pendingSubstitutionsRef.current = undefined
     variableConfirmPassedRef.current = false
+    skipVariableSaveLockRef.current = false
   }, [editor?.id, open])
 
   useEffect(() => {
@@ -281,6 +283,8 @@ function ContentInstallDialog({
   }
 
   const handleSkipVariableSave = async () => {
+    if (skipVariableSaveLockRef.current) return
+    skipVariableSaveLockRef.current = true
     await continueInstallAfterVariableSaveDecision()
   }
 
@@ -391,7 +395,7 @@ function ContentInstallDialog({
       />
       <VariableSaveConfirmationDialog
         changes={pendingVariableChanges}
-        isSubmitting={isSavingVariables}
+        isSubmitting={isSavingVariables || isInstalling}
         onOpenChange={(next) => {
           if (!next) {
             setPendingVariableChanges(null)
