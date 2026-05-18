@@ -39,11 +39,12 @@ function VariableCard({
     <div className="group rounded-lg bg-background px-3.5 py-3">
       <div className="flex items-center gap-2">
         <span className="truncate font-mono text-sm font-medium">{variable.name}</span>
-        <div className="ml-auto flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="ml-auto flex shrink-0 gap-0.5 opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
           <Button
             variant="ghost"
             size="icon"
             className="size-6"
+            aria-label="编辑变量"
             onClick={() => onEdit(variable)}
           >
             <Pencil className="size-3" />
@@ -52,6 +53,7 @@ function VariableCard({
             variant="ghost"
             size="icon"
             className="size-6"
+            aria-label="删除变量"
             onClick={() => onDelete(variable)}
           >
             <Trash2 className="size-3" />
