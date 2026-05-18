@@ -36,6 +36,10 @@ function ancestors(nodeId: string, rev: Map<string, string[]>): Set<string> {
 export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
   const errors: ValidationError[] = []; const warnings: ValidationWarning[] = []
 
+  if (!def.name?.trim()) {
+    errors.push({ type: "invalid_config", message: "工作流名称不能为空" })
+  }
+
   // Validate param name uniqueness
   const paramNamesSeen = new Set<string>()
   for (const p of def.params) {
