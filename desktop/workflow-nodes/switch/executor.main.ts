@@ -23,11 +23,15 @@ function normalizeResponse(raw: string): string {
   return unquoted.replace(/[.,;:!?]+$/, "").trim().toLowerCase()
 }
 
+function escapeRegex(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
 /**
  * Multi-strategy branch matching. Tries in order:
  * 1. Exact match on full trimmed+lowercased response vs lowercased branch IDs
  * 2. Exact match on normalized first-line response vs lowercased branch IDs
- * 3. Search for lowercased branch IDs within the normalized response (longest match wins)
+ * 3. Search for branch IDs as whole words within the normalized response (longest match wins)
  *
  * All comparisons are case-insensitive: the response is lowercased by
  * normalizeResponse / trim().toLowerCase(), and branch IDs are lowercased at
@@ -45,10 +49,10 @@ function matchBranch(response: string, branchIds: string[]): string | null {
   const normalizedMatch = branchIds.find((id) => id.toLowerCase() === normalized)
   if (normalizedMatch) return normalizedMatch
 
-  // Strategy 3: search for branch IDs within normalized response (case-insensitive)
+  // Strategy 3: search for branch IDs as whole words within normalized response (case-insensitive)
   // Sort by length descending to prefer longest match (avoids substring false positives)
   const sorted = [...branchIds].sort((a, b) => b.length - a.length)
-  const found = sorted.find((id) => normalized.includes(id.toLowerCase()))
+  const found = sorted.find((id) => new RegExp(`\\b${escapeRegex(id.toLowerCase())}\\b`).test(normalized))
   if (found) return found
 
   return null

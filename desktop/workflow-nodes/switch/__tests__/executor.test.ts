@@ -37,6 +37,15 @@ describe("switchNodeExecutor", () => {
     })
     expect(r.status).toBe("success"); expect(r.activeBranch).toBe("no")
   })
+  it("does not match branch ID from substring (e.g. 'no' in 'not enough information')", async () => {
+    const r = await switchNodeExecutor.execute({
+      config, resolvedVariables: {}, context: ctx,
+      agentDeps: { sendToAgent: vi.fn().mockResolvedValue({ status: "success" as const, response: "not enough information", durationMs: 5 }) },
+    })
+    expect(r.status).toBe("failed")
+    expect(r.activeBranch).toBeUndefined()
+    expect(r.error).toBe("Agent 响应不匹配任何分支 [yes, no]")
+  })
   it("fails provider API error text instead of falling back to defaultBranch", async () => {
     const r = await switchNodeExecutor.execute({
       config: { ...config, defaultBranch: "no" }, resolvedVariables: {}, context: ctx,
