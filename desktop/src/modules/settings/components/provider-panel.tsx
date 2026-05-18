@@ -321,6 +321,7 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
       await requireSynapseBridge().agent.archiveProvider({ providerId: archiveConfirm.provider.id })
       await refresh()
       toast("Provider 已归档")
+      setArchiveConfirm(null)
     } catch (rawError) {
       logger.error("Provider archive failed.", {
         boundary: "settings.providers.archive",
@@ -329,8 +330,6 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
         ...providerErrorDiagnostic(rawError),
       })
       toast("归档失败")
-    } finally {
-      setArchiveConfirm(null)
     }
   }, [archiveConfirm, refresh])
 
