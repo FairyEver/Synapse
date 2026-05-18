@@ -235,11 +235,12 @@ function ProviderModelSelectDialog({
                               const modelName = resolveModelName(provider, tierConfig.tier)
                               const isTierSelected = selected && selectedTier === tierConfig.tier
                               return (
-                                <div
+                                <button
                                   key={tierConfig.tier}
                                   data-tier={tierConfig.tier}
+                                  type="button"
                                   className={cn(
-                                    "cursor-pointer rounded px-2 py-1 text-sm",
+                                    "w-full rounded px-2 py-1 text-left text-sm",
                                     selected
                                       ? isTierSelected
                                         ? "bg-foreground font-medium text-background"
@@ -252,7 +253,7 @@ function ProviderModelSelectDialog({
                                   }}
                                 >
                                   {tierConfig.label} ({modelName})
-                                </div>
+                                </button>
                               )
                             })}
                           </div>
