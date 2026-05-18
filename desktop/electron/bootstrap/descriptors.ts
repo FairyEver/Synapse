@@ -210,7 +210,10 @@ export function createRunWorkflowHandler(deps: {
     runAborts.set(runId, ac)
     runStatuses.set(runId, { runId, workflowId: id, status: "running", nodeResults: {}, startedAt, params: effectiveParams, definition: def })
     const appConfig = await configStore.load()
-    const activeRepo = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
+    const defaultProject = def.defaultProjectId
+      ? appConfig.repositories.find((r) => r.uuid === def.defaultProjectId)
+      : undefined
+    const activeRepo = defaultProject ?? appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
     const projectId = activeRepo?.uuid
     const completion = workflowEngine.run(def, effectiveParams, runId, (event) => {
       const current = runStatuses.get(runId) ?? { runId, workflowId: id, status: "running" as const, nodeResults: {}, startedAt }
