@@ -34,25 +34,29 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
   const [migrationOpen, setMigrationOpen] = useState(false)
   const [busy, setBusy] = useState(false)
 
+  const runScan = useCallback(async () => {
+    if (!provider) return
+    setScan({ status: "loading" })
+    try {
+      const result = await requireSynapseBridge().agent.scanProviderReferences({ providerId: provider.id })
+      setScan({
+        status: "loaded",
+        taskCount: result.taskCount,
+        workflowNodeCount: result.workflowNodeCount,
+        conversationCount: result.conversationCount,
+        references: result.references.map((r) => ({ kind: r.kind, entityName: r.entityName, nodeName: r.nodeName })),
+      })
+    } catch {
+      logger.error("Provider reference scan failed.", { boundary: "settings.providers.scan", providerId: provider.id })
+      setScan({ status: "error", message: "扫描引用失败" })
+    }
+  }, [provider])
+
   useEffect(() => {
     if (!provider) return
     setScan({ status: "loading" })
-    void (async () => {
-      try {
-        const result = await requireSynapseBridge().agent.scanProviderReferences({ providerId: provider.id })
-        setScan({
-          status: "loaded",
-          taskCount: result.taskCount,
-          workflowNodeCount: result.workflowNodeCount,
-          conversationCount: result.conversationCount,
-          references: result.references.map((r) => ({ kind: r.kind, entityName: r.entityName, nodeName: r.nodeName })),
-        })
-      } catch {
-        logger.error("Provider reference scan failed.", { boundary: "settings.providers.scan", providerId: provider.id })
-        setScan({ status: "error", message: "扫描引用失败" })
-      }
-    })()
-  }, [provider])
+    void runScan()
+  }, [runScan])
 
   const handleDelete = useCallback(async () => {
     if (!provider) return
@@ -105,7 +109,12 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
             <AlertDialogDescription asChild>
               <div className="flex flex-col gap-2">
                 {scan.status === "loading" && <p>正在扫描引用…</p>}
-                {scan.status === "error" && <p className="text-destructive">{scan.message}</p>}
+                {scan.status === "error" && (
+                  <p className="text-destructive">
+                    {scan.message}
+                    <Button variant="link" size="sm" className="ml-2 h-auto p-0" onClick={runScan}>重试</Button>
+                  </p>
+                )}
                 {scan.status === "loaded" && !hasReferences && <p>该供应商未被任何内容引用，可以安全删除。</p>}
                 {scan.status === "loaded" && hasReferences && (
                   <>
@@ -148,8 +157,8 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
                 迁移到其他供应商
               </Button>
             )}
-            <Button variant="destructive" disabled={busy || scan.status === "loading"} onClick={handleDelete}>
-              {hasReferences ? "仍然删除" : "确认删除"}
+            <Button variant="destructive" disabled={busy || scan.status === "loading" || scan.status === "error"} onClick={handleDelete}>
+              {scan.status === "error" ? "扫描失败" : hasReferences ? "仍然删除" : "确认删除"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
