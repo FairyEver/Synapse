@@ -330,10 +330,10 @@ export class WorkflowEngine {
     const endNodeId = endNode?.id
 
     if (effectiveAbortSignal.aborted) {
-      // Mark any still-running or scheduler-skipped nodes as cancelled
+      // Mark any still-running nodes as cancelled (skipped nodes stay skipped)
       const runningNodes: string[] = []
       for (const nr of Object.values(nodeResults)) {
-        if (nr.status === "running" || nr.status === "skipped") {
+        if (nr.status === "running") {
           nr.status = "cancelled"; nr.error = "运行被取消"
           nr.endedAt = nr.endedAt ?? Date.now()
           nr.durationMs = nr.startedAt ? (nr.endedAt ?? Date.now()) - nr.startedAt : undefined
