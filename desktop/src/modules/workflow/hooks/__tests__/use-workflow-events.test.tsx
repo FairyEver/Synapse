@@ -115,6 +115,7 @@ describe("useWorkflowEvents", () => {
       workflowListener?.({
         type: "workflow:failed",
         runId: "run-1",
+        workflowId: "workflow-1",
         error: rawError,
         result: {
           status: "failed",
@@ -165,6 +166,28 @@ describe("useWorkflowEvents", () => {
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("/Users/example/repo")
   })
+
+  it("notifies when a run snapshot fails to save", async () => {
+    const onSnapshotSaveFailed = vi.fn()
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<SnapshotSaveFailureProbe onSnapshotSaveFailed={onSnapshotSaveFailed} />)
+    })
+
+    await act(async () => {
+      workflowListener?.({
+        type: "workflow:snapshot-save-failed",
+        runId: "run-1",
+        workflowId: "workflow-1",
+        status: "completed",
+      })
+      await Promise.resolve()
+    })
+
+    expect(onSnapshotSaveFailed).toHaveBeenCalledWith("completed")
+  })
 })
 
 function HookProbe({
@@ -173,6 +196,16 @@ function HookProbe({
   readonly onFailed: (error: string, nodeResults?: Record<string, NodeRunResult>) => void
 }): ReactNode {
   const callbacks = useMemo(() => ({ onFailed }), [onFailed])
+  useWorkflowEvents("run-1", callbacks)
+  return null
+}
+
+function SnapshotSaveFailureProbe({
+  onSnapshotSaveFailed,
+}: {
+  readonly onSnapshotSaveFailed: (status: "completed" | "failed" | "cancelled") => void
+}): ReactNode {
+  const callbacks = useMemo(() => ({ onSnapshotSaveFailed }), [onSnapshotSaveFailed])
   useWorkflowEvents("run-1", callbacks)
   return null
 }

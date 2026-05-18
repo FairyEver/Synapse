@@ -179,6 +179,9 @@ export function WorkflowRunnerApp() {
       setRunState("cancelled"); setRunError(null)
       if (results) setNodeResults(results)
     },
+    onSnapshotSaveFailed: () => {
+      setLoadError("运行已结束，但历史保存失败")
+    },
   })
 
   const handleCancel = useCallback(async () => {

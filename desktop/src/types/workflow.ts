@@ -54,6 +54,7 @@ export type WorkflowEvent =
   | { type: "workflow:completed"; runId: string; workflowId: string; result: WorkflowRunResult }
   | { type: "workflow:failed"; runId: string; workflowId: string; error: string; result?: WorkflowRunResult }
   | { type: "workflow:cancelled"; runId: string; workflowId: string; result?: WorkflowRunResult }
+  | { type: "workflow:snapshot-save-failed"; runId: string; workflowId: string; status: WorkflowRunResult["status"] }
 export interface ValidationError {
   type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch" | "missing_end_node" | "multiple_end_nodes" | "missing_param"
   nodeId?: string; edgeId?: string; message: string

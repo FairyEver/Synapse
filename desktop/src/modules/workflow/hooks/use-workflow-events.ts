@@ -15,6 +15,7 @@ export interface WorkflowEventCallbacks {
   onCompleted?: (nodeResults: Record<string, NodeRunResult>) => void
   onFailed?: (error: string, nodeResults?: Record<string, NodeRunResult>) => void
   onCancelled?: (nodeResults?: Record<string, NodeRunResult>) => void
+  onSnapshotSaveFailed?: (status: "completed" | "failed" | "cancelled") => void
 }
 
 export function useWorkflowEvents(
@@ -109,6 +110,13 @@ export function useWorkflowEvents(
         const hasResults = !!event.result?.nodeResults
         logger.info("workflow:cancelled — applying terminal state", { runId, hasAuthoritativeResults: hasResults, nodeCount: hasResults ? Object.keys(event.result!.nodeResults).length : 0 })
         cbRef.current.onCancelled?.(event.result?.nodeResults)
+      } else if (event.type === "workflow:snapshot-save-failed") {
+        logger.warn("workflow snapshot save failed event received", {
+          runId,
+          workflowId: event.workflowId,
+          status: event.status,
+        })
+        cbRef.current.onSnapshotSaveFailed?.(event.status)
       }
     })
 

@@ -92,7 +92,7 @@ function saveRunSnapshot(
       {
         domain: "workflow",
         type: "workflow:snapshot-save-failed",
-        payload: { runId: snapshot.runId, workflowId: snapshot.workflowId, status: snapshot.status },
+        payload: { type: "workflow:snapshot-save-failed", runId: snapshot.runId, workflowId: snapshot.workflowId, status: snapshot.status },
         timestamp: new Date().toISOString(),
       },
       { backpressure: "block" },
