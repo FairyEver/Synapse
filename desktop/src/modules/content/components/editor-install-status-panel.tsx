@@ -177,7 +177,7 @@ function renderInstallStatusTargetList({
                 {actions.length > 0 ? (
                   <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                      <Button type="button" variant="ghost" size="icon" className="size-7">
+                      <Button type="button" variant="ghost" size="icon" className="size-7" aria-label="更多操作">
                         <MoreHorizontal className="size-4" />
                       </Button>
                     </DropdownMenuTrigger>
