@@ -49,12 +49,16 @@ export class WorkflowService {
       const entries = await readdir(path.join(resolvedPath, "workflows"), { withFileTypes: true })
       ids = entries.filter((e) => e.isDirectory()).map((e) => e.name)
     } catch (err) {
+      if (errorCode(err) === "ENOENT") {
+        // workflows 目录不存在——合法空列表
+        return []
+      }
       logger.warn("workflow list failed", {
         boundary: "workflow-service.list",
         ...repoPathMeta,
         ...errorLogMeta(err),
       })
-      return []
+      throw err
     }
     const defs = await Promise.all(ids.map((id) => this.get(id)))
     const metas: WorkflowMeta[] = []
