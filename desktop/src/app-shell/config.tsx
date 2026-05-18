@@ -82,7 +82,7 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
 
   const updateConfig = useCallback(
     async (patch: SynapseConfigPatch, reset = false) => {
-      logger.info("Updating app config from renderer.", { patch, reset })
+      logger.info("Updating app config from renderer.", { patch: sanitizePatchForLog(patch), reset })
       const nextConfig = await updateConfigThroughBridge(patch)
 
       setConfig(nextConfig)
@@ -165,3 +165,14 @@ function useAppConfig(): AppConfigContextValue {
 }
 
 export { AppConfigProvider, useAppConfig }
+
+function sanitizePatchForLog(patch: SynapseConfigPatch): SynapseConfigPatch {
+  if (!patch.repositories || !Array.isArray(patch.repositories)) return patch
+  return {
+    ...patch,
+    repositories: patch.repositories.map((repo) => {
+      if (!repo.variables) return repo
+      return { ...repo, variables: repo.variables.map((v) => ({ ...v, value: v.value ? "[redacted]" : v.value })) }
+    }),
+  }
+}

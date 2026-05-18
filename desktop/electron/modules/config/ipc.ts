@@ -91,7 +91,7 @@ export const configIpcModule: IpcModule = {
       request: configPatchSchema,
       response: configSchema,
       handler: async (_ctx, patch: SynapseConfigPatch) => {
-        logger.info(`Handling config.update request. patch: ${JSON.stringify(patch)}`)
+        logger.info(`Handling config.update request. patch: ${JSON.stringify(sanitizePatchForLog(patch))}`)
         const config = await configStore.update(patch)
 
         logger.info(
@@ -284,4 +284,15 @@ export const configIpcModule: IpcModule = {
     },
   },
   events: {},
+}
+
+function sanitizePatchForLog(patch: SynapseConfigPatch): SynapseConfigPatch {
+  if (!patch.repositories || !Array.isArray(patch.repositories)) return patch
+  return {
+    ...patch,
+    repositories: patch.repositories.map((repo) => {
+      if (!repo.variables) return repo
+      return { ...repo, variables: repo.variables.map((v) => ({ ...v, value: v.value ? "[redacted]" : v.value })) }
+    }),
+  }
 }
