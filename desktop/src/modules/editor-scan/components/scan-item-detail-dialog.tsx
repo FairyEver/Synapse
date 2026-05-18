@@ -68,6 +68,12 @@ import { EditorCopyDialog } from "./editor-copy-dialog"
 
 const logger = createRendererLogger("editor-scan")
 
+/** Extract the last path component for safe logging (never logs the full absolute path). */
+function logSafeItemPath(filePath: string): string {
+  const normalized = filePath.replace(/\\/g, "/")
+  return normalized.split("/").pop() ?? filePath
+}
+
 type ScanItemDetailDialogProps = {
   item: ScanItemForDetail | null
   onChanged?: () => Promise<void> | void
@@ -132,7 +138,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
     try {
       await navigator.clipboard.writeText(content)
       success("已复制到剪贴板。")
-      logger.info("Scan item content copied.", { path: item?.path })
+      logger.info("Scan item content copied.", { pathBasename: item?.path ? logSafeItemPath(item.path) : undefined })
     } catch {
       notifyError("复制失败。")
     }
@@ -173,7 +179,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
       logger.info("Scan item moved to trash.", {
         editorId: item.editorId,
         itemType: item.type,
-        path: item.path,
+        pathBasename: logSafeItemPath(item.path),
         scope: item.scope,
         trashMode: item.trash.mode,
       })
@@ -184,12 +190,12 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
         await onChanged?.()
       } catch (refreshError) {
         logger.warn("Scan list refresh failed after trash.", {
-          path: item.path,
+          pathBasename: logSafeItemPath(item.path),
           error: refreshError,
         })
       }
     } catch (error) {
-      logger.error("Scan item trash failed.", { path: item.path, error })
+      logger.error("Scan item trash failed.", { pathBasename: logSafeItemPath(item.path), error })
       setTrashError(error instanceof Error ? error.message : "移到废纸篓失败。")
     } finally {
       setIsTrashBusy(false)
@@ -252,7 +258,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
         },
       )
     } catch (error) {
-      logger.error("Quick publish draft preparation failed.", { path: item.path, error })
+      logger.error("Quick publish draft preparation failed.", { pathBasename: logSafeItemPath(item.path), error })
       setQuickPublishError(error instanceof Error ? error.message : "读取本地内容失败。")
     } finally {
       setIsQuickPublishBusy(false)

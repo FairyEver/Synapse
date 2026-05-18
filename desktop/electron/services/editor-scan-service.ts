@@ -193,7 +193,7 @@ async function scanSkillsDirectory(dirPath: string): Promise<EditorScanSkillItem
         trash: { mode: "path" },
       })
     } catch (error) {
-      logger.warn("Failed to scan skill directory.", { path: skillDir, error })
+      logger.warn("Failed to scan skill directory.", { dirName: path.basename(skillDir), error })
     }
   }
 
