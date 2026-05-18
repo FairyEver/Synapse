@@ -62,7 +62,7 @@ function RepositoryListItem({
   const { syncRepository } = useRepositoryActions()
   const { switchActiveRepository } = useActiveRepositorySwitch()
   const { currentRepoProfileState } = useCurrentRepoProfile()
-  const { promise } = useAppNotifications()
+  const { promise, error: notifyError } = useAppNotifications()
   const isBusy = Boolean(operation?.isRunning) || initializingUuid === repository.uuid
   const canSync = repositoryState?.status === "ready" && repositoryState.isGitRepository
   const canInitialize = repositoryState?.status === "ready" && !isOnboardingBlocked
@@ -96,6 +96,7 @@ function RepositoryListItem({
           error,
           repositoryUuid: repository.uuid,
         })
+        notifyError(error instanceof Error ? error.message : "切换仓库失败")
       }
     }
   }
