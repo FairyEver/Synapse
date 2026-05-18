@@ -134,7 +134,15 @@ export class ReactiveScheduler {
         if (!acceptingResults) return
         results.set(nodeId, outcome)
         running.delete(nodeId)
-        callbacks.onNodeDone(outcome)
+        try {
+          callbacks.onNodeDone(outcome)
+        } catch (err) {
+          logger.error("scheduler: onNodeDone callback threw", {
+            nodeId,
+            error: err instanceof Error ? err.message : String(err),
+            ...(this.runId ? { runId: this.runId } : {}),
+          })
+        }
         if (outcome.status === "failed") {
           hadFailure = true
           logger.info("scheduler: node failed, stopping new launches", { nodeId, ...(this.runId ? { runId: this.runId } : {}) })
@@ -144,7 +152,17 @@ export class ReactiveScheduler {
             releaseFailedDependency(next)
           }
         } else {
-          const downstream = callbacks.resolveActivatedDownstream(nodeId, outcome)
+          let downstream: string[]
+          try {
+            downstream = callbacks.resolveActivatedDownstream(nodeId, outcome)
+          } catch (err) {
+            downstream = []
+            logger.error("scheduler: resolveActivatedDownstream callback threw", {
+              nodeId,
+              error: err instanceof Error ? err.message : String(err),
+              ...(this.runId ? { runId: this.runId } : {}),
+            })
+          }
           const activatedSet = new Set(downstream)
           for (const next of downstream) {
             activeSignals.set(next, (activeSignals.get(next) ?? 0) + 1)
@@ -163,10 +181,11 @@ export class ReactiveScheduler {
         }
       }).catch((err: unknown) => {
         if (!acceptingResults) return
-        // If the .then() callback already recorded this node's result (e.g.
-        // onNodeDone threw after results.set), do not overwrite it with a
-        // synthetic failure — the real outcome is already stored.
         if (results.has(nodeId)) {
+          // .then() callback already recorded the result but downstream release
+          // may not have completed — only possible if a non-callback exception
+          // escapes past the try/catch guards above. Log and skip synthetic
+          // failure to avoid overwriting the real outcome.
           running.delete(nodeId)
           logger.warn("scheduler: .then callback threw after result was recorded", { nodeId, error: err instanceof Error ? err.message : String(err), ...(this.runId ? { runId: this.runId } : {}) })
           return
