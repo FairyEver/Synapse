@@ -51,7 +51,7 @@ function emitRendererLog(
 ): void {
   // Logging failures must not break the user flow or create an unsanitized fallback log.
   void writeRendererLog(level, category, message, details).catch((err) => {
-    console.warn(`[${category}] renderer log write failed:`, err)
+    console.warn(`[${category}] renderer log write failed.`, sanitizeRendererLogDetails("error", err))
   })
 }
 
