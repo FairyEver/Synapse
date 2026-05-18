@@ -136,7 +136,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
         const dataRepo = ctx.resolve<DataRepository>("core.data-repository")
         const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
         const session = await conversations.get(request.conversationId)
-        if (!session) {
+        if (!session || session.projectId !== request.projectId) {
           return {
             projectId: request.projectId,
             sessionKey: request.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY,
