@@ -94,12 +94,12 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
       toast("供应商已删除")
       onDeleted()
       onOpenChange(false)
+      setMigrationOpen(false)
     } catch {
       logger.error("Provider migrate+delete failed.", { boundary: "settings.providers.migrate", providerId: provider.id })
       toast("操作失败")
     } finally {
       setBusy(false)
-      setMigrationOpen(false)
     }
   }, [provider, onDeleted, onOpenChange])
 
