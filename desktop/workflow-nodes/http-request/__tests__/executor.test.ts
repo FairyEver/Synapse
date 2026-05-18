@@ -75,11 +75,11 @@ describe("httpRequestNodeExecutor", () => {
     }))
   })
 
-  it("uses default timeout when timeoutMins is null", async () => {
+  it("disables timeout when timeoutMins is null", async () => {
     const deps = fakeRuntimeDeps()
     await httpRequestNodeExecutor.execute(makeInput({ timeoutMins: null }, deps))
     expect(deps.sendHttpRequest).toHaveBeenCalledWith(expect.objectContaining({
-      timeoutMs: 5 * 60_000,
+      timeoutMs: undefined,
     }))
   })
 

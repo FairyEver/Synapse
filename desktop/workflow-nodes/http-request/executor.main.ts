@@ -35,7 +35,7 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
         url,
         headers: buildHeaders(interpolated),
         body: buildBody(interpolated),
-        timeoutMs: (config.timeoutMins ?? 5) * 60_000,
+        timeoutMs: config.timeoutMins === null ? undefined : (config.timeoutMins ?? 5) * 60_000,
         abortSignal: context.abortSignal,
       })
 
