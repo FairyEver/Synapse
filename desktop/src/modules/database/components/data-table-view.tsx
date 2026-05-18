@@ -704,6 +704,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                         variant="ghost"
                         size="icon-xs"
                         className="rounded-sm"
+                        aria-label="编辑行"
                         data-track="database-row-edit-start"
                         onClick={() => {
                           void beginRowEdit(rowId, editableColumns[0]?.name ?? null, "button").catch((error) => {
@@ -717,6 +718,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
                         variant="ghost"
                         size="icon-xs"
                         className="rounded-sm"
+                        aria-label="删除行"
                         data-track="database-row-delete-open"
                         onClick={() => setDeleteId(rowId)}
                       >
