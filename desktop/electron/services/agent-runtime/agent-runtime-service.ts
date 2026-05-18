@@ -988,7 +988,7 @@ export class AgentRuntimeService {
 
 export { conversationId }
 
-function permissionActionForTool(toolName: string): PermissionAction {
+export function permissionActionForTool(toolName: string): PermissionAction {
   switch (toolName) {
     case "Bash":
     case "Shell":
@@ -1003,6 +1003,8 @@ function permissionActionForTool(toolName: string): PermissionAction {
     case "WebSearch":
       return "network.connect"
     case "Read":
+    case "Glob":
+    case "Grep":
       return "fs.read.outside-userdata"
     default:
       return "agent.spawn"

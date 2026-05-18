@@ -8,7 +8,7 @@ import type {
   DataNamespace,
 } from "../../../runtime/data-repo"
 import type { ProviderService } from "../../provider"
-import { AgentRuntimeService, conversationId } from "../agent-runtime-service"
+import { AgentRuntimeService, conversationId, permissionActionForTool } from "../agent-runtime-service"
 import type {
   AgentEvent,
   AgentLiveSession,
@@ -1038,3 +1038,34 @@ function resolveSoon<T>(promise: Promise<T>): Promise<T | "timeout"> {
     }),
   ])
 }
+
+describe("permissionActionForTool", () => {
+  it("maps Read/Glob/Grep to fs.read.outside-userdata", () => {
+    expect(permissionActionForTool("Read")).toBe("fs.read.outside-userdata")
+    expect(permissionActionForTool("Glob")).toBe("fs.read.outside-userdata")
+    expect(permissionActionForTool("Grep")).toBe("fs.read.outside-userdata")
+  })
+
+  it("maps Bash/Shell/run_shell_command to shell.exec", () => {
+    expect(permissionActionForTool("Bash")).toBe("shell.exec")
+    expect(permissionActionForTool("Shell")).toBe("shell.exec")
+    expect(permissionActionForTool("run_shell_command")).toBe("shell.exec")
+  })
+
+  it("maps Write/Edit/MultiEdit/NotebookEdit to fs.write", () => {
+    expect(permissionActionForTool("Write")).toBe("fs.write")
+    expect(permissionActionForTool("Edit")).toBe("fs.write")
+    expect(permissionActionForTool("MultiEdit")).toBe("fs.write")
+    expect(permissionActionForTool("NotebookEdit")).toBe("fs.write")
+  })
+
+  it("maps WebFetch/WebSearch to network.connect", () => {
+    expect(permissionActionForTool("WebFetch")).toBe("network.connect")
+    expect(permissionActionForTool("WebSearch")).toBe("network.connect")
+  })
+
+  it("defaults unknown tools to agent.spawn", () => {
+    expect(permissionActionForTool("UnknownTool")).toBe("agent.spawn")
+    expect(permissionActionForTool("")).toBe("agent.spawn")
+  })
+})
