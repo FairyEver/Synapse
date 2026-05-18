@@ -407,20 +407,6 @@ function unregisterMcp(target: McpTarget, serverName: string): { success: boolea
   }
 }
 
-function cleanupLegacyMcpNames(): void {
-  if (SYNAPSE_MCP_LEGACY_SERVER_NAMES.length === 0) return
-  logger.info("Cleaning up legacy MCP names.", { legacyNames: SYNAPSE_MCP_LEGACY_SERVER_NAMES })
-  for (const legacy of SYNAPSE_MCP_LEGACY_SERVER_NAMES) {
-    if (legacy === SYNAPSE_MCP_SERVER_NAME) continue
-    for (const target of MCP_TARGETS) {
-      const { success, modified } = unregisterMcp(target, legacy)
-      if (success && modified) {
-        logger.info("Legacy MCP entry removed.", { target, name: legacy })
-      }
-    }
-  }
-}
-
 function getMcpServers(): McpServerInfo[] {
   return MCP_DEFINITIONS.map((definition) => {
     const target = definition.target
@@ -484,9 +470,18 @@ async function openMcpSettings(target: McpTarget): Promise<{ success: boolean; e
   }
 }
 
+function cleanupLegacyMcpNamesForTarget(target: McpTarget): void {
+  for (const legacy of SYNAPSE_MCP_LEGACY_SERVER_NAMES) {
+    if (legacy === SYNAPSE_MCP_SERVER_NAME) continue
+    const { success, modified } = unregisterMcp(target, legacy)
+    if (success && modified) {
+      logger.info("Legacy MCP entry removed.", { target, name: legacy })
+    }
+  }
+}
+
 function autoRegisterMcp(mcpPort: number): void {
   logger.info("MCP auto-registration started.", { port: mcpPort, targets: MCP_TARGETS.map((d) => d) })
-  cleanupLegacyMcpNames()
   const mcpUrl = getMcpUrl(mcpPort)
 
   for (const definition of MCP_DEFINITIONS) {
@@ -515,11 +510,17 @@ function autoRegisterMcp(mcpPort: number): void {
 
       if (detection.registered && detection.mode === "http" && detection.url === mcpUrl) {
         logger.info("MCP target already registered with correct URL.", { target, settingsPath })
+        cleanupLegacyMcpNamesForTarget(target)
         continue
       }
 
-      registerMcp(target, mcpPort)
-      logger.info("MCP auto-registered.", { target, settingsPath, previousMode: detection.mode, previousUrl: detection.url })
+      const result = registerMcp(target, mcpPort)
+      if (result.success) {
+        logger.info("MCP auto-registered.", { target, settingsPath, previousMode: detection.mode, previousUrl: detection.url })
+        cleanupLegacyMcpNamesForTarget(target)
+      } else {
+        logger.warn("MCP auto-registration failed, preserving legacy entries.", { target, error: result.error })
+      }
     } catch (error) {
       logger.warn("MCP auto-registration failed (non-fatal).", { target, error: error instanceof Error ? error.message : String(error) })
     }
