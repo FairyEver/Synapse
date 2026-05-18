@@ -22,6 +22,7 @@ type ContentBulkActionsProps = {
   onBatchConfirm: () => void
   onDeletedFilterChange: (filter: "mine" | "all") => void
   purgeTarget: SynapseContentMeta | null
+  purgeBusy?: boolean
   onPurgeTargetChange: (item: SynapseContentMeta | null) => void
   onPurgeConfirm: () => void
 }
@@ -35,6 +36,7 @@ function ContentBulkActions({
   onBatchConfirm,
   onDeletedFilterChange,
   purgeTarget,
+  purgeBusy,
   onPurgeTargetChange,
   onPurgeConfirm,
 }: ContentBulkActionsProps) {
@@ -80,7 +82,7 @@ function ContentBulkActions({
       </div>
 
       {/* Single item purge confirmation */}
-      <AlertDialog open={purgeTarget !== null} onOpenChange={(open) => { if (!open) onPurgeTargetChange(null) }}>
+      <AlertDialog open={purgeTarget !== null} onOpenChange={(open) => { if (!open && !purgeBusy) onPurgeTargetChange(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>永久删除</AlertDialogTitle>
@@ -89,12 +91,13 @@ function ContentBulkActions({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogCancel disabled={purgeBusy}>取消</AlertDialogCancel>
             <AlertDialogAction
               variant="destructive"
+              disabled={purgeBusy}
               onClick={onPurgeConfirm}
             >
-              永久删除
+              {purgeBusy ? "删除中..." : "永久删除"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

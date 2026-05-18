@@ -106,6 +106,7 @@ function ContentBrowserPage({
   const consumedOpenRequestIdRef = useRef<string | null>(null)
   const refreshedOpenRequestIdRef = useRef<string | null>(null)
   const [purgeTarget, setPurgeTarget] = useState<SynapseContentMeta | null>(null)
+  const [purgeBusy, setPurgeBusy] = useState(false)
   const [busyItemId, setBusyItemId] = useState<string | null>(null)
   const [deletedFilter, setDeletedFilterRaw] = useState<"mine" | "all">("mine")
   const deletedFilterRef = useRef(deletedFilter)
@@ -315,7 +316,8 @@ function ContentBrowserPage({
   }
 
   const handlePurgeConfirm = async () => {
-    if (!purgeTarget) return
+    if (!purgeTarget || purgeBusy) return
+    setPurgeBusy(true)
     const startedAt = performance.now()
     logger.info("Content purge initiated.", { contentId: purgeTarget.id, contentType })
     try {
@@ -327,6 +329,8 @@ function ContentBrowserPage({
     } catch (err) {
       logger.error("Content purge failed.", { contentId: purgeTarget.id, contentType, elapsedMs: Math.round(performance.now() - startedAt), error: err })
       toast.error("永久删除失败，请稍后重试。")
+    } finally {
+      setPurgeBusy(false)
     }
   }
 
@@ -443,6 +447,7 @@ function ContentBrowserPage({
                 onBatchConfirm={handleBatchConfirm}
                 onDeletedFilterChange={setDeletedFilter}
                 purgeTarget={purgeTarget}
+                purgeBusy={purgeBusy}
                 onPurgeTargetChange={setPurgeTarget}
                 onPurgeConfirm={handlePurgeConfirm}
               />
