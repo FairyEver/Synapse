@@ -197,8 +197,8 @@ export class AgentCommandRouter {
     }
 
     const target = resolveModelTarget(targetInput, models)
-    await this.deps.providerService.updateProvider(provider.id, { model: target })
     const reset = await this.deps.resetSession(message)
+    await this.deps.providerService.updateProvider(provider.id, { model: target })
     return commandResult(
       reset?.id ?? conversation.id,
       `Model changed: ${target}`,
