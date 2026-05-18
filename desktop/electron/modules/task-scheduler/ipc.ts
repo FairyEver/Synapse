@@ -3,10 +3,76 @@ import { readFile, writeFile } from "node:fs/promises"
 import { z } from "zod"
 
 import type { IpcModule } from "../../runtime/ipc/types"
+import type { AuditSink, PermissionGuard, PermissionAction } from "../../runtime/security"
 import { createMainLogger } from "../../services/log-store"
 import type { TaskSchedulerService } from "../../services/task-scheduler"
 
 const logger = createMainLogger("task-scheduler.ipc")
+
+type FilePermissionParams = {
+  permissionGuard: PermissionGuard
+  auditSink: AuditSink
+  action: PermissionAction
+  resource: string
+  source: string
+}
+
+async function checkFilePermission({
+  permissionGuard,
+  auditSink,
+  action,
+  resource,
+  source,
+}: FilePermissionParams): Promise<void> {
+  const permission = await permissionGuard.check({
+    action,
+    actor: { kind: "user" },
+    resource,
+    context: { source },
+  })
+  if (!permission.allowed) {
+    auditSink.record({
+      action,
+      actor: { kind: "user" },
+      resource,
+      outcome: "denied",
+      metadata: {
+        source,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    throw new Error(permission.reason)
+  }
+  auditSink.record({
+    action,
+    actor: { kind: "user" },
+    resource,
+    outcome: "allowed",
+    metadata: { source },
+  })
+}
+
+function recordFilePermissionFailure(
+  auditSink: AuditSink,
+  action: PermissionAction,
+  resource: string,
+  source: string,
+  error: unknown,
+): void {
+  const message = error instanceof Error ? error.message : String(error)
+  auditSink.record({
+    action,
+    actor: { kind: "user" },
+    resource,
+    outcome: "failed",
+    metadata: {
+      source,
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorLength: message.length,
+    },
+  })
+}
 
 const taskScopeSchema = z.discriminatedUnion("type", [
   z.object({ type: z.literal("global") }),
@@ -225,7 +291,7 @@ export const taskSchedulerIpcModule: IpcModule = {
       kind: "invoke",
       request: z.object({ json: z.string() }),
       response: z.object({ success: z.boolean(), path: z.string().optional() }),
-      handler: async (_ctx, request: { json: string }) => {
+      handler: async (ctx, request: { json: string }) => {
         const parentWindow = BrowserWindow.getFocusedWindow()
           ?? BrowserWindow.getAllWindows().find(w => w.isVisible() && !w.isDestroyed())
           ?? undefined
@@ -238,7 +304,22 @@ export const taskSchedulerIpcModule: IpcModule = {
         if (result.canceled || !result.filePath) {
           return { success: false }
         }
-        await writeFile(result.filePath, request.json, "utf-8")
+        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+        const action: PermissionAction = "fs.write"
+        const source = "task-scheduler.exportTasksToFile"
+        await checkFilePermission({
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+          auditSink,
+          action,
+          resource: result.filePath,
+          source,
+        })
+        try {
+          await writeFile(result.filePath, request.json, "utf-8")
+        } catch (error) {
+          recordFilePermissionFailure(auditSink, action, result.filePath, source, error)
+          throw error
+        }
         return { success: true, path: result.filePath }
       },
     },
@@ -247,7 +328,7 @@ export const taskSchedulerIpcModule: IpcModule = {
       kind: "invoke",
       request: z.void().optional(),
       response: z.object({ success: z.boolean(), content: z.string().optional() }),
-      handler: async () => {
+      handler: async (ctx) => {
         const parentWindow = BrowserWindow.getFocusedWindow()
           ?? BrowserWindow.getAllWindows().find(w => w.isVisible() && !w.isDestroyed())
           ?? undefined
@@ -259,7 +340,24 @@ export const taskSchedulerIpcModule: IpcModule = {
         if (result.canceled || result.filePaths.length === 0) {
           return { success: false }
         }
-        const content = await readFile(result.filePaths[0], "utf-8")
+        const filePath = result.filePaths[0]
+        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+        const action: PermissionAction = "fs.read.outside-userdata"
+        const source = "task-scheduler.importTasksFromFile"
+        await checkFilePermission({
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+          auditSink,
+          action,
+          resource: filePath,
+          source,
+        })
+        let content: string
+        try {
+          content = await readFile(filePath, "utf-8")
+        } catch (error) {
+          recordFilePermissionFailure(auditSink, action, filePath, source, error)
+          throw error
+        }
         return { success: true, content }
       },
     },
