@@ -37,7 +37,7 @@ const MCP_SERVER_META = mcpDefinitions.map((definition) => ({
 }))
 
 function McpSettingsPanel() {
-  const { promise } = useAppNotifications()
+  const { promise, notify } = useAppNotifications()
   const [mcpServersByTarget, setMcpServersByTarget] = useState<
     Partial<Record<DatabaseMcpTarget, DatabaseMcpServerInfo>>
   >({})
@@ -140,9 +140,13 @@ function McpSettingsPanel() {
     }
   })
 
-  const handleCopyMcpUrl = useCallback(() => {
+  const handleCopyMcpUrl = useCallback(async () => {
     if (!mcpHttpStatus?.url) return
-    void navigator.clipboard.writeText(mcpHttpStatus.url)
+    try {
+      await navigator.clipboard.writeText(mcpHttpStatus.url)
+    } catch {
+      notify({ message: "复制失败", tone: "destructive" })
+    }
   }, [mcpHttpStatus])
 
   return (
