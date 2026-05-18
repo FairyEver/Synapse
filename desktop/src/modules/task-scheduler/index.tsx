@@ -429,10 +429,13 @@ function TaskSchedulerModule() {
             }
           }}
           onStopRun={async (runId) => {
-            await runMutation(
+            const result = await runMutation(
               () => stopRunOrThrow(runId),
               { loading: "正在停止运行...", success: "运行已停止。", error: "停止运行失败。" },
             )
+            if (result === null) {
+              throw new Error("停止运行失败")
+            }
           }}
         />
 
