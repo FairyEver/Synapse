@@ -966,6 +966,75 @@ export const opsDiagnosticsSchema: NamespaceSchema<OpsDiagnosticsEntryV1> = {
     && typeof (v as OpsDiagnosticsEntryV1).updatedAt === "string",
 }
 
+export interface WorkflowEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  name: string
+  description?: string
+  version: string
+  createdAt: number
+  updatedAt: number
+  defaultProjectId?: string
+  defaultProviderId?: string
+  defaultModelTier?: "default" | "haiku" | "sonnet" | "opus"
+  params: Array<{ name: string; type: "text" | "number"; default: string | number | null; description?: string }>
+  nodes: Array<{ id: string; name: string; type: string; position: { x: number; y: number }; config: Record<string, unknown> }>
+  edges: Array<{ id: string; from: string; to: string; branch?: string }>
+}
+
+function isWorkflowParam(value: unknown): boolean {
+  return isAnyRecord<Record<string, unknown>>(value)
+    && typeof value.name === "string"
+    && (value.type === "text" || value.type === "number")
+    && (value.default === null || typeof value.default === "string" || typeof value.default === "number")
+    && isOptionalString(value.description)
+}
+
+function isWorkflowNode(value: unknown): boolean {
+  return isAnyRecord<Record<string, unknown>>(value)
+    && typeof value.id === "string"
+    && typeof value.name === "string"
+    && typeof value.type === "string"
+    && isAnyRecord(value.position)
+    && typeof (value.position as Record<string, unknown>).x === "number"
+    && typeof (value.position as Record<string, unknown>).y === "number"
+    && isAnyRecord(value.config)
+}
+
+function isWorkflowEdge(value: unknown): boolean {
+  return isAnyRecord<Record<string, unknown>>(value)
+    && typeof value.id === "string"
+    && typeof value.from === "string"
+    && typeof value.to === "string"
+    && isOptionalString(value.branch)
+}
+
+export const workflowsSchema: NamespaceSchema<WorkflowEntryV1> = {
+  name: "workflows",
+  backend: "json",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is WorkflowEntryV1 =>
+    isAnyRecord<WorkflowEntryV1>(v)
+    && (v as WorkflowEntryV1).schemaVersion === 1
+    && typeof (v as WorkflowEntryV1).id === "string"
+    && typeof (v as WorkflowEntryV1).name === "string"
+    && isOptionalString((v as WorkflowEntryV1).description)
+    && typeof (v as WorkflowEntryV1).version === "string"
+    && typeof (v as WorkflowEntryV1).createdAt === "number"
+    && typeof (v as WorkflowEntryV1).updatedAt === "number"
+    && isOptionalString((v as WorkflowEntryV1).defaultProjectId)
+    && isOptionalString((v as WorkflowEntryV1).defaultProviderId)
+    && ((v as WorkflowEntryV1).defaultModelTier === undefined
+      || ["default", "haiku", "sonnet", "opus"].includes((v as WorkflowEntryV1).defaultModelTier as string))
+    && Array.isArray((v as WorkflowEntryV1).params)
+    && (v as WorkflowEntryV1).params.every(isWorkflowParam)
+    && Array.isArray((v as WorkflowEntryV1).nodes)
+    && (v as WorkflowEntryV1).nodes.every(isWorkflowNode)
+    && Array.isArray((v as WorkflowEntryV1).edges)
+    && (v as WorkflowEntryV1).edges.every(isWorkflowEdge),
+}
+
 function isProviderModelArray(value: unknown): value is ProviderModelEntryV1[] {
   return Array.isArray(value)
     && value.every((item) =>

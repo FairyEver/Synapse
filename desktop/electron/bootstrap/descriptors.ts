@@ -1099,16 +1099,10 @@ export const coreHttpTestDescriptor: ServiceDescriptor<{ initialized: true }> = 
 export const coreWorkflowServiceDescriptor: ServiceDescriptor<WorkflowService> = {
   id: "core.workflow",
   criticality: "degraded",
-  dependsOn: ["core.config"],
-  create() {
-    // Pass a getter so WorkflowService always resolves the CURRENT active repo path,
-    // not a stale snapshot captured at service creation time.
-    const getRepoPath = (): string => {
-      const config = configStore.loadSync()
-      const activeRepo = config.repositories.find((r) => r.uuid === config.activeRepoUuid) ?? config.repositories[0]
-      return activeRepo?.localPath ?? app.getPath("userData")
-    }
-    return new WorkflowService(getRepoPath)
+  dependsOn: ["core.data-repository"],
+  create(ctx) {
+    const dataRepo = ctx.registry.get<DataRepository>("core.data-repository")
+    return new WorkflowService(dataRepo)
   },
 }
 

@@ -72,6 +72,7 @@ export {
   webhookConfigSchema,
   webhookRunsSchema,
   workspaceBindingsSchema,
+  workflowsSchema,
   type AuditEntryV1,
   type AgentCompressStateEntryV1,
   type AgentCompressStatusV1,
@@ -121,6 +122,7 @@ export {
   type WebhookConfigEntryV1,
   type WebhookRunEntryV1,
   type WebhookRunStatusV1,
+  type WorkflowEntryV1,
   type WorkspaceBindingEntryV1,
 } from "./schemas"
 export {

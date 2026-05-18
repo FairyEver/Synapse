@@ -48,6 +48,7 @@ export {
   taskSchedulerTasksSchema,
   webhookConfigSchema,
   webhookRunsSchema,
+  workflowsSchema,
   workspaceBindingsSchema,
   type AuditEntryV1,
   type AgentCompressStateEntryV1,
@@ -93,6 +94,7 @@ export {
   type WebhookConfigEntryV1,
   type WebhookRunEntryV1,
   type WebhookRunStatusV1,
+  type WorkflowEntryV1,
   type WorkspaceBindingEntryV1,
 } from "./placeholders"
 
@@ -122,6 +124,7 @@ import {
   taskSchedulerTasksSchema,
   webhookConfigSchema,
   webhookRunsSchema,
+  workflowsSchema,
   workspaceBindingsSchema,
 } from "./placeholders"
 import type { NamespaceSchema } from "../types"
@@ -150,6 +153,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   relayBindingsSchema,
   relayRunsSchema,
   opsDiagnosticsSchema,
+  workflowsSchema,
   connectorsSchema,
   conversationsSchema,
   auditSchema,
