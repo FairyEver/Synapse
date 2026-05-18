@@ -23,7 +23,6 @@ const INITIAL_UPDATE_STATE: SynapseAppUpdateState = {
   totalBytes: null,
   lastCheckedAt: null,
   canCheck: false,
-  downloadedFilePath: null,
 }
 
 function formatBytes(value: number | null): string | null {

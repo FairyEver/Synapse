@@ -20,5 +20,4 @@ export type SynapseAppUpdateState = {
   totalBytes: number | null
   lastCheckedAt: string | null
   canCheck: boolean
-  downloadedFilePath: string | null
 }

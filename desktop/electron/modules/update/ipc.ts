@@ -33,7 +33,6 @@ const updateStateResponseSchema = z.object({
   totalBytes: z.number().nullable(),
   lastCheckedAt: z.string().nullable(),
   canCheck: z.boolean(),
-  downloadedFilePath: z.string().nullable(),
 })
 
 export const updateIpcModule: IpcModule = {

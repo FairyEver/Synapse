@@ -54,7 +54,6 @@ function createBaseState(): SynapseAppUpdateState {
     totalBytes: null,
     lastCheckedAt: null,
     canCheck: isSupported,
-    downloadedFilePath: null,
   }
 }
 
@@ -239,7 +238,7 @@ class UpdateService {
     autoUpdater.on("update-downloaded", (event) => {
       logger.info("Update downloaded.", {
         version: event.version,
-        downloadedFile: event.downloadedFile,
+        downloadedFileBase: event.downloadedFile.split(/[/\\]/).pop(),
       })
       if (this.isManualUpdateFlow()) {
         this.handleUpdateDownloaded(event)
@@ -393,7 +392,6 @@ class UpdateService {
       transferredBytes: this.state.totalBytes ?? this.state.transferredBytes,
       totalBytes: this.state.totalBytes ?? this.state.transferredBytes,
       canCheck: false,
-      downloadedFilePath: event.downloadedFile,
     })
   }
 
