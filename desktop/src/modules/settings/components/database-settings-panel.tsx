@@ -163,7 +163,7 @@ function DatabaseSettingsPanel() {
         if (!result.success) throw new Error(result.error ?? "安装失败")
         const status = await databaseCliStatusGet()
         setCliStatus(status)
-        logger.info("CLI installed.", { available: status.available, path: status.path })
+        logger.info("CLI installed.", { available: status.available })
       },
       { loading: "正在安装 CLI...", success: "CLI 已安装" },
     )
@@ -231,7 +231,7 @@ function DatabaseSettingsPanel() {
       async () => {
         const result = await databaseExport()
         if (!result.success) return
-        logger.info("Database exported.", { path: result.path })
+        logger.info("Database exported.")
       },
       { loading: "正在导出...", success: "数据库已导出" },
     )
@@ -251,7 +251,7 @@ function DatabaseSettingsPanel() {
 
   const handleOpenDbDirectory = useCallback(() => {
     if (!status?.dbDirectoryPath) return
-    logger.info("Opening database directory.", { path: status.dbDirectoryPath })
+    logger.info("Opening database directory.")
     window.synapse?.shell.showItemInFolder(status.dbDirectoryPath)
   }, [status?.dbDirectoryPath])
 
