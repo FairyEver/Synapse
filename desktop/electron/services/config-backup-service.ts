@@ -478,8 +478,16 @@ class ConfigBackupService {
 
     const backup = parseBackup(parsedValue)
 
+    const previousConfig = await configStore.load()
     await configStore.replace(backup.config)
-    await userIdentityService.importIdentity(backup.identity)
+
+    try {
+      await userIdentityService.importIdentity(backup.identity)
+    } catch (identityError) {
+      logger.warn("Identity import failed, rolling back config.", { filePath })
+      await configStore.replace(previousConfig)
+      throw identityError
+    }
 
     logger.info("Config backup imported.", {
       filePath,
