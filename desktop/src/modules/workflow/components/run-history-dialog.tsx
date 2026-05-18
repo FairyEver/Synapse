@@ -18,9 +18,10 @@ const STATUS_VARIANT: Record<string, "default" | "secondary" | "destructive" | "
 
 function getFirstError(snapshot: WorkflowRunSnapshot): string | null {
   if (snapshot.status !== "failed") return null
-  return Object.values(snapshot.nodeResults)
+  const nodeError = Object.values(snapshot.nodeResults)
     .filter((r) => r.error)
     .sort((a, b) => (a.startedAt ?? Number.MAX_SAFE_INTEGER) - (b.startedAt ?? Number.MAX_SAFE_INTEGER))[0]?.error ?? null
+  return nodeError ?? snapshot.error ?? null
 }
 
 interface RunHistoryDialogProps {

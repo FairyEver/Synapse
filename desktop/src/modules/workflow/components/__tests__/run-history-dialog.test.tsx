@@ -91,6 +91,33 @@ describe("RunHistoryDialog", () => {
     expect(`${JSON.stringify(warnSpy.mock.calls)}${JSON.stringify(errorSpy.mock.calls)}`).not.toContain("Missing `Description`")
   })
 
+  it("shows workflow-level errors when no node error is available", async () => {
+    window.synapse = {
+      workflow: {
+        runHistory: vi.fn().mockResolvedValue([
+          createSnapshot({
+            error: "工作流准备失败",
+            nodeResults: {},
+          }),
+        ]),
+      },
+    } as unknown as Window["synapse"]
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<RunHistoryDialog open workflowId="workflow-1" onClose={vi.fn()} />)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("工作流准备失败")
+  })
+
   it("tracks opening a workflow run without recording node output", async () => {
     const openRunner = vi.fn()
     window.synapse = {
@@ -124,8 +151,7 @@ describe("RunHistoryDialog", () => {
       await Promise.resolve()
     })
 
-    const openButton = Array.from(document.body.querySelectorAll("button"))
-      .find((button) => button.textContent?.includes("查看"))
+    const openButton = document.body.querySelector('[role="button"]')
     expect(openButton).toBeDefined()
 
     await act(async () => {
