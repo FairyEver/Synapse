@@ -14,9 +14,69 @@ import type {
   DatabaseQueryParams,
   DatabaseWhereClause,
 } from "./types"
+import type { AuditSink, PermissionAction, PermissionGuard } from "../runtime/security"
 
 const logger = createMainLogger("database.ipc")
 let handlersRegistered = false
+let permissionGuard: PermissionGuard | undefined
+let auditSink: AuditSink | undefined
+
+function setSecurity(guard: PermissionGuard | undefined, sink: AuditSink | undefined): void {
+  permissionGuard = guard
+  auditSink = sink
+}
+
+function actorIdentityForIpc(event: IpcMainInvokeEvent): { kind: "user"; id?: string } {
+  return { kind: "user", id: undefined }
+}
+
+function getDatabaseAuditAction(type: "export" | "import"): { action: PermissionAction; resource: string } {
+  if (type === "export") return { action: "fs.write", resource: "database:export" }
+  return { action: "fs.read.outside-userdata", resource: "database:import" }
+}
+
+async function checkFilePermission(
+  event: IpcMainInvokeEvent,
+  type: "export" | "import",
+  filePath: string,
+): Promise<{ allowed: true } | { allowed: false; reason: string }> {
+  if (!permissionGuard) return { allowed: true }
+  const { action, resource } = getDatabaseAuditAction(type)
+  const result = await permissionGuard.check({
+    action,
+    actor: actorIdentityForIpc(event),
+    resource,
+    context: { filePath, projectId: undefined },
+  })
+  if (!result.allowed) {
+    auditSink?.record({
+      action,
+      actor: actorIdentityForIpc(event),
+      resource,
+      outcome: "denied",
+      metadata: { filePath, reason: result.reason, policyId: result.policyId },
+    })
+  }
+  return result
+}
+
+function recordAudit(
+  event: IpcMainInvokeEvent,
+  type: "export" | "import",
+  filePath: string,
+  outcome: "allowed" | "failed",
+  error?: string,
+): void {
+  if (!auditSink) return
+  const { action, resource } = getDatabaseAuditAction(type)
+  auditSink.record({
+    action,
+    actor: actorIdentityForIpc(event),
+    resource,
+    outcome,
+    metadata: { filePath, ...(error ? { error } : {}) },
+  })
+}
 
 function getOwnerWindow(event: IpcMainInvokeEvent): BrowserWindow | undefined {
   return BrowserWindow.fromWebContents(event.sender) ?? undefined
@@ -203,9 +263,20 @@ function registerDatabaseHandlers(): void {
       return { success: false }
     }
 
-    databaseService.exportDatabase(result.filePath)
-    logger.info("Database exported.", { path: result.filePath })
-    return { success: true, path: result.filePath }
+    const permission = await checkFilePermission(event, "export", result.filePath)
+    if (!permission.allowed) {
+      return { success: false, error: permission.reason }
+    }
+
+    try {
+      databaseService.exportDatabase(result.filePath)
+      recordAudit(event, "export", result.filePath, "allowed")
+      logger.info("Database exported.", { path: result.filePath })
+      return { success: true, path: result.filePath }
+    } catch (error) {
+      recordAudit(event, "export", result.filePath, "failed", error instanceof Error ? error.message : String(error))
+      throw error
+    }
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseImport, async (event) => {
@@ -219,8 +290,20 @@ function registerDatabaseHandlers(): void {
       return { success: false }
     }
 
-    databaseService.importDatabase(result.filePaths[0])
-    return { success: true }
+    const filePath = result.filePaths[0]
+    const permission = await checkFilePermission(event, "import", filePath)
+    if (!permission.allowed) {
+      return { success: false, error: permission.reason }
+    }
+
+    try {
+      databaseService.importDatabase(filePath)
+      recordAudit(event, "import", filePath, "allowed")
+      return { success: true }
+    } catch (error) {
+      recordAudit(event, "import", filePath, "failed", error instanceof Error ? error.message : String(error))
+      throw error
+    }
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseTableExport, async (event, table: string) => {
@@ -234,8 +317,19 @@ function registerDatabaseHandlers(): void {
       return { success: false }
     }
 
-    databaseService.exportTable(table, result.filePath)
-    return { success: true, path: result.filePath }
+    const permission = await checkFilePermission(event, "export", result.filePath)
+    if (!permission.allowed) {
+      return { success: false, error: permission.reason }
+    }
+
+    try {
+      databaseService.exportTable(table, result.filePath)
+      recordAudit(event, "export", result.filePath, "allowed")
+      return { success: true, path: result.filePath }
+    } catch (error) {
+      recordAudit(event, "export", result.filePath, "failed", error instanceof Error ? error.message : String(error))
+      throw error
+    }
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseTableImportInspect, async (event) => {
@@ -249,13 +343,36 @@ function registerDatabaseHandlers(): void {
       return { success: false }
     }
 
-    const inspection = databaseService.inspectTableImport(result.filePaths[0])
-    return { success: true, ...inspection }
+    const filePath = result.filePaths[0]
+    const permission = await checkFilePermission(event, "import", filePath)
+    if (!permission.allowed) {
+      return { success: false, error: permission.reason }
+    }
+
+    try {
+      const inspection = databaseService.inspectTableImport(filePath)
+      recordAudit(event, "import", filePath, "allowed")
+      return { success: true, ...inspection }
+    } catch (error) {
+      recordAudit(event, "import", filePath, "failed", error instanceof Error ? error.message : String(error))
+      throw error
+    }
   })
 
-  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseTableImport, async (_event, sourcePath: string) => {
-    const tableName = databaseService.importTable(sourcePath)
-    return { success: true, tableName }
+  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseTableImport, async (event, sourcePath: string) => {
+    const permission = await checkFilePermission(event, "import", sourcePath)
+    if (!permission.allowed) {
+      return { success: false, error: permission.reason }
+    }
+
+    try {
+      const tableName = databaseService.importTable(sourcePath)
+      recordAudit(event, "import", sourcePath, "allowed")
+      return { success: true, tableName }
+    } catch (error) {
+      recordAudit(event, "import", sourcePath, "failed", error instanceof Error ? error.message : String(error))
+      throw error
+    }
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseCliInstall, async () => {
@@ -341,4 +458,4 @@ function registerDatabaseHandlers(): void {
   logger.info("Database IPC handlers registered.")
 }
 
-export { registerDatabaseHandlers }
+export { registerDatabaseHandlers, setSecurity }

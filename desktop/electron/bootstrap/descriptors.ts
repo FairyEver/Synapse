@@ -310,6 +310,8 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     "core.workflow.run-aborts",
     "core.workflow.run-statuses",
     "core.workflow.engine",
+    "core.permission-guard",
+    "core.audit-sink",
     PROVIDER_SERVICE_ID,
   ],
   async create(ctx) {
@@ -323,6 +325,8 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const runStatuses = ctx.registry.get<Map<string, WorkflowRunStatus>>("core.workflow.run-statuses")
     const workflowEngine = ctx.registry.get<WorkflowEngine>("core.workflow.engine")
     const providerService = ctx.registry.get<ProviderService>(PROVIDER_SERVICE_ID)
+    const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
+    const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
     const capabilityLogger = createMainLogger("bootstrap.workflow-capability")
     const runCompletions = new Map<string, Promise<unknown>>()
 
@@ -372,7 +376,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       schedulerDispatch: (action, params) => dispatchSchedulerAction(taskScheduler, actionRuntime, action, params),
       workflowDispatch: (action, params, context) => workflowDispatcher.dispatch(action, params, context),
     })
-    await initDatabase(eventBus, actionRouter)
+    await initDatabase(eventBus, actionRouter, { permissionGuard, auditSink })
     return { initialized: true }
   },
   async stop() {
