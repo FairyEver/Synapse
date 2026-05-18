@@ -33,6 +33,7 @@ type ChatAction =
   | { type: "SET_SESSIONS"; sessions: SynapseAgentSessionSummary[] }
   | { type: "UPDATE_SESSIONS"; updater: (current: SynapseAgentSessionSummary[]) => SynapseAgentSessionSummary[] }
   | { type: "SET_ARCHIVED_SESSIONS"; archivedSessions: SynapseAgentSessionSummary[] }
+  | { type: "UPDATE_ARCHIVED_SESSIONS"; updater: (current: SynapseAgentSessionSummary[]) => SynapseAgentSessionSummary[] }
   | { type: "SET_TIMELINE"; timeline: SynapseAgentTimelineItem[] }
   | { type: "UPDATE_TIMELINE"; updater: (current: SynapseAgentTimelineItem[]) => SynapseAgentTimelineItem[] }
   | { type: "SET_PENDING_PERMISSIONS"; pendingPermissions: SynapseAgentPendingPermission[] }
@@ -85,6 +86,8 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       return { ...state, sessions: action.updater(state.sessions) }
     case "SET_ARCHIVED_SESSIONS":
       return { ...state, archivedSessions: action.archivedSessions }
+    case "UPDATE_ARCHIVED_SESSIONS":
+      return { ...state, archivedSessions: action.updater(state.archivedSessions) }
     case "SET_TIMELINE":
       return {
         ...state,

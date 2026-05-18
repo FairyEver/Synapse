@@ -548,6 +548,7 @@ function useChatConnection(
         if (result.ok) {
           dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, target.projectId, target.id) })
           dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.filter((session) => !isSameSession(session, target)) })
+          dispatch({ type: "UPDATE_ARCHIVED_SESSIONS", updater: (current) => current.filter((session) => !isSameSession(session, target)) })
           await refresh()
           toast("会话已删除")
         }
@@ -559,6 +560,7 @@ function useChatConnection(
       }
       dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, target.projectId, target.id) })
       dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.filter((session) => !isSameSession(session, target)) })
+      dispatch({ type: "UPDATE_ARCHIVED_SESSIONS", updater: (current) => current.filter((session) => !isSameSession(session, target)) })
       if (selectedProjectIdRef.current === target.projectId && selectedConversationIdRef.current === target.id) {
         const next = state.sessions.find((session) => !isSameSession(session, target))
         if (next) {
