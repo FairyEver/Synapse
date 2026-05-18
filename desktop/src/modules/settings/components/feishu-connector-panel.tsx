@@ -158,17 +158,25 @@ function FeishuConnectorPanel({
     let cancelled = false
     const intervalMs = (setup.poll?.intervalSeconds ?? setup.intervalSeconds) * 1000
     const timer = window.setInterval(() => {
-      void feishu.pollSetup(setup.setupId).then((poll) => {
-        if (cancelled) return
-        setSetup((current) => current?.setupId === setup.setupId ? { ...current, poll } : current)
-      })
+      void feishu.pollSetup(setup.setupId)
+        .then((poll) => {
+          if (cancelled) return
+          setSetup((current) => current?.setupId === setup.setupId ? { ...current, poll } : current)
+        })
+        .catch(() => {
+          if (cancelled) return
+          setSetup((current) => current?.setupId === setup.setupId
+            ? { ...current, poll: { status: "error", message: "轮询失败" } }
+            : current)
+          showError("飞书授权状态读取失败")
+        })
     }, intervalMs)
 
     return () => {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [feishu, setup])
+  }, [feishu, setup, showError])
 
   const statusBadge = useMemo(() => {
     const connectorStatus = status?.connector?.status ?? "disabled"
