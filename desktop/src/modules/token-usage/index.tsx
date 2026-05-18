@@ -122,7 +122,7 @@ export function TokenUsageModule() {
           setSelectedSources(next)
         }} />
         <DateRangeFilter value={range} onChange={handleRangeChange} />
-        <ExportButton models={filteredModels} agents={filteredAgentRows} dailyRows={dailyRows} graphResult={graphResult} />
+        <ExportButton models={filteredModels} agents={filteredAgentRows} dailyRows={dailyRows} graphResult={graphResult} isFiltering={isFiltering} />
         <ScanButton scanning={scanning} onScan={handleScan} lastScanInfo={lastScanInfo} error={scanError} />
       </div>
       <ScrollArea className="min-h-0 flex-1 px-4 pb-4">

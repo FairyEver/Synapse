@@ -8,12 +8,16 @@ interface ExportButtonProps {
   agents: AgentRow[]
   dailyRows: Record<string, unknown>[]
   graphResult: GraphResult | null
+  isFiltering: boolean
 }
 
-export function ExportButton({ models, agents, dailyRows, graphResult }: ExportButtonProps) {
+export function ExportButton({ models, agents, dailyRows, graphResult, isFiltering }: ExportButtonProps) {
   const [exported, setExported] = useState(false)
 
   const handleExport = useCallback(() => {
+    const totalTokens = models.reduce((sum, m) => sum + m.input + m.output + m.cacheRead + m.cacheWrite + m.reasoning, 0)
+    const totalCost = models.reduce((sum, m) => sum + m.cost, 0)
+
     const data = {
       models: models.map((m) => ({
         model: m.model, provider: m.provider, client: m.client,
@@ -25,11 +29,12 @@ export function ExportButton({ models, agents, dailyRows, graphResult }: ExportB
         tokens: { input: a.input, output: a.output, cacheRead: a.cacheRead, cacheWrite: a.cacheWrite, total: a.input + a.output + a.cacheRead + a.cacheWrite + a.reasoning },
         cost: a.cost, messageCount: a.messageCount,
       })),
-      daily: dailyRows,
-      totals: graphResult ? {
-        tokens: graphResult.summary.totalTokens,
-        cost: graphResult.summary.totalCost,
-      } : null,
+      daily: isFiltering ? null : dailyRows,
+      totals: isFiltering
+        ? { tokens: totalTokens, cost: totalCost }
+        : graphResult
+          ? { tokens: graphResult.summary.totalTokens, cost: graphResult.summary.totalCost }
+          : null,
     }
 
     const json = JSON.stringify(data, null, 2)
@@ -43,7 +48,7 @@ export function ExportButton({ models, agents, dailyRows, graphResult }: ExportB
     URL.revokeObjectURL(url)
     setExported(true)
     setTimeout(() => setExported(false), 2000)
-  }, [models, agents, dailyRows, graphResult])
+  }, [models, agents, dailyRows, graphResult, isFiltering])
 
   return (
     <Button variant="outline" size="sm" className="gap-1.5" onClick={handleExport}>
