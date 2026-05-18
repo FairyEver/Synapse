@@ -251,6 +251,51 @@ export class AgentRuntimeService {
       : undefined
 
     try {
+      if (this.deps.permissionGuard) {
+        const spawnPermission = await this.deps.permissionGuard.check({
+          action: "agent.spawn",
+          actor: { kind: "system" },
+          resource: `scheduled:${input.projectId}:${input.agentType}`,
+          context: {
+            projectId: input.projectId,
+            agentType: input.agentType,
+            providerId: input.providerId,
+            sessionPolicy: input.sessionPolicy,
+          },
+        })
+        if (!spawnPermission.allowed) {
+          this.deps.auditSink?.record({
+            action: "agent.spawn",
+            actor: { kind: "system" },
+            resource: `scheduled:${input.projectId}:${input.agentType}`,
+            outcome: "denied",
+            metadata: {
+              projectId: input.projectId,
+              agentType: input.agentType,
+              reason: spawnPermission.reason,
+              policyId: spawnPermission.policyId,
+            },
+          })
+          return {
+            conversationId: "",
+            status: "error",
+            error: "Agent spawn not permitted for scheduled execution",
+            durationMs: Date.now() - startMs,
+          }
+        }
+        this.deps.auditSink?.record({
+          action: "agent.spawn",
+          actor: { kind: "system" },
+          resource: `scheduled:${input.projectId}:${input.agentType}`,
+          outcome: "allowed",
+          metadata: {
+            projectId: input.projectId,
+            agentType: input.agentType,
+            sessionPolicy: input.sessionPolicy,
+          },
+        })
+      }
+
       let result: AgentRuntimeTurnResult
 
       if (input.sessionPolicy === "fresh" || !input.lastConversationId) {
