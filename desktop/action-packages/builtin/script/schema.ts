@@ -1,7 +1,7 @@
 import { z } from "zod"
 
 export const scriptActionConfigSchema = z.object({
-  script: z.string().min(1).or(z.literal("")).default(""),
+  script: z.string().min(1).default(""),
   shell: z.enum(["posix", "cmd", "powershell"]).default("posix"),
   env: z.record(z.string(), z.string()).optional(),
   pathStrategy: z.enum(["merge", "replace"]).optional(),
