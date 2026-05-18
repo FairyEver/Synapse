@@ -141,6 +141,7 @@ function VariableBindingRow({
           variant="ghost"
           className="h-6 w-6 text-muted-foreground hover:text-destructive"
           onClick={onDelete}
+          aria-label="删除变量绑定"
         >
           <Trash2 className="size-3" />
         </Button>
