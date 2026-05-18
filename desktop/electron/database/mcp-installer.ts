@@ -241,7 +241,7 @@ function detectCodexRegistration(raw: string): { registered: boolean; mode: McpR
       if (url.startsWith("http://127.0.0.1:")) {
         return { registered: true, mode: "http", url }
       }
-    } catch { /* ignore */ }
+    } catch { /* URL parsing is best-effort */ }
   }
 
   const commandMatch = section.match(/^\s*command\s*=\s*("(?:\\.|[^"])*")\s*$/m)

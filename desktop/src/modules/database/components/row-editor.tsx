@@ -175,7 +175,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
 
           if (isMultiChoice) {
             let selected: string[] = []
-            try { selected = JSON.parse(values[col.name] || "[]") } catch { /* empty */ }
+            try { selected = JSON.parse(values[col.name] || "[]") } catch { /* malformed JSON */ }
             if (!Array.isArray(selected)) selected = []
             return (
               <TableCell key={col.name} className={ROW_EDITOR_EDITABLE_CELL_CLASS}>

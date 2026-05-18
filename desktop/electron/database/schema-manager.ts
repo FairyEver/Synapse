@@ -26,6 +26,7 @@ import {
   getChoiceColumns,
   getMultiChoiceColumns,
 } from "./type-coercion"
+import { createMainLogger } from "../services/log-store"
 import {
   assertSemanticallyCorrectColumn,
   validateChoicesConsistency,
@@ -33,6 +34,8 @@ import {
   validateColumnName,
   validateName,
 } from "./validators"
+
+const logger = createMainLogger("database.schema-manager")
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -89,7 +92,7 @@ export class SchemaManager {
       try {
         const row = db.prepare(`SELECT COUNT(*) as count FROM ${q(t.name)}`).get() as { count: number }
         rowCount = row.count
-      } catch { /* ignore */ }
+      } catch (error) { logger.warn("Failed to count rows for table overview.", { table: t.name, error }) }
 
       return {
         name: t.name,
@@ -473,7 +476,7 @@ export class SchemaManager {
             seen.add(s)
             usage[s] = (usage[s] ?? 0) + 1
           }
-        } catch { /* ignore malformed JSON */ }
+        } catch { /* ignore */ }
       }
     } else {
       const rows = db.prepare(`SELECT ${q(column)} AS v, COUNT(*) AS c FROM ${q(table)} WHERE ${q(column)} IS NOT NULL AND ${q(column)} != '' GROUP BY ${q(column)}`).all() as { v: unknown; c: number | bigint }[]
@@ -518,7 +521,7 @@ export class SchemaManager {
               if (!allowed.has(s)) invalid.add(s)
             }
           }
-        } catch { /* ignore malformed JSON */ }
+        } catch { /* ignore */ }
       } else {
         const s = String(row.v)
         if (!allowed.has(s)) invalid.add(s)

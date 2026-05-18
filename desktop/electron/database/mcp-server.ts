@@ -148,7 +148,7 @@ function tryListen(port: number): Promise<number> {
     const s = createServer((req, res) => {
       handleRequest(req, res).catch((error) => {
         logger.error("Unhandled MCP HTTP error.", { error })
-        try { res.writeHead(500); res.end() } catch { /* ignore */ }
+        try { res.writeHead(500); res.end() } catch { /* error response is best-effort */ }
       })
     })
 

@@ -214,7 +214,7 @@ function stopHttpServer(): Promise<void> {
   return new Promise((resolve) => {
     try {
       unlinkSync(getServerInfoPath())
-    } catch { /* ignore */ }
+    } catch (error) { logger.warn("Failed to clean up server info file.", { error }) }
 
     serverInfo = null
     actionRouter = null

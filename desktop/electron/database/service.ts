@@ -533,7 +533,7 @@ class DatabaseService {
   }
 
   private backupAndReopenDatabase(): void {
-    try { this.db?.close() } catch { /* ignore */ }
+    try { this.db?.close() } catch (error) { logger.warn("Failed to close database before backup.", { error }) }
     this.db = null
 
     const timestamp = Date.now()
@@ -1246,7 +1246,7 @@ class DatabaseService {
       throw error
     } finally {
       if (deleteBackup) {
-        try { unlinkSync(backupPath) } catch { /* ignore */ }
+        try { unlinkSync(backupPath) } catch (error) { logger.warn("Failed to delete temp backup.", { error }) }
       }
     }
   }
