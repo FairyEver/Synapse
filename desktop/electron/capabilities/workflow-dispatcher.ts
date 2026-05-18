@@ -43,11 +43,11 @@ function requireArray(params: Record<string, unknown>, key: string): unknown[] {
   return v
 }
 
-function emitDefinitionUpdated(eventBus: EventBus, workflowId: string): void {
+function emitDefinitionUpdated(eventBus: EventBus, workflowId: string, source: string, versionHash: string): void {
   eventBus.emit({
     domain: "workflow",
     type: "workflow:definition-updated",
-    payload: { workflowId },
+    payload: { workflowId, source, versionHash },
     timestamp: new Date().toISOString(),
   })
 }
@@ -63,7 +63,7 @@ async function atomicMutate(
   const validation = validateWorkflow(def)
   const saveResult = await deps.workflowService.save(def)
   if ("errors" in saveResult) throw new Error(`Save failed: ${(saveResult as WorkflowSaveError).errors.map((e) => e.message).join("; ")}`)
-  emitDefinitionUpdated(deps.eventBus, workflowId)
+  emitDefinitionUpdated(deps.eventBus, workflowId, "mcp", (saveResult as WorkflowSaveResult).versionHash)
   return { ok: true, data: { versionHash: (saveResult as WorkflowSaveResult).versionHash, validation } }
 }
 
@@ -289,6 +289,11 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   "workflow.param.update": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const newParams = requireArray(params, "params")
+    for (const p of newParams) {
+      if (p && typeof p === "object" && (p as { default?: unknown }).default === undefined) {
+        (p as { default: unknown }).default = null
+      }
+    }
     return atomicMutate(deps, workflowId, (def) => {
       def.params = newParams as WorkflowDefinition["params"]
     })
