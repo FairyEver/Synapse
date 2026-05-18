@@ -77,6 +77,24 @@ function rendererBaseUrl(): string {
   return process.env.VITE_DEV_SERVER_URL ?? "app://-"
 }
 
+/**
+ * Deep-sanitize nodeResults for persistent storage: apply sanitizeError
+ * to resolved variable values and resolved prompt text so that sensitive
+ * content (tokens, API keys, local paths) is not written to run snapshots.
+ * The in-memory copy retains the original resolved values for the active run.
+ */
+function sanitizeNodeResultsForSnapshot(
+  nodeResults: Record<string, NodeRunResult>,
+): Record<string, NodeRunResult> {
+  const out: Record<string, NodeRunResult> = {}
+  for (const [nodeId, nr] of Object.entries(nodeResults)) {
+    out[nodeId] = nr.input
+      ? { ...nr, input: { variables: Object.fromEntries(Object.entries(nr.input.variables).map(([k, v]) => [k, sanitizeError(v)])), ...(nr.input.prompt !== undefined ? { prompt: sanitizeError(nr.input.prompt) } : {}) } }
+      : nr
+  }
+  return out
+}
+
 function saveRunSnapshot(
   snapshots: RunSnapshotService,
   snapshot: Parameters<RunSnapshotService["save"]>[0],
@@ -275,7 +293,7 @@ function handleRunEvent(options: {
     endedAt,
     status,
     params,
-    nodeResults,
+    nodeResults: sanitizeNodeResultsForSnapshot(nodeResults),
     definition: def,
     ...(event.type === "workflow:failed" ? { error: event.error } : {}),
   }, eventBus)
