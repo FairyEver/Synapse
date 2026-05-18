@@ -94,9 +94,6 @@ export function WorkflowRunnerApp() {
         if (cancelled) return
         if (def) {
           setDefinition(def)
-          // Fallback succeeded: clear the loadError so the warning banner
-          // doesn't persist when the DAG is now correctly rendered.
-          setLoadError(null)
         }
       } catch (err) {
         if (cancelled) return
