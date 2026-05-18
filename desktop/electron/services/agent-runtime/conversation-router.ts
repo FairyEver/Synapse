@@ -541,6 +541,7 @@ export class ConversationRouter {
             message: "Relay cannot approve tool permissions.",
           })
           error = "Relay requested permission."
+          await this.sessionManager.closeCurrentTurn(conversation.id)
           break
         }
         if (event.type === "result") {
