@@ -88,55 +88,72 @@ async function doScan(): Promise<ScanProgress> {
       continue
     }
 
-    let clientDirty = false
+    // Phase 1: detect whether any file needs re-parsing (fingerprint changed)
+    let anyDirty = false
     for (const filePath of result.files) {
       try {
         const stat = fs.statSync(filePath)
         const fp = getFingerprint(filePath)
-
         if (fp && fp.size === stat.size && fp.mtimeMs === stat.mtimeMs) {
           continue
         }
-
-        if (!clientDirty) {
-          clearDailyUsageForClient(result.clientId)
-          clearHourlyUsageForClient(result.clientId)
-          clearFingerprintsForClient(result.clientId)
-          clientDirty = true
-        }
+        anyDirty = true
         break
       } catch (error) {
         logger.error("Failed to stat file", { filePath, error: String(error) })
       }
     }
 
-    if (!clientDirty) {
+    if (!anyDirty) {
       progress.scannedClients++
       continue
     }
 
+    // Phase 2: parse ALL files and cache results.
+    // Only clear + upsert if every file succeeds, so a single bad file
+    // doesn't wipe previously aggregated data for this client.
+    const parsed: Array<{ messages: Awaited<ReturnType<AgentParser["parseFile"]>>; stat: fs.Stats }> = []
+    let parseAborted = false
     for (const filePath of result.files) {
       try {
         const stat = fs.statSync(filePath)
         const messages = await parser.parseFile(filePath)
-        if (messages.length > 0) {
-          upsertDailyUsage(messages)
-          upsertHourlyUsage(messages)
-          progress.newMessages += messages.length
-        }
-
-        upsertFingerprint({
-          filePath,
-          clientId: result.clientId,
-          size: stat.size,
-          mtimeMs: stat.mtimeMs,
-          bytesParsed: stat.size,
-        })
-
-        progress.parsedFiles++
+        parsed.push({ messages, stat })
       } catch (error) {
-        logger.error("Failed to parse file", { filePath, error: String(error) })
+        logger.error("Failed to parse file, preserving old data for client", {
+          clientId: result.clientId, filePath, error: String(error),
+        })
+        parseAborted = true
+        break
       }
+    }
+
+    if (parseAborted) {
+      // Keep old data intact — clear did not run, old upserts survive.
+      progress.scannedClients++
+      continue
+    }
+
+    // Phase 3: all files parsed successfully → clear old data, upsert fresh.
+    clearDailyUsageForClient(result.clientId)
+    clearHourlyUsageForClient(result.clientId)
+    clearFingerprintsForClient(result.clientId)
+
+    for (let i = 0; i < result.files.length; i++) {
+      const { messages, stat } = parsed[i]
+      if (messages.length > 0) {
+        upsertDailyUsage(messages)
+        upsertHourlyUsage(messages)
+        progress.newMessages += messages.length
+      }
+      upsertFingerprint({
+        filePath: result.files[i],
+        clientId: result.clientId,
+        size: stat.size,
+        mtimeMs: stat.mtimeMs,
+        bytesParsed: stat.size,
+      })
+      progress.parsedFiles++
     }
 
     progress.scannedClients++
