@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { ShieldAlert, ShieldCheck, ShieldX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -16,10 +16,21 @@ type AgentPermissionCardProps = {
 
 function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: AgentPermissionCardProps) {
   const [codeCollapsed, setCodeCollapsed] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+
+  // Reset submitting state when the permission is no longer pending (submission succeeded)
+  useEffect(() => {
+    if (submitting && !pending) {
+      setSubmitting(false)
+    }
+  }, [submitting, pending])
+
   const body = item.toolInput ? redactAgentPathLikeValue(item.toolInput) : formatRawInput(item.toolInputRaw)
   const showActions = pending
 
   function handleRespond(behavior: "allow" | "deny") {
+    if (submitting) return
+    setSubmitting(true)
     track({
       component: "agent",
       name: "agent-permission-card-response",
@@ -78,6 +89,7 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
           <Button
             variant="outline"
             size="sm"
+            disabled={submitting}
             onClick={() => handleRespond("deny")}
           >
             <ShieldX data-icon="inline-start" />
@@ -85,6 +97,7 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
           </Button>
           <Button
             size="sm"
+            disabled={submitting}
             onClick={() => handleRespond("allow")}
           >
             <ShieldCheck data-icon="inline-start" />
