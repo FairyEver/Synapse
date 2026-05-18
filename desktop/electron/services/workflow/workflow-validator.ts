@@ -130,9 +130,23 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
       }
     }
 
+    // Variable name uniqueness check
+    const vars = (node.config as Record<string, unknown>)["variables"]
+    if (Array.isArray(vars)) {
+      const varNames = (vars as Array<{ name: string }>).map((v) => v.name).filter(Boolean)
+      const seenVar = new Set<string>()
+      for (const vname of varNames) {
+        if (seenVar.has(vname)) {
+          errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」存在重复的变量名「${vname}」` })
+          logger.warn("duplicate variable name detected", { workflowId: def.id, nodeId: node.id, nodeName: node.name, duplicateName: vname })
+          continue
+        }
+        seenVar.add(vname)
+      }
+    }
+
     if (!hasCycle) {
       const anc = ancestors(node.id, revAdj)
-      const vars = (node.config as Record<string, unknown>)["variables"]
       for (const v of (Array.isArray(vars) ? vars : []) as Array<Record<string, unknown>>) {
         const src = v["source"] as Record<string, unknown> | undefined
         if (src?.["type"] === "node_output" && !anc.has(src["node"] as string)) {

@@ -19,7 +19,7 @@ export function SwitchNodeCard({ config, name, selected, status, progressLabel, 
   const totalHeight = SWITCH_HEADER_H + config.branches.length * SWITCH_BRANCH_H + progressPadding
   return (
     <div
-      className={cn("relative rounded-lg border bg-card w-56 shadow-sm overflow-hidden flex flex-col", selected && "ring-2 ring-primary", statusClass(status))}
+      className={cn("relative rounded-lg border bg-card w-56 overflow-hidden flex flex-col", selected && "ring-2 ring-primary", statusClass(status))}
       style={{ height: totalHeight }}
     >
       <div className="px-3 py-2 flex flex-col justify-center shrink-0" style={{ height: SWITCH_HEADER_H }}>

@@ -9,7 +9,7 @@ export function EndNodeCard({ config, name, selected, status, progressLabel: _pr
 }) {
   const Icon = endNodeManifest.icon
   return (
-    <div className={cn("rounded-lg border bg-card px-3 py-2 w-56 shadow-sm", selected && "ring-2 ring-primary", statusClass(status))}>
+    <div className={cn("rounded-lg border bg-card px-3 py-2 w-56", selected && "ring-2 ring-primary", statusClass(status))}>
       <div className="flex items-center gap-2 mb-1">
         <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
         <span className="text-xs font-medium text-foreground truncate">{name || "结束"}</span>
