@@ -92,13 +92,13 @@ function useEditorDirectories() {
   }, [loadDirectories])
 
   const handleOpen = useCallback((dirPath: string) => {
-    logger.info("Opening editor directory.", { path: dirPath })
+    logger.info("Opening editor directory.", { dirName: dirPath.split(/[/\\]/).pop() ?? dirPath })
     window.synapse?.shell.showItemInFolder(dirPath)
   }, [])
 
   const handleCreate = useCallback(
     async (dirPath: string) => {
-      logger.info("Creating editor directory.", { path: dirPath })
+      logger.info("Creating editor directory.", { dirName: dirPath.split(/[/\\]/).pop() ?? dirPath })
       await promise(
         async () => {
           await requireSynapseBridge().editor.createDirectory(dirPath)
