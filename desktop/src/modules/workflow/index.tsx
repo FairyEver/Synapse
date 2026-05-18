@@ -28,8 +28,19 @@ export function WorkflowModule() {
         toast.error(result.errors[0]?.message ?? "创建工作流失败：校验未通过")
         return
       }
-      await workflowApi.openEditor(result.id)
+
       setListKey((k) => k + 1)
+
+      try {
+        await workflowApi.openEditor(result.id)
+      } catch (err) {
+        logger.warn("Workflow created but open editor failed.", {
+          boundary: "renderer.workflow.create",
+          workflowId: result.id,
+          ...errorDiagnostic(err),
+        })
+        toast.error("工作流已创建，但打开编辑器失败")
+      }
     } catch (err) {
       logger.warn("Workflow create failed.", {
         boundary: "renderer.workflow.create",
