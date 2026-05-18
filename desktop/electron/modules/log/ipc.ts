@@ -8,10 +8,11 @@
 import { z } from "zod"
 import { app, dialog } from "electron"
 import path from "node:path"
-import type { IpcModule } from "../../runtime/ipc/types"
+import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { WindowManager } from "../../runtime/window"
 import { logStore } from "../../services/log-store"
 import type { SynapseRendererLogPayload } from "../../../src/types/log"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
 
 // Schemas
 const rendererLogPayloadSchema = z.object({
@@ -74,7 +75,55 @@ export const logIpcModule: IpcModule = {
           return { fileCount: 0, filePath: "" }
         }
 
-        return logStore.exportAllLogs(dialogResult.filePath)
+        const actor = { kind: "user" } as const
+        const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+
+        const permission = await permissionGuard.check({
+          action: "fs.write",
+          actor,
+          resource: dialogResult.filePath,
+          context: { source: "log.export" },
+        })
+        if (!permission.allowed) {
+          auditSink.record({
+            action: "fs.write",
+            actor,
+            resource: dialogResult.filePath,
+            outcome: "denied",
+            metadata: {
+              source: "log.export",
+              reason: permission.reason,
+              policyId: permission.policyId,
+            },
+          })
+          throw new Error(permission.reason)
+        }
+
+        try {
+          const result = await logStore.exportAllLogs(dialogResult.filePath)
+          auditSink.record({
+            action: "fs.write",
+            actor,
+            resource: dialogResult.filePath,
+            outcome: "allowed",
+            metadata: { source: "log.export" },
+          })
+          return result
+        } catch (error) {
+          auditSink.record({
+            action: "fs.write",
+            actor,
+            resource: dialogResult.filePath,
+            outcome: "failed",
+            metadata: {
+              source: "log.export",
+              errorName: error instanceof Error ? error.name : typeof error,
+              errorLength: String(error).length,
+            },
+          })
+          throw error
+        }
       },
     },
     clear: {
