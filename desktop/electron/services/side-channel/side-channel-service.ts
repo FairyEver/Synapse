@@ -168,7 +168,7 @@ export class SideChannelService implements ReplyTargetRuntime {
     }
   }
 
-  dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): void {
+  dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): Promise<void> {
     const dispatcher = this.dispatchers.get(target.transport.kind)
     const conversationId = event.conversationId ?? target.conversationId
     if (!dispatcher) {
@@ -181,9 +181,9 @@ export class SideChannelService implements ReplyTargetRuntime {
         conversationId,
         sdkSessionId: event.sdkSessionId,
       })
-      return
+      return Promise.resolve()
     }
-    void dispatcher.dispatchAgentEvent(target, event).catch((error) => {
+    return dispatcher.dispatchAgentEvent(target, event).catch((error) => {
       this.deps.logger?.warn("Reply target dispatch failed.", {
         projectId: target.projectId,
         sessionKey: target.sessionKey,

@@ -43,10 +43,11 @@ export class ReplyOutboxService {
     this.deps = deps
   }
 
-  record(input: ReplyOutboxRecordInput): void {
+  record(input: ReplyOutboxRecordInput): string {
     const now = this.isoNow()
+    const id = this.nextId()
     const entry: OutboxEntryV1 = {
-      id: this.nextId(),
+      id,
       schemaVersion: 1,
       projectId: input.target.projectId,
       destination: {
@@ -73,17 +74,45 @@ export class ReplyOutboxService {
           ...errorDiagnostic(error),
         })
       })
+
+    return id
   }
 
-  recordAgentEvent(target: ReplyTarget, event: AgentEvent): void {
+  recordAgentEvent(target: ReplyTarget, event: AgentEvent): string {
     const payload = payloadFromAgentEvent(event)
     const failed = event.type === "error"
-    this.record({
+    return this.record({
       target,
       payload,
-      status: failed ? "failed" : "sent",
+      status: failed ? "failed" : "pending",
       lastError: failed ? event.message : undefined,
     })
+  }
+
+  updateRecordStatus(
+    id: string,
+    status: ReplyOutboxStatus,
+    lastError?: string,
+  ): void {
+    const now = this.isoNow()
+    this.pendingWrite = this.pendingWrite
+      .then(async () => {
+        const entry = await this.deps.outbox.get(id)
+        if (!entry) return
+        await this.deps.outbox.upsert({
+          ...entry,
+          status,
+          lastError,
+          updatedAt: now,
+        })
+      })
+      .catch((error) => {
+        this.deps.logger?.warn("Outbox status update failed.", {
+          outboxId: id,
+          status,
+          ...errorDiagnostic(error),
+        })
+      })
   }
 
   async list(filter?: Partial<OutboxEntryV1>): Promise<OutboxEntryV1[]> {

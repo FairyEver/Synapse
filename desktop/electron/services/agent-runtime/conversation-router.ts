@@ -35,7 +35,7 @@ export interface ConversationRouterDeps {
   readonly outbox?: ReplyOutboxService
   readonly replyTargets?: {
     rememberReplyTarget(target: ReplyTarget): void
-    dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): void
+    dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): Promise<void>
   }
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
   readonly now?: () => Date
@@ -806,8 +806,24 @@ export class ConversationRouter {
       timestamp: this.isoNow(),
     })
     if (shouldSuppressReply(message)) return
-    this.deps.outbox?.recordAgentEvent(target, event)
-    this.deps.replyTargets?.dispatchAgentEvent(target, event)
+    // Record outbox entry as pending before dispatch. After dispatch completes
+    // (or fails), update the status to "sent" or "failed" so outbox accurately
+    // reflects delivery outcome rather than pre-emptively marking as "sent".
+    const outboxId = this.deps.outbox?.recordAgentEvent(target, event)
+    if (outboxId) {
+      const outbox = this.deps.outbox
+      const replyTargets = this.deps.replyTargets
+      if (replyTargets) {
+        replyTargets.dispatchAgentEvent(target, event).then(
+          () => outbox.updateRecordStatus(outboxId, "sent"),
+          (error: unknown) => outbox.updateRecordStatus(
+            outboxId,
+            "failed",
+            error instanceof Error ? error.message : String(error),
+          ),
+        )
+      }
+    }
   }
 
   private emitConversationUpdated(conversation: ConversationEntryV1): void {
