@@ -29,22 +29,27 @@ const checks = [
   {
     description: "No bare ipcMain.handle/on outside runtime/ipc",
     pattern: /ipcMain\.(handle|on)\(/,
-    roots: ["electron/runtime", "electron/bootstrap", "src/runtime"],
-    excludeDirs: ["runtime/ipc"],
+    roots: ["electron", "src/runtime"],
+    excludeDirs: ["runtime/ipc", "__tests__"],
+    allowFiles: ["electron/ipc/validated-ipc.ts"],
     skipDocComments: true,
   },
   {
     description: "No bare webContents.send outside runtime/event-bus and runtime/window",
     pattern: /webContents\.send\(/,
-    roots: ["electron/runtime", "electron/bootstrap", "src/runtime"],
-    excludeDirs: ["runtime/event-bus", "runtime/window"],
+    roots: ["electron", "src/runtime"],
+    excludeDirs: ["runtime/event-bus", "runtime/window", "__tests__"],
     skipDocComments: true,
   },
   {
     description: "No bare http/net/https.createServer outside runtime/network",
-    pattern: /\b(http|net|https)\.createServer\(/,
-    roots: ["electron/runtime", "electron/bootstrap", "src/runtime"],
-    excludeDirs: ["runtime/network"],
+    pattern: /\b(?:http|net|https)\.createServer\(|\bcreateServer\(/,
+    roots: ["electron", "src/runtime"],
+    excludeDirs: ["runtime/network", "__tests__"],
+    allowFiles: [
+      "electron/database/http-server.ts",
+      "electron/database/mcp-server.ts",
+    ],
     skipDocComments: true,
   },
   {
@@ -99,6 +104,10 @@ function isExcluded(file, excludeDirs) {
     || file.includes(`/${segment}/`))
 }
 
+function isAllowed(file, allowFiles) {
+  return (allowFiles ?? []).includes(file.split(path.sep).join("/"))
+}
+
 function lineMatches(line, pattern, skipDocComments) {
   if (skipDocComments && /^\s*\*/.test(line)) return false
   return pattern.test(line)
@@ -120,6 +129,7 @@ for (const check of checks) {
       }
       const lines = content.split("\n")
       for (let i = 0; i < lines.length; i++) {
+        if (isAllowed(relFile, check.allowFiles)) break
         const line = lines[i]
         if (lineMatches(line, check.pattern, check.skipDocComments ?? false)) {
           offenders.push(`${relFile}:${i + 1}: ${line.trim()}`)
