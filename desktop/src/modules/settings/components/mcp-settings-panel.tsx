@@ -14,7 +14,6 @@ import {
 } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { mcpDefinitions } from "@/definitions/generated/renderer-registry"
-import { EDITOR_ICON_CLIP_STYLE } from "@/lib/editor-icons"
 import {
   databaseMcpServersGet,
   databaseMcpHttpStatusGet,
@@ -96,36 +95,44 @@ function McpSettingsPanel() {
 
   const handleRegisterMCP = useCallback(
     async (target: DatabaseMcpTarget) => {
-      await promise(
-        async () => {
-          const result = await databaseMcpRegister(target)
-          if (!result.success) throw new Error(result.error ?? "注册失败")
-          await refreshMcpServers()
-          logger.info("MCP registered.", { target })
-        },
-        {
-          loading: "正在注册 MCP...",
-          success: `MCP Server 已注册到 ${MCP_SERVER_META.find((m) => m.id === target)?.label ?? target}`,
-        },
-      )
+      try {
+        await promise(
+          async () => {
+            const result = await databaseMcpRegister(target)
+            if (!result.success) throw new Error(result.error ?? "注册失败")
+            await refreshMcpServers()
+            logger.info("MCP registered.", { target })
+          },
+          {
+            loading: "正在注册 MCP...",
+            success: `MCP Server 已注册到 ${MCP_SERVER_META.find((m) => m.id === target)?.label ?? target}`,
+          },
+        )
+      } catch {
+        // promise() re-throws on error — catch to prevent unhandled rejection.
+      }
     },
     [promise, refreshMcpServers],
   )
 
   const handleOpenMCPSettings = useCallback(
     async (target: DatabaseMcpTarget) => {
-      await promise(
-        async () => {
-          const result = await databaseMcpSettingsOpen(target)
-          if (!result.success) throw new Error(result.error ?? "打开失败")
-          logger.info("MCP settings opened.", { target })
-        },
-        {
-          loading: "正在打开配置文件...",
-          success: null,
-          error: (error) => error instanceof Error ? error.message : "打开失败。",
-        },
-      )
+      try {
+        await promise(
+          async () => {
+            const result = await databaseMcpSettingsOpen(target)
+            if (!result.success) throw new Error(result.error ?? "打开失败")
+            logger.info("MCP settings opened.", { target })
+          },
+          {
+            loading: "正在打开配置文件...",
+            success: null,
+            error: (error) => error instanceof Error ? error.message : "打开失败。",
+          },
+        )
+      } catch {
+        // promise() re-throws on error — catch to prevent unhandled rejection.
+      }
     },
     [promise],
   )
@@ -193,8 +200,7 @@ function McpSettingsPanel() {
               <img
                 src={server.icon}
                 alt={server.label}
-                className="size-5 shrink-0"
-                style={EDITOR_ICON_CLIP_STYLE}
+                className="size-5 shrink-0 clip-path-[inset(6%)]"
               />
               <span className="truncate text-sm">{server.label}</span>
               {mcpServersLoading ? (
