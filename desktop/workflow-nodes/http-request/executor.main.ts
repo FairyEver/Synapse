@@ -37,6 +37,7 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
         body: buildBody(interpolated),
         timeoutMs: config.timeoutMins === null ? undefined : (config.timeoutMins ?? 5) * 60_000,
         abortSignal: context.abortSignal,
+        maxResponseBodyBytes: 5 * 1024 * 1024,
       })
 
       const durationMs = Date.now() - start

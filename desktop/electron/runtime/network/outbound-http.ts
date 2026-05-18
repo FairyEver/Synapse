@@ -6,6 +6,7 @@ export type OutboundHttpRequest = {
   readonly timeoutMs?: number
   readonly abortSignal?: AbortSignal
   readonly fetchImpl?: typeof fetch
+  readonly maxResponseBodyBytes?: number
   readonly logger?: {
     warn: (message: string, meta?: unknown) => void
     error: (message: string, meta?: unknown) => void
@@ -51,11 +52,12 @@ export async function sendOutboundHttpRequest(
         requestHeaders: sanitizeHeaders(request.headers),
       })
     }
+    const body = await readBodyWithLimit(response, request.maxResponseBodyBytes)
     return {
       status: response.status,
       statusText: response.statusText,
       headers: Object.fromEntries(response.headers.entries()),
-      body: await response.text(),
+      body,
     }
   } catch (error) {
     request.logger?.error("Outbound HTTP request errored.", {
@@ -70,6 +72,37 @@ export async function sendOutboundHttpRequest(
     if (timeout) clearTimeout(timeout)
     request.abortSignal?.removeEventListener("abort", onAbort)
   }
+}
+
+const TRUNCATED_MESSAGE = "\n\n[响应体超过大小限制，已截断]"
+
+async function readBodyWithLimit(response: Response, maxBytes?: number): Promise<string> {
+  if (maxBytes === undefined || maxBytes <= 0) {
+    return await response.text()
+  }
+  const reader = response.body?.getReader()
+  if (!reader) {
+    return (await response.text()).slice(0, maxBytes)
+  }
+  const decoder = new TextDecoder()
+  let result = ""
+  let totalRead = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    totalRead += value.length
+    if (totalRead > maxBytes) {
+      const remaining = maxBytes - (totalRead - value.length)
+      if (remaining > 0) {
+        result += decoder.decode(value.slice(0, remaining))
+      }
+      result += TRUNCATED_MESSAGE
+      reader.cancel()
+      break
+    }
+    result += decoder.decode(value, { stream: true })
+  }
+  return result + decoder.decode()
 }
 
 const SENSITIVE_PARAM_NAMES = new Set(["token", "key", "secret", "password", "auth", "api_key", "apikey", "access_token"])
