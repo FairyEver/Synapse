@@ -1094,7 +1094,7 @@ function metadataStringListContains(
 function parsePermissionAction(action: string):
   | { readonly requestId: string; readonly behavior: "allow" | "deny" }
   | null {
-  const match = /^perm:([^:]+):(allow|deny)$/.exec(action)
+  const match = /^perm:(.+):(allow|deny)$/.exec(action)
   if (!match?.[1] || !match[2]) return null
   return { requestId: match[1], behavior: match[2] as "allow" | "deny" }
 }
