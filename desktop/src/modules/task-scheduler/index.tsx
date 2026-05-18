@@ -111,6 +111,7 @@ function TaskSchedulerModule() {
   const [runningTaskIds, setRunningTaskIds] = useState<Set<string>>(() => new Set())
   const [isExportOpen, setIsExportOpen] = useState(false)
   const [importEntries, setImportEntries] = useState<TaskExportEntry[] | null>(null)
+  const [importing, setImporting] = useState(false)
 
   async function runMutation<T>(
     operation: () => Promise<T>,
@@ -474,7 +475,15 @@ function TaskSchedulerModule() {
             open={true}
             onOpenChange={(open) => { if (!open) setImportEntries(null) }}
             entries={importEntries}
-            onImport={(indices) => void handleImport(indices)}
+            importing={importing}
+            onImport={async (indices) => {
+              setImporting(true)
+              try {
+                await handleImport(indices)
+              } finally {
+                setImporting(false)
+              }
+            }}
           />
         ) : null}
       </div>

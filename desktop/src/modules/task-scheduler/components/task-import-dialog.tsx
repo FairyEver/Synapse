@@ -20,11 +20,13 @@ function TaskImportDialog({
   onOpenChange,
   entries,
   onImport,
+  importing = false,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   entries: TaskExportEntry[]
   onImport: (indices: number[]) => void
+  importing?: boolean
 }) {
   const [selected, setSelected] = useState<Set<number>>(
     () => new Set(entries.map((_, i) => i)),
@@ -119,10 +121,10 @@ function TaskImportDialog({
             取消
           </Button>
           <Button
-            disabled={selected.size === 0}
+            disabled={selected.size === 0 || importing}
             onClick={handleImport}
           >
-            导入
+            {importing ? "正在导入..." : "导入"}
           </Button>
         </DialogFooter>
       </DialogContent>
