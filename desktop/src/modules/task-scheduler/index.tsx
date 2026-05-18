@@ -139,7 +139,7 @@ const [isExporting, setIsExporting] = useState(false)
   }
 
   async function handleCreate(input: ScheduledTaskCreateInput) {
-    await runMutation(
+    const result = await runMutation(
       async () => {
         const task = await createTask(input)
         logger.info("Task created.", { taskId: task.id, taskNameLength: task.name.length })
@@ -147,10 +147,11 @@ const [isExporting, setIsExporting] = useState(false)
       },
       { loading: "正在保存任务...", success: "任务已保存。", error: "保存任务失败。" },
     )
+    if (!result) throw new Error("保存任务失败。")
   }
 
   async function handleUpdate(id: string, patch: ScheduledTaskUpdateInput) {
-    await runMutation(
+    const result = await runMutation(
       async () => {
         const task = await updateTask(id, patch)
         logger.info("Task updated.", { taskId: task.id, taskNameLength: task.name.length })
@@ -158,6 +159,7 @@ const [isExporting, setIsExporting] = useState(false)
       },
       { loading: "正在保存任务...", success: "任务已保存。", error: "保存任务失败。" },
     )
+    if (!result) throw new Error("保存任务失败。")
   }
 
   async function handleDelete() {
