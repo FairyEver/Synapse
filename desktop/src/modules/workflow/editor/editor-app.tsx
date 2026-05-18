@@ -127,6 +127,7 @@ export function WorkflowEditorApp() {
       if (!isDirtyRef.current) return
       e.preventDefault()
       e.returnValue = ""
+      setShowCloseDialogRef.current(true)
     }
     window.addEventListener("beforeunload", handler)
     return () => window.removeEventListener("beforeunload", handler)
