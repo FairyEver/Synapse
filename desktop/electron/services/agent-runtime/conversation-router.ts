@@ -757,16 +757,27 @@ export class ConversationRouter {
     event: AgentEvent,
   ): Promise<void> {
     if (!this.deps.agentEvents) return
-    await this.deps.agentEvents.upsert({
-      id: `${conversationId}:${turnId}:${sequence}`,
-      schemaVersion: 1,
-      projectId: this.deps.projectId,
-      conversationId,
-      turnId,
-      eventType: event.type,
-      payload: sanitizeEventPayload(event),
-      createdAt: this.isoNow(),
-    })
+    try {
+      await this.deps.agentEvents.upsert({
+        id: `${conversationId}:${turnId}:${sequence}`,
+        schemaVersion: 1,
+        projectId: this.deps.projectId,
+        conversationId,
+        turnId,
+        eventType: event.type,
+        payload: sanitizeEventPayload(event),
+        createdAt: this.isoNow(),
+      })
+    } catch (error) {
+      this.deps.logger?.warn("AgentRuntime event persistence failed.", {
+        boundary: "agent-runtime.event-persistence",
+        projectId: this.deps.projectId,
+        conversationId,
+        turnId,
+        eventType: event.type,
+        ...queuedTurnFailureMetadata(error),
+      })
+    }
   }
 
   private async persistFailureEvent(
