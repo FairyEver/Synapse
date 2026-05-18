@@ -58,7 +58,7 @@ let scanInProgress = false
 
 export async function scanTokenUsage(): Promise<ScanProgress> {
   if (scanInProgress) {
-    return { totalClients: 0, scannedClients: 0, totalFiles: 0, parsedFiles: 0, newMessages: 0, elapsedMs: 0 }
+    throw new Error("SCAN_ALREADY_IN_PROGRESS")
   }
   scanInProgress = true
   try {

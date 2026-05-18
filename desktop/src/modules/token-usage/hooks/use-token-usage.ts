@@ -38,6 +38,10 @@ export function useTokenUsageScan() {
       const result = await requireSynapseBridge().tokenUsage.scan()
       return result
     } catch (e) {
+      if (e instanceof Error && e.message === "SCAN_ALREADY_IN_PROGRESS") {
+        logger.warn("Token usage scan skipped — already in progress")
+        return null
+      }
       logLoadError("scan", e)
       setError(toLoadError(e))
       return null
