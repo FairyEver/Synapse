@@ -239,7 +239,14 @@ export function WorkflowRunnerApp() {
   }, [runId, runParams])
 
   const handleOpenEditor = useCallback(() => {
-    void window.synapse?.workflow.openEditor(workflowId)
+    void window.synapse?.workflow.openEditor(workflowId).catch((err) => {
+      logger.warn("Workflow editor open failed.", {
+        boundary: "renderer.workflow.runner.openEditor",
+        workflowId,
+        ...errorDiagnostic(err),
+      })
+      setRunError("打开工作流失败，请重试")
+    })
   }, [workflowId])
 
   const handleRetry = useCallback(() => {
