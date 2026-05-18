@@ -62,6 +62,7 @@ function AgentDefaultsContent() {
       )
     } catch (error) {
       logger.error("Agent default provider model save failed.", error)
+      throw error
     }
   }, [promise, updateConfig])
 
@@ -131,7 +132,7 @@ function AgentDefaultsContent() {
           open={providerDialogOpen}
           onOpenChange={setProviderDialogOpen}
           defaultSelection={defaultPM ?? undefined}
-          onSelect={(selection) => void saveDefaultProviderModel(selection)}
+          onSelect={(selection) => saveDefaultProviderModel(selection)}
         />
       </SettingsFieldRow>
       <AlertDialog open={pendingMode !== null} onOpenChange={(open) => {

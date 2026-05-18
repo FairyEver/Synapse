@@ -29,7 +29,7 @@ const logger = createRendererLogger("agent")
 type ProviderModelSelectDialogProps = {
   readonly open: boolean
   readonly onOpenChange: (open: boolean) => void
-  readonly onSelect: (selection: ProviderModelSelection) => void
+  readonly onSelect: (selection: ProviderModelSelection) => void | Promise<void>
   readonly defaultSelection?: ProviderModelSelection
 }
 
@@ -54,6 +54,7 @@ function ProviderModelSelectDialog({
   const [selectedProviderId, setSelectedProviderId] = useState<string | undefined>(undefined)
   const [selectedTier, setSelectedTier] = useState<ModelTier | undefined>(undefined)
   const [loading, setLoading] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [loaded, setLoaded] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const requestIdRef = useRef(0)
@@ -129,7 +130,7 @@ function ProviderModelSelectDialog({
   const selectedProviderAvailable = Boolean(
     selectedProviderId && visibleProviders.some((p) => p.id === selectedProviderId),
   )
-  const canConfirm = selectedProviderAvailable && selectedTier !== undefined && !loading && !error
+  const canConfirm = selectedProviderAvailable && selectedTier !== undefined && !loading && !error && !saving
 
   const handleSelectProvider = (providerId: string) => {
     setSelectedProviderId(providerId)
@@ -147,8 +148,9 @@ function ProviderModelSelectDialog({
     setSelectedTier(tier)
   }
 
-  const handleConfirm = useCallback(() => {
+  const handleConfirm = useCallback(async () => {
     if (!selectedProviderId || !selectedTier || !canConfirm) return
+    setSaving(true)
     track({
       component: "agent",
       name: "agent-provider-model-select",
@@ -163,8 +165,14 @@ function ProviderModelSelectDialog({
     const provider = visibleProviders.find((p) => p.id === selectedProviderId)
     const providerName = provider?.name
     const modelName = provider ? resolveModelName(provider, selectedTier) : undefined
-    onSelect({ providerId: selectedProviderId, modelTier: selectedTier, providerName, modelName })
-    onOpenChange(false)
+    try {
+      await onSelect({ providerId: selectedProviderId, modelTier: selectedTier, providerName, modelName })
+      onOpenChange(false)
+    } catch {
+      // Save failed — dialog stays open, selection preserved
+    } finally {
+      setSaving(false)
+    }
   }, [canConfirm, onOpenChange, onSelect, selectedProviderId, selectedTier, visibleProviders])
 
   return (
@@ -257,7 +265,7 @@ function ProviderModelSelectDialog({
           )}
         </div>
         <DialogFooter>
-          <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+          <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             取消
           </Button>
           <Button
@@ -265,7 +273,7 @@ function ProviderModelSelectDialog({
             disabled={!canConfirm}
             onClick={handleConfirm}
           >
-            确认
+            {saving ? "正在保存..." : "确认"}
           </Button>
         </DialogFooter>
       </DialogContent>
