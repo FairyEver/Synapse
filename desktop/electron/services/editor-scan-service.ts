@@ -383,8 +383,8 @@ async function readItemContent(filePath: string): Promise<string> {
     }
     return await readFile(filePath, "utf8")
   } catch (error) {
-    logger.warn("Failed to read scan item content.", { path: filePath, error })
-    return ""
+    logger.warn("Failed to read scan item content.", { error })
+    throw new Error("读取内容失败", { cause: error })
   }
 }
 
