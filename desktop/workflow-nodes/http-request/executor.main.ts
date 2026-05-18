@@ -16,7 +16,12 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
     }
 
     input.onProgress?.("building_request", "构建请求…")
-    const interpolated = interpolateConfig(config, resolvedVariables)
+    let interpolated: HttpRequestNodeConfig
+    try {
+      interpolated = interpolateConfig(config, resolvedVariables)
+    } catch (err) {
+      return { status: "failed", output: "", error: `模板变量解析失败：${err instanceof Error ? err.message : String(err)}`, durationMs: Date.now() - start }
+    }
 
     logger.info("http request node executing", {
       runId: context.runId, method: interpolated.method, urlLength: interpolated.url.length,
