@@ -332,6 +332,7 @@ function DatabaseModule() {
       } catch (error) {
         logger.error("Insert failed.", { error })
         showError(error instanceof Error ? error.message : "新增失败，请稍后重试。")
+        throw error
       }
     },
     [refreshQuery, refreshTables, selectedTable, showError, showSuccess],
@@ -352,6 +353,7 @@ function DatabaseModule() {
       } catch (error) {
         logger.error("Update failed.", { error })
         showError(error instanceof Error ? error.message : "保存失败，请稍后重试。")
+        throw error
       }
     },
     [refreshQuery, selectedTable, showError],
