@@ -80,6 +80,7 @@ function VariablesPanel() {
   const [form, setForm] = useState<VariableFormState>({ name: "", value: "", description: "" })
   const [formError, setFormError] = useState<string | null>(null)
   const [deleting, setDeleting] = useState(false)
+  const [isSubmitting, setIsSubmitting] = useState(false)
 
   const variables = useMemo(
     () => activeRepository?.variables ?? [],
@@ -103,7 +104,7 @@ function VariablesPanel() {
   }, [])
 
   const handleSubmitAdd = useCallback(async () => {
-    if (!activeRepository) return
+    if (!activeRepository || isSubmitting) return
 
     const name = form.name.trim()
     if (!name || !VARIABLE_NAME_REGEX.test(name)) {
@@ -123,6 +124,7 @@ function VariablesPanel() {
       ...(form.description.trim() ? { description: form.description.trim() } : undefined),
     }
 
+    setIsSubmitting(true)
     try {
       await updateRepository(activeRepository.uuid, {
         variables: [...variables, newVariable],
@@ -130,11 +132,13 @@ function VariablesPanel() {
       setIsAddOpen(false)
     } catch {
       setFormError("保存失败，请重试。")
+    } finally {
+      setIsSubmitting(false)
     }
-  }, [activeRepository, form, updateRepository, variables])
+  }, [activeRepository, form, updateRepository, variables, isSubmitting])
 
   const handleSubmitEdit = useCallback(async () => {
-    if (!activeRepository || !editingVariable) return
+    if (!activeRepository || !editingVariable || isSubmitting) return
 
     const name = form.name.trim()
     if (!name || !VARIABLE_NAME_REGEX.test(name)) {
@@ -162,6 +166,7 @@ function VariablesPanel() {
       v.name === editingVariable.name ? updated : v,
     )
 
+    setIsSubmitting(true)
     try {
       await updateRepository(activeRepository.uuid, {
         variables: nextVariables.length > 0 ? nextVariables : undefined,
@@ -169,11 +174,13 @@ function VariablesPanel() {
       setEditingVariable(null)
     } catch {
       setFormError("保存失败，请重试。")
+    } finally {
+      setIsSubmitting(false)
     }
-  }, [activeRepository, editingVariable, form, updateRepository, variables])
+  }, [activeRepository, editingVariable, form, updateRepository, variables, isSubmitting])
 
   const handleDelete = useCallback(async () => {
-    if (!activeRepository || !deletingVariable) return
+    if (!activeRepository || !deletingVariable || isSubmitting) return
 
     const nextVariables = variables.filter((v) => v.name !== deletingVariable.name)
     setDeleting(true)
@@ -188,7 +195,7 @@ function VariablesPanel() {
     } finally {
       setDeleting(false)
     }
-  }, [activeRepository, deletingVariable, updateRepository, variables])
+  }, [activeRepository, deletingVariable, updateRepository, variables, isSubmitting])
 
   if (!activeRepository) {
     return (
@@ -267,7 +274,7 @@ function VariablesPanel() {
         <FormDialog
           title="添加变量"
           footer={
-            <Button type="submit">添加</Button>
+            <Button type="submit" disabled={isSubmitting}>{isSubmitting ? "保存中..." : "添加"}</Button>
           }
           onSubmit={(e) => {
             e.preventDefault()
@@ -285,7 +292,7 @@ function VariablesPanel() {
         <FormDialog
           title="修改变量"
           footer={
-            <Button type="submit">保存</Button>
+            <Button type="submit" disabled={isSubmitting}>{isSubmitting ? "保存中..." : "保存"}</Button>
           }
           onSubmit={(e) => {
             e.preventDefault()
