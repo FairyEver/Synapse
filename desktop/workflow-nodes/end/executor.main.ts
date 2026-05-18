@@ -14,7 +14,12 @@ export const endNodeExecutor: NodeExecutor<EndNodeConfig> = {
       templateLength: config.template.length,
       variableCount: Object.keys(resolvedVariables).length,
     })
-    const output = interpolatePrompt(config.template, resolvedVariables)
+    let output: string
+    try {
+      output = interpolatePrompt(config.template, resolvedVariables)
+    } catch (err) {
+      return { status: "failed", output: "", error: `模板变量解析失败：${err instanceof Error ? err.message : String(err)}`, durationMs: Date.now() - start }
+    }
     const durationMs = Date.now() - start
     logger.info("end node succeeded", {
       runId: context.runId,
