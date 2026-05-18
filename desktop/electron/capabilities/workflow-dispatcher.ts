@@ -43,6 +43,17 @@ function requireArray(params: Record<string, unknown>, key: string): unknown[] {
   return v
 }
 
+function requirePosition(value: unknown, label: string): { x: number; y: number } {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Invalid position in ${label}: expected object with x and y numbers`)
+  }
+  const pos = value as Record<string, unknown>
+  if (typeof pos.x !== "number" || !Number.isFinite(pos.x) || typeof pos.y !== "number" || !Number.isFinite(pos.y)) {
+    throw new Error(`Invalid position in ${label}: x and y must be finite numbers`)
+  }
+  return { x: pos.x, y: pos.y }
+}
+
 function emitDefinitionUpdated(eventBus: EventBus, workflowId: string, source: string, versionHash: string): void {
   eventBus.emit({
     domain: "workflow",
@@ -217,7 +228,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     const node = requireObject(params, "node")
     let nodeId: string
     const result = await atomicMutate(deps, workflowId, (def) => {
-      const position = node.position as { x: number; y: number } | undefined ?? autoPosition(def.nodes)
+      const position = "position" in node ? requirePosition(node.position, "workflow.node.create") : autoPosition(def.nodes)
       const id = randomUUID()
       nodeId = id
       def.nodes.push({
@@ -239,7 +250,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
       const target = def.nodes.find((n) => n.id === nodeId)
       if (!target) throw new Error(`Node not found: ${nodeId}`)
       if (typeof patch.name === "string") target.name = patch.name
-      if (patch.position) target.position = patch.position as { x: number; y: number }
+      if ("position" in patch) target.position = requirePosition(patch.position, "workflow.node.update")
       if (patch.config) target.config = patch.config as Record<string, unknown>
     })
   },
