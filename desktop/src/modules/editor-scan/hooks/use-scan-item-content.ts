@@ -10,20 +10,24 @@ function useScanItemContent(filePath: string | null) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const lastPathRef = useRef<string | null>(null)
+  const currentReqRef = useRef(0)
 
-  const load = useCallback(async (path: string) => {
+  const load = useCallback(async (path: string, reqId: number) => {
     setLoading(true)
+    setContent(null)
     setError(null)
     try {
       const bridge = getSynapseBridge()
       if (!bridge) throw new Error("Bridge not available")
       const result = await bridge.editorScan.readItemContent(path)
+      if (reqId !== currentReqRef.current) return
       setContent(result)
     } catch (err) {
+      if (reqId !== currentReqRef.current) return
       logger.error("Failed to load scan item content.", { path, error: err })
       setError(err instanceof Error ? err.message : "读取内容失败")
     } finally {
-      setLoading(false)
+      if (reqId === currentReqRef.current) setLoading(false)
     }
   }, [])
 
@@ -31,6 +35,7 @@ function useScanItemContent(filePath: string | null) {
     if (!filePath) {
       setContent(null)
       setError(null)
+      setLoading(false)
       lastPathRef.current = null
       return
     }
@@ -38,7 +43,9 @@ function useScanItemContent(filePath: string | null) {
     if (filePath === lastPathRef.current) return
 
     lastPathRef.current = filePath
-    void load(filePath)
+    setContent(null)
+    const reqId = ++currentReqRef.current
+    void load(filePath, reqId)
   }, [filePath, load])
 
   return { content, loading, error }
