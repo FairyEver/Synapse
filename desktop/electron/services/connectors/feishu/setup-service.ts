@@ -194,6 +194,16 @@ export class FeishuSetupService {
 
     try {
       await this.secrets().upsert(secret)
+    } catch (error) {
+      this.recordAudit("secret.write", "failed", input.projectId, {
+        secretRef: id,
+        appId,
+        error: error instanceof Error ? error.message : String(error),
+      })
+      throw error
+    }
+
+    try {
       const connector = await this.connectorRepository.upsert({
         projectId: input.projectId,
         platform: "feishu",
@@ -209,6 +219,7 @@ export class FeishuSetupService {
       })
       return this.connectorRepository.toFeishuSummary(connector)
     } catch (error) {
+      await this.secrets().remove(id).catch(() => {})
       this.recordAudit("secret.write", "failed", input.projectId, {
         secretRef: id,
         appId,
