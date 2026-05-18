@@ -1,4 +1,4 @@
-import { EDITOR_ICON_CLIP_STYLE, getEditorIconSrc } from "@/lib/editor-icons"
+import { getEditorIconSrc } from "@/lib/editor-icons"
 import { cn } from "@/lib/utils"
 import type { SynapseEditorId } from "@/types/editor"
 
@@ -19,8 +19,7 @@ function EditorIcon({ className, editorId }: EditorIconProps) {
       src={iconSrc}
       alt=""
       aria-hidden="true"
-      className={cn("size-5 shrink-0", className)}
-      style={EDITOR_ICON_CLIP_STYLE}
+      className={cn("size-5 shrink-0 clip-path-[inset(6%)]", className)}
     />
   )
 }
