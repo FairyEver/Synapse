@@ -95,13 +95,12 @@ function AppResetPanel() {
             try {
               await navigator.clipboard.writeText(userId)
               logger.info("User ID copied to clipboard before reset.")
+              logger.info("App reset confirmed after copying user ID. Initiating full reset.")
+              void window.synapse?.config.resetApp()
             } catch (error) {
               logger.error("Failed to copy user ID before reset.", error)
-              notifications.warning("复制用户 ID 失败，但仍将执行重置。请手动复制上方用户 ID 后再继续。")
+              notifications.warning("复制用户 ID 失败，请手动复制后重新操作。")
             }
-
-            logger.info("App reset confirmed after copying user ID. Initiating full reset.")
-            void window.synapse?.config.resetApp()
           })()
         }}
       />
