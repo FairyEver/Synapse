@@ -145,7 +145,7 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
               if (!PanelComponent) return <div className="flex items-center justify-center h-full text-xs text-muted-foreground"><p>该节点类型暂不支持配置编辑</p></div>
               return (
                 <PanelComponent
-                  key={node.id}
+                  key={`${node.id}::${definition.version ?? "0"}`}
                   config={node.config}
                   onChange={(c) => onConfigChange(node.id, c)}
                   upstreamNodes={upstreamNodes}
