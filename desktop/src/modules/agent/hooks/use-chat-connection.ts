@@ -779,6 +779,8 @@ function useChatConnection(
         errorName: rawError instanceof Error ? rawError.name : typeof rawError,
         errorLength: errorMessage(rawError).length,
       })
+      dispatch({ type: "CANCEL_RESET" })
+      dispatch({ type: "SET_ERROR", error: "强制停止失败" })
     }
   }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef])
 
