@@ -249,6 +249,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
               className="rounded-sm"
               disabled={isSaving}
               data-track="database-row-save"
+              aria-label="保存行"
               onClick={() => {
                 void handleSave().catch(() => {})
               }}
@@ -261,6 +262,7 @@ const RowEditor = forwardRef<RowEditorHandle, RowEditorProps>(function RowEditor
               className="rounded-sm"
               disabled={isSaving}
               data-track="database-row-cancel"
+              aria-label="取消编辑"
               onClick={handleCancel}
             >
               <X className="size-3.5" />
