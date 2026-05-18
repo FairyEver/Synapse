@@ -195,7 +195,6 @@ function DatabaseModule() {
       setPendingImport(null)
     } catch (error) {
       logger.error("Table import failed.", { error })
-      setPendingImport(null)
     }
   }, [pendingImport, promise, refreshTables])
 
@@ -540,13 +539,13 @@ function DatabaseModule() {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
-            <AlertDialogAction
+            <Button
               onClick={() => {
                 void handleConfirmImportTable()
               }}
             >
               {pendingImport?.exists ? "替换导入" : "导入"}
-            </AlertDialogAction>
+            </Button>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
