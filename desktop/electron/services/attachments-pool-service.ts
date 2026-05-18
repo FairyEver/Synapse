@@ -97,7 +97,7 @@ class AttachmentsPoolService {
         logger.info("Stored attachment in pool.", {
           originalName,
           sha256: reference.sha256,
-          targetPath,
+          pathLength: targetPath.length,
         })
       }
 
