@@ -99,6 +99,8 @@ function LogExportPanel() {
           error: (error) => error instanceof Error ? error.message : "导出日志失败",
         },
       )
+    } catch (error) {
+      logger.error("Log export failed.", error)
     } finally {
       setActiveAction(null)
     }
@@ -174,6 +176,8 @@ function LogExportPanel() {
       )
       setIsClearDialogOpen(false)
       setTotalLogSize(0)
+    } catch (error) {
+      logger.error("Log clear failed.", error)
     } finally {
       setActiveAction(null)
     }
