@@ -106,6 +106,10 @@ export class ReactiveScheduler {
 
     const tryStart = (nodeId: string) => {
       if (abortSignal.aborted) return
+      if (hadFailure) {
+        skipNodeAndPropagate(nodeId, "upstream failed")
+        return
+      }
       if (this.maxConcurrency > 0 && running.size >= this.maxConcurrency) {
         waitQueue.push(nodeId)
         return
