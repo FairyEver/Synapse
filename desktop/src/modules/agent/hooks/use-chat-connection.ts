@@ -409,13 +409,6 @@ function useChatConnection(
     const requestId = selectRequestIdRef.current + 1
     selectRequestIdRef.current = requestId
     dispatch({ type: "SET_ERROR", error: null })
-    // Eagerly update the selection refs before the async IPC so that
-    // phase.update events arriving during switchSession are not dropped by
-    // the use-chat-events filter. The refs are re-set to the canonical values
-    // once the IPC resolves (via setSelectedSession).
-    selectedProjectIdRef.current = target.projectId
-    selectedConversationIdRef.current = target.id
-    selectedSessionKeyRef.current = target.sessionKey
     try {
       const switched = await bridge.agent.switchSession({
         projectId: target.projectId,
