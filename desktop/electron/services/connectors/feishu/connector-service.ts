@@ -855,7 +855,7 @@ export class FeishuConnectorService {
     if (!parsed) return false
     if (!this.relayService) {
       await reply("Relay 不可用。")
-      return true
+      return "denied"
     }
     const [subCommand, ...args] = parsed.args
     switch ((subCommand ?? "list").toLowerCase()) {
@@ -864,17 +864,17 @@ export class FeishuConnectorService {
         await reply(bindings.length > 0
           ? bindings.map((binding) => `${binding.id} -> ${binding.targetProjectId}`).join("\n")
           : "Relay 绑定为空。")
-        return true
+        return "allowed"
       }
       case "bind": {
         if (!isAdmin) {
           await reply("当前飞书用户无权修改 Relay 绑定。")
-          return true
+          return "denied"
         }
         const targetProjectId = args[0]
         if (!targetProjectId) {
           await reply("用法：/relay bind <project-id>")
-          return true
+          return "denied"
         }
         const binding = await this.relayService.bind({
           sourceProjectId: connector.projectId,
@@ -886,28 +886,28 @@ export class FeishuConnectorService {
           createdBy: message.userId,
         })
         await reply(`已绑定：${binding.targetProjectId}`)
-        return true
+        return "allowed"
       }
       case "unbind": {
         if (!isAdmin) {
           await reply("当前飞书用户无权修改 Relay 绑定。")
-          return true
+          return "denied"
         }
         const bindingId = args[0]
         if (!bindingId) {
           await reply("用法：/relay unbind <binding-id>")
-          return true
+          return "denied"
         }
         const removed = await this.relayService.unbind(bindingId)
         await reply(removed ? "已解绑。" : "未找到绑定。")
-        return true
+        return "allowed"
       }
       case "send": {
         const targetProjectId = args[0]
         const relayMessage = args.slice(1).join(" ").trim()
         if (!targetProjectId || !relayMessage) {
           await reply("用法：/relay send <project-id> <message>")
-          return true
+          return "denied"
         }
         if (!isAdmin) {
           const bindings = await this.relayService.listBindings(connector.projectId)
@@ -916,7 +916,7 @@ export class FeishuConnectorService {
           )
           if (!hasBinding) {
             await reply("未找到目标项目的 Relay 绑定，请联系管理员先执行 /relay bind。")
-            return true
+            return "denied"
           }
         }
         const result = await this.relayService.send({
@@ -935,11 +935,11 @@ export class FeishuConnectorService {
         } else if (result.error) {
           await reply(result.error)
         }
-        return true
+        return "allowed"
       }
       default:
         await reply("用法：/relay list|bind|unbind|send")
-        return true
+        return "denied"
     }
   }
 
