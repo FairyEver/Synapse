@@ -74,6 +74,8 @@ export function useWorkflowEvents(
         boundary: "renderer.workflow.hydration-status",
         ...errorDiagnostic(error),
       })
+      const msg = error instanceof Error ? error.message : String(error)
+      cbRef.current.onFailed?.(`运行状态恢复失败：${sanitizeError(msg)}`)
     })
 
     const unsub = window.synapse?.workflow.onEvent((event: WorkflowEvent) => {
