@@ -42,11 +42,36 @@ function McpSettingsPanel() {
     Partial<Record<DatabaseMcpTarget, DatabaseMcpServerInfo>>
   >({})
   const [mcpHttpStatus, setMcpHttpStatus] = useState<DatabaseMcpHttpStatus | null>(null)
+  const [mcpHttpStatusLoading, setMcpHttpStatusLoading] = useState(true)
+  const [mcpHttpStatusError, setMcpHttpStatusError] = useState<string | null>(null)
   const [mcpServersLoading, setMcpServersLoading] = useState(true)
 
-  useEffect(() => {
-    void databaseMcpHttpStatusGet().then(setMcpHttpStatus).catch(() => setMcpHttpStatus(null))
+  const refreshMcpHttpStatus = useCallback(async () => {
+    setMcpHttpStatusLoading(true)
+    setMcpHttpStatusError(null)
+    try {
+      const status = await databaseMcpHttpStatusGet()
+      setMcpHttpStatus(status)
+    } catch (error) {
+      logger.error("Failed to load MCP HTTP status.", error)
+      setMcpHttpStatus(null)
+      setMcpHttpStatusError("状态读取失败")
+    } finally {
+      setMcpHttpStatusLoading(false)
+    }
   }, [])
+
+  useEffect(() => {
+    void refreshMcpHttpStatus()
+  }, [refreshMcpHttpStatus])
+
+  const mcpHttpStatusLabel = mcpHttpStatusError
+    ? "状态读取失败"
+    : mcpHttpStatusLoading
+      ? "检测中"
+      : mcpHttpStatus?.running
+        ? "运行中"
+        : "未启动"
 
   const refreshMcpServers = useCallback(async () => {
     setMcpServersLoading(true)
@@ -127,12 +152,21 @@ function McpSettingsPanel() {
         <CardAction>
           <StatusPill
             active={Boolean(mcpHttpStatus?.running)}
-            activeLabel="运行中"
-            inactiveLabel="未启动"
+            activeLabel={mcpHttpStatusLabel}
+            inactiveLabel={mcpHttpStatusLabel}
+            variant={mcpHttpStatusError || mcpHttpStatusLoading ? "warning" : "default"}
           />
         </CardAction>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
+        {mcpHttpStatusError ? (
+          <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+            <span>{mcpHttpStatusError}</span>
+            <Button variant="outline" size="sm" onClick={() => void refreshMcpHttpStatus()}>
+              重试
+            </Button>
+          </div>
+        ) : null}
         {mcpHttpStatus?.url ? (
           <div className="flex items-center gap-2">
             <code className="min-w-0 flex-1 truncate rounded bg-muted px-2 py-1 font-mono text-xs text-foreground">
