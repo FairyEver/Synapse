@@ -147,7 +147,8 @@ function TaskFormDialog({
   const ActionConfigForm = selectedAction.ConfigForm
   const canSubmit = Boolean(
     form.name.trim()
-    && selectedAction.manifest.configSchema.safeParse(form.actionConfig).success,
+    && selectedAction.manifest.configSchema.safeParse(form.actionConfig).success
+    && form.activeDays.length > 0,
   )
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
