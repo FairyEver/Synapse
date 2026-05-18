@@ -15,7 +15,7 @@ function StatusPill({ active, activeLabel, inactiveLabel, variant = "default" }:
   }
 
   return active ? (
-    <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+    <span className="rounded-full bg-accent px-2 py-0.5 text-xs font-medium text-accent-foreground">
       {activeLabel}
     </span>
   ) : (
