@@ -175,7 +175,15 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
       })
       setIsTrashConfirmOpen(false)
       onOpenChange(false)
-      await onChanged?.()
+
+      try {
+        await onChanged?.()
+      } catch (refreshError) {
+        logger.warn("Scan list refresh failed after trash.", {
+          path: item.path,
+          error: refreshError,
+        })
+      }
     } catch (error) {
       logger.error("Scan item trash failed.", { path: item.path, error })
       setTrashError(error instanceof Error ? error.message : "移到废纸篓失败。")
