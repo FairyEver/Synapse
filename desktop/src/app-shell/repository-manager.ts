@@ -161,8 +161,8 @@ class RepositoryManager {
       return
     }
 
-    this.resetContentForRepositoryChange()
     await this.setActiveRepository(uuid)
+    this.resetContentForRepositoryChange()
     await this.refreshRepositoryStates()
     await this.refreshAllContent()
   }
@@ -183,8 +183,8 @@ class RepositoryManager {
       return
     }
 
-    this.resetContentForRepositoryChange()
     await this.updateConfig({ activeRepoUuid: null })
+    this.resetContentForRepositoryChange()
   }
 
   async addRepository(
@@ -199,10 +199,6 @@ class RepositoryManager {
         : currentActiveRepositoryUuid
     const activeRepositoryChanged = currentActiveRepositoryUuid !== nextActiveRepositoryUuid
 
-    if (activeRepositoryChanged) {
-      this.resetContentForRepositoryChange()
-    }
-
     await this.updateConfig({
       repositories: repos,
       activeRepoUuid: nextActiveRepositoryUuid,
@@ -212,6 +208,7 @@ class RepositoryManager {
     await this.refreshSyncSnapshots()
 
     if (activeRepositoryChanged) {
+      this.resetContentForRepositoryChange()
       await this.refreshAllContent()
     }
   }
@@ -232,15 +229,15 @@ class RepositoryManager {
     const isActiveRepository = this.getActiveRepositoryUuid() === uuid
     const contentSourceChanged = patch.localPath !== undefined || patch.contentDirs !== undefined
 
-    if (isActiveRepository && contentSourceChanged) {
-      this.resetContentForRepositoryChange()
-    }
-
     const repos = (this.config?.repositories ?? []).map((r) =>
       r.uuid === uuid ? { ...r, ...patch } : r,
     )
     await this.updateConfig({ repositories: repos })
     await this.refreshRepositoryStates()
+
+    if (isActiveRepository && contentSourceChanged) {
+      this.resetContentForRepositoryChange()
+    }
 
     if (isActiveRepository) {
       await this.refreshPendingPushes(uuid)
@@ -276,16 +273,16 @@ class RepositoryManager {
           !== JSON.stringify(nextActiveRepository.contentDirs)
       )
 
-    if (activeRepositoryChanged || activeRepositoryContentSourceChanged) {
-      this.resetContentForRepositoryChange()
-    }
-
     await this.updateConfig({
       repositories,
       activeRepoUuid: nextActiveRepoUuid,
     })
     this.pruneRepositoryRuntimeState(new Set(repositories.map((repository) => repository.uuid)))
     await this.refreshRepositoryStates()
+
+    if (activeRepositoryChanged || activeRepositoryContentSourceChanged) {
+      this.resetContentForRepositoryChange()
+    }
 
     if (nextActiveRepoUuid) {
       await this.refreshPendingPushes(nextActiveRepoUuid)
