@@ -3,6 +3,7 @@ import type { HttpRequestNodeConfig } from "./schema"
 import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
 import { createMainLogger } from "../../electron/services/log-store"
 import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-utils"
+import { sanitizeError } from "../../electron/services/error-sanitize"
 
 const logger = createMainLogger("workflow.node.http-request-executor")
 
@@ -81,7 +82,8 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
       }
     } catch (err) {
       const durationMs = Date.now() - start
-      const message = err instanceof Error ? err.message : String(err)
+      const raw = err instanceof Error ? err.message : String(err)
+      const message = sanitizeError(raw)
       logger.warn("http request node failed", {
         runId: context.runId, method: config.method,
         errorMessage: truncateWithEllipsis(message, 500), durationMs,
@@ -118,7 +120,7 @@ function buildUrl(config: HttpRequestNodeConfig): string {
   try {
     url = new URL(raw)
   } catch {
-    throw new Error(`URL 无法解析，请确保包含合法协议前缀（如 https://）：${config.url}`)
+    throw new Error("URL 无法解析，请确保包含合法协议前缀（如 https://）")
   }
   for (const [key, value] of Object.entries(config.query ?? {})) {
     url.searchParams.set(key, value)
