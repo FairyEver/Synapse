@@ -117,6 +117,15 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
       }
     }
 
+    // HTTP request node: validate URL is not empty
+    if (node.type === "http-request") {
+      const cfg = node.config as Record<string, unknown>
+      const url = typeof cfg.url === "string" ? cfg.url.trim() : ""
+      if (!url) {
+        errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」的 URL 不能为空` })
+      }
+    }
+
     // Switch node: validate branch ID uniqueness
     if (node.type === "switch") {
       const branches = (node.config as Record<string, unknown>)["branches"]
