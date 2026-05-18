@@ -40,7 +40,10 @@ const ImageCropDialog = forwardRef<ImageCropDialogRef, ImageCropDialogProps>(
         fileInputRef.current?.click()
       },
       openWithImage: (imageDataUrl: string) => {
-        setImageSrc(imageDataUrl)
+        setImageSrc((prev) => {
+          if (prev) URL.revokeObjectURL(prev)
+          return imageDataUrl
+        })
         setScale(1)
         setPosition({ x: 0.5, y: 0.5 })
         setOpen(true)
@@ -56,7 +59,10 @@ const ImageCropDialog = forwardRef<ImageCropDialogRef, ImageCropDialogProps>(
         const file = e.target.files?.[0]
         if (!file) return
         const url = URL.createObjectURL(file)
-        setImageSrc(url)
+        setImageSrc((prev) => {
+          if (prev) URL.revokeObjectURL(prev)
+          return url
+        })
         setScale(1)
         setPosition({ x: 0.5, y: 0.5 })
         setOpen(true)
