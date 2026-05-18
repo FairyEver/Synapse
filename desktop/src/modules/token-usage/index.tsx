@@ -27,6 +27,7 @@ export function TokenUsageModule() {
   const [range, setRange] = useState<RangePreset>("30d")
   const [groupBy, setGroupBy] = useState<GroupByMode>("clientModel")
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set())
+  const userHasFiltered = useRef(false)
   const { scan, scanning, error: scanError } = useTokenUsageScan()
   const { data: graphResult, loading: graphLoading, error: graphError, refresh: refreshGraph } = useGraphResult()
   const { data: models, loading: modelsLoading, error: modelsError, refresh: refreshModels } = useModelReport()
@@ -40,10 +41,10 @@ export function TokenUsageModule() {
   const allClients = useMemo(() => graphResult?.summary.clients ?? [], [graphResult])
 
   useEffect(() => {
-    if (allClients.length > 0 && selectedSources.size === 0) {
+    if (allClients.length > 0 && !userHasFiltered.current) {
       setSelectedSources(new Set(allClients))
     }
-  }, [allClients, selectedSources.size])
+  }, [allClients])
 
   const refreshAll = useCallback((options?: { since?: string; until?: string }) => {
     void refreshGraph(options)
@@ -115,7 +116,11 @@ export function TokenUsageModule() {
           <GroupByPicker value={groupBy} onChange={handleGroupByChange} />
         )}
         <div className="flex-1" />
-        <SourcePicker clients={allClients} selected={selectedSources} onChange={setSelectedSources} />
+        <SourcePicker clients={allClients} selected={selectedSources} onChange={(next) => {
+          const isSelectAll = allClients.length > 0 && allClients.every((c) => next.has(c))
+          userHasFiltered.current = !isSelectAll
+          setSelectedSources(next)
+        }} />
         <DateRangeFilter value={range} onChange={handleRangeChange} />
         <ExportButton models={filteredModels} agents={filteredAgentRows} dailyRows={dailyRows} graphResult={graphResult} />
         <ScanButton scanning={scanning} onScan={handleScan} lastScanInfo={lastScanInfo} error={scanError} />
