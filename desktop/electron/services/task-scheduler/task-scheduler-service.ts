@@ -72,15 +72,31 @@ export class TaskSchedulerService {
   }
 
   async schedulerTaskUpdate(id: string, patch: ScheduledTaskUpdateInput): Promise<ScheduledTaskEntry> {
+    const oldTask = await this.deps.tasks.get(id)
     this.cancel(id)
-    const task = await this.deps.tasks.update(id, patch)
-    if (this.started && task.enabled) await this.schedule(task.id, task.nextRunAt)
-    return task
+    try {
+      const task = await this.deps.tasks.update(id, patch)
+      if (this.started && task.enabled) await this.schedule(task.id, task.nextRunAt)
+      return task
+    } catch (err) {
+      if (this.started && oldTask?.enabled && oldTask.nextRunAt) {
+        await this.schedule(oldTask.id, oldTask.nextRunAt)
+      }
+      throw err
+    }
   }
 
   async deleteTask(id: string): Promise<{ readonly deleted: boolean }> {
+    const oldTask = await this.deps.tasks.get(id)
     this.cancel(id)
-    return { deleted: await this.deps.tasks.delete(id) }
+    try {
+      return { deleted: await this.deps.tasks.delete(id) }
+    } catch (err) {
+      if (this.started && oldTask?.enabled && oldTask.nextRunAt) {
+        await this.schedule(oldTask.id, oldTask.nextRunAt)
+      }
+      throw err
+    }
   }
 
   async schedulerTaskEnable(id: string): Promise<ScheduledTaskEntry> {
@@ -92,10 +108,18 @@ export class TaskSchedulerService {
   }
 
   private async setTaskEnabled(id: string, enabled: boolean): Promise<ScheduledTaskEntry> {
+    const oldTask = await this.deps.tasks.get(id)
     this.cancel(id)
-    const task = await this.deps.tasks.setEnabled(id, enabled)
-    if (this.started && task.enabled) await this.schedule(task.id, task.nextRunAt)
-    return task
+    try {
+      const task = await this.deps.tasks.setEnabled(id, enabled)
+      if (this.started && task.enabled) await this.schedule(task.id, task.nextRunAt)
+      return task
+    } catch (err) {
+      if (this.started && oldTask?.enabled && oldTask.nextRunAt) {
+        await this.schedule(oldTask.id, oldTask.nextRunAt)
+      }
+      throw err
+    }
   }
 
   async runNow(id: string): Promise<ScheduledTaskRunEntry | null> {
