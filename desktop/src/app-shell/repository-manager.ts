@@ -423,9 +423,19 @@ class RepositoryManager {
         completedAt: result.completedAt,
       })
 
-      await this.refreshPendingPushes(uuid)
+      // Post-operation refresh is best-effort — failure should not retroactively
+      // mark the successful operation as failed.
+      try {
+        await this.refreshPendingPushes(uuid)
+      } catch {
+        logger.warn("repository.operation.pending-push-refresh-failed", { uuid, operation })
+      }
       if (operation === "sync" && uuid === this.getActiveRepositoryUuid()) {
-        await this.refreshAllContent()
+        try {
+          await this.refreshAllContent()
+        } catch {
+          logger.warn("repository.operation.content-refresh-failed", { uuid, operation })
+        }
       }
       this.notifyRepositorySubscribers()
       return result
