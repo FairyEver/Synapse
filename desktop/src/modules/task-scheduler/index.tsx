@@ -228,6 +228,7 @@ function TaskSchedulerModule() {
           trigger: entry.trigger,
           action: entry.action,
           enabled: false,
+          activeDays: entry.activeDays,
           missedRunPolicy: entry.missedRunPolicy,
         })
         successCount++

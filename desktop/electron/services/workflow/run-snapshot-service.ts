@@ -28,8 +28,12 @@ export class RunSnapshotService {
     }
     const entries = await Promise.all(files.map(async (file) => {
       try {
-        const snapshot = JSON.parse(await readFile(path.join(dir, file), "utf-8")) as WorkflowRunSnapshot
-        return { file, snapshot }
+        const raw = JSON.parse(await readFile(path.join(dir, file), "utf-8"))
+        if (!isValidSnapshotShape(raw)) {
+          logger.warn("run snapshot file has invalid structure, skipping", { workflowId, file })
+          return null
+        }
+        return { file, snapshot: raw as WorkflowRunSnapshot }
       } catch (err) {
         logger.warn("run snapshot file corrupted or unreadable, skipping", {
           workflowId, file,
@@ -137,7 +141,12 @@ export class RunSnapshotService {
       if (!dirent.isDirectory()) continue
       const file = path.join(this.dataDir, "workflow-runs", dirent.name, `${runId}.json`)
       try {
-        return JSON.parse(await readFile(file, "utf-8")) as WorkflowRunSnapshot
+        const raw = JSON.parse(await readFile(file, "utf-8"))
+        if (!isValidSnapshotShape(raw)) {
+          logger.warn("findByRunId snapshot has invalid structure, skipping", { runId, workflowId: dirent.name })
+          continue
+        }
+        return raw as WorkflowRunSnapshot
       } catch (err) {
         if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
           logger.warn("findByRunId readFile failed", { runId, workflowId: dirent.name, ...snapshotErrorMetadata(err) })
@@ -149,7 +158,12 @@ export class RunSnapshotService {
 
   async get(runId: string, workflowId: string): Promise<WorkflowRunSnapshot | null> {
     try {
-      return JSON.parse(await readFile(path.join(this.dir(workflowId), `${runId}.json`), "utf-8")) as WorkflowRunSnapshot
+      const raw = JSON.parse(await readFile(path.join(this.dir(workflowId), `${runId}.json`), "utf-8"))
+      if (!isValidSnapshotShape(raw)) {
+        logger.warn("run snapshot get: invalid structure", { runId, workflowId })
+        return null
+      }
+      return raw as WorkflowRunSnapshot
     } catch (err) {
       const code = (err as NodeJS.ErrnoException).code
       // ENOENT is expected when the snapshot simply doesn't exist — no need to warn
@@ -178,4 +192,18 @@ function snapshotErrorMetadata(error: unknown): {
     errorMessage: message,
     ...(code ? { code } : {}),
   }
+}
+
+function isValidSnapshotShape(value: unknown): value is WorkflowRunSnapshot {
+  if (typeof value !== "object" || value === null) return false
+  const obj = value as Record<string, unknown>
+  return (
+    typeof obj.runId === "string" &&
+    typeof obj.workflowId === "string" &&
+    typeof obj.version === "string" &&
+    typeof obj.startedAt === "number" &&
+    typeof obj.status === "string" &&
+    typeof obj.nodeResults === "object" && obj.nodeResults !== null &&
+    typeof obj.params === "object" && obj.params !== null
+  )
 }

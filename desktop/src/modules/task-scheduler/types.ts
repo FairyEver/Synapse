@@ -40,6 +40,7 @@ type TaskExportEntry = {
   cwd?: string
   trigger: ScheduledTaskTrigger
   action: ScheduledTaskActionRef
+  activeDays?: number[]
   missedRunPolicy: "skip" | "run_once"
 }
 
