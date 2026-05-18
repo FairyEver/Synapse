@@ -658,6 +658,8 @@ function useChatConnection(
       })
       dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.map((session) =>
         isSameSession(session, target) ? { ...session, name, updatedAt: new Date().toISOString() } : session) })
+      dispatch({ type: "UPDATE_ARCHIVED_SESSIONS", updater: (current) => current.map((session) =>
+        isSameSession(session, target) ? { ...session, name, updatedAt: new Date().toISOString() } : session) })
       toast("已重命名")
     } catch (rawError) {
       logger.error("Agent session rename failed.", {
