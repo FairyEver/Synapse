@@ -40,6 +40,7 @@ function tierModelValue(provider: SynapseAgentProvider, tier: ModelTier): string
 
 function ProviderLookupProvider({ children }: { children: ReactNode }) {
   const [providers, setProviders] = useState<SynapseAgentProvider[]>([])
+  const [loaded, setLoaded] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -51,6 +52,8 @@ function ProviderLookupProvider({ children }: { children: ReactNode }) {
         logger.warn("provider list fetch failed — cards will show raw IDs", {
           ...errorLogMeta(err),
         })
+      } finally {
+        if (!cancelled) setLoaded(true)
       }
     })()
     return () => { cancelled = true }
@@ -64,6 +67,7 @@ function ProviderLookupProvider({ children }: { children: ReactNode }) {
       return provider ? tierModelValue(provider, modelTier) : undefined
     },
     isProviderAvailable: (providerId) => {
+      if (!loaded) return true
       const provider = providers.find((p) => p.id === providerId)
       return provider != null && !provider.archived
     },
