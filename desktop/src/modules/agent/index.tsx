@@ -23,7 +23,7 @@ import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import type { OpenAgentSessionPayload } from "@/app-shell/navigation"
-import type { SynapseAgentDisplayProfile } from "@/types/agent"
+import type { SynapseAgentDisplayProfile, SynapseAgentPublishedCommand } from "@/types/agent"
 
 import { AgentSessionSidebar, type ProjectOption } from "./components/agent-session-sidebar"
 import { AgentTimeline } from "./components/agent-timeline"
@@ -300,6 +300,19 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const headerProvider = selectedProvider ?? activeProvider
   const selectedAgentDefinition = agentDefinitions.find((definition) =>
     definition.id === selectedSession?.agentType)
+  const mergedCommands = useMemo(() => {
+    const defCommands = selectedAgentDefinition?.commands ?? []
+    const runtimeCommands = chat.commands ?? []
+    const seen = new Set<string>()
+    const result: SynapseAgentPublishedCommand[] = []
+    for (const cmd of [...defCommands, ...runtimeCommands]) {
+      if (!seen.has(cmd.name)) {
+        seen.add(cmd.name)
+        result.push(cmd as unknown as SynapseAgentPublishedCommand)
+      }
+    }
+    return result
+  }, [selectedAgentDefinition?.commands, chat.commands])
   const selectedDisplayProfile = selectedAgentDefinition?.displayProfile
     ?? DEFAULT_AGENT_DISPLAY_PROFILE
   const selectedCliLabel = agentCliLabel(selectedSession?.agentType)
@@ -452,7 +465,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                     <CommandList>
                       <CommandEmpty>无命令</CommandEmpty>
                       <CommandGroup>
-                        {(selectedAgentDefinition?.commands ?? []).map((command) => (
+                        {(mergedCommands).map((command) => (
                           <CommandItem
                             key={command.name}
                             value={`/${command.name}`}
