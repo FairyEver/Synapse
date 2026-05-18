@@ -3,8 +3,6 @@ import { resolveShellCommand } from "../../electron/services/shell-exec"
 import type { ActionRunResult } from "../types"
 import type { ActionRuntimeContext } from "../../electron/action-runtime/action-registry"
 
-const UNLIMITED_OUTPUT_BYTES = Number.MAX_SAFE_INTEGER
-
 export type ShellActionConfig = {
   readonly shell: "posix" | "cmd" | "powershell"
   readonly env?: Record<string, string>
@@ -44,7 +42,6 @@ export async function runShellAction(input: {
     output: {
       stdout: "buffer",
       stderr: "buffer",
-      maxBufferBytes: UNLIMITED_OUTPUT_BYTES,
     },
     metadata: {
       source: "task-scheduler",
