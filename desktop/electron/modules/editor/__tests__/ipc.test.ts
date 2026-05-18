@@ -89,7 +89,6 @@ describe("editorIpcModule", () => {
     }))
   })
 })
-})
 
 function createHarness(options: {
   permission?: Awaited<ReturnType<PermissionGuard["check"]>>
