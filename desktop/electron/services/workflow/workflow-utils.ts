@@ -1,4 +1,5 @@
 import type { WorkflowDefinition } from "../../../src/types/workflow"
+import { sanitizeError } from "../../../src/lib/error-sanitize"
 export { errorCode } from "../error-utils"
 
 export function truncateWithEllipsis(value: string, maxLength: number): string {
@@ -17,11 +18,7 @@ export function agentErrorDiagnostic(error: string | undefined): { readonly erro
 
 export function sanitizeAgentError(error: string | undefined): string {
   if (!error) return ""
-  return error
-    .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, "[path]")
-    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path]")
-    .replace(/\b(api[_-]?key|apikey|token|secret|authorization|bearer|cookie|password|credential)[\s=:]+[^\s,;"')]+/gi, "$1=[redacted]")
-    .replace(/\bsk-[A-Za-z0-9_-]{8,}\b/g, "[key]")
+  return sanitizeError(error)
 }
 
 export function agentFailureMessage(error: string | undefined): string {

@@ -71,7 +71,7 @@ describe("promptNodeExecutor", () => {
   it("logs Agent diagnostics without prompt, output, or raw error text", async () => {
     const prompt = "Summarize sk-secret from /Users/liyang/private"
     const output = "answer includes private repository context"
-    const error = "SDK failed for secret prompt at /Users/liyang/private"
+    const error = "SDK failed for secret=\"sk-abc123\" at /Users/liyang/private"
 
     await promptNodeExecutor.execute({
       config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt },
@@ -121,8 +121,8 @@ describe("promptNodeExecutor", () => {
       warn: logger.warn.mock.calls,
     })
     expect(logs).not.toContain("sk-secret")
+    expect(logs).not.toContain("sk-abc123")
     expect(logs).not.toContain("/Users/liyang/private")
     expect(logs).not.toContain("private repository context")
-    expect(logs).not.toContain("secret prompt")
   })
 })
