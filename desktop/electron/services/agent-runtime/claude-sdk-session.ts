@@ -74,6 +74,10 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly toolNamesByUseId = new Map<string, string>()
   private closed = false
   private finished = false
+  get finished(): boolean {
+    return this.finished
+  }
+
   private sdkSessionId: string | undefined
   private permissionSeq = 0
 

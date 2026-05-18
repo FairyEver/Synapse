@@ -117,6 +117,7 @@ export class SessionManager {
     if (
       input.state.liveSession
       && input.state.liveSession.alive()
+      && !input.state.liveSession.finished
       && providerMatches
       && modeMatches
     ) {
