@@ -558,8 +558,16 @@ function useChatConnection(
           dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, target.projectId, target.id) })
           dispatch({ type: "UPDATE_SESSIONS", updater: (current) => current.filter((session) => !isSameSession(session, target)) })
           dispatch({ type: "UPDATE_ARCHIVED_SESSIONS", updater: (current) => current.filter((session) => !isSameSession(session, target)) })
-          await refresh()
           toast("会话已删除")
+          try {
+            await refresh()
+          } catch (refreshError) {
+            logger.warn("Agent session list refresh after delete failed.", {
+              projectId: target.projectId,
+              conversationId: target.id,
+              errorName: refreshError instanceof Error ? refreshError.name : typeof refreshError,
+            })
+          }
         }
         return
       }
@@ -596,7 +604,15 @@ function useChatConnection(
               errorName: rawError instanceof Error ? rawError.name : typeof rawError,
               errorLength: errorMessage(rawError).length,
             })
-            await refresh()
+            try {
+              await refresh()
+            } catch (refreshError) {
+              logger.warn("Agent session list refresh after delete fallback failed.", {
+                projectId: next.projectId,
+                conversationId: target.id,
+                errorName: refreshError instanceof Error ? refreshError.name : typeof refreshError,
+              })
+            }
           }
         } else {
           setSelectedSession(undefined)
