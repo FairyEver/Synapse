@@ -42,6 +42,25 @@ export const httpRequestNodeExecutor: NodeExecutor<HttpRequestNodeConfig> = {
       const durationMs = Date.now() - start
       const output = response.body ?? ""
 
+      if (response.status >= 400) {
+        logger.warn("http request node failed — non-2xx status", {
+          runId: context.runId, method: config.method, status: response.status,
+          outputLength: output.length, durationMs,
+        })
+        return {
+          status: "failed",
+          output,
+          outputs: {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+            body: response.body,
+          },
+          error: `HTTP ${response.status} ${response.statusText}`,
+          durationMs,
+        }
+      }
+
       input.onProgress?.("processing_response", "处理响应…")
       logger.info("http request node succeeded", {
         runId: context.runId, method: config.method, status: response.status,

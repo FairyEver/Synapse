@@ -94,6 +94,34 @@ describe("httpRequestNodeExecutor", () => {
     }))
   })
 
+  it("returns failed for 4xx response status", async () => {
+    const deps = fakeRuntimeDeps({
+      status: 404,
+      statusText: "Not Found",
+      headers: {},
+      body: '{"error":"not found"}',
+    })
+    const result = await httpRequestNodeExecutor.execute(makeInput({}, deps))
+    expect(result.status).toBe("failed")
+    expect(result.error).toContain("404")
+    expect(result.error).toContain("Not Found")
+    expect(result.outputs?.status).toBe(404)
+  })
+
+  it("returns failed for 5xx response status with body preserved", async () => {
+    const deps = fakeRuntimeDeps({
+      status: 503,
+      statusText: "Service Unavailable",
+      headers: { "content-type": "text/plain" },
+      body: "Service temporarily unavailable",
+    })
+    const result = await httpRequestNodeExecutor.execute(makeInput({}, deps))
+    expect(result.status).toBe("failed")
+    expect(result.error).toContain("503")
+    expect(result.output).toBe("Service temporarily unavailable")
+    expect(result.outputs?.body).toBe("Service temporarily unavailable")
+  })
+
   it("returns failed when sendHttpRequest throws", async () => {
     const deps: NodeRuntimeDeps = {
       processRunner: { run: vi.fn() },
