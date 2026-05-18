@@ -39,6 +39,7 @@ import { isFeishuAdmin, normalizeFeishuMessage } from "./message-normalizer"
 import { FeishuReplyService, feishuReplyContext } from "./reply-service"
 import { FeishuSetupService, secretId } from "./setup-service"
 import { feishuSdkClientFactory } from "./sdk-client"
+import { sanitizeError } from "../../error-sanitize"
 import {
   WorkspaceBindingRepository,
   isDirectory,
@@ -550,9 +551,14 @@ export class FeishuConnectorService {
     } catch (error) {
       await this.markDegraded(connectorId, error)
       this.recordAudit("failed", projectId, connectorId, "message", error)
+      this.deps.logger?.warn("Feishu message handler failed.", {
+        error: sanitizeError(error instanceof Error ? error.message : String(error)),
+        projectId,
+        connectorId,
+      })
       await running?.client.replyText(
         normalized.message.replyCtx as FeishuReplyContext,
-        error instanceof Error ? error.message : String(error),
+        ERROR_GENERIC_MESSAGE,
       ).catch((replyError) => {
         this.deps.logger?.warn("Failed to send Feishu error reply.", {
           error: replyError instanceof Error ? replyError.message : String(replyError),
@@ -1484,6 +1490,7 @@ function isPermissionNotPendingError(error: unknown): boolean {
 }
 
 const DEFAULT_WORKSPACE_IDLE_TIMEOUT_MS = 15 * 60 * 1000
+const ERROR_GENERIC_MESSAGE = "操作失败，请稍后重试。"
 
 interface WorkspaceConfigLike {
   readonly enabled?: boolean
