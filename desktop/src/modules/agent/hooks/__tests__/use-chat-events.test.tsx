@@ -142,7 +142,7 @@ describe("useChatEvents", () => {
 
     const event: SynapseAgentDomainEvent = {
       domain: "agent",
-      type: "text",
+      type: "permissionRequest",
       timestamp: "2026-05-14T00:00:00.000Z",
       scope: { sessionId: "conversation-1" },
       payload: {
@@ -150,8 +150,11 @@ describe("useChatEvents", () => {
         sessionKey: "local:renderer",
         platform: "renderer",
         event: {
-          type: "text",
-          content: "partial",
+          type: "permissionRequest",
+          requestId: "req-1",
+          toolName: "test_tool",
+          toolInput: "{}",
+          toolInputRaw: "{}",
         },
       },
     }
@@ -169,7 +172,7 @@ describe("useChatEvents", () => {
         conversationId: "conversation-1",
         sessionKey: "local:renderer",
         platform: "renderer",
-        eventType: "text",
+        eventType: "permissionRequest",
         boundary: "renderer.agent.pending-permissions",
         errorName: "Error",
         errorLength: "secret permission refresh detail".length,
@@ -195,15 +198,18 @@ describe("useChatEvents", () => {
 
     const event = {
       domain: "agent",
-      type: "text",
+      type: "permissionRequest",
       timestamp: "2026-05-14T00:00:00.000Z",
       payload: {
         projectId: "project-1",
         sessionKey: "local:renderer",
         platform: "renderer",
         event: {
-          type: "text",
-          content: "partial",
+          type: "permissionRequest",
+          requestId: "req-2",
+          toolName: "test_tool",
+          toolInput: "{}",
+          toolInputRaw: "{}",
           conversationId: "conversation-1",
           sdkSessionId: "sdk-session-1",
         },
@@ -220,9 +226,9 @@ describe("useChatEvents", () => {
       "Agent stream event applied.",
       expect.objectContaining({
         projectId: "project-1",
-        eventType: "text",
+        eventType: "permissionRequest",
         conversationId: "conversation-1",
-        agentEventType: "text",
+        agentEventType: "permissionRequest",
         sdkSessionId: "sdk-session-1",
         selectedConversationId: "conversation-1",
       }),

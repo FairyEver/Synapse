@@ -241,19 +241,19 @@ function useChatEvents(
             })
           },
         })
-      }
-      void refreshPendingPermissions().catch((rawError: unknown) => {
-        logger.error("Agent pending permissions refresh failed.", {
-          projectId: domainEvent.payload.projectId,
-          conversationId: streamEventConversationId(domainEvent),
-          sessionKey: domainEvent.payload.sessionKey,
-          platform: domainEvent.payload.platform,
-          eventType: domainEvent.type,
-          boundary: "renderer.agent.pending-permissions",
-          ...errorLogMeta(rawError),
+        void refreshPendingPermissions().catch((rawError: unknown) => {
+          logger.error("Agent pending permissions refresh failed.", {
+            projectId: domainEvent.payload.projectId,
+            conversationId: streamEventConversationId(domainEvent),
+            sessionKey: domainEvent.payload.sessionKey,
+            platform: domainEvent.payload.platform,
+            eventType: domainEvent.type,
+            boundary: "renderer.agent.pending-permissions",
+            ...errorLogMeta(rawError),
+          })
+          dispatch({ type: "SET_ERROR", error: "权限刷新失败" })
         })
-        dispatch({ type: "SET_ERROR", error: "权限刷新失败" })
-      })
+      }
     })
   }, [
     dispatch,
