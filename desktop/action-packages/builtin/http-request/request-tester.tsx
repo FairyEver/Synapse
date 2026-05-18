@@ -61,7 +61,7 @@ export function RequestTester({ config }: { readonly config: HttpRequestActionCo
             className="flex items-center gap-1.5 w-full text-left"
             onClick={() => setExpanded(!expanded)}
           >
-            <span className={`text-xs font-mono font-medium ${response.status >= 400 ? "text-destructive" : response.status >= 300 ? "text-yellow-600" : "text-green-600"}`}>
+            <span className={`text-xs font-mono font-medium ${response.status >= 400 ? "text-destructive" : response.status >= 300 ? "text-amber-600 dark:text-amber-400" : "text-emerald-600 dark:text-emerald-400"}`}>
               {response.status} {response.statusText}
             </span>
             <span className="text-xs text-muted-foreground">· {response.durationMs}ms</span>
