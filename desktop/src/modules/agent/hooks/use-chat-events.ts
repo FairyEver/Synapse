@@ -230,6 +230,7 @@ function useChatEvents(
           boundary: "renderer.agent.pending-permissions",
           ...errorLogMeta(rawError),
         })
+        dispatch({ type: "SET_ERROR", error: "权限刷新失败" })
       })
     })
   }, [
