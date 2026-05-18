@@ -250,7 +250,7 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
         <AlertDialogFooter>
           <AlertDialogCancel>取消</AlertDialogCancel>
           <Button variant="ghost" onClick={() => { setShowCloseConfirm(false); onClose() }}>放弃</Button>
-          <Button onClick={() => { setShowCloseConfirm(false); handleSave() }}>保存</Button>
+          <Button onClick={() => { setShowCloseConfirm(false); handleSave() }} disabled={hasDuplicates}>保存</Button>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
