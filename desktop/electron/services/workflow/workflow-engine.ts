@@ -152,8 +152,8 @@ export class WorkflowEngine {
           const cfg = (node.type === "prompt" || node.type === "switch")
             ? {
                 ...(rawCfg as Record<string, unknown>),
-                providerId: (rawCfg as Record<string, unknown>).providerId ?? def.defaultProviderId,
-                modelTier: (rawCfg as Record<string, unknown>).modelTier ?? def.defaultModelTier,
+                providerId: (rawCfg as Record<string, unknown>).providerId || def.defaultProviderId,
+                modelTier: (rawCfg as Record<string, unknown>).modelTier || def.defaultModelTier,
               }
             : rawCfg
           const vars = (cfg as Record<string, unknown>)["variables"]
