@@ -301,6 +301,11 @@ export class ProviderService {
     if (provider.active) {
       await this.clearActiveUserProvider()
     }
+
+    // Delete the provider record first so that a failure leaves secrets intact.
+    await this.providers.remove(id)
+
+    // Clean up secrets only after the provider record is gone.
     if (provider.secretRef) {
       await this.secretStore.deleteSecret(provider.secretRef)
     }
@@ -309,7 +314,6 @@ export class ProviderService {
         await this.secretStore.deleteSecret(secretRef)
       }
     }
-    await this.providers.remove(id)
   }
 
   async archiveProvider(id: string): Promise<void> {
