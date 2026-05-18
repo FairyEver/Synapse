@@ -318,7 +318,7 @@ export function buildEffectiveRunParams(def: WorkflowDefinition, params: Record<
 
 function paramHasValue(params: Record<string, unknown>, name: string): boolean {
   const value = params[name]
-  return Object.prototype.hasOwnProperty.call(params, name) && value !== undefined && value !== null
+  return Object.prototype.hasOwnProperty.call(params, name) && value !== undefined && value !== null && value !== ""
 }
 
 function paramHasDefault(param: { default?: unknown }): boolean {

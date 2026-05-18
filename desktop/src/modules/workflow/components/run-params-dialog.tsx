@@ -17,10 +17,12 @@ interface RunParamsDialogProps {
 export function RunParamsDialog({ open, params, lastValues, onConfirm, onCancel }: RunParamsDialogProps) {
   const [values, setValues] = useState<Record<string, string>>(() => Object.fromEntries(params.map((p) => [p.name, String(p.default ?? "")])))
   const [submitting, setSubmitting] = useState(false)
+  const [errors, setErrors] = useState<Record<string, string>>({})
 
   useEffect(() => {
     if (open) {
       setSubmitting(false)
+      setErrors({})
       // Pre-fill with last-submitted values when available; fall back to defaults
       setValues(Object.fromEntries(params.map((p) => [
         p.name,
@@ -29,9 +31,27 @@ export function RunParamsDialog({ open, params, lastValues, onConfirm, onCancel 
     }
   }, [open, params, lastValues])
 
+  function validate(): boolean {
+    const next: Record<string, string> = {}
+    for (const p of params) {
+      if (p.default !== null) continue
+      const raw = values[p.name]
+      if (p.type === "number") {
+        if (raw === "" || Number.isNaN(Number(raw))) {
+          next[p.name] = "此项为必填"
+        }
+      } else if (!raw) {
+        next[p.name] = "此项为必填"
+      }
+    }
+    setErrors(next)
+    return Object.keys(next).length === 0
+  }
+
   const handleSubmit = async (e?: React.FormEvent) => {
     e?.preventDefault()
     if (submitting) return
+    if (!validate()) return
     setSubmitting(true)
     const parsed: Record<string, unknown> = {}
     for (const p of params) {
@@ -71,7 +91,11 @@ export function RunParamsDialog({ open, params, lastValues, onConfirm, onCancel 
             {params.map((p) => (
               <div key={p.name} className="grid gap-1.5">
                 <Label htmlFor={p.name}>{p.description ?? p.name}</Label>
-                <Input id={p.name} type={p.type === "number" ? "number" : "text"} value={values[p.name] ?? ""} onChange={(e) => setValues((v) => ({ ...v, [p.name]: e.target.value }))} />
+                <Input id={p.name} type={p.type === "number" ? "number" : "text"} value={values[p.name] ?? ""} onChange={(e) => {
+                  setValues((v) => ({ ...v, [p.name]: e.target.value }))
+                  if (errors[p.name]) setErrors((prev) => { const next = { ...prev }; delete next[p.name]; return next })
+                }} aria-invalid={!!errors[p.name]} />
+                {errors[p.name] && <p className="text-xs text-destructive">{errors[p.name]}</p>}
               </div>
             ))}
           </div>
