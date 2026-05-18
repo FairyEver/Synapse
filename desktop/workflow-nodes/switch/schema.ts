@@ -11,7 +11,7 @@ export const switchNodeConfigSchema = z.object({
   providerId: z.string().optional(),
   modelTier: z.enum(["default", "haiku", "sonnet", "opus"]).optional(),
   variables: z.array(variableBindingSchema),
-  prompt: z.string(),
+  prompt: z.string().trim().min(1, "提示词不能为空"),
   projectId: z.string().optional(),
   branches: z.array(switchBranchSchema).min(1),
   defaultBranch: z.string().optional(),
