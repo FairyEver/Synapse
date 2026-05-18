@@ -701,12 +701,17 @@ class RepositoryManager {
   }
 
   private async refreshPendingPushesForRepositories(repositoryUuids: string[]): Promise<void> {
-    await Promise.all(
+    const results = await Promise.allSettled(
       repositoryUuids.map(async (repositoryUuid) => {
         const pendingState = await this.getPendingPushesFromBridge(repositoryUuid)
         this.pendingPushes.set(repositoryUuid, pendingState)
       }),
     )
+    for (const result of results) {
+      if (result.status === "rejected") {
+        logger.warn("repository.pending-push-refresh-failed", { error: String(result.reason) })
+      }
+    }
     this.notifyRepositorySubscribers()
   }
 
