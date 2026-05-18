@@ -186,18 +186,18 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.abortController?.abort()
     this.abortCleanup?.()
     this.eventQueue.close()
-    void Promise.resolve()
-      .then(() => this.query.close())
-      .catch((error) => {
-        this.logger?.warn("Claude SDK query close failed.", {
-          boundary: "claude-sdk-query.close",
-          projectId: this.projectId,
-          conversationId: this.conversationId,
-          providerId: this.providerId,
-          sdkSessionId: this.sdkSessionId,
-          ...errorLogMeta(error),
-        })
+    try {
+      await this.query.close()
+    } catch (error) {
+      this.logger?.warn("Claude SDK query close failed.", {
+        boundary: "claude-sdk-query.close",
+        projectId: this.projectId,
+        conversationId: this.conversationId,
+        providerId: this.providerId,
+        sdkSessionId: this.sdkSessionId,
+        ...errorLogMeta(error),
       })
+    }
   }
 
   private buildQueryOptions(options: ClaudeSDKSessionOptions): Record<string, unknown> {
