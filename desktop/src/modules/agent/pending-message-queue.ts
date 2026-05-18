@@ -18,6 +18,8 @@ type PendingMessage = PendingMessageInput & {
   readonly error?: string
 }
 
+const MAX_PENDING_QUEUE_SIZE = 20
+
 function targetKey(target: PendingMessageTarget): string {
   return [target.projectId, target.conversationId, target.sessionKey].join("\0")
 }
@@ -94,6 +96,7 @@ export {
   firstQueuedMessageForIdleTarget,
   markPendingMessageFailed,
   markPendingMessageSending,
+  MAX_PENDING_QUEUE_SIZE,
   pendingMessagesForTarget,
   removePendingMessage,
   replacePendingMessage,

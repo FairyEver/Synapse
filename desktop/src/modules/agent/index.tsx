@@ -34,6 +34,7 @@ import {
   firstQueuedMessageForIdleTarget,
   markPendingMessageFailed,
   markPendingMessageSending,
+  MAX_PENDING_QUEUE_SIZE,
   pendingMessagesForTarget,
   removePendingMessage,
   replacePendingMessage,
@@ -190,6 +191,10 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   }, [chat.sendMessage, chat.sendingConversationIds, pendingMessages])
 
   const queueMessage = (content: string, target: PendingMessageTarget) => {
+    if (pendingMessages.length >= MAX_PENDING_QUEUE_SIZE) {
+      toast("待发送队列已满，请等待当前消息发送完成")
+      return
+    }
     pendingMessageIdRef.current += 1
     setPendingMessages((current) => [
       ...current,
