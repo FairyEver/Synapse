@@ -229,15 +229,29 @@ export class ConversationRouter {
     }
 
     return new Promise<AgentRuntimeTurnResult>((resolve) => {
-      state.queue.push({
+      const turn = {
         message,
         conversationId: conversation.id,
         abortSignal,
         resolve,
-      })
+      }
+      state.queue.push(turn)
       if (!state.busy) {
         state.busy = true
         void this.processQueue(state)
+      } else if (abortSignal) {
+        const onAbort = () => {
+          const idx = state.queue.indexOf(turn)
+          if (idx >= 0) {
+            state.queue.splice(idx, 1)
+            resolve(this.buildCancelledResult(message, conversation.id))
+          }
+        }
+        if (abortSignal.aborted) {
+          onAbort()
+        } else {
+          abortSignal.addEventListener("abort", onAbort, { once: true })
+        }
       }
     })
   }
