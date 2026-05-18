@@ -20,6 +20,7 @@ import {
   type AgentEvent,
   type AgentMessage,
 } from "../agent-runtime"
+import { formatPermissionBody } from "../agent-runtime/permission-sanitize"
 import type { ReplyTarget } from "../reply-target"
 import type { SideChannelService } from "../side-channel"
 import type { SideChannelPreparedAttachment } from "../side-channel"
@@ -870,8 +871,9 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
     target: ReplyTarget,
     event: Extract<AgentEvent, { type: "permissionRequest" }>,
   ): Promise<void> {
+    const body = formatPermissionBody(event.toolName, event.toolInput, event.toolInputRaw)
     if (!adapter.capabilities.has("card")) {
-      await this.sendReply(adapter, target, `Permission required: ${event.toolName}`)
+      await this.sendReply(adapter, target, `Permission required: ${body}`)
       return
     }
     adapter.connection.sendJson({
@@ -880,7 +882,7 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       reply_ctx: target.replyCtx?.replyCtx,
       card: {
         title: "Permission required",
-        body: event.toolName,
+        body,
         actions: [
           { label: "Allow", action: `perm:${event.requestId}:allow` },
           { label: "Deny", action: `perm:${event.requestId}:deny` },

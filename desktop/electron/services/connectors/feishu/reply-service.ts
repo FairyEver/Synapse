@@ -4,6 +4,7 @@ import type {
   AgentThinkingEvent,
   AgentToolUseEvent,
 } from "../../agent-runtime"
+import { formatPermissionBody } from "../../agent-runtime/permission-sanitize"
 import type { ReplyTarget } from "../../reply-target"
 import type { ReplyOutboxService } from "../../reply-target"
 import type { SideChannelPreparedAttachment } from "../../side-channel"
@@ -295,7 +296,7 @@ function permissionCard(
         tag: "div",
         text: {
           tag: "plain_text",
-          content: event.toolName,
+          content: formatPermissionBody(event.toolName, event.toolInput, event.toolInputRaw),
         },
       },
       {
