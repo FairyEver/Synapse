@@ -148,6 +148,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
             promptLength: prompt?.length ?? 0,
             ...errorDiagnostic(rawError),
           })
+          toast.error("发送失败")
         }
       })()
       return
@@ -158,8 +159,9 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       return
     }
     pendingSessionRefreshKeyRef.current = pendingKey
-    void chat.refresh().catch((rawError) => {
+    void chat.refresh().finally(() => {
       pendingSessionRefreshKeyRef.current = null
+    }).catch((rawError) => {
       logger.error("Agent pending session refresh failed.", {
         boundary: "renderer.agent.pending-session-refresh",
         projectId: pendingAgentSession.projectId,
