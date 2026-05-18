@@ -309,11 +309,13 @@ function handleEngineRejection(options: {
 
 async function resolveWorkflowProjectId(def: WorkflowDefinition): Promise<string | undefined> {
   const appConfig = await configStore.load()
-  const defaultProject = def.defaultProjectId
-    ? appConfig.repositories.find((r) => r.uuid === def.defaultProjectId)
+  const resolvedId = def.defaultProjectId
+    ? appConfig.repositories.find((r) => r.uuid === def.defaultProjectId)?.uuid
+      ?? appConfig.global.projects.find((p) => p.id === def.defaultProjectId)?.id
     : undefined
-  const activeRepo = defaultProject ?? appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid) ?? appConfig.repositories[0]
-  return activeRepo?.uuid
+  return resolvedId
+    ?? appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid)?.uuid
+    ?? appConfig.repositories[0]?.uuid
 }
 
 function findActiveRun(runStatuses: Map<string, WorkflowRunStatus>, workflowId: string): string | undefined {
