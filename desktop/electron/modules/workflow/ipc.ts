@@ -655,10 +655,10 @@ export const workflowIpcModule: IpcModule = {
       channel: "synapse:workflow:open-runner", kind: "invoke",
       request: z.object({ workflowId: z.string(), runId: z.string() }),
       response: z.void(),
-      handler: (ctx, { workflowId, runId }: { workflowId: string; runId: string }) => {
+      handler: async (ctx, { workflowId, runId }: { workflowId: string; runId: string }) => {
         logger.info("workflow:openRunner", { workflowId, runId })
         const baseUrl = rendererBaseUrl()
-        ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").openRunner(workflowId, runId, baseUrl)
+        await ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").openRunner(workflowId, runId, baseUrl)
       },
     },
     cancel: {

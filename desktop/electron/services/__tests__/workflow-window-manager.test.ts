@@ -7,6 +7,7 @@ type FakeBrowserWindow = {
   focused: boolean
   loadedUrls: string[]
   sentMessages: Array<{ channel: string; payload: unknown }>
+  loadError?: Error
   closedHandler?: () => void
   webContents: {
     send: (channel: string, payload: unknown) => void
@@ -25,6 +26,7 @@ type FakeBrowserWindow = {
 const electronMock = vi.hoisted(() => {
   const windows: FakeBrowserWindow[] = []
   let nextId = 1
+  let nextLoadError: Error | undefined
 
   function createWindow(): FakeBrowserWindow {
     const win: FakeBrowserWindow = {
@@ -33,6 +35,7 @@ const electronMock = vi.hoisted(() => {
       focused: false,
       loadedUrls: [],
       sentMessages: [],
+      loadError: nextLoadError,
       webContents: {
         send: (channel, payload) => {
           win.sentMessages.push({ channel, payload })
@@ -47,6 +50,7 @@ const electronMock = vi.hoisted(() => {
         win.focused = true
       },
       loadURL: async (url: string) => {
+        if (win.loadError) throw win.loadError
         win.loadedUrls.push(url)
       },
       on: (event: string, handler: () => void) => {
@@ -57,6 +61,7 @@ const electronMock = vi.hoisted(() => {
       },
     }
     windows.push(win)
+    nextLoadError = undefined
     return win
   }
 
@@ -65,6 +70,10 @@ const electronMock = vi.hoisted(() => {
     reset: () => {
       windows.length = 0
       nextId = 1
+      nextLoadError = undefined
+    },
+    setNextLoadError: (error: Error) => {
+      nextLoadError = error
     },
     BrowserWindow: vi.fn(function BrowserWindow() {
       return createWindow()
@@ -126,11 +135,11 @@ describe("WorkflowWindowManager", () => {
     healthMock.detach.mockClear()
   })
 
-  it("closes the editor window when opening the runner for the same workflow", () => {
+  it("closes the editor window when opening the runner for the same workflow", async () => {
     const manager = new WorkflowWindowManager()
 
     const editor = manager.open("workflow-1", "app://-")
-    const runner = manager.openRunner("workflow-1", "run-1", "app://-")
+    const runner = await manager.openRunner("workflow-1", "run-1", "app://-")
 
     expect(editor).not.toBe(runner)
     expect(editor.isDestroyed()).toBe(true)
@@ -139,10 +148,10 @@ describe("WorkflowWindowManager", () => {
     expect(manager.hasActiveRun("workflow-1")).toBe(true)
   })
 
-  it("closes the runner window when opening the editor for the same workflow", () => {
+  it("closes the runner window when opening the editor for the same workflow", async () => {
     const manager = new WorkflowWindowManager()
 
-    const runner = manager.openRunner("workflow-1", "run-1", "app://-")
+    const runner = await manager.openRunner("workflow-1", "run-1", "app://-")
     const editor = manager.open("workflow-1", "app://-")
 
     expect(runner).not.toBe(editor)
@@ -150,5 +159,18 @@ describe("WorkflowWindowManager", () => {
     expect(editor.isDestroyed()).toBe(false)
     expect(manager.hasActiveRun("workflow-1")).toBe(false)
     expect(manager.getOpenEditorIds()).toEqual(["workflow-1"])
+  })
+
+  it("keeps the editor open when runner URL loading fails", async () => {
+    const manager = new WorkflowWindowManager()
+
+    const editor = manager.open("workflow-1", "app://-")
+    electronMock.setNextLoadError(new Error("load failed"))
+    const openPromise = manager.openRunner("workflow-1", "run-1", "app://-")
+
+    await expect(openPromise).rejects.toThrow("load failed")
+
+    expect(editor.isDestroyed()).toBe(false)
+    expect(manager.hasActiveRun("workflow-1")).toBe(false)
   })
 })

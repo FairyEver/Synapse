@@ -17,11 +17,7 @@ export class WorkflowWindowManager {
     const existing = this.editorWindows.get(workflowId)
     if (existing && !existing.isDestroyed()) {
       logger.info("workflow editor window reused", { workflowId, runId })
-      try {
-        existing.webContents.send("synapse:workflow:editor-refocus", { runId })
-      } catch (err) {
-        logger.warn("workflow editor window refocus send failed", { workflowId, runId, error: err instanceof Error ? err.message : String(err) })
-      }
+      this.sendToWindow(existing, "synapse:workflow:editor-refocus", { runId }, { workflowId, runId })
       existing.focus()
       this.closeRunnerWindow(workflowId, "workflow runner window closed after editor opened")
       return existing
@@ -44,9 +40,7 @@ export class WorkflowWindowManager {
       this.mainWindowManager.attach({ id: windowId, role: "detail" }, managedBrowserWindow(win, "detail"))
     }
 
-    const health = new RendererHealthService({
-      logger: createMainLogger(`renderer-health.editor.${workflowId}`),
-    })
+    const health = this.createHealthService(`renderer-health.editor.${workflowId}`)
     health.attach(win.webContents)
     this.healthServices.set(windowId, health)
 
@@ -62,15 +56,11 @@ export class WorkflowWindowManager {
     return win
   }
 
-  openRunner(workflowId: string, runId: string, baseUrl: string): BrowserWindow {
+  async openRunner(workflowId: string, runId: string, baseUrl: string): Promise<BrowserWindow> {
     const existing = this.runnerWindows.get(workflowId)
     if (existing && !existing.isDestroyed()) {
       logger.info("workflow runner window reused — switching run", { workflowId, newRunId: runId })
-      try {
-        existing.webContents.send("synapse:workflow:runner-switch-run", { runId })
-      } catch (err) {
-        logger.warn("workflow runner window switch-run send failed", { workflowId, newRunId: runId, error: err instanceof Error ? err.message : String(err) })
-      }
+      this.sendToWindow(existing, "synapse:workflow:runner-switch-run", { runId }, { workflowId, runId })
       existing.focus()
       this.closeEditorWindow(workflowId, "workflow editor window closed after runner opened")
       return existing
@@ -83,18 +73,13 @@ export class WorkflowWindowManager {
 
     const params = new URLSearchParams({ window: "workflow-runner", workflowId, runId })
     const url = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${params.toString()}`
-    void win.loadURL(url).catch((err: Error) => {
-      logger.error("workflow runner window URL load failed", { workflowId, runId, url, error: err.message })
-    })
 
     const windowId = `workflow-runner:${workflowId}`
     if (this.mainWindowManager) {
       this.mainWindowManager.attach({ id: windowId, role: "detail" }, managedBrowserWindow(win, "detail"))
     }
 
-    const health = new RendererHealthService({
-      logger: createMainLogger(`renderer-health.runner.${workflowId}`),
-    })
+    const health = this.createHealthService(`renderer-health.runner.${workflowId}`)
     health.attach(win.webContents)
     this.healthServices.set(windowId, health)
 
@@ -105,6 +90,16 @@ export class WorkflowWindowManager {
       this.runnerWindows.delete(workflowId)
     })
     this.runnerWindows.set(workflowId, win)
+    try {
+      await win.loadURL(url)
+    } catch (err) {
+      logger.error("workflow runner window URL load failed", { workflowId, runId, url, error: err instanceof Error ? err.message : String(err) })
+      this.healthServices.get(windowId)?.detach()
+      this.healthServices.delete(windowId)
+      this.runnerWindows.delete(workflowId)
+      if (!win.isDestroyed()) win.destroy()
+      throw err
+    }
     this.closeEditorWindow(workflowId, "workflow editor window closed after runner opened")
     logger.info("workflow runner window opened", { workflowId, runId })
     return win
@@ -158,5 +153,29 @@ export class WorkflowWindowManager {
       runner.destroy()
     }
     this.runnerWindows.delete(workflowId)
+  }
+
+  private createHealthService(loggerName: string): RendererHealthService {
+    return new RendererHealthService({
+      logger: createMainLogger(loggerName),
+      sendRendererMessage: (target, channel, payload) => {
+        const sent = this.mainWindowManager?.broadcast(channel, payload, (window) => window.id === target.id) ?? 0
+        if (sent === 0) {
+          throw new Error("target window is not managed")
+        }
+      },
+    })
+  }
+
+  private sendToWindow(
+    target: BrowserWindow,
+    channel: string,
+    payload: unknown,
+    meta: Record<string, unknown>,
+  ): void {
+    const sent = this.mainWindowManager?.broadcast(channel, payload, (window) => window.id === target.webContents.id) ?? 0
+    if (sent === 0) {
+      logger.warn("workflow window message skipped", { channel, ...meta })
+    }
   }
 }

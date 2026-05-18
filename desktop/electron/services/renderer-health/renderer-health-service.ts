@@ -16,10 +16,12 @@ interface RendererHealthLogger {
 export interface RendererHealthServiceDeps {
   readonly logger: RendererHealthLogger
   readonly ipcMain?: IpcMain
+  readonly sendRendererMessage?: (target: WebContents, channel: string, payload?: unknown) => void
 }
 
 export class RendererHealthService {
   private readonly logger: RendererHealthLogger
+  private readonly sendRendererMessage: (target: WebContents, channel: string, payload?: unknown) => void
   private webContents: WebContents | null = null
   private intervalTimer: ReturnType<typeof setInterval> | null = null
   private timeoutTimer: ReturnType<typeof setTimeout> | null = null
@@ -31,6 +33,7 @@ export class RendererHealthService {
 
   constructor(deps: RendererHealthServiceDeps) {
     this.logger = deps.logger
+    this.sendRendererMessage = deps.sendRendererMessage ?? defaultRendererMessageSender
   }
 
   attach(webContents: WebContents): void {
@@ -80,7 +83,7 @@ export class RendererHealthService {
     if (!this.webContents || this.webContents.isDestroyed()) return
 
     try {
-      this.webContents.send(DIAGNOSTICS_PING_CHANNEL)
+      this.sendRendererMessage(this.webContents, DIAGNOSTICS_PING_CHANNEL)
     } catch (err) {
       this.logger.warn("心跳发送失败，停止健康检查", { error: String(err) })
       this.detach()
@@ -127,4 +130,12 @@ export class RendererHealthService {
       })
     }
   }
+}
+
+function defaultRendererMessageSender(target: WebContents, channel: string, payload?: unknown): void {
+  if (payload === undefined) {
+    target.send(channel)
+    return
+  }
+  target.send(channel, payload)
 }
