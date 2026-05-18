@@ -162,15 +162,18 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   "workflow.definition.create": async (params, deps) => {
     const result = await deps.workflowService.create()
     if ("errors" in result) throw new Error(`Create failed: ${result.errors.map((e) => e.message).join("; ")}`)
+    let versionHash = result.versionHash
     if (typeof params.name === "string" && params.name) {
       const def = await deps.workflowService.get(result.id)
       if (def) {
         def.name = params.name
-        await deps.workflowService.save(def)
+        const saveResult = await deps.workflowService.save(def)
+        if ("errors" in saveResult) throw new Error(`Save failed: ${(saveResult as WorkflowSaveError).errors.map((e) => e.message).join("; ")}`)
+        versionHash = (saveResult as WorkflowSaveResult).versionHash
       }
     }
-    emitDefinitionUpdated(deps.eventBus, result.id, "mcp", result.versionHash)
-    return { ok: true, data: result }
+    emitDefinitionUpdated(deps.eventBus, result.id, "mcp", versionHash)
+    return { ok: true, data: { id: result.id, versionHash } }
   },
 
   "workflow.definition.update": async (params, deps) => {
