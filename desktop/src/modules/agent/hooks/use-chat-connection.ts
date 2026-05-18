@@ -378,7 +378,6 @@ function useChatConnection(
       ]) })
       dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(current, session.projectId, session.id) })
       clearTimeline()
-      await refresh()
     } catch (rawError) {
       if (requestId !== selectRequestIdRef.current) {
         return
@@ -392,6 +391,16 @@ function useChatConnection(
         errorLength: errorMessage(rawError).length,
       })
       dispatch({ type: "SET_ERROR", error: "创建失败" })
+      return
+    }
+    // Separate error boundary for post-creation refresh. A refresh failure
+    // after a successful create should not be reported as "创建失败".
+    try {
+      await refresh()
+    } catch {
+      // refresh() has its own internal error handling; this catch is a safety
+      // net in case a synchronous error somehow escapes to prevent an
+      // unhandled rejection.
     }
   }, [clearTimeline, dispatch, refresh, selectRequestIdRef, setSelectedSession])
 
