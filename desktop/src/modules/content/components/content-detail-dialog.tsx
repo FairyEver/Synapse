@@ -460,7 +460,9 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction
               disabled={isRepositoryInitializing}
-              onClick={() => void handleDelete()}
+              onClick={() => void handleDelete().catch((error) => {
+                logger.warn("Content delete confirmed but failed.", { error })
+              })}
             >
               删除
             </AlertDialogAction>
