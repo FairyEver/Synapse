@@ -86,6 +86,7 @@ function TaskImportDialog({
           <Checkbox
             checked={allSelected ? true : someSelected ? "indeterminate" : false}
             onCheckedChange={toggleAll}
+            aria-label="全选"
           />
           <span className="text-sm text-muted-foreground">
             已选 {selected.size} 项
