@@ -36,8 +36,8 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
   const [runningId, setRunningId] = useState<string | null>(null)
   // Track a conflict so we can offer "cancel old & start new" instead of just an error toast.
   const [conflictState, setConflictState] = useState<{ def: WorkflowDefinition; params: Record<string, unknown> } | null>(null)
-  // Remember last-used param values so the dialog can pre-fill them on re-run
-  const [lastRunValues, setLastRunValues] = useState<Record<string, string>>({})
+  // Remember last-used param values per workflow so the dialog can pre-fill them on re-run
+  const [lastRunValues, setLastRunValues] = useState<Record<string, Record<string, string>>>({})
 
   // Track the latest run status per workflow so WorkflowCard can show a live badge.
   const [runStates, setRunStates] = useState<Record<string, WorkflowCardRunState>>({})
@@ -233,7 +233,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
             onDelete={() => void handleDelete(meta.id)} />
         ))}
       </div>
-      <RunParamsDialog open={!!runTarget} params={runTarget?.params ?? []} lastValues={lastRunValues} onConfirm={async (params, rawValues) => { setLastRunValues(rawValues); await handleConfirmRun(params).catch(() => {}) }} onCancel={() => setRunTarget(null)} />
+      <RunParamsDialog open={!!runTarget} params={runTarget?.params ?? []} lastValues={runTarget ? lastRunValues[runTarget.id] : undefined} onConfirm={async (params, rawValues) => { if (runTarget) setLastRunValues((prev) => ({ ...prev, [runTarget.id]: rawValues })); await handleConfirmRun(params).catch(() => {}) }} onCancel={() => setRunTarget(null)} />
       <RunHistoryDialog open={!!historyWorkflowId} workflowId={historyWorkflowId ?? ""} onClose={() => setHistoryWorkflowId(null)} />
       <AlertDialog open={!!conflictState} onOpenChange={(o) => { if (!o) setConflictState(null) }}>
         <AlertDialogContent>
