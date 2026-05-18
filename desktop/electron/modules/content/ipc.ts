@@ -378,7 +378,7 @@ export const contentIpcModule: IpcModule = {
       channel: "synapse:content:download",
       request: z.object({ contentType: contentTypeSchema, id: z.string() }),
       response: z.object({ canceled: z.boolean(), filePath: z.string().nullable() }),
-      handler: async (_ctx, args: { contentType: SynapseContentType; id: string }) => {
+      handler: async (ctx, args: { contentType: SynapseContentType; id: string }) => {
         const definition = getContentTypeDefinition(args.contentType)
 
         const detail = await contentService.getDetail(args.contentType, args.id)
@@ -403,6 +403,37 @@ export const contentIpcModule: IpcModule = {
             filePath: null,
           }
         }
+
+        const permissionGuard = ctx.resolve<PermissionGuard>("core.permission-guard")
+        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+        const downloadMetadata = { contentType: args.contentType, contentId: args.id }
+
+        const permission = await permissionGuard.check({
+          action: "fs.write",
+          actor: { kind: "user" },
+          resource: result.filePath,
+          context: downloadMetadata,
+        })
+
+        if (!permission.allowed) {
+          auditSink.record({
+            action: "fs.write",
+            actor: { kind: "user" },
+            resource: result.filePath,
+            outcome: "denied",
+            metadata: downloadMetadata,
+          })
+          logger.warn("Content download permission denied.", { targetPath: result.filePath, ...downloadMetadata })
+          throw new Error("没有写入该位置的权限。")
+        }
+
+        auditSink.record({
+          action: "fs.write",
+          actor: { kind: "user" },
+          resource: result.filePath,
+          outcome: "allowed",
+          metadata: { ...downloadMetadata, fileName: sanitizedFileName },
+        })
 
         logger.info(`Content download started. contentType: ${args.contentType}, contentId: ${args.id}, targetPath: ${result.filePath}`)
         await contentDownloadService.download(args.contentType, args.id, result.filePath)
