@@ -58,12 +58,12 @@ const exportResultSchema = z.object({
   success: z.boolean(),
   filePath: z.optional(z.string()),
   message: z.optional(z.string()),
-})
+}).nullable()
 
 const importResultSchema = z.object({
   success: z.boolean(),
   message: z.optional(z.string()),
-})
+}).nullable()
 
 export const configIpcModule: IpcModule = {
   id: "config",
@@ -109,7 +109,7 @@ export const configIpcModule: IpcModule = {
         logger.info("Handling config.exportBackup request.")
         const result = await configBackupService.exportBackup()
         if (result === null) {
-          return { success: false, message: "用户取消了导出操作。" }
+          return null
         }
         return { success: true, filePath: result.filePath }
       },
@@ -123,7 +123,7 @@ export const configIpcModule: IpcModule = {
         logger.info("Handling config.importBackup request.")
         const result = await configBackupService.importBackup()
         if (result === null) {
-          return { success: false, message: "用户取消了导入操作。" }
+          return null
         }
         return { success: true, message: "配置已成功导入。" }
       },
