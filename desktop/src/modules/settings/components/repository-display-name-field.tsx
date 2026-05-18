@@ -133,7 +133,14 @@ function RepositoryDisplayNameField({
       logger.info("Repository display name saved.", { repositoryUuid })
 
       if (isActiveRepository) {
-        await refreshRepoProfileState()
+        try {
+          await refreshRepoProfileState()
+        } catch (refreshError: unknown) {
+          logger.error("Failed to refresh repo profile state after display name save.", {
+            error: refreshError,
+            repositoryUuid,
+          })
+        }
       }
 
       setIsOpen(false)
