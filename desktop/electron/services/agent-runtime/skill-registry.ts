@@ -46,6 +46,16 @@ export class SkillRegistry {
     for (const filePath of files) {
       let content: string
       try {
+        const stat = await fs.stat(filePath)
+        if (stat.size > MAX_SKILL_FILE_SIZE) {
+          this.deps.logger?.warn("Agent skill file too large, skipped.", {
+            boundary: "agent.skill.file-size",
+            projectId: this.deps.projectId,
+            fileName: path.basename(filePath),
+            fileSize: stat.size,
+          })
+          continue
+        }
         content = await fs.readFile(filePath, "utf8")
       } catch (error) {
         this.deps.logger?.warn("Agent skill file skipped.", {
@@ -126,13 +136,23 @@ function skillDirs(workspacePath: string | undefined): readonly string[] {
   return roots
 }
 
+// Maximum recursion depth for skill file discovery
+const MAX_SKILL_DISCOVERY_DEPTH = 3
+// Maximum number of skill files to discover
+const MAX_SKILL_FILES = 50
+// Maximum single file size for skill file content (64 KB)
+const MAX_SKILL_FILE_SIZE = 64 * 1024
+
 async function listSkillFiles(
   roots: readonly string[],
   onDirectoryError?: (dir: string, error: unknown) => void,
+  maxDepth = MAX_SKILL_DISCOVERY_DEPTH,
+  maxFiles = MAX_SKILL_FILES,
 ): Promise<readonly string[]> {
   const result: string[] = []
   const visited = new Set<string>()
-  async function walk(dir: string): Promise<void> {
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > maxDepth || result.length >= maxFiles) return
     let realDir: string
     try {
       realDir = await fs.realpath(dir)
@@ -151,15 +171,16 @@ async function listSkillFiles(
       return
     }
     for (const entry of entries) {
+      if (result.length >= maxFiles) break
       const next = path.join(realDir, entry.name)
       if (entry.isDirectory()) {
-        await walk(next)
+        await walk(next, depth + 1)
       } else if (entry.isFile() && entry.name === "SKILL.md") {
         result.push(next)
       }
     }
   }
-  for (const root of roots) await walk(root)
+  for (const root of roots) await walk(root, 0)
   return result
 }
 

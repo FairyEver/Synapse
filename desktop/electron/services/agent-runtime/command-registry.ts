@@ -173,6 +173,17 @@ export class CustomCommandRegistry {
         if (!name) continue
         let content: string
         try {
+          const stat = await fs.stat(filePath)
+          if (stat.size > MAX_COMMAND_FILE_SIZE) {
+            this.deps.logger?.warn("Agent command file too large, skipped.", {
+              boundary: "agent.command.file-size",
+              projectId: this.deps.projectId,
+              commandName: name,
+              fileName: path.basename(filePath),
+              fileSize: stat.size,
+            })
+            continue
+          }
           content = await fs.readFile(filePath, "utf8")
         } catch (error) {
           this.deps.logger?.warn("Agent command file skipped.", {
@@ -275,12 +286,22 @@ function commandDirs(workspacePath: string | undefined): readonly string[] {
   return roots
 }
 
+// Maximum recursion depth for command file discovery
+const MAX_COMMAND_DISCOVERY_DEPTH = 3
+// Maximum number of command files to discover
+const MAX_COMMAND_FILES = 100
+// Maximum single file size for command file content (64 KB)
+const MAX_COMMAND_FILE_SIZE = 64 * 1024
+
 async function listMarkdownFiles(
   root: string,
   onDirectoryError?: (dir: string, error: unknown) => void,
+  maxDepth = MAX_COMMAND_DISCOVERY_DEPTH,
+  maxFiles = MAX_COMMAND_FILES,
 ): Promise<readonly string[]> {
   const result: string[] = []
-  async function walk(dir: string): Promise<void> {
+  async function walk(dir: string, depth: number): Promise<void> {
+    if (depth > maxDepth || result.length >= maxFiles) return
     let entries: Dirent[]
     try {
       entries = await fs.readdir(dir, { withFileTypes: true })
@@ -289,15 +310,16 @@ async function listMarkdownFiles(
       return
     }
     for (const entry of entries) {
+      if (result.length >= maxFiles) break
       const next = path.join(dir, entry.name)
       if (entry.isDirectory()) {
-        await walk(next)
+        await walk(next, depth + 1)
       } else if (entry.isFile() && entry.name.toLowerCase().endsWith(".md")) {
         result.push(next)
       }
     }
   }
-  await walk(root)
+  await walk(root, 0)
   return result
 }
 
