@@ -198,45 +198,57 @@ function FeishuConnectorPanel({
 
   const handleBeginSetup = useCallback(async () => {
     if (!projectId || !feishu) return
-    const result = await promise(
-      () => feishu.beginSetup(projectId),
-      {
-        loading: "正在创建二维码...",
-        success: "二维码已创建。",
-      },
-    )
-    setSetup(result)
+    try {
+      const result = await promise(
+        () => feishu.beginSetup(projectId),
+        {
+          loading: "正在创建二维码...",
+          success: "二维码已创建。",
+        },
+      )
+      setSetup(result)
+    } catch {
+      // Error already shown by promise()
+    }
   }, [feishu, projectId, promise])
 
   const handleSaveSetup = useCallback(async () => {
     if (!setup || !feishu) return
-    await promise(
-      () => feishu.saveSetup(setup.setupId),
-      {
-        loading: "正在保存飞书连接器...",
-        success: "飞书已保存。",
-      },
-    )
-    setSetup(null)
-    await notifyConnectorChanged()
+    try {
+      await promise(
+        () => feishu.saveSetup(setup.setupId),
+        {
+          loading: "正在保存飞书连接器...",
+          success: "飞书已保存。",
+        },
+      )
+      setSetup(null)
+      await notifyConnectorChanged()
+    } catch {
+      // Error already shown by promise()
+    }
   }, [feishu, notifyConnectorChanged, promise, setup])
 
   const handleSaveManual = useCallback(async () => {
     if (!projectId || !feishu) return
-    await promise(
-      () => feishu.saveManualCredentials({
-        projectId,
-        appId: manualAppId,
-        appSecret: manualAppSecret,
-        ownerOpenId: manualOwnerOpenId || undefined,
-      }),
-      {
-        loading: "正在保存飞书连接器...",
-        success: "飞书已保存。",
-      },
-    )
-    setManualAppSecret("")
-    await notifyConnectorChanged()
+    try {
+      await promise(
+        () => feishu.saveManualCredentials({
+          projectId,
+          appId: manualAppId,
+          appSecret: manualAppSecret,
+          ownerOpenId: manualOwnerOpenId || undefined,
+        }),
+        {
+          loading: "正在保存飞书连接器...",
+          success: "飞书已保存。",
+        },
+      )
+      setManualAppSecret("")
+      await notifyConnectorChanged()
+    } catch {
+      // Error already shown by promise()
+    }
   }, [
     feishu,
     manualAppId,
@@ -249,72 +261,92 @@ function FeishuConnectorPanel({
 
   const handleStart = useCallback(async () => {
     if (!projectId || !feishu) return
-    const result = await promise(
-      () => feishu.start(projectId),
-      {
-        loading: "正在连接飞书...",
-        success: "飞书已连接。",
-      },
-    )
-    setStatus(result)
-    onConnectorChange?.()
+    try {
+      const result = await promise(
+        () => feishu.start(projectId),
+        {
+          loading: "正在连接飞书...",
+          success: "飞书已连接。",
+        },
+      )
+      setStatus(result)
+      onConnectorChange?.()
+    } catch {
+      // Error already shown by promise()
+    }
   }, [feishu, onConnectorChange, projectId, promise])
 
   const handleStop = useCallback(async () => {
     if (!projectId || !feishu) return
-    const result = await promise(
-      () => feishu.stop(projectId),
-      {
-        loading: "正在断开飞书...",
-        success: "飞书已断开。",
-      },
-    )
-    setStatus(result)
-    onConnectorChange?.()
+    try {
+      const result = await promise(
+        () => feishu.stop(projectId),
+        {
+          loading: "正在断开飞书...",
+          success: "飞书已断开。",
+        },
+      )
+      setStatus(result)
+      onConnectorChange?.()
+    } catch {
+      // Error already shown by promise()
+    }
   }, [feishu, onConnectorChange, projectId, promise])
 
   const handleChooseBaseDir = useCallback(async () => {
-    const selectedPath = await window.synapse?.repository.chooseDirectory()
-    if (selectedPath) {
-      setWorkspaceConfig((current) => ({ ...current, baseDir: selectedPath }))
+    try {
+      const selectedPath = await window.synapse?.repository.chooseDirectory()
+      if (selectedPath) {
+        setWorkspaceConfig((current) => ({ ...current, baseDir: selectedPath }))
+      }
+    } catch {
+      // Dialog cancelled or bridge unavailable
     }
   }, [])
 
   const handleSaveWorkspaceConfig = useCallback(async () => {
     if (!projectId || !feishu) return
-    const saved = await promise(
-      () => feishu.updateWorkspaceConfig({
-        projectId,
-        enabled: workspaceConfig.enabled,
-        baseDir: workspaceConfig.baseDir,
-        autoBindByChannelName: workspaceConfig.autoBindByChannelName,
-        idleTimeoutMs: workspaceConfig.idleTimeoutMs,
-      }),
-      {
-        loading: "正在保存目录规则...",
-        success: "目录规则已保存。",
-      },
-    )
-    setWorkspaceConfig(saved)
-    await refreshWorkspace()
+    try {
+      const saved = await promise(
+        () => feishu.updateWorkspaceConfig({
+          projectId,
+          enabled: workspaceConfig.enabled,
+          baseDir: workspaceConfig.baseDir,
+          autoBindByChannelName: workspaceConfig.autoBindByChannelName,
+          idleTimeoutMs: workspaceConfig.idleTimeoutMs,
+        }),
+        {
+          loading: "正在保存目录规则...",
+          success: "目录规则已保存。",
+        },
+      )
+      setWorkspaceConfig(saved)
+      await refreshWorkspace()
+    } catch {
+      // Error already shown by promise()
+    }
   }, [feishu, projectId, promise, refreshWorkspace, workspaceConfig])
 
   const handleUnbindWorkspace = useCallback(async (
     binding: SynapseFeishuWorkspaceBinding,
   ) => {
     if (!projectId || !feishu) return
-    await promise(
-      () => feishu.unbindWorkspaceBinding({
-        projectId,
-        scope: binding.scope,
-        channelKey: binding.channelKey,
-      }),
-      {
-        loading: "正在解绑...",
-        success: "已解绑。",
-      },
-    )
-    await refreshWorkspace()
+    try {
+      await promise(
+        () => feishu.unbindWorkspaceBinding({
+          projectId,
+          scope: binding.scope,
+          channelKey: binding.channelKey,
+        }),
+        {
+          loading: "正在解绑...",
+          success: "已解绑。",
+        },
+      )
+      await refreshWorkspace()
+    } catch {
+      // Error already shown by promise()
+    }
   }, [feishu, projectId, promise, refreshWorkspace])
 
   const connector = status?.connector
