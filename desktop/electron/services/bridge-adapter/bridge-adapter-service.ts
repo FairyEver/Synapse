@@ -473,6 +473,7 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
         requestId: permission.requestId,
         behavior: permission.behavior,
         actor: { kind: "user", id: `bridge:${adapter.platform}` },
+        sessionKey: action.session_key,
       })
       this.recordAdapterAudit("allowed", adapter.platform, "card_action", {
         projectId: project.projectId,

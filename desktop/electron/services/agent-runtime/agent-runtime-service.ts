@@ -568,6 +568,9 @@ export class AgentRuntimeService {
     if (!pending) {
       throw new Error(`Permission request "${request.requestId}" is not pending`)
     }
+    if (request.sessionKey !== undefined && request.sessionKey !== pending.sessionKey) {
+      throw new Error(`Session key mismatch: the request's session does not own this permission`)
+    }
 
     const action = permissionActionForTool(pending.toolName)
     const resource = pending.toolInput ?? pending.toolName

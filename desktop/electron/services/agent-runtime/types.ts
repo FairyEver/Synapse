@@ -200,6 +200,7 @@ export interface AgentPermissionDecision {
 export interface AgentPermissionResponseRequest extends AgentPermissionDecision {
   readonly requestId: string
   readonly actor: ActorIdentity
+  readonly sessionKey?: string
 }
 
 export interface AgentPendingPermission {
