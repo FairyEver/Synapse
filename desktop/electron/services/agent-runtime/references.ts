@@ -194,7 +194,7 @@ async function readReferenceFile(reference: LocalReference, maxBytes: number = M
   }
 }
 
-async function isResolvedInsideWorkspace(
+export async function isResolvedInsideWorkspace(
   reference: LocalReference,
   workspacePath: string,
 ): Promise<boolean> {
