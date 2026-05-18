@@ -237,7 +237,16 @@ function ContentInstallDialog({
         scope,
         targetPath: result.targetPath,
       })
-      await onInstalled?.()
+      try {
+        await onInstalled?.()
+      } catch (refreshError) {
+        logger.warn("Post-install refresh failed; install itself succeeded.", {
+          contentId: item.id,
+          contentType: item.type,
+          editorId: editor.id,
+          error: refreshError,
+        })
+      }
       setIsRuleProjectInstallFormOpen(false)
       onOpenChange(false)
     } catch (error) {
