@@ -699,11 +699,12 @@ class LineEmitter {
 }
 
 let cachedShellPath: string | null = null
-let shellPathResolveFailed = false
+let lastShellPathFailedAt = 0
+const SHELL_PATH_RETRY_MS = 30_000
 
 function resolveShellPath(): string | null {
   if (cachedShellPath) return cachedShellPath
-  if (shellPathResolveFailed) return null
+  if (lastShellPathFailedAt > 0 && Date.now() - lastShellPathFailedAt < SHELL_PATH_RETRY_MS) return null
 
   if (process.platform === "win32") {
     cachedShellPath = process.env.PATH ?? ""
@@ -728,7 +729,7 @@ function resolveShellPath(): string | null {
     // Shell PATH resolution failed; fall back to process.env.PATH.
   }
 
-  shellPathResolveFailed = true
+  lastShellPathFailedAt = Date.now()
   return null
 }
 
