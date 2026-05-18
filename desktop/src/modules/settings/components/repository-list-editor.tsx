@@ -165,7 +165,7 @@ function RepositoryListEditor({
 
     const validationResult = await validateDirectory(localPath)
     if (!validationResult.isValid) {
-      logger.warn("Chosen repository directory failed validation.", { localPath, message: validationResult.message })
+      logger.warn("Chosen repository directory failed validation.", { message: validationResult.message })
       setFormError(validationResult.message)
       return
     }
@@ -207,7 +207,7 @@ function RepositoryListEditor({
       return
     }
 
-    logger.info("New repository parent path selected.", { selectedPath })
+    logger.info("New repository parent path selected.", { dirName: selectedPath.split(/[/\\]/).pop() ?? selectedPath })
     setNewRepositoryParentPath(selectedPath)
     setCreateRepositoryError(null)
   }
@@ -289,7 +289,7 @@ function RepositoryListEditor({
       return
     }
 
-    logger.info("Repository edit directory selected.", { selectedPath })
+    logger.info("Repository edit directory selected.", { dirName: selectedPath.split(/[/\\]/).pop() ?? selectedPath })
     setEditPath(selectedPath)
     setEditError(null)
   }
