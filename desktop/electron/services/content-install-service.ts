@@ -196,7 +196,7 @@ export class ContentInstallService {
                 await rename(target.targetPath, backupPath)
                 backupPathForRestore = backupPath
               } catch (error) {
-                logger.warn("Failed to backup existing skill directory", { targetPath: target.targetPath, error })
+                logger.warn("Failed to backup existing skill directory", { targetPath: path.basename(target.targetPath), error })
                 throw new Error("备份旧 Skill 失败，未替换目标。")
               }
             }
@@ -219,7 +219,7 @@ export class ContentInstallService {
                 repositoryRootPath: repositoryRootPath ?? "",
                 writeTextFile: async (filePath, content) => {
                   await writeFile(filePath, content.endsWith("\n") ? content : `${content}\n`, "utf8")
-                  logger.info("Staged skill file.", { filePath })
+                  logger.info("Staged skill file.", { filePath: path.basename(filePath) })
                 },
                 copyAttachment: async (attachment, attachmentTargetPath) => {
                   if (detail.source === "builtin") {
@@ -241,7 +241,7 @@ export class ContentInstallService {
                     )
                   }
                   logger.info("Staged skill attachment.", {
-                    filePath: attachmentTargetPath,
+                    filePath: path.basename(attachmentTargetPath),
                     originalName: attachment.originalName,
                   })
                 },
@@ -254,8 +254,8 @@ export class ContentInstallService {
                 await rename(backupPathForRestore, target.targetPath)
               } catch (restoreError) {
                 logger.warn("Failed to restore backed up skill directory", {
-                  backupPath: backupPathForRestore,
-                  targetPath: target.targetPath,
+                  backupPath: path.basename(backupPathForRestore),
+                  targetPath: path.basename(target.targetPath),
                   error: restoreError,
                 })
               }
@@ -294,7 +294,7 @@ export class ContentInstallService {
       editorId: payload.editorId,
       scope: payload.scope,
       targetKind: target.targetKind,
-      targetPath: target.targetPath,
+      targetPath: path.basename(target.targetPath),
     })
 
     return {
