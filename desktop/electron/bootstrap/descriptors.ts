@@ -612,19 +612,34 @@ export const providerServiceDescriptor: ServiceDescriptor<ProviderService> = {
               const def = await workflowService.get(meta.id) as Record<string, unknown> | null
               if (!def) continue
               const defNodes = (def as { nodes?: Array<{ id: string; name: string; config: Record<string, unknown> }> }).nodes
-              if (!defNodes) continue
-              for (const node of defNodes) {
-                const config = node.config
-                if (typeof config.providerId === "string" && config.providerId) {
-                  nodes.push({
-                    workflowId: (def as { id: string }).id,
-                    workflowName: (def as { name: string }).name,
-                    nodeId: node.id,
-                    nodeName: node.name,
-                    providerId: config.providerId,
-                    modelTier: typeof config.modelTier === "string" ? config.modelTier : "default",
-                  })
+              if (defNodes) {
+                for (const node of defNodes) {
+                  const config = node.config
+                  if (typeof config.providerId === "string" && config.providerId) {
+                    nodes.push({
+                      workflowId: (def as { id: string }).id,
+                      workflowName: (def as { name: string }).name,
+                      nodeId: node.id,
+                      nodeName: node.name,
+                      providerId: config.providerId,
+                      modelTier: typeof config.modelTier === "string" ? config.modelTier : "default",
+                    })
+                  }
                 }
+              }
+              // Workflow-level default provider — not captured by per-node config scan above
+              const defaultProviderId = (def as { defaultProviderId?: string }).defaultProviderId
+              if (defaultProviderId) {
+                nodes.push({
+                  workflowId: (def as { id: string }).id,
+                  workflowName: (def as { name: string }).name,
+                  nodeId: "",
+                  nodeName: "工作流默认供应商",
+                  providerId: defaultProviderId,
+                  modelTier: typeof (def as { defaultModelTier?: string }).defaultModelTier === "string"
+                    ? (def as { defaultModelTier?: string }).defaultModelTier!
+                    : "default",
+                })
               }
             }
             return nodes
