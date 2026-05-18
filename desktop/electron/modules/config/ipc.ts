@@ -260,6 +260,8 @@ export const configIpcModule: IpcModule = {
         const userDataPath = app.getPath("userData")
         const entries = await readdir(userDataPath, { withFileTypes: true })
 
+        const failedEntries: string[] = []
+
         for (const entry of entries) {
           if (shouldPreserveOnReset(entry.name)) {
             continue
@@ -274,8 +276,16 @@ export const configIpcModule: IpcModule = {
               await unlink(entryPath)
             }
           } catch {
-            // Best effort — some files may be locked by Chromium.
+            failedEntries.push(entry.name)
+            logger.warn("Failed to delete entry during app reset.", { entryName: entry.name })
           }
+        }
+
+        if (failedEntries.length > 0) {
+          logger.warn("App reset completed with some entries not deleted.", {
+            failedCount: failedEntries.length,
+            failedEntries,
+          })
         }
 
         app.relaunch()
