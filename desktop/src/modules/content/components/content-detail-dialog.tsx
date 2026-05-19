@@ -289,7 +289,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
     resolvedItem.createdByDisplayName,
   )
 
-  const handleSave = async (payload: TPayload, force = false) => {
+  const handleSave = async (payload: TPayload, force = false, baseHistoryDirnameOverride?: string) => {
     if (!detail || isSaving) {
       return
     }
@@ -322,7 +322,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
         const updatePayload: SynapseUpdateContentPayload<typeof item.type> = {
           ...serializedPayload as SynapseUpdateContentPayload<typeof item.type>,
           id: detail.id,
-          baseHistoryDirname: detail.latestHistoryDirname,
+          baseHistoryDirname: baseHistoryDirnameOverride ?? detail.latestHistoryDirname,
           force,
         }
         const result = await manager.updateContent(contentType, updatePayload)
@@ -371,7 +371,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
     })
   }
 
-  const handleDelete = async (force = false) => {
+  const handleDelete = async (force = false, baseHistoryDirnameOverride?: string) => {
     logger.info(`${labels.singular} delete initiated from detail dialog.`, {
       contentId: deleteTarget.id,
       contentType,
@@ -381,7 +381,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
       () => manager.deleteContent({
         id: deleteTarget.id,
         type: deleteTarget.type,
-        baseHistoryDirname: deleteTarget.latestHistoryDirname,
+        baseHistoryDirname: baseHistoryDirnameOverride ?? deleteTarget.latestHistoryDirname,
         force,
       }),
       {
@@ -426,12 +426,12 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
     setConflictState(null)
 
     if (nextConflictState.mode === "delete") {
-      await handleDelete(true)
+      await handleDelete(true, nextConflictState.latestHistoryDirname)
       return
     }
 
     try {
-      await handleSave(nextConflictState.payload, true)
+      await handleSave(nextConflictState.payload, true, nextConflictState.latestHistoryDirname)
     } catch {
       // Error handled by notification system
     }
