@@ -9,6 +9,9 @@
 
 import type { ProjectContainerRegistry } from "./types"
 import { makeUnrefInterval } from "../lib"
+import { createMainLogger } from "../../services/log-store"
+
+const logger = createMainLogger("runtime.idle-reaper")
 
 export interface IdleReaperOptions {
   readonly idleTimeoutMs?: number
@@ -54,7 +57,15 @@ export class IdleReaper {
       const last = this.lastActiveAt.get(entry.projectId)
         ?? new Date(entry.openedAt).getTime()
       if (last < horizon) {
-        await this.registry.close(entry.projectId)
+        try {
+          await this.registry.close(entry.projectId)
+        } catch (error) {
+          logger.error("Failed to close idle project container.", {
+            projectId: entry.projectId,
+            error,
+          })
+          continue
+        }
         this.lastActiveAt.delete(entry.projectId)
       }
     }
