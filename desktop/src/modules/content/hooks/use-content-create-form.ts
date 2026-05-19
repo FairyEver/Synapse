@@ -183,7 +183,8 @@ function useContentCreateForm<T extends Record<string, unknown>>(
       await onSubmit(normalize(target))
       onOpenChange(false)
     } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : errorFallbackMessage)
+      const message = error instanceof Error ? error.message : errorFallbackMessage
+      if (message) setSubmitError(message)
     } finally {
       setIsSubmitting(false)
     }

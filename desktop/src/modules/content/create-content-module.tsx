@@ -135,7 +135,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
         },
       ).catch(() => undefined)
       if (result?.status !== "saved") {
-        return
+        throw new Error("")
       }
     }
 
