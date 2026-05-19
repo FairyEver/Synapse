@@ -173,10 +173,9 @@ function useContentDetailState<T extends SynapseContentType>({
     ) {
       if (detail) {
         setDisplayedVersion(buildCurrentVersion(detail))
+        setPreviewError(null)
+        setIsLoading(false)
       }
-
-      setPreviewError(null)
-      setIsLoading(false)
       return
     }
 
