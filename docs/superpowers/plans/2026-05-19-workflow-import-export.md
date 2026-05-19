@@ -953,7 +953,7 @@ git commit -m "feat: add workflow package ipc"
 - Modify: `desktop/src/types/bridge.ts`
 - Test: `pnpm --filter @synapse/desktop run typecheck`
 
-- [ ] **Step 1: Add bridge type methods**
+- [x] **Step 1: Add bridge type methods**
 
 In `desktop/src/types/bridge.ts`, extend `workflow`:
 
@@ -963,7 +963,7 @@ inspectImportPackage: () => Promise<WorkflowImportPreview | null>
 importPackage: (packagePath: string, mappings: WorkflowModelMapping[]) => Promise<{ workflowId: string; versionHash: string } | { errors: ValidationError[] }>
 ```
 
-- [ ] **Step 2: Add preload channel constants and bridge functions**
+- [x] **Step 2: Add preload channel constants and bridge functions**
 
 In `desktop/electron/preload.ts`, add workflow channel entries:
 
@@ -983,7 +983,7 @@ importPackage: (packagePath: string, mappings) =>
   invoke(IPC_CHANNELS.workflow.importPackage)({ packagePath, mappings }),
 ```
 
-- [ ] **Step 3: Update generated IPC channels**
+- [x] **Step 3: Update generated IPC channels**
 
 In `desktop/electron/generated/ipc-channels.generated.ts`, add matching workflow channel entries:
 
@@ -995,7 +995,7 @@ In `desktop/electron/generated/ipc-channels.generated.ts`, add matching workflow
 
 If the repo has a working generator script, use it instead of hand-editing this generated file. If no obvious generator command exists, hand-edit to keep preload and generated channels aligned.
 
-- [ ] **Step 4: Run typecheck**
+- [x] **Step 4: Run typecheck**
 
 Run:
 
@@ -1005,7 +1005,9 @@ pnpm --filter @synapse/desktop run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+Actual: renderer/main type checks advanced after local fixes, but full `typecheck` remains blocked by existing `tsconfig.test` errors in agent-runtime/network tests and a stale `src/runtime/i18n` test import.
+
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/electron/preload.ts desktop/electron/generated/ipc-channels.generated.ts desktop/src/types/bridge.ts

@@ -186,6 +186,9 @@ const IPC_CHANNELS = {
     "renew": "synapse:license:renew",
   },
   "workflow": {
+    "exportPackageData": "synapse:workflow:export-package-data",
+    "inspectImportPackageData": "synapse:workflow:inspect-import-package-data",
+    "importPackageData": "synapse:workflow:import-package-data",
     "list": "synapse:workflow:list",
     "get": "synapse:workflow:get",
     "create": "synapse:workflow:create",
@@ -202,6 +205,9 @@ const IPC_CHANNELS = {
     "openEditor": "synapse:workflow:open-editor",
     "editorState": "synapse:workflow:editor-state",
     "checkCanSync": "synapse:workflow:check-can-sync",
+    "exportPackage": "synapse:workflow:export-package",
+    "inspectImportPackage": "synapse:workflow:inspect-import-package",
+    "importPackage": "synapse:workflow:import-package",
     "event": "synapse:workflow:event",
   },
   "usage-analysis": {
@@ -727,6 +733,11 @@ const synapseBridge: SynapseBridge = {
     openEditor: (id: string, runId?: string) => invoke(IPC_CHANNELS.workflow.openEditor)({ id, runId }),
     editorState: invoke(IPC_CHANNELS.workflow.editorState),
     checkCanSync: invoke(IPC_CHANNELS.workflow.checkCanSync),
+    exportPackage: (workflowId: string, workflowName?: string) =>
+      invoke(IPC_CHANNELS.workflow.exportPackage)({ workflowId, workflowName }),
+    inspectImportPackage: () => invoke(IPC_CHANNELS.workflow.inspectImportPackage)(),
+    importPackage: (packagePath: string, mappings) =>
+      invoke(IPC_CHANNELS.workflow.importPackage)({ packagePath, mappings }),
     onEvent: (listener) =>
       subscribe("synapse:events:workflow")((domainEvent) => {
         listener((domainEvent as DomainEvent).payload as WorkflowEvent)

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
 import type { WorkflowModelMapping } from "../../../src/types/workflow-package"
+import type { CCProvider } from "../provider/types"
 import { WorkflowPackageService } from "../workflow/workflow-package-service"
 
 const nowIso = "2026-05-19T10:00:00.000Z"
@@ -55,7 +56,7 @@ function createService() {
     }),
   }
   const providerService = {
-    listProviders: vi.fn(async () => [
+    listProviders: vi.fn(async (): Promise<CCProvider[]> => [
       {
         id: "provider-deepseek",
         name: "DeepSeek",
