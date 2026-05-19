@@ -6,7 +6,7 @@ import {
   X,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { FieldError } from "@/components/ui/field"
+import { Field, FieldContent, FieldError, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
@@ -263,114 +263,126 @@ function SkillCreateDialog({
   }
 
   const titleField = (
-    <div className="min-w-0 flex flex-col gap-2">
-      <Label htmlFor="skill-create-title">中文名称</Label>
-      <Input
-        id="skill-create-title"
-        value={form.title}
-        aria-invalid={errors.title ? "true" : undefined}
-        onChange={(event) => updateField("title", event.target.value)}
-        placeholder="API 文档生成助手"
-      />
-      <FieldError>{errors.title}</FieldError>
-    </div>
+    <Field className="min-w-0" data-invalid={errors.title ? true : undefined}>
+      <FieldLabel htmlFor="skill-create-title">中文名称</FieldLabel>
+      <FieldContent>
+        <Input
+          id="skill-create-title"
+          value={form.title}
+          aria-invalid={errors.title ? "true" : undefined}
+          onChange={(event) => updateField("title", event.target.value)}
+          placeholder="API 文档生成助手"
+        />
+        <FieldError>{errors.title}</FieldError>
+      </FieldContent>
+    </Field>
   )
 
   const nameField = (
-    <div className="min-w-0 flex flex-col gap-2">
-      <Label htmlFor="skill-create-name">名称</Label>
-      <Input
-        id="skill-create-name"
-        value={form.name}
-        aria-invalid={errors.name ? "true" : undefined}
-        className="font-mono"
-        onChange={(event) => updateField("name", event.target.value)}
-        placeholder="my-skill-name"
-      />
-      <p className="text-xs text-muted-foreground">小写字母、数字、连字符、点号，3-50 字符。安装到编辑器时用作文件名。</p>
-      <FieldError>{errors.name}</FieldError>
-    </div>
+    <Field className="min-w-0" data-invalid={errors.name ? true : undefined}>
+      <FieldLabel htmlFor="skill-create-name">名称</FieldLabel>
+      <FieldContent>
+        <Input
+          id="skill-create-name"
+          value={form.name}
+          aria-invalid={errors.name ? "true" : undefined}
+          className="font-mono"
+          onChange={(event) => updateField("name", event.target.value)}
+          placeholder="my-skill-name"
+        />
+        <p className="text-xs text-muted-foreground">小写字母、数字、连字符、点号，3-50 字符。安装到编辑器时用作文件名。</p>
+        <FieldError>{errors.name}</FieldError>
+      </FieldContent>
+    </Field>
   )
 
   const categoryField = (
-    <div className="min-w-0 flex flex-col gap-2">
-      <Label htmlFor="skill-create-category">分类</Label>
-      <Select
-        data-track="skill-category-select"
-        value={form.category}
-        onValueChange={(value) => updateField("category", value)}
-      >
-        <SelectTrigger
-          id="skill-create-category"
-          aria-invalid={errors.category ? "true" : undefined}
-          className="w-full"
+    <Field className="min-w-0" data-invalid={errors.category ? true : undefined}>
+      <FieldLabel htmlFor="skill-create-category">分类</FieldLabel>
+      <FieldContent>
+        <Select
+          data-track="skill-category-select"
+          value={form.category}
+          onValueChange={(value) => updateField("category", value)}
         >
-          <SelectValue placeholder="选择分类" />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectGroup>
-            {categoryOptions.map((category) => (
-              <SelectItem key={category.id} value={category.id}>
-                {category.label}
-              </SelectItem>
-            ))}
-          </SelectGroup>
-        </SelectContent>
-      </Select>
-      <FieldError>{errors.category}</FieldError>
-    </div>
+          <SelectTrigger
+            id="skill-create-category"
+            aria-invalid={errors.category ? "true" : undefined}
+            className="w-full"
+          >
+            <SelectValue placeholder="选择分类" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectGroup>
+              {categoryOptions.map((category) => (
+                <SelectItem key={category.id} value={category.id}>
+                  {category.label}
+                </SelectItem>
+              ))}
+            </SelectGroup>
+          </SelectContent>
+        </Select>
+        <FieldError>{errors.category}</FieldError>
+      </FieldContent>
+    </Field>
   )
 
   const usageField = (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor="skill-create-usage">使用说明</Label>
-      <Textarea
-        id="skill-create-usage"
-        value={form.usage ?? ""}
-        onChange={(event) => updateField("usage", event.target.value)}
-        placeholder="输入 /my-skill 触发，适用于..."
-        rows={2}
-        className="min-h-0 resize-none"
-      />
-      <p className="text-xs text-muted-foreground">
-        显示在详情头部，不会安装到编辑器。
-      </p>
-    </div>
+    <Field>
+      <FieldLabel htmlFor="skill-create-usage">使用说明</FieldLabel>
+      <FieldContent>
+        <Textarea
+          id="skill-create-usage"
+          value={form.usage ?? ""}
+          onChange={(event) => updateField("usage", event.target.value)}
+          placeholder="输入 /my-skill 触发，适用于..."
+          rows={2}
+          className="min-h-0 resize-none"
+        />
+        <p className="text-xs text-muted-foreground">
+          显示在详情头部，不会安装到编辑器。
+        </p>
+      </FieldContent>
+    </Field>
   )
 
   const descriptionField = (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor="skill-create-description">简介</Label>
-      <Textarea
-        id="skill-create-description"
-        value={form.description}
-        aria-invalid={errors.description ? "true" : undefined}
-        onChange={(event) => updateField("description", event.target.value)}
-        placeholder="自动整理 API 文档"
-        rows={2}
-        className="min-h-0 resize-none"
-      />
-      <p className="text-xs text-muted-foreground">
-        安装到编辑器时，这段简介会作为 skill 描述一并写入。
-      </p>
-      <FieldError>{errors.description}</FieldError>
-    </div>
+    <Field data-invalid={errors.description ? true : undefined}>
+      <FieldLabel htmlFor="skill-create-description">简介</FieldLabel>
+      <FieldContent>
+        <Textarea
+          id="skill-create-description"
+          value={form.description}
+          aria-invalid={errors.description ? "true" : undefined}
+          onChange={(event) => updateField("description", event.target.value)}
+          placeholder="自动整理 API 文档"
+          rows={2}
+          className="min-h-0 resize-none"
+        />
+        <p className="text-xs text-muted-foreground">
+          安装到编辑器时，这段简介会作为 skill 描述一并写入。
+        </p>
+        <FieldError>{errors.description}</FieldError>
+      </FieldContent>
+    </Field>
   )
 
   const contentField = (
-    <div className="flex flex-col gap-2">
-      <Label htmlFor="skill-create-content">主说明</Label>
-      <Textarea
-        id="skill-create-content"
-        value={form.content}
-        aria-invalid={errors.content ? "true" : undefined}
-        className="min-h-0"
-        onChange={(event) => updateField("content", event.target.value)}
-        placeholder="输入 Skill 的主说明。"
-        rows={5}
-      />
-      <FieldError>{errors.content}</FieldError>
-    </div>
+    <Field data-invalid={errors.content ? true : undefined}>
+      <FieldLabel htmlFor="skill-create-content">主说明</FieldLabel>
+      <FieldContent>
+        <Textarea
+          id="skill-create-content"
+          value={form.content}
+          aria-invalid={errors.content ? "true" : undefined}
+          className="min-h-0"
+          onChange={(event) => updateField("content", event.target.value)}
+          placeholder="输入 Skill 的主说明。"
+          rows={5}
+        />
+        <FieldError>{errors.content}</FieldError>
+      </FieldContent>
+    </Field>
   )
 
   const totalAttachmentSize = useMemo(
