@@ -50,6 +50,7 @@ export class WorkflowEngine {
     abortSignal?: AbortSignal,
     projectId?: string,
     triggerSource?: string,
+    actor?: { kind: string; id?: string; display?: string },
   ): Promise<WorkflowRunResult> {
     const effectiveAbortSignal = abortSignal ?? this.abortSignal ?? new AbortController().signal
     if (effectiveAbortSignal.aborted) {
@@ -192,7 +193,7 @@ export class WorkflowEngine {
 
           const execResult = await executor.execute({
             config: cfg, resolvedVariables: resolved,
-            context: { projectId: effectiveProjectId, runId, abortSignal: effectiveAbortSignal },
+            context: { projectId: effectiveProjectId, runId, abortSignal: effectiveAbortSignal, actor },
             agentDeps: this.agentDeps,
             runtimeDeps: this.runtimeDeps,
             onProgress: (phase, label) => {

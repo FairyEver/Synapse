@@ -26,6 +26,7 @@ export interface WorkflowRuntimeContext {
   projectId: string
   runId: string
   abortSignal: AbortSignal
+  actor?: { kind: string; id?: string; display?: string }
 }
 
 export interface AgentSendDeps {

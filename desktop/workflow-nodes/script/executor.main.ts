@@ -35,7 +35,7 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
           timeoutMins: config.timeoutMins,
         },
         context: {
-          actor: { kind: "system" as const, id: "workflow-engine" },
+          actor: context.actor ?? { kind: "system" as const, id: "workflow-engine" },
           taskId: context.runId,
           runId: context.runId,
           cwd: homedir(),

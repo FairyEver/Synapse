@@ -215,7 +215,7 @@ function startRunWithLifecycle(options: RunLifecycleOptions): string {
       abortMap,
       runStatuses,
     })
-  }, ac.signal, projectId, triggerSource).catch((err) => {
+  }, ac.signal, projectId, triggerSource, { kind: "user", id: "local-user", display: "User" }).catch((err) => {
     handleEngineRejection({
       err,
       def,
