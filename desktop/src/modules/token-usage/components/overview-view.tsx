@@ -1,8 +1,6 @@
 import { useState } from "react"
 import { StackedBarChart } from "./stacked-bar-chart"
-import { formatTokens, formatCost, formatPercent, formatCacheRatio } from "../lib/format"
-import { getProviderColorClassName } from "../lib/colors"
-import { cn } from "@/lib/utils"
+import { formatTokens, formatCost, formatCacheRatio } from "../lib/format"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import type { GraphResult, HourlyRow } from "../hooks/use-token-usage"
 
@@ -23,25 +21,14 @@ export function OverviewView({ graphResult, hourlyRows = [] }: OverviewViewProps
     )
   }
 
-  const modelMap = new Map<string, { providerId: string; tokens: number; cost: number }>()
   let totalCacheRead = 0
   let totalInput = 0
   let totalCacheWrite = 0
   for (const c of contributions) {
-    for (const cl of c.clients) {
-      const total = cl.tokens.input + cl.tokens.output + cl.tokens.cacheRead + cl.tokens.cacheWrite + cl.tokens.reasoning
-      const existing = modelMap.get(cl.modelId) || { providerId: cl.providerId, tokens: 0, cost: 0 }
-      existing.tokens += total
-      existing.cost += cl.cost
-      modelMap.set(cl.modelId, existing)
-      totalCacheRead += cl.tokens.cacheRead
-      totalInput += cl.tokens.input
-      totalCacheWrite += cl.tokens.cacheWrite
-    }
+    totalCacheRead += c.tokenBreakdown.cacheRead
+    totalInput += c.tokenBreakdown.input
+    totalCacheWrite += c.tokenBreakdown.cacheWrite
   }
-  const topModels = [...modelMap.entries()]
-    .sort((a, b) => b[1].tokens - a[1].tokens)
-    .slice(0, 10)
 
   const stats = [
     { label: "总 Token", value: formatTokens(summary.totalTokens) },
@@ -77,21 +64,6 @@ export function OverviewView({ graphResult, hourlyRows = [] }: OverviewViewProps
         </Tabs>
       </div>
       <StackedBarChart contributions={chartContributions} />
-      <div>
-        <h3 className="mb-2 text-sm font-medium">热门模型</h3>
-        <div className="space-y-1">
-          {topModels.map(([modelId, info], i) => (
-            <div key={modelId} className="flex items-center gap-2 text-sm">
-              <span className="text-muted-foreground w-5 text-right">{i + 1}</span>
-              <span className={cn("size-2 rounded-full", getProviderColorClassName(info.providerId))} />
-              <span className="flex-1 truncate">{modelId}</span>
-              <span className="text-muted-foreground">{formatPercent(info.tokens, summary.totalTokens)}</span>
-              <span className="w-20 text-right">{formatTokens(info.tokens)}</span>
-              <span className="text-muted-foreground w-16 text-right">{formatCost(info.cost)}</span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   )
 }

@@ -1,11 +1,13 @@
 import { useState, useMemo } from "react"
+import ReactECharts from "echarts-for-react"
+import type { EChartsOption } from "echarts"
 import {
   Table, TableBody, TableCell, TableHeader, TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts"
 import { formatTokens, formatCost, formatCacheRatio } from "../lib/format"
 import { useSort } from "../hooks/use-sort"
+import { useEChartsThemeTokens } from "../lib/echarts-theme"
 import { SortableHeader } from "./sortable-header"
 import type { HourlyRow, HourlyProfile } from "../hooks/use-token-usage"
 
@@ -144,14 +146,7 @@ function HourlyProfileView({ profile }: { profile: HourlyProfile | null }) {
 
       <div>
         <h3 className="mb-3 text-sm font-medium">每周用量分布</h3>
-        <ResponsiveContainer width="100%" height={280}>
-          <BarChart data={profile.weekdays} layout="vertical">
-            <XAxis type="number" tickFormatter={(v: number) => formatTokens(v)} />
-            <YAxis type="category" dataKey="day" width={36} interval={0} />
-            <Tooltip formatter={(value) => [formatTokens(Number(value)), "Token"]} />
-            <Bar dataKey="tokens" fill="var(--primary)" radius={[0, 4, 4, 0]} />
-          </BarChart>
-        </ResponsiveContainer>
+        <WeekdayUsageChart weekdays={profile.weekdays} />
       </div>
 
       <p className="text-sm text-muted-foreground">
@@ -161,5 +156,54 @@ function HourlyProfileView({ profile }: { profile: HourlyProfile | null }) {
         )}
       </p>
     </div>
+  )
+}
+
+function WeekdayUsageChart({ weekdays }: { weekdays: HourlyProfile["weekdays"] }) {
+  const theme = useEChartsThemeTokens()
+  const option = useMemo<EChartsOption>(() => ({
+    color: [theme.primary],
+    animation: false,
+    grid: { top: 8, right: 16, bottom: 16, left: 40 },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "shadow" },
+      valueFormatter: (value: unknown) => formatTokens(Number(value)),
+      confine: true,
+    },
+    xAxis: {
+      type: "value",
+      axisLine: { show: false },
+      axisTick: { show: false },
+      splitLine: { lineStyle: { color: theme.border } },
+      axisLabel: {
+        color: theme.mutedForeground,
+        formatter: (value: number) => formatTokens(value),
+      },
+    },
+    yAxis: {
+      type: "category",
+      data: weekdays.map((item) => item.day),
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: theme.mutedForeground },
+    },
+    series: [{
+      name: "Token",
+      type: "bar",
+      data: weekdays.map((item) => item.tokens),
+      barMaxWidth: 28,
+      itemStyle: { borderRadius: [0, 4, 4, 0] },
+    }],
+  }), [theme, weekdays])
+
+  return (
+    <ReactECharts
+      className="h-72 w-full"
+      option={option}
+      opts={{ renderer: "canvas" }}
+      notMerge
+      lazyUpdate
+    />
   )
 }

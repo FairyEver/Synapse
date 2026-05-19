@@ -1,5 +1,4 @@
-import { useState, useMemo } from "react"
-import { ContributionGraph } from "./contribution-graph"
+import { useMemo } from "react"
 import { formatTokens, formatCost } from "../lib/format"
 import type { GraphResult } from "../hooks/use-token-usage"
 
@@ -100,18 +99,6 @@ export function StatsView({ graphResult }: StatsViewProps) {
   const streaks = calculateStreak(contributions)
   const favoriteModel = useMemo(() => findFavoriteModel(contributions), [contributions])
   const bestDay = useMemo(() => findBestDay(contributions), [contributions])
-  const [selectedDate, setSelectedDate] = useState<string | null>(null)
-
-  const contribDays = contributions.map((c) => ({
-    date: c.date,
-    tokens: c.totals.tokens,
-    intensity: c.intensity,
-  }))
-
-  const selectedDayData = useMemo(() => {
-    if (!selectedDate) return null
-    return contributions.find((c) => c.date === selectedDate) || null
-  }, [selectedDate, contributions])
 
   const stats = [
     { label: "活跃天数", value: String(summary.activeDays) },
@@ -126,40 +113,7 @@ export function StatsView({ graphResult }: StatsViewProps) {
   ]
 
   return (
-    <div className="flex flex-col gap-6">
-      <ContributionGraph
-        contributions={contribDays}
-        selectedDate={selectedDate}
-        onDateClick={setSelectedDate}
-      />
-
-      {selectedDayData && (
-        <div className="rounded-md border p-4">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium">{selectedDayData.date}</span>
-            <span className="text-muted-foreground text-sm">
-              {formatTokens(selectedDayData.totals.tokens)} Token · {formatCost(selectedDayData.totals.cost)}
-            </span>
-          </div>
-          <div className="space-y-1">
-            {selectedDayData.clients.map((cl, i) => (
-              <div key={`${cl.client}-${cl.modelId}-${i}`} className="flex items-center justify-between text-sm">
-                <span>
-                  <span className="text-muted-foreground">{cl.client}</span>
-                  <span className="mx-1">·</span>
-                  <span>{cl.modelId}</span>
-                </span>
-                <span className="text-muted-foreground">
-                  {formatTokens(cl.tokens.input + cl.tokens.output + cl.tokens.cacheRead + cl.tokens.cacheWrite + cl.tokens.reasoning)}
-                  <span className="mx-1">·</span>
-                  {formatCost(cl.cost)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
+    <div>
       <div className="grid grid-cols-3 gap-3 sm:grid-cols-3">
         {stats.map((s) => (
           <div key={s.label} className="rounded-md border p-3">

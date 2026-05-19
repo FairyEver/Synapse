@@ -62,38 +62,59 @@ function usePromptRun() {
         return false
       }
 
+      const sendArgs = {
+        projectId,
+        sessionKey: session.sessionKey,
+        conversationId: session.id,
+        content,
+        clientSubmittedAt: now,
+        providerId,
+      }
+
+      const logSendFailure = (error: unknown) => {
+        logger.error("Prompt run: send message failed.", {
+          promptId: item.id,
+          projectId,
+          conversationId: session.id,
+          sessionKey: session.sessionKey,
+          agentType,
+          providerId,
+          boundary: "renderer.prompt-run.agent-send",
+          ...errorLogMeta(error),
+        })
+        toast.error("发送失败")
+      }
+
       if (navigate) {
-        requestOpenAgentSession({ projectId, conversationId: session.id, prompt: content })
-      } else {
+        requestOpenAgentSession({ projectId, conversationId: session.id })
+        void (async () => {
+          try {
+            await bridge.agent.send(sendArgs)
+          } catch (error) {
+            logSendFailure(error)
+          }
+        })()
+        return true
+      }
+
+      try {
+        await bridge.agent.send(sendArgs)
+        toast("已发送到 Agent")
+      } catch (error) {
+        logSendFailure(error)
         try {
-          await bridge.agent.send({
-            projectId,
-            sessionKey: session.sessionKey,
-            conversationId: session.id,
-            content,
-            clientSubmittedAt: now,
-            providerId,
-          })
-          toast("已发送到 Agent")
-        } catch (error) {
-          logger.error("Prompt run: send message failed.", {
+          await bridge.agent.deleteSession({ projectId, conversationId: session.id })
+        } catch (cleanupError) {
+          logger.warn("Prompt run: cleanup session failed.", {
             promptId: item.id,
             projectId,
             conversationId: session.id,
             sessionKey: session.sessionKey,
-            agentType,
-            providerId,
-            boundary: "renderer.prompt-run.agent-send",
-            ...errorLogMeta(error),
+            boundary: "renderer.prompt-run.cleanup-session",
+            ...errorLogMeta(cleanupError),
           })
-          toast.error("发送失败")
-          try {
-            await bridge.agent.deleteSession({ projectId, conversationId: session.id })
-          } catch {
-            // Best-effort cleanup; don't mask the original error.
-          }
-          return false
         }
+        return false
       }
 
       return true

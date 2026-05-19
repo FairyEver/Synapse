@@ -1,5 +1,5 @@
-import { useEffect, useState } from "react"
-import { Folder, Plug } from "lucide-react"
+import { useState } from "react"
+import { Folder } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
   AlertDialog,
@@ -27,21 +27,13 @@ import { Label } from "@/components/ui/label"
 import { arePathsEqualForCompare } from "@/lib/path-compare"
 import { getProjectNameFromPath } from "@/lib/path-utils"
 import { getRendererPlatform } from "@/lib/runtime-platform"
-import { FeishuConnectorPanel } from "@/modules/settings/components/feishu-connector-panel"
 import type { SynapseProjectConfig } from "@/types/config"
-import type { SynapseFeishuConnectorRuntimeStatus } from "@/types/connectors"
 
 const logger = createRendererLogger("settings.projects")
 
 type ProjectListEditorProps = {
   projects: SynapseProjectConfig[]
   onSave: (projects: SynapseProjectConfig[]) => Promise<void>
-}
-
-type ConnectorDialogState = {
-  project: SynapseProjectConfig
-  variant: "setup" | "config"
-  initialTab: "status" | "credentials"
 }
 
 function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
@@ -56,8 +48,6 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   const [editPath, setEditPath] = useState("")
   const [editError, setEditError] = useState<string | null>(null)
   const [isSavingEdit, setIsSavingEdit] = useState(false)
-  const [connectorDialog, setConnectorDialog] = useState<ConnectorDialogState | null>(null)
-  const [connectorRefreshToken, setConnectorRefreshToken] = useState(0)
   const [deleteTarget, setDeleteTarget] = useState<{ project: SynapseProjectConfig; sessionCount: number | null } | null>(null)
   const hasDirectoryPicker = Boolean(window.synapse?.repository)
 
@@ -144,25 +134,6 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
     setEditName(project.name)
     setEditPath(project.path)
     setEditError(null)
-  }
-
-  const handleOpenConnector = (
-    project: SynapseProjectConfig,
-    variant: ConnectorDialogState["variant"],
-    initialTab: ConnectorDialogState["initialTab"],
-  ) => {
-    setConnectorDialog({ project, variant, initialTab })
-  }
-
-  const handleConnectorChanged = () => {
-    setConnectorRefreshToken((value) => value + 1)
-    setConnectorDialog((current) => current
-      ? {
-        ...current,
-        variant: "config",
-        initialTab: current.variant === "setup" ? "status" : current.initialTab,
-      }
-      : current)
   }
 
   const handleEditDialogClose = () => {
@@ -274,11 +245,6 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                 </p>
               </CardContent>
               <CardFooter className="justify-end gap-2">
-                <ProjectConnectorButton
-                  project={project}
-                  refreshToken={connectorRefreshToken}
-                  onOpen={handleOpenConnector}
-                />
                 <Button
                   variant="ghost"
                   size="sm"
@@ -438,25 +404,6 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
         </DialogContent>
       </Dialog>
 
-      <Dialog open={connectorDialog !== null} onOpenChange={(open) => { if (!open) setConnectorDialog(null) }}>
-        <DialogContent className="max-h-svh overflow-y-auto sm:max-w-4xl">
-          <DialogHeader>
-            <DialogTitle>{connectorDialog?.project.name ?? "飞书连接器"}</DialogTitle>
-          </DialogHeader>
-          {connectorDialog ? (
-            <FeishuConnectorPanel
-              key={`${connectorDialog.project.id}:${connectorDialog.variant}:${connectorDialog.initialTab}`}
-              projectId={connectorDialog.project.id}
-              projectName={connectorDialog.project.name}
-              projectPath={connectorDialog.project.path}
-              initialTab={connectorDialog.initialTab}
-              variant={connectorDialog.variant}
-              onConnectorChange={handleConnectorChanged}
-            />
-          ) : null}
-        </DialogContent>
-      </Dialog>
-
       <AlertDialog open={deleteTarget !== null} onOpenChange={(open) => { if (!open) setDeleteTarget(null) }}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -486,65 +433,6 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
         </AlertDialogContent>
       </AlertDialog>
     </div>
-  )
-}
-
-function ProjectConnectorButton({
-  project,
-  refreshToken,
-  onOpen,
-}: {
-  project: SynapseProjectConfig
-  refreshToken: number
-  onOpen: (
-    project: SynapseProjectConfig,
-    variant: ConnectorDialogState["variant"],
-    initialTab: ConnectorDialogState["initialTab"],
-  ) => void
-}) {
-  const [status, setStatus] = useState<SynapseFeishuConnectorRuntimeStatus | null>(null)
-  const [isLoading, setIsLoading] = useState(false)
-  const feishu = window.synapse?.connectors.feishu
-
-  useEffect(() => {
-    if (!feishu) {
-      setStatus(null)
-      return
-    }
-
-    let cancelled = false
-    setIsLoading(true)
-
-    void feishu.getStatus(project.id).then((nextStatus) => {
-      if (!cancelled) setStatus(nextStatus)
-    }).catch((error) => {
-      logger.error("Failed to load project connector status.", { error, projectId: project.id })
-      if (!cancelled) setStatus(null)
-    }).finally(() => {
-      if (!cancelled) setIsLoading(false)
-    })
-
-    return () => {
-      cancelled = true
-    }
-  }, [feishu, project.id, refreshToken])
-
-  const configured = status?.configured ?? false
-
-  return (
-    <Button
-      variant="ghost"
-      size="sm"
-      disabled={!feishu || isLoading}
-      onClick={() => onOpen(
-        project,
-        configured ? "config" : "setup",
-        configured ? "status" : "credentials",
-      )}
-    >
-      <Plug data-icon="inline-start" />
-      {configured ? "连接器配置" : "添加连接器"}
-    </Button>
   )
 }
 

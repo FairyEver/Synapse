@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo, useRef } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { useTokenUsageScan, useGraphResult, useModelReport, useDailyReport, useAgentReport, useHourlyReport, useHourlyProfile } from "./hooks/use-token-usage"
 import type { ScanResult } from "./hooks/use-token-usage"
 import { ScanButton } from "./components/scan-button"
@@ -10,7 +10,6 @@ import { StatsView } from "./components/stats-view"
 import { HourlyView } from "./components/hourly-view"
 import { DateRangeFilter, dateRangeToOptions } from "./components/date-range-filter"
 import type { RangePreset } from "./components/date-range-filter"
-import { SourcePicker } from "./components/source-picker"
 import { GroupByPicker } from "./components/group-by-picker"
 import type { GroupByMode } from "./components/group-by-picker"
 import { ExportButton } from "./components/export-button"
@@ -26,8 +25,6 @@ export function TokenUsageModule() {
   const [activeSubTab, setActiveSubTab] = useState<SubTab>("overview")
   const [range, setRange] = useState<RangePreset>("30d")
   const [groupBy, setGroupBy] = useState<GroupByMode>("clientModel")
-  const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set())
-  const userHasFiltered = useRef(false)
   const { scan, scanning, error: scanError } = useTokenUsageScan()
   const { data: graphResult, loading: graphLoading, error: graphError, refresh: refreshGraph } = useGraphResult()
   const { data: models, loading: modelsLoading, error: modelsError, refresh: refreshModels } = useModelReport()
@@ -39,14 +36,6 @@ export function TokenUsageModule() {
   const initialScanDone = useRef(false)
   const rangeRef = useRef(range)
   rangeRef.current = range
-
-  const allClients = useMemo(() => graphResult?.summary.clients ?? [], [graphResult])
-
-  useEffect(() => {
-    if (allClients.length > 0 && !userHasFiltered.current) {
-      setSelectedSources(new Set(allClients))
-    }
-  }, [allClients])
 
   const refreshAll = useCallback((options?: { since?: string; until?: string }) => {
     void refreshGraph(options)
@@ -82,72 +71,8 @@ export function TokenUsageModule() {
     }
   }, [])
 
-  const sourceFilter = useCallback((client: string) => selectedSources.has(client), [selectedSources])
-  const isFiltering = selectedSources.size > 0 && selectedSources.size < allClients.length
   const loadErrors = [scanError, graphError, modelsError, dailyError, agentsError, hourlyError, hourlyProfileError].filter(Boolean)
   const isLoading = graphLoading || modelsLoading || dailyLoading || agentsLoading || hourlyLoading || hourlyProfileLoading
-
-  const filteredModels = useMemo(() =>
-    isFiltering ? models.filter((m) => sourceFilter(m.client)) : models,
-  [models, isFiltering, sourceFilter])
-
-  const filteredHourlyRows = useMemo(() =>
-    isFiltering ? hourlyRows.filter((r) => sourceFilter(r.client)) : hourlyRows,
-  [hourlyRows, isFiltering, sourceFilter])
-
-  const filteredAgentRows = useMemo(() =>
-    isFiltering ? agentRows.filter((a) => sourceFilter(a.client)) : agentRows,
-  [agentRows, isFiltering, sourceFilter])
-
-  const filteredGraphResult = useMemo(() => {
-    if (!graphResult || !isFiltering) return graphResult
-    const filteredContributions = graphResult.contributions.map((day) => {
-      const filteredClients = day.clients.filter((c) => selectedSources.has(c.client))
-      const totals = filteredClients.reduce(
-        (acc, c) => {
-          acc.tokens += c.tokens.input + c.tokens.output + c.tokens.cacheRead + c.tokens.cacheWrite + c.tokens.reasoning
-          acc.cost += c.cost
-          acc.messages += c.messages
-          return acc
-        },
-        { tokens: 0, cost: 0, messages: 0 },
-      )
-      const intensity: 0 | 1 | 2 | 3 | 4 =
-        totals.tokens === 0 ? 0
-        : totals.tokens <= 100 ? 1
-        : totals.tokens <= 1000 ? 2
-        : totals.tokens <= 10000 ? 3
-        : 4
-      return {
-        ...day,
-        clients: filteredClients,
-        totals: { ...day.totals, ...totals },
-        intensity,
-        tokenBreakdown: filteredClients.reduce(
-          (acc, c) => {
-            acc.input += c.tokens.input; acc.output += c.tokens.output
-            acc.cacheRead += c.tokens.cacheRead; acc.cacheWrite += c.tokens.cacheWrite
-            acc.reasoning += c.tokens.reasoning
-            return acc
-          },
-          { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 },
-        ),
-      }
-    })
-    const summary = {
-      totalTokens: filteredContributions.reduce((s, d) => s + d.totals.tokens, 0),
-      totalCost: filteredContributions.reduce((s, d) => s + d.totals.cost, 0),
-      totalDays: filteredContributions.length,
-      activeDays: filteredContributions.filter((d) => d.totals.tokens > 0).length,
-      averagePerDay: filteredContributions.length > 0
-        ? filteredContributions.reduce((s, d) => s + d.totals.tokens, 0) / filteredContributions.length
-        : 0,
-      maxCostInSingleDay: Math.max(...filteredContributions.map((d) => d.totals.cost), 0),
-      clients: [...selectedSources],
-      models: [...new Set(filteredContributions.flatMap((d) => d.clients.map((c) => c.modelId)))],
-    }
-    return { ...graphResult, summary, contributions: filteredContributions }
-  }, [graphResult, isFiltering, selectedSources])
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -168,13 +93,8 @@ export function TokenUsageModule() {
           <GroupByPicker value={groupBy} onChange={handleGroupByChange} />
         )}
         <div className="flex-1" />
-        <SourcePicker clients={allClients} selected={selectedSources} onChange={(next) => {
-          const isSelectAll = allClients.length > 0 && allClients.every((c) => next.has(c))
-          userHasFiltered.current = !isSelectAll
-          setSelectedSources(next)
-        }} />
         <DateRangeFilter value={range} onChange={handleRangeChange} />
-        <ExportButton models={filteredModels} agents={filteredAgentRows} dailyRows={dailyRows} graphResult={filteredGraphResult} isFiltering={isFiltering} />
+        <ExportButton models={models} agents={agentRows} dailyRows={dailyRows} graphResult={graphResult} />
         <ScanButton scanning={scanning} onScan={handleScan} lastScanInfo={lastScanInfo} error={scanError} />
       </div>
       <ScrollArea className="min-h-0 flex-1 px-4 pb-4">
@@ -195,23 +115,23 @@ export function TokenUsageModule() {
               <Skeleton className="h-24 w-full" />
             </div>
           ) : null}
-          {activeSubTab === "overview" && filteredGraphResult ? (
-            <OverviewView graphResult={filteredGraphResult} hourlyRows={filteredHourlyRows} />
+          {activeSubTab === "overview" && graphResult ? (
+            <OverviewView graphResult={graphResult} hourlyRows={hourlyRows} />
           ) : null}
           {activeSubTab === "models" ? (
-            <ModelsView models={filteredModels} />
+            <ModelsView models={models} />
           ) : null}
           {activeSubTab === "daily" ? (
             <DailyView rows={dailyRows as { date: string; turns: number; messages: number; input: number; output: number; cacheRead: number; cacheWrite: number; reasoning: number; cost: number }[]} />
           ) : null}
           {activeSubTab === "hourly" ? (
-            <HourlyView rows={filteredHourlyRows} profile={hourlyProfile} />
+            <HourlyView rows={hourlyRows} profile={hourlyProfile} />
           ) : null}
           {activeSubTab === "agents" ? (
-            <AgentsView agents={filteredAgentRows} />
+            <AgentsView agents={agentRows} />
           ) : null}
-          {activeSubTab === "stats" && filteredGraphResult ? (
-            <StatsView graphResult={filteredGraphResult} />
+          {activeSubTab === "stats" && graphResult ? (
+            <StatsView graphResult={graphResult} />
           ) : null}
         </div>
       </ScrollArea>

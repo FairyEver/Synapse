@@ -47,7 +47,6 @@ describe("ExportButton", () => {
           agents={[agentRow({ reasoning: 11 })]}
           dailyRows={[]}
           graphResult={null}
-          isFiltering
         />,
       )
     })

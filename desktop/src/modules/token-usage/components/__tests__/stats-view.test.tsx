@@ -84,4 +84,16 @@ describe("StatsView", () => {
     expectStatValue(html, "当前连续", "0 天")
     expectStatValue(html, "最长连续", "2 天")
   })
+
+  it("does not render contribution graph cells", () => {
+    const html = renderToStaticMarkup(
+      <StatsView
+        graphResult={graphResult([
+          contribution(dateOffset(0)),
+        ])}
+      />,
+    )
+
+    expect(html).not.toContain("aria-label")
+  })
 })

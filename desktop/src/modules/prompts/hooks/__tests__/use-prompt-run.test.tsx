@@ -48,6 +48,8 @@ afterEach(() => {
   rendererLogger.error.mockClear()
   rendererLogger.info.mockClear()
   rendererLogger.warn.mockClear()
+  mocks.readContent.mockClear()
+  mocks.requestOpenAgentSession.mockClear()
   vi.restoreAllMocks()
 })
 
@@ -79,7 +81,52 @@ describe("usePromptRun", () => {
     expect(mocks.requestOpenAgentSession).toHaveBeenCalledWith({
       projectId: "project-1",
       conversationId: "conversation-1",
-      prompt: "Prompt body",
+    })
+  })
+
+  it("navigates to the created conversation before the prompt send completes", async () => {
+    mocks.readContent.mockResolvedValue({ content: "Prompt body" })
+    const sendDeferred = createDeferred()
+    const send = vi.fn().mockReturnValue(sendDeferred.promise)
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          createSession: vi.fn().mockResolvedValue({
+            id: "conversation-1",
+            sessionKey: "local:renderer",
+          }),
+          send,
+        },
+      },
+    })
+
+    await renderRunProbe({ navigate: true })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(send).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      sessionKey: "local:renderer",
+      conversationId: "conversation-1",
+      content: "Prompt body",
+      providerId: "provider-1",
+    }))
+    expect(mocks.requestOpenAgentSession).toHaveBeenCalledWith({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+    })
+
+    await act(async () => {
+      sendDeferred.resolve({
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        conversationId: "conversation-1",
+        resultText: "",
+        events: [],
+      })
+      await Promise.resolve()
     })
   })
 
@@ -200,4 +247,12 @@ const promptItem: SynapseContentMeta<"prompt"> = {
   modifiedByDisplayName: "User",
   title: "Prompt One",
   type: "prompt",
+}
+
+function createDeferred() {
+  let resolve!: (value: unknown) => void
+  const promise = new Promise((promiseResolve) => {
+    resolve = promiseResolve
+  })
+  return { promise, resolve }
 }
