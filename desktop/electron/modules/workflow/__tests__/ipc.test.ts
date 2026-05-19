@@ -229,6 +229,10 @@ describe("workflowIpcModule", () => {
         recentlyViewed: { rule: [], skill: [], prompt: [] },
         contentSortOrder: "modified-desc",
       },
+      agent: {
+        defaultPermissionMode: "default",
+        defaultProviderModel: null,
+      },
     } as never)
     const workflow = { create: vi.fn(async () => ({ id: "workflow-1", versionHash: "v_1" })) }
     const harness = createInMemoryHarness()
@@ -238,9 +242,43 @@ describe("workflowIpcModule", () => {
     }
     harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
 
-    await harness.invoke("synapse:workflow:create")
+    await harness.invoke("synapse:workflow:create", undefined)
 
-    expect(workflow.create).toHaveBeenCalledWith("agent-project-1")
+    expect(workflow.create).toHaveBeenCalledWith("agent-project-1", undefined)
+  })
+
+  it("prefills new workflows with the configured default provider model", async () => {
+    vi.mocked(configStore.load).mockResolvedValue({
+      repositories: [{
+        uuid: "repo-1",
+        name: "Content Repo",
+        localPath: "/repo",
+        contentDirs: {},
+      }],
+      activeRepoUuid: "repo-1",
+      global: {
+        themeMode: "system",
+        projects: [],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+      agent: {
+        defaultPermissionMode: "default",
+        defaultProviderModel: { providerId: "provider-1", modelTier: "sonnet" },
+      },
+    } as never)
+    const workflow = { create: vi.fn(async () => ({ id: "workflow-1", versionHash: "v_1" })) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    await harness.invoke("synapse:workflow:create", undefined)
+
+    expect(workflow.create).toHaveBeenCalledWith(undefined, { providerId: "provider-1", modelTier: "sonnet" })
   })
 
   it("logs cancel signal only when an active AbortController exists, warns otherwise", async () => {

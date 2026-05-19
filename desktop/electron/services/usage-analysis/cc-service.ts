@@ -1,22 +1,19 @@
 import type { DatabaseSync } from "node:sqlite"
 import {
   parseClaudeUsageFile,
-  type ParsedToolEvent,
-  type ParsedUsageEvent,
   type ParsedUsageFile,
-  type ParsedUsageSession,
 } from "./cc-parser"
-import { createUsageRangeFilter, localHourKey } from "./range"
+import { createUsageRangeFilter } from "./range"
 import { collectJsonlFiles, fingerprintFile } from "./scan"
 import type {
   UsageDetailRow,
+  UsageDetailInput,
   UsageModelRow,
   UsageOverviewReport,
   UsageProjectRow,
   UsageRangeInput,
   UsageRefreshResult,
   UsageTimeBucket,
-  UsageTokenBreakdown,
   UsageToolRow,
 } from "./types"
 
@@ -28,6 +25,7 @@ interface UsageAnalysisServiceOptions {
 interface ScanFileRow {
   readonly size: number
   readonly mtime_ms: number
+  readonly line_count: number
   readonly parse_status: string
 }
 
@@ -52,35 +50,6 @@ interface UsageEventRow {
   readonly cost_cache_write: number
   readonly cost_reasoning: number
   readonly total_cost: number
-}
-
-interface SessionRow {
-  readonly session_id: string
-  readonly file_path: string
-  readonly workspace_key: string
-  readonly workspace_label: string
-  readonly provider: string
-  readonly source: string
-  readonly cli_version: string
-  readonly started_at: string
-  readonly ended_at: string
-  readonly model_summary: string
-  readonly request_count: number
-  readonly conversation_count: number
-  readonly tool_call_count: number
-}
-
-interface ToolEventRow {
-  readonly id: string
-  readonly session_id: string
-  readonly timestamp_ms: number
-  readonly date: string
-  readonly workspace_key: string
-  readonly tool_name: string
-  readonly category: string
-  readonly status: string
-  readonly exit_code: number | null
-  readonly duration_ms: number | null
 }
 
 interface ParsedTaskLike {
@@ -111,40 +80,17 @@ function tokenTotal(row: UsageEventRow): number {
   return row.input_tokens + row.output_tokens + row.cache_read_tokens + row.cache_write_tokens + row.reasoning_tokens
 }
 
-function emptyTokenBreakdown(): UsageTokenBreakdown {
-  return { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, reasoning: 0 }
-}
-
-function addUsageToAggregate(aggregate: AggregateValue, row: UsageEventRow): void {
-  aggregate.input += row.input_tokens
-  aggregate.output += row.output_tokens
-  aggregate.cacheRead += row.cache_read_tokens
-  aggregate.cacheWrite += row.cache_write_tokens
-  aggregate.reasoning += row.reasoning_tokens
-  aggregate.tokens += tokenTotal(row)
-  aggregate.estimatedCost += row.total_cost
-  aggregate.requests += 1
-}
-
-function createAggregate(): AggregateValue {
-  return {
-    tokens: 0,
-    estimatedCost: 0,
-    input: 0,
-    output: 0,
-    cacheRead: 0,
-    cacheWrite: 0,
-    reasoning: 0,
-    requests: 0,
-  }
-}
-
 function compareDesc(a: number, b: number): number {
   return b - a
 }
 
 function isoFromTimestamp(timestampMs: number): string {
   return new Date(timestampMs).toISOString()
+}
+
+function toNumber(value: unknown): number {
+  const numberValue = Number(value)
+  return Number.isFinite(numberValue) ? numberValue : 0
 }
 
 export class CcUsageAnalysisService {
@@ -167,19 +113,30 @@ export class CcUsageAnalysisService {
   }
 
   getOverview(range: UsageRangeInput): UsageOverviewReport {
-    const usageRows = this.queryUsageRows(range)
-    const toolRows = this.queryToolRows(range)
-    const totals = this.createTotals(usageRows, toolRows)
+    const totalsRow = this.queryUsageTotals(range)
     return {
       generatedAt: new Date().toISOString(),
-      totals,
-      tokenBreakdown: this.createTokenBreakdown(usageRows),
+      totals: {
+        tokens: totalsRow.tokens,
+        estimatedCost: totalsRow.estimatedCost,
+        requests: totalsRow.requests,
+        conversations: totalsRow.conversations,
+        toolCalls: this.queryToolCallTotal(range),
+        activeDays: totalsRow.activeDays,
+      },
+      tokenBreakdown: {
+        input: totalsRow.input,
+        output: totalsRow.output,
+        cacheRead: totalsRow.cacheRead,
+        cacheWrite: totalsRow.cacheWrite,
+        reasoning: totalsRow.reasoning,
+      },
       costBreakdown: {
-        input: usageRows.reduce((sum, row) => sum + row.cost_input, 0),
-        output: usageRows.reduce((sum, row) => sum + row.cost_output, 0),
-        cacheRead: usageRows.reduce((sum, row) => sum + row.cost_cache_read, 0),
-        cacheWrite: usageRows.reduce((sum, row) => sum + row.cost_cache_write, 0),
-        reasoning: usageRows.reduce((sum, row) => sum + row.cost_reasoning, 0),
+        input: totalsRow.costInput,
+        output: totalsRow.costOutput,
+        cacheRead: totalsRow.costCacheRead,
+        cacheWrite: totalsRow.costCacheWrite,
+        reasoning: totalsRow.costReasoning,
       },
       topModels: this.getModels(range).slice(0, 5),
       topProjects: this.getProjects(range).slice(0, 5),
@@ -189,122 +146,209 @@ export class CcUsageAnalysisService {
   }
 
   getTime(range: UsageRangeInput): UsageTimeBucket[] {
-    const usageRows = this.queryUsageRows(range)
-    const toolRows = this.queryToolRows(range)
-    const useHour = range.preset === "7d"
-    const byBucket = new Map<string, { aggregate: AggregateValue; models: Map<string, number>; sessions: Set<string> }>()
+    const bucketColumn = range.preset === "7d" ? "hour" : "date"
+    const usageFilter = this.createRangeWhere(range)
+    const toolFilter = this.createRangeWhere(range)
+    const usageRows = this.db.prepare(`
+      SELECT
+        ${bucketColumn} AS bucket,
+        SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens,
+        SUM(total_cost) AS estimated_cost,
+        COUNT(*) AS requests,
+        COUNT(DISTINCT session_id) AS conversations
+      FROM ${this.prefix}_usage_events
+      ${usageFilter.whereSql}
+      GROUP BY ${bucketColumn}
+      ORDER BY ${bucketColumn} ASC
+    `).all(...usageFilter.params) as Record<string, unknown>[]
+    const modelRows = this.db.prepare(`
+      SELECT
+        ${bucketColumn} AS bucket,
+        model,
+        SUM(input_tokens) AS input,
+        SUM(output_tokens) AS output,
+        SUM(cache_read_tokens) AS cache_read,
+        SUM(cache_write_tokens) AS cache_write,
+        SUM(reasoning_tokens) AS reasoning,
+        SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens
+      FROM ${this.prefix}_usage_events
+      ${usageFilter.whereSql}
+      GROUP BY ${bucketColumn}, model
+    `).all(...usageFilter.params) as Record<string, unknown>[]
+    const toolRows = this.db.prepare(`
+      SELECT ${bucketColumn} AS bucket, COUNT(*) AS tool_calls
+      FROM ${this.prefix}_tool_events
+      ${toolFilter.whereSql}
+      GROUP BY ${bucketColumn}
+    `).all(...toolFilter.params) as Record<string, unknown>[]
+    const toolCallsByBucket = new Map(toolRows.map((row) => [String(row.bucket ?? ""), toNumber(row.tool_calls)]))
+    const modelsByBucket = new Map<string, {
+      model: string
+      tokens: number
+      input: number
+      output: number
+      cacheRead: number
+      cacheWrite: number
+      reasoning: number
+    }[]>()
+    for (const row of modelRows) {
+      const bucket = String(row.bucket ?? "")
+      const models = modelsByBucket.get(bucket) ?? []
+      models.push({
+        model: String(row.model ?? "unknown"),
+        tokens: toNumber(row.tokens),
+        input: toNumber(row.input),
+        output: toNumber(row.output),
+        cacheRead: toNumber(row.cache_read),
+        cacheWrite: toNumber(row.cache_write),
+        reasoning: toNumber(row.reasoning),
+      })
+      modelsByBucket.set(bucket, models)
+    }
+
+    const byBucket = new Map<string, { tokens: number; estimatedCost: number; requests: number; conversations: number }>()
     for (const row of usageRows) {
-      const bucket = useHour ? row.hour : row.date
-      const current = byBucket.get(bucket) ?? { aggregate: createAggregate(), models: new Map<string, number>(), sessions: new Set<string>() }
-      addUsageToAggregate(current.aggregate, row)
-      current.models.set(row.model, (current.models.get(row.model) ?? 0) + tokenTotal(row))
-      current.sessions.add(row.session_id)
-      byBucket.set(bucket, current)
+      const bucket = String(row.bucket ?? "")
+      byBucket.set(bucket, {
+        tokens: toNumber(row.tokens),
+        estimatedCost: toNumber(row.estimated_cost),
+        requests: toNumber(row.requests),
+        conversations: toNumber(row.conversations),
+      })
     }
 
     return [...byBucket.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([bucket, value]) => ({
       bucket,
-      tokens: value.aggregate.tokens,
-      estimatedCost: value.aggregate.estimatedCost,
-      requests: value.aggregate.requests,
-      conversations: value.sessions.size,
-      toolCalls: toolRows.filter((row) => (useHour ? localHourKey(row.timestamp_ms) : row.date) === bucket).length,
-      dominantModel: [...value.models.entries()].sort((a, b) => compareDesc(a[1], b[1]))[0]?.[0] ?? "",
+      tokens: value.tokens,
+      estimatedCost: value.estimatedCost,
+      requests: value.requests,
+      conversations: value.conversations,
+      toolCalls: toolCallsByBucket.get(bucket) ?? 0,
+      dominantModel: (modelsByBucket.get(bucket) ?? []).sort((a, b) => compareDesc(a.tokens, b.tokens))[0]?.model ?? "",
+      modelBreakdown: (modelsByBucket.get(bucket) ?? []).sort((a, b) => compareDesc(a.tokens, b.tokens)),
     }))
   }
 
   getModels(range: UsageRangeInput): UsageModelRow[] {
-    const byModel = new Map<string, AggregateValue & { provider: string }>()
-    for (const row of this.queryUsageRows(range)) {
-      const key = `${row.provider}\n${row.model}`
-      const current = byModel.get(key) ?? { ...createAggregate(), provider: row.provider }
-      addUsageToAggregate(current, row)
-      byModel.set(key, current)
-    }
-    return [...byModel.entries()]
-      .map(([key, value]) => {
-        const model = key.split("\n")[1] ?? "unknown"
-        return {
-          model,
-          provider: value.provider,
-          tokens: value.tokens,
-          estimatedCost: value.estimatedCost,
-          input: value.input,
-          output: value.output,
-          cacheRead: value.cacheRead,
-          cacheWrite: value.cacheWrite,
-          reasoning: value.reasoning,
-          requests: value.requests,
-          averageTokensPerRequest: value.requests > 0 ? value.tokens / value.requests : 0,
-        }
-      })
-      .sort((a, b) => compareDesc(a.tokens, b.tokens))
+    const filter = this.createRangeWhere(range)
+    const rows = this.db.prepare(`
+      SELECT
+        model,
+        provider,
+        SUM(input_tokens) AS input,
+        SUM(output_tokens) AS output,
+        SUM(cache_read_tokens) AS cache_read,
+        SUM(cache_write_tokens) AS cache_write,
+        SUM(reasoning_tokens) AS reasoning,
+        SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens,
+        SUM(total_cost) AS estimated_cost,
+        COUNT(*) AS requests
+      FROM ${this.prefix}_usage_events
+      ${filter.whereSql}
+      GROUP BY provider, model
+      ORDER BY tokens DESC
+    `).all(...filter.params) as Record<string, unknown>[]
+    return rows.map((row) => ({
+      model: String(row.model ?? "unknown"),
+      provider: String(row.provider ?? ""),
+      tokens: toNumber(row.tokens),
+      estimatedCost: toNumber(row.estimated_cost),
+      input: toNumber(row.input),
+      output: toNumber(row.output),
+      cacheRead: toNumber(row.cache_read),
+      cacheWrite: toNumber(row.cache_write),
+      reasoning: toNumber(row.reasoning),
+      requests: toNumber(row.requests),
+      averageTokensPerRequest: toNumber(row.requests) > 0 ? toNumber(row.tokens) / toNumber(row.requests) : 0,
+    }))
   }
 
   getProjects(range: UsageRangeInput): UsageProjectRow[] {
-    const sessions = this.querySessionRows()
-    const sessionIdsByWorkspace = new Map<string, Set<string>>()
-    for (const session of sessions) {
-      const ids = sessionIdsByWorkspace.get(session.workspace_key) ?? new Set<string>()
-      ids.add(session.session_id)
-      sessionIdsByWorkspace.set(session.workspace_key, ids)
-    }
-
-    const toolRows = this.queryToolRows(range)
-    const byWorkspace = new Map<string, AggregateValue & { label: string; lastUsedAt: string; toolCalls: number }>()
-    for (const row of this.queryUsageRows(range)) {
-      const current = byWorkspace.get(row.workspace_key) ?? { ...createAggregate(), label: row.workspace_label, lastUsedAt: "", toolCalls: 0 }
-      addUsageToAggregate(current, row)
-      const rowTime = isoFromTimestamp(row.timestamp_ms)
-      if (!current.lastUsedAt || rowTime > current.lastUsedAt) current.lastUsedAt = rowTime
-      byWorkspace.set(row.workspace_key, current)
-    }
-    for (const row of toolRows) {
-      const current = byWorkspace.get(row.workspace_key)
-      if (current) current.toolCalls += 1
-    }
-
-    return [...byWorkspace.entries()].map(([workspaceKey, value]) => ({
-      workspaceKey,
-      workspaceLabel: value.label || workspaceKey || "unknown",
-      sessions: sessionIdsByWorkspace.get(workspaceKey)?.size ?? 0,
-      requests: value.requests,
-      tokens: value.tokens,
-      estimatedCost: value.estimatedCost,
-      toolCalls: value.toolCalls,
-      lastUsedAt: value.lastUsedAt,
-    })).sort((a, b) => compareDesc(a.tokens, b.tokens))
+    const filter = this.createRangeWhere(range)
+    const rows = this.db.prepare(`
+      SELECT
+        workspace_key,
+        MAX(workspace_label) AS workspace_label,
+        COUNT(DISTINCT session_id) AS sessions,
+        COUNT(*) AS requests,
+        SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens,
+        SUM(total_cost) AS estimated_cost,
+        MAX(timestamp_ms) AS last_timestamp_ms
+      FROM ${this.prefix}_usage_events
+      ${filter.whereSql}
+      GROUP BY workspace_key
+      ORDER BY tokens DESC
+    `).all(...filter.params) as Record<string, unknown>[]
+    const toolRows = this.db.prepare(`
+      SELECT workspace_key, COUNT(*) AS tool_calls
+      FROM ${this.prefix}_tool_events
+      ${filter.whereSql}
+      GROUP BY workspace_key
+    `).all(...filter.params) as Record<string, unknown>[]
+    const toolCallsByWorkspace = new Map(toolRows.map((row) => [String(row.workspace_key ?? ""), toNumber(row.tool_calls)]))
+    return rows.map((row) => {
+      const workspaceKey = String(row.workspace_key ?? "")
+      const lastTimestamp = toNumber(row.last_timestamp_ms)
+      return {
+        workspaceKey,
+        workspaceLabel: String(row.workspace_label ?? "") || workspaceKey || "unknown",
+        sessions: toNumber(row.sessions),
+        requests: toNumber(row.requests),
+        tokens: toNumber(row.tokens),
+        estimatedCost: toNumber(row.estimated_cost),
+        toolCalls: toolCallsByWorkspace.get(workspaceKey) ?? 0,
+        lastUsedAt: lastTimestamp > 0 ? isoFromTimestamp(lastTimestamp) : "",
+      }
+    })
   }
 
   getTools(range: UsageRangeInput): UsageToolRow[] {
-    const byTool = new Map<string, { toolName: string; category: string; calls: number; failures: number; durationTotal: number; durationCount: number }>()
-    for (const row of this.queryToolRows(range)) {
-      const key = `${row.category}\n${row.tool_name}`
-      const current = byTool.get(key) ?? { toolName: row.tool_name, category: row.category, calls: 0, failures: 0, durationTotal: 0, durationCount: 0 }
-      current.calls += 1
-      if (row.status === "failed" || (row.exit_code !== null && row.exit_code !== 0)) current.failures += 1
-      if (typeof row.duration_ms === "number") {
-        current.durationTotal += row.duration_ms
-        current.durationCount += 1
+    const filter = this.createRangeWhere(range)
+    const rows = this.db.prepare(`
+      SELECT
+        tool_name,
+        category,
+        COUNT(*) AS calls,
+        SUM(CASE WHEN status = 'failed' OR (exit_code IS NOT NULL AND exit_code != 0) THEN 1 ELSE 0 END) AS failures,
+        AVG(duration_ms) AS average_duration_ms
+      FROM ${this.prefix}_tool_events
+      ${filter.whereSql}
+      GROUP BY category, tool_name
+      ORDER BY calls DESC
+    `).all(...filter.params) as Record<string, unknown>[]
+    return rows.map((row) => {
+      const calls = toNumber(row.calls)
+      const failures = toNumber(row.failures)
+      return {
+        toolName: String(row.tool_name ?? "unknown"),
+        category: String(row.category ?? ""),
+        calls,
+        failures,
+        failureRate: calls > 0 ? failures / calls : 0,
+        averageDurationMs: toNumber(row.average_duration_ms),
       }
-      byTool.set(key, current)
-    }
-    return [...byTool.values()].map((row) => ({
-      toolName: row.toolName,
-      category: row.category,
-      calls: row.calls,
-      failures: row.failures,
-      failureRate: row.calls > 0 ? row.failures / row.calls : 0,
-      averageDurationMs: row.durationCount > 0 ? row.durationTotal / row.durationCount : 0,
-    })).sort((a, b) => compareDesc(a.calls, b.calls))
+    })
   }
 
-  getDetails(range: UsageRangeInput): UsageDetailRow[] {
-    const toolCallsBySession = new Map<string, number>()
-    for (const row of this.queryToolRows(range)) {
-      toolCallsBySession.set(row.session_id, (toolCallsBySession.get(row.session_id) ?? 0) + 1)
-    }
-    return this.queryUsageRows(range).sort((a, b) => b.timestamp_ms - a.timestamp_ms).map((row) => ({
+  getDetails(range: UsageDetailInput): UsageDetailRow[] {
+    const limit = Math.min(Math.max(Math.trunc(range.limit ?? 200), 1), 1000)
+    const offset = Math.max(Math.trunc(range.offset ?? 0), 0)
+    const usageFilter = this.createRangeWhere(range, "u.date")
+    const toolFilter = this.createRangeWhere(range)
+    const rows = this.db.prepare(`
+      SELECT u.*, COALESCE(t.tool_calls, 0) AS tool_calls
+      FROM ${this.prefix}_usage_events u
+      LEFT JOIN (
+        SELECT session_id, COUNT(*) AS tool_calls
+        FROM ${this.prefix}_tool_events
+        ${toolFilter.whereSql}
+        GROUP BY session_id
+      ) t ON t.session_id = u.session_id
+      ${usageFilter.whereSql}
+      ORDER BY u.timestamp_ms DESC
+      LIMIT ? OFFSET ?
+    `).all(...toolFilter.params, ...usageFilter.params, limit, offset) as unknown as (UsageEventRow & { tool_calls: number })[]
+    return rows.map((row) => ({
       id: row.id,
       timestamp: isoFromTimestamp(row.timestamp_ms),
       sessionId: row.session_id,
@@ -319,75 +363,82 @@ export class CcUsageAnalysisService {
         cacheWrite: row.cache_write_tokens,
         reasoning: row.reasoning_tokens,
       },
-      toolCalls: toolCallsBySession.get(row.session_id) ?? 0,
+      toolCalls: toNumber(row.tool_calls),
     }))
   }
 
-  protected queryUsageRows(range: UsageRangeInput): UsageEventRow[] {
+  private createRangeWhere(range: UsageRangeInput, column = "date"): { whereSql: string; params: string[] } {
     const filter = createUsageRangeFilter(range)
     const params: string[] = []
     const where: string[] = []
     if (filter.sinceDate) {
-      where.push("date >= ?")
+      where.push(`${column} >= ?`)
       params.push(filter.sinceDate)
     }
     if (filter.untilDate) {
-      where.push("date <= ?")
+      where.push(`${column} <= ?`)
       params.push(filter.untilDate)
     }
-    const query = `SELECT * FROM ${this.prefix}_usage_events${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY timestamp_ms ASC`
-    return this.db.prepare(query).all(...params) as UsageEventRow[]
+    return { whereSql: where.length ? `WHERE ${where.join(" AND ")}` : "", params }
   }
 
-  protected queryToolRows(range: UsageRangeInput): ToolEventRow[] {
-    const filter = createUsageRangeFilter(range)
-    const params: string[] = []
-    const where: string[] = []
-    if (filter.sinceDate) {
-      where.push("date >= ?")
-      params.push(filter.sinceDate)
-    }
-    if (filter.untilDate) {
-      where.push("date <= ?")
-      params.push(filter.untilDate)
-    }
-    const query = `SELECT * FROM ${this.prefix}_tool_events${where.length ? ` WHERE ${where.join(" AND ")}` : ""} ORDER BY timestamp_ms ASC`
-    return this.db.prepare(query).all(...params) as ToolEventRow[]
-  }
-
-  protected querySessionRows(): SessionRow[] {
-    return this.db.prepare(`SELECT * FROM ${this.prefix}_sessions`).all() as SessionRow[]
-  }
-
-  private createTotals(usageRows: UsageEventRow[], toolRows: ToolEventRow[]): UsageOverviewReport["totals"] {
-    const sessions = new Set<string>()
-    const days = new Set<string>()
-    let tokens = 0
-    let estimatedCost = 0
-    for (const row of usageRows) {
-      sessions.add(row.session_id)
-      days.add(row.date)
-      tokens += tokenTotal(row)
-      estimatedCost += row.total_cost
-    }
+  private queryUsageTotals(range: UsageRangeInput): AggregateValue & {
+    costInput: number
+    costOutput: number
+    costCacheRead: number
+    costCacheWrite: number
+    costReasoning: number
+    conversations: number
+    activeDays: number
+  } {
+    const filter = this.createRangeWhere(range)
+    const row = this.db.prepare(`
+      SELECT
+        COALESCE(SUM(input_tokens), 0) AS input,
+        COALESCE(SUM(output_tokens), 0) AS output,
+        COALESCE(SUM(cache_read_tokens), 0) AS cache_read,
+        COALESCE(SUM(cache_write_tokens), 0) AS cache_write,
+        COALESCE(SUM(reasoning_tokens), 0) AS reasoning,
+        COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens), 0) AS tokens,
+        COALESCE(SUM(total_cost), 0) AS estimated_cost,
+        COALESCE(SUM(cost_input), 0) AS cost_input,
+        COALESCE(SUM(cost_output), 0) AS cost_output,
+        COALESCE(SUM(cost_cache_read), 0) AS cost_cache_read,
+        COALESCE(SUM(cost_cache_write), 0) AS cost_cache_write,
+        COALESCE(SUM(cost_reasoning), 0) AS cost_reasoning,
+        COUNT(*) AS requests,
+        COUNT(DISTINCT session_id) AS conversations,
+        COUNT(DISTINCT date) AS active_days
+      FROM ${this.prefix}_usage_events
+      ${filter.whereSql}
+    `).get(...filter.params) as Record<string, unknown> | undefined
     return {
-      tokens,
-      estimatedCost,
-      requests: usageRows.length,
-      conversations: sessions.size,
-      toolCalls: toolRows.length,
-      activeDays: days.size,
+      input: toNumber(row?.input),
+      output: toNumber(row?.output),
+      cacheRead: toNumber(row?.cache_read),
+      cacheWrite: toNumber(row?.cache_write),
+      reasoning: toNumber(row?.reasoning),
+      tokens: toNumber(row?.tokens),
+      estimatedCost: toNumber(row?.estimated_cost),
+      requests: toNumber(row?.requests),
+      costInput: toNumber(row?.cost_input),
+      costOutput: toNumber(row?.cost_output),
+      costCacheRead: toNumber(row?.cost_cache_read),
+      costCacheWrite: toNumber(row?.cost_cache_write),
+      costReasoning: toNumber(row?.cost_reasoning),
+      conversations: toNumber(row?.conversations),
+      activeDays: toNumber(row?.active_days),
     }
   }
 
-  private createTokenBreakdown(usageRows: UsageEventRow[]): UsageTokenBreakdown {
-    return usageRows.reduce((totals, row) => ({
-      input: totals.input + row.input_tokens,
-      output: totals.output + row.output_tokens,
-      cacheRead: totals.cacheRead + row.cache_read_tokens,
-      cacheWrite: totals.cacheWrite + row.cache_write_tokens,
-      reasoning: totals.reasoning + row.reasoning_tokens,
-    }), emptyTokenBreakdown())
+  private queryToolCallTotal(range: UsageRangeInput): number {
+    const filter = this.createRangeWhere(range)
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS calls
+      FROM ${this.prefix}_tool_events
+      ${filter.whereSql}
+    `).get(...filter.params) as { calls?: number } | undefined
+    return toNumber(row?.calls)
   }
 }
 
@@ -395,7 +446,7 @@ async function refreshUsageNamespace(options: {
   readonly db: DatabaseSync
   readonly prefix: "cc" | "cx"
   readonly roots: string[]
-  readonly parseFile: (filePath: string) => Promise<ParsedFileWithTasks>
+  readonly parseFile: (filePath: string, parseOptions?: { readonly startLine?: number }) => Promise<ParsedFileWithTasks>
 }): Promise<UsageRefreshResult> {
   const startedAt = Date.now()
   const files = collectJsonlFiles(options.roots)
@@ -407,15 +458,21 @@ async function refreshUsageNamespace(options: {
 
   for (const file of files) {
     const fp = fingerprintFile(file)
-    const existing = options.db.prepare(`SELECT size, mtime_ms, parse_status FROM ${options.prefix}_scan_files WHERE file_path = ?`).get(file) as ScanFileRow | undefined
+    const existing = options.db.prepare(`SELECT size, mtime_ms, line_count, parse_status FROM ${options.prefix}_scan_files WHERE file_path = ?`).get(file) as ScanFileRow | undefined
     if (existing?.size === fp.size && existing.mtime_ms === fp.mtimeMs && existing.parse_status === "parsed") {
       skippedFiles += 1
       continue
     }
 
     try {
-      const parsed = await options.parseFile(file)
-      persistParsedFile(options.db, options.prefix, file, fp.size, fp.mtimeMs, parsed)
+      const canAppend = options.prefix === "cc" && existing?.parse_status === "parsed" && fp.size >= existing.size && existing.line_count > 0
+      const parsed = await options.parseFile(file, canAppend ? { startLine: existing.line_count } : undefined)
+      if (canAppend && parsed.lineCount <= existing.line_count) {
+        markScanFile(options.db, options.prefix, file, fp.size, fp.mtimeMs, parsed.lineCount)
+        skippedFiles += 1
+        continue
+      }
+      persistParsedFile(options.db, options.prefix, file, fp.size, fp.mtimeMs, parsed, canAppend ? "append" : "replace")
       parsedFiles += 1
       usageEvents += parsed.usageEvents.length
       toolEvents += parsed.toolEvents.length
@@ -423,11 +480,12 @@ async function refreshUsageNamespace(options: {
       failedFiles += 1
       const errorKind = error instanceof Error ? error.name : "ParseError"
       options.db.prepare(`
-        INSERT INTO ${options.prefix}_scan_files (file_path, size, mtime_ms, parse_status, error_kind, last_scanned_at)
-        VALUES (?, ?, ?, 'failed', ?, ?)
+        INSERT INTO ${options.prefix}_scan_files (file_path, size, mtime_ms, line_count, parse_status, error_kind, last_scanned_at)
+        VALUES (?, ?, ?, 0, 'failed', ?, ?)
         ON CONFLICT(file_path) DO UPDATE SET
           size = excluded.size,
           mtime_ms = excluded.mtime_ms,
+          line_count = excluded.line_count,
           parse_status = excluded.parse_status,
           error_kind = excluded.error_kind,
           last_scanned_at = excluded.last_scanned_at
@@ -448,16 +506,26 @@ async function refreshUsageNamespace(options: {
   }
 }
 
-function persistParsedFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: string, size: number, mtimeMs: number, parsed: ParsedFileWithTasks): void {
+function persistParsedFile(
+  db: DatabaseSync,
+  prefix: "cc" | "cx",
+  filePath: string,
+  size: number,
+  mtimeMs: number,
+  parsed: ParsedFileWithTasks,
+  mode: "append" | "replace",
+): void {
   db.exec("BEGIN IMMEDIATE")
   try {
     const oldSessions = db.prepare(`SELECT session_id FROM ${prefix}_sessions WHERE file_path = ?`).all(filePath) as { session_id: string }[]
     const sessionIds = new Set([...oldSessions.map((row) => row.session_id), ...parsed.sessions.map((session) => session.sessionId)])
-    for (const sessionId of sessionIds) {
-      db.prepare(`DELETE FROM ${prefix}_usage_events WHERE session_id = ?`).run(sessionId)
-      db.prepare(`DELETE FROM ${prefix}_tool_events WHERE session_id = ?`).run(sessionId)
-      db.prepare(`DELETE FROM ${prefix}_sessions WHERE session_id = ?`).run(sessionId)
-      if (prefix === "cx") db.prepare("DELETE FROM cx_task_events WHERE session_id = ?").run(sessionId)
+    if (mode === "replace") {
+      for (const sessionId of sessionIds) {
+        db.prepare(`DELETE FROM ${prefix}_usage_events WHERE session_id = ?`).run(sessionId)
+        db.prepare(`DELETE FROM ${prefix}_tool_events WHERE session_id = ?`).run(sessionId)
+        db.prepare(`DELETE FROM ${prefix}_sessions WHERE session_id = ?`).run(sessionId)
+        if (prefix === "cx") db.prepare("DELETE FROM cx_task_events WHERE session_id = ?").run(sessionId)
+      }
     }
 
     const insertSession = db.prepare(`
@@ -465,6 +533,25 @@ function persistParsedFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: stri
         session_id, file_path, workspace_key, workspace_label, provider, source, cli_version,
         started_at, ended_at, model_summary, request_count, conversation_count, tool_call_count
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(session_id) DO UPDATE SET
+        file_path = excluded.file_path,
+        workspace_key = COALESCE(NULLIF(excluded.workspace_key, ''), ${prefix}_sessions.workspace_key),
+        workspace_label = COALESCE(NULLIF(excluded.workspace_label, ''), ${prefix}_sessions.workspace_label),
+        provider = COALESCE(NULLIF(excluded.provider, ''), ${prefix}_sessions.provider),
+        source = COALESCE(NULLIF(excluded.source, ''), ${prefix}_sessions.source),
+        cli_version = COALESCE(NULLIF(excluded.cli_version, ''), ${prefix}_sessions.cli_version),
+        started_at = CASE
+          WHEN ${prefix}_sessions.started_at = '' THEN excluded.started_at
+          WHEN excluded.started_at = '' THEN ${prefix}_sessions.started_at
+          WHEN excluded.started_at < ${prefix}_sessions.started_at THEN excluded.started_at
+          ELSE ${prefix}_sessions.started_at
+        END,
+        ended_at = CASE
+          WHEN excluded.ended_at > ${prefix}_sessions.ended_at THEN excluded.ended_at
+          ELSE ${prefix}_sessions.ended_at
+        END,
+        model_summary = COALESCE(NULLIF(excluded.model_summary, ''), ${prefix}_sessions.model_summary),
+        conversation_count = ${mode === "append" ? `${prefix}_sessions.conversation_count + excluded.conversation_count` : "excluded.conversation_count"}
     `)
     for (const session of parsed.sessions) {
       insertSession.run(
@@ -485,7 +572,7 @@ function persistParsedFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: stri
     }
 
     const insertUsage = db.prepare(`
-      INSERT INTO ${prefix}_usage_events (
+      INSERT OR REPLACE INTO ${prefix}_usage_events (
         id, session_id, timestamp_ms, date, hour, workspace_key, workspace_label, model, provider,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens,
         cost_input, cost_output, cost_cache_read, cost_cache_write, cost_reasoning, total_cost
@@ -517,9 +604,9 @@ function persistParsedFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: stri
     }
 
     const insertTool = db.prepare(`
-      INSERT INTO ${prefix}_tool_events (
-        id, session_id, timestamp_ms, date, workspace_key, tool_name, category, status, exit_code, duration_ms
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT OR REPLACE INTO ${prefix}_tool_events (
+        id, session_id, timestamp_ms, date, hour, workspace_key, tool_name, category, status, exit_code, duration_ms
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     for (const event of parsed.toolEvents) {
       insertTool.run(
@@ -527,6 +614,7 @@ function persistParsedFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: stri
         event.sessionId,
         event.timestampMs,
         event.date,
+        event.hour,
         event.workspaceKey,
         event.toolName,
         event.category,
@@ -538,7 +626,7 @@ function persistParsedFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: stri
 
     if (prefix === "cx" && parsed.taskEvents) {
       const insertTask = db.prepare(`
-        INSERT INTO cx_task_events (id, session_id, started_at, completed_at, duration_ms, time_to_first_token_ms)
+        INSERT OR REPLACE INTO cx_task_events (id, session_id, started_at, completed_at, duration_ms, time_to_first_token_ms)
         VALUES (?, ?, ?, ?, ?, ?)
       `)
       for (const event of parsed.taskEvents) {
@@ -546,20 +634,42 @@ function persistParsedFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: stri
       }
     }
 
-    db.prepare(`
-      INSERT INTO ${prefix}_scan_files (file_path, size, mtime_ms, parse_status, error_kind, last_scanned_at)
-      VALUES (?, ?, ?, 'parsed', NULL, ?)
-      ON CONFLICT(file_path) DO UPDATE SET
-        size = excluded.size,
-        mtime_ms = excluded.mtime_ms,
-        parse_status = excluded.parse_status,
-        error_kind = excluded.error_kind,
-        last_scanned_at = excluded.last_scanned_at
-    `).run(filePath, size, mtimeMs, new Date().toISOString())
+    refreshSessionSummaries(db, prefix, [...sessionIds])
+    markScanFile(db, prefix, filePath, size, mtimeMs, parsed.lineCount)
     db.exec("COMMIT")
   } catch (error) {
     db.exec("ROLLBACK")
     throw error
+  }
+}
+
+function markScanFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: string, size: number, mtimeMs: number, lineCount: number): void {
+  db.prepare(`
+    INSERT INTO ${prefix}_scan_files (file_path, size, mtime_ms, line_count, parse_status, error_kind, last_scanned_at)
+    VALUES (?, ?, ?, ?, 'parsed', NULL, ?)
+    ON CONFLICT(file_path) DO UPDATE SET
+      size = excluded.size,
+      mtime_ms = excluded.mtime_ms,
+      line_count = excluded.line_count,
+      parse_status = excluded.parse_status,
+      error_kind = excluded.error_kind,
+      last_scanned_at = excluded.last_scanned_at
+  `).run(filePath, size, mtimeMs, lineCount, new Date().toISOString())
+}
+
+function refreshSessionSummaries(db: DatabaseSync, prefix: "cc" | "cx", sessionIds: readonly string[]): void {
+  const update = db.prepare(`
+    UPDATE ${prefix}_sessions SET
+      request_count = (SELECT COUNT(*) FROM ${prefix}_usage_events WHERE session_id = ?),
+      tool_call_count = (SELECT COUNT(*) FROM ${prefix}_tool_events WHERE session_id = ?),
+      model_summary = COALESCE((
+        SELECT GROUP_CONCAT(model, ', ')
+        FROM (SELECT DISTINCT model FROM ${prefix}_usage_events WHERE session_id = ? AND model != '')
+      ), model_summary)
+    WHERE session_id = ?
+  `)
+  for (const sessionId of sessionIds) {
+    update.run(sessionId, sessionId, sessionId, sessionId)
   }
 }
 

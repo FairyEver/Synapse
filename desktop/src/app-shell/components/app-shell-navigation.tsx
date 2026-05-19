@@ -13,9 +13,14 @@ type AppShellNavigationProps = {
 
 function AppShellNavigation({ tabs, value, onValueChange }: AppShellNavigationProps) {
   return (
-    <nav className="flex justify-center">
-      <Tabs data-track="app-shell-navigation" value={value} onValueChange={onValueChange}>
-        <TabsList>
+    <nav className="flex min-w-0 justify-start overflow-x-auto">
+      <Tabs
+        data-track="app-shell-navigation"
+        value={value}
+        onValueChange={onValueChange}
+        className="min-w-0"
+      >
+        <TabsList className="shrink-0">
           {tabs.map((tab) => (
             <TabsTrigger key={tab.id} value={tab.id}>
               {tab.label}

@@ -3,7 +3,7 @@ import path from "node:path"
 import readline from "node:readline"
 import { estimateUsageCost } from "./pricing"
 import { localDateKey, localHourKey } from "./range"
-import type { ParsedToolEvent, ParsedUsageEvent, ParsedUsageSession } from "./cc-parser"
+import type { ParsedToolEvent, ParsedUsageEvent, ParsedUsageSession, UsageParseOptions } from "./cc-parser"
 
 export interface ParsedTaskEvent {
   readonly id: string
@@ -19,6 +19,7 @@ export interface ParsedCodexUsageFile {
   readonly usageEvents: ParsedUsageEvent[]
   readonly toolEvents: ParsedToolEvent[]
   readonly taskEvents: ParsedTaskEvent[]
+  readonly lineCount: number
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -41,7 +42,7 @@ function workspaceFromCwd(cwd: unknown): { key: string; label: string } {
   return { key: cwd, label: path.basename(cwd) || cwd }
 }
 
-export async function parseCodexUsageFile(filePath: string): Promise<ParsedCodexUsageFile> {
+export async function parseCodexUsageFile(filePath: string, options: UsageParseOptions = {}): Promise<ParsedCodexUsageFile> {
   const fallbackTs = fs.statSync(filePath).mtimeMs
   let sessionId = path.basename(filePath, ".jsonl")
   let workspace = { key: "", label: "" }
@@ -56,6 +57,7 @@ export async function parseCodexUsageFile(filePath: string): Promise<ParsedCodex
   const usageEvents: ParsedUsageEvent[] = []
   const toolEvents: ParsedToolEvent[] = []
   const taskEvents: ParsedTaskEvent[] = []
+  let lineCount = 0
 
   const rl = readline.createInterface({
     input: fs.createReadStream(filePath),
@@ -63,6 +65,8 @@ export async function parseCodexUsageFile(filePath: string): Promise<ParsedCodex
   })
 
   for await (const line of rl) {
+    lineCount += 1
+    if (options.startLine && lineCount <= options.startLine) continue
     if (!line.trim()) continue
     let raw: Record<string, unknown>
     try {
@@ -145,6 +149,7 @@ export async function parseCodexUsageFile(filePath: string): Promise<ParsedCodex
         sessionId,
         timestampMs,
         date: localDateKey(timestampMs),
+        hour: localHourKey(timestampMs),
         workspaceKey: workspace.key,
         toolName,
         category: payloadType,
@@ -167,6 +172,7 @@ export async function parseCodexUsageFile(filePath: string): Promise<ParsedCodex
         sessionId,
         timestampMs,
         date: localDateKey(timestampMs),
+        hour: localHourKey(timestampMs),
         workspaceKey: workspace.key,
         toolName: payloadType,
         category: payloadType === "exec_command_end" ? "exec" : payloadType,
@@ -208,5 +214,6 @@ export async function parseCodexUsageFile(filePath: string): Promise<ParsedCodex
     usageEvents,
     toolEvents,
     taskEvents,
+    lineCount,
   }
 }

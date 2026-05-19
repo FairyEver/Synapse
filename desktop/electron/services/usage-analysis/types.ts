@@ -5,6 +5,11 @@ export interface UsageRangeInput {
   readonly preset: UsageRangePreset
 }
 
+export interface UsageDetailInput extends UsageRangeInput {
+  readonly limit?: number
+  readonly offset?: number
+}
+
 export interface UsageRangeFilter {
   readonly sinceDate?: string
   readonly untilDate?: string
@@ -68,6 +73,12 @@ export interface UsageTimeBucket {
   readonly conversations: number
   readonly toolCalls: number
   readonly dominantModel: string
+  readonly modelBreakdown: UsageTimeModelBucket[]
+}
+
+export interface UsageTimeModelBucket extends UsageTokenBreakdown {
+  readonly model: string
+  readonly tokens: number
 }
 
 export interface UsageModelRow {

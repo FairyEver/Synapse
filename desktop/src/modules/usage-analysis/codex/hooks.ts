@@ -40,7 +40,7 @@ export function useCodexTools(range: UsageRangePreset, refreshKey: number) {
 
 export function useCodexDetails(range: UsageRangePreset, refreshKey: number) {
   return useReportLoader(
-    () => requireSynapseBridge().usageAnalysis.codex.getDetails(toUsageRangeInput(range)),
+    () => requireSynapseBridge().usageAnalysis.codex.getDetails({ ...toUsageRangeInput(range), limit: 200 }),
     [range, refreshKey],
   )
 }

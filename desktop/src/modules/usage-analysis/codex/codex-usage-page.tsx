@@ -2,7 +2,6 @@ import { useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
 import type { UsageRangePreset, UsageViewId } from "../shared/types"
-import { CodexDetailsPage } from "./pages/details"
 import { CodexModelsPage } from "./pages/models"
 import { CodexOverviewPage } from "./pages/overview"
 import { CodexProjectsPage } from "./pages/projects"
@@ -44,7 +43,6 @@ export function CodexUsagePage() {
       {view === "models" ? <CodexModelsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "projects" ? <CodexProjectsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "tools" ? <CodexToolsPage range={range} refreshKey={refreshKey} /> : null}
-      {view === "details" ? <CodexDetailsPage range={range} refreshKey={refreshKey} /> : null}
     </UsageAnalysisShell>
   )
 }

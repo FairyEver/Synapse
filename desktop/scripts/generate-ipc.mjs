@@ -65,7 +65,6 @@ const MODULE_SOURCES = [
  * whose values are channel strings.
  */
 const EXTRA_CHANNEL_SOURCES = [
-  { id: "token-usage", importPath: "../electron/token-usage/channels.ts", exportName: "TOKEN_USAGE_CHANNELS" },
   { id: "usage-analysis", importPath: "../electron/usage-analysis/channels.ts", exportName: "USAGE_ANALYSIS_CHANNELS" },
 ]
 

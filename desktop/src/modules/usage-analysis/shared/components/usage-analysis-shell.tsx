@@ -22,7 +22,6 @@ const VIEWS: { readonly id: UsageViewId; readonly label: string }[] = [
   { id: "models", label: "模型" },
   { id: "projects", label: "项目" },
   { id: "tools", label: "工具" },
-  { id: "details", label: "明细" },
 ]
 
 export function UsageAnalysisShell(props: UsageAnalysisShellProps) {

@@ -43,12 +43,11 @@ import { DatabaseModule } from "@/modules/database"
 import { EditorScanModule } from "@/modules/editor-scan"
 import { AgentModule } from "@/modules/agent"
 import { TaskSchedulerModule } from "@/modules/task-scheduler"
-import { TokenUsageModule } from "@/modules/token-usage"
 import { CcUsageAnalysisModule, CodexUsageAnalysisModule } from "@/modules/usage-analysis"
 import { WorkflowModule } from "@/modules/workflow"
 import type { SynapseContentType } from "@/types/content"
 
-type AppTabId = SynapseContentType | "agent" | "database" | "task-scheduler" | "editor-scan" | "token-usage" | "usage-cc" | "usage-codex" | "workflow" | "settings"
+type AppTabId = SynapseContentType | "agent" | "database" | "task-scheduler" | "editor-scan" | "usage-cc" | "usage-codex" | "workflow" | "settings"
 type DialogKind = "create" | "detail" | "install"
 type ContentDialogState = Record<DialogKind, boolean>
 type ContentDialogStateMap = Record<SynapseContentType, ContentDialogState>
@@ -140,7 +139,6 @@ function MainApp() {
       { id: "database" as const, label: "数据库" },
       { id: "task-scheduler" as const, label: "定时任务" },
       { id: "editor-scan" as const, label: "IDE" },
-      { id: "token-usage" as const, label: "用量" },
       { id: "usage-cc" as const, label: "CC" },
       { id: "usage-codex" as const, label: "Codex" },
       ...(import.meta.env.DEV ? [{ id: "workflow" as const, label: "工作流" }] : []),
@@ -382,11 +380,6 @@ function MainApp() {
           {activeTab === "editor-scan" ? (
             <ErrorBoundary fallbackTitle="IDE 模块出现问题">
               <EditorScanModule />
-            </ErrorBoundary>
-          ) : null}
-          {activeTab === "token-usage" ? (
-            <ErrorBoundary fallbackTitle="Token Usage 模块出现问题">
-              <TokenUsageModule />
             </ErrorBoundary>
           ) : null}
           {activeTab === "usage-cc" ? (

@@ -155,6 +155,18 @@ describe("validateWorkflow", () => {
     expect(r.valid).toBe(true)
   })
 
+  it("errors when switch node has no project and workflow default project is blank", () => {
+    const sw = { id: "sw", name: "S", type: "switch", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }] } }
+    const r = validateWorkflow({
+      ...base,
+      defaultProjectId: "   ",
+      nodes: [sw, nodeEnd],
+      edges: [{ id: "e1", from: "sw", to: "end", branch: "yes" }],
+    })
+    expect(r.valid).toBe(false)
+    expect(r.errors.some((e) => e.type === "invalid_config" && e.nodeId === "sw" && e.message.includes("项目"))).toBe(true)
+  })
+
   // Edge case: switch branch with no outgoing edge
   it("errors when switch branch has no outgoing edge", () => {
     const sw = { id: "sw", name: "S", type: "switch", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }, { id: "no", label: "N" }] } }

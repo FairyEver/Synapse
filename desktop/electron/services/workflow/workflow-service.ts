@@ -9,6 +9,10 @@ const logger = createMainLogger("service.workflow")
 
 export interface WorkflowSaveResult { versionHash: string }
 export interface WorkflowSaveError { errors: ValidationError[] }
+export interface WorkflowDefaultProviderModel {
+  providerId: string
+  modelTier: NonNullable<WorkflowDefinition["defaultModelTier"]>
+}
 
 export class WorkflowService {
   private _seq = 0
@@ -118,12 +122,14 @@ export class WorkflowService {
     return { versionHash }
   }
 
-  async create(defaultProjectId?: string): Promise<{ id: string; versionHash: string } | WorkflowSaveError> {
+  async create(defaultProjectId?: string, defaultProviderModel?: WorkflowDefaultProviderModel): Promise<{ id: string; versionHash: string } | WorkflowSaveError> {
     const id = randomUUID()
     const now = Date.now()
     const def: WorkflowDefinition = {
       id, name: "新工作流", version: "", createdAt: now, updatedAt: now, params: [],
       defaultProjectId,
+      defaultProviderId: defaultProviderModel?.providerId,
+      defaultModelTier: defaultProviderModel?.modelTier,
       nodes: [{ id: "end", name: "结束", type: "end", position: { x: 600, y: 200 }, config: { outputType: "text", template: "", variables: [] } }],
       edges: [],
     }

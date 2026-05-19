@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react"
 import { AlertTriangle, ChevronUp, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
@@ -13,12 +13,56 @@ interface WorkflowErrorCardProps {
 
 export function WorkflowErrorCard({ items, onSelectItem }: WorkflowErrorCardProps) {
   const [collapsed, setCollapsed] = useState(false)
+  const [offset, setOffset] = useState({ x: 0, y: 0 })
+  const dragCleanupRef = useRef<(() => void) | null>(null)
 
   useEffect(() => {
     if (items.length > 0) setCollapsed(false)
   }, [items])
 
+  useEffect(() => {
+    return () => {
+      dragCleanupRef.current?.()
+    }
+  }, [])
+
   if (items.length === 0) return null
+
+  const positionStyle = offset.x !== 0 || offset.y !== 0
+    ? { transform: `translate(${offset.x}px, ${offset.y}px)` }
+    : undefined
+
+  const handleDragStart = (event: ReactMouseEvent<HTMLElement>) => {
+    if (event.button !== 0) return
+    if (event.target instanceof HTMLElement && event.target.closest("button")) return
+    event.preventDefault()
+
+    const target = event.currentTarget.closest<HTMLElement>("[data-workflow-error-floating]")
+    if (!target) return
+
+    const start = { x: event.clientX, y: event.clientY }
+    const startOffset = offset
+    const targetRect = target.getBoundingClientRect()
+    const parentRect = target.parentElement?.getBoundingClientRect()
+
+    const handleMove = (moveEvent: MouseEvent) => {
+      const next = {
+        x: startOffset.x + moveEvent.clientX - start.x,
+        y: startOffset.y + moveEvent.clientY - start.y,
+      }
+      setOffset(clampOffset(next, startOffset, targetRect, parentRect))
+    }
+    const handleEnd = () => {
+      window.removeEventListener("mousemove", handleMove)
+      window.removeEventListener("mouseup", handleEnd)
+      dragCleanupRef.current = null
+    }
+
+    dragCleanupRef.current?.()
+    window.addEventListener("mousemove", handleMove)
+    window.addEventListener("mouseup", handleEnd)
+    dragCleanupRef.current = handleEnd
+  }
 
   if (collapsed) {
     return (
@@ -26,7 +70,9 @@ export function WorkflowErrorCard({ items, onSelectItem }: WorkflowErrorCardProp
         type="button"
         variant="outline"
         size="sm"
+        data-workflow-error-floating
         className="absolute right-3 top-16 z-20 gap-1.5 bg-background shadow-sm"
+        style={positionStyle}
         onClick={() => setCollapsed(false)}
       >
         <AlertTriangle className="size-3.5 text-destructive" />
@@ -40,8 +86,13 @@ export function WorkflowErrorCard({ items, onSelectItem }: WorkflowErrorCardProp
   const hiddenCount = Math.max(0, items.length - visibleItems.length)
 
   return (
-    <Card className="absolute right-3 top-16 z-20 w-80 bg-background shadow-md">
-      <CardHeader className="flex flex-row items-center gap-2 px-3 py-2">
+    <Card
+      data-testid="workflow-error-card"
+      data-workflow-error-floating
+      className="absolute right-3 top-16 z-20 w-80 gap-0 bg-background py-0 shadow-md"
+      style={positionStyle}
+    >
+      <CardHeader className="cursor-move select-none flex flex-row items-center gap-2 px-3 py-2" onMouseDown={handleDragStart}>
         <AlertTriangle className="size-4 shrink-0 text-destructive" />
         <CardTitle className="flex-1 text-sm">需要处理 {items.length} 处</CardTitle>
         <Button
@@ -73,4 +124,25 @@ export function WorkflowErrorCard({ items, onSelectItem }: WorkflowErrorCardProp
       </CardContent>
     </Card>
   )
+}
+
+function clampOffset(
+  next: { x: number; y: number },
+  startOffset: { x: number; y: number },
+  targetRect: DOMRect,
+  parentRect: DOMRect | undefined,
+): { x: number; y: number } {
+  if (!parentRect || parentRect.width <= 0 || parentRect.height <= 0 || targetRect.width <= 0 || targetRect.height <= 0) {
+    return next
+  }
+
+  const minX = startOffset.x + parentRect.left - targetRect.left
+  const maxX = startOffset.x + parentRect.right - targetRect.right
+  const minY = startOffset.y + parentRect.top - targetRect.top
+  const maxY = startOffset.y + parentRect.bottom - targetRect.bottom
+
+  return {
+    x: Math.min(Math.max(next.x, minX), maxX),
+    y: Math.min(Math.max(next.y, minY), maxY),
+  }
 }

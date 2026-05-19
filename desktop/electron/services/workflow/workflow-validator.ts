@@ -35,6 +35,7 @@ function ancestors(nodeId: string, rev: Map<string, string[]>): Set<string> {
 
 export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
   const errors: ValidationError[] = []; const warnings: ValidationWarning[] = []
+  const hasDefaultProjectId = typeof def.defaultProjectId === "string" && def.defaultProjectId.trim().length > 0
 
   if (!def.name?.trim()) {
     errors.push({ type: "invalid_config", message: "工作流名称不能为空" })
@@ -116,7 +117,7 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
       if (!hasModelTier && !def.defaultModelTier) {
         errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」未配置模型层级，且工作流未设置默认模型` })
       }
-      if (!hasProjectId && !def.defaultProjectId) {
+      if (!hasProjectId && !hasDefaultProjectId) {
         errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」未配置项目，且工作流未设置默认项目` })
       }
     }

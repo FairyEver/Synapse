@@ -40,7 +40,7 @@ export function useCcTools(range: UsageRangePreset, refreshKey: number) {
 
 export function useCcDetails(range: UsageRangePreset, refreshKey: number) {
   return useReportLoader(
-    () => requireSynapseBridge().usageAnalysis.cc.getDetails(toUsageRangeInput(range)),
+    () => requireSynapseBridge().usageAnalysis.cc.getDetails({ ...toUsageRangeInput(range), limit: 200 }),
     [range, refreshKey],
   )
 }

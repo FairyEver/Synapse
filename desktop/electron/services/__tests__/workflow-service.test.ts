@@ -108,6 +108,15 @@ describe("WorkflowService", () => {
     const def = await svc.get(result.id)
     expect(def?.defaultProjectId).toBe("project-1")
   })
+  it("create stores the supplied default provider model", async () => {
+    const { svc } = createRepo()
+    const result = await svc.create(undefined, { providerId: "provider-1", modelTier: "sonnet" })
+    expect("id" in result).toBe(true)
+    if (!("id" in result)) return
+    const def = await svc.get(result.id)
+    expect(def?.defaultProviderId).toBe("provider-1")
+    expect(def?.defaultModelTier).toBe("sonnet")
+  })
   it("rejects invalid workflow and returns structured errors", async () => {
     const { svc } = createRepo()
     const def = { ...makeDef(), nodes: [] }

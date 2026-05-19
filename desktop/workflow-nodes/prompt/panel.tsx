@@ -1,6 +1,8 @@
 import { useRef, useState } from "react"
 import { AlertTriangle, ChevronDown } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Label } from "@/components/ui/label"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
 import type { ModelTier } from "@/types/provider-model"
 import type { SynapseProjectConfig } from "@/types/config"
@@ -30,6 +32,7 @@ export interface PromptNodePanelProps {
 export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParams, projects, defaultProjectName, defaultProviderId, defaultModelTier, validationItems = [] }: PromptNodePanelProps) {
   const [prompt, setPrompt] = useState(config.prompt)
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
+  const [customProviderEnabled, setCustomProviderEnabled] = useState(Boolean(config.providerId))
   const lastCommittedRef = useRef<PromptNodeConfig>(config)
   const { getProviderName, getModelName, isProviderAvailable } = useProviderLookup()
   const providerUnavailable = Boolean(config.providerId && !isProviderAvailable(config.providerId))
@@ -43,26 +46,52 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
   const varSummary = config.variables.length > 0 ? `${config.variables.length}个` : undefined
   const promptSummary = prompt.length > 0 ? `${prompt.length}字` : undefined
   const errorFor = (fieldKey: string) => validationItems.find((item) => item.fieldKey === fieldKey)?.summary
+  const inheritedProviderLabel = defaultProviderId
+    ? `${getProviderName(defaultProviderId) ?? defaultProviderId} · ${getModelName(defaultProviderId, (defaultModelTier as ModelTier) ?? "default") ?? TIER_LABELS[(defaultModelTier as ModelTier) ?? "default"]}`
+    : undefined
+  const nodeProviderLabel = config.providerId
+    ? `${getProviderName(config.providerId) ?? config.providerId} · ${getModelName(config.providerId, config.modelTier ?? "default") ?? TIER_LABELS[config.modelTier ?? "default"]}`
+    : "选择供应商 + 模型"
 
   return (
     <div className="grid gap-2">
       <CollapsibleSection title="执行配置">
-        <Button variant="outline" className={`w-full justify-between h-7 text-xs${providerUnavailable ? " border-destructive" : ""}`} onClick={() => setProviderDialogOpen(true)}>
-          <span className="flex min-w-0 items-center gap-1 truncate">
-            {providerUnavailable && <AlertTriangle className="size-3 shrink-0 text-destructive" />}
-            {config.providerId
-              ? `${getProviderName(config.providerId) ?? config.providerId} · ${getModelName(config.providerId, config.modelTier ?? "default") ?? TIER_LABELS[config.modelTier ?? "default"]}`
-              : defaultProviderId
-                ? `继承: ${getProviderName(defaultProviderId) ?? defaultProviderId} · ${getModelName(defaultProviderId, (defaultModelTier as ModelTier) ?? "default") ?? TIER_LABELS[(defaultModelTier as ModelTier) ?? "default"]}`
-                : "选择供应商 + 模型"}
-          </span>
-          <ChevronDown className="size-3.5 text-muted-foreground" />
-        </Button>
-        {providerUnavailable && <p className="text-[11px] text-destructive">供应商不可用，请重新选择</p>}
+        <div className="grid gap-2">
+          <div className="flex items-center gap-2">
+            <Checkbox
+              id="prompt-node-custom-provider"
+              checked={customProviderEnabled}
+              onCheckedChange={(checked) => {
+                const enabled = checked === true
+                setCustomProviderEnabled(enabled)
+                if (!enabled) commit({ providerId: undefined, modelTier: undefined })
+              }}
+            />
+            <Label htmlFor="prompt-node-custom-provider" className="text-xs font-normal">单独设置供应商</Label>
+          </div>
+          {customProviderEnabled ? (
+            <Button variant="outline" className={`w-full justify-between h-7 text-xs${providerUnavailable ? " border-destructive" : ""}`} onClick={() => setProviderDialogOpen(true)}>
+              <span className="flex min-w-0 items-center gap-1 truncate">
+                {providerUnavailable && <AlertTriangle className="size-3 shrink-0 text-destructive" />}
+                {nodeProviderLabel}
+              </span>
+              <ChevronDown className="size-3.5 text-muted-foreground" />
+            </Button>
+          ) : (
+            <p className="text-xs text-muted-foreground">
+              {inheritedProviderLabel ? `使用工作流默认：${inheritedProviderLabel}` : "未设置工作流默认供应商"}
+            </p>
+          )}
+        </div>
+        {customProviderEnabled && providerUnavailable && <p className="text-[11px] text-destructive">供应商不可用，请重新选择</p>}
         <ProviderModelSelectDialog
           open={providerDialogOpen}
           onOpenChange={setProviderDialogOpen}
-          defaultSelection={config.providerId ? { providerId: config.providerId, modelTier: config.modelTier ?? "default" } : undefined}
+          defaultSelection={config.providerId
+            ? { providerId: config.providerId, modelTier: config.modelTier ?? "default" }
+            : defaultProviderId
+              ? { providerId: defaultProviderId, modelTier: (defaultModelTier as ModelTier) ?? "default" }
+              : undefined}
           onSelect={(s) => commit({ providerId: s.providerId, modelTier: s.modelTier })}
         />
       </CollapsibleSection>

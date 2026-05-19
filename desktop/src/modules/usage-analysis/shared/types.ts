@@ -9,7 +9,7 @@ import type {
 } from "@/types/bridge"
 
 export type UsageRangePreset = UsageAnalysisRangePreset
-export type UsageViewId = "overview" | "time" | "models" | "projects" | "tools" | "details"
+export type UsageViewId = "overview" | "time" | "models" | "projects" | "tools"
 export type UsageOverviewReport = UsageAnalysisOverviewReport
 export type UsageTimeBucket = UsageAnalysisTimeBucket
 export type UsageModelRow = UsageAnalysisModelRow

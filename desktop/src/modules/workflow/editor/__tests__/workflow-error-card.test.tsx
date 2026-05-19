@@ -51,6 +51,26 @@ describe("WorkflowErrorCard", () => {
 
     expect(document.body.textContent).toContain("需要处理 4 处")
   })
+
+  it("moves by dragging the card title and keeps that position when collapsed", async () => {
+    await renderCard(<WorkflowErrorCard items={items()} onSelectItem={vi.fn()} />)
+
+    await act(async () => {
+      mouseDown(textByContent("需要处理 4 处"), 100, 80)
+      mouseMove(140, 110)
+      mouseUp(140, 110)
+    })
+
+    const card = document.body.querySelector<HTMLElement>("[data-testid='workflow-error-card']")
+    expect(card?.style.transform).toBe("translate(40px, 30px)")
+
+    await act(async () => {
+      buttonByLabel("关闭错误提示").click()
+    })
+
+    const collapsed = buttonByText("4 处需要处理")
+    expect(collapsed.style.transform).toBe("translate(40px, 30px)")
+  })
 })
 
 async function renderCard(node: ReactNode): Promise<void> {
@@ -90,4 +110,23 @@ function buttonContaining(...parts: string[]): HTMLButtonElement {
     .find((candidate) => parts.every((part) => candidate.textContent?.includes(part)))
   if (!button) throw new Error(`Button not found containing: ${parts.join(", ")}`)
   return button
+}
+
+function textByContent(text: string): HTMLElement {
+  const element = Array.from(document.body.querySelectorAll<HTMLElement>("*"))
+    .find((candidate) => candidate.textContent?.trim() === text)
+  if (!element) throw new Error(`Element not found: ${text}`)
+  return element
+}
+
+function mouseDown(element: HTMLElement, clientX: number, clientY: number): void {
+  element.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, clientX, clientY }))
+}
+
+function mouseMove(clientX: number, clientY: number): void {
+  window.dispatchEvent(new MouseEvent("mousemove", { bubbles: true, clientX, clientY }))
+}
+
+function mouseUp(clientX: number, clientY: number): void {
+  window.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, clientX, clientY }))
 }

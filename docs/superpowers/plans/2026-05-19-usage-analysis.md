@@ -297,6 +297,132 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: pass.
 
+---
+
+### Task 17: Review Feedback - Stable ECharts Hover Colors
+
+**Files:**
+- `desktop/src/modules/usage-analysis/shared/echarts-theme.ts`
+- `desktop/src/modules/usage-analysis/shared/components/usage-charts.tsx`
+
+- [x] **Step 1: Normalize chart token colors for ECharts**
+
+Converted `oklch(...)` theme token values to RGB strings before passing them to ECharts.
+
+- [x] **Step 2: Disable ECharts emphasis color transforms**
+
+Disabled emphasis on bar, line, pie, and rank series so hover does not recalculate colors.
+
+- [x] **Step 3: Run targeted verification**
+
+```bash
+pnpm --filter @synapse/desktop exec vitest run src/modules/usage-analysis/__tests__ electron/services/usage-analysis/__tests__
+git diff --check
+```
+
+Expected: pass.
+
+---
+
+### Task 16: Review Feedback - Chart Hover, Density, and Project Labels
+
+**Files:**
+- `desktop/src/modules/usage-analysis/shared/components/usage-charts.tsx`
+- `desktop/src/modules/usage-analysis/shared/components/report-views.tsx`
+- `desktop/src/styles/globals.css`
+
+- [x] **Step 1: Fix hover disappearing bars**
+
+Removed shadow axis pointers from bar charts and pinned emphasis/blur opacity.
+
+- [x] **Step 2: Tune trend line markers**
+
+Made request/tool lines thinner and markers smaller with solid fill.
+
+- [x] **Step 3: Make rank charts denser**
+
+Added dynamic chart heights and tighter bar category gaps based on row count.
+
+- [x] **Step 4: Shorten project labels**
+
+Added shortest-unique project path labels for project ranking charts.
+
+- [x] **Step 5: Run targeted verification**
+
+```bash
+pnpm --filter @synapse/desktop exec vitest run src/modules/usage-analysis/__tests__ electron/services/usage-analysis/__tests__
+git diff --check
+```
+
+Expected: pass.
+
+---
+
+### Task 15: Review Feedback - Model-Stacked Token Trend
+
+**Files:**
+- `desktop/electron/services/usage-analysis/types.ts`
+- `desktop/electron/services/usage-analysis/cc-service.ts`
+- `desktop/electron/services/usage-analysis/__tests__/reports.test.ts`
+- `desktop/src/types/bridge.ts`
+- `desktop/src/modules/usage-analysis/shared/components/usage-charts.tsx`
+- `desktop/src/styles/globals.css`
+
+- [x] **Step 1: Return per-model time bucket token breakdown**
+
+Extended time buckets with `modelBreakdown` for total, input, output, cache read, cache write, and reasoning tokens.
+
+- [x] **Step 2: Redesign trend chart interaction**
+
+Changed the trend chart to model-stacked bars with `全部 / 输入 / 输出 / 缓存读 / 缓存写` tabs and a custom tooltip.
+
+- [x] **Step 3: Fix line hover color**
+
+Pinned request/tool line colors and emphasis behavior so hover does not wash out the line.
+
+- [x] **Step 4: Run targeted verification**
+
+```bash
+pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/__tests__ src/modules/usage-analysis/__tests__
+git diff --check
+```
+
+Expected: pass.
+
+---
+
+### Task 14: Review Feedback - Hide Details and Improve Chart Color
+
+**Files:**
+- `desktop/src/styles/globals.css`
+- `desktop/src/modules/usage-analysis/shared/components/usage-analysis-shell.tsx`
+- `desktop/src/modules/usage-analysis/shared/components/report-views.tsx`
+- `desktop/src/modules/usage-analysis/shared/components/usage-charts.tsx`
+- `desktop/src/modules/usage-analysis/shared/types.ts`
+- `desktop/src/modules/usage-analysis/cc/cc-usage-page.tsx`
+- `desktop/src/modules/usage-analysis/codex/codex-usage-page.tsx`
+
+- [x] **Step 1: Hide details view**
+
+Removed the `明细` tab and renderer mounting from CC and Codex usage analysis.
+
+- [x] **Step 2: Remove duplicated overview tables**
+
+Kept overview metrics and charts; removed the lower Token 类型 / 费用类型 / 高频工具 table block.
+
+- [x] **Step 3: Replace grayscale chart palette**
+
+Updated chart theme tokens and ranking chart color mapping so ECharts uses distinct chart colors.
+
+- [x] **Step 4: Run targeted verification**
+
+```bash
+pnpm --filter @synapse/desktop exec vitest run src/modules/usage-analysis/__tests__ electron/services/usage-analysis/__tests__
+git diff --check
+```
+
+Expected: pass.
+
 - [x] **Step 6: Commit**
 
 ```bash
@@ -2130,3 +2256,42 @@ git commit -m "fix: verify usage analysis integration"
 ```
 
 If no fixes were needed, do not create an empty commit.
+
+---
+
+### Task 13: Review Feedback - Performance and Chart-First UI
+
+**Files:**
+- `desktop/electron/services/usage-analysis/db.ts`
+- `desktop/electron/services/usage-analysis/cc-parser.ts`
+- `desktop/electron/services/usage-analysis/codex-parser.ts`
+- `desktop/electron/services/usage-analysis/cc-service.ts`
+- `desktop/electron/usage-analysis/ipc-handlers.ts`
+- `desktop/src/types/bridge.ts`
+- `desktop/src/modules/usage-analysis/shared/components/report-views.tsx`
+- `desktop/src/modules/usage-analysis/shared/components/usage-charts.tsx`
+- `desktop/src/modules/usage-analysis/shared/echarts-theme.ts`
+- `desktop/src/modules/usage-analysis/cc/hooks.ts`
+- `desktop/src/modules/usage-analysis/codex/hooks.ts`
+
+- [x] **Step 1: Research fast Claude Code usage scanners**
+
+Reviewed `ryoppippi/ccusage` and `phuryn/claude-usage`.
+
+- [x] **Step 2: Optimize scan and report performance**
+
+Added scan `line_count`, CC append-only parsing, message-id dedupe, SQL aggregation queries, DB indexes, and capped detail reads.
+
+- [x] **Step 3: Redesign reports around charts**
+
+Added trend, breakdown, and ranking charts for overview/time/model/project/tool views; removed duplicated view titles.
+
+- [x] **Step 4: Run targeted verification**
+
+```bash
+pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/__tests__ src/modules/usage-analysis/__tests__
+pnpm --filter @synapse/desktop run check:hard-constraints
+git diff --check
+```
+
+Expected: pass.

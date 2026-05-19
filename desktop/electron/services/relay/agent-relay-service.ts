@@ -13,6 +13,7 @@ import {
   AGENT_RUNTIME_SERVICE_ID,
   type AgentMessage,
 } from "../agent-runtime"
+import type { ReplyTarget } from "../reply-target"
 import type { SideChannelService } from "../side-channel"
 import type { RelayProjectSummary, RelaySendRequest, RelaySendResult } from "./types"
 
@@ -119,8 +120,14 @@ export class AgentRelayService {
       })
       await this.finishRun(run, "failed", { lastError: failure.summary })
       this.recordAudit("failed", request, run.id, failure.summary)
-      if (request.visible && sourceTarget) {
-        await this.trySendVisible(sourceTarget, "Relay failed. Check diagnostics.")
+      if (request.visible) {
+        const sourceTarget = this.deps.sideChannel?.getReplyTarget(
+          request.sourceProjectId,
+          request.sourceSessionKey,
+        )
+        if (sourceTarget) {
+          await this.trySendVisible(sourceTarget, "Relay failed. Check diagnostics.")
+        }
       }
       throw error
     }
@@ -173,6 +180,25 @@ export class AgentRelayService {
     return projectId
       ? runs.filter((run) => run.sourceProjectId === projectId || run.targetProjectId === projectId)
       : runs
+  }
+
+  private async trySendVisible(target: ReplyTarget, message: string): Promise<void> {
+    try {
+      await this.deps.sideChannel?.send({
+        projectId: target.projectId,
+        sessionKey: target.sessionKey,
+        message: truncate(message),
+      })
+    } catch (error) {
+      const failure = relayFailureMetadata(error)
+      this.deps.logger?.warn("Agent relay visible response failed.", {
+        boundary: "agent-relay.visible-response",
+        sourceProjectId: target.projectId,
+        sourceSessionKey: target.sessionKey,
+        errorName: failure.errorName,
+        errorLength: failure.errorLength,
+      })
+    }
   }
 
   private async createRun(

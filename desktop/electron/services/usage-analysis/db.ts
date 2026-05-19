@@ -25,6 +25,7 @@ function initUsageAnalysisSchema(database: DatabaseSync): void {
         file_path TEXT PRIMARY KEY,
         size INTEGER NOT NULL,
         mtime_ms INTEGER NOT NULL,
+        line_count INTEGER NOT NULL DEFAULT 0,
         parse_status TEXT NOT NULL,
         error_kind TEXT,
         last_scanned_at TEXT NOT NULL
@@ -77,6 +78,7 @@ function initUsageAnalysisSchema(database: DatabaseSync): void {
         session_id TEXT NOT NULL,
         timestamp_ms INTEGER NOT NULL,
         date TEXT NOT NULL,
+        hour TEXT NOT NULL DEFAULT '',
         workspace_key TEXT NOT NULL DEFAULT '',
         tool_name TEXT NOT NULL,
         category TEXT NOT NULL,
@@ -133,4 +135,24 @@ function initUsageAnalysisSchema(database: DatabaseSync): void {
       time_to_first_token_ms INTEGER
     )
   `)
+
+  for (const prefix of ["cc", "cx"] as const) {
+    ensureColumn(database, `${prefix}_scan_files`, "line_count", "INTEGER NOT NULL DEFAULT 0")
+    ensureColumn(database, `${prefix}_tool_events`, "hour", "TEXT NOT NULL DEFAULT ''")
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_usage_date ON ${prefix}_usage_events(date)`)
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_usage_hour ON ${prefix}_usage_events(hour)`)
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_usage_model ON ${prefix}_usage_events(provider, model)`)
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_usage_workspace ON ${prefix}_usage_events(workspace_key)`)
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_usage_timestamp ON ${prefix}_usage_events(timestamp_ms)`)
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_tool_date ON ${prefix}_tool_events(date)`)
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_tool_hour ON ${prefix}_tool_events(hour)`)
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_tool_session ON ${prefix}_tool_events(session_id)`)
+    database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_tool_name ON ${prefix}_tool_events(category, tool_name)`)
+  }
+}
+
+function ensureColumn(database: DatabaseSync, table: string, column: string, definition: string): void {
+  const rows = database.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+  if (rows.some((row) => row.name === column)) return
+  database.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`)
 }

@@ -2,7 +2,6 @@ import { useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
 import type { UsageRangePreset, UsageViewId } from "../shared/types"
-import { CcDetailsPage } from "./pages/details"
 import { CcModelsPage } from "./pages/models"
 import { CcOverviewPage } from "./pages/overview"
 import { CcProjectsPage } from "./pages/projects"
@@ -44,7 +43,6 @@ export function CcUsagePage() {
       {view === "models" ? <CcModelsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "projects" ? <CcProjectsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "tools" ? <CcToolsPage range={range} refreshKey={refreshKey} /> : null}
-      {view === "details" ? <CcDetailsPage range={range} refreshKey={refreshKey} /> : null}
     </UsageAnalysisShell>
   )
 }

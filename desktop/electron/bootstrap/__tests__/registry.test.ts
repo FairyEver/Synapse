@@ -92,8 +92,8 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.relay",
         "core.side-channel",
         "core.task-scheduler",
-        "core.token-usage",
         "core.update",
+        "core.usage-analysis",
         "core.window-manager",
         "core.workflow",
         "core.workflow.engine",
@@ -201,7 +201,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.database",
     ])
     expect(byId.get("core.update")?.dependsOn).toEqual(["core.config", "core.window-manager"])
-    expect(byId.get("repo.watch")?.dependsOn).toEqual(["core.config"])
+    expect(byId.get("repo.watch")?.dependsOn).toEqual(["core.config", "core.event-bus"])
     expect(byId.get("repo.maintenance")?.dependsOn).toEqual(["repo.watch", "repo.pending-pushes"])
     expect(byId.get("repo.pending-pushes")?.dependsOn).toEqual(["core.database"])
     expect(byId.get("repo.sync-coordinator")?.dependsOn).toEqual([

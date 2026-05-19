@@ -48,6 +48,7 @@ export interface ParsedToolEvent {
   readonly sessionId: string
   readonly timestampMs: number
   readonly date: string
+  readonly hour: string
   readonly workspaceKey: string
   readonly toolName: string
   readonly category: string
@@ -60,6 +61,11 @@ export interface ParsedUsageFile {
   readonly sessions: ParsedUsageSession[]
   readonly usageEvents: ParsedUsageEvent[]
   readonly toolEvents: ParsedToolEvent[]
+  readonly lineCount: number
+}
+
+export interface UsageParseOptions {
+  readonly startLine?: number
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -86,23 +92,25 @@ function workspaceFromClaudePath(filePath: string): { key: string; label: string
 }
 
 function extractReasoningTokens(content: unknown[]): number {
-  return content.reduce((total, item) => {
+  return content.reduce<number>((total, item) => {
     const block = asRecord(item)
     if (!block || block.type !== "thinking") return total
     return total + asNumber(block.tokens)
   }, 0)
 }
 
-export async function parseClaudeUsageFile(filePath: string): Promise<ParsedUsageFile> {
+export async function parseClaudeUsageFile(filePath: string, options: UsageParseOptions = {}): Promise<ParsedUsageFile> {
   const fallbackTs = fs.statSync(filePath).mtimeMs
-  const sessionId = path.basename(filePath, ".jsonl")
+  const fallbackSessionId = path.basename(filePath, ".jsonl")
   const workspace = workspaceFromClaudePath(filePath)
-  const usageEvents: ParsedUsageEvent[] = []
-  const toolEvents: ParsedToolEvent[] = []
+  const usageEvents = new Map<string, ParsedUsageEvent>()
+  const toolEvents = new Map<string, ParsedToolEvent>()
+  const sessionIds = new Set<string>()
   const models = new Set<string>()
   let conversationCount = 0
   let startedAt = ""
   let endedAt = ""
+  let lineCount = 0
 
   const rl = readline.createInterface({
     input: fs.createReadStream(filePath),
@@ -110,6 +118,8 @@ export async function parseClaudeUsageFile(filePath: string): Promise<ParsedUsag
   })
 
   for await (const line of rl) {
+    lineCount += 1
+    if (options.startLine && lineCount <= options.startLine) continue
     if (!line.trim()) continue
     let raw: Record<string, unknown>
     try {
@@ -120,6 +130,8 @@ export async function parseClaudeUsageFile(filePath: string): Promise<ParsedUsag
 
     const timestampMs = parseTimestamp(raw.timestamp, fallbackTs)
     const iso = new Date(timestampMs).toISOString()
+    const sessionId = typeof raw.sessionId === "string" && raw.sessionId ? raw.sessionId : fallbackSessionId
+    sessionIds.add(sessionId)
     if (!startedAt || iso < startedAt) startedAt = iso
     if (!endedAt || iso > endedAt) endedAt = iso
 
@@ -132,22 +144,26 @@ export async function parseClaudeUsageFile(filePath: string): Promise<ParsedUsag
     if (!message) continue
 
     const content = Array.isArray(message.content) ? message.content : []
-    for (const block of content) {
+    const messageId = typeof message.id === "string" && message.id ? message.id : ""
+    content.forEach((block, index) => {
       const value = asRecord(block)
-      if (value?.type !== "tool_use") continue
+      if (value?.type !== "tool_use") return
       const toolName = typeof value.name === "string" ? value.name : "unknown"
-      toolEvents.push({
-        id: `${sessionId}:tool:${toolEvents.length}`,
+      const blockId = typeof value.id === "string" && value.id ? value.id : String(index)
+      const id = `${sessionId}:tool:${messageId || `line-${lineCount}`}:${blockId}`
+      toolEvents.set(id, {
+        id,
         sessionId,
         timestampMs,
         date: localDateKey(timestampMs),
+        hour: localHourKey(timestampMs),
         workspaceKey: workspace.key,
         toolName,
         category: "tool_use",
         status: "",
         durationMs: null,
       })
-    }
+    })
 
     const usage = asRecord(message.usage)
     const model = typeof message.model === "string" ? message.model : ""
@@ -162,8 +178,9 @@ export async function parseClaudeUsageFile(filePath: string): Promise<ParsedUsag
       reasoning: extractReasoningTokens(content),
     }
     const cost = estimateUsageCost("cc", model, tokens)
-    usageEvents.push({
-      id: `${sessionId}:usage:${usageEvents.length}`,
+    const eventId = `${sessionId}:usage:${messageId || `line-${lineCount}`}`
+    usageEvents.set(eventId, {
+      id: eventId,
       sessionId,
       timestampMs,
       date: localDateKey(timestampMs),
@@ -186,8 +203,12 @@ export async function parseClaudeUsageFile(filePath: string): Promise<ParsedUsag
     })
   }
 
+  const usageRows = [...usageEvents.values()]
+  const toolRows = [...toolEvents.values()]
+  if (sessionIds.size === 0 && !options.startLine) sessionIds.add(fallbackSessionId)
+
   return {
-    sessions: [{
+    sessions: [...sessionIds].map((sessionId) => ({
       sessionId,
       filePath,
       workspaceKey: workspace.key,
@@ -198,11 +219,12 @@ export async function parseClaudeUsageFile(filePath: string): Promise<ParsedUsag
       startedAt,
       endedAt,
       modelSummary: [...models].join(", "),
-      requestCount: usageEvents.length,
+      requestCount: usageRows.filter((event) => event.sessionId === sessionId).length,
       conversationCount,
-      toolCallCount: toolEvents.length,
-    }],
-    usageEvents,
-    toolEvents,
+      toolCallCount: toolRows.filter((event) => event.sessionId === sessionId).length,
+    })),
+    usageEvents: usageRows,
+    toolEvents: toolRows,
+    lineCount,
   }
 }

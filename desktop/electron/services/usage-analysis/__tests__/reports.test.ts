@@ -39,5 +39,14 @@ describe("usage analysis reports", () => {
     expect(overview.totals.requests).toBe(1)
     expect(overview.totals.toolCalls).toBe(1)
     expect(overview.topModels[0].model).toBe("claude-opus-4.6")
+    expect(overview.trend[0].modelBreakdown).toEqual([{
+      model: "claude-opus-4.6",
+      tokens: 190,
+      input: 100,
+      output: 20,
+      cacheRead: 30,
+      cacheWrite: 40,
+      reasoning: 0,
+    }])
   })
 })

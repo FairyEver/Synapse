@@ -7,9 +7,9 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
-import { BreakdownTable } from "./breakdown-table"
 import { MetricGrid } from "./metric-grid"
 import { ReportState } from "./report-state"
+import { UsageBreakdownChart, UsageRankChart, UsageTrendChart } from "./usage-charts"
 import type {
   ReportState as LoaderState,
   UsageDetailRow,
@@ -36,32 +36,83 @@ function formatPercent(value: number): string {
   return new Intl.NumberFormat("zh-CN", { style: "percent", maximumFractionDigits: 1 }).format(value)
 }
 
-function tokenRows(breakdown: UsageOverviewReport["tokenBreakdown"]) {
+function projectKey(row: UsageProjectRow): string {
+  return row.workspaceKey || row.workspaceLabel
+}
+
+function createProjectLabelMap(rows: readonly UsageProjectRow[]): Map<string, string> {
+  const parsed = rows.map((row) => ({
+    key: projectKey(row),
+    parts: projectPathParts(row.workspaceLabel || row.workspaceKey),
+  }))
+  const depthByKey = new Map(parsed.map((item) => [item.key, 1]))
+
+  while (true) {
+    const labels = new Map<string, string[]>()
+    for (const item of parsed) {
+      const depth = depthByKey.get(item.key) ?? 1
+      const label = item.parts.slice(-depth).join("/")
+      labels.set(label, [...(labels.get(label) ?? []), item.key])
+    }
+    const duplicates = [...labels.values()].filter((keys) => keys.length > 1)
+    if (duplicates.length === 0) break
+    let changed = false
+    for (const keys of duplicates) {
+      for (const key of keys) {
+        const item = parsed.find((candidate) => candidate.key === key)
+        const currentDepth = depthByKey.get(key) ?? 1
+        if (item && currentDepth < item.parts.length) {
+          depthByKey.set(key, currentDepth + 1)
+          changed = true
+        }
+      }
+    }
+    if (!changed) break
+  }
+
+  return new Map(parsed.map((item) => {
+    const depth = depthByKey.get(item.key) ?? 1
+    return [item.key, item.parts.slice(-depth).join("/") || item.key || "unknown"]
+  }))
+}
+
+function projectPathParts(value: string): string[] {
+  const normalized = normalizeProjectPath(value)
+  const parts = normalized.split("/").filter(Boolean)
+  return parts.length > 0 ? parts : [normalized || "unknown"]
+}
+
+function normalizeProjectPath(value: string): string {
+  const trimmed = value.trim().replaceAll("\\", "/")
+  if (trimmed.startsWith("-Users-")) {
+    return trimmed.replace(/^-Users-/, "/Users/").replaceAll("-", "/")
+  }
+  return trimmed
+}
+
+function tokenChartRows(breakdown: UsageOverviewReport["tokenBreakdown"]) {
   return [
-    { label: "输入", value: formatInteger(breakdown.input) },
-    { label: "输出", value: formatInteger(breakdown.output) },
-    { label: "缓存读取", value: formatInteger(breakdown.cacheRead) },
-    { label: "缓存写入", value: formatInteger(breakdown.cacheWrite) },
-    { label: "推理", value: formatInteger(breakdown.reasoning) },
+    { label: "输入", value: breakdown.input },
+    { label: "输出", value: breakdown.output },
+    { label: "缓存读", value: breakdown.cacheRead },
+    { label: "缓存写", value: breakdown.cacheWrite },
+    { label: "推理", value: breakdown.reasoning },
   ]
 }
 
-function costRows(breakdown: UsageOverviewReport["costBreakdown"]) {
+function costChartRows(breakdown: UsageOverviewReport["costBreakdown"]) {
   return [
-    { label: "输入", value: formatCurrency(breakdown.input) },
-    { label: "输出", value: formatCurrency(breakdown.output) },
-    { label: "缓存读取", value: formatCurrency(breakdown.cacheRead) },
-    { label: "缓存写入", value: formatCurrency(breakdown.cacheWrite) },
-    { label: "推理", value: formatCurrency(breakdown.reasoning) },
+    { label: "输入", value: breakdown.input },
+    { label: "输出", value: breakdown.output },
+    { label: "缓存读", value: breakdown.cacheRead },
+    { label: "缓存写", value: breakdown.cacheWrite },
+    { label: "推理", value: breakdown.reasoning },
   ]
-}
-
-function SectionTitle({ children }: { readonly children: string }) {
-  return <h3 className="text-sm font-medium">{children}</h3>
 }
 
 export function OverviewReportView({ state }: { readonly state: LoaderState<UsageOverviewReport> }) {
   const report = state.data
+  const projectLabels = report ? createProjectLabelMap(report.topProjects) : new Map<string, string>()
   return (
     <ReportState loading={state.loading} error={state.error} empty={!report || report.totals.tokens === 0}>
       {report ? (
@@ -76,14 +127,15 @@ export function OverviewReportView({ state }: { readonly state: LoaderState<Usag
               { label: "活跃天", value: formatInteger(report.totals.activeDays) },
             ]}
           />
-          <div className="grid gap-4 lg:grid-cols-2">
-            <BreakdownTable title="Token 类型" rows={tokenRows(report.tokenBreakdown)} />
-            <BreakdownTable title="费用类型" rows={costRows(report.costBreakdown)} />
+          <UsageTrendChart title="Token 趋势" rows={report.trend} />
+          <div className="grid gap-4 md:grid-cols-2">
+            <UsageBreakdownChart title="Token 类型占比" rows={tokenChartRows(report.tokenBreakdown)} valueFormatter={formatInteger} compact />
+            <UsageBreakdownChart title="费用类型占比" rows={costChartRows(report.costBreakdown)} valueFormatter={formatCurrency} compact />
           </div>
           <div className="grid gap-4 xl:grid-cols-3">
-            <ModelTable title="模型" rows={report.topModels} compact />
-            <ProjectTable title="项目" rows={report.topProjects} compact />
-            <ToolTable title="工具" rows={report.topTools} compact />
+            <UsageRankChart title="模型 Token 排行" rows={report.topModels.map((row) => ({ label: row.model, value: row.tokens, extra: row.estimatedCost }))} valueFormatter={formatInteger} extraFormatter={(value) => `费用 ${formatCurrency(value)}`} />
+            <UsageRankChart title="项目 Token 排行" rows={report.topProjects.map((row) => ({ label: projectLabels.get(projectKey(row)) ?? row.workspaceLabel, value: row.tokens, extra: row.requests }))} valueFormatter={formatInteger} extraFormatter={(value) => `请求 ${formatInteger(value)}`} />
+            <UsageRankChart title="工具调用排行" rows={report.topTools.map((row) => ({ label: row.toolName, value: row.calls, extra: row.failureRate }))} valueFormatter={formatInteger} extraFormatter={(value) => `失败率 ${formatPercent(value)}`} />
           </div>
         </div>
       ) : null}
@@ -95,8 +147,8 @@ export function TimeReportView({ state }: { readonly state: LoaderState<UsageTim
   const rows = state.data ?? []
   return (
     <ReportState loading={state.loading} error={state.error} empty={rows.length === 0}>
-      <div className="flex flex-col gap-2">
-        <SectionTitle>时间</SectionTitle>
+      <div className="flex flex-col gap-4">
+        <UsageTrendChart title="Token / 请求 / 工具" rows={rows} />
         <Table>
           <TableHeader>
             <TableRow>
@@ -130,16 +182,25 @@ export function ModelsReportView({ state }: { readonly state: LoaderState<UsageM
   const rows = state.data ?? []
   return (
     <ReportState loading={state.loading} error={state.error} empty={rows.length === 0}>
-      <ModelTable title="模型" rows={rows} />
+      <div className="flex flex-col gap-4">
+        <UsageRankChart title="Token 排行" rows={rows.map((row) => ({ label: row.model, value: row.tokens, extra: row.estimatedCost }))} valueFormatter={formatInteger} extraFormatter={(value) => `费用 ${formatCurrency(value)}`} />
+        <UsageBreakdownChart title="模型费用占比" rows={rows.map((row) => ({ label: row.model, value: row.estimatedCost }))} valueFormatter={formatCurrency} />
+        <ModelTable rows={rows} />
+      </div>
     </ReportState>
   )
 }
 
 export function ProjectsReportView({ state }: { readonly state: LoaderState<UsageProjectRow[]> }) {
   const rows = state.data ?? []
+  const projectLabels = createProjectLabelMap(rows)
   return (
     <ReportState loading={state.loading} error={state.error} empty={rows.length === 0}>
-      <ProjectTable title="项目" rows={rows} />
+      <div className="flex flex-col gap-4">
+        <UsageRankChart title="Token 排行" rows={rows.map((row) => ({ label: projectLabels.get(projectKey(row)) ?? row.workspaceLabel, value: row.tokens, extra: row.requests }))} valueFormatter={formatInteger} extraFormatter={(value) => `请求 ${formatInteger(value)}`} />
+        <UsageRankChart title="工具调用排行" rows={rows.map((row) => ({ label: projectLabels.get(projectKey(row)) ?? row.workspaceLabel, value: row.toolCalls, extra: row.sessions }))} valueFormatter={formatInteger} extraFormatter={(value) => `会话 ${formatInteger(value)}`} />
+        <ProjectTable rows={rows} labels={projectLabels} />
+      </div>
     </ReportState>
   )
 }
@@ -148,7 +209,11 @@ export function ToolsReportView({ state }: { readonly state: LoaderState<UsageTo
   const rows = state.data ?? []
   return (
     <ReportState loading={state.loading} error={state.error} empty={rows.length === 0}>
-      <ToolTable title="工具" rows={rows} />
+      <div className="flex flex-col gap-4">
+        <UsageRankChart title="调用排行" rows={rows.map((row) => ({ label: row.toolName, value: row.calls, extra: row.failureRate }))} valueFormatter={formatInteger} extraFormatter={(value) => `失败率 ${formatPercent(value)}`} />
+        <UsageBreakdownChart title="失败占比" rows={rows.map((row) => ({ label: row.toolName, value: row.failures }))} valueFormatter={formatInteger} />
+        <ToolTable rows={rows} />
+      </div>
     </ReportState>
   )
 }
@@ -158,7 +223,7 @@ export function DetailsReportView({ state }: { readonly state: LoaderState<Usage
   return (
     <ReportState loading={state.loading} error={state.error} empty={rows.length === 0}>
       <div className="flex flex-col gap-2">
-        <SectionTitle>明细</SectionTitle>
+        <div className="text-sm text-muted-foreground">最近 200 条</div>
         <Table>
           <TableHeader>
             <TableRow>
@@ -190,10 +255,10 @@ export function DetailsReportView({ state }: { readonly state: LoaderState<Usage
   )
 }
 
-function ModelTable({ title, rows, compact = false }: { readonly title: string; readonly rows: readonly UsageModelRow[]; readonly compact?: boolean }) {
+function ModelTable({ title, rows, compact = false }: { readonly title?: string; readonly rows: readonly UsageModelRow[]; readonly compact?: boolean }) {
   return (
     <div className="flex flex-col gap-2">
-      <SectionTitle>{title}</SectionTitle>
+      {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
       <Table>
         <TableHeader>
           <TableRow>
@@ -220,10 +285,20 @@ function ModelTable({ title, rows, compact = false }: { readonly title: string; 
   )
 }
 
-function ProjectTable({ title, rows, compact = false }: { readonly title: string; readonly rows: readonly UsageProjectRow[]; readonly compact?: boolean }) {
+function ProjectTable({
+  title,
+  rows,
+  labels = createProjectLabelMap(rows),
+  compact = false,
+}: {
+  readonly title?: string
+  readonly rows: readonly UsageProjectRow[]
+  readonly labels?: ReadonlyMap<string, string>
+  readonly compact?: boolean
+}) {
   return (
     <div className="flex flex-col gap-2">
-      <SectionTitle>{title}</SectionTitle>
+      {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
       <Table>
         <TableHeader>
           <TableRow>
@@ -237,7 +312,7 @@ function ProjectTable({ title, rows, compact = false }: { readonly title: string
         <TableBody>
           {rows.map((row) => (
             <TableRow key={row.workspaceKey || row.workspaceLabel}>
-              <TableCell>{row.workspaceLabel || "-"}</TableCell>
+              <TableCell>{labels.get(projectKey(row)) ?? row.workspaceLabel ?? "-"}</TableCell>
               {!compact ? <TableCell>{row.workspaceKey || "-"}</TableCell> : null}
               <TableCell className="text-right tabular-nums">{formatInteger(row.tokens)}</TableCell>
               <TableCell className="text-right tabular-nums">{formatInteger(row.requests)}</TableCell>
@@ -250,10 +325,10 @@ function ProjectTable({ title, rows, compact = false }: { readonly title: string
   )
 }
 
-function ToolTable({ title, rows, compact = false }: { readonly title: string; readonly rows: readonly UsageToolRow[]; readonly compact?: boolean }) {
+function ToolTable({ title, rows, compact = false }: { readonly title?: string; readonly rows: readonly UsageToolRow[]; readonly compact?: boolean }) {
   return (
     <div className="flex flex-col gap-2">
-      <SectionTitle>{title}</SectionTitle>
+      {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
       <Table>
         <TableHeader>
           <TableRow>

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto"
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
-import type { WorkflowService } from "../../services/workflow/workflow-service"
+import type { WorkflowDefaultProviderModel, WorkflowService } from "../../services/workflow/workflow-service"
 import type { WorkflowEngine } from "../../services/workflow/workflow-engine"
 import type { RunSnapshotService } from "../../services/workflow/run-snapshot-service"
 import type { WorkflowWindowManager } from "../../services/workflow/window-manager"
@@ -330,9 +330,15 @@ function handleEngineRejection(options: {
   pruneTerminalStatuses(runStatuses, def.id)
 }
 
-async function resolveDefaultWorkflowProjectId(): Promise<string | undefined> {
+async function resolveDefaultWorkflowCreateOptions(): Promise<{
+  defaultProjectId?: string
+  defaultProviderModel?: WorkflowDefaultProviderModel
+}> {
   const appConfig = await configStore.load()
-  return appConfig.global.projects[0]?.id
+  return {
+    defaultProjectId: appConfig.global.projects[0]?.id,
+    defaultProviderModel: appConfig.agent?.defaultProviderModel ?? undefined,
+  }
 }
 
 async function resolveWorkflowProjectId(def: WorkflowDefinition): Promise<string | undefined> {
@@ -386,8 +392,8 @@ export const workflowIpcModule: IpcModule = {
       ]),
       handler: async (ctx) => {
         logger.info("workflow:create requested")
-        const defaultProjectId = await resolveDefaultWorkflowProjectId()
-        const result = await ctx.resolve<WorkflowService>("core.workflow").create(defaultProjectId)
+        const { defaultProjectId, defaultProviderModel } = await resolveDefaultWorkflowCreateOptions()
+        const result = await ctx.resolve<WorkflowService>("core.workflow").create(defaultProjectId, defaultProviderModel)
         if ("errors" in result) {
           logger.warn("workflow:create failed", { errors: result.errors })
         } else {

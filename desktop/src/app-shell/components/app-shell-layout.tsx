@@ -17,10 +17,10 @@ function AppShellLayout({ navigation, children, actions }: AppShellLayoutProps) 
       <SwitchRepositoryOnboardingDialog />
       <div className="flex h-full flex-col">
         <header className="shrink-0 border-b border-sidebar-border/50">
-          <div className="relative flex min-h-10 items-center justify-center px-3">
-            <div className="min-w-0">{navigation}</div>
+          <div className="flex min-h-10 items-center justify-between gap-3 px-3">
+            <div className="min-w-0 flex-1">{navigation}</div>
             {actions && (
-              <div className="absolute right-3 shrink-0">
+              <div className="shrink-0">
                 {actions}
               </div>
             )}
