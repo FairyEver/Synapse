@@ -134,6 +134,8 @@ const SENSITIVE_PARAM_NAMES = new Set(["token", "key", "secret", "password", "au
 function sanitizeUrlForAudit(raw: string): string {
   try {
     const url = new URL(raw)
+    url.username = ""
+    url.password = ""
     for (const param of url.searchParams.keys()) {
       if (SENSITIVE_PARAM_NAMES.has(param.toLowerCase())) {
         url.searchParams.set(param, "[REDACTED]")

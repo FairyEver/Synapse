@@ -105,4 +105,34 @@ describe("sendHttpTestRequest", () => {
     }))
     expect(JSON.stringify(vi.mocked(audit.record).mock.calls)).not.toContain("sk-secret")
   })
+
+  it("redacts URL userinfo from permission and audit resources", async () => {
+    const guard = permissionGuard(true)
+    const audit = auditSink()
+    const sendRequest = vi.fn().mockResolvedValue({
+      status: 204,
+      statusText: "No Content",
+      headers: {},
+      body: "",
+    })
+
+    await sendHttpTestRequest(config({
+      url: "https://user:secret@example.com/api?token=sk-secret",
+    }), {
+      permissionGuard: guard,
+      auditSink: audit,
+      sendRequest,
+    })
+
+    expect(guard.check).toHaveBeenCalledWith(expect.objectContaining({
+      resource: "https://example.com/api?token=%5BREDACTED%5D",
+    }))
+    expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
+      resource: "https://example.com/api?token=%5BREDACTED%5D",
+      outcome: "allowed",
+    }))
+    expect(JSON.stringify(vi.mocked(guard.check).mock.calls)).not.toContain("user:secret")
+    expect(JSON.stringify(vi.mocked(audit.record).mock.calls)).not.toContain("user:secret")
+    expect(JSON.stringify(vi.mocked(audit.record).mock.calls)).not.toContain("sk-secret")
+  })
 })
