@@ -1989,7 +1989,7 @@ git commit -m "feat: add usage analysis pages"
 **Files:**
 - Modify: `desktop/src/App.tsx`
 
-- [ ] **Step 1: Update imports and tab type**
+- [x] **Step 1: Update imports and tab type**
 
 In `desktop/src/App.tsx`, add:
 
@@ -2003,7 +2003,7 @@ Extend `AppTabId`:
 type AppTabId = SynapseContentType | "agent" | "database" | "task-scheduler" | "editor-scan" | "token-usage" | "usage-cc" | "usage-codex" | "workflow" | "settings"
 ```
 
-- [ ] **Step 2: Add tabs after old 用量**
+- [x] **Step 2: Add tabs after old 用量**
 
 In the `tabs` array, add:
 
@@ -2018,7 +2018,7 @@ Keep old:
 { id: "token-usage" as const, label: "用量" },
 ```
 
-- [ ] **Step 3: Render modules**
+- [x] **Step 3: Render modules**
 
 Below old `TokenUsageModule` render block, add:
 
