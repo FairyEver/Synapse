@@ -33,7 +33,7 @@ Do not start a dev server or browser preview for verification. Use source-level 
 - Modify: `desktop/src/types/bridge.ts`
 - Test: typecheck through later tasks
 
-- [ ] **Step 1: Create shared package types**
+- [x] **Step 1: Create shared package types**
 
 Create `desktop/src/types/workflow-package.ts` with this content:
 
@@ -96,7 +96,7 @@ export interface WorkflowImportPreview {
 }
 ```
 
-- [ ] **Step 2: Import workflow package types in the bridge type file**
+- [x] **Step 2: Import workflow package types in the bridge type file**
 
 Modify the import section of `desktop/src/types/bridge.ts` to include:
 
@@ -109,7 +109,7 @@ import type {
 
 Do not add bridge methods yet; Task 5 adds them with IPC.
 
-- [ ] **Step 3: Run the targeted type check after type usage exists**
+- [x] **Step 3: Run the targeted type check after type usage exists**
 
 Skip command execution in this task. These types are unused until later tasks. The first meaningful typecheck happens in Task 5.
 

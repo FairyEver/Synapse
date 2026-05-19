@@ -36,6 +36,10 @@ import type {
 } from "./backup"
 import type { SynapseConfig, SynapseConfigPatch } from "./config"
 import type {
+  WorkflowImportPreview,
+  WorkflowModelMapping,
+} from "./workflow-package"
+import type {
   SynapseContentDownloadResult,
   SynapseContentDetail,
   SynapseContentHistoryEntry,
