@@ -11,7 +11,7 @@ export function parseRecordText(value: string): Record<string, string> {
     if (!key) {
       throw new Error("配置项名称不能为空")
     }
-    result[key] = rawLine.slice(separatorIndex + 1)
+    result[key] = rawLine.slice(separatorIndex + 1).trim()
   }
   return result
 }
