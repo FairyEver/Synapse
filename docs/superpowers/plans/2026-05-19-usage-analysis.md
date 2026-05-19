@@ -1128,7 +1128,7 @@ git commit -m "feat: parse Claude Code usage analysis"
 - Create: `desktop/electron/services/usage-analysis/codex-parser.ts`
 - Test: `desktop/electron/services/usage-analysis/__tests__/codex-parser.test.ts`
 
-- [ ] **Step 1: Write Codex parser tests**
+- [x] **Step 1: Write Codex parser tests**
 
 Create `desktop/electron/services/usage-analysis/__tests__/codex-parser.test.ts`:
 
@@ -1185,7 +1185,7 @@ describe("Codex usage parser", () => {
 })
 ```
 
-- [ ] **Step 2: Run the failing parser test**
+- [x] **Step 2: Run the failing parser test**
 
 Run:
 
@@ -1195,7 +1195,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: fail because `../codex-parser` does not exist.
 
-- [ ] **Step 3: Implement Codex parser**
+- [x] **Step 3: Implement Codex parser**
 
 Create `desktop/electron/services/usage-analysis/codex-parser.ts` using the same `ParsedUsageFile` shapes from `cc-parser.ts`, plus task events:
 
@@ -1399,7 +1399,7 @@ export async function parseCodexUsageFile(filePath: string): Promise<ParsedCodex
 }
 ```
 
-- [ ] **Step 4: Run Codex parser tests**
+- [x] **Step 4: Run Codex parser tests**
 
 Run:
 
@@ -1409,7 +1409,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/electron/services/usage-analysis/codex-parser.ts desktop/electron/services/usage-analysis/__tests__/codex-parser.test.ts
