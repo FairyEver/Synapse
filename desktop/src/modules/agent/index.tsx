@@ -134,7 +134,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
         try {
           await chat.selectSession(target)
           if (prompt) {
-            await chat.sendMessage(prompt)
+            const sent = await chat.sendMessage(prompt)
+            if (!sent) return
           }
           onPendingAgentSessionConsumed?.()
         } catch (rawError) {

@@ -11,33 +11,36 @@ import { AgentModule } from "../index"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-const mocks = vi.hoisted(() => ({
-  chat: null as unknown,
-  useAgentChat: vi.fn(),
-  forcePin: vi.fn(),
-  timelineProps: null as {
-    onOpenReference?: (reference: string) => void
-  } | null,
-  sidebarProps: null as {
-    projects?: Array<{ id: string; name: string; path: string }>
-  } | null,
-  configProjects: [{ id: "project-1", name: "Project One", path: "/repo" }],
-  activeRepository: { uuid: "project-1", name: "Project One", localPath: "/repo" },
-  bridgeAvailable: true,
-  bridge: {
-    agent: {
-      getTimeline: vi.fn(),
-      openReference: vi.fn(),
+const mocks = vi.hoisted(() => {
+  const toast = Object.assign(vi.fn(), { error: vi.fn() })
+  return {
+    chat: null as unknown,
+    useAgentChat: vi.fn(),
+    forcePin: vi.fn(),
+    timelineProps: null as {
+      onOpenReference?: (reference: string) => void
+    } | null,
+    sidebarProps: null as {
+      projects?: Array<{ id: string; name: string; path: string }>
+    } | null,
+    configProjects: [{ id: "project-1", name: "Project One", path: "/repo" }],
+    activeRepository: { uuid: "project-1", name: "Project One", localPath: "/repo" },
+    bridgeAvailable: true,
+    bridge: {
+      agent: {
+        getTimeline: vi.fn(),
+        openReference: vi.fn(),
+      },
     },
-  },
-  toast: vi.fn(),
-  rendererLogger: {
-    error: vi.fn(),
-    info: vi.fn(),
-    warn: vi.fn(),
-    debug: vi.fn(),
-  },
-}))
+    toast,
+    rendererLogger: {
+      error: vi.fn(),
+      info: vi.fn(),
+      warn: vi.fn(),
+      debug: vi.fn(),
+    },
+  }
+})
 
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => mocks.rendererLogger,
@@ -173,7 +176,7 @@ describe("AgentModule pending prompt sessions", () => {
   it("refreshes missing pending sessions before selecting and sending the prompt", async () => {
     const refresh = vi.fn().mockResolvedValue(undefined)
     const selectSession = vi.fn().mockResolvedValue(undefined)
-    const sendMessage = vi.fn().mockResolvedValue(undefined)
+    const sendMessage = vi.fn().mockResolvedValue(true)
     const onPendingAgentSessionConsumed = vi.fn()
     mocks.chat = createChatState({ refresh, selectSession, sendMessage })
 
@@ -390,6 +393,42 @@ describe("AgentModule pending prompt sessions", () => {
     expect(JSON.stringify(mocks.rendererLogger.error.mock.calls)).not.toContain("Run this prompt")
   })
 
+  it("does not consume a pending session prompt when sending returns false", async () => {
+    const selectSession = vi.fn().mockResolvedValue(undefined)
+    const sendMessage = vi.fn().mockResolvedValue(false)
+    const onPendingAgentSessionConsumed = vi.fn()
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectSession,
+      sendMessage,
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentModule
+          pendingAgentSession={{
+            projectId: "project-1",
+            conversationId: "conversation-1",
+            prompt: "Run this prompt",
+          }}
+          onPendingAgentSessionConsumed={onPendingAgentSessionConsumed}
+        />,
+      )
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(selectSession).toHaveBeenCalledWith(targetSession)
+    expect(sendMessage).toHaveBeenCalledWith("Run this prompt")
+    expect(onPendingAgentSessionConsumed).not.toHaveBeenCalled()
+  })
+
   it("logs transcript copy failures with sanitized conversation context", async () => {
     const transcriptError = new Error("secret transcript IPC detail")
     mocks.bridge.agent.getTimeline.mockRejectedValue(transcriptError)
@@ -542,7 +581,7 @@ function createChatState(overrides: Record<string, unknown> = {}) {
     deleteSession: vi.fn(),
     renameSession: vi.fn(),
     refresh: vi.fn().mockResolvedValue(undefined),
-    sendMessage: vi.fn().mockResolvedValue(undefined),
+    sendMessage: vi.fn().mockResolvedValue(true),
     respondPermission: vi.fn(),
     cancelTurn: vi.fn(),
     forceKillTurn: vi.fn(),
