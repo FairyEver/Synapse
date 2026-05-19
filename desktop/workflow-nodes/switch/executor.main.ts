@@ -87,7 +87,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
     })
 
     input.onProgress?.("awaiting_response", "等待响应…")
-    const agentResult = await agentDeps.sendToAgent({ providerId: config.providerId ?? "", modelTier: config.modelTier ?? "default", prompt, projectId: context.projectId, abortSignal: context.abortSignal })
+    const agentResult = await agentDeps.sendToAgent({ providerId: config.providerId ?? "", modelTier: config.modelTier ?? "default", prompt, projectId: context.projectId ?? "", abortSignal: context.abortSignal })
     const durationMs = Date.now() - start
 
     if (agentResult.status === "failed") {

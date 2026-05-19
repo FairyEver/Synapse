@@ -128,7 +128,6 @@ class UpdateService {
         transferredBytes: null,
         totalBytes: null,
         canCheck: isUpdateSupportedInCurrentEnvironment(),
-        downloadedFilePath: null,
       })
     }
   }
@@ -191,7 +190,6 @@ class UpdateService {
           transferredBytes: null,
           totalBytes: null,
           canCheck: false,
-          downloadedFilePath: null,
         })
       }
     })
@@ -223,7 +221,6 @@ class UpdateService {
           totalBytes: null,
           lastCheckedAt: new Date().toISOString(),
           canCheck: true,
-          downloadedFilePath: null,
         })
       }
       this.clearUpdateFlow()
@@ -321,7 +318,6 @@ class UpdateService {
       transferredBytes: 0,
       totalBytes: null,
       canCheck: false,
-      downloadedFilePath: null,
     })
 
     void this.downloadLatestUpdate(updateInfo).catch((error) => {
@@ -349,7 +345,6 @@ class UpdateService {
       transferredBytes: this.state.transferredBytes ?? 0,
       totalBytes: this.state.totalBytes,
       canCheck: false,
-      downloadedFilePath: null,
     })
 
     try {
@@ -375,7 +370,6 @@ class UpdateService {
       transferredBytes: toNullablePositiveNumber(progressInfo.transferred),
       totalBytes: toNullablePositiveNumber(progressInfo.total),
       canCheck: false,
-      downloadedFilePath: null,
     })
   }
 
@@ -413,7 +407,6 @@ class UpdateService {
       transferredBytes: null,
       totalBytes: null,
       canCheck: isUpdateSupportedInCurrentEnvironment(),
-      downloadedFilePath: null,
     })
   }
 
@@ -435,7 +428,6 @@ class UpdateService {
       transferredBytes: null,
       totalBytes: null,
       canCheck: isUpdateSupportedInCurrentEnvironment(),
-      downloadedFilePath: null,
     })
   }
 

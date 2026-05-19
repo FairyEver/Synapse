@@ -124,7 +124,7 @@ async function assertPathAllowed(
   const allowedRoots = [options.workspacePath, path.join(tmpdir(), "synapse-side-channel")].filter((value): value is string =>
     typeof value === "string" && value.trim().length > 0)
   const allowed = await isInsideAnyRoot(target, allowedRoots)
-  if (allowed) return info.size
+  if (allowed) return statSizeToNumber(info.size)
 
   const decision = await options.permissionGuard?.check({
     action: "fs.read.outside-userdata",
@@ -132,11 +132,19 @@ async function assertPathAllowed(
     resource: target,
     context: { source: "side-channel" },
   })
-  if (decision?.allowed) return info.size
+  if (decision?.allowed) return statSizeToNumber(info.size)
   throw new AttachmentPolicyError(
     "path_escape_rejected",
     decision?.reason ?? "attachment path is outside allowed roots",
   )
+}
+
+function statSizeToNumber(size: number | bigint): number {
+  if (typeof size === "number") return size
+  if (size > BigInt(Number.MAX_SAFE_INTEGER)) {
+    throw new AttachmentPolicyError("attachment_too_large", "attachment size exceeds supported range")
+  }
+  return Number(size)
 }
 
 async function statPath(

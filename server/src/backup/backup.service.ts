@@ -10,7 +10,7 @@ import { promisify } from "node:util"
 import { pipeline } from "node:stream/promises"
 import { createGzip } from "node:zlib"
 import * as tar from "tar"
-import COS from "cos-nodejs-sdk-v5"
+import type COS from "cos-nodejs-sdk-v5"
 import { isBackupConfigured, loadEnv, type ServerEnv } from "../config/env"
 
 const execFileAsync = promisify(execFile)
@@ -43,7 +43,8 @@ export class BackupService {
     this.region = this.env.cosRegion ?? ""
 
     if (isBackupConfigured(this.env)) {
-      this.cos = new COS({
+      const CosClient = require("cos-nodejs-sdk-v5") as typeof COS
+      this.cos = new CosClient({
         SecretId: this.env.cosSecretId!,
         SecretKey: this.env.cosSecretKey!,
       })

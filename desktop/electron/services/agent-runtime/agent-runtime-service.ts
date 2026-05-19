@@ -91,7 +91,7 @@ export interface AgentRuntimeServiceDeps {
   readonly executionIsolation?: ProcessIsolationResolver
   readonly replyTargets?: {
     rememberReplyTarget(target: ReplyTarget): void
-    dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): void
+    dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): Promise<void>
     getAgentEnv(projectId: string, sessionKey: string): Record<string, string> | undefined
   }
 }

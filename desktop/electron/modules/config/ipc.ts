@@ -6,7 +6,7 @@
  */
 
 import { z } from "zod"
-import { app } from "electron"
+import { app, BrowserWindow } from "electron"
 import { readdir, rm, unlink } from "node:fs/promises"
 import path from "node:path"
 import type { IpcModule } from "../../runtime/ipc/types"
@@ -26,6 +26,12 @@ const PRESERVED_FILE_PREFIXES = ["synapse-database.db", "synapse-data.db"]
 
 function shouldPreserveOnReset(entryName: string): boolean {
   return PRESERVED_FILE_PREFIXES.some((prefix) => entryName.startsWith(prefix))
+}
+
+function getParentWindow(): Electron.BrowserWindow | null {
+  return BrowserWindow.getFocusedWindow()
+    ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
+    ?? null
 }
 
 // Schemas
@@ -110,7 +116,7 @@ export const configIpcModule: IpcModule = {
         logger.info("Handling config.exportBackup request.")
 
         const filePath = await configBackupService.selectExportTarget({
-          getParentWindow: ctx.getParentWindow,
+          getParentWindow,
         })
         if (!filePath) {
           return null
@@ -175,7 +181,7 @@ export const configIpcModule: IpcModule = {
         logger.info("Handling config.importBackup request.")
 
         const filePath = await configBackupService.selectImportSource({
-          getParentWindow: ctx.getParentWindow,
+          getParentWindow,
         })
         if (!filePath) {
           return null
@@ -216,20 +222,21 @@ export const configIpcModule: IpcModule = {
         try {
           await configBackupService.readImport(filePath)
           auditSink.record({
-            action: "config.import",
+            action: "fs.write",
             actor,
             resource: "config+identity",
             outcome: "allowed",
-            metadata: { source: "config.importBackup" },
+            metadata: { operation: "config.import", source: "config.importBackup" },
           })
           return { success: true, message: "配置已成功导入。" }
         } catch (error) {
           auditSink.record({
-            action: "config.import",
+            action: "fs.write",
             actor,
             resource: "config+identity",
             outcome: "failed",
             metadata: {
+              operation: "config.import",
               source: "config.importBackup",
               errorName: error instanceof Error ? error.name : typeof error,
             },

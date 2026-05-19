@@ -837,7 +837,7 @@ export class FeishuConnectorService {
       ? await this.handleRelayCommand(connector, message, isAdmin, reply)
       : false
     if (relayResult) {
-      const outcome = relayResult === "denied" || relayResult === "failed" ? relayResult : "allowed"
+      const outcome = relayResult === "denied" ? "denied" : "allowed"
       const relayAuditCtx = { sessionKey: message.sessionKey, userId: message.userId }
       this.recordAudit(outcome, connector.projectId, connector.id, "relay_command", undefined, relayAuditCtx)
       return true

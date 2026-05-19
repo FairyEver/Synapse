@@ -1,5 +1,6 @@
 import type { LucideIcon } from "lucide-react"
 import type { ZodType } from "zod"
+import type { ActorIdentity } from "../electron/runtime/security"
 
 export interface PortDefinition { id: string; label: string }
 export interface ConfigFieldDescriptor {
@@ -26,7 +27,7 @@ export interface WorkflowRuntimeContext {
   projectId?: string
   runId: string
   abortSignal: AbortSignal
-  actor?: { kind: string; id?: string; display?: string }
+  actor?: ActorIdentity
 }
 
 export interface AgentSendDeps {
@@ -66,4 +67,3 @@ export interface NodeExecutionResult {
 export interface NodeExecutor<TConfig = unknown> {
   execute(input: NodeExecutionInput<TConfig>): Promise<NodeExecutionResult>
 }
-

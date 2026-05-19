@@ -863,9 +863,9 @@ export class ConversationRouter {
     // Record outbox entry as pending before dispatch. After dispatch completes
     // (or fails), update the status to "sent" or "failed" so outbox accurately
     // reflects delivery outcome rather than pre-emptively marking as "sent".
-    const outboxId = this.deps.outbox?.recordAgentEvent(target, event)
-    if (outboxId) {
-      const outbox = this.deps.outbox
+    const outbox = this.deps.outbox
+    const outboxId = outbox?.recordAgentEvent(target, event)
+    if (outbox && outboxId) {
       const replyTargets = this.deps.replyTargets
       if (replyTargets) {
         replyTargets.dispatchAgentEvent(target, event).then(

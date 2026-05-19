@@ -137,7 +137,9 @@ async function doScan(): Promise<ScanProgress> {
 
     // Phase 3: all files parsed successfully → clear old data, upsert fresh.
     // Wrapped in a transaction so a crash between DELETE and UPSERT cannot lose data.
-    const commitClientData = getDb().transaction(() => {
+    const database = getDb()
+    database.exec("BEGIN IMMEDIATE")
+    try {
       clearDailyUsageForClient(result.clientId)
       clearHourlyUsageForClient(result.clientId)
       clearFingerprintsForClient(result.clientId)
@@ -158,8 +160,15 @@ async function doScan(): Promise<ScanProgress> {
         })
         progress.parsedFiles++
       }
-    })
-    commitClientData()
+      database.exec("COMMIT")
+    } catch (error) {
+      try {
+        database.exec("ROLLBACK")
+      } catch (rollbackError) {
+        logger.error("Failed to roll back token usage scan transaction", { error: String(rollbackError) })
+      }
+      throw error
+    }
 
     progress.scannedClients++
   }

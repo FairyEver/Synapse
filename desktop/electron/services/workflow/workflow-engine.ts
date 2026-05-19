@@ -1,5 +1,6 @@
 import type { WorkflowDefinition, WorkflowRunResult, WorkflowEvent, NodeRunResult } from "../../../src/types/workflow"
 import type { AgentSendDeps, NodeRuntimeDeps } from "../../../workflow-nodes/types"
+import type { ActorIdentity } from "../../runtime/security"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { interpolatePrompt, resolveVariables } from "./variable-resolver"
 import { ReactiveScheduler } from "./workflow-scheduler"
@@ -50,13 +51,13 @@ export class WorkflowEngine {
     abortSignal?: AbortSignal,
     projectId?: string,
     triggerSource?: string,
-    actor?: { kind: string; id?: string; display?: string },
+    actor?: ActorIdentity,
   ): Promise<WorkflowRunResult> {
     const effectiveAbortSignal = abortSignal ?? this.abortSignal ?? new AbortController().signal
     if (effectiveAbortSignal.aborted) {
       logger.warn("workflow cancelled before start", { runId, workflowId: def.id })
       const result: WorkflowRunResult = { status: "cancelled", nodeResults: {}, durationMs: 0 }
-      emit({ type: "workflow:cancelled", runId, result })
+      emit({ type: "workflow:cancelled", runId, workflowId: def.id, result })
       return result
     }
     emit({ type: "workflow:started", runId, workflowId: def.id })
@@ -90,7 +91,7 @@ export class WorkflowEngine {
         ...diagnostic,
       })
       const result: WorkflowRunResult = { status: "failed", nodeResults, durationMs: Date.now() - startMs }
-      emit({ type: "workflow:failed", runId, error: visibleError, result })
+      emit({ type: "workflow:failed", runId, workflowId: def.id, error: visibleError, result })
       return result
     }
     const { executableNodeIds, implicitEdges } = executionSet
@@ -100,7 +101,7 @@ export class WorkflowEngine {
       const visibleError = hasEndNode ? "没有节点连接到结束节点，无法执行" : "工作流缺少结束节点，无法执行"
       logger.warn("workflow has no executable nodes — aborting", { runId, workflowId: def.id, hasEndNode })
       const result: WorkflowRunResult = { status: "failed", nodeResults, durationMs: Date.now() - startMs }
-      emit({ type: "workflow:failed", runId, error: visibleError, result })
+      emit({ type: "workflow:failed", runId, workflowId: def.id, error: visibleError, result })
       return result
     }
     const executableNodes = def.nodes
@@ -350,7 +351,7 @@ export class WorkflowEngine {
         runningNodeIds: runningNodes,
       })
       const result: WorkflowRunResult = { status: "cancelled", nodeResults, durationMs }
-      emit({ type: "workflow:cancelled", runId, result })
+      emit({ type: "workflow:cancelled", runId, workflowId: def.id, result })
       return result
     }
 
@@ -385,14 +386,14 @@ export class WorkflowEngine {
         firstFailedNode: failedNode?.nodeId,
         ...stringDiagnostic(detailedError, "workflow"),
       })
-      emit({ type: "workflow:failed", runId, error: detailedError, result })
+      emit({ type: "workflow:failed", runId, workflowId: def.id, error: detailedError, result })
     } else {
       logger.info("workflow run completed", {
         runId, workflowId: def.id, durationMs,
         triggerSource: triggerSource ?? "unknown",
         ...(result.output !== undefined ? { outputLength: result.output.length } : {}),
       })
-      emit({ type: "workflow:completed", runId, result })
+      emit({ type: "workflow:completed", runId, workflowId: def.id, result })
     }
     return result
   }
