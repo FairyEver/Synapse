@@ -5,6 +5,7 @@ import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type { HttpRequestActionConfig } from "../../../action-packages/builtin/http-request/schema"
 
 export const HTTP_TEST_CHANNEL = "synapse:http:test-request"
+const MAX_RESPONSE_BODY_BYTES = 5 * 1024 * 1024
 
 export interface HttpTestResponse {
   readonly status: number
@@ -85,6 +86,7 @@ export async function sendHttpTestRequest(
       headers: buildHeaders(config),
       body: buildBody(config),
       timeoutMs: config.timeoutMins === null ? undefined : (config.timeoutMins ?? 5) * 60_000,
+      maxResponseBodyBytes: MAX_RESPONSE_BODY_BYTES,
     })
     deps.auditSink.record({
       action: "network.connect",

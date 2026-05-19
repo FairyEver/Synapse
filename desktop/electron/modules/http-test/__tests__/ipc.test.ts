@@ -106,6 +106,27 @@ describe("sendHttpTestRequest", () => {
     expect(JSON.stringify(vi.mocked(audit.record).mock.calls)).not.toContain("sk-secret")
   })
 
+  it("limits response body size for test requests", async () => {
+    const guard = permissionGuard(true)
+    const audit = auditSink()
+    const sendRequest = vi.fn().mockResolvedValue({
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      body: "ok",
+    })
+
+    await sendHttpTestRequest(config(), {
+      permissionGuard: guard,
+      auditSink: audit,
+      sendRequest,
+    })
+
+    expect(sendRequest).toHaveBeenCalledWith(expect.objectContaining({
+      maxResponseBodyBytes: 5 * 1024 * 1024,
+    }))
+  })
+
   it("redacts URL userinfo from permission and audit resources", async () => {
     const guard = permissionGuard(true)
     const audit = auditSink()
