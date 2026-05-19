@@ -90,6 +90,7 @@ async function migrateConnectors(
     }
 
     const nextConnectorId = `feishu:${nextProjectId}`
+    const nextSecretRef = rewriteFeishuSecretRef(connector.secretRef, connector.projectId, nextProjectId)
     if (!await connectors.get(backupId("connectors", connector.id))) {
       await connectors.upsert({
         ...connector,
@@ -102,12 +103,19 @@ async function migrateConnectors(
       })
     }
 
+    if (connector.secretRef !== nextSecretRef) {
+      const copied = await copySecret(dataRepository, connector.projectId, nextProjectId, logger)
+      if (!copied) {
+        continue
+      }
+    }
+
     if (!await connectors.get(nextConnectorId)) {
       await connectors.upsert({
         ...connector,
         id: nextConnectorId,
         projectId: nextProjectId,
-        secretRef: rewriteFeishuSecretRef(connector.secretRef, connector.projectId, nextProjectId),
+        secretRef: nextSecretRef,
         metadata: {
           ...recordValue(connector.metadata),
           migratedFromProjectId: connector.projectId,
@@ -115,8 +123,6 @@ async function migrateConnectors(
         },
       })
     }
-
-    await copySecret(dataRepository, connector.projectId, nextProjectId, logger)
   }
 }
 
@@ -143,7 +149,7 @@ async function copySecret(
   previousProjectId: string,
   nextProjectId: string,
   logger: StructuredLogger,
-): Promise<void> {
+): Promise<boolean> {
   const secrets = dataRepository.namespace<SecretEntryV1>("secrets")
   const previousSecretId = feishuSecretId(previousProjectId)
   const nextSecretId = feishuSecretId(nextProjectId)
@@ -154,19 +160,31 @@ async function copySecret(
       secrets.get(nextSecretId),
     ])
 
-    if (previousSecret && !nextSecret) {
-      await secrets.upsert({
-        ...previousSecret,
-        id: nextSecretId,
-        description: previousSecret.description ?? `Feishu credentials for ${nextProjectId}`,
-      })
+    if (nextSecret) {
+      return true
     }
+
+    if (!previousSecret) {
+      logger.warn("Skipped Feishu connector migration because source secret is missing.", {
+        previousProjectId,
+        nextProjectId,
+      })
+      return false
+    }
+
+    await secrets.upsert({
+      ...previousSecret,
+      id: nextSecretId,
+      description: previousSecret.description ?? `Feishu credentials for ${nextProjectId}`,
+    })
+    return true
   } catch (error) {
     logger.warn("Failed to copy Feishu secret during project migration.", {
       error,
       previousProjectId,
       nextProjectId,
     })
+    return false
   }
 }
 

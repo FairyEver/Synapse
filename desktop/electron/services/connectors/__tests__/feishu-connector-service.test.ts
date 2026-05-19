@@ -27,6 +27,34 @@ import type {
 } from "../feishu/feishu-types"
 
 describe("FeishuConnectorService", () => {
+  it("does not report configured when a connector points to a missing secret", async () => {
+    const dataRepository = new MemoryDataRepository()
+    await dataRepository.namespace<ConnectorEntryV1>("connectors").upsert({
+      id: "feishu:project-1",
+      schemaVersion: 1,
+      projectId: "project-1",
+      platform: "feishu",
+      secretRef: "feishu:project-1:credentials",
+      status: "disabled",
+      allowlist: { mode: "all" },
+      sessionKeyPolicy: { mode: "thread" },
+    })
+    const service = new FeishuConnectorService({
+      dataRepository,
+      projectContainers: fakeProjectContainers(new FakeAgentRuntime()),
+      sideChannel: new FakeSideChannel() as unknown as SideChannelService,
+      listProjects: async () => [{ projectId: "project-1", name: "Project", workspacePath: "/repo" }],
+    })
+
+    await expect(service.getStatus("project-1")).resolves.toEqual(expect.objectContaining({
+      configured: false,
+      running: false,
+      connector: expect.objectContaining({
+        id: "feishu:project-1",
+      }),
+    }))
+  })
+
   it("starts Feishu WS client, routes messages to AgentRuntime, and handles permission card actions", async () => {
     const dataRepository = new MemoryDataRepository()
     const client = new FakeFeishuClient()

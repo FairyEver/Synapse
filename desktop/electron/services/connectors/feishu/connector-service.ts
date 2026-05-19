@@ -324,9 +324,10 @@ export class FeishuConnectorService {
 
   async getStatus(projectId: string): Promise<FeishuConnectorRuntimeStatus> {
     const connector = await this.connectorRepository.getByProject(projectId, "feishu")
+    const secret = connector?.secretRef ? await this.setupService.readSecret(projectId) : null
     return {
       projectId,
-      configured: Boolean(connector?.secretRef),
+      configured: Boolean(secret),
       running: connector ? this.running.has(connector.id) : false,
       connector: connector ? this.connectorRepository.toFeishuSummary(connector) : undefined,
     }

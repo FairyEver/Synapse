@@ -1,14 +1,19 @@
-import { describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type {
   ConversationEntryV1,
+  ConnectorEntryV1,
   DataNamespace,
   DataRepository,
+  SecretEntryV1,
 } from "../../runtime/data-repo"
 import { createNoopLogger } from "../../runtime/lib/test-helpers"
-import { migrateRepositoryScopedConnectorData } from "../project-scope-migration"
 
 describe("migrateRepositoryScopedConnectorData", () => {
+  beforeEach(() => {
+    vi.resetModules()
+  })
+
   it("moves repository-scoped agent conversations to the matching configured project id on Windows case-only path differences", async () => {
     const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform")
     Object.defineProperty(process, "platform", {
@@ -30,30 +35,10 @@ describe("migrateRepositoryScopedConnectorData", () => {
     })
 
     try {
-      await migrateRepositoryScopedConnectorData(dataRepository, {
-        activeRepoUuid: "repo-1",
-        repositories: [{
-          uuid: "repo-1",
-          name: "Desktop",
-          localPath: "C:\\Users\\liyang\\Desktop",
-          contentDirs: {},
-        }],
-        global: {
-          themeMode: "system",
-          projects: [{
-            id: "project-1",
-            name: "Desktop",
-            path: "c:\\users\\LIYANG\\Desktop\\",
-          }],
-          favorites: { rule: [], skill: [], prompt: [] },
-          recentlyViewed: { rule: [], skill: [], prompt: [] },
-          contentSortOrder: "modified-desc",
-        },
-        agent: {
-          defaultPermissionMode: "default",
-          defaultProviderModel: null,
-        },
-      }, createNoopLogger())
+      await migrateRepositoryScopedConnectorData(dataRepository, createProjectConfig({
+        projectPath: "c:\\users\\LIYANG\\Desktop\\",
+        repositoryPath: "C:\\Users\\liyang\\Desktop",
+      }), createNoopLogger())
     } finally {
       if (platformDescriptor) {
         Object.defineProperty(process, "platform", platformDescriptor)
@@ -65,7 +50,89 @@ describe("migrateRepositoryScopedConnectorData", () => {
       sessionKey: "local:renderer",
     }))
   })
+
+  it("does not create a migrated Feishu connector when secret copy fails", async () => {
+    const dataRepository = new MemoryDataRepository()
+    const connectors = dataRepository.namespace<ConnectorEntryV1>("connectors")
+    const secrets = dataRepository.namespace<SecretEntryV1>("secrets")
+    await connectors.upsert(createFeishuConnector({
+      id: "feishu:repo-1",
+      projectId: "repo-1",
+      secretRef: "feishu:repo-1:credentials",
+    }))
+    await secrets.upsert({
+      id: "feishu:repo-1:credentials",
+      schemaVersion: 1,
+      kind: "generic",
+      value: "{\"appId\":\"cli_x\",\"appSecret\":\"secret\"}",
+    })
+    const secretNamespace = secrets as MemoryNamespace<SecretEntryV1>
+    secretNamespace.failGetsWith(new Error("secret backend unavailable"))
+
+    await migrateRepositoryScopedConnectorData(dataRepository, createProjectConfig(), createNoopLogger())
+
+    await expect(connectors.get("feishu:project-1")).resolves.toBeNull()
+    await expect(connectors.get("feishu:repo-1")).resolves.toEqual(expect.objectContaining({
+      projectId: "repo-1",
+      secretRef: "feishu:repo-1:credentials",
+    }))
+  })
 })
+
+async function migrateRepositoryScopedConnectorData(
+  ...args: Parameters<typeof import("../project-scope-migration").migrateRepositoryScopedConnectorData>
+): ReturnType<typeof import("../project-scope-migration").migrateRepositoryScopedConnectorData> {
+  const migration = await import("../project-scope-migration")
+
+  return migration.migrateRepositoryScopedConnectorData(...args)
+}
+
+function createProjectConfig(input: {
+  projectPath?: string
+  repositoryPath?: string
+} = {}) {
+  return {
+    activeRepoUuid: "repo-1",
+    repositories: [{
+      uuid: "repo-1",
+      name: "Desktop",
+      localPath: input.repositoryPath ?? "/Users/liyang/Desktop",
+      contentDirs: {},
+    }],
+    global: {
+      themeMode: "system" as const,
+      projects: [{
+        id: "project-1",
+        name: "Desktop",
+        path: input.projectPath ?? "/Users/liyang/Desktop",
+      }],
+      favorites: { rule: [], skill: [], prompt: [] },
+      recentlyViewed: { rule: [], skill: [], prompt: [] },
+      contentSortOrder: "modified-desc" as const,
+    },
+    agent: {
+      defaultPermissionMode: "default" as const,
+      defaultProviderModel: null,
+    },
+  }
+}
+
+function createFeishuConnector(input: {
+  id: string
+  projectId: string
+  secretRef?: string
+}): ConnectorEntryV1 {
+  return {
+    id: input.id,
+    schemaVersion: 1,
+    projectId: input.projectId,
+    platform: "feishu",
+    secretRef: input.secretRef,
+    status: "disabled",
+    allowlist: { mode: "all" },
+    sessionKeyPolicy: { mode: "thread" },
+  }
+}
 
 class MemoryDataRepository implements DataRepository {
   private readonly namespaces = new Map<string, MemoryNamespace<Record<string, unknown> & { id: string }>>()
@@ -94,6 +161,7 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
   readonly schemaVersion = 1
   readonly backend = "json" as const
   private readonly items = new Map<string, T>()
+  private getFailure: Error | null = null
 
   constructor(readonly name: string) {}
 
@@ -112,6 +180,9 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
   }
 
   async get(id: string): Promise<T | null> {
+    if (this.getFailure) {
+      throw this.getFailure
+    }
     return this.items.get(id) ?? null
   }
 
@@ -125,5 +196,9 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
 
   onChange(): () => void {
     return () => {}
+  }
+
+  failGetsWith(error: Error): void {
+    this.getFailure = error
   }
 }
