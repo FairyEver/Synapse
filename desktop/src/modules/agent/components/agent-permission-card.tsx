@@ -11,7 +11,7 @@ type AgentPermissionCardProps = {
   readonly item: SynapseAgentPermissionRequestTimelineItem
   readonly pending: boolean
   readonly isLatestPending: boolean
-  readonly onRespond: (requestId: string, behavior: "allow" | "deny") => void
+  readonly onRespond: (requestId: string, behavior: "allow" | "deny") => void | Promise<void>
 }
 
 function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: AgentPermissionCardProps) {
@@ -28,7 +28,7 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
   const body = item.toolInput ? redactAgentPathLikeValue(item.toolInput) : formatRawInput(item.toolInputRaw)
   const showActions = pending
 
-  function handleRespond(behavior: "allow" | "deny") {
+  async function handleRespond(behavior: "allow" | "deny") {
     if (submitting) return
     setSubmitting(true)
     track({
@@ -49,7 +49,11 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
         ...(item.threadId ? { threadId: item.threadId } : {}),
       },
     })
-    onRespond(item.requestId, behavior)
+    try {
+      await onRespond(item.requestId, behavior)
+    } catch {
+      setSubmitting(false)
+    }
   }
 
   return (

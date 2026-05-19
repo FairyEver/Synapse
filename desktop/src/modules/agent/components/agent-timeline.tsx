@@ -29,7 +29,7 @@ function AgentTimeline({
   readonly sending: boolean
   readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
   readonly onOpenReference: (reference: string) => void
-  readonly onRespondPermission: (requestId: string, behavior: "allow" | "deny") => void
+  readonly onRespondPermission: (requestId: string, behavior: "allow" | "deny") => void | Promise<void>
   readonly viewportRef: Ref<HTMLDivElement>
   readonly showJumpToBottom: boolean
   readonly onJumpToBottom: () => void

@@ -502,7 +502,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               sending={chat.sending}
               pendingPermissions={chat.pendingPermissions}
               onOpenReference={openReference}
-              onRespondPermission={(requestId, behavior) => void chat.respondPermission(requestId, behavior)}
+              onRespondPermission={(requestId, behavior) => chat.respondPermission(requestId, behavior)}
               viewportRef={stick.viewportRef}
               showJumpToBottom={!stick.isPinned && stick.hasUnread}
               onJumpToBottom={() => stick.scrollToBottom({ behavior: "smooth" })}

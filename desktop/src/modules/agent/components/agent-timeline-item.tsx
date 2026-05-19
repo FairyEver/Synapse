@@ -28,7 +28,7 @@ function AgentTimelineItem({
   readonly agentIcon?: string
   readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
   readonly onOpenReference: (reference: string) => void
-  readonly onRespondPermission: (requestId: string, behavior: "allow" | "deny") => void
+  readonly onRespondPermission: (requestId: string, behavior: "allow" | "deny") => void | Promise<void>
 }) {
   switch (item.kind) {
     case "message":
