@@ -296,6 +296,9 @@ export class MessageRouter {
     } finally {
       state.busy = false
       state.lastActivity = Date.now()
+      if (state.queue.length > 0) {
+        void this.processQueue(state)
+      }
     }
   }
 
