@@ -345,7 +345,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private resolveToolResultName(event: AgentEvent): AgentEvent {
     if (event.type !== "toolResult") return event
     const toolName = this.toolNamesByUseId.get(event.toolName)
-    return toolName ? { ...event, toolName } : event
+    return toolName ? { ...event, toolName } : { ...event, toolName: "tool_result" }
   }
 
   private nextPermissionRequestId(): string {
