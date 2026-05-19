@@ -1,0 +1,153 @@
+import { randomUUID } from "node:crypto"
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { afterEach, describe, expect, it, vi } from "vitest"
+
+const fsMockState = vi.hoisted(() => ({
+  cleanupFailureParentPath: null as string | null,
+}))
+
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>()
+  const pathModule = await import("node:path")
+
+  return {
+    ...actual,
+    rm: vi.fn(async (...args: Parameters<typeof actual.rm>) => {
+      const [target] = args
+      const targetPath = String(target)
+
+      if (
+        fsMockState.cleanupFailureParentPath
+        && pathModule.dirname(targetPath) === fsMockState.cleanupFailureParentPath
+        && pathModule.basename(targetPath).startsWith(".synapse-history-")
+      ) {
+        throw Object.assign(new Error("temporary cleanup locked"), { code: "EBUSY" })
+      }
+
+      return actual.rm(...args)
+    }),
+  }
+})
+
+vi.mock("electron", () => ({
+  app: {
+    getAppPath: () => "/tmp/synapse-content-write-test-app",
+    getPath: (which: string) => `/tmp/synapse-content-write-test-${which}`,
+    getName: () => "synapse-test",
+    getVersion: () => "0.0.0-test",
+    isPackaged: false,
+  },
+}))
+
+import { createDefaultConfig } from "../../../src/lib/config"
+import type { SynapseRepositoryConfig } from "../../../src/types/config"
+import { configStore } from "../config-store"
+import {
+  CONTENT_ATTACHMENTS_FILE_NAME,
+  CONTENT_MAIN_FILE_NAME,
+  CONTENT_META_FILE_NAME,
+  HISTORY_DIRECTORY_NAME,
+} from "../content-history-service"
+import { contentWriteService } from "../content-write-service"
+import { repositoryStore } from "../repository-store"
+
+const tempRoots: string[] = []
+
+async function createTempRoot(): Promise<string> {
+  const root = path.join(os.tmpdir(), `synapse-content-write-${randomUUID()}`)
+  await mkdir(root, { recursive: true })
+  tempRoots.push(root)
+  return root
+}
+
+async function writeJson(filePath: string, value: unknown): Promise<void> {
+  await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8")
+}
+
+async function writeRuleFixture(root: string, historyDirname: string): Promise<void> {
+  const historyPath = path.join(root, "rules", "rule-1", HISTORY_DIRECTORY_NAME, historyDirname)
+
+  await mkdir(historyPath, { recursive: true })
+  await writeJson(path.join(root, "rules", "rule-1", CONTENT_META_FILE_NAME), {
+    schemaVersion: 1,
+    id: "rule-1",
+    type: "rule",
+    createdBy: "user",
+    createdByDisplayName: "User",
+    createdAt: "2026-05-19T00:00:00.000Z",
+  })
+  await writeJson(path.join(historyPath, "snapshot.json"), {
+    schemaVersion: 1,
+    title: "Rule",
+    name: "rule",
+    description: "Description",
+    category: "test",
+    icon: "wrench",
+    iconBg: "default",
+    iconType: "icon",
+    modifiedBy: "user",
+    modifiedByDisplayName: "User",
+    modifiedAt: "2026-05-19T00:00:00.000Z",
+    deleted: false,
+  })
+  await writeFile(path.join(historyPath, CONTENT_MAIN_FILE_NAME), "# Rule\n", "utf8")
+  await writeJson(path.join(historyPath, CONTENT_ATTACHMENTS_FILE_NAME), {
+    schemaVersion: 1,
+    files: [],
+  })
+}
+
+describe("contentWriteService", () => {
+  afterEach(async () => {
+    fsMockState.cleanupFailureParentPath = null
+    vi.restoreAllMocks()
+    await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+  })
+
+  it("keeps an updated rule committed when temporary history cleanup fails after rename", async () => {
+    const root = await createTempRoot()
+    const baseHistoryDirname = "20260519000000Z__user__abc123"
+    const repository: SynapseRepositoryConfig = {
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: root,
+      contentDirs: { rule: "rules" },
+    }
+    const config = createDefaultConfig()
+    config.activeRepoUuid = repository.uuid
+    config.repositories = [repository]
+
+    await writeRuleFixture(root, baseHistoryDirname)
+    vi.spyOn(configStore, "load").mockResolvedValue(config)
+    vi.spyOn(repositoryStore, "getRepositoryState").mockResolvedValue({
+      repositoryUuid: repository.uuid,
+      localPath: root,
+      status: "ready",
+      isGitRepository: false,
+      gitRootPath: null,
+    })
+    fsMockState.cleanupFailureParentPath = path.join(root, "rules", "rule-1", HISTORY_DIRECTORY_NAME)
+
+    const result = await contentWriteService.updateRule(
+      {
+        id: "rule-1",
+        baseHistoryDirname,
+        title: "Rule",
+        name: "rule",
+        description: "Description",
+        category: "test",
+        icon: "wrench",
+        iconBg: "default",
+        iconType: "icon",
+        iconImage: "",
+        content: "# Updated",
+      },
+      { displayName: "User", userId: "user" },
+    )
+
+    await expect(readFile(path.join(result.gitPaths[0], CONTENT_MAIN_FILE_NAME), "utf8"))
+      .resolves.toBe("# Updated\n")
+  })
+})

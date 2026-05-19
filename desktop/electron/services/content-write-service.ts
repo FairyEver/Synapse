@@ -207,11 +207,21 @@ async function stageHistoryDirectory(
     const targetHistoryPath = path.join(historyRootPath, historyDirname)
     await rename(tempHistoryPath, targetHistoryPath)
     logger.info("Committed history directory.", { targetHistoryPath: path.basename(targetHistoryPath) })
-    await rm(tempDirectoryPath, { recursive: true, force: true })
+    try {
+      await rm(tempDirectoryPath, { recursive: true, force: true })
+    } catch (cleanupError) {
+      logger.warn("Failed to cleanup temporary history directory after commit.", {
+        error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+      })
+    }
 
     return targetHistoryPath
   } catch (error) {
-    await rm(tempDirectoryPath, { recursive: true, force: true })
+    await rm(tempDirectoryPath, { recursive: true, force: true }).catch((cleanupError) => {
+      logger.warn("Failed to cleanup temporary history directory after staging error.", {
+        error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError),
+      })
+    })
     throw error
   }
 }
@@ -660,7 +670,7 @@ class ContentWriteService {
       throw error
     }
 
-    let historyPath: string | null = null
+    let historyPath: string
     try {
       historyPath = await stageHistoryDirectory(
         contentDirectoryPath,
