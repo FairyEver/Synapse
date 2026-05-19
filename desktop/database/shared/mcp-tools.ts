@@ -59,6 +59,7 @@ const whereClauseSchema = {
   anyOf: [
     {
       type: "object",
+      not: { required: ["combinator", "conditions"] },
       description: "Equality filter object. Each key becomes `column = value`, and multiple keys are combined with AND.",
     },
     {
@@ -70,7 +71,7 @@ const whereClauseSchema = {
       type: "object",
       properties: {
         combinator: { type: "string", enum: ["all", "any"], description: "all combines conditions with AND; any combines them with OR." },
-        conditions: { type: "array", items: whereConditionSchema, description: "Filter expressions in this group." },
+        conditions: { type: "array", minItems: 1, items: whereConditionSchema, description: "Filter expressions in this group." },
       },
       required: ["combinator", "conditions"],
       description: "Grouped filter object: { combinator: 'all'|'any', conditions: [...] }.",

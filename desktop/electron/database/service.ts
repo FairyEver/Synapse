@@ -66,6 +66,22 @@ const LEGACY_TYPE_TO_KIND = new Map<string, ColumnKind>([
 
 type BulkMutationOptions = { dryRun?: boolean }
 
+function isGroupedWhereClause(where: DatabaseWhereClause): where is { conditions: unknown[] } {
+  return typeof where === "object"
+    && where !== null
+    && !Array.isArray(where)
+    && "combinator" in where
+    && "conditions" in where
+    && Array.isArray((where as { conditions: unknown }).conditions)
+}
+
+function isEmptyWhereClause(where: DatabaseWhereClause | undefined): boolean {
+  if (!where) return true
+  if (Array.isArray(where)) return where.length === 0
+  if (isGroupedWhereClause(where)) return where.conditions.length === 0
+  return Object.keys(where).length === 0
+}
+
 function q(name: string): string {
   return `"${name.replace(/"/g, '""')}"`
 }
@@ -141,7 +157,7 @@ class DatabaseService {
       this.db = new DatabaseSync(this.dbPath)
       this.db.exec("PRAGMA journal_mode=WAL")
     } catch (error) {
-      throw new Error(`Failed to open database: ${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(`Failed to open database: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
     }
 
     try {
@@ -219,7 +235,7 @@ class DatabaseService {
       })
     } catch (error) {
       this.restoreMovedFiles(moved)
-      throw new Error(`Failed to migrate legacy database file name: ${error instanceof Error ? error.message : String(error)}`)
+      throw new Error(`Failed to migrate legacy database file name: ${error instanceof Error ? error.message : String(error)}`, { cause: error })
     }
   }
 
@@ -914,9 +930,7 @@ class DatabaseService {
     validateName(table, "table")
     this.assertTableExists(table)
 
-    const whereEmpty = !where
-      || (Array.isArray(where) ? where.length === 0 : Object.keys(where).length === 0)
-    if (whereEmpty) {
+    if (isEmptyWhereClause(where)) {
       throw new Error("database.rows.update requires a non-empty where clause. Use database.row.update to target a single row by id.")
     }
 
@@ -975,9 +989,7 @@ class DatabaseService {
     validateName(table, "table")
     this.assertTableExists(table)
 
-    const whereEmpty = !where
-      || (Array.isArray(where) ? where.length === 0 : Object.keys(where).length === 0)
-    if (whereEmpty) {
+    if (isEmptyWhereClause(where)) {
       throw new Error("database.rows.delete requires a non-empty where clause. Use database.row.delete to target a single row by id, or drop and recreate the table to clear it.")
     }
 

@@ -218,6 +218,41 @@ describe("DatabaseService table descriptions", () => {
       where: [{ field: "labels", op: "CONTAINS", value: "bug" }],
     }).rows).toEqual([])
   })
+
+  it("rejects bulk updates with empty grouped where conditions", () => {
+    service.databaseTableCreate("tasks", [
+      { name: "title", kind: "text" },
+      { name: "state_note", kind: "text" },
+    ])
+    service.databaseRowCreate("tasks", { title: "First", state_note: "open" })
+    service.databaseRowCreate("tasks", { title: "Second", state_note: "open" })
+
+    expect(() => service.databaseRowsUpdate(
+      "tasks",
+      { combinator: "all", conditions: [] },
+      { state_note: "closed" },
+    )).toThrow("database.rows.update requires a non-empty where clause")
+
+    expect(service.databaseRowList({ table: "tasks", orderBy: "id" }).rows.map((row) => row.state_note)).toEqual([
+      "open",
+      "open",
+    ])
+  })
+
+  it("rejects bulk deletes with empty grouped where conditions", () => {
+    service.databaseTableCreate("tasks", [
+      { name: "title", kind: "text" },
+    ])
+    service.databaseRowCreate("tasks", { title: "First" })
+    service.databaseRowCreate("tasks", { title: "Second" })
+
+    expect(() => service.databaseRowsDelete(
+      "tasks",
+      { combinator: "any", conditions: [] },
+    )).toThrow("database.rows.delete requires a non-empty where clause")
+
+    expect(service.databaseRowList({ table: "tasks" }).total).toBe(2)
+  })
 })
 
 describe("DatabaseService legacy database migration", () => {

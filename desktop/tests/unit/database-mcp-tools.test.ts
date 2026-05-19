@@ -48,4 +48,19 @@ describe("Database MCP tool descriptions", () => {
     const names = buildTools().map((tool) => tool.name)
     expect(names.every((name) => name.startsWith("database_"))).toBe(true)
   })
+
+  it("requires grouped where conditions for bulk mutations", () => {
+    for (const toolName of ["database_rows_update", "database_rows_delete"]) {
+      const where = getTool(toolName).inputSchema.properties.where as {
+        anyOf: Array<{
+          not?: { required?: string[] }
+          properties?: {
+            conditions?: { minItems?: number }
+          }
+        }>
+      }
+      expect(where.anyOf[0]?.not?.required).toEqual(["combinator", "conditions"])
+      expect(where.anyOf[2]?.properties?.conditions?.minItems).toBe(1)
+    }
+  })
 })
