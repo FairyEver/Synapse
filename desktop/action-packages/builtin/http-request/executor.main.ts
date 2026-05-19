@@ -79,7 +79,7 @@ export function createHttpRequestAction(deps: {
           abortSignal: context.abortSignal,
         })
         return {
-          status: "success",
+          status: response.status >= 400 ? "failed" : "success",
           summary: `${String(response.status)} ${response.statusText}`,
           logs: response.body ? [{ label: "response", value: response.body }] : [],
           outputs: {
