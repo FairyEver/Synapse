@@ -3,18 +3,22 @@ import path from "node:path"
 import { pathExists } from "./fs-utils"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
+import { arePathsEqualForCompare } from "../../src/lib/path-compare"
 import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import type {
   SynapseContentInstallResult,
+  SynapseEditorResolvedTarget,
   SynapseInstallToEditorPayload,
   SynapseReadEditorInstallFormValuesPayload,
   SynapseReadEditorInstallFormValuesResult,
+  SynapseResolveEditorTargetPayload,
 } from "../../src/types/editor"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import { attachmentsPoolService } from "./attachments-pool-service"
 import { configStore } from "./config-store"
 import { contentService } from "./content-service"
 import { editorAdapterService } from "./editor-adapter-service"
+import { editorAdapterById } from "./editor-adapters"
 import { editorInstallStrategyById } from "./definitions/generated/main-registry"
 import { findSkillDirectoryByContentId } from "./editor-adapters/skill-identity"
 import { applyVariableSubstitutions } from "../../src/lib/variable-substitution"
@@ -35,6 +39,15 @@ type EditorWriteSecurityDeps = {
   auditSink: AuditSink
   permissionGuard: PermissionGuard
 }
+
+type EditorReadSecurityDeps = {
+  actor: ActorIdentity
+  auditSink: AuditSink
+  permissionGuard: PermissionGuard
+}
+
+const UNTRUSTED_PROJECT_PATH_ERROR = "项目路径不在已配置项目中。"
+const UNTRUSTED_INSTALL_TARGET_ERROR = "安装目标不在已配置编辑器路径中。"
 
 async function checkEditorWritePermission(
   deps: EditorWriteSecurityDeps | undefined,
@@ -58,6 +71,49 @@ async function checkEditorWritePermission(
     })
     throw new Error("没有写入该位置的权限。")
   }
+}
+
+async function checkEditorReadPermission(
+  deps: EditorReadSecurityDeps | undefined,
+  resource: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  if (!deps) return
+  const permission = await deps.permissionGuard.check({
+    action: "fs.read.outside-userdata",
+    actor: deps.actor,
+    context: metadata,
+    resource,
+  })
+  if (!permission.allowed) {
+    deps.auditSink.record({
+      action: "fs.read.outside-userdata",
+      actor: deps.actor,
+      metadata: {
+        ...metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+      outcome: "denied",
+      resource,
+    })
+    throw new Error(permission.reason)
+  }
+}
+
+function recordEditorReadAudit(
+  deps: EditorReadSecurityDeps | undefined,
+  resource: string,
+  outcome: "allowed" | "failed",
+  metadata: Record<string, unknown>,
+): void {
+  deps?.auditSink.record({
+    action: "fs.read.outside-userdata",
+    actor: deps.actor,
+    metadata,
+    outcome,
+    resource,
+  })
 }
 
 function recordEditorWriteAudit(
@@ -100,12 +156,73 @@ function formatInstallFailure(error: unknown, targetPath: string): Error {
     : formatted
 }
 
+function isSamePath(left: string, right: string): boolean {
+  return arePathsEqualForCompare(left, right, {
+    platform: process.platform,
+    resolvePath: path.resolve,
+  })
+}
+
+function isPathInsideDirectory(targetPath: string, directoryPath: string): boolean {
+  const relative = path.relative(path.resolve(directoryPath), path.resolve(targetPath))
+  return relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative)
+}
+
+async function assertConfiguredProjectPath(
+  payload: SynapseResolveEditorTargetPayload,
+): Promise<void> {
+  if (payload.scope !== "project") return
+  if (!payload.projectPath?.trim()) {
+    throw new Error("项目路径为空，无法解析项目安装位置。")
+  }
+
+  const config = await configStore.load()
+  const isConfigured = config.global.projects.some((project) => isSamePath(project.path, payload.projectPath ?? ""))
+  if (!isConfigured) {
+    throw new Error(UNTRUSTED_PROJECT_PATH_ERROR)
+  }
+}
+
+async function getTrustedRuleDirectories(editorId: string): Promise<string[]> {
+  const adapter = editorAdapterById.get(editorId)
+  if (!adapter) return []
+
+  const directories: string[] = []
+  const globalRulesPath = adapter.resolveGlobalDirectoryPaths().rulesPath
+  if (globalRulesPath) directories.push(globalRulesPath)
+
+  const config = await configStore.load()
+  const scanConfig = adapter.getScanPathConfig()
+  for (const project of config.global.projects) {
+    directories.push(scanConfig.projectPaths(project.path).rulesPath)
+  }
+
+  return Array.from(new Set(directories))
+}
+
+async function assertTrustedInstallFormTarget(
+  payload: SynapseReadEditorInstallFormValuesPayload,
+): Promise<void> {
+  const directories = await getTrustedRuleDirectories(payload.editorId)
+  const isTrusted = directories.some((directory) => isPathInsideDirectory(payload.targetPath, directory))
+  if (!isTrusted) {
+    throw new Error(UNTRUSTED_INSTALL_TARGET_ERROR)
+  }
+}
+
 export class ContentInstallService {
+  async resolveEditorInstallTarget(
+    payload: SynapseResolveEditorTargetPayload,
+  ): Promise<SynapseEditorResolvedTarget> {
+    await assertConfiguredProjectPath(payload)
+    return editorAdapterService.resolveTarget(payload)
+  }
+
   async installToEditor(
     payload: SynapseInstallToEditorPayload,
     security?: EditorWriteSecurityDeps,
   ): Promise<SynapseContentInstallResult> {
-    const target = await editorAdapterService.resolveTarget(payload)
+    const target = await this.resolveEditorInstallTarget(payload)
     const definition = getContentTypeDefinition(payload.contentType)
 
     const isConfirmedConflict = target.status === "conflict" && payload.replaceConfirmed
@@ -197,7 +314,7 @@ export class ContentInstallService {
                 backupPathForRestore = backupPath
               } catch (error) {
                 logger.warn("Failed to backup existing skill directory", { targetPath: path.basename(target.targetPath), error })
-                throw new Error("备份旧 Skill 失败，未替换目标。")
+                throw new Error("备份旧 Skill 失败，未替换目标。", { cause: error })
               }
             }
           }
@@ -311,6 +428,7 @@ export class ContentInstallService {
 
   async readEditorInstallFormValues(
     payload: SynapseReadEditorInstallFormValuesPayload,
+    security?: EditorReadSecurityDeps,
   ): Promise<SynapseReadEditorInstallFormValuesResult> {
     const installStrategy = editorInstallStrategyById.get(payload.editorId)
 
@@ -318,12 +436,25 @@ export class ContentInstallService {
       return { values: null }
     }
 
-    const values = await installStrategy.readRuleProjectFormValues({
-      targetPath: payload.targetPath,
-      readExistingTextFile,
-    })
+    await assertTrustedInstallFormTarget(payload)
+    const auditMetadata = {
+      editorId: payload.editorId,
+      operation: "read-install-form-values",
+    }
+    await checkEditorReadPermission(security, payload.targetPath, auditMetadata)
 
-    return { values }
+    try {
+      const values = await installStrategy.readRuleProjectFormValues({
+        targetPath: payload.targetPath,
+        readExistingTextFile,
+      })
+
+      recordEditorReadAudit(security, payload.targetPath, "allowed", auditMetadata)
+      return { values }
+    } catch (error) {
+      recordEditorReadAudit(security, payload.targetPath, "failed", auditMetadata)
+      throw error
+    }
   }
 }
 

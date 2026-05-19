@@ -482,7 +482,7 @@ export const contentIpcModule: IpcModule = {
       request: unknownRequestSchema,
       response: contentRecordSchema,
       handler: async (_ctx, payload: SynapseResolveEditorTargetPayload) => {
-        return editorAdapterService.resolveTarget(payload)
+        return contentInstallService.resolveEditorInstallTarget(payload)
       },
     },
     installToEditor: {
@@ -517,8 +517,12 @@ export const contentIpcModule: IpcModule = {
       channel: "synapse:content:read-editor-install-form-values",
       request: unknownRequestSchema,
       response: contentRecordSchema,
-      handler: async (_ctx, payload: SynapseReadEditorInstallFormValuesPayload) => {
-        return contentInstallService.readEditorInstallFormValues(payload)
+      handler: async (ctx, payload: SynapseReadEditorInstallFormValuesPayload) => {
+        return contentInstallService.readEditorInstallFormValues(payload, {
+          actor: { kind: "user" },
+          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+        })
       },
     },
     getIconPromptTemplate: {
