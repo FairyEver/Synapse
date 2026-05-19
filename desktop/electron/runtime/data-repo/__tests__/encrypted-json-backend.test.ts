@@ -103,6 +103,71 @@ describe("EncryptedJsonNamespace (T2.3)", () => {
     }
   })
 
+  it("keeps cached collection state unchanged when encrypted persistence fails", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "secrets.bin")
+    try {
+      let failEncrypt = false
+      const safeStorage = makeFakeSafeStorage()
+      const ns = new EncryptedJsonNamespace<ApiKey>({
+        name: "secrets",
+        schemaVersion: 1,
+        backend: "encrypted-json",
+        filePath: file,
+        safeStorage: {
+          ...safeStorage,
+          encryptString(plaintext) {
+            if (failEncrypt) throw new Error("disk full")
+            return safeStorage.encryptString(plaintext)
+          },
+        },
+      })
+      await ns.upsert({ id: "k1", provider: "anthropic", token: "sk-AAA" })
+      failEncrypt = true
+
+      await expect(
+        ns.upsert({ id: "k2", provider: "openai", token: "sk-BBB" }),
+      ).rejects.toThrow("disk full")
+
+      expect(await ns.get("k2")).toBeNull()
+      expect(await ns.list()).toEqual([{ id: "k1", provider: "anthropic", token: "sk-AAA" }])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("keeps cached singleton state unchanged when encrypted persistence fails", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "secrets.bin")
+    try {
+      let failEncrypt = false
+      const safeStorage = makeFakeSafeStorage()
+      const ns = new EncryptedJsonNamespace<ApiKey>({
+        name: "secrets",
+        schemaVersion: 1,
+        backend: "encrypted-json",
+        filePath: file,
+        safeStorage: {
+          ...safeStorage,
+          encryptString(plaintext) {
+            if (failEncrypt) throw new Error("disk full")
+            return safeStorage.encryptString(plaintext)
+          },
+        },
+      })
+      await ns.setSingleton({ id: "k1", provider: "anthropic", token: "sk-AAA" })
+      failEncrypt = true
+
+      await expect(
+        ns.setSingleton({ id: "k2", provider: "openai", token: "sk-BBB" }),
+      ).rejects.toThrow("disk full")
+
+      expect(await ns.getSingleton()).toEqual({ id: "k1", provider: "anthropic", token: "sk-AAA" })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("throws EncryptionUnavailableError when safeStorage reports unavailable", async () => {
     const dir = await tempDir()
     const file = path.join(dir, "secrets.bin")

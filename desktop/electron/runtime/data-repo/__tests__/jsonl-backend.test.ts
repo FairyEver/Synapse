@@ -61,6 +61,29 @@ describe("JsonLinesNamespace (T2.4)", () => {
     }
   })
 
+  it("keeps cached collection state unchanged when append persistence fails", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "audit.jsonl")
+    try {
+      const ns = new JsonLinesNamespace<AuditEvent>({
+        name: "audit",
+        schemaVersion: 1,
+        backend: "jsonl",
+        filePath: file,
+      })
+      await ns.upsert({ id: "e1", action: "x", outcome: "allowed" })
+      const circular = { id: "e2", action: "y", outcome: "denied" } as AuditEvent & { self?: unknown }
+      circular.self = circular
+
+      await expect(ns.upsert(circular)).rejects.toThrow()
+
+      expect(await ns.get("e2")).toBeNull()
+      expect(await ns.list()).toEqual([{ id: "e1", action: "x", outcome: "allowed" }])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("remove() throws by default (audit semantics)", async () => {
     const dir = await tempDir()
     const file = path.join(dir, "audit.jsonl")

@@ -165,8 +165,9 @@ export class JsonLinesNamespace<T extends Record<string, unknown> & { id: string
     await this.load()
     await this.ensureHeader()
     const previous = this.cache!.get(item.id)
+    const line = JSON.stringify(item) + "\n"
+    await appendFile(this.filePath, line, "utf8")
     this.cache!.set(item.id, item)
-    await appendFile(this.filePath, JSON.stringify(item) + "\n", "utf8")
     this.emit({ kind: "upsert", id: item.id, value: item, previous })
   }
 
@@ -179,10 +180,12 @@ export class JsonLinesNamespace<T extends Record<string, unknown> & { id: string
     await this.load()
     const previous = this.cache!.get(id)
     if (!previous) return
-    this.cache!.delete(id)
+    const nextCache = new Map(this.cache!)
+    nextCache.delete(id)
     // For removable JSONL we rewrite the whole file. Audit/heavy namespaces
     // should keep allowRemove=false to avoid this hot path.
-    await this.rewrite()
+    await this.rewrite(nextCache.values())
+    this.cache = nextCache
     this.emit({ kind: "remove", id, previous })
   }
 
@@ -200,13 +203,13 @@ export class JsonLinesNamespace<T extends Record<string, unknown> & { id: string
     await this.rewrite()
   }
 
-  private async rewrite(): Promise<void> {
+  private async rewrite(items: Iterable<T> = this.cache!.values()): Promise<void> {
     const header: JsonlHeader = {
       [HEADER_KEY]: 1,
       schemaVersion: this.schemaVersion,
     }
     const lines: string[] = [JSON.stringify(header)]
-    for (const item of this.cache!.values()) {
+    for (const item of items) {
       lines.push(JSON.stringify(item))
     }
     await writeTextFileAtomic(this.filePath, lines.join("\n") + "\n")

@@ -98,9 +98,8 @@ export class JsonNamespace<T extends Record<string, unknown>>
     return envelope
   }
 
-  protected async persist(): Promise<void> {
-    if (!this.cache) return
-    await writeJsonFileAtomic(this.filePath, this.cache)
+  protected async persist(envelope: JsonFileEnvelope<T>): Promise<void> {
+    await writeJsonFileAtomic(this.filePath, envelope)
   }
 
   private makeEmpty(): JsonFileEnvelope<T> {
@@ -119,8 +118,9 @@ export class JsonNamespace<T extends Record<string, unknown>>
   async setSingleton(value: T): Promise<void> {
     const env = await this.loadEnvelope()
     const previous = env.singleton
-    this.cache = { ...env, singleton: value }
-    await this.persist()
+    const next = { ...env, singleton: value }
+    await this.persist(next)
+    this.cache = next
     this.emit({
       kind: "replace",
       value,
@@ -142,11 +142,12 @@ export class JsonNamespace<T extends Record<string, unknown>>
   async upsert(item: T & { id: string }): Promise<void> {
     const env = await this.loadEnvelope()
     const previous = env.items[item.id]
-    this.cache = {
+    const next = {
       ...env,
       items: { ...env.items, [item.id]: item },
     }
-    await this.persist()
+    await this.persist(next)
+    this.cache = next
     this.emit({
       kind: "upsert",
       id: item.id,
@@ -161,8 +162,9 @@ export class JsonNamespace<T extends Record<string, unknown>>
     const previous = env.items[id]
     const { [id]: _removed, ...rest } = env.items
     void _removed
-    this.cache = { ...env, items: rest }
-    await this.persist()
+    const next = { ...env, items: rest }
+    await this.persist(next)
+    this.cache = next
     this.emit({ kind: "remove", id, previous })
   }
 

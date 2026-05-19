@@ -113,10 +113,9 @@ export class EncryptedJsonNamespace<T extends Record<string, unknown>>
     return raw
   }
 
-  private async persist(): Promise<void> {
-    if (!this.cache) return
+  private async persist(envelope: JsonFileEnvelope<T>): Promise<void> {
     this.ensureEncryptionAvailable()
-    const plaintext = JSON.stringify(this.cache)
+    const plaintext = JSON.stringify(envelope)
     const cipher = this.safeStorage.encryptString(plaintext)
     const bytes = new Uint8Array(cipher.buffer, cipher.byteOffset, cipher.byteLength)
     await writeBinaryFileAtomic(this.filePath, bytes, { mode: 0o600 })
@@ -139,8 +138,9 @@ export class EncryptedJsonNamespace<T extends Record<string, unknown>>
     this.ensureEncryptionAvailable()
     const env = await this.loadEnvelope()
     const previous = env.singleton
-    this.cache = { ...env, singleton: value }
-    await this.persist()
+    const next = { ...env, singleton: value }
+    await this.persist(next)
+    this.cache = next
     this.emit({
       kind: "replace",
       value,
@@ -162,11 +162,12 @@ export class EncryptedJsonNamespace<T extends Record<string, unknown>>
     this.ensureEncryptionAvailable()
     const env = await this.loadEnvelope()
     const previous = env.items[item.id]
-    this.cache = {
+    const next = {
       ...env,
       items: { ...env.items, [item.id]: item },
     }
-    await this.persist()
+    await this.persist(next)
+    this.cache = next
     this.emit({
       kind: "upsert",
       id: item.id,
@@ -182,8 +183,9 @@ export class EncryptedJsonNamespace<T extends Record<string, unknown>>
     const previous = env.items[id]
     const { [id]: _removed, ...rest } = env.items
     void _removed
-    this.cache = { ...env, items: rest }
-    await this.persist()
+    const next = { ...env, items: rest }
+    await this.persist(next)
+    this.cache = next
     this.emit({ kind: "remove", id, previous })
   }
 }

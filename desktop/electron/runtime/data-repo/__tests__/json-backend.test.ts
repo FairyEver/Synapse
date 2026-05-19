@@ -170,6 +170,51 @@ describe("JsonNamespace (T2.2)", () => {
     }
   })
 
+  it("keeps cached collection state unchanged when upsert persistence fails", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "users.json")
+    try {
+      const ns = new JsonNamespace<User>({
+        name: "users",
+        schemaVersion: 1,
+        backend: "json",
+        filePath: file,
+      })
+      await ns.upsert({ id: "u1", name: "Ada" })
+      const circular = { id: "u2", name: "Bad" } as User & { self?: unknown }
+      circular.self = circular
+
+      await expect(ns.upsert(circular)).rejects.toThrow()
+
+      expect(await ns.get("u2")).toBeNull()
+      expect(await ns.list()).toEqual([{ id: "u1", name: "Ada" }])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("keeps cached singleton state unchanged when setSingleton persistence fails", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "config.json")
+    try {
+      const ns = new JsonNamespace<User>({
+        name: "config",
+        schemaVersion: 1,
+        backend: "json",
+        filePath: file,
+      })
+      await ns.setSingleton({ id: "u1", name: "Ada" })
+      const circular = { id: "u2", name: "Bad" } as User & { self?: unknown }
+      circular.self = circular
+
+      await expect(ns.setSingleton(circular)).rejects.toThrow()
+
+      expect(await ns.getSingleton()).toEqual({ id: "u1", name: "Ada" })
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("persisted file uses envelope shape with schemaVersion", async () => {
     const dir = await tempDir()
     const file = path.join(dir, "users.json")
