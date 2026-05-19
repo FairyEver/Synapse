@@ -1,8 +1,11 @@
 import type { MainActionDefinition } from "../../../electron/action-runtime/action-registry"
 import type { AgentRuntimeService } from "../../../electron/services/agent-runtime/agent-runtime-service"
 import { sanitizeError } from "../../../electron/services/error-sanitize"
+import { createMainLogger } from "../../../electron/services/log-store"
 import { agentActionManifest } from "./manifest"
 import type { AgentActionConfig } from "./schema"
+
+const logger = createMainLogger("action.agent-executor")
 
 export function createAgentAction(deps: {
   readonly getAgentRuntime: (projectId: string) => Promise<AgentRuntimeService | undefined>
@@ -73,12 +76,21 @@ export function createAgentAction(deps: {
         }
       } catch (rawError) {
         const message = rawError instanceof Error ? rawError.message : String(rawError)
-        const isProviderError = message.includes("Provider not found") || message.includes("not found")
+        logger.error("Agent action execute failed.", {
+          taskId: input.context.taskId,
+          runId: input.context.runId,
+          projectId: input.config.projectId,
+          agentType: input.config.agentType,
+          error: sanitizeError(message),
+        })
+        const isProviderError = message.includes("Provider not found")
+        const sanitized = sanitizeError(message)
+        const truncated = sanitized.length > 120 ? sanitized.slice(0, 120) + "…" : sanitized
         return {
           status: "failed",
           error: isProviderError
             ? "供应商已删除或不可用，请重新配置"
-            : `Agent runtime error (${message.length} chars)`,
+            : `Agent runtime error: ${truncated}`,
           metrics: { durationMs: Date.now() - startMs },
         }
       }
