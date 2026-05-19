@@ -16,6 +16,8 @@ export interface DataRepositoryAuditSinkDeps {
   readonly idFactory?: () => string
 }
 
+const MAX_MEMORY_EVENTS = 10_000
+
 export class DataRepositoryAuditSink implements AuditSink {
   private readonly audit: DataNamespace<AuditEntryV1>
   private readonly logger?: Pick<StructuredLogger, "warn">
@@ -23,12 +25,18 @@ export class DataRepositoryAuditSink implements AuditSink {
   private readonly idFactory: () => string
   private readonly events: AuditEvent[] = []
   private pendingWrite: Promise<void> = Promise.resolve()
+  private healthy = true
+  private consecutiveFailures = 0
 
   constructor(deps: DataRepositoryAuditSinkDeps) {
     this.audit = deps.audit
     this.logger = deps.logger
     this.now = deps.now ?? (() => new Date())
     this.idFactory = deps.idFactory ?? (() => `audit:${randomUUID()}`)
+  }
+
+  isHealthy(): boolean {
+    return this.healthy
   }
 
   record(event: AuditSinkInput): void {
@@ -45,6 +53,9 @@ export class DataRepositoryAuditSink implements AuditSink {
       ...(metadata ? { metadata } : {}),
     }
     this.events.push(cachedEvent)
+    if (this.events.length > MAX_MEMORY_EVENTS) {
+      this.events.splice(0, this.events.length - MAX_MEMORY_EVENTS)
+    }
 
     const entry: AuditEntryV1 = {
       id,
@@ -65,9 +76,16 @@ export class DataRepositoryAuditSink implements AuditSink {
 
     this.pendingWrite = this.pendingWrite
       .then(() => this.audit.upsert(entry))
+      .then(() => {
+        this.consecutiveFailures = 0
+        this.healthy = true
+      })
       .catch((error) => {
+        this.consecutiveFailures++
+        this.healthy = false
         this.logger?.warn("Audit event persistence failed.", {
           action: entry.action,
+          consecutiveFailures: this.consecutiveFailures,
           error: error instanceof Error ? error.message : String(error),
         })
       })
