@@ -79,8 +79,8 @@ function HourlyTable({ rows }: { rows: HourlyRow[] }) {
         </TableRow>
       </TableHeader>
       <TableBody>
-        {sorted.map((r, i) => (
-          <TableRow key={`${r.hour}-${r.client}-${r.model}-${i}`}>
+        {sorted.map((r) => (
+          <TableRow key={`${r.hour}-${r.client}-${r.provider}-${r.model}`}>
             <TableCell>{r.hour}</TableCell>
             <TableCell>{r.client}</TableCell>
             {hasTurns && <TableCell className="text-right">{r.turns}</TableCell>}

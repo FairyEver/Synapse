@@ -314,7 +314,7 @@ export function getHourlyReport(options?: { since?: string; until?: string }): H
 
   const hourMap = new Map<string, HourlyReportRow>()
   for (const r of rows) {
-    const key = `${r.hour}:${r.client}:${r.model_id}`
+    const key = `${r.hour}:${r.client}:${r.provider_id}:${r.model_id}`
     const cost = r.cost_usd > 0 ? r.cost_usd : estimateCost(r.model_id, {
       input: r.input_tokens, output: r.output_tokens,
       cacheRead: r.cache_read_tokens, cacheWrite: r.cache_write_tokens,
