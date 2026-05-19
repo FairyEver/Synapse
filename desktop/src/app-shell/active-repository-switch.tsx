@@ -72,6 +72,7 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
             repositoryUuid: activeRepository.uuid,
             missingDirs: result.missingDirectories,
           })
+          showError("仓库目录结构异常，已自动断开连接。")
           await clearActiveRepository()
         }
       } catch (error) {
@@ -79,9 +80,11 @@ function ActiveRepositorySwitchProvider({ children }: { children: ReactNode }) {
           error,
           repositoryUuid: activeRepository.uuid,
         })
+        showError("仓库验证失败，请检查目录是否可访问。")
+        await clearActiveRepository()
       }
     })()
-  }, [activeRepoState?.status, activeRepository, clearActiveRepository, manager])
+  }, [activeRepoState?.status, activeRepository, clearActiveRepository, manager, showError])
 
   const runActiveRepositorySwitch = useCallback(
     async (repositoryUuid: string) => {
