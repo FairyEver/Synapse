@@ -312,7 +312,7 @@ git commit -m "feat: add usage analysis range types"
 - Create: `desktop/electron/services/usage-analysis/pricing.ts`
 - Test: `desktop/electron/services/usage-analysis/__tests__/pricing.test.ts`
 
-- [ ] **Step 1: Write pricing tests**
+- [x] **Step 1: Write pricing tests**
 
 Create `desktop/electron/services/usage-analysis/__tests__/pricing.test.ts`:
 
@@ -372,7 +372,7 @@ describe("usage analysis pricing", () => {
 })
 ```
 
-- [ ] **Step 2: Run the failing test**
+- [x] **Step 2: Run the failing test**
 
 Run:
 
@@ -382,7 +382,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: fail because `../pricing` does not exist.
 
-- [ ] **Step 3: Implement pricing**
+- [x] **Step 3: Implement pricing**
 
 Create `desktop/electron/services/usage-analysis/pricing.ts`:
 
@@ -451,7 +451,7 @@ export function estimateUsageCost(tool: UsageTool, model: string, tokens: UsageT
 }
 ```
 
-- [ ] **Step 4: Run pricing tests**
+- [x] **Step 4: Run pricing tests**
 
 Run:
 
@@ -461,7 +461,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/electron/services/usage-analysis/pricing.ts desktop/electron/services/usage-analysis/__tests__/pricing.test.ts
