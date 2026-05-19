@@ -37,6 +37,8 @@ export function TokenUsageModule() {
   const { data: hourlyProfile, loading: hourlyProfileLoading, error: hourlyProfileError, refresh: refreshHourlyProfile } = useHourlyProfile()
   const [lastScanInfo, setLastScanInfo] = useState<Pick<ScanResult, "elapsedMs" | "newMessages"> | null>(null)
   const initialScanDone = useRef(false)
+  const rangeRef = useRef(range)
+  rangeRef.current = range
 
   const allClients = useMemo(() => graphResult?.summary.clients ?? [], [graphResult])
 
@@ -60,8 +62,8 @@ export function TokenUsageModule() {
     if (result) {
       setLastScanInfo({ elapsedMs: result.elapsedMs, newMessages: result.newMessages })
     }
-    refreshAll(dateRangeToOptions(range))
-  }, [scan, refreshAll, range])
+    refreshAll(dateRangeToOptions(rangeRef.current))
+  }, [scan, refreshAll])
 
   const handleRangeChange = useCallback((preset: RangePreset) => {
     setRange(preset)
