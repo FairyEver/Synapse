@@ -87,6 +87,11 @@ function usePromptRun() {
             ...errorLogMeta(error),
           })
           toast.error("发送失败")
+          try {
+            await bridge.agent.deleteSession({ projectId, conversationId: session.id })
+          } catch {
+            // Best-effort cleanup; don't mask the original error.
+          }
           return false
         }
       }
