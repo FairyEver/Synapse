@@ -196,7 +196,15 @@ export class TaskSchedulerService {
     const task = await this.deps.tasks.get(id)
     if (!task?.enabled) return
     const nextRunAt = this.resolveNextRunAt(task, preferredNextRunAt)
-    await this.deps.tasks.markScheduled(id, nextRunAt.toISOString())
+    try {
+      await this.deps.tasks.markScheduled(id, nextRunAt.toISOString())
+    } catch (error) {
+      this.deps.logger?.warn?.("markScheduled failed, scheduling in memory only.", {
+        taskId: id,
+        boundary: "task-scheduler-schedule-fallback",
+        ...errorMetadata(error),
+      })
+    }
     const delayMs = Math.min(
       TIMER_MAX_DELAY_MS,
       Math.max(0, nextRunAt.getTime() - this.now().getTime()),
