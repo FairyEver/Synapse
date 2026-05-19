@@ -127,7 +127,7 @@ git commit -m "feat: add workflow package shared types"
 - Create: `desktop/electron/services/__tests__/workflow-package-service.test.ts`
 - Test: `pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/workflow-package-service.test.ts`
 
-- [ ] **Step 1: Write failing service tests**
+- [x] **Step 1: Write failing service tests**
 
 Create `desktop/electron/services/__tests__/workflow-package-service.test.ts` with these tests:
 
@@ -334,7 +334,7 @@ describe("WorkflowPackageService", () => {
 })
 ```
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 
 Run:
 
@@ -344,7 +344,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/workf
 
 Expected: FAIL because `workflow-package-service.ts` does not exist.
 
-- [ ] **Step 3: Implement `WorkflowPackageService`**
+- [x] **Step 3: Implement `WorkflowPackageService`**
 
 Create `desktop/electron/services/workflow/workflow-package-service.ts` with this implementation shape:
 
@@ -583,7 +583,7 @@ function assertPackage(value: SynapseWorkflowPackageV1): void {
 
 If TypeScript reports `crypto.randomUUID()` is not available in this module context, import `randomUUID` from `node:crypto` and use `deps.createId ?? randomUUID`.
 
-- [ ] **Step 4: Run service test**
+- [x] **Step 4: Run service test**
 
 Run:
 
@@ -593,7 +593,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/workf
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/electron/services/workflow/workflow-package-service.ts desktop/electron/services/__tests__/workflow-package-service.test.ts
