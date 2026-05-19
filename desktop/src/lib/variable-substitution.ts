@@ -5,7 +5,7 @@ const PLACEHOLDER_REGEX = /(?:(\\)\$|\$)\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g
 
 function isInsideCodeBlock(content: string, matchIndex: number): boolean {
   const before = content.slice(0, matchIndex)
-  const fenceCount = (before.match(/^```/gm) ?? []).length
+  const fenceCount = (before.match(/^ {0,3}```/gm) ?? []).length
   return fenceCount % 2 === 1
 }
 
