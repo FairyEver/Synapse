@@ -348,6 +348,12 @@ function createRawPayloadSubscription<TPayload>(
 
 const SENSITIVE_IPC_FIELD_PATTERN =
   /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization)/i
+const SENSITIVE_ERROR_VALUE_PATTERN =
+  /\b(secret|token|api[-_]?key|authorization|cookie|password|credential)\b\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)/gi
+const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
+const SECRET_KEY_PATTERN = /\bsk-[A-Za-z0-9_-]{8,}\b/g
+const WINDOWS_PATH_PATTERN = /\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g
+const POSIX_PATH_PATTERN = /(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g
 
 function sanitizeIpcPayload(fieldName: string, value: unknown, depth = 0): unknown {
   if (value === null || value === undefined) return value
@@ -372,7 +378,17 @@ function sanitizeIpcPayload(fieldName: string, value: unknown, depth = 0): unkno
 }
 
 function describeIpcError(error: unknown): string {
-  return error instanceof Error ? error.message : String(error)
+  return sanitizeIpcErrorMessage(error instanceof Error ? error.message : String(error))
+}
+
+function sanitizeIpcErrorMessage(value: string): string {
+  return value
+    .replace(BEARER_TOKEN_PATTERN, "Bearer [redacted]")
+    .replace(SENSITIVE_ERROR_VALUE_PATTERN, "$1=[redacted]")
+    .replace(SECRET_KEY_PATTERN, "[key]")
+    .replace(WINDOWS_PATH_PATTERN, "[path]")
+    .replace(POSIX_PATH_PATTERN, "$1[path]")
+    .trim()
 }
 
 function writeRendererIpcFailureLog(channel: string, args: unknown, error: unknown, durationMs: number): void {

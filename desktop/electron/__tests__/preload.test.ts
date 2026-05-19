@@ -154,6 +154,36 @@ describe("preload bridge", () => {
     )
   })
 
+  it("sanitizes renderer IPC failure log errors", async () => {
+    const bridge = await loadPreloadBridge()
+    const failure = new Error("token=sk-secret Bearer abc.def at /Users/liyang/private/file.ts")
+    electronMock.ipcRenderer.invoke.mockImplementation((channel: string) => {
+      if (channel === "synapse:config:get") {
+        return Promise.reject(failure)
+      }
+      return Promise.resolve(undefined)
+    })
+
+    await expect(bridge.config.get()).rejects.toThrow("token=sk-secret")
+
+    const logCall = electronMock.ipcRenderer.invoke.mock.calls.find(([channel]) =>
+      channel === "synapse:log:write")
+    expect(logCall?.[1]).toEqual(expect.objectContaining({
+      level: "error",
+      category: "renderer.ipc",
+      message: "IPC invoke failed.",
+      details: expect.objectContaining({
+        channel: "synapse:config:get",
+        error: expect.any(String),
+      }),
+    }))
+
+    const serializedLog = JSON.stringify(logCall?.[1])
+    expect(serializedLog).not.toContain("sk-secret")
+    expect(serializedLog).not.toContain("abc.def")
+    expect(serializedLog).not.toContain("/Users/liyang/private")
+  })
+
   it("passes direct update event payloads through", async () => {
     const bridge = await loadPreloadBridge()
     const listener = vi.fn()
