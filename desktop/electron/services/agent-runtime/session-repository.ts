@@ -143,13 +143,9 @@ export class AgentSessionRepository {
       createdAt: now,
       updatedAt: now,
     }
+    await this.conversations.upsert({ ...conversation, active: false })
+    await this.deactivateActive(input.sessionKey, input.platform, conversation.id, input.workspaceKey)
     await this.conversations.upsert(conversation)
-    try {
-      await this.deactivateActive(input.sessionKey, input.platform, conversation.id, input.workspaceKey)
-    } catch (e) {
-      await this.conversations.upsert({ ...conversation, active: false, updatedAt: this.isoNow() }).catch(() => {})
-      throw e
-    }
     return conversation
   }
 
