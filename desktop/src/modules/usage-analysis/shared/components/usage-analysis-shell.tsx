@@ -41,9 +41,16 @@ export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
           </div>
           <div className="flex items-center gap-2">
             <RangePicker value={props.range} onChange={props.onRangeChange} />
-            <Button type="button" variant="outline" size="sm" disabled={props.refreshing} onClick={props.onRefresh}>
-              <RefreshCw data-icon="inline-start" />
-              刷新
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={props.refreshing}
+              aria-busy={props.refreshing}
+              onClick={props.onRefresh}
+            >
+              <RefreshCw data-icon="inline-start" className={props.refreshing ? "animate-spin" : undefined} />
+              {props.refreshing ? "刷新中" : "刷新"}
             </Button>
           </div>
         </div>
