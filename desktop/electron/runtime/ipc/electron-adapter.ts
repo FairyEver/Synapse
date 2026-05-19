@@ -6,6 +6,7 @@
  */
 
 import { ipcMain } from "electron"
+import { assertTrustedIpcSender } from "../../ipc/validated-ipc"
 
 type IpcTransportLogger = {
   info?: (message: string, meta?: unknown) => void
@@ -97,7 +98,8 @@ function redactDiagnosticText(value: string): string {
 export function createElectronTransportInstall(options: ElectronTransportInstallOptions = {}) {
   return (channel: string, invoker: (request: unknown) => Promise<unknown>) => {
     // eslint-disable-next-line no-restricted-properties -- This adapter is the single Electron transport boundary for IpcRegistry.
-    ipcMain.handle(channel, async (_event, request) => {
+    ipcMain.handle(channel, async (event, request) => {
+      assertTrustedIpcSender(event)
       const startedAt = performance.now()
       try {
         return await invoker(request)
