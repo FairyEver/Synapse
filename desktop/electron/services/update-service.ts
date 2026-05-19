@@ -267,7 +267,7 @@ class UpdateService {
       }
 
       if (this.isAutoUpdateFlow()) {
-        this.clearUpdateFlow("auto")
+        this.handleError(error)
       }
     })
 
@@ -479,7 +479,7 @@ class UpdateService {
       this.beginUpdateFlow("auto")
       autoUpdater.checkForUpdates().catch((error) => {
         logger.warn("Auto update check failed.", { error })
-        this.clearUpdateFlow("auto")
+        this.handleError(error)
       })
     }
 
