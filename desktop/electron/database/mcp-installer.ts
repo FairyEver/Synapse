@@ -6,6 +6,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from "yaml"
 import { createMainLogger } from "../services/log-store"
 import { mcpDefinitions } from "../services/definitions/generated/main-registry"
 import type { SynapseMcpDefinition } from "../../src/definitions/types"
+import { getMcpServerToken } from "./mcp-server"
 import { SYNAPSE_MCP_LEGACY_SERVER_NAMES, SYNAPSE_MCP_SERVER_NAME } from "../../database/shared/server-identity"
 
 const logger = createMainLogger("database.mcp-installer")
@@ -135,8 +136,11 @@ function detectJsonRegistration(settings: Record<string, unknown>): { registered
 function registerJsonMcp(settingsPath: string, mcpUrl: string): void {
   const settings = readJsonSettings(settingsPath)
   const servers = isRecord(settings.mcpServers) ? settings.mcpServers : {}
+  const token = getMcpServerToken()
 
-  servers[SYNAPSE_MCP_SERVER_NAME] = { type: "http", url: mcpUrl }
+  servers[SYNAPSE_MCP_SERVER_NAME] = token
+    ? { type: "http", url: mcpUrl, headers: { Authorization: `Bearer ${token}` } }
+    : { type: "http", url: mcpUrl }
   settings.mcpServers = servers
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8")
 }
@@ -190,10 +194,17 @@ function findCodexServerSectionRange(lines: string[], serverName: string): { sta
 }
 
 function buildCodexServerBlock(mcpUrl: string, lineEnding: string): string {
-  return [
+  const token = getMcpServerToken()
+  const lines = [
     getCodexServerTableName(SYNAPSE_MCP_SERVER_NAME),
     `url = ${escapeTomlString(mcpUrl)}`,
-  ].join(lineEnding)
+  ]
+  if (token) {
+    lines.push("")
+    lines.push(`[mcp_servers.${SYNAPSE_MCP_SERVER_NAME}.headers]`)
+    lines.push(`Authorization = ${escapeTomlString(`Bearer ${token}`)}`)
+  }
+  return lines.join(lineEnding)
 }
 
 function upsertCodexServerConfig(raw: string, mcpUrl: string): string {
@@ -320,8 +331,11 @@ function detectHermesYamlRegistration(raw: string): { registered: boolean; mode:
 function registerHermesYamlMcp(settingsPath: string, mcpUrl: string): void {
   const settings = readHermesYamlSettings(settingsPath)
   const servers = isRecord(settings.mcp_servers) ? settings.mcp_servers : {}
+  const token = getMcpServerToken()
 
-  servers[SYNAPSE_MCP_SERVER_NAME] = { url: mcpUrl }
+  servers[SYNAPSE_MCP_SERVER_NAME] = token
+    ? { url: mcpUrl, headers: { Authorization: `Bearer ${token}` } }
+    : { url: mcpUrl }
   settings.mcp_servers = servers
 
   ensureParentDirectory(settingsPath)

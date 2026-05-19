@@ -1,4 +1,5 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
+import { randomBytes } from "node:crypto"
 import { createMainLogger } from "../services/log-store"
 import type { SynapseActionRouter } from "../capabilities/action-router"
 import { MCP_TOOL_ACTIONS } from "../../synapse-capabilities/shared/registry"
@@ -18,10 +19,9 @@ const MAX_BODY_SIZE = 1024 * 1024
 
 let server: Server | null = null
 let activePort = 0
+let activeToken = ""
 let actionRouter: SynapseActionRouter | null = null
 
-// MCP tool calls route through the same dispatcher as the HTTP API so the two
-// protocols can never disagree about argument handling or response shape.
 async function executeTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
   const action = MCP_TOOL_ACTIONS[toolName]
   if (!action) throw new Error(`Unknown tool: ${toolName}`)
@@ -106,7 +106,7 @@ function applyCorsHeaders(req: IncomingMessage, res: ServerResponse): boolean {
 }
 
 async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise<void> {
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type")
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization")
   res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS")
   if (!applyCorsHeaders(req, res)) {
     return
@@ -121,6 +121,13 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
   if (req.method !== "POST" || req.url !== "/mcp") {
     res.writeHead(404, { "Content-Type": "application/json" })
     res.end(JSON.stringify({ error: "Not found" }))
+    return
+  }
+
+  const authHeader = req.headers.authorization
+  if (!activeToken || authHeader !== `Bearer ${activeToken}`) {
+    res.writeHead(401, { "Content-Type": "application/json" })
+    res.end(JSON.stringify({ error: "Unauthorized" }))
     return
   }
 
@@ -153,7 +160,6 @@ function tryListen(port: number): Promise<number> {
     })
 
     s.once("error", (error) => {
-      // Release the unbound server so we don't leak the descriptor on retry.
       s.close(() => { /* already failed; ignore close callback */ })
       reject(error)
     })
@@ -168,6 +174,7 @@ function tryListen(port: number): Promise<number> {
 
 async function startMcpServer(router: SynapseActionRouter): Promise<number> {
   actionRouter = router
+  activeToken = randomBytes(32).toString("hex")
   for (let i = 0; i < MCP_PORT_ATTEMPTS; i++) {
     const port = MCP_DEFAULT_PORT + i
     try {
@@ -188,6 +195,7 @@ async function startMcpServer(router: SynapseActionRouter): Promise<number> {
 function stopMcpServer(): Promise<void> {
   return new Promise((resolve) => {
     activePort = 0
+    activeToken = ""
     actionRouter = null
     if (!server) { resolve(); return }
     server.close(() => {
@@ -202,6 +210,10 @@ function getMcpServerPort(): number {
   return activePort
 }
 
+function getMcpServerToken(): string {
+  return activeToken
+}
+
 function isMcpServerRunning(): boolean {
   return activePort > 0 && server !== null
 }
@@ -210,4 +222,4 @@ function getMcpServerUrl(): string {
   return activePort > 0 ? `http://127.0.0.1:${activePort}/mcp` : ""
 }
 
-export { startMcpServer, stopMcpServer, getMcpServerPort, isMcpServerRunning, getMcpServerUrl }
+export { startMcpServer, stopMcpServer, getMcpServerPort, getMcpServerToken, isMcpServerRunning, getMcpServerUrl }
