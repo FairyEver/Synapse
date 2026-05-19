@@ -3,39 +3,62 @@ import { guardedLog } from "./guard"
 
 const MAX_SERIALIZED_LENGTH = 2048
 
-function serializeArg(arg: unknown): unknown {
+type ConsoleArgDiagnostic = {
+  argType: string
+  errorName?: string
+  messageLength?: number
+  serializedLength?: number
+  stackLength?: number
+  textLength?: number
+}
+
+function getArgType(arg: unknown): string {
+  if (arg === null) return "null"
+  if (arg instanceof Error) return arg.name || "Error"
+  if (Array.isArray(arg)) return "array"
+  return typeof arg
+}
+
+function describeArg(arg: unknown): ConsoleArgDiagnostic {
   if (arg instanceof Error) {
-    return { message: arg.message, stack: arg.stack }
+    return {
+      argType: arg.name || "Error",
+      errorName: arg.name || "Error",
+      messageLength: arg.message.length,
+      stackLength: arg.stack?.length,
+    }
   }
-  if (typeof arg === "string") return arg
-  if (arg === null || arg === undefined) return arg
+  if (typeof arg === "string") {
+    return {
+      argType: "string",
+      textLength: arg.length,
+    }
+  }
+  if (arg === null || arg === undefined) return { argType: getArgType(arg) }
   try {
     const json = JSON.stringify(arg)
-    if (json.length > MAX_SERIALIZED_LENGTH) {
-      return json.slice(0, MAX_SERIALIZED_LENGTH) + "...[truncated]"
+    return {
+      argType: getArgType(arg),
+      serializedLength: Math.min(json.length, MAX_SERIALIZED_LENGTH),
     }
-    return JSON.parse(json)
   } catch {
-    return String(arg)
+    return {
+      argType: getArgType(arg),
+      serializedLength: String(arg).length,
+    }
   }
 }
 
-function formatArgs(args: unknown[]): { message: string; meta?: unknown } {
-  if (args.length === 0) return { message: "(empty)" }
-
+function formatArgs(args: unknown[]): { meta: unknown } {
   const first = args[0]
-  if (first instanceof Error) {
-    return {
-      message: first.message || "Error",
-      meta: { stack: first.stack, args: args.slice(1).map(serializeArg) },
-    }
+  return {
+    meta: {
+      argCount: args.length,
+      args: args.map(describeArg),
+      boundary: "renderer.console",
+      firstArgType: args.length === 0 ? "empty" : getArgType(first),
+    },
   }
-
-  const message = typeof first === "string" ? first : String(first)
-  if (args.length === 1) return { message }
-
-  const rest = args.slice(1).map(serializeArg)
-  return { message, meta: rest.length === 1 ? rest[0] : rest }
 }
 
 const REACT_DEV_PREFIXES = [
@@ -60,15 +83,15 @@ export function installConsoleInterceptor(logger: RendererLogger): () => void {
   console.error = (...args: unknown[]) => {
     originalError.apply(console, args)
     if (isReactDevWarning(args)) return
-    const { message, meta } = formatArgs(args)
-    guardedLog(logger, "error", message, meta)
+    const { meta } = formatArgs(args)
+    guardedLog(logger, "error", "Renderer console error.", meta)
   }
 
   console.warn = (...args: unknown[]) => {
     originalWarn.apply(console, args)
     if (isReactDevWarning(args)) return
-    const { message, meta } = formatArgs(args)
-    guardedLog(logger, "warn", message, meta)
+    const { meta } = formatArgs(args)
+    guardedLog(logger, "warn", "Renderer console warning.", meta)
   }
 
   return () => {

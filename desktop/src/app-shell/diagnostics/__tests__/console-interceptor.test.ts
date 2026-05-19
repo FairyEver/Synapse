@@ -17,8 +17,13 @@ describe("installConsoleInterceptor", () => {
     console.error("test error", { foo: 1 })
 
     expect(logger.error).toHaveBeenCalledTimes(1)
-    const [msg] = logger.error.mock.calls[0]
-    expect(msg).toContain("test error")
+    const [msg, meta] = logger.error.mock.calls[0]
+    expect(msg).toBe("Renderer console error.")
+    expect(meta).toMatchObject({
+      argCount: 2,
+      boundary: "renderer.console",
+      firstArgType: "string",
+    })
     cleanup()
   })
 
@@ -29,6 +34,7 @@ describe("installConsoleInterceptor", () => {
     console.warn("test warning")
 
     expect(logger.warn).toHaveBeenCalledTimes(1)
+    expect(logger.warn.mock.calls[0][0]).toBe("Renderer console warning.")
     cleanup()
   })
 
@@ -48,12 +54,16 @@ describe("installConsoleInterceptor", () => {
     console.error("big", largeObj)
 
     const [, meta] = logger.error.mock.calls[0]
-    const serialized = typeof meta === "string" ? meta : JSON.stringify(meta)
-    expect(serialized.length).toBeLessThanOrEqual(2200)
+    expect(meta).toMatchObject({
+      args: [
+        { argType: "string", textLength: 3 },
+        { argType: "object", serializedLength: 2048 },
+      ],
+    })
     cleanup()
   })
 
-  it("extracts message and stack from Error instances", () => {
+  it("extracts length diagnostics from Error instances", () => {
     const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     const cleanup = installConsoleInterceptor(logger)
 
@@ -61,8 +71,37 @@ describe("installConsoleInterceptor", () => {
     console.error(err)
 
     const [msg, meta] = logger.error.mock.calls[0]
-    expect(msg).toContain("something broke")
-    expect(meta).toHaveProperty("stack")
+    expect(msg).toBe("Renderer console error.")
+    expect(meta).toMatchObject({
+      args: [{
+        argType: "Error",
+        errorName: "Error",
+        messageLength: "something broke".length,
+        stackLength: err.stack?.length,
+      }],
+    })
+    cleanup()
+  })
+
+  it("logs console errors without raw message text", () => {
+    const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() }
+    const cleanup = installConsoleInterceptor(logger)
+
+    console.error(new Error("token=sk-secret at /Users/liyang/private/file.ts"))
+    console.warn("failed with api_key=secret at /Users/liyang/private/file.ts")
+
+    expect(logger.error).toHaveBeenCalledWith("Renderer console error.", expect.objectContaining({
+      boundary: "renderer.console",
+      firstArgType: "Error",
+    }))
+    expect(logger.warn).toHaveBeenCalledWith("Renderer console warning.", expect.objectContaining({
+      boundary: "renderer.console",
+      firstArgType: "string",
+    }))
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("/Users/liyang/private")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("api_key=secret")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("/Users/liyang/private")
     cleanup()
   })
 
@@ -75,7 +114,7 @@ describe("installConsoleInterceptor", () => {
     console.warn("real warning from app code")
 
     expect(logger.warn).toHaveBeenCalledTimes(1)
-    expect(logger.warn.mock.calls[0][0]).toBe("real warning from app code")
+    expect(logger.warn.mock.calls[0][0]).toBe("Renderer console warning.")
     expect(logger.error).not.toHaveBeenCalled()
     cleanup()
   })
