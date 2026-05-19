@@ -2059,7 +2059,7 @@ git commit -m "feat: add usage analysis tabs"
 **Files:**
 - No new files unless verification reveals necessary fixes.
 
-- [ ] **Step 1: Run hard constraints**
+- [x] **Step 1: Run hard constraints**
 
 Run:
 
@@ -2069,7 +2069,7 @@ pnpm --filter @synapse/desktop run check:hard-constraints
 
 Expected: pass.
 
-- [ ] **Step 2: Run usage analysis tests**
+- [x] **Step 2: Run usage analysis tests**
 
 Run:
 
@@ -2099,7 +2099,7 @@ pnpm --filter @synapse/desktop run typecheck
 
 Expected: pass.
 
-- [ ] **Step 5: Inspect diff**
+- [x] **Step 5: Inspect diff**
 
 Run:
 
