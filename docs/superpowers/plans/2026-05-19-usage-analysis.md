@@ -83,7 +83,7 @@ Modify renderer integration:
 - Create: `desktop/electron/services/usage-analysis/range.ts`
 - Test: `desktop/electron/services/usage-analysis/__tests__/range.test.ts`
 
-- [ ] **Step 1: Write the range helper test**
+- [x] **Step 1: Write the range helper test**
 
 Create `desktop/electron/services/usage-analysis/__tests__/range.test.ts`:
 
@@ -111,7 +111,7 @@ describe("usage analysis range helpers", () => {
 })
 ```
 
-- [ ] **Step 2: Run the failing test**
+- [x] **Step 2: Run the failing test**
 
 Run:
 

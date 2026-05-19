@@ -8,6 +8,7 @@ import {
   buildPromptShortcutOptions,
   extractClaudeCodeGlobalSkillNames,
   matchPromptShortcutTrigger,
+  shouldStartPromptShortcutCompletion,
 } from "./prompt-shortcuts"
 
 const logger = createRendererLogger("workflow.prompt-editor")
@@ -21,34 +22,40 @@ interface PromptEditorProps {
   rows?: number
 }
 
-function useClaudeCodeGlobalSkillNames(): string[] {
+function useClaudeCodeGlobalSkillNames(): { skillNames: string[]; refresh: () => void } {
   const [skillNames, setSkillNames] = useState<string[]>([])
+  const requestIdRef = useRef(0)
 
-  useEffect(() => {
-    let cancelled = false
+  const refresh = useCallback(() => {
+    const requestId = requestIdRef.current + 1
+    requestIdRef.current = requestId
 
     void (async () => {
       try {
         const scan = await window.synapse?.editorScan?.scanAll?.()
-        if (!cancelled) {
+        if (requestIdRef.current === requestId) {
           setSkillNames(extractClaudeCodeGlobalSkillNames(scan))
         }
       } catch (error) {
         logger.warn("Failed to load Claude Code global skills.", { error })
       }
     })()
-
-    return () => {
-      cancelled = true
-    }
   }, [])
 
-  return skillNames
+  useEffect(() => {
+    refresh()
+
+    return () => {
+      requestIdRef.current += 1
+    }
+  }, [refresh])
+
+  return { skillNames, refresh }
 }
 
 export function PromptEditor({ value, onChange, onBlur, variables, placeholder, rows = 8 }: PromptEditorProps) {
   const editorRef = useRef<ReactCodeMirrorRef>(null)
-  const skillNames = useClaudeCodeGlobalSkillNames()
+  const { skillNames, refresh: refreshSkillNames } = useClaudeCodeGlobalSkillNames()
   const options = useMemo(() => buildPromptShortcutOptions({ variables, skillNames }), [variables, skillNames])
   const minHeight = `${Math.max(rows, 3) * 20}px`
 
@@ -62,8 +69,10 @@ export function PromptEditor({ value, onChange, onBlur, variables, placeholder, 
     return {
       from: match.from,
       options: sourceOptions.map((option) => ({
-        label: option.label,
+        label: option.completionLabel,
+        displayLabel: option.label,
         type: match.kind === "variable" ? "variable" : "keyword",
+        detail: match.kind === "variable" ? "变量" : "Skill",
         apply: option.apply,
       })),
       validFor: match.kind === "variable" ? /^@[^\s@/]*$/ : /^\/[^\s@/]*$/,
@@ -73,7 +82,21 @@ export function PromptEditor({ value, onChange, onBlur, variables, placeholder, 
   const extensions = useMemo(() => [
     autocompletion({ override: [completionSource] }),
     EditorView.lineWrapping,
-  ], [completionSource])
+    EditorView.domEventHandlers({
+      focus: () => {
+        refreshSkillNames()
+        return false
+      },
+    }),
+    EditorView.updateListener.of((update) => {
+      if (!update.docChanged) return
+      const cursor = update.state.selection.main
+      if (!cursor.empty) return
+      if (shouldStartPromptShortcutCompletion(update.state.doc.toString(), cursor.from)) {
+        startCompletion(update.view)
+      }
+    }),
+  ], [completionSource, refreshSkillNames])
 
   const insertTrigger = (trigger: "@" | "/") => {
     const view = editorRef.current?.view

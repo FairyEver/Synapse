@@ -31,7 +31,7 @@ const workflowCapabilities: readonly CapabilityDefinition[] = [
   { id: "workflow.edge.delete" as CapabilityId, title: "Delete edge", description: "Delete an edge by ID.", mutates: true },
   { id: "workflow.param.update" as CapabilityId, title: "Update params", description: "Replace the workflow parameter list.", mutates: true },
   // Layout
-  { id: "workflow.layout.update" as CapabilityId, title: "Auto-layout", description: "Reposition workflow nodes using dagre left-to-right auto-layout.", mutates: true },
+  { id: "workflow.layout.update" as CapabilityId, title: "Auto-layout", description: "Reposition workflow nodes using the same pure auto-layout algorithm as the UI editor.", mutates: true },
 ]
 
 export const WORKFLOW_DOMAIN: CapabilityDomainDefinition = {
@@ -270,7 +270,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     // Layout
     {
       name: "workflow_layout_update",
-      description: "Reposition all nodes in a workflow using dagre left-to-right auto-layout. Saves the updated positions. The UI editor will reflect the changes on next load.",
+      description: "Reposition all nodes in a workflow using the same pure auto-layout algorithm as the UI editor. Saves the updated positions. Call this after adding, deleting, or reconnecting nodes so the workflow opens cleanly in the UI.",
       inputSchema: {
         type: "object",
         properties: {

@@ -1139,12 +1139,18 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
         const config = await configStore.load()
         const repo = projectId
           ? config.repositories.find((r) => r.uuid === projectId)
-          : (config.repositories.find((r) => r.uuid === config.activeRepoUuid) ?? config.repositories[0])
+          : undefined
         const proj = !repo && projectId
           ? config.global.projects.find((p) => p.id === projectId)
           : undefined
-        const effectiveProjectId = repo?.uuid ?? proj?.id ?? ""
-        const workspacePath = repo?.localPath ?? proj?.path ?? os.homedir()
+        const activeRepo = config.repositories.find((r) => r.uuid === config.activeRepoUuid)
+        const activeProject = activeRepo
+          ? config.global.projects.find((p) => p.path === activeRepo.localPath)
+          : undefined
+        const fallbackProject = activeProject ?? config.global.projects[0]
+        const fallbackRepo = activeRepo ?? config.repositories[0]
+        const effectiveProjectId = repo?.uuid ?? proj?.id ?? fallbackProject?.id ?? fallbackRepo?.uuid ?? ""
+        const workspacePath = repo?.localPath ?? proj?.path ?? fallbackProject?.path ?? fallbackRepo?.localPath ?? os.homedir()
         const containers = registry.get<ProjectContainerRegistry>("core.project-containers")
         const container = await containers.open(effectiveProjectId, { name: "", workspacePath })
         const agentRuntime = container.get<import("../services/agent-runtime").AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)

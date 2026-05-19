@@ -61,6 +61,11 @@ export function matchPromptShortcutTrigger(doc: string, pos: number): PromptShor
   }
 }
 
+export function shouldStartPromptShortcutCompletion(doc: string, pos: number): boolean {
+  const trigger = doc.at(pos - 1)
+  return trigger === "@" || trigger === "/"
+}
+
 function uniqueNonEmpty(values: readonly string[]): string[] {
   const seen = new Set<string>()
   const result: string[] = []

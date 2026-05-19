@@ -223,7 +223,7 @@
 5. workflow_node_create({ workflowId, node })           → 添加节点（position 可省略，自动布局）
 6. workflow_edge_create({ workflowId, from, to })       → 连接节点
 7. workflow_node_update({ workflowId, nodeId, patch })  → 配置节点（设置 prompt、variables 等）
-8. workflow_layout_update({ workflowId })               → 自动排列节点位置（可选）
+8. workflow_layout_update({ workflowId })               → 自动排列节点位置
 9. workflow_definition_inspect({ definition })          → 校验完整性
 10. workflow_run_execute({ workflowId, params })         → 执行工作流
 11. workflow_run_get({ runId })                          → 轮询运行结果
@@ -232,7 +232,7 @@
 关键点：
 - 步骤 3 创建的工作流已包含一个 end 节点，无需手动创建
 - 步骤 5 中 position 可省略，dispatcher 自动计算布局
-- 步骤 8 在批量添加节点后调用，自动整理为左右层级排列
+- 步骤 8 在新增、删除或重连节点后调用，自动整理为左右层级排列，无需打开 UI
 - 步骤 9 可在任何修改后调用，提前发现问题
 - 步骤 11 需轮询直到 status 变为 `completed` / `failed` / `cancelled`
 

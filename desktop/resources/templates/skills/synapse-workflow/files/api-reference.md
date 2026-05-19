@@ -195,11 +195,11 @@ Replace the workflow's parameter list entirely.
 
 ### workflow_layout_update
 
-Reposition all nodes using dagre auto-layout algorithm. Saves the updated positions.
+Reposition all nodes using the same pure auto-layout algorithm as the UI editor. Saves the updated positions.
 
 **Params:** `workflowId` (string, required), `direction?` (string, `"LR"` or `"TB"`, default `"LR"`)
 **Returns:** `{ versionHash, validation? }`
-**Notes:** `LR` arranges nodes left-to-right, `TB` arranges top-to-bottom. The UI editor reflects the changes on next load. Useful after batch node creation to clean up overlapping positions.
+**Notes:** `LR` arranges nodes left-to-right, `TB` arranges top-to-bottom. The UI editor reflects the changes on next load. Call this after adding, deleting, or reconnecting nodes so agents can clean up layout without opening the UI.
 
 ---
 

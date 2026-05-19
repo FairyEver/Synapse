@@ -336,7 +336,13 @@ async function resolveWorkflowProjectId(def: WorkflowDefinition): Promise<string
     ? appConfig.repositories.find((r) => r.uuid === def.defaultProjectId)?.uuid
       ?? appConfig.global.projects.find((p) => p.id === def.defaultProjectId)?.id
     : undefined
+  const activeRepository = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid)
+  const activeProject = activeRepository
+    ? appConfig.global.projects.find((p) => p.path === activeRepository.localPath)
+    : undefined
   return resolvedId
+    ?? activeProject?.id
+    ?? appConfig.global.projects[0]?.id
     ?? appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid)?.uuid
     ?? appConfig.repositories[0]?.uuid
 }

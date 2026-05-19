@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto"
-import dagre from "@dagrejs/dagre"
 import { zodToJsonSchema } from "zod-to-json-schema"
 import type { WorkflowService, WorkflowSaveResult, WorkflowSaveError } from "../services/workflow/workflow-service"
 import type { RunSnapshotService } from "../services/workflow/run-snapshot-service"
@@ -9,7 +8,7 @@ import type { WorkflowDefinition, WorkflowRunStatus, ValidationError } from "../
 import { validateWorkflow } from "../services/workflow/workflow-validator"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import { createMainLogger } from "../services/log-store"
-import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../workflow-nodes/switch/constants"
+import { layoutWorkflowNodes } from "../../src/lib/workflow-auto-layout"
 
 const logger = createMainLogger("capability.workflow-dispatcher")
 const workflowMutationChains = new WeakMap<WorkflowDispatchDeps, Map<string, Promise<void>>>()
@@ -347,33 +346,9 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
       ? params.direction
       : "LR"
     const nodeWidth = 220
-    const defaultNodeHeight = 80
     return atomicMutate(deps, workflowId, (def) => {
       if (def.nodes.length === 0) return
-      const g = new dagre.graphlib.Graph()
-      g.setDefaultEdgeLabel(() => ({}))
-      g.setGraph({ rankdir: direction, nodesep: 40, ranksep: 80 })
-      for (const node of def.nodes) {
-        const nodeHeight = node.type === "switch"
-          ? SWITCH_HEADER_H + (((node.config as Record<string, unknown>)["branches"] as Array<unknown> | undefined)?.length ?? 0) * SWITCH_BRANCH_H
-          : defaultNodeHeight
-        g.setNode(node.id, { width: nodeWidth, height: nodeHeight })
-      }
-      for (const edge of def.edges) {
-        if (g.hasNode(edge.from) && g.hasNode(edge.to)) {
-          g.setEdge(edge.from, edge.to)
-        }
-      }
-      dagre.layout(g)
-      for (const node of def.nodes) {
-        const pos = g.node(node.id)
-        if (pos) {
-          const nodeHeight = node.type === "switch"
-            ? SWITCH_HEADER_H + (((node.config as Record<string, unknown>)["branches"] as Array<unknown> | undefined)?.length ?? 0) * SWITCH_BRANCH_H
-            : defaultNodeHeight
-          node.position = { x: pos.x - nodeWidth / 2, y: pos.y - nodeHeight / 2 }
-        }
-      }
+      def.nodes = layoutWorkflowNodes(def.nodes, def.edges, { direction, nodeWidth })
     })
   },
 }

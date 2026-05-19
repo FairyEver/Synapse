@@ -5,6 +5,7 @@ import {
   completionTextForPromptShortcut,
   extractClaudeCodeGlobalSkillNames,
   matchPromptShortcutTrigger,
+  shouldStartPromptShortcutCompletion,
 } from "../prompt-shortcuts"
 
 describe("prompt shortcuts", () => {
@@ -104,6 +105,12 @@ describe("prompt shortcuts", () => {
     expect(matchPromptShortcutTrigger("hello @AA", 9)).toEqual({ kind: "variable", from: 6, text: "@AA" })
     expect(matchPromptShortcutTrigger("run /review", 11)).toEqual({ kind: "skill", from: 4, text: "/review" })
     expect(matchPromptShortcutTrigger("https://example.com/a", 21)).toBeNull()
+  })
+
+  it("starts completion immediately after typing a prompt shortcut trigger", () => {
+    expect(shouldStartPromptShortcutCompletion("@", 1)).toBe(true)
+    expect(shouldStartPromptShortcutCompletion("run /", 5)).toBe(true)
+    expect(shouldStartPromptShortcutCompletion("run /review", 11)).toBe(false)
   })
 
   it("returns insertion text for each shortcut kind", () => {

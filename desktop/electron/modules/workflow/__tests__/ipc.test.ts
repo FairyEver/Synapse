@@ -118,7 +118,7 @@ describe("workflowIpcModule", () => {
     expect(engine.run).toHaveBeenCalledWith(
       expect.anything(), expect.anything(), expect.anything(),
       expect.anything(), expect.anything(), expect.anything(),
-      "renderer",
+      "renderer", expect.anything(),
     )
 
     // workflow:runDefinition → "editor-run-definition"
@@ -129,7 +129,7 @@ describe("workflowIpcModule", () => {
     expect(engine.run).toHaveBeenCalledWith(
       expect.anything(), expect.anything(), expect.anything(),
       expect.anything(), expect.anything(), expect.anything(),
-      "editor-run-definition",
+      "editor-run-definition", expect.anything(),
     )
 
     // workflow:rerun → "rerun"
@@ -157,7 +157,55 @@ describe("workflowIpcModule", () => {
     expect(engine.run).toHaveBeenCalledWith(
       expect.anything(), expect.anything(), expect.anything(),
       expect.anything(), expect.anything(), expect.anything(),
-      "rerun",
+      "rerun", expect.anything(),
+    )
+  })
+
+  it("uses the first configured Agent project instead of the active repository when workflow has no default project", async () => {
+    vi.mocked(configStore.load).mockResolvedValue({
+      repositories: [{
+        uuid: "repo-1",
+        name: "Content Repo",
+        localPath: "/repo",
+        contentDirs: {},
+      }],
+      activeRepoUuid: "repo-1",
+      global: {
+        themeMode: "system",
+        projects: [{
+          id: "agent-project-1",
+          name: "Agent Project",
+          path: "/agent-project",
+        }],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+    } as never)
+    const eventBus = { emit: vi.fn() }
+    const snapshots = { save: vi.fn(async () => undefined) }
+    const engine = { run: vi.fn(async () => undefined) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.engine") return engine as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      if (serviceId === "core.event-bus") return eventBus as T
+      if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
+      if (serviceId === "core.workflow.run-statuses") return new Map<string, WorkflowRunStatus>() as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    await harness.invoke("synapse:workflow:run-definition", {
+      definition: workflowDefinition(),
+      params: {},
+    })
+
+    expect(engine.run).toHaveBeenCalledWith(
+      expect.anything(), expect.anything(), expect.anything(),
+      expect.anything(), expect.anything(), "agent-project-1",
+      "editor-run-definition",
+      expect.anything(),
     )
   })
 
