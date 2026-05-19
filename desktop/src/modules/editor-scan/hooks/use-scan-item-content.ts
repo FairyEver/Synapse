@@ -56,6 +56,7 @@ function useSkillFiles(dirPath: string | null) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const lastPathRef = useRef<string | null>(null)
+  const currentReqRef = useRef(0)
 
   useEffect(() => {
     if (!dirPath) {
@@ -72,16 +73,23 @@ function useSkillFiles(dirPath: string | null) {
     const bridge = getSynapseBridge()
     if (!bridge) return
 
+    const reqId = ++currentReqRef.current
     setLoading(true)
     setError(null)
     void bridge.editorScan.listSkillFiles(dirPath)
-      .then(setFiles)
+      .then((result) => {
+        if (reqId !== currentReqRef.current) return
+        setFiles(result)
+      })
       .catch((err) => {
+        if (reqId !== currentReqRef.current) return
         logger.error("Failed to load skill files.", { path: dirPath, error: err })
         setFiles([])
         setError(err instanceof Error ? err.message : "读取关联文件失败")
       })
-      .finally(() => setLoading(false))
+      .finally(() => {
+        if (reqId === currentReqRef.current) setLoading(false)
+      })
   }, [dirPath])
 
   return { files, loading, error }
