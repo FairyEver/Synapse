@@ -330,21 +330,14 @@ function handleEngineRejection(options: {
   pruneTerminalStatuses(runStatuses, def.id)
 }
 
-async function resolveWorkflowProjectId(def: WorkflowDefinition): Promise<string | undefined> {
+async function resolveDefaultWorkflowProjectId(): Promise<string | undefined> {
   const appConfig = await configStore.load()
-  const resolvedId = def.defaultProjectId
-    ? appConfig.repositories.find((r) => r.uuid === def.defaultProjectId)?.uuid
-      ?? appConfig.global.projects.find((p) => p.id === def.defaultProjectId)?.id
-    : undefined
-  const activeRepository = appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid)
-  const activeProject = activeRepository
-    ? appConfig.global.projects.find((p) => p.path === activeRepository.localPath)
-    : undefined
-  return resolvedId
-    ?? activeProject?.id
-    ?? appConfig.global.projects[0]?.id
-    ?? appConfig.repositories.find((r) => r.uuid === appConfig.activeRepoUuid)?.uuid
-    ?? appConfig.repositories[0]?.uuid
+  return appConfig.global.projects[0]?.id
+}
+
+async function resolveWorkflowProjectId(def: WorkflowDefinition): Promise<string | undefined> {
+  const projectId = def.defaultProjectId?.trim()
+  return projectId || undefined
 }
 
 function findActiveRun(runStatuses: Map<string, WorkflowRunStatus>, workflowId: string): string | undefined {
@@ -393,7 +386,8 @@ export const workflowIpcModule: IpcModule = {
       ]),
       handler: async (ctx) => {
         logger.info("workflow:create requested")
-        const result = await ctx.resolve<WorkflowService>("core.workflow").create()
+        const defaultProjectId = await resolveDefaultWorkflowProjectId()
+        const result = await ctx.resolve<WorkflowService>("core.workflow").create(defaultProjectId)
         if ("errors" in result) {
           logger.warn("workflow:create failed", { errors: result.errors })
         } else {

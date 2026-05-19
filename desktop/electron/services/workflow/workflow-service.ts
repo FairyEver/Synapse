@@ -118,11 +118,12 @@ export class WorkflowService {
     return { versionHash }
   }
 
-  async create(): Promise<{ id: string; versionHash: string } | WorkflowSaveError> {
+  async create(defaultProjectId?: string): Promise<{ id: string; versionHash: string } | WorkflowSaveError> {
     const id = randomUUID()
     const now = Date.now()
     const def: WorkflowDefinition = {
       id, name: "新工作流", version: "", createdAt: now, updatedAt: now, params: [],
+      defaultProjectId,
       nodes: [{ id: "end", name: "结束", type: "end", position: { x: 600, y: 200 }, config: { outputType: "text", template: "", variables: [] } }],
       edges: [],
     }

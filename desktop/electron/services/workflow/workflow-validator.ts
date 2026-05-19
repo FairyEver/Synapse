@@ -109,11 +109,15 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
       const cfg = node.config as Record<string, unknown>
       const hasProviderId = typeof cfg.providerId === "string" && cfg.providerId.length > 0
       const hasModelTier = typeof cfg.modelTier === "string" && cfg.modelTier.length > 0
+      const hasProjectId = typeof cfg.projectId === "string" && cfg.projectId.trim().length > 0
       if (!hasProviderId && !def.defaultProviderId) {
         errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」未配置供应商，且工作流未设置默认供应商` })
       }
       if (!hasModelTier && !def.defaultModelTier) {
         errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」未配置模型层级，且工作流未设置默认模型` })
+      }
+      if (!hasProjectId && !def.defaultProjectId) {
+        errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」未配置项目，且工作流未设置默认项目` })
       }
     }
 

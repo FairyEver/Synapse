@@ -119,6 +119,8 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.workflow.run-aborts",
       "core.workflow.run-statuses",
       "core.workflow.engine",
+      "core.permission-guard",
+      "core.audit-sink",
       "provider",
     ])
     expect(coreDatabaseDescriptor.stop).toBeTypeOf("function")
@@ -171,7 +173,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     const { coreWorkflowEngineDescriptor } = await importBootstrap()
     const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
       agentDeps: {
-        sendToAgent(input: { providerId?: string; modelTier?: string; prompt: string; abortSignal: AbortSignal }): Promise<{
+        sendToAgent(input: { providerId?: string; modelTier?: string; prompt: string; projectId?: string; abortSignal: AbortSignal }): Promise<{
           status: "success" | "failed"
           response: string
           error?: string
@@ -184,6 +186,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       providerId: "test-provider",
       modelTier: "fast",
       prompt: "secret prompt",
+      projectId: "repo-1",
       abortSignal: new AbortController().signal,
     })
 
@@ -208,6 +211,60 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(serialized).not.toContain("sk-test")
     expect(serialized).not.toContain("/Users/liyang/private")
     expect(serialized).not.toContain("secret prompt")
+  })
+
+  it("workflow Agent dependency fails instead of falling back when project is missing", async () => {
+    const logger = { error: vi.fn() }
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: "repo-1",
+          repositories: [{ uuid: "repo-1", name: "Repo", localPath: "/repo" }],
+          global: {
+            projects: [{ id: "agent-project-1", name: "Agent Project", path: "/agent-project" }],
+          },
+        })),
+      },
+    }))
+    vi.doMock("../../services/log-store", () => ({
+      logStore: {},
+      createMainLogger: () => logger,
+    }))
+    const containers = { open: vi.fn() }
+    const permissionGuard = { check: vi.fn() }
+    const auditSink = { record: vi.fn() }
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "core.project-containers") return containers
+          if (id === "core.permission-guard") return permissionGuard
+          if (id === "core.audit-sink") return auditSink
+          throw new Error(`unexpected service ${id}`)
+        }),
+      },
+    }
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
+      agentDeps: {
+        sendToAgent(input: { providerId?: string; modelTier?: string; prompt: string; projectId?: string; abortSignal: AbortSignal }): Promise<{
+          status: "success" | "failed"
+          response: string
+          error?: string
+          durationMs: number
+        }>
+      }
+    }
+
+    const result = await engine.agentDeps.sendToAgent({
+      providerId: "test-provider",
+      modelTier: "fast",
+      prompt: "secret prompt",
+      abortSignal: new AbortController().signal,
+    })
+
+    expect(result.status).toBe("failed")
+    expect(containers.open).not.toHaveBeenCalled()
   })
 
   it("workflow HTTP dependency records denied audits with a sanitized resource", async () => {
@@ -371,6 +428,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     const workflowService = { get: vi.fn().mockResolvedValue(workflowDef) }
     const runAborts = new Map<string, AbortController>()
     const runStatuses = new Map<string, { runId: string; workflowId: string; status: string; nodeResults: Record<string, unknown>; startedAt: number; error?: string; params?: Record<string, unknown>; definition?: unknown }>()
+    const runCompletions = new Map<string, Promise<unknown>>()
     const eventBus = { emit: vi.fn() }
     const snapshotService = { save: vi.fn() }
     const capabilityLogger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
@@ -384,6 +442,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       eventBus: eventBus as never,
       runAborts: runAborts as never,
       runStatuses: runStatuses as never,
+      runCompletions,
       capabilityLogger: capabilityLogger as never,
     })
 

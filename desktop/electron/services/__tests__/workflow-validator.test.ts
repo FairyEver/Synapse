@@ -13,6 +13,7 @@ const nodeEnd = { id: "end", name: "结束", type: "end", position: { x: 400, y:
 // base now includes an End Node so existing tests keep passing
 const base: WorkflowDefinition = {
   id: "wf", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+  defaultProjectId: "project-1",
   nodes: [nodeA, nodeB, nodeEnd],
   edges: [{ id: "e1", from: "a", to: "b" }, { id: "e2", from: "b", to: "end" }],
 }
@@ -128,6 +129,29 @@ describe("validateWorkflow", () => {
     const sw = { id: "sw", name: "S", type: "switch", position: { x: 0, y: 0 }, config: { variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }] } }
     const defWithDefault = { ...base, defaultProviderId: "test-provider", defaultModelTier: "sonnet" as const, nodes: [sw, nodeB, nodeEnd], edges: [{ id: "e1", from: "sw", to: "b", branch: "yes" }, { id: "e2", from: "b", to: "end" }] }
     const r = validateWorkflow(defWithDefault)
+    expect(r.valid).toBe(true)
+  })
+
+  it("errors when prompt node has no project and workflow has no default project", () => {
+    const nodeNoProject = { id: "np", name: "NP", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "hi" } }
+    const r = validateWorkflow({
+      ...base,
+      defaultProjectId: undefined,
+      nodes: [nodeNoProject, { ...nodeEnd, config: { ...nodeEnd.config, variables: [{ name: "result", source: { type: "node_output", node: "np" } }] } }],
+      edges: [{ id: "e1", from: "np", to: "end" }],
+    })
+    expect(r.valid).toBe(false)
+    expect(r.errors.some((e) => e.type === "invalid_config" && e.nodeId === "np" && e.message.includes("项目"))).toBe(true)
+  })
+
+  it("passes when prompt node has project and workflow has no default project", () => {
+    const nodeWithProject = { id: "np", name: "NP", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", projectId: "project-node", variables: [], prompt: "hi" } }
+    const r = validateWorkflow({
+      ...base,
+      defaultProjectId: undefined,
+      nodes: [nodeWithProject, { ...nodeEnd, config: { ...nodeEnd.config, variables: [{ name: "result", source: { type: "node_output", node: "np" } }] } }],
+      edges: [{ id: "e1", from: "np", to: "end" }],
+    })
     expect(r.valid).toBe(true)
   })
 

@@ -117,7 +117,7 @@ describe("workflowIpcModule", () => {
     await harness.invoke("synapse:workflow:run", { id: "workflow-1", params: {} })
     expect(engine.run).toHaveBeenCalledWith(
       expect.anything(), expect.anything(), expect.anything(),
-      expect.anything(), expect.anything(), expect.anything(),
+      expect.anything(), expect.anything(), undefined,
       "renderer", expect.anything(),
     )
 
@@ -128,7 +128,7 @@ describe("workflowIpcModule", () => {
     })
     expect(engine.run).toHaveBeenCalledWith(
       expect.anything(), expect.anything(), expect.anything(),
-      expect.anything(), expect.anything(), expect.anything(),
+      expect.anything(), expect.anything(), undefined,
       "editor-run-definition", expect.anything(),
     )
 
@@ -156,12 +156,12 @@ describe("workflowIpcModule", () => {
     await harness2.invoke("synapse:workflow:rerun", { previousRunId: "previous-run", params: {} })
     expect(engine.run).toHaveBeenCalledWith(
       expect.anything(), expect.anything(), expect.anything(),
-      expect.anything(), expect.anything(), expect.anything(),
+      expect.anything(), expect.anything(), undefined,
       "rerun", expect.anything(),
     )
   })
 
-  it("uses the first configured Agent project instead of the active repository when workflow has no default project", async () => {
+  it("does not infer a run project from configured projects when workflow has no default project", async () => {
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [{
         uuid: "repo-1",
@@ -203,10 +203,44 @@ describe("workflowIpcModule", () => {
 
     expect(engine.run).toHaveBeenCalledWith(
       expect.anything(), expect.anything(), expect.anything(),
-      expect.anything(), expect.anything(), "agent-project-1",
+      expect.anything(), expect.anything(), undefined,
       "editor-run-definition",
       expect.anything(),
     )
+  })
+
+  it("prefills new workflows with the first configured Agent project", async () => {
+    vi.mocked(configStore.load).mockResolvedValue({
+      repositories: [{
+        uuid: "repo-1",
+        name: "Content Repo",
+        localPath: "/repo",
+        contentDirs: {},
+      }],
+      activeRepoUuid: "repo-1",
+      global: {
+        themeMode: "system",
+        projects: [{
+          id: "agent-project-1",
+          name: "Agent Project",
+          path: "/agent-project",
+        }],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+    } as never)
+    const workflow = { create: vi.fn(async () => ({ id: "workflow-1", versionHash: "v_1" })) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    await harness.invoke("synapse:workflow:create")
+
+    expect(workflow.create).toHaveBeenCalledWith("agent-project-1")
   })
 
   it("logs cancel signal only when an active AbortController exists, warns otherwise", async () => {

@@ -66,7 +66,7 @@ export class WorkflowEngine {
     logger.info("workflow run started", {
       runId,
       workflowId: def.id,
-      projectId: projectId ?? "(fallback to def.id)",
+      projectId: projectId ?? "(none)",
       nodeCount: def.nodes.length,
       paramKeys,
       paramCount: paramKeys.length,

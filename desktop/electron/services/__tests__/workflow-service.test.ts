@@ -100,6 +100,14 @@ describe("WorkflowService", () => {
     expect(def!.nodes).toHaveLength(1)
     expect(def!.nodes[0].type).toBe("end")
   })
+  it("create stores the supplied default project", async () => {
+    const { svc } = createRepo()
+    const result = await svc.create("project-1")
+    expect("id" in result).toBe(true)
+    if (!("id" in result)) return
+    const def = await svc.get(result.id)
+    expect(def?.defaultProjectId).toBe("project-1")
+  })
   it("rejects invalid workflow and returns structured errors", async () => {
     const { svc } = createRepo()
     const def = { ...makeDef(), nodes: [] }

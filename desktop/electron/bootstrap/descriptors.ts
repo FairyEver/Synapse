@@ -1152,21 +1152,17 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
     const engineLogger = createMainLogger("service.workflow.engine.agent-deps")
     const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({ providerId, modelTier, prompt, projectId, abortSignal }) => {
       try {
+        if (!projectId) {
+          throw new Error("Workflow prompt project is required")
+        }
         const config = await configStore.load()
-        const repo = projectId
-          ? config.repositories.find((r) => r.uuid === projectId)
-          : undefined
-        const proj = !repo && projectId
-          ? config.global.projects.find((p) => p.id === projectId)
-          : undefined
-        const activeRepo = config.repositories.find((r) => r.uuid === config.activeRepoUuid)
-        const activeProject = activeRepo
-          ? config.global.projects.find((p) => p.path === activeRepo.localPath)
-          : undefined
-        const fallbackProject = activeProject ?? config.global.projects[0]
-        const fallbackRepo = activeRepo ?? config.repositories[0]
-        const effectiveProjectId = repo?.uuid ?? proj?.id ?? fallbackProject?.id ?? fallbackRepo?.uuid ?? ""
-        const workspacePath = repo?.localPath ?? proj?.path ?? fallbackProject?.path ?? fallbackRepo?.localPath ?? os.homedir()
+        const repo = config.repositories.find((r) => r.uuid === projectId)
+        const proj = !repo ? config.global.projects.find((p) => p.id === projectId) : undefined
+        if (!repo && !proj) {
+          throw new Error("Workflow prompt project was not found")
+        }
+        const effectiveProjectId = repo?.uuid ?? proj?.id ?? projectId
+        const workspacePath = repo?.localPath ?? proj?.path ?? os.homedir()
         const containers = registry.get<ProjectContainerRegistry>("core.project-containers")
         const container = await containers.open(effectiveProjectId, { name: "", workspacePath })
         const agentRuntime = container.get<import("../services/agent-runtime").AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
