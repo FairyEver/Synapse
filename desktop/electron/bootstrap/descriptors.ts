@@ -1211,13 +1211,25 @@ function createHttpSendHandler(deps: {
   auditSink: AuditSink
 }): typeof sendOutboundHttpRequest {
   return async (request) => {
+    const resource = sanitizeWorkflowHttpAuditResource(request.url)
     const permission = await deps.permissionGuard.check({
       action: "network.connect",
       actor: { kind: "system" },
-      resource: request.url,
+      resource,
       context: { source: "workflow" },
     })
     if (!permission.allowed) {
+      deps.auditSink.record({
+        action: "network.connect",
+        actor: { kind: "system" },
+        resource,
+        outcome: "denied",
+        metadata: {
+          source: "workflow",
+          reason: permission.reason,
+          policyId: permission.policyId,
+        },
+      })
       throw new Error(`HTTP request denied by workflow engine: ${permission.reason}`)
     }
     try {
@@ -1225,7 +1237,7 @@ function createHttpSendHandler(deps: {
       deps.auditSink.record({
         action: "network.connect",
         actor: { kind: "system" },
-        resource: request.url,
+        resource,
         outcome: "allowed",
         metadata: { status: response.status, source: "workflow" },
       })
@@ -1234,12 +1246,30 @@ function createHttpSendHandler(deps: {
       deps.auditSink.record({
         action: "network.connect",
         actor: { kind: "system" },
-        resource: request.url,
+        resource,
         outcome: "failed",
-        metadata: { source: "workflow", error: error instanceof Error ? error.message : String(error) },
+        metadata: { source: "workflow", error: sanitizeError(error instanceof Error ? error.message : String(error)) },
       })
       throw error
     }
+  }
+}
+
+const SENSITIVE_WORKFLOW_HTTP_PARAM_NAMES = new Set(["token", "key", "secret", "password", "auth", "api_key", "apikey", "access_token"])
+
+function sanitizeWorkflowHttpAuditResource(raw: string): string {
+  try {
+    const url = new URL(raw)
+    url.username = ""
+    url.password = ""
+    for (const param of url.searchParams.keys()) {
+      if (SENSITIVE_WORKFLOW_HTTP_PARAM_NAMES.has(param.toLowerCase())) {
+        url.searchParams.set(param, "[REDACTED]")
+      }
+    }
+    return url.toString()
+  } catch {
+    return sanitizeError(raw)
   }
 }
 

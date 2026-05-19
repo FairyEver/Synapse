@@ -210,6 +210,133 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(serialized).not.toContain("secret prompt")
   })
 
+  it("workflow HTTP dependency records denied audits with a sanitized resource", async () => {
+    const auditSink = { record: vi.fn() }
+    const permissionGuard = {
+      check: vi.fn().mockResolvedValue({
+        allowed: false,
+        reason: "blocked by policy",
+        policyId: "policy-deny",
+      }),
+    }
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "core.permission-guard") return permissionGuard
+          if (id === "core.audit-sink") return auditSink
+          throw new Error(`unexpected service ${id}`)
+        }),
+      },
+    }
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
+      runtimeDeps: {
+        sendHttpRequest(request: { method: string; url: string; fetchImpl?: typeof fetch }): Promise<unknown>
+      }
+    }
+
+    await expect(engine.runtimeDeps.sendHttpRequest({
+      method: "GET",
+      url: "https://user:pass@example.test/hook?token=secret&ok=1",
+      fetchImpl: vi.fn(),
+    })).rejects.toThrow("HTTP request denied by workflow engine: blocked by policy")
+
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      resource: "https://example.test/hook?token=%5BREDACTED%5D&ok=1",
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith({
+      action: "network.connect",
+      actor: { kind: "system" },
+      resource: "https://example.test/hook?token=%5BREDACTED%5D&ok=1",
+      outcome: "denied",
+      metadata: {
+        source: "workflow",
+        reason: "blocked by policy",
+        policyId: "policy-deny",
+      },
+    })
+    const serialized = JSON.stringify(auditSink.record.mock.calls)
+    expect(serialized).not.toContain("secret")
+    expect(serialized).not.toContain("user:pass")
+  })
+
+  it("workflow HTTP dependency records allowed audits with a sanitized resource", async () => {
+    const auditSink = { record: vi.fn() }
+    const permissionGuard = {
+      check: vi.fn().mockResolvedValue({ allowed: true }),
+    }
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "core.permission-guard") return permissionGuard
+          if (id === "core.audit-sink") return auditSink
+          throw new Error(`unexpected service ${id}`)
+        }),
+      },
+    }
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
+      runtimeDeps: {
+        sendHttpRequest(request: { method: string; url: string; fetchImpl?: typeof fetch }): Promise<unknown>
+      }
+    }
+
+    await engine.runtimeDeps.sendHttpRequest({
+      method: "POST",
+      url: "https://user:pass@example.test/hook?api_key=secret&ok=1",
+      fetchImpl: vi.fn().mockResolvedValue(new Response("ok", { status: 200 })),
+    })
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      resource: "https://example.test/hook?api_key=%5BREDACTED%5D&ok=1",
+      outcome: "allowed",
+      metadata: { source: "workflow", status: 200 },
+    }))
+    const serialized = JSON.stringify(auditSink.record.mock.calls)
+    expect(serialized).not.toContain("secret")
+    expect(serialized).not.toContain("user:pass")
+  })
+
+  it("workflow HTTP dependency records failed audits with a sanitized resource", async () => {
+    const auditSink = { record: vi.fn() }
+    const permissionGuard = {
+      check: vi.fn().mockResolvedValue({ allowed: true }),
+    }
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "core.permission-guard") return permissionGuard
+          if (id === "core.audit-sink") return auditSink
+          throw new Error(`unexpected service ${id}`)
+        }),
+      },
+    }
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
+      runtimeDeps: {
+        sendHttpRequest(request: { method: string; url: string; fetchImpl?: typeof fetch }): Promise<unknown>
+      }
+    }
+
+    await expect(engine.runtimeDeps.sendHttpRequest({
+      method: "GET",
+      url: "https://user:pass@example.test/hook?access_token=secret&ok=1",
+      fetchImpl: vi.fn().mockRejectedValue(new Error("request failed")),
+    })).rejects.toThrow("request failed")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      resource: "https://example.test/hook?access_token=%5BREDACTED%5D&ok=1",
+      outcome: "failed",
+      metadata: { source: "workflow", error: "request failed" },
+    }))
+    const serialized = JSON.stringify(auditSink.record.mock.calls)
+    expect(serialized).not.toContain("secret")
+    expect(serialized).not.toContain("user:pass")
+  })
+
   it("createRunWorkflowHandler catch handler handles engine rejection without leaking raw error text", async () => {
     vi.doMock("../../services/config-store", () => ({
       configStore: {
