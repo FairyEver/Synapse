@@ -1,4 +1,5 @@
 import { FolderOpen } from "lucide-react"
+import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import {
   Tooltip,
@@ -29,7 +30,9 @@ function ScanItemCard({
   const handleOpenInFinder = (e: React.MouseEvent) => {
     e.stopPropagation()
     const bridge = getSynapseBridge()
-    bridge?.shell.showItemInFolder(itemPath).catch(() => {})
+    bridge?.shell.showItemInFolder(itemPath).catch(() => {
+      toast.error("无法在访达中打开文件。")
+    })
   }
 
   const metaEntries = metadata

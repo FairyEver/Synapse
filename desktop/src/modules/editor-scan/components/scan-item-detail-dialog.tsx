@@ -146,8 +146,10 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
 
   const handleOpenInFinder = useCallback(() => {
     if (!item) return
-    getSynapseBridge()?.shell.showItemInFolder(item.path).catch(() => {})
-  }, [item])
+    getSynapseBridge()?.shell.showItemInFolder(item.path).catch(() => {
+      notifyError("无法在访达中打开文件。")
+    })
+  }, [item, notifyError])
 
   const trashDisabledReason = item?.trash.mode === "unsupported"
     ? item.trash.disabledReason
