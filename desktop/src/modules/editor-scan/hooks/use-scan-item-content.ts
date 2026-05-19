@@ -71,7 +71,11 @@ function useSkillFiles(dirPath: string | null) {
     lastPathRef.current = dirPath
 
     const bridge = getSynapseBridge()
-    if (!bridge) return
+    if (!bridge) {
+      setError("Bridge 不可用")
+      setFiles([])
+      return
+    }
 
     const reqId = ++currentReqRef.current
     setLoading(true)
