@@ -92,6 +92,7 @@ import { getMcpServers } from "../database/mcp-installer"
 import { getMcpServerPort, getMcpServerUrl, isMcpServerRunning } from "../database/mcp-server"
 import { collectOpsStatus } from "../modules/ops/status"
 import { WorkflowService } from "../services/workflow/workflow-service"
+import { WorkflowPackageService } from "../services/workflow/workflow-package-service"
 import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "../services/workflow/workflow-validator"
@@ -1106,6 +1107,18 @@ export const coreWorkflowServiceDescriptor: ServiceDescriptor<WorkflowService> =
   create(ctx) {
     const dataRepo = ctx.registry.get<DataRepository>("core.data-repository")
     return new WorkflowService(dataRepo)
+  },
+}
+
+export const coreWorkflowPackageDescriptor: ServiceDescriptor<WorkflowPackageService> = {
+  id: "core.workflow.package",
+  criticality: "degraded",
+  dependsOn: ["core.workflow", PROVIDER_SERVICE_ID],
+  create(ctx) {
+    return new WorkflowPackageService({
+      workflowService: ctx.registry.get<WorkflowService>("core.workflow"),
+      providerService: ctx.registry.get<ProviderService>(PROVIDER_SERVICE_ID),
+    })
   },
 }
 

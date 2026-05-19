@@ -606,7 +606,7 @@ git commit -m "feat: add workflow package service"
 - Modify: `desktop/electron/bootstrap/descriptors.ts`
 - Test: `pnpm --filter @synapse/desktop exec vitest run electron/bootstrap/__tests__/descriptors.test.ts`
 
-- [ ] **Step 1: Write failing descriptor test**
+- [x] **Step 1: Write failing descriptor test**
 
 Open `desktop/electron/bootstrap/__tests__/descriptors.test.ts` and add an assertion near the workflow descriptor assertions:
 
@@ -616,7 +616,7 @@ expect(byId.get("core.workflow.package")?.dependsOn).toEqual(["core.workflow", "
 
 Run the descriptor test before implementation.
 
-- [ ] **Step 2: Run descriptor test to verify it fails**
+- [x] **Step 2: Run descriptor test to verify it fails**
 
 Run:
 
@@ -626,7 +626,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/bootstrap/__tests__/desc
 
 Expected: FAIL because `core.workflow.package` is not registered.
 
-- [ ] **Step 3: Register descriptor**
+- [x] **Step 3: Register descriptor**
 
 In `desktop/electron/bootstrap/descriptors.ts`, import:
 
@@ -654,7 +654,7 @@ export const coreWorkflowPackageDescriptor: ServiceDescriptor<WorkflowPackageSer
 
 Add `coreWorkflowPackageDescriptor` to the exported descriptor list in the same file, next to the other workflow descriptors.
 
-- [ ] **Step 4: Run descriptor test**
+- [x] **Step 4: Run descriptor test**
 
 Run:
 
@@ -664,7 +664,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/bootstrap/__tests__/desc
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/electron/bootstrap/descriptors.ts desktop/electron/bootstrap/__tests__/descriptors.test.ts

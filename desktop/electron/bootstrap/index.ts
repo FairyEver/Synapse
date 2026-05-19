@@ -18,6 +18,7 @@ export {
   coreTaskSchedulerDescriptor,
   coreHttpTestDescriptor,
   coreUpdateDescriptor,
+  coreWorkflowPackageDescriptor,
   createUiTrayDescriptor,
   repoMaintenanceDescriptor,
   repoPendingPushesDescriptor,
