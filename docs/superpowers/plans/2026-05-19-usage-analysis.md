@@ -827,7 +827,7 @@ git commit -m "feat: add usage analysis scan utilities"
 - Create: `desktop/electron/services/usage-analysis/cc-parser.ts`
 - Test: `desktop/electron/services/usage-analysis/__tests__/cc-parser.test.ts`
 
-- [ ] **Step 1: Write CC parser tests**
+- [x] **Step 1: Write CC parser tests**
 
 Create `desktop/electron/services/usage-analysis/__tests__/cc-parser.test.ts`:
 
@@ -898,7 +898,7 @@ describe("Claude Code usage parser", () => {
 })
 ```
 
-- [ ] **Step 2: Run the failing parser test**
+- [x] **Step 2: Run the failing parser test**
 
 Run:
 
@@ -908,7 +908,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: fail because `../cc-parser` does not exist.
 
-- [ ] **Step 3: Implement CC parser**
+- [x] **Step 3: Implement CC parser**
 
 Create `desktop/electron/services/usage-analysis/cc-parser.ts` with a streaming JSONL parser:
 
@@ -1103,7 +1103,7 @@ export async function parseClaudeUsageFile(filePath: string): Promise<ParsedUsag
 }
 ```
 
-- [ ] **Step 4: Run CC parser tests**
+- [x] **Step 4: Run CC parser tests**
 
 Run:
 
@@ -1113,7 +1113,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/electron/services/usage-analysis/cc-parser.ts desktop/electron/services/usage-analysis/__tests__/cc-parser.test.ts
