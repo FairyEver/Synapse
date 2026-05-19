@@ -1046,6 +1046,9 @@ class DatabaseService {
     if (/\b(attach|detach)\b/i.test(normalized)) {
       throw new Error("ATTACH and DETACH statements are not allowed")
     }
+    if (referencesSystemTable(sql)) {
+      throw new Error("Cannot read system tables (prefixed with _)")
+    }
 
     const db = this.getDb()
     const sqlParams = (params ?? []).map(toSqlValue)
