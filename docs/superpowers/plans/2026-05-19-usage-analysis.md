@@ -121,7 +121,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: fail because `../range` does not exist.
 
-- [ ] **Step 3: Create shared main-process types**
+- [x] **Step 3: Create shared main-process types**
 
 Create `desktop/electron/services/usage-analysis/types.ts`:
 
@@ -246,7 +246,7 @@ export interface UsageDetailRow {
 }
 ```
 
-- [ ] **Step 4: Implement range helpers**
+- [x] **Step 4: Implement range helpers**
 
 Create `desktop/electron/services/usage-analysis/range.ts`:
 
@@ -287,7 +287,7 @@ export function createUsageRangeFilter(input: UsageRangeInput, now = new Date())
 }
 ```
 
-- [ ] **Step 5: Run the test**
+- [x] **Step 5: Run the test**
 
 Run:
 
@@ -297,7 +297,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add desktop/electron/services/usage-analysis/types.ts desktop/electron/services/usage-analysis/range.ts desktop/electron/services/usage-analysis/__tests__/range.test.ts
