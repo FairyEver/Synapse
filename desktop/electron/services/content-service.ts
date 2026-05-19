@@ -20,6 +20,9 @@ import { builtinContentService } from "./builtin-content-service"
 import { contentHistoryService, resolveContentDirectoryPath } from "./content-history-service"
 import { contentIndexService } from "./content-index-service"
 import { configStore } from "./config-store"
+import { createMainLogger } from "./log-store"
+
+const logger = createMainLogger("service.content")
 
 type ActiveRepositoryContext = {
   repository: SynapseRepositoryConfig
@@ -80,8 +83,13 @@ class ContentService {
       return builtinItems
     }
 
-    await contentIndexService.syncIndex(context.repository)
-    const repositoryItems = await contentIndexService.listContent(context.repository, contentType) as SynapseContentMeta<T>[]
+    let repositoryItems: SynapseContentMeta<T>[] = []
+    try {
+      await contentIndexService.syncIndex(context.repository)
+      repositoryItems = await contentIndexService.listContent(context.repository, contentType) as SynapseContentMeta<T>[]
+    } catch (error) {
+      logger.warn("Failed to load repository content, returning builtin items only.", { contentType, error })
+    }
 
     return [...builtinItems, ...repositoryItems]
   }
