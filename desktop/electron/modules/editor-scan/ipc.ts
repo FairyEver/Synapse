@@ -146,8 +146,12 @@ export const editorScanIpcModule: IpcModule = {
       channel: "synapse:editor-scan:read-item-content",
       request: z.object({ filePath: z.string() }),
       response: z.string(),
-      handler: async (_ctx, request: { filePath: string }) => {
-        return readItemContent(request.filePath)
+      handler: async (ctx, request: { filePath: string }) => {
+        return readItemContent(request.filePath, {
+          actor: { kind: "user" },
+          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+        })
       },
     },
     listSkillFiles: {
@@ -155,8 +159,12 @@ export const editorScanIpcModule: IpcModule = {
       channel: "synapse:editor-scan:list-skill-files",
       request: z.object({ dirPath: z.string() }),
       response: z.array(skillFileInfoSchema),
-      handler: async (_ctx, request: { dirPath: string }) => {
-        return listSkillFiles(request.dirPath)
+      handler: async (ctx, request: { dirPath: string }) => {
+        return listSkillFiles(request.dirPath, {
+          actor: { kind: "user" },
+          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+        })
       },
     },
     prepareQuickPublishDraft: {
@@ -164,8 +172,12 @@ export const editorScanIpcModule: IpcModule = {
       channel: "synapse:editor-scan:prepare-quick-publish-draft",
       request: quickPublishRequestSchema,
       response: quickPublishDraftSchema,
-      handler: async (_ctx, request: EditorScanQuickPublishRequest) => {
-        return prepareQuickPublishDraft(request)
+      handler: async (ctx, request: EditorScanQuickPublishRequest) => {
+        return prepareQuickPublishDraft(request, {
+          actor: { kind: "user" },
+          auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+          permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+        })
       },
     },
     trashItem: {

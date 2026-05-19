@@ -19,11 +19,19 @@ vi.mock("electron", () => ({
 }))
 
 import { scanCodexRules, scanCursorRules } from "../../../src/definitions/editor/shared-rule-scanners"
+import { createDefaultConfig } from "../../../src/lib/config"
 import {
   buildRuleQuickPublishPayload,
   buildSkillQuickPublishPayload,
 } from "../../../src/modules/editor-scan/lib/quick-publish"
-import { prepareQuickPublishDraft, scanSkillDirectories, trashScanItem } from "../editor-scan-service"
+import { configStore } from "../config-store"
+import {
+  listSkillFiles,
+  prepareQuickPublishDraft,
+  readItemContent,
+  scanSkillDirectories,
+  trashScanItem,
+} from "../editor-scan-service"
 
 const tempDirs: string[] = []
 
@@ -60,12 +68,80 @@ function createAllowingSecurity() {
   }
 }
 
+function createDenyingReadSecurity() {
+  const auditEvents: Array<{
+    action: string
+    outcome: string
+    resource: string
+    metadata?: Record<string, unknown>
+  }> = []
+  const auditSink: AuditSink = {
+    record: vi.fn((event) => { auditEvents.push(event) }),
+    list: vi.fn(() => []),
+    clearForTests: vi.fn(),
+  }
+  const permissionGuard: PermissionGuard = {
+    registerPolicy: vi.fn(() => () => {}),
+    check: vi.fn(async () => ({
+      allowed: false as const,
+      policyId: "deny-read",
+      reason: "denied by deny-read",
+    })),
+  }
+
+  return {
+    auditEvents,
+    security: {
+      actor: { kind: "user" as const },
+      auditSink,
+      permissionGuard,
+    },
+  }
+}
+
+function mockEditorScanProject(projectPath: string) {
+  const config = createDefaultConfig()
+  config.global.projects = [{
+    id: "project-1",
+    name: "Project",
+    path: projectPath,
+  }]
+  vi.spyOn(configStore, "load").mockResolvedValue(config)
+}
+
 afterEach(async () => {
+  vi.restoreAllMocks()
   trashItem.mockReset()
   await Promise.all(tempDirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
 describe("editor scan quick publish", () => {
+  it("checks read permission before returning scanned item content and attachments", async () => {
+    const root = await createTempDir()
+    const rulePath = path.join(root, "AGENTS.md")
+    const skillDir = path.join(root, "release-helper")
+    await writeFile(rulePath, "# Rule\n")
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Release Helper\n")
+    const { auditEvents, security } = createDenyingReadSecurity()
+
+    await expect(readItemContent(rulePath, security)).rejects.toThrow("denied by deny-read")
+    await expect(listSkillFiles(skillDir, security)).rejects.toThrow("denied by deny-read")
+    await expect(prepareQuickPublishDraft({
+      itemType: "skill",
+      itemPath: skillDir,
+      itemName: "release-helper",
+      metadata: {},
+    }, security)).rejects.toThrow("denied by deny-read")
+
+    expect(security.permissionGuard.check).toHaveBeenCalledTimes(3)
+    expect(auditEvents).toEqual([
+      expect.objectContaining({ action: "fs.read.outside-userdata", outcome: "denied", resource: rulePath }),
+      expect.objectContaining({ action: "fs.read.outside-userdata", outcome: "denied", resource: skillDir }),
+      expect.objectContaining({ action: "fs.read.outside-userdata", outcome: "denied", resource: skillDir }),
+    ])
+  })
+
   it("merges Codex global skill directories and keeps the primary copy for duplicate names", async () => {
     const root = await createTempDir()
     const primaryDir = path.join(root, ".agents", "skills")
@@ -485,19 +561,20 @@ describe("editor scan quick publish", () => {
 
 describe("editor scan trash", () => {
   it("moves a skill directory to the system trash", async () => {
-    const root = await createTempDir()
-    const skillDir = path.join(root, "release-helper")
+    const projectRoot = await createTempDir()
+    const skillDir = path.join(projectRoot, ".agents", "skills", "release-helper")
     await mkdir(skillDir, { recursive: true })
     await writeFile(path.join(skillDir, "SKILL.md"), "# Release Helper\n")
     trashItem.mockResolvedValue(undefined)
     const { auditEvents, security } = createAllowingSecurity()
+    mockEditorScanProject(projectRoot)
 
     const result = await trashScanItem({
       itemType: "skill",
       itemName: "release-helper",
       itemPath: skillDir,
       editorId: "codex",
-      scope: "global",
+      scope: "project",
       source: "external",
       trash: { mode: "path" },
       synapseContentId: null,
@@ -513,7 +590,7 @@ describe("editor scan trash", () => {
         operation: "trash",
         contentType: "skill",
         editorId: "codex",
-        scope: "global",
+        scope: "project",
         source: "external",
         trashMode: "path",
       },
@@ -521,11 +598,13 @@ describe("editor scan trash", () => {
   })
 
   it("moves a standalone rule file to the system trash", async () => {
-    const root = await createTempDir()
-    const rulePath = path.join(root, "project.mdc")
+    const projectRoot = await createTempDir()
+    const rulePath = path.join(projectRoot, ".cursor", "rules", "project.mdc")
+    await mkdir(path.dirname(rulePath), { recursive: true })
     await writeFile(rulePath, "# Rule\n")
     trashItem.mockResolvedValue(undefined)
     const { security } = createAllowingSecurity()
+    mockEditorScanProject(projectRoot)
 
     await expect(trashScanItem({
       itemType: "rule",
@@ -546,8 +625,8 @@ describe("editor scan trash", () => {
   })
 
   it("removes only the target Synapse rule section from a shared file", async () => {
-    const root = await createTempDir()
-    const filePath = path.join(root, "AGENTS.md")
+    const projectRoot = await createTempDir()
+    const filePath = path.join(projectRoot, "AGENTS.md")
     await writeFile(
       filePath,
       [
@@ -565,13 +644,14 @@ describe("editor scan trash", () => {
       ].join("\n"),
     )
     const { security } = createAllowingSecurity()
+    mockEditorScanProject(projectRoot)
 
     await trashScanItem({
       itemType: "rule",
       itemName: "first",
       itemPath: filePath,
       editorId: "codex",
-      scope: "global",
+      scope: "project",
       source: "synapse",
       trash: { mode: "rule-section", ruleId: "first" },
       synapseContentId: "first",
@@ -585,17 +665,18 @@ describe("editor scan trash", () => {
   })
 
   it("rejects unsupported shared-file handwritten rules", async () => {
-    const root = await createTempDir()
-    const filePath = path.join(root, "AGENTS.md")
+    const projectRoot = await createTempDir()
+    const filePath = path.join(projectRoot, "AGENTS.md")
     await writeFile(filePath, "# Handwritten\n")
     const { security } = createAllowingSecurity()
+    mockEditorScanProject(projectRoot)
 
     await expect(trashScanItem({
       itemType: "rule",
       itemName: "Handwritten",
       itemPath: filePath,
       editorId: "codex",
-      scope: "global",
+      scope: "project",
       source: "external",
       trash: {
         mode: "unsupported",

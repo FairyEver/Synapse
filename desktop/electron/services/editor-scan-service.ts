@@ -56,8 +56,57 @@ type EditorScanTrashSecurityDeps = {
   permissionGuard: PermissionGuard
 }
 
+type EditorScanReadSecurityDeps = {
+  actor: ActorIdentity
+  auditSink: AuditSink
+  permissionGuard: PermissionGuard
+}
+
 function escapeForRegex(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+}
+
+async function checkEditorReadPermission(
+  deps: EditorScanReadSecurityDeps | undefined,
+  resource: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  if (!deps) return
+  const permission = await deps.permissionGuard.check({
+    action: "fs.read.outside-userdata",
+    actor: deps.actor,
+    context: metadata,
+    resource,
+  })
+  if (!permission.allowed) {
+    deps.auditSink.record({
+      action: "fs.read.outside-userdata",
+      actor: deps.actor,
+      metadata: {
+        ...metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+      outcome: "denied",
+      resource,
+    })
+    throw new Error(permission.reason)
+  }
+}
+
+function recordEditorReadAudit(
+  deps: EditorScanReadSecurityDeps | undefined,
+  resource: string,
+  outcome: "allowed" | "failed",
+  metadata: Record<string, unknown>,
+): void {
+  deps?.auditSink.record({
+    action: "fs.read.outside-userdata",
+    actor: deps.actor,
+    metadata,
+    outcome,
+    resource,
+  })
 }
 
 async function checkEditorTrashPermission(
@@ -396,16 +445,25 @@ async function resolveSkillMainFile(dirPath: string): Promise<string | null> {
   return mdFiles.length > 0 ? path.join(dirPath, mdFiles[0]) : null
 }
 
-async function readItemContent(filePath: string): Promise<string> {
+async function readItemContent(
+  filePath: string,
+  security?: EditorScanReadSecurityDeps,
+): Promise<string> {
+  const auditMetadata = { operation: "read-item-content" }
+  await checkEditorReadPermission(security, filePath, auditMetadata)
   try {
     const info = await stat(filePath)
+    let content: string
     if (info.isDirectory()) {
       const mainFile = await resolveSkillMainFile(filePath)
-      if (!mainFile) return ""
-      return await readFile(mainFile, "utf8")
+      content = mainFile ? await readFile(mainFile, "utf8") : ""
+    } else {
+      content = await readFile(filePath, "utf8")
     }
-    return await readFile(filePath, "utf8")
+    recordEditorReadAudit(security, filePath, "allowed", auditMetadata)
+    return content
   } catch (error) {
+    recordEditorReadAudit(security, filePath, "failed", auditMetadata)
     logger.warn("Failed to read scan item content.", { error })
     throw new Error("读取内容失败", { cause: error })
   }
@@ -452,10 +510,18 @@ async function collectFiles(
   }
 }
 
-async function listSkillFiles(dirPath: string): Promise<SkillFileEntry[]> {
+async function listSkillFiles(
+  dirPath: string,
+  security?: EditorScanReadSecurityDeps,
+): Promise<SkillFileEntry[]> {
+  const auditMetadata = { operation: "list-skill-files" }
+  await checkEditorReadPermission(security, dirPath, auditMetadata)
   try {
     const info = await stat(dirPath)
-    if (!info.isDirectory()) return []
+    if (!info.isDirectory()) {
+      recordEditorReadAudit(security, dirPath, "allowed", auditMetadata)
+      return []
+    }
 
     const mainFile = await resolveSkillMainFile(dirPath)
     const mainFileName = mainFile ? path.basename(mainFile) : null
@@ -468,8 +534,10 @@ async function listSkillFiles(dirPath: string): Promise<SkillFileEntry[]> {
     await collectFiles(dirPath, dirPath, skip, entries)
 
     entries.sort((a, b) => a.name.localeCompare(b.name))
+    recordEditorReadAudit(security, dirPath, "allowed", auditMetadata)
     return entries
   } catch (error) {
+    recordEditorReadAudit(security, dirPath, "failed", auditMetadata)
     logger.warn("Failed to list skill files.", { error })
     throw new Error("读取关联文件失败", { cause: error })
   }
@@ -543,52 +611,68 @@ async function collectSkillFileSnapshots(
 
 async function prepareQuickPublishDraft(
   request: EditorScanQuickPublishRequest,
+  security?: EditorScanReadSecurityDeps,
 ): Promise<EditorScanQuickPublishDraft> {
-  if (request.itemType === "rule") {
-    const content = request.ruleContent ?? await readFile(request.itemPath, "utf8")
-    if (!content.trim()) {
-      throw new Error("Rule 正文为空。")
+  const auditMetadata = {
+    contentType: request.itemType,
+    itemName: request.itemName,
+    operation: "prepare-quick-publish-draft",
+  }
+  await checkEditorReadPermission(security, request.itemPath, auditMetadata)
+  try {
+    if (request.itemType === "rule") {
+      const content = request.ruleContent ?? await readFile(request.itemPath, "utf8")
+      if (!content.trim()) {
+        throw new Error("Rule 正文为空。")
+      }
+
+      const draft = {
+        itemType: "rule" as const,
+        itemPath: request.itemPath,
+        itemName: request.itemName,
+        content,
+        metadata: request.metadata ?? {},
+      }
+      recordEditorReadAudit(security, request.itemPath, "allowed", auditMetadata)
+      return draft
     }
 
-    return {
-      itemType: "rule",
+    const info = await stat(request.itemPath)
+    if (!info.isDirectory()) {
+      throw new Error("Skill 路径不是文件夹。")
+    }
+
+    const mainFile = await resolveSkillMainFile(request.itemPath)
+    if (!mainFile) {
+      throw new Error("未找到 Skill 主文件。")
+    }
+
+    const content = await readFile(mainFile, "utf8")
+    if (!content.trim()) {
+      throw new Error("Skill 主说明为空。")
+    }
+
+    const skip = new Set<string>([path.basename(mainFile), SYNAPSE_SKILL_ID_FILE])
+    const files: EditorScanQuickPublishSkillFile[] = []
+    await collectSkillFileSnapshots(request.itemPath, request.itemPath, skip, files, {
+      fileCount: 0,
+      totalSize: 0,
+    })
+    files.sort((a, b) => a.originalName.localeCompare(b.originalName))
+
+    const draft = {
+      itemType: "skill" as const,
       itemPath: request.itemPath,
       itemName: request.itemName,
       content,
+      files,
       metadata: request.metadata ?? {},
     }
-  }
-
-  const info = await stat(request.itemPath)
-  if (!info.isDirectory()) {
-    throw new Error("Skill 路径不是文件夹。")
-  }
-
-  const mainFile = await resolveSkillMainFile(request.itemPath)
-  if (!mainFile) {
-    throw new Error("未找到 Skill 主文件。")
-  }
-
-  const content = await readFile(mainFile, "utf8")
-  if (!content.trim()) {
-    throw new Error("Skill 主说明为空。")
-  }
-
-  const skip = new Set<string>([path.basename(mainFile), SYNAPSE_SKILL_ID_FILE])
-  const files: EditorScanQuickPublishSkillFile[] = []
-  await collectSkillFileSnapshots(request.itemPath, request.itemPath, skip, files, {
-    fileCount: 0,
-    totalSize: 0,
-  })
-  files.sort((a, b) => a.originalName.localeCompare(b.originalName))
-
-  return {
-    itemType: "skill",
-    itemPath: request.itemPath,
-    itemName: request.itemName,
-    content,
-    files,
-    metadata: request.metadata ?? {},
+    recordEditorReadAudit(security, request.itemPath, "allowed", auditMetadata)
+    return draft
+  } catch (error) {
+    recordEditorReadAudit(security, request.itemPath, "failed", auditMetadata)
+    throw error
   }
 }
 
