@@ -87,57 +87,23 @@ function uniqueStrings(values: readonly unknown[]): string[] {
   return result
 }
 
+const SYSTEM_TABLES = ["_meta_tables", "_meta_columns", "_operation_log"]
+
 function referencesSystemTable(sql: string): boolean {
-  let inString = false
-  let inLineComment = false
-  let inBlockComment = false
-
-  for (let index = 0; index < sql.length; index += 1) {
-    const char = sql[index]
-    const next = sql[index + 1]
-
-    if (inLineComment) {
-      if (char === "\n") inLineComment = false
-      continue
-    }
-    if (inBlockComment) {
-      if (char === "*" && next === "/") {
-        inBlockComment = false
-        index += 1
-      }
-      continue
-    }
-    if (inString) {
-      if (char === "'" && next === "'") {
-        index += 1
-      } else if (char === "'") {
-        inString = false
-      }
-      continue
-    }
-
-    if (char === "-" && next === "-") {
-      inLineComment = true
-      index += 1
-      continue
-    }
-    if (char === "/" && next === "*") {
-      inBlockComment = true
-      index += 1
-      continue
-    }
-    if (char === "'") {
-      inString = true
-      continue
-    }
-    if (char === "_" && next && /[a-zA-Z]/.test(next)) {
-      const prev = index > 0 ? sql[index - 1] : undefined
-      if (!prev || !/[a-zA-Z0-9_]/.test(prev)) {
+  const normalized = sql.toLowerCase()
+  for (const table of SYSTEM_TABLES) {
+    let searchFrom = 0
+    while (true) {
+      const idx = normalized.indexOf(table, searchFrom)
+      if (idx === -1) break
+      const before = idx > 0 ? normalized[idx - 1] : " "
+      const after = normalized[idx + table.length] ?? " "
+      if (!/[a-zA-Z0-9_]/.test(before) && !/[a-zA-Z0-9_]/.test(after)) {
         return true
       }
+      searchFrom = idx + 1
     }
   }
-
   return false
 }
 
