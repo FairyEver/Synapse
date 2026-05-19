@@ -183,7 +183,7 @@ export function TokenUsageModule() {
             <Alert variant="destructive">
               <AlertDescription className="flex items-center justify-between gap-3">
                 <span>{loadErrors[0]?.message ?? "读取失败"}</span>
-                <Button size="sm" variant="outline" onClick={() => refreshAll(dateRangeToOptions(range))}>
+                <Button size="sm" variant="outline" onClick={() => void handleScan()}>
                   重试
                 </Button>
               </AlertDescription>
