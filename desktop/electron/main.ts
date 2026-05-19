@@ -86,7 +86,7 @@ if (!gotSingleInstanceLock) {
           type: "warning",
           title: "部分功能不可用",
           message: "部分服务启动失败。",
-          detail: result.degraded.map((failure) => failure.id).join("\n"),
+          detail: result.degraded.map((f) => `${f.id}: ${f.error?.message ?? "未知错误"}`).join("\n"),
           buttons: ["知道了"],
         })
       }
