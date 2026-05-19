@@ -138,13 +138,14 @@ describe("SideChannelService", () => {
         resource: "side-channel:/send",
         metadata: expect.objectContaining({
           projectId: "project-1",
-          sessionKey: "bridge:s1",
+          conversationId: "conv-1",
           transportKind: "bridge",
           connectorId: "bridge",
           attachmentCount: 0,
         }),
       }),
     ])
+    expect(JSON.stringify(auditSink.list())).not.toContain("bridge:s1")
   })
 
   it("sanitizes failed side-channel send dispatch diagnostics", async () => {
@@ -186,7 +187,7 @@ describe("SideChannelService", () => {
         outcome: "failed",
         metadata: expect.objectContaining({
           projectId: "project-1",
-          sessionKey: "bridge:s1",
+          conversationId: "conv-1",
           transportKind: "bridge",
           connectorId: "bridge",
           attachmentCount: 0,
@@ -206,6 +207,7 @@ describe("SideChannelService", () => {
     }))
     expect(JSON.stringify(outboxEntries)).not.toContain("secret prompt")
     expect(JSON.stringify(auditSink.list())).not.toContain("secret prompt")
+    expect(JSON.stringify(auditSink.list())).not.toContain("bridge:s1")
     expect(JSON.stringify(warn.mock.calls)).not.toContain("secret prompt")
   })
 
@@ -289,7 +291,7 @@ describe("SideChannelService", () => {
         outcome: "failed",
         metadata: expect.objectContaining({
           projectId: "project-1",
-          sessionKey: "bridge:s1",
+          conversationId: "conv-1",
           transportKind: "bridge",
           connectorId: "bridge",
           attachmentCount: 0,
@@ -310,6 +312,7 @@ describe("SideChannelService", () => {
       errorLength: "dispatcher is unavailable".length,
     }))
     expect(JSON.stringify(auditSink.list())).not.toContain("generated file is ready")
+    expect(JSON.stringify(auditSink.list())).not.toContain("bridge:s1")
     expect(JSON.stringify(warn.mock.calls)).not.toContain("generated file is ready")
   })
 

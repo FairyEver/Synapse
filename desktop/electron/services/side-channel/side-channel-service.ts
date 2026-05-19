@@ -405,7 +405,7 @@ export class SideChannelService implements ReplyTargetRuntime {
       outcome,
       metadata: {
         projectId: target.projectId,
-        sessionKey: target.sessionKey,
+        ...(target.conversationId ? { conversationId: target.conversationId } : {}),
         transportKind: target.transport.kind,
         connectorId: target.transport.connectorId,
         attachmentCount,
