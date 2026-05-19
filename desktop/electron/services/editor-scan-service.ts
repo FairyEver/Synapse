@@ -284,28 +284,42 @@ async function scanProject(
   projectPath: string,
   projectName: string,
 ): Promise<EditorScanProjectResult> {
-  const exists = await pathExists(projectPath)
-  if (!exists) {
+  try {
+    const exists = await pathExists(projectPath)
+    if (!exists) {
+      return { projectPath, projectName, pathExists: false, editors: [] }
+    }
+
+    const editorPaths = getProjectEditorPaths(projectPath)
+    const editorResults = await Promise.allSettled(
+      editorPaths.map(async (ep): Promise<EditorScanProjectEntry> => {
+        const [skills, rules] = await Promise.all([
+          scanSkillsDirectory(ep.skillsPath),
+          scanRulesForEditor(ep.editorId, ep.rulesPath),
+        ])
+        return {
+          editorId: ep.editorId,
+          editorLabel: ep.editorLabel,
+          skills,
+          rules,
+        }
+      }),
+    )
+
+    const editors: EditorScanProjectEntry[] = []
+    for (const result of editorResults) {
+      if (result.status === "fulfilled") {
+        editors.push(result.value)
+      } else {
+        logger.warn("editor scan failed in project", { projectPath, error: result.reason })
+      }
+    }
+
+    return { projectPath, projectName, pathExists: true, editors }
+  } catch (error) {
+    logger.warn("project scan failed", { projectPath, error })
     return { projectPath, projectName, pathExists: false, editors: [] }
   }
-
-  const editorPaths = getProjectEditorPaths(projectPath)
-  const editors = await Promise.all(
-    editorPaths.map(async (ep): Promise<EditorScanProjectEntry> => {
-      const [skills, rules] = await Promise.all([
-        scanSkillsDirectory(ep.skillsPath),
-        scanRulesForEditor(ep.editorId, ep.rulesPath),
-      ])
-      return {
-        editorId: ep.editorId,
-        editorLabel: ep.editorLabel,
-        skills,
-        rules,
-      }
-    }),
-  )
-
-  return { projectPath, projectName, pathExists: true, editors }
 }
 
 // --- main export ---
@@ -335,11 +349,20 @@ async function scanAll(): Promise<EditorScanResult> {
   const config = await configStore.load()
   const projects = config.global.projects
 
-  const projectsPromise = Promise.all(
+  const projectsPromise = Promise.allSettled(
     projects.map((p) => scanProject(p.path, p.name)),
   )
 
-  const [global, projectResults] = await Promise.all([globalPromise, projectsPromise])
+  const [global, projectSettled] = await Promise.all([globalPromise, projectsPromise])
+
+  const projectResults: EditorScanProjectResult[] = []
+  for (const result of projectSettled) {
+    if (result.status === "fulfilled") {
+      projectResults.push(result.value)
+    } else {
+      logger.warn("project scan failed", { error: result.reason })
+    }
+  }
 
   return { global, projects: projectResults }
 }
