@@ -167,7 +167,13 @@ export class WindowManagerImpl implements WindowManager {
     for (const entry of this.windows.values()) {
       const handle = entry.handle
       if (!handle || handle.isDestroyed()) continue
-      if (filter && !filter(handle)) continue
+      if (filter) {
+        try {
+          if (!filter(handle)) continue
+        } catch {
+          continue
+        }
+      }
       try {
         handle.send(channel, payload)
         sent++
