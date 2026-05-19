@@ -1,4 +1,4 @@
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { appendAgentTimelineEvent } from "@/lib/agent-timeline"
@@ -40,6 +40,11 @@ function useChatEvents(
     pendingConversationIdsRef,
   } = refs
   const { loadTimeline, refreshConversationSnapshot, refreshPendingPermissions, updateTimeline } = connection
+
+  const sessionsRef = useRef(state.sessions)
+  sessionsRef.current = state.sessions
+  const agentTypeRef = useRef(state.status?.agentType)
+  agentTypeRef.current = state.status?.agentType
 
   useEffect(() => {
     if (projectIdsRef.current.length === 0) return undefined
@@ -209,10 +214,10 @@ function useChatEvents(
         selectedConversationId: selectedConversationIdRef.current,
         selectedSessionKey: selectedSessionKeyRef.current,
       })
-      const agentType = state.sessions.find((session) =>
+      const agentType = sessionsRef.current.find((session) =>
         session.projectId === selectedProjectIdRef.current
         && session.id === selectedConversationIdRef.current)?.agentType
-        ?? state.status?.agentType
+        ?? agentTypeRef.current
       updateTimeline((current) =>
         appendAgentTimelineEvent(current, domainEvent.payload.event, domainEvent.timestamp, agentType))
       const event = domainEvent.payload.event
@@ -268,8 +273,6 @@ function useChatEvents(
     selectedConversationIdRef,
     selectedProjectIdRef,
     selectedSessionKeyRef,
-    state.sessions,
-    state.status?.agentType,
     updateTimeline,
   ])
 }
