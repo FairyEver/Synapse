@@ -157,6 +157,9 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
       service.startIdleReclaim()
       return service
     },
+    stop(instance) {
+      instance.stopIdleReclaim()
+    },
   }
 }
 
