@@ -393,8 +393,10 @@ const [isExporting, setIsExporting] = useState(false)
                 void handleRunTask(task)
               }}
               onStop={(task) => {
+                const runId = task.activeRun?.id
+                if (!runId) return
                 void runMutation(
-                  () => stopRunOrThrow(task.id),
+                  () => stopRunOrThrow(runId),
                   { loading: "正在停止运行...", success: "运行已停止。", error: "停止运行失败。" },
                 )
               }}

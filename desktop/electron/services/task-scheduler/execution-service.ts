@@ -27,6 +27,7 @@ export interface TaskSchedulerExecutionLogger {
 
 export class TaskSchedulerExecutionService {
   private readonly activeRuns = new Map<string, AbortController>()
+  private readonly taskToRunId = new Map<string, string>()
   private readonly logger: TaskSchedulerExecutionLogger
 
   constructor(private readonly deps: TaskSchedulerExecutionServiceDeps) {
@@ -40,6 +41,7 @@ export class TaskSchedulerExecutionService {
     const run = await this.deps.runs.start(task.id, triggeredBy)
     const controller = new AbortController()
     this.activeRuns.set(run.id, controller)
+    this.taskToRunId.set(task.id, run.id)
     this.logger.info?.("Scheduled task execution started.", {
       source: "task-scheduler",
       taskId: task.id,
@@ -199,6 +201,7 @@ export class TaskSchedulerExecutionService {
       return finished
     } finally {
       this.activeRuns.delete(run.id)
+      this.taskToRunId.delete(task.id)
     }
   }
 
@@ -207,6 +210,10 @@ export class TaskSchedulerExecutionService {
     if (!controller) return false
     controller.abort()
     return true
+  }
+
+  getActiveRunIdForTask(taskId: string): string | undefined {
+    return this.taskToRunId.get(taskId)
   }
 
   private async getLastSuccessOutputs(taskId: string): Promise<Record<string, unknown> | undefined> {

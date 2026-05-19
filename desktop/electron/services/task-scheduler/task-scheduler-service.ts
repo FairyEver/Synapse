@@ -327,9 +327,10 @@ export class TaskSchedulerService {
 
   private withRuntimeState(task: ScheduledTaskEntry): ScheduledTaskEntry {
     if (!this.runningTaskIds.has(task.id)) return task
+    const runId = this.deps.execution.getActiveRunIdForTask(task.id)
     return {
       ...task,
-      activeRun: { status: "running" },
+      activeRun: { status: "running", id: runId },
     }
   }
 }
