@@ -17,6 +17,7 @@ interface UsageAnalysisShellProps {
 }
 
 const VIEWS: { readonly id: UsageViewId; readonly label: string }[] = [
+  { id: "today", label: "今日" },
   { id: "overview", label: "概览" },
   { id: "time", label: "时间" },
   { id: "models", label: "模型" },
@@ -40,7 +41,9 @@ export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
             </Tabs>
           </div>
           <div className="flex items-center gap-2">
-            <RangePicker value={props.range} onChange={props.onRangeChange} />
+            {props.view === "today" ? null : (
+              <RangePicker value={props.range} onChange={props.onRangeChange} />
+            )}
             <Button
               type="button"
               variant="outline"

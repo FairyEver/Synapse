@@ -26,10 +26,16 @@ export function createUsageRangeFilter(input: UsageRangeInput, now = new Date())
   if (input.preset === "all") return {}
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate())
   if (input.preset === "today") {
-    const today = localDateKey(end.getTime())
+    const startMs = end.getTime()
+    const nowMs = now.getTime()
+    const today = localDateKey(startMs)
     return {
       sinceDate: today,
       untilDate: today,
+      sinceHour: localHourKey(startMs),
+      untilHour: localHourKey(nowMs),
+      sinceTimestampMs: startMs,
+      untilTimestampMs: nowMs,
     }
   }
   const days = RANGE_DAYS[input.preset]

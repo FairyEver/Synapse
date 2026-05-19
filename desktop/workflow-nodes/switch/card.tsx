@@ -1,14 +1,15 @@
 import { cn } from "@/lib/utils"
 import { switchNodeManifest } from "./manifest"
-import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "./constants"
+import { getSwitchHeaderHeight, SWITCH_BRANCH_H } from "./constants"
 import type { SwitchNodeConfig } from "./schema"
 import { NodeProgressBar, useRunningTimer } from "@/modules/workflow/runner/node-progress-bar"
+import { CopyIdButton } from "@/modules/workflow/components/copy-id-button"
 import { useProviderLookup } from "../provider-lookup-context"
 import { statusClass, type NodeStatus } from "../node-status-utils"
 
-export function SwitchNodeCard({ config, name, selected, status, progressLabel, startedAt }: {
+export function SwitchNodeCard({ config, name, selected, status, progressLabel, startedAt, nodeId }: {
   config: SwitchNodeConfig; name?: string; selected?: boolean; status?: NodeStatus
-  progressLabel?: string; startedAt?: number
+  progressLabel?: string; startedAt?: number; nodeId?: string
 }) {
   const Icon = switchNodeManifest.icon
   const timer = useRunningTimer(startedAt, status === "running")
@@ -16,13 +17,14 @@ export function SwitchNodeCard({ config, name, selected, status, progressLabel, 
   const providerDisplay = config.providerId ? (getProviderName(config.providerId) ?? config.providerId) : undefined
   const modelDisplay = config.providerId ? (getModelName(config.providerId, config.modelTier ?? "default") ?? config.modelTier ?? "default") : undefined
   const progressPadding = status === "running" ? 12 : 0
-  const totalHeight = SWITCH_HEADER_H + config.branches.length * SWITCH_BRANCH_H + progressPadding
+  const headerHeight = getSwitchHeaderHeight(Boolean(nodeId))
+  const totalHeight = headerHeight + config.branches.length * SWITCH_BRANCH_H + progressPadding
   return (
     <div
       className={cn("relative rounded-lg border bg-card w-56 overflow-hidden flex flex-col", selected && "ring-2 ring-primary", statusClass(status))}
       style={{ height: totalHeight }}
     >
-      <div className="px-3 py-2 flex flex-col justify-center shrink-0" style={{ height: SWITCH_HEADER_H }}>
+      <div className="px-3 py-2 flex flex-col justify-center shrink-0" style={{ height: headerHeight }}>
         <div className="flex items-center gap-2 mb-1.5">
           <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
           <span className="text-xs font-medium text-foreground truncate">{name || "Switch"}</span>
@@ -30,6 +32,7 @@ export function SwitchNodeCard({ config, name, selected, status, progressLabel, 
             <span className="ml-auto text-[10px] font-mono text-muted-foreground shrink-0">{timer}</span>
           )}
         </div>
+        {nodeId ? <CopyIdButton id={nodeId} kind="node" className="mb-1.5" /> : null}
         {status === "running" && progressLabel ? (
           <p className="text-[11px] text-muted-foreground truncate">{progressLabel}</p>
         ) : config.providerId ? (

@@ -5,7 +5,7 @@ import { SwitchNodeCard } from "../../../../workflow-nodes/switch/card"
 import { EndNodeCard } from "../../../../workflow-nodes/end/card"
 import { HttpRequestNodeCard } from "../../../../workflow-nodes/http-request/card"
 import { ScriptNodeCard } from "../../../../workflow-nodes/script/card"
-import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
+import { getSwitchHeaderHeight, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
 import type { SwitchNodeConfig } from "../../../../workflow-nodes/switch/schema"
 import type { EndNodeConfig } from "../../../../workflow-nodes/end/schema"
@@ -18,7 +18,7 @@ export function PromptNodeWrapper({ id, data, selected }: NodeProps) {
     <NodeContextMenu nodeId={id} nodeType="prompt">
       <div>
         <Handle type="target" position={Position.Left} />
-        <PromptNodeCard config={data as PromptNodeConfig} name={name} selected={selected} />
+        <PromptNodeCard config={data as PromptNodeConfig} name={name} selected={selected} nodeId={id} />
         <Handle type="source" position={Position.Right} />
       </div>
     </NodeContextMenu>
@@ -28,18 +28,19 @@ export function PromptNodeWrapper({ id, data, selected }: NodeProps) {
 export function SwitchNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   const branches = (data as { branches?: Array<{ id: string; label: string }> }).branches ?? []
+  const headerHeight = getSwitchHeaderHeight(true)
   return (
     <NodeContextMenu nodeId={id} nodeType="switch">
       <div>
         <Handle type="target" position={Position.Left} />
-        <SwitchNodeCard config={data as SwitchNodeConfig} name={name} selected={selected} />
+        <SwitchNodeCard config={data as SwitchNodeConfig} name={name} selected={selected} nodeId={id} />
         {branches.map((b, i) => (
           <Handle
             key={b.id}
             type="source"
             position={Position.Right}
             id={b.id}
-            style={{ top: `${SWITCH_HEADER_H + (i + 0.5) * SWITCH_BRANCH_H}px` }}
+            style={{ top: `${headerHeight + (i + 0.5) * SWITCH_BRANCH_H}px` }}
           />
         ))}
       </div>
@@ -53,7 +54,7 @@ export function EndNodeWrapper({ id, data, selected }: NodeProps) {
     <NodeContextMenu nodeId={id} nodeType="end">
       <div>
         <Handle type="target" position={Position.Left} />
-        <EndNodeCard config={data as EndNodeConfig} name={name} selected={selected} />
+        <EndNodeCard config={data as EndNodeConfig} name={name} selected={selected} nodeId={id} />
       </div>
     </NodeContextMenu>
   )
@@ -65,7 +66,7 @@ export function HttpRequestNodeWrapper({ id, data, selected }: NodeProps) {
     <NodeContextMenu nodeId={id} nodeType="http_request">
       <div>
         <Handle type="target" position={Position.Left} />
-        <HttpRequestNodeCard config={data as HttpRequestNodeConfig} name={name} selected={selected} />
+        <HttpRequestNodeCard config={data as HttpRequestNodeConfig} name={name} selected={selected} nodeId={id} />
         <Handle type="source" position={Position.Right} />
       </div>
     </NodeContextMenu>
@@ -78,7 +79,7 @@ export function ScriptNodeWrapper({ id, data, selected }: NodeProps) {
     <NodeContextMenu nodeId={id} nodeType="script">
       <div>
         <Handle type="target" position={Position.Left} />
-        <ScriptNodeCard config={data as ScriptNodeConfig} name={name} selected={selected} />
+        <ScriptNodeCard config={data as ScriptNodeConfig} name={name} selected={selected} nodeId={id} />
         <Handle type="source" position={Position.Right} />
       </div>
     </NodeContextMenu>

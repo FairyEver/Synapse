@@ -10,4 +10,9 @@ describe("RangePicker", () => {
     expect(html).toContain("90 天")
     expect(html).toContain("全部")
   })
+
+  it("does not render today as a historical range option", () => {
+    const html = renderToStaticMarkup(<RangePicker value="30d" onChange={() => undefined} />)
+    expect(html).not.toContain("今日")
+  })
 })

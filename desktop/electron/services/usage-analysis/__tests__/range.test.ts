@@ -17,6 +17,10 @@ describe("usage analysis range helpers", () => {
     expect(createUsageRangeFilter({ preset: "today" }, new Date("2026-05-20T15:30:00+08:00"))).toEqual({
       sinceDate: "2026-05-20",
       untilDate: "2026-05-20",
+      sinceHour: "2026-05-20 00",
+      untilHour: "2026-05-20 15",
+      sinceTimestampMs: new Date("2026-05-20T00:00:00+08:00").getTime(),
+      untilTimestampMs: new Date("2026-05-20T15:30:00+08:00").getTime(),
     })
   })
 

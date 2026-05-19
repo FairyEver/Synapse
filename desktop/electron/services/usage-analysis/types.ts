@@ -13,6 +13,10 @@ export interface UsageDetailInput extends UsageRangeInput {
 export interface UsageRangeFilter {
   readonly sinceDate?: string
   readonly untilDate?: string
+  readonly sinceHour?: string
+  readonly untilHour?: string
+  readonly sinceTimestampMs?: number
+  readonly untilTimestampMs?: number
 }
 
 export interface UsageTokenBreakdown {

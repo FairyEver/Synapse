@@ -2,11 +2,12 @@ import { cn } from "@/lib/utils"
 import { scriptNodeManifest } from "./manifest"
 import type { ScriptNodeConfig } from "./schema"
 import { NodeProgressBar, useRunningTimer } from "@/modules/workflow/runner/node-progress-bar"
+import { CopyIdButton } from "@/modules/workflow/components/copy-id-button"
 import { statusClass, type NodeStatus } from "../node-status-utils"
 
-export function ScriptNodeCard({ config, name, selected, status, progressLabel, startedAt }: {
+export function ScriptNodeCard({ config, name, selected, status, progressLabel, startedAt, nodeId }: {
   config: ScriptNodeConfig; name?: string; selected?: boolean; status?: NodeStatus
-  progressLabel?: string; startedAt?: number
+  progressLabel?: string; startedAt?: number; nodeId?: string
 }) {
   const Icon = scriptNodeManifest.icon
   const timer = useRunningTimer(startedAt, status === "running")
@@ -19,6 +20,7 @@ export function ScriptNodeCard({ config, name, selected, status, progressLabel, 
           <span className="ml-auto text-[10px] font-mono text-muted-foreground shrink-0">{timer}</span>
         )}
       </div>
+      {nodeId ? <CopyIdButton id={nodeId} kind="node" className="mb-1.5" /> : null}
       {status === "running" && progressLabel ? (
         <p className="text-[11px] text-muted-foreground truncate">{progressLabel}</p>
       ) : (

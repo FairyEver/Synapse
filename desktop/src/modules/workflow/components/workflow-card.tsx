@@ -9,6 +9,7 @@ import {
 import type { WorkflowMeta, WorkflowRunStatus } from "@/types/workflow"
 import { Download, GitBranch, Play, Trash2, History, Loader2 } from "lucide-react"
 import { RUN_STATE_BADGE } from "../lib/status-display"
+import { CopyIdButton } from "./copy-id-button"
 
 export type WorkflowCardRunState = WorkflowRunStatus["status"]
 
@@ -29,6 +30,7 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onHistory
           <GitBranch className="h-4 w-4 text-muted-foreground" />
           {meta.name}
         </CardTitle>
+        <CopyIdButton id={meta.id} kind="workflow" className="-ml-1" />
       </CardHeader>
       <CardContent className="flex items-center justify-between">
         <div className="flex items-center gap-2">

@@ -1,7 +1,10 @@
 import { useState } from "react"
+import { useAppNotifications } from "@/app-shell/notifications"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
+import { TodayReportView } from "../shared/components/today-report-view"
 import type { UsageRangePreset, UsageViewId } from "../shared/types"
+import { useCcModels, useCcOverview, useCcTime } from "./hooks"
 import { CcModelsPage } from "./pages/models"
 import { CcOverviewPage } from "./pages/overview"
 import { CcProjectsPage } from "./pages/projects"
@@ -9,7 +12,8 @@ import { CcTimePage } from "./pages/time"
 import { CcToolsPage } from "./pages/tools"
 
 export function CcUsagePage() {
-  const [view, setView] = useState<UsageViewId>("overview")
+  const { error: showError } = useAppNotifications()
+  const [view, setView] = useState<UsageViewId>("today")
   const [range, setRange] = useState<UsageRangePreset>("30d")
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
@@ -19,8 +23,8 @@ export function CcUsagePage() {
     try {
       await requireSynapseBridge().usageAnalysis.cc.refresh()
       setRefreshKey((current) => current + 1)
-    } catch {
-      setRefreshKey((current) => current + 1)
+    } catch (error) {
+      showError(error instanceof Error ? error.message : "刷新失败")
     } finally {
       setRefreshing(false)
     }
@@ -38,11 +42,22 @@ export function CcUsagePage() {
         void refresh()
       }}
     >
+      {view === "today" ? <CcTodayPage refreshKey={refreshKey} /> : null}
       {view === "overview" ? <CcOverviewPage range={range} refreshKey={refreshKey} /> : null}
       {view === "time" ? <CcTimePage range={range} refreshKey={refreshKey} /> : null}
       {view === "models" ? <CcModelsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "projects" ? <CcProjectsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "tools" ? <CcToolsPage range={range} refreshKey={refreshKey} /> : null}
     </UsageAnalysisShell>
+  )
+}
+
+function CcTodayPage({ refreshKey }: { readonly refreshKey: number }) {
+  return (
+    <TodayReportView
+      overviewState={useCcOverview("today", refreshKey)}
+      timeState={useCcTime("today", refreshKey)}
+      modelsState={useCcModels("today", refreshKey)}
+    />
   )
 }
