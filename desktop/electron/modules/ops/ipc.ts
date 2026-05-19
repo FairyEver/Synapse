@@ -233,7 +233,10 @@ export const opsIpcModule: IpcModule = {
           outcome: "allowed",
           metadata: { source: "ops.openLogDirectory" },
         })
-        await shell.openPath(logPath)
+        const openError = await shell.openPath(logPath)
+        if (openError) {
+          throw new Error(`打开日志目录失败：${openError}`)
+        }
         return { ok: true }
       },
     },
