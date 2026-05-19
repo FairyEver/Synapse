@@ -669,13 +669,21 @@ class ContentWriteService {
         payload.content.trim(),
         attachmentsResult.attachments,
       )
-      if (stagedIconPath) {
-        await rename(stagedIconPath, path.join(contentDirectoryPath, ICON_IMAGE_FILE_NAME))
-      }
     } catch (error) {
-      if (historyPath) await rm(historyPath, { recursive: true, force: true })
       if (stagedIconPath) await rm(stagedIconPath, { force: true })
       throw error
+    }
+
+    if (stagedIconPath) {
+      try {
+        await rename(stagedIconPath, path.join(contentDirectoryPath, ICON_IMAGE_FILE_NAME))
+      } catch (error) {
+        logger.warn("Icon rename failed after history committed, keeping history intact.", {
+          contentId,
+          error: error instanceof Error ? error.message : String(error),
+        })
+        await rm(stagedIconPath, { force: true }).catch(() => {})
+      }
     }
 
     logger.info("Wrote content history snapshot.", {
