@@ -153,14 +153,27 @@ class AttachmentsPoolService {
     repositoryRootPath: string,
     attachment: SynapseContentAttachmentRecord,
     targetPath: string,
-  ): Promise<void> {
+  ): Promise<boolean> {
+    const sourcePath = this.resolveAttachmentPath(repositoryRootPath, attachment.sha256)
+
+    if (!await pathExists(sourcePath)) {
+      logger.warn("Attachment blob missing from pool, skipping copy.", {
+        originalName: attachment.originalName,
+        sha256: attachment.sha256,
+        sourcePath,
+        targetPath,
+      })
+      return false
+    }
+
     await mkdir(path.dirname(targetPath), { recursive: true })
-    await copyFile(this.resolveAttachmentPath(repositoryRootPath, attachment.sha256), targetPath)
+    await copyFile(sourcePath, targetPath)
     logger.info("Copied attachment to path.", {
       originalName: attachment.originalName,
       sha256: attachment.sha256,
       targetPath,
     })
+    return true
   }
 }
 
