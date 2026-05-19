@@ -8,12 +8,15 @@ vi.mock("electron", () => ({
     getPath: (which: string) => `/tmp/synapse-editor-copy-test-${which}`,
     getName: () => "synapse-test",
     getVersion: () => "0.0.0-test",
+    getAppPath: () => "/tmp/synapse-editor-copy-test-app",
     isPackaged: false,
   },
 }))
 
 import { EditorCopyService } from "../editor-copy-service"
 import type { SynapseEditorCopySource } from "../../../src/types/editor-copy"
+import { createDefaultConfig } from "../../../src/lib/config"
+import { configStore } from "../config-store"
 import {
   createPermissionGuard,
   InMemoryAuditSink,
@@ -37,8 +40,19 @@ function createRuleSource(filePath: string): SynapseEditorCopySource {
   }
 }
 
+function mockConfiguredProjects(paths: string[]): void {
+  const config = createDefaultConfig()
+  config.global.projects = paths.map((projectPath, index) => ({
+    id: `project-${index + 1}`,
+    name: `Project ${index + 1}`,
+    path: projectPath,
+  }))
+  vi.spyOn(configStore, "load").mockResolvedValue(config)
+}
+
 describe("EditorCopyService", () => {
   afterEach(async () => {
+    vi.restoreAllMocks()
     await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
   })
 
@@ -51,6 +65,7 @@ describe("EditorCopyService", () => {
     await mkdir(path.dirname(targetPath), { recursive: true })
     await writeFile(sourcePath, "Review carefully.", "utf8")
     await writeFile(targetPath, "Existing rule.", "utf8")
+    mockConfiguredProjects([projectPath])
 
     const service = new EditorCopyService()
     const target = await service.resolveTarget({
@@ -75,6 +90,7 @@ describe("EditorCopyService", () => {
     const sourcePath = path.join(root, "project", "AGENTS.md")
     await mkdir(path.dirname(sourcePath), { recursive: true })
     await writeFile(sourcePath, "Project rule.", "utf8")
+    mockConfiguredProjects([path.dirname(sourcePath)])
 
     const service = new EditorCopyService()
     const target = await service.resolveTarget({
@@ -105,6 +121,7 @@ describe("EditorCopyService", () => {
     await mkdir(path.dirname(targetPath), { recursive: true })
     await writeFile(sourcePath, "Review carefully.", "utf8")
     await writeFile(targetPath, "Existing rule.", "utf8")
+    mockConfiguredProjects([projectPath])
 
     const service = new EditorCopyService()
 
@@ -128,18 +145,20 @@ describe("EditorCopyService", () => {
 
   it("records an allowed fs.write audit after copying to an editor target", async () => {
     const root = await createTempRoot()
-    const sourcePath = path.join(root, "source", "review-rule.md")
-    const projectPath = path.join(root, "project")
+    const sourceProjectPath = path.join(root, "source-project")
+    const targetProjectPath = path.join(root, "target-project")
+    const sourcePath = path.join(sourceProjectPath, ".cursor", "rules", "review-rule.mdc")
     await mkdir(path.dirname(sourcePath), { recursive: true })
-    await mkdir(projectPath, { recursive: true })
+    await mkdir(targetProjectPath, { recursive: true })
     await writeFile(sourcePath, "Review carefully.", "utf8")
+    mockConfiguredProjects([sourceProjectPath, targetProjectPath])
 
     const auditSink = new InMemoryAuditSink()
     const service = new EditorCopyService()
     const result = await service.copy({
       source: createRuleSource(sourcePath),
       targetEditorId: "cursor",
-      targetProjectPath: projectPath,
+      targetProjectPath: targetProjectPath,
       targetScope: "project",
     }, {
       actor: { kind: "user" },
@@ -149,11 +168,72 @@ describe("EditorCopyService", () => {
 
     expect(auditSink.list()).toEqual([
       expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        actor: { kind: "user" },
+        outcome: "allowed",
+        resource: sourcePath,
+      }),
+      expect.objectContaining({
         action: "fs.write",
         actor: { kind: "user" },
         outcome: "allowed",
         resource: result.targetPath,
       }),
     ])
+  })
+
+  it("rejects project copy targets whose project path is not configured", async () => {
+    const configuredRoot = await createTempRoot()
+    const rogueRoot = await createTempRoot()
+    mockConfiguredProjects([configuredRoot])
+
+    const service = new EditorCopyService()
+
+    await expect(service.resolveTarget({
+      source: createRuleSource(path.join(configuredRoot, ".cursor", "rules", "review-rule.mdc")),
+      targetEditorId: "cursor",
+      targetProjectPath: rogueRoot,
+      targetScope: "project",
+    })).rejects.toThrow("项目路径不在已配置项目中。")
+  })
+
+  it("checks source read permission before copying to an editor target", async () => {
+    const root = await createTempRoot()
+    const sourceProjectPath = path.join(root, "source-project")
+    const targetProjectPath = path.join(root, "target-project")
+    const sourcePath = path.join(sourceProjectPath, ".cursor", "rules", "review-rule.mdc")
+    await mkdir(path.dirname(sourcePath), { recursive: true })
+    await mkdir(targetProjectPath, { recursive: true })
+    await writeFile(sourcePath, "Review carefully.", "utf8")
+    mockConfiguredProjects([sourceProjectPath, targetProjectPath])
+
+    const auditSink = new InMemoryAuditSink()
+    const permissionGuard = createPermissionGuard()
+    permissionGuard.registerPolicy({
+      decide: (request) => request.action === "fs.read.outside-userdata"
+        ? "deny"
+        : "defer-to-next",
+      id: "deny-source-read",
+    })
+    const service = new EditorCopyService()
+
+    await expect(service.copy({
+      source: createRuleSource(sourcePath),
+      targetEditorId: "cursor",
+      targetProjectPath,
+      targetScope: "project",
+    }, {
+      actor: { kind: "user" },
+      auditSink,
+      permissionGuard,
+    })).rejects.toThrow("denied by deny-source-read")
+
+    expect(auditSink.list()).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        outcome: "denied",
+        resource: sourcePath,
+      }),
+    ]))
   })
 })

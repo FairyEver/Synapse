@@ -19,6 +19,7 @@ import {
 import { arePathsEqualForCompare } from "../../src/lib/path-compare"
 import { editorInstallStrategyById } from "./definitions/generated/main-registry"
 import { editorAdapterService } from "./editor-adapter-service"
+import { configStore } from "./config-store"
 import { pathExists } from "./fs-utils"
 import { createMainLogger } from "./log-store"
 import { prepareQuickPublishDraft } from "./editor-scan-service"
@@ -33,6 +34,7 @@ import {
 const logger = createMainLogger("service.editor-copy")
 const MARKDOWN_EXTENSION_PATTERN = /\.(md|mdc)$/iu
 const SAFE_RULE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/
+const UNTRUSTED_PROJECT_PATH_ERROR = "项目路径不在已配置项目中。"
 
 type EditorWriteSecurityDeps = {
   actor: ActorIdentity
@@ -185,6 +187,21 @@ function createResolvePayload(payload: SynapseResolveEditorCopyTargetPayload) {
   }
 }
 
+async function assertConfiguredProjectPath(
+  payload: SynapseResolveEditorCopyTargetPayload,
+): Promise<void> {
+  if (payload.targetScope !== "project") return
+  if (!payload.targetProjectPath?.trim()) {
+    throw new Error("项目路径为空，无法解析项目复制位置。")
+  }
+
+  const config = await configStore.load()
+  const isConfigured = config.global.projects.some((project) => isSamePath(project.path, payload.targetProjectPath ?? ""))
+  if (!isConfigured) {
+    throw new Error(UNTRUSTED_PROJECT_PATH_ERROR)
+  }
+}
+
 function createInstallPayload(
   payload: SynapseCopyToEditorPayload,
 ): SynapseInstallToEditorPayload {
@@ -199,6 +216,7 @@ class EditorCopyService {
   async resolveTarget(
     payload: SynapseResolveEditorCopyTargetPayload,
   ): Promise<SynapseEditorResolvedTarget> {
+    await assertConfiguredProjectPath(payload)
     const target = await editorAdapterService.resolveTarget(createResolvePayload(payload))
     return normalizeCopyTarget(payload.source, target)
   }
@@ -229,9 +247,9 @@ class EditorCopyService {
 
     try {
       if (payload.source.itemType === "rule") {
-        await this.copyRule(payload, target)
+        await this.copyRule(payload, target, security)
       } else {
-        await this.copySkill(payload, target)
+        await this.copySkill(payload, target, security)
       }
     } catch (error) {
       recordEditorWriteAudit(security, target.targetPath, "failed", auditMetadata)
@@ -263,6 +281,7 @@ class EditorCopyService {
   private async copyRule(
     payload: SynapseCopyToEditorPayload,
     target: Extract<SynapseEditorResolvedTarget, { status: "ready" }>,
+    security: EditorWriteSecurityDeps | undefined,
   ): Promise<void> {
     if (target.targetKind !== "file") {
       throw new Error("当前编辑器没有返回合法的 Rule 复制目标。")
@@ -274,7 +293,7 @@ class EditorCopyService {
       itemType: "rule",
       metadata: payload.source.metadata,
       ruleContent: payload.source.content,
-    })
+    }, security)
 
     if (draft.itemType !== "rule") {
       throw new Error("读取 Rule 内容失败。")
@@ -296,6 +315,7 @@ class EditorCopyService {
   private async copySkill(
     payload: SynapseCopyToEditorPayload,
     target: Extract<SynapseEditorResolvedTarget, { status: "ready" }>,
+    security: EditorWriteSecurityDeps | undefined,
   ): Promise<void> {
     if (target.targetKind !== "directory") {
       throw new Error("当前编辑器没有返回合法的 Skill 复制目标。")
@@ -306,7 +326,7 @@ class EditorCopyService {
       itemPath: payload.source.itemPath,
       itemType: "skill",
       metadata: payload.source.metadata,
-    })
+    }, security)
 
     if (draft.itemType !== "skill") {
       throw new Error("读取 Skill 内容失败。")
