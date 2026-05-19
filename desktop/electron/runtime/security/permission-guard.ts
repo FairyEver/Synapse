@@ -109,6 +109,15 @@ export const systemShellExecPolicy: PermissionPolicy = {
       : "defer-to-next",
 }
 
+/** Allow system actors to perform network requests and spawn agents (workflow engine, scheduler). */
+export const systemAutomationPolicy: PermissionPolicy = {
+  id: "system-automation-allow",
+  decide: (req) =>
+    req.actor.kind === "system" && (req.action === "network.connect" || req.action === "agent.spawn")
+      ? "allow"
+      : "defer-to-next",
+}
+
 // ----- AuditSink ----------------------------------------------------
 
 export interface AuditEvent {

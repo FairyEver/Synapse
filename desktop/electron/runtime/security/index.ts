@@ -8,6 +8,7 @@ export {
   createPermissionGuard,
   userInitiatedAllowPolicy,
   systemShellExecPolicy,
+  systemAutomationPolicy,
 } from "./permission-guard"
 export type {
   ActorIdentity,
