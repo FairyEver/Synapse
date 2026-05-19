@@ -69,9 +69,25 @@ function defaultRedact(record: LogRecord): LogRecord {
 function redactContext(context: Record<string, unknown>): Record<string, unknown> {
   const redacted: Record<string, unknown> = {}
   for (const [k, v] of Object.entries(context)) {
-    redacted[k] = SECRET_KEY_RE.test(k) ? "[REDACTED]" : v
+    redacted[k] = SECRET_KEY_RE.test(k) ? "[REDACTED]" : redactValue(v, 0)
   }
   return redacted
+}
+
+const MAX_REDACT_DEPTH = 8
+
+function redactValue(value: unknown, depth: number): unknown {
+  if (depth >= MAX_REDACT_DEPTH) return "[REDACTED deep]"
+  if (value === null || value === undefined) return value
+  if (Array.isArray(value)) return value.map((item) => redactValue(item, depth + 1))
+  if (typeof value === "object") {
+    const result: Record<string, unknown> = {}
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      result[k] = SECRET_KEY_RE.test(k) ? "[REDACTED]" : redactValue(v, depth + 1)
+    }
+    return result
+  }
+  return value
 }
 
 function redactLogError(error: NonNullable<LogRecord["error"]>): NonNullable<LogRecord["error"]> {
