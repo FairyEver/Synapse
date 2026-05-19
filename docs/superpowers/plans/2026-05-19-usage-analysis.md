@@ -1729,7 +1729,7 @@ git commit -m "feat: expose usage analysis IPC"
 - Create: `desktop/src/modules/usage-analysis/shared/components/report-state.tsx`
 - Test: `desktop/src/modules/usage-analysis/__tests__/range-picker.test.tsx`
 
-- [ ] **Step 1: Write range picker test**
+- [x] **Step 1: Write range picker test**
 
 Create `desktop/src/modules/usage-analysis/__tests__/range-picker.test.tsx`:
 
@@ -1749,7 +1749,7 @@ describe("RangePicker", () => {
 })
 ```
 
-- [ ] **Step 2: Implement shared renderer files**
+- [x] **Step 2: Implement shared renderer files**
 
 Use existing shadcn components. `RangePicker` should use `Tabs`, not hand-rolled buttons:
 
@@ -1836,7 +1836,7 @@ export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
 
 Define `UsageRangePreset` and `UsageViewId` in `shared/types.ts`.
 
-- [ ] **Step 3: Run shared renderer test**
+- [x] **Step 3: Run shared renderer test**
 
 Run:
 
@@ -1846,7 +1846,7 @@ pnpm --filter @synapse/desktop exec vitest run src/modules/usage-analysis/__test
 
 Expected: pass.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add desktop/src/modules/usage-analysis/shared desktop/src/modules/usage-analysis/__tests__/range-picker.test.tsx
