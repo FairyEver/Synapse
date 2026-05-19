@@ -295,6 +295,7 @@ export class SchemaManager {
       db.exec(`ALTER TABLE ${q(from)} RENAME TO ${q(to)}`)
       db.prepare(`UPDATE "_meta_tables" SET name = ?, updated_at = ? WHERE name = ?`).run(to, now, from)
       db.prepare(`UPDATE "_meta_columns" SET table_name = ? WHERE table_name = ?`).run(to, from)
+      db.prepare(`UPDATE "_table_folder_members" SET table_name = ? WHERE table_name = ?`).run(to, from)
       db.exec("COMMIT")
     } catch (error) {
       db.exec("ROLLBACK")

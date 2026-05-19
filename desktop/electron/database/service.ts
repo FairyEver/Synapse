@@ -1118,8 +1118,6 @@ class DatabaseService {
 
   databaseTableRename(from: string, to: string): void {
     this.getSchemaManager().databaseTableRename(from, to)
-    const db = this.getDb()
-    db.prepare(`UPDATE "_table_folder_members" SET table_name = ? WHERE table_name = ?`).run(to, from)
   }
 
   databaseColumnRename(table: string, from: string, to: string): void {
