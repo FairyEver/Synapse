@@ -74,7 +74,12 @@ if (!gotSingleInstanceLock) {
       // Initialize install status cache
       await installStatusCacheService.buildCache()
 
-      const result = await registry.startAll()
+      const result = await registry.startAll().catch(async (startErr) => {
+        await registry.stopAll(10_000).catch((stopErr) => {
+          logger.error("stopAll failed during fatal startup cleanup.", { error: stopErr })
+        })
+        throw startErr
+      })
       if (result.degraded.length > 0) {
         for (const failure of result.degraded) {
           logger.warn("Service started in degraded state.", {
