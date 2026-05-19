@@ -1,5 +1,10 @@
-import { spawn } from "node:child_process"
 import path from "node:path"
+import {
+  ControlledProcessPermissionError,
+  type ControlledProcessResult,
+  type ControlledProcessRunner,
+} from "../process"
+import type { ActorIdentity } from "../security"
 
 type ZipArchiveMessages = {
   missingTool?: string
@@ -8,7 +13,9 @@ type ZipArchiveMessages = {
 }
 
 type ZipArchiveOptions = {
+  actor?: ActorIdentity
   messages?: ZipArchiveMessages
+  processRunner?: Pick<ControlledProcessRunner, "run">
   timeoutMs?: number
 }
 
@@ -37,6 +44,21 @@ function formatArchiveSpawnError(error: unknown, messages: Required<ZipArchiveMe
   return error instanceof Error ? error.message : messages.startFailed
 }
 
+function formatArchiveProcessError(result: ControlledProcessResult, messages: Required<ZipArchiveMessages>): string {
+  if (result.timedOut) {
+    return "压缩操作超时，请稍后重试。"
+  }
+
+  if (result.error?.includes("ENOENT")) {
+    return messages.missingTool
+  }
+
+  return formatArchiveFailureMessage(
+    `${result.stdout ?? ""}\n${result.stderr ?? ""}\n${result.error ?? ""}`,
+    messages,
+  )
+}
+
 function formatArchiveFailureMessage(output: string, messages: Required<ZipArchiveMessages>): string {
   const firstLine = output
     .trim()
@@ -49,55 +71,49 @@ function formatArchiveFailureMessage(output: string, messages: Required<ZipArchi
 
 const ARCHIVE_DEFAULT_TIMEOUT_MS = 5 * 60 * 1000
 
-function runArchiveCommand(
+async function runArchiveCommand(
   command: string,
   args: string[],
   messages: Required<ZipArchiveMessages>,
   options?: {
+    actor?: ActorIdentity
     cwd?: string
+    processRunner?: Pick<ControlledProcessRunner, "run">
     timeoutMs?: number
   },
 ): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const childProcess = spawn(command, args, {
-      cwd: options?.cwd,
-      env: {
-        ...process.env,
+  if (!options?.processRunner || !options.actor) {
+    throw new Error("压缩命令缺少安全执行上下文。")
+  }
+
+  try {
+    const result = await options.processRunner.run({
+      action: "shell.exec",
+      actor: options.actor,
+      args,
+      command,
+      cwd: options.cwd,
+      metadata: {
+        source: "archive.createZipArchive",
       },
+      output: {
+        stderr: "buffer",
+        stdout: "buffer",
+      },
+      timeoutMs: options.timeoutMs ?? ARCHIVE_DEFAULT_TIMEOUT_MS,
     })
 
-    const timeoutMs = options?.timeoutMs ?? ARCHIVE_DEFAULT_TIMEOUT_MS
-    const timer = setTimeout(() => {
-      childProcess.kill("SIGTERM")
-      reject(new Error("压缩操作超时，请稍后重试。"))
-    }, timeoutMs)
+    if (result.exitCode === 0 && !result.timedOut && !result.error) {
+      return
+    }
 
-    let stdout = ""
-    let stderr = ""
-
-    childProcess.stdout.on("data", (chunk: Buffer) => {
-      stdout += chunk.toString("utf8")
-    })
-
-    childProcess.stderr.on("data", (chunk: Buffer) => {
-      stderr += chunk.toString("utf8")
-    })
-
-    childProcess.on("error", (error) => {
-      clearTimeout(timer)
-      reject(new Error(formatArchiveSpawnError(error, messages)))
-    })
-
-    childProcess.on("close", (code) => {
-      clearTimeout(timer)
-      if (code === 0) {
-        resolve()
-        return
-      }
-
-      reject(new Error(formatArchiveFailureMessage(`${stdout}\n${stderr}`, messages)))
-    })
-  })
+    throw new Error(formatArchiveProcessError(result, messages))
+  } catch (error) {
+    if (error instanceof ControlledProcessPermissionError) {
+      throw error
+    }
+    throw new Error(formatArchiveSpawnError(error, messages), { cause: error })
+  }
 }
 
 async function createZipArchive(
@@ -126,7 +142,11 @@ async function createZipArchive(
       "-NonInteractive",
       "-Command",
       script,
-    ], messages, { timeoutMs })
+    ], messages, {
+      actor: options?.actor,
+      processRunner: options?.processRunner,
+      timeoutMs,
+    })
     return
   }
 
@@ -137,7 +157,11 @@ async function createZipArchive(
       "--keepParent",
       sourceDirectoryPath,
       outputFilePath,
-    ], messages, { timeoutMs })
+    ], messages, {
+      actor: options?.actor,
+      processRunner: options?.processRunner,
+      timeoutMs,
+    })
     return
   }
 
@@ -145,7 +169,12 @@ async function createZipArchive(
     "zip",
     ["-r", "-q", outputFilePath, path.basename(sourceDirectoryPath)],
     messages,
-    { cwd: path.dirname(sourceDirectoryPath), timeoutMs },
+    {
+      actor: options?.actor,
+      cwd: path.dirname(sourceDirectoryPath),
+      processRunner: options?.processRunner,
+      timeoutMs,
+    },
   )
 }
 

@@ -8,11 +8,12 @@
 import { z } from "zod"
 import { app, dialog } from "electron"
 import path from "node:path"
-import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
+import type { IpcModule } from "../../runtime/ipc/types"
 import type { WindowManager } from "../../runtime/window"
 import { logStore } from "../../services/log-store"
 import type { SynapseRendererLogPayload } from "../../../src/types/log"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import { createControlledProcessRunner } from "../../runtime/process"
 
 // Schemas
 const rendererLogPayloadSchema = z.object({
@@ -101,7 +102,10 @@ export const logIpcModule: IpcModule = {
         }
 
         try {
-          const result = await logStore.exportAllLogs(dialogResult.filePath)
+          const result = await logStore.exportAllLogs(dialogResult.filePath, {
+            actor,
+            processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+          })
           auditSink.record({
             action: "fs.write",
             actor,

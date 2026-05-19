@@ -11,6 +11,7 @@ import path from "node:path"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { EventBus } from "../../runtime/event-bus"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import { createControlledProcessRunner } from "../../runtime/process"
 import { getContentTypeDefinition } from "../../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../../src/lib/config"
 import type { SynapseContentType } from "../../../src/types/content"
@@ -450,7 +451,10 @@ export const contentIpcModule: IpcModule = {
         })
 
         logger.info(`Content download started. contentType: ${args.contentType}, contentId: ${args.id}, targetPath: ${path.basename(result.filePath)}`)
-        await contentDownloadService.download(args.contentType, args.id, result.filePath)
+        await contentDownloadService.download(args.contentType, args.id, result.filePath, {
+          actor: { kind: "user" },
+          processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+        })
 
         return {
           canceled: false,

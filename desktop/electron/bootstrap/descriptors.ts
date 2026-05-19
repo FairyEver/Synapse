@@ -685,6 +685,9 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
     "core.database",
   ],
   create(ctx) {
+    const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
+    const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+
     return new DiagnosticsService({
       appInfo: app,
       configStore,
@@ -711,10 +714,13 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
       }),
       getMcpServers,
       probeMcpHttp,
-      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
-      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
+      permissionGuard,
+      auditSink,
       logger: ctx.logger.child("diagnostics"),
-      createZipArchive,
+      createZipArchive: (sourceDirectoryPath, outputFilePath) => createZipArchive(sourceDirectoryPath, outputFilePath, {
+        actor: { kind: "user" },
+        processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      }),
       createConfigBackupPayload,
     })
   },

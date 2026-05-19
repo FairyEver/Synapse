@@ -2,6 +2,7 @@ import { copyFile, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { createZipArchive } from "../runtime/archive"
+import type { ZipArchiveOptions } from "../runtime/archive"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import {
@@ -18,6 +19,7 @@ import { createMainLogger } from "./log-store"
 import { repositoryStore } from "./repository-store"
 
 const logger = createMainLogger("service.content-download")
+type ContentDownloadArchiveOptions = Pick<ZipArchiveOptions, "actor" | "processRunner">
 
 async function getActiveRepository(): Promise<SynapseRepositoryConfig> {
   const config = await configStore.load()
@@ -37,8 +39,13 @@ async function getActiveRepositoryRootPath(): Promise<string> {
   return repositoryState.gitRootPath ?? repository.localPath
 }
 
-async function createSkillArchive(sourceDirectoryPath: string, outputFilePath: string): Promise<void> {
+async function createSkillArchive(
+  sourceDirectoryPath: string,
+  outputFilePath: string,
+  archiveOptions?: ContentDownloadArchiveOptions,
+): Promise<void> {
   await createZipArchive(sourceDirectoryPath, outputFilePath, {
+    ...archiveOptions,
     messages: {
       missingTool: "当前系统缺少导出 Skill 压缩包所需的工具，暂时不能下载 Skill。",
       startFailed: "启动导出命令失败。",
@@ -62,14 +69,19 @@ async function withTemporaryOutput<T>(
 }
 
 class ContentDownloadService {
-  async download(contentType: SynapseContentType, id: string, targetPath: string): Promise<void> {
+  async download(
+    contentType: SynapseContentType,
+    id: string,
+    targetPath: string,
+    archiveOptions?: ContentDownloadArchiveOptions,
+  ): Promise<void> {
     const definition = getContentTypeDefinition(contentType)
 
     switch (definition.download.exporter) {
       case "text-file":
         return this.exportAsTextFile(contentType, id, targetPath)
       case "zip-archive":
-        return this.exportAsZipArchive(contentType, id, targetPath)
+        return this.exportAsZipArchive(contentType, id, targetPath, archiveOptions)
       default:
         throw new Error(`不支持 ${definition.singularLabel} 的下载方式。`)
     }
@@ -79,8 +91,12 @@ class ContentDownloadService {
     return this.download("rule", ruleId, targetPath)
   }
 
-  async downloadSkill(skillId: string, targetPath: string): Promise<void> {
-    return this.download("skill", skillId, targetPath)
+  async downloadSkill(
+    skillId: string,
+    targetPath: string,
+    archiveOptions?: ContentDownloadArchiveOptions,
+  ): Promise<void> {
+    return this.download("skill", skillId, targetPath, archiveOptions)
   }
 
   private async exportAsTextFile(
@@ -109,6 +125,7 @@ class ContentDownloadService {
     contentType: SynapseContentType,
     id: string,
     targetPath: string,
+    archiveOptions?: ContentDownloadArchiveOptions,
   ): Promise<void> {
     const detail = await contentService.getDetail(contentType, id)
     const repositoryRootPath = detail.source === "builtin" ? null : await getActiveRepositoryRootPath()
@@ -154,7 +171,7 @@ class ContentDownloadService {
           }
         }
 
-        await createSkillArchive(stagingDirectoryPath, tempPath)
+        await createSkillArchive(stagingDirectoryPath, tempPath, archiveOptions)
         logger.info("Created skill archive.", { tempPath: path.basename(tempPath) })
         await copyFile(tempPath, targetPath)
         logger.info("Copied archive to target.", { targetPath: path.basename(targetPath) })

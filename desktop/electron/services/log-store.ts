@@ -14,6 +14,7 @@ import os from "node:os"
 import path from "node:path"
 import { inspect } from "node:util"
 import { createZipArchive } from "../runtime/archive"
+import type { ZipArchiveOptions } from "../runtime/archive"
 import type {
   SynapseLogClearResult,
   SynapseLogEntry,
@@ -133,10 +134,6 @@ function createLogFileName(date: Date): string {
   ].join("")
 
   return `synapse-${d}-${t}.log`
-}
-
-function createExportFileName(date: Date): string {
-  return `synapse-logs-${date.toISOString().replace(/[:.]/g, "-")}.zip`
 }
 
 function getByteLength(value: string): number {
@@ -457,7 +454,10 @@ class LogService {
     })
   }
 
-  async exportAllLogs(exportFilePath: string): Promise<SynapseLogExportResult> {
+  async exportAllLogs(
+    exportFilePath: string,
+    archiveOptions: Pick<ZipArchiveOptions, "actor" | "processRunner">,
+  ): Promise<SynapseLogExportResult> {
     return this.enqueue(async () => {
       await this.flushBuffer()
       await this.rotateIfNeeded()
@@ -474,6 +474,7 @@ class LogService {
         }
 
         await createZipArchive(stagingDirectoryPath, exportFilePath, {
+          ...archiveOptions,
           messages: {
             missingTool: "当前系统缺少导出日志压缩包所需的工具。",
             startFailed: "启动日志导出命令失败。",
