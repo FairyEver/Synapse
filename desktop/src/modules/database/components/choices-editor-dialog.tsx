@@ -160,9 +160,8 @@ function ChoicesEditorDialog({
         choiceCount: finalValues.length,
       })
       onOpenChange(false)
-    } catch {
-      // Parent already shows an error toast via useAppNotifications.promise.
-      // Keep the dialog open so the user can adjust and retry.
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "保存失败，请重试。")
     } finally {
       setSaving(false)
     }
