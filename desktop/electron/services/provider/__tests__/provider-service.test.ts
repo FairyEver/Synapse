@@ -169,6 +169,148 @@ describe("ProviderService", () => {
     })
   })
 
+  it("does not require secret write permission when creating provider metadata without secrets", async () => {
+    const permissionGuard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const { service, providers } = makeProviderService({ permissionGuard, auditSink })
+
+    permissionGuard.registerPolicy({
+      id: "deny-secret-write",
+      decide: (request) => request.action === "secret.write" ? "deny" : "defer-to-next",
+    })
+
+    await service.createProvider({
+      id: "metadata-only",
+      name: "Metadata Only",
+      category: "custom",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      env: {},
+    })
+
+    await expect(providers.get("metadata-only")).resolves.toMatchObject({
+      id: "metadata-only",
+      secretRef: "provider:metadata-only:api-key",
+    })
+    expect(auditSink.list().filter((r) => r.action === "secret.write")).toEqual([])
+  })
+
+  it("denies provider secret creation through PermissionGuard and records audit", async () => {
+    const permissionGuard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const { service, providers, secrets } = makeProviderService({ permissionGuard, auditSink })
+
+    permissionGuard.registerPolicy({
+      id: "deny-secret-write",
+      decide: (request) => request.action === "secret.write" ? "deny" : "defer-to-next",
+    })
+
+    await expect(service.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      apiKey: "sk-test",
+      env: {},
+    })).rejects.toThrow("denied by deny-secret-write")
+
+    await expect(providers.get("anthropic")).resolves.toBeNull()
+    await expect(secrets.get("provider:anthropic:api-key")).resolves.toBeNull()
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "secret.write",
+        outcome: "denied",
+        resource: "provider:anthropic",
+        metadata: expect.objectContaining({
+          operation: "create",
+          providerId: "anthropic",
+          policyId: "deny-secret-write",
+        }),
+      }),
+    ])
+  })
+
+  it("denies provider secret updates through PermissionGuard and records audit", async () => {
+    const permissionGuard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const { service, providers, secrets } = makeProviderService({ permissionGuard, auditSink })
+
+    await service.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      env: {},
+    })
+    permissionGuard.registerPolicy({
+      id: "deny-secret-write",
+      decide: (request) => request.action === "secret.write" ? "deny" : "defer-to-next",
+    })
+
+    await expect(service.updateProvider("anthropic", {
+      apiKey: "sk-test",
+    })).rejects.toThrow("denied by deny-secret-write")
+
+    await expect(providers.get("anthropic")).resolves.toMatchObject({
+      id: "anthropic",
+      secretRef: "provider:anthropic:api-key",
+    })
+    await expect(secrets.get("provider:anthropic:api-key")).resolves.toBeNull()
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "secret.write",
+        outcome: "denied",
+        resource: "provider:anthropic",
+        metadata: expect.objectContaining({
+          operation: "update",
+          providerId: "anthropic",
+          policyId: "deny-secret-write",
+        }),
+      }),
+    ])
+  })
+
+  it("denies provider secret deletion through PermissionGuard and records audit", async () => {
+    const permissionGuard = createPermissionGuard()
+    const auditSink = new InMemoryAuditSink()
+    const { service, providers, secrets } = makeProviderService({ permissionGuard, auditSink })
+
+    await service.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      apiKey: "sk-test",
+      env: {},
+    })
+    auditSink.clearForTests()
+    permissionGuard.registerPolicy({
+      id: "deny-secret-write",
+      decide: (request) => request.action === "secret.write" ? "deny" : "defer-to-next",
+    })
+
+    await expect(service.deleteProvider("anthropic")).rejects.toThrow("denied by deny-secret-write")
+
+    await expect(providers.get("anthropic")).resolves.toMatchObject({
+      id: "anthropic",
+      secretRef: "provider:anthropic:api-key",
+    })
+    await expect(secrets.get("provider:anthropic:api-key")).resolves.toMatchObject({
+      value: "sk-test",
+    })
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "secret.write",
+        outcome: "denied",
+        resource: "provider:anthropic",
+        metadata: expect.objectContaining({
+          operation: "delete",
+          providerId: "anthropic",
+          policyId: "deny-secret-write",
+        }),
+      }),
+    ])
+  })
+
   it("lists public supported provider presets", async () => {
     const { service } = makeProviderService()
 
@@ -332,7 +474,7 @@ describe("ProviderService", () => {
       actor: { kind: "agent", id: "agent-1" },
       projectId: "project-1",
     })).rejects.toThrow("denied by deny-provider-secret")
-    expect(auditSink.list()).toEqual([
+    expect(auditSink.list().filter((r) => r.action === "secret.read")).toEqual([
       expect.objectContaining({
         action: "secret.read",
         outcome: "denied",
@@ -368,7 +510,7 @@ describe("ProviderService", () => {
       projectId: "project-1",
     })).rejects.toThrow(rawError)
 
-    expect(auditSink.list()).toEqual([
+    expect(auditSink.list().filter((r) => r.action === "secret.read")).toEqual([
       expect.objectContaining({
         action: "secret.read",
         outcome: "failed",

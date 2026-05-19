@@ -195,16 +195,28 @@ export class ProviderService {
     if (input.id === LOCAL_PROVIDER_ID) {
       throw new Error("The local Claude Code provider is built in and cannot be created.")
     }
+    const hasSecretWrite = input.apiKey !== undefined
+      || (input.secretEnv !== undefined && Object.keys(input.secretEnv).length > 0)
+    if (hasSecretWrite) {
+      await this.assertSecretWrite(input.id, "create")
+    }
     const now = this.isoNow()
-    const secretRef = input.apiKey === undefined
-      ? undefined
-      : await this.secretStore.setApiKey(input.id, input.apiKey, `${input.name} API key`)
-    const secretEnvRefs = await storeSecretEnv(
-      this.secretStore,
-      input.id,
-      input.name,
-      input.secretEnv,
-    )
+    let secretRef: string | undefined
+    let secretEnvRefs: Record<string, string> | undefined
+    try {
+      secretRef = input.apiKey === undefined
+        ? undefined
+        : await this.secretStore.setApiKey(input.id, input.apiKey, `${input.name} API key`)
+      secretEnvRefs = await storeSecretEnv(
+        this.secretStore,
+        input.id,
+        input.name,
+        input.secretEnv,
+      )
+    } catch (error) {
+      this.recordSecretWriteAudit(input.id, "create", "failed", errorAuditMetadata(error))
+      throw error
+    }
     const provider = toProviderEntry({
       id: input.id,
       name: input.name,
@@ -227,6 +239,9 @@ export class ProviderService {
       updatedAt: now,
     })
     await this.providers.upsert(provider)
+    if (hasSecretWrite) {
+      this.recordSecretWriteAudit(input.id, "create", "allowed", { secretRef })
+    }
     if (input.active) {
       await this.setActiveProvider(input.id)
       const active = await this.getProvider(input.id)
@@ -245,32 +260,50 @@ export class ProviderService {
     if (nextActive && nextArchived) {
       throw new Error(`Provider cannot be active and archived: ${id}`)
     }
-    const secretRef = patch.apiKey === undefined
-      ? existing.secretRef
-      : await this.secretStore.setApiKey(id, patch.apiKey, `${patch.name ?? existing.name} API key`)
-    const nextSecretEnvRefs = { ...(existing.secretEnvRefs ?? {}) }
-    for (const envName of patch.clearSecretEnv ?? []) {
-      const ref = nextSecretEnvRefs[envName]
-      if (ref) {
-        await this.secretStore.deleteSecret(ref)
-      }
-      delete nextSecretEnvRefs[envName]
+    const hasSecretChange = patch.apiKey !== undefined
+      || (patch.clearSecretEnv && patch.clearSecretEnv.length > 0)
+      || (patch.secretEnv && Object.keys(patch.secretEnv).length > 0)
+    if (hasSecretChange) {
+      await this.assertSecretWrite(id, "update")
     }
-    const storedSecretEnvRefs = await storeSecretEnv(
-      this.secretStore,
-      id,
-      patch.name ?? existing.name,
-      patch.secretEnv,
-    )
-    Object.assign(nextSecretEnvRefs, storedSecretEnvRefs)
+    let secretRef: string | undefined
+    let nextSecretEnvRefs: Record<string, string | undefined>
+    try {
+      secretRef = patch.apiKey === undefined
+        ? existing.secretRef
+        : await this.secretStore.setApiKey(id, patch.apiKey, `${patch.name ?? existing.name} API key`)
+      nextSecretEnvRefs = { ...(existing.secretEnvRefs ?? {}) }
+      for (const envName of patch.clearSecretEnv ?? []) {
+        const ref = nextSecretEnvRefs[envName]
+        if (ref) {
+          await this.secretStore.deleteSecret(ref)
+        }
+        delete nextSecretEnvRefs[envName]
+      }
+      const storedSecretEnvRefs = await storeSecretEnv(
+        this.secretStore,
+        id,
+        patch.name ?? existing.name,
+        patch.secretEnv,
+      )
+      Object.assign(nextSecretEnvRefs, storedSecretEnvRefs)
+    } catch (error) {
+      if (hasSecretChange) {
+        this.recordSecretWriteAudit(id, "update", "failed", errorAuditMetadata(error))
+      }
+      throw error
+    }
     const updated: CCProvider = {
       ...existing,
       ...providerPatch(patch),
       secretRef,
-      secretEnvRefs: Object.keys(nextSecretEnvRefs).length ? nextSecretEnvRefs : undefined,
+      secretEnvRefs: Object.keys(nextSecretEnvRefs).length ? nextSecretEnvRefs as Record<string, string> : undefined,
       updatedAt: this.isoNow(),
     }
     await this.providers.upsert(toProviderEntry(updated))
+    if (hasSecretChange) {
+      this.recordSecretWriteAudit(id, "update", "allowed", { secretRef })
+    }
     if (patch.active) {
       await this.setActiveProvider(id)
       return this.getProvider(id)
@@ -297,23 +330,28 @@ export class ProviderService {
         throw new Error(`无法删除：该供应商正在被 ${parts.join("、")} 使用，请先迁移引用后再删除。`)
       }
     }
+    await this.assertSecretWrite(id, "delete")
     const provider = await this.getProvider(id)
     if (provider.active) {
       await this.clearActiveUserProvider()
     }
 
-    // Delete the provider record first so that a failure leaves secrets intact.
     await this.providers.remove(id)
 
-    // Clean up secrets only after the provider record is gone.
-    if (provider.secretRef) {
-      await this.secretStore.deleteSecret(provider.secretRef)
-    }
-    if (provider.secretEnvRefs) {
-      for (const secretRef of Object.values(provider.secretEnvRefs)) {
-        await this.secretStore.deleteSecret(secretRef)
+    try {
+      if (provider.secretRef) {
+        await this.secretStore.deleteSecret(provider.secretRef)
       }
+      if (provider.secretEnvRefs) {
+        for (const secretRef of Object.values(provider.secretEnvRefs)) {
+          await this.secretStore.deleteSecret(secretRef)
+        }
+      }
+    } catch (error) {
+      this.recordSecretWriteAudit(id, "delete", "failed", errorAuditMetadata(error))
+      throw error
     }
+    this.recordSecretWriteAudit(id, "delete", "allowed", { secretRef: provider.secretRef })
   }
 
   async archiveProvider(id: string): Promise<void> {
@@ -497,6 +535,53 @@ export class ProviderService {
 
   private isoNow(): string {
     return (this.now?.() ?? new Date()).toISOString()
+  }
+
+  private async assertSecretWrite(
+    providerId: string,
+    operation: "create" | "update" | "delete",
+  ): Promise<void> {
+    const actor: ActorIdentity = { kind: "user" }
+    const resource = `provider:${providerId}`
+    const metadata = { providerId, operation }
+
+    if (this.permissionGuard) {
+      const permission = await this.permissionGuard.check({
+        action: "secret.write",
+        actor,
+        resource,
+        context: metadata,
+      })
+      if (!permission.allowed) {
+        this.auditSink?.record({
+          action: "secret.write",
+          actor,
+          resource,
+          outcome: "denied",
+          metadata: {
+            ...metadata,
+            reason: permission.reason,
+            policyId: permission.policyId,
+          },
+        })
+        throw new Error(permission.reason)
+      }
+    }
+  }
+
+  private recordSecretWriteAudit(
+    providerId: string,
+    operation: "create" | "update" | "delete",
+    outcome: "allowed" | "failed",
+    extra?: Record<string, unknown>,
+  ): void {
+    this.auditSink?.record({
+      action: "secret.write",
+      actor: { kind: "user" },
+      resource: `provider:${providerId}`,
+      outcome,
+      metadata: removeUndefined({ providerId, operation, ...extra } as Record<string, unknown>),
+    })
   }
 
   private async assertCanReadCcSwitchSource(
