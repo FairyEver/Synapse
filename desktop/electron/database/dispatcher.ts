@@ -263,12 +263,12 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   },
 
   "database.folder.rename": (params) => {
-    databaseService.folderRename(requireNumber(params, "id"), requireString(params, "name"))
+    databaseService.folderRename(requireNumber(params, "folderId"), requireString(params, "name"))
     return { ok: true }
   },
 
   "database.folder.delete": (params) => {
-    databaseService.folderDelete(requireNumber(params, "id"))
+    databaseService.folderDelete(requireNumber(params, "folderId"))
     return { ok: true }
   },
 
