@@ -30,11 +30,7 @@ function previewLines(text: string, metadata?: Record<string, string>): string {
 }
 
 async function readFullText(filePath: string): Promise<string> {
-  try {
-    return await readFile(filePath, "utf8")
-  } catch {
-    return ""
-  }
+  return readFile(filePath, "utf8")
 }
 
 function parseFrontmatter(text: string): { metadata: Record<string, string>; body: string } {
@@ -135,8 +131,9 @@ export async function scanCodexRules(filePath: string): Promise<EditorScanRuleIt
   let text: string
   try {
     text = await readFullText(filePath)
-  } catch {
-    return []
+  } catch (error) {
+    await warnScanFailure("Failed to scan Codex rule.", { path: filePath, error })
+    throw error
   }
 
   if (!text.trim()) return []

@@ -1,4 +1,4 @@
-import { mkdtemp, readFile, rm, writeFile, mkdir, symlink } from "node:fs/promises"
+import { chmod, mkdtemp, readFile, rm, writeFile, mkdir, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -542,6 +542,15 @@ describe("editor scan quick publish", () => {
     })
   })
 
+  it("rejects when Codex rule content cannot be read", async () => {
+    const root = await createTempDir()
+    const filePath = path.join(root, "AGENTS.md")
+    await writeFile(filePath, "# Rule\n")
+    await chmod(filePath, 0o000)
+
+    await expect(scanCodexRules(filePath)).rejects.toThrow()
+  })
+
   it("recognizes Cursor rules installed from Synapse by file name", async () => {
     const root = await createTempDir()
     const contentId = "abc123"
@@ -583,6 +592,15 @@ describe("editor scan quick publish", () => {
       path: rulePath,
       trash: { mode: "path" },
     })
+  })
+
+  it("omits Cursor rule files that cannot be read", async () => {
+    const root = await createTempDir()
+    const rulePath = path.join(root, "project.mdc")
+    await writeFile(rulePath, "# Rule\n")
+    await chmod(rulePath, 0o000)
+
+    await expect(scanCursorRules(root)).resolves.toEqual([])
   })
 })
 
