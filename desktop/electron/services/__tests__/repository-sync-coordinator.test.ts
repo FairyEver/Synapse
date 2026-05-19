@@ -355,6 +355,35 @@ describe("RepositorySyncCoordinator", () => {
     expect(coordinator.getSnapshots()).toEqual(snapshots)
   })
 
+  it("isolates snapshot hydration failures per configured repository", async () => {
+    serviceMocks.pendingPushesService.readState
+      .mockRejectedValueOnce(new Error("cache read failed at /Users/me/repo token=secret-value"))
+      .mockResolvedValueOnce(emptyPendingState)
+    const eventBus = createEventBus()
+    const coordinator = new RepositorySyncCoordinator({ eventBus })
+
+    const snapshots = await coordinator.getSnapshotsForRepositories([repository, secondRepository])
+
+    expect(snapshots).toHaveLength(2)
+    expect(snapshots).toEqual([
+      expect.objectContaining({
+        repositoryUuid: "repo-1",
+        status: "attention",
+        phase: "blocked",
+        pendingCount: 0,
+        failureCategory: "unknown",
+      }),
+      expect.objectContaining({
+        repositoryUuid: "repo-2",
+        status: "synced",
+        pendingCount: 0,
+      }),
+    ])
+    expect(JSON.stringify(snapshots[0])).not.toContain("/Users/me/repo")
+    expect(JSON.stringify(snapshots[0])).not.toContain("secret-value")
+    expect(coordinator.getSnapshots()).toEqual(snapshots)
+  })
+
   it("rearms persisted recoverable retry timers when hydrating snapshots", async () => {
     const failedState = createPendingState([
       createPendingEntry({

@@ -10,6 +10,7 @@ import type {
 } from "../../src/types/repository"
 import { configStore } from "./config-store"
 import { contentSubmissionService } from "./content-submission-service"
+import { sanitizeError } from "./error-sanitize"
 import { classifyGitFailure } from "./git-error-utils"
 import { createMainLogger } from "./log-store"
 import { pendingPushesService } from "./pending-pushes-service"
@@ -52,6 +53,12 @@ function createEmptySnapshot(repositoryUuid: string): SynapseRepositorySyncSnaps
   }
 }
 
+function toSafeErrorMessage(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error)
+
+  return sanitizeError(message) || "同步快照刷新失败。"
+}
+
 class RepositorySyncCoordinator {
   private readonly eventBus: EventBus
   private readonly now: () => Date
@@ -80,7 +87,7 @@ class RepositorySyncCoordinator {
       if (this.hasActiveOperation(repository.uuid)) {
         snapshots.push(this.getSnapshot(repository.uuid))
       } else {
-        snapshots.push(await this.refreshSnapshot(repository))
+        snapshots.push(await this.refreshSnapshotForHydration(repository))
       }
     }
 
@@ -370,6 +377,23 @@ class RepositorySyncCoordinator {
     return Boolean(state?.currentPromise || state?.syncPromise || state?.maintenancePromise)
   }
 
+  private async refreshSnapshotForHydration(
+    repository: SynapseRepositoryConfig,
+  ): Promise<SynapseRepositorySyncSnapshot> {
+    try {
+      return await this.refreshSnapshot(repository)
+    } catch (error) {
+      const snapshot = this.createRefreshFailureSnapshot(repository.uuid, error)
+      this.emitSnapshot(snapshot)
+      logger.warn("repository.sync-snapshot-refresh-failed", {
+        category: snapshot.failureCategory,
+        error: toSafeErrorMessage(error),
+        repositoryUuid: repository.uuid,
+      })
+      return snapshot
+    }
+  }
+
   private createSnapshotFromPending(
     repositoryUuid: string,
     pending: SynapsePendingPushState,
@@ -404,6 +428,24 @@ class RepositorySyncCoordinator {
       retryCount,
       canRetryNow: true,
       primaryAction: failureSnapshotState?.primaryAction ?? "retry",
+    }
+  }
+
+  private createRefreshFailureSnapshot(
+    repositoryUuid: string,
+    error: unknown,
+  ): SynapseRepositorySyncSnapshot {
+    const failure = classifyGitFailure(toSafeErrorMessage(error), "同步快照刷新失败。")
+
+    return {
+      ...createEmptySnapshot(repositoryUuid),
+      status: failure.recoverable ? "offline" : "attention",
+      phase: failure.recoverable ? "retry-wait" : "blocked",
+      message: failure.message,
+      detail: failure.detail,
+      failureCategory: failure.category,
+      canRetryNow: true,
+      primaryAction: failure.primaryAction,
     }
   }
 

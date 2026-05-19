@@ -192,6 +192,20 @@ describe("RepositoryManager", () => {
     expect(manager.getPendingPushes(repository.uuid)).toEqual({ count: 1, items: [] })
   })
 
+  it("keeps initialization alive when sync snapshot refresh fails", async () => {
+    const bridge = createBridge()
+    bridge.repository.getSyncSnapshots = vi.fn(async () => {
+      throw new Error("snapshot refresh failed")
+    })
+    installBridge(bridge)
+    const manager = new RepositoryManager()
+
+    await expect(manager.initialize()).resolves.toBeUndefined()
+
+    expect(manager.getConfig()).toEqual(config)
+    expect(manager.isReady()).toBe(true)
+  })
+
   it("refreshes sync snapshots after replacing repositories", async () => {
     let snapshots: SynapseRepositorySyncSnapshot[] = []
     const bridge = createBridge()

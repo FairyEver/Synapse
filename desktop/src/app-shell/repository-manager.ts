@@ -721,12 +721,16 @@ class RepositoryManager {
       return
     }
 
-    const snapshots = await bridge.getSyncSnapshots()
-    this.syncSnapshots.clear()
-    for (const snapshot of snapshots) {
-      this.applySyncSnapshot(snapshot)
+    try {
+      const snapshots = await bridge.getSyncSnapshots()
+      this.syncSnapshots.clear()
+      for (const snapshot of snapshots) {
+        this.applySyncSnapshot(snapshot)
+      }
+      this.notifyRepositorySubscribers()
+    } catch (error) {
+      logger.warn("repository.sync-snapshot-refresh-failed", { error: String(error) })
     }
-    this.notifyRepositorySubscribers()
   }
 
   private setupBridgeListeners(): void {
