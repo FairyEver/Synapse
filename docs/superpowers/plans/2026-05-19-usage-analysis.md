@@ -1426,7 +1426,7 @@ git commit -m "feat: parse Codex usage analysis"
 - Create: `desktop/electron/services/usage-analysis/index.ts`
 - Test: `desktop/electron/services/usage-analysis/__tests__/reports.test.ts`
 
-- [ ] **Step 1: Write report service tests**
+- [x] **Step 1: Write report service tests**
 
 Create `desktop/electron/services/usage-analysis/__tests__/reports.test.ts`:
 
@@ -1476,7 +1476,7 @@ describe("usage analysis reports", () => {
 })
 ```
 
-- [ ] **Step 2: Run the failing report test**
+- [x] **Step 2: Run the failing report test**
 
 Run:
 
@@ -1486,7 +1486,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: fail because services do not exist.
 
-- [ ] **Step 3: Implement service persistence and reports**
+- [x] **Step 3: Implement service persistence and reports**
 
 Implement `CcUsageAnalysisService` and `CodexUsageAnalysisService` with these public methods:
 
@@ -1516,7 +1516,7 @@ SELECT * FROM cc_usage_events WHERE date >= ? AND date <= ?
 
 Use `createUsageRangeFilter` to omit the `WHERE` clause for `all`.
 
-- [ ] **Step 4: Export services**
+- [x] **Step 4: Export services**
 
 Create `desktop/electron/services/usage-analysis/index.ts`:
 
@@ -1527,7 +1527,7 @@ export { CodexUsageAnalysisService } from "./codex-service"
 export type { UsageRangeInput, UsageRefreshResult } from "./types"
 ```
 
-- [ ] **Step 5: Run report tests**
+- [x] **Step 5: Run report tests**
 
 Run:
 
@@ -1537,7 +1537,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add desktop/electron/services/usage-analysis/cc-service.ts desktop/electron/services/usage-analysis/codex-service.ts desktop/electron/services/usage-analysis/index.ts desktop/electron/services/usage-analysis/__tests__/reports.test.ts
