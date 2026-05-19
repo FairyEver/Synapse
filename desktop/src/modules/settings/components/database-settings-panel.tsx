@@ -233,10 +233,11 @@ function DatabaseSettingsPanel() {
       await promise(
         async () => {
           const result = await databaseExport()
-          if (!result.success) return
+          if (!result.success) return null
           logger.info("Database exported.")
+          return result
         },
-        { loading: "正在导出...", success: "数据库已导出" },
+        { loading: "正在导出...", success: (value) => value ? "数据库已导出" : null },
       )
     } catch {}
   }, [promise])
@@ -246,11 +247,12 @@ function DatabaseSettingsPanel() {
       await promise(
         async () => {
           const result = await databaseImport()
-          if (!result.success) return
+          if (!result.success) return null
           await refreshStatus()
           logger.info("Database imported.")
+          return result
         },
-        { loading: "正在导入...", success: "数据库已导入" },
+        { loading: "正在导入...", success: (value) => value ? "数据库已导入" : null },
       )
     } catch {}
   }, [promise, refreshStatus])
