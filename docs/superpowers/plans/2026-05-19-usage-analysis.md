@@ -476,7 +476,7 @@ git commit -m "feat: add usage analysis pricing"
 - Create: `desktop/electron/services/usage-analysis/db.ts`
 - Test: `desktop/electron/services/usage-analysis/__tests__/db.test.ts`
 
-- [ ] **Step 1: Write schema test**
+- [x] **Step 1: Write schema test**
 
 Create `desktop/electron/services/usage-analysis/__tests__/db.test.ts`:
 
@@ -519,7 +519,7 @@ describe("usage analysis db", () => {
 })
 ```
 
-- [ ] **Step 2: Run the failing test**
+- [x] **Step 2: Run the failing test**
 
 Run:
 
@@ -529,7 +529,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: fail because `../db` does not exist.
 
-- [ ] **Step 3: Implement DB schema**
+- [x] **Step 3: Implement DB schema**
 
 Create `desktop/electron/services/usage-analysis/db.ts` with:
 
@@ -672,7 +672,7 @@ function initUsageAnalysisSchema(database: DatabaseSync): void {
 }
 ```
 
-- [ ] **Step 4: Run DB test**
+- [x] **Step 4: Run DB test**
 
 Run:
 
@@ -682,7 +682,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/electron/services/usage-analysis/db.ts desktop/electron/services/usage-analysis/__tests__/db.test.ts
