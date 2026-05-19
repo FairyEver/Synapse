@@ -1864,7 +1864,7 @@ git commit -m "feat: add usage analysis UI shell"
 - Test: `desktop/src/modules/usage-analysis/__tests__/cc-page.test.tsx`
 - Test: `desktop/src/modules/usage-analysis/__tests__/codex-page.test.tsx`
 
-- [ ] **Step 1: Write page smoke tests**
+- [x] **Step 1: Write page smoke tests**
 
 Create `desktop/src/modules/usage-analysis/__tests__/cc-page.test.tsx`:
 
@@ -1900,7 +1900,7 @@ describe("CodexUsageAnalysisModule", () => {
 })
 ```
 
-- [ ] **Step 2: Implement hooks**
+- [x] **Step 2: Implement hooks**
 
 Create `cc/hooks.ts` and `codex/hooks.ts`. Each hook calls `requireSynapseBridge().usageAnalysis.<tool>`.
 
@@ -1935,7 +1935,7 @@ export function useCcOverview(range: UsageRangePreset) {
 
 Avoid component-level `fetch` or raw Electron APIs.
 
-- [ ] **Step 3: Implement page components**
+- [x] **Step 3: Implement page components**
 
 Each page should render a concise empty/loading state and report tables. First pass can render table-based reports without chart dependencies:
 
@@ -1948,7 +1948,7 @@ Each page should render a concise empty/loading state and report tables. First p
 
 Use `Table`, `Badge`, `Skeleton`, `Alert`, `Button`, and existing utility classes. Do not use inline styles or custom colors.
 
-- [ ] **Step 4: Implement module entry**
+- [x] **Step 4: Implement module entry**
 
 Create `desktop/src/modules/usage-analysis/index.tsx` exporting:
 
@@ -1965,7 +1965,7 @@ export function CodexUsageAnalysisModule() {
 }
 ```
 
-- [ ] **Step 5: Run renderer tests**
+- [x] **Step 5: Run renderer tests**
 
 Run:
 
@@ -1975,7 +1975,7 @@ pnpm --filter @synapse/desktop exec vitest run src/modules/usage-analysis/__test
 
 Expected: pass.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add desktop/src/modules/usage-analysis
