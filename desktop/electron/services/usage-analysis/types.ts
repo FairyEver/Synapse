@@ -1,5 +1,5 @@
 export type UsageTool = "cc" | "codex"
-export type UsageRangePreset = "7d" | "30d" | "90d" | "all"
+export type UsageRangePreset = "today" | "7d" | "30d" | "90d" | "all"
 
 export interface UsageRangeInput {
   readonly preset: UsageRangePreset
