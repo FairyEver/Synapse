@@ -23,7 +23,7 @@ export interface NodeManifest<TConfig = unknown> {
 }
 
 export interface WorkflowRuntimeContext {
-  projectId: string
+  projectId?: string
   runId: string
   abortSignal: AbortSignal
   actor?: { kind: string; id?: string; display?: string }
@@ -66,5 +66,4 @@ export interface NodeExecutionResult {
 export interface NodeExecutor<TConfig = unknown> {
   execute(input: NodeExecutionInput<TConfig>): Promise<NodeExecutionResult>
 }
-
 
