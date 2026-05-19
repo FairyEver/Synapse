@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import type { SynapseEditorId } from "@/types/editor"
-import type { InstallStatusMap } from "@/types/install-status"
+import type { InstallStatusEntry, InstallStatusMap } from "@/types/install-status"
 
 const logger = createRendererLogger("content.install-status")
 
@@ -28,8 +28,8 @@ function InstallStatusProvider({ children }: { children: ReactNode }) {
     const unsubscribe = window.synapse.installStatus.onChanged((event) => {
       setStatusMap((prev) => {
         const next = { ...prev }
-        if (event.editors.length > 0) {
-          next[event.contentId] = event.editors
+        if (event.entries.length > 0) {
+          next[event.contentId] = event.entries
         } else {
           delete next[event.contentId]
         }
@@ -52,7 +52,7 @@ function InstallStatusProvider({ children }: { children: ReactNode }) {
   )
 }
 
-function useInstallStatus(contentId: string): SynapseEditorId[] {
+function useInstallStatus(contentId: string): InstallStatusEntry[] {
   const ctx = useContext(InstallStatusContext)
   if (!ctx) return []
   return ctx.statusMap[contentId] ?? []

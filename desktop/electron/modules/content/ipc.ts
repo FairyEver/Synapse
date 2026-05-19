@@ -498,16 +498,14 @@ export const contentIpcModule: IpcModule = {
           permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
         })
 
-        if (payload.scope === "global") {
-          const editors = await installStatusCacheService.refresh(payload.contentId)
-          const eventBus = ctx.resolve<EventBus>("core.event-bus")
-          eventBus.emit({
-            domain: "install-status",
-            type: "install-status.changed",
-            payload: { contentId: payload.contentId, editors },
-            timestamp: new Date().toISOString(),
-          })
-        }
+        const entries = await installStatusCacheService.refresh(payload.contentId)
+        const eventBus = ctx.resolve<EventBus>("core.event-bus")
+        eventBus.emit({
+          domain: "install-status",
+          type: "install-status.changed",
+          payload: { contentId: payload.contentId, entries },
+          timestamp: new Date().toISOString(),
+        })
 
         return result
       },

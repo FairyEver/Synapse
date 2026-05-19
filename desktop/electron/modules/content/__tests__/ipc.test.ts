@@ -24,6 +24,14 @@ const mocks = vi.hoisted(() => ({
     restoreContent: vi.fn(),
     updateContent: vi.fn(),
   },
+  contentInstallService: {
+    installToEditor: vi.fn(),
+  },
+  installStatusCacheService: {
+    refresh: vi.fn(),
+  },
+  auditSink: {},
+  permissionGuard: {},
 }))
 
 vi.mock("electron", () => ({
@@ -55,9 +63,13 @@ vi.mock("../../../services/content-download-service", () => ({
 
 vi.mock("../../../services/content-install-service", () => ({
   contentInstallService: {
-    installToEditor: vi.fn(),
+    installToEditor: mocks.contentInstallService.installToEditor,
     readEditorInstallFormValues: vi.fn(),
   },
+}))
+
+vi.mock("../../../services/install-status-cache-service", () => ({
+  installStatusCacheService: mocks.installStatusCacheService,
 }))
 
 vi.mock("../../../services/content-service", () => ({
@@ -101,6 +113,12 @@ function createContext(options: { failCoordinatorResolve?: boolean } = {}) {
       if (id === "repo.sync-coordinator" && !options.failCoordinatorResolve) {
         return mocks.coordinator
       }
+      if (id === "core.audit-sink") {
+        return mocks.auditSink
+      }
+      if (id === "core.permission-guard") {
+        return mocks.permissionGuard
+      }
       throw new Error(`Unexpected service id: ${id}`)
     }),
   }
@@ -143,6 +161,13 @@ describe("contentIpcModule sync ownership", () => {
       status: "saved",
       pendingPushCount: 1,
     })
+    mocks.contentInstallService.installToEditor.mockResolvedValue({ installed: true })
+    mocks.installStatusCacheService.refresh.mockResolvedValue([{
+      editorId: "codex",
+      projectName: "Project",
+      projectPath: "/project",
+      scope: "project",
+    }])
   })
 
   it.each([
@@ -357,5 +382,32 @@ describe("contentIpcModule sync ownership", () => {
       error: "Unexpected service id: repo.sync-coordinator",
       message: "Unexpected service id: repo.sync-coordinator",
     })
+  })
+
+  it("refreshes and broadcasts install status after project editor install succeeds", async () => {
+    const { contentIpcModule } = await import("../ipc")
+
+    await contentIpcModule.methods.installToEditor.handler(createContext() as never, {
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "codex",
+      projectPath: "/project",
+      scope: "project",
+    } as never)
+
+    expect(mocks.installStatusCacheService.refresh).toHaveBeenCalledWith("skill-1")
+    expect(mocks.eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "install-status",
+      type: "install-status.changed",
+      payload: {
+        contentId: "skill-1",
+        entries: [{
+          editorId: "codex",
+          projectName: "Project",
+          projectPath: "/project",
+          scope: "project",
+        }],
+      },
+    }))
   })
 })

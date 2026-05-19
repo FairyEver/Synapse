@@ -16,6 +16,7 @@ import type { SynapseEditorId } from "@/types/editor"
 import { editorDefinitions } from "@/definitions/generated/renderer-registry"
 import { useInstallStatus, useUninstallFromEditor } from "@/modules/content/contexts/install-status-context"
 import { LoaderCircle } from "lucide-react"
+import type { InstallStatusEntry } from "@/types/install-status"
 
 const editorLabelMap = new Map<string, string>(
   editorDefinitions.map((def) => [def.id, def.label]),
@@ -42,7 +43,7 @@ function EditorBadge({
     try {
       await uninstall(contentId, editorId)
       setOpen(false)
-    } catch (_error) {
+    } catch {
       toast.error("卸载失败，请重试。")
     } finally {
       setBusy(false)
@@ -90,16 +91,40 @@ function EditorBadge({
 }
 
 function EditorInstallBadges({ contentId }: { contentId: string }) {
-  const editors = useInstallStatus(contentId)
+  const entries = useInstallStatus(contentId)
 
-  if (editors.length === 0) return null
+  if (entries.length === 0) return null
 
   return (
     <div className="flex items-center gap-1.5 pt-2">
-      {editors.map((editorId) => (
-        <EditorBadge key={editorId} contentId={contentId} editorId={editorId} />
+      {entries.map((entry) => (
+        entry.scope === "global" ? (
+          <EditorBadge
+            key={`${entry.scope}:${entry.editorId}`}
+            contentId={contentId}
+            editorId={entry.editorId}
+          />
+        ) : (
+          <ProjectEditorBadge
+            key={`${entry.scope}:${entry.editorId}:${entry.projectPath ?? ""}`}
+            entry={entry}
+          />
+        )
       ))}
     </div>
+  )
+}
+
+function ProjectEditorBadge({ entry }: { entry: InstallStatusEntry }) {
+  const label = getEditorLabel(entry.editorId)
+  const projectName = entry.projectName ?? "项目"
+  return (
+    <span
+      className="flex size-5 items-center justify-center rounded"
+      title={`${label} · ${projectName}`}
+    >
+      <EditorIcon editorId={entry.editorId} className="size-5" />
+    </span>
   )
 }
 

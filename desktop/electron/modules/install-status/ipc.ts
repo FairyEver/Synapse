@@ -5,9 +5,6 @@ import type { AuditSink, PermissionGuard } from "../../runtime/security/permissi
 import { installStatusCacheService } from "../../services/install-status-cache-service"
 import { trashScanItem } from "../../services/editor-scan-service"
 import { scanAll } from "../../services/editor-scan-service"
-import { createMainLogger } from "../../services/log-store"
-
-const logger = createMainLogger("install-status-ipc")
 
 const uninstallSchema = z.object({
   contentId: z.string(),
@@ -64,12 +61,12 @@ export const installStatusIpcModule: IpcModule = {
           },
         )
 
-        const editors = await installStatusCacheService.refresh(payload.contentId)
+        const entries = await installStatusCacheService.refresh(payload.contentId)
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         eventBus.emit({
           domain: "install-status",
           type: "install-status.changed",
-          payload: { contentId: payload.contentId, editors },
+          payload: { contentId: payload.contentId, entries },
           timestamp: new Date().toISOString(),
         })
       },
