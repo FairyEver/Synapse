@@ -355,7 +355,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       projects={projectOptions}
       selectedProjectId={chat.selectedProjectId}
       selectedConversationId={chat.selectedConversationId}
-      followFeishu={chat.followFeishu}
       unreadByConversationId={chat.unreadByConversationId}
       onCreateSession={(projectId, selection) => void chat.createSession(projectId, selection.providerId, undefined, selection.modelTier)}
       onSelect={(session) => void chat.selectSession(session)}
@@ -373,7 +372,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
         }
       }}
       onRename={(session, name) => chat.renameSession(session, name)}
-      onFollowFeishuChange={chat.setFollowFeishu}
     />
   )
 

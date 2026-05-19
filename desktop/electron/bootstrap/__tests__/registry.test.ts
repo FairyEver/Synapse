@@ -82,7 +82,6 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.diagnostics",
         "core.event-bus",
         "core.execution-isolation",
-        "core.feishu-connector",
         "core.http-test",
         "core.license",
         "core.logging",
@@ -154,13 +153,6 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.permission-guard",
       "core.audit-sink",
     ])
-    expect(byId.get("core.feishu-connector")?.dependsOn).toEqual([
-      "core.project-containers",
-      "core.side-channel",
-      "core.data-repository",
-      "core.permission-guard",
-      "core.audit-sink",
-    ])
     expect(byId.get("core.task-scheduler")?.dependsOn).toEqual([
       "core.data-repository",
       "core.permission-guard",
@@ -175,7 +167,6 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.relay")?.dependsOn).toEqual([
       "core.project-containers",
       "core.side-channel",
-      "core.feishu-connector",
       "core.data-repository",
       "core.audit-sink",
     ])
@@ -186,7 +177,6 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.permission-guard",
       "core.audit-sink",
       "core.execution-isolation",
-      "core.feishu-connector",
     ])
     expect(byId.get("core.database")?.dependsOn).toEqual([
       "core.config",
@@ -198,6 +188,8 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.workflow.run-aborts",
       "core.workflow.run-statuses",
       "core.workflow.engine",
+      "core.permission-guard",
+      "core.audit-sink",
       "provider",
     ])
     expect(byId.get("core.diagnostics")?.dependsOn).toEqual([
@@ -241,7 +233,6 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(idx("core.permission-guard")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.audit-sink")).toBeLessThan(idx("core.project-containers"))
     expect(idx("core.project-containers")).toBeLessThan(idx("core.side-channel"))
-    expect(idx("core.side-channel")).toBeLessThan(idx("core.feishu-connector"))
     expect(idx("core.side-channel")).toBeLessThan(idx("core.bridge-adapter"))
     expect(idx("core.data-repository")).toBeLessThan(idx("core.task-scheduler"))
     expect(idx("core.permission-guard")).toBeLessThan(idx("core.task-scheduler"))

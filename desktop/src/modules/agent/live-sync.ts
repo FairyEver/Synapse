@@ -6,18 +6,6 @@ type SelectedConversation = {
   readonly sessionKey: string
 }
 
-type FollowDecisionInput = SynapseAgentConversationUpdatedPayload & {
-  readonly conversationId: string
-}
-
-type FollowState = {
-  readonly followFeishu: boolean
-  readonly inputDirty: boolean
-  readonly selectedProjectId?: string
-  readonly selectedConversationId?: string
-  readonly selectedSessionKey: string
-}
-
 type UnreadState = Record<string, number>
 
 type TimelineSnapshotState = {
@@ -73,21 +61,6 @@ function clearConversationUnread(
   return next
 }
 
-function shouldAutoFollowConversation(
-  target: FollowDecisionInput,
-  state: FollowState,
-): boolean {
-  return state.followFeishu
-    && !state.inputDirty
-    && target.platform === "feishu"
-    && (!state.selectedProjectId || target.projectId === state.selectedProjectId)
-    && !isSelectedConversation(target, {
-      projectId: state.selectedProjectId,
-      conversationId: state.selectedConversationId,
-      sessionKey: state.selectedSessionKey,
-    })
-}
-
 function shouldApplyTimelineSnapshot(
   target: Pick<SynapseAgentConversationUpdatedPayload, "projectId" | "sessionKey"> & {
     readonly conversationId?: string
@@ -124,6 +97,5 @@ export {
   isSelectedConversation,
   shouldApplyPhaseUpdate,
   shouldApplyTimelineSnapshot,
-  shouldAutoFollowConversation,
 }
 export type { UnreadState }

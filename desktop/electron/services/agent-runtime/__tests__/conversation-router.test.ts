@@ -388,8 +388,8 @@ describe("ConversationRouter", () => {
 
     const result = await router.send({
       ...baseMessage("hello"),
-      platform: "feishu",
-      sessionKey: "feishu:chat:user",
+      platform: "external",
+      sessionKey: "external:chat:user",
     })
     const phaseEvents = events.filter((event) => event.type === "phase.update")
 
@@ -410,8 +410,8 @@ describe("ConversationRouter", () => {
 
     const result = await router.send({
       ...baseMessage("hello"),
-      platform: "feishu",
-      sessionKey: "feishu:chat:user",
+      platform: "external",
+      sessionKey: "external:chat:user",
     })
     const phaseEvents = events.filter((event) => event.type === "phase.update")
 

@@ -8,7 +8,6 @@ import {
 } from "../../services/agent-runtime"
 import type { AutomationIngressService } from "../../services/automation-ingress"
 import { configStore } from "../../services/config-store"
-import type { FeishuConnectorService } from "../../services/connectors"
 import { createMainLogger, logStore } from "../../services/log-store"
 import type { AgentRelayService } from "../../services/relay"
 import type { SideChannelService } from "../../services/side-channel"
@@ -32,7 +31,6 @@ async function collectOpsStatus(
     webhook: await optional<AutomationIngressService>(resolve, "core.automation-ingress")?.getStatus(),
     relay: await relayStatus(optional<AgentRelayService>(resolve, "core.relay")),
     agent: projectId ? await safeAgentStatus(resolve, projectId) : undefined,
-    feishu: projectId ? await feishuStatus(resolve, projectId) : undefined,
   }
 }
 
@@ -116,20 +114,6 @@ async function agentStatus(
     workspacePath: project.path,
   })
   return container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID).getStatus()
-}
-
-async function feishuStatus(
-  resolve: ServiceResolver,
-  projectId: string,
-) {
-  const service = optional<FeishuConnectorService>(resolve, "core.feishu-connector")
-  if (!service) return undefined
-  const status = await service.getStatus(projectId)
-  return {
-    projectId: status.projectId,
-    configured: status.configured,
-    running: status.running,
-  }
 }
 
 async function relayStatus(service: AgentRelayService | undefined) {

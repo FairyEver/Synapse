@@ -9,8 +9,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import { Label } from "@/components/ui/label"
-import { Switch } from "@/components/ui/switch"
 import {
   ModuleSidebar,
   ModuleSidebarList,
@@ -35,14 +33,12 @@ type AgentSessionSidebarProps = {
   projects: ProjectOption[]
   selectedProjectId?: string
   selectedConversationId?: string
-  followFeishu: boolean
   unreadByConversationId: Record<string, number>
   onCreateSession: (projectId: string, selection: ProviderModelSelection) => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
   onDeleteOthers: (session: SynapseAgentSessionSummary) => void
   onRename: (session: SynapseAgentSessionSummary, name: string) => void | Promise<void>
-  onFollowFeishuChange: (follow: boolean) => void
 }
 
 function AgentSessionSidebar({
@@ -51,14 +47,12 @@ function AgentSessionSidebar({
   projects,
   selectedProjectId,
   selectedConversationId,
-  followFeishu,
   unreadByConversationId,
   onCreateSession,
   onSelect,
   onDelete,
   onDeleteOthers,
   onRename,
-  onFollowFeishuChange,
 }: AgentSessionSidebarProps) {
   const { config } = useAppConfig()
   const sessionsByProject = groupSessionsByProject(sessions)
@@ -66,18 +60,6 @@ function AgentSessionSidebar({
 
   return (
     <ModuleSidebar variant="bare">
-      <div className="flex items-center justify-between px-3">
-        <Label htmlFor="agent-follow-feishu" className="text-xs text-muted-foreground">
-          跟随飞书
-        </Label>
-        <Switch
-          id="agent-follow-feishu"
-          size="sm"
-          data-track="agent-follow-feishu"
-          checked={followFeishu}
-          onCheckedChange={onFollowFeishuChange}
-        />
-      </div>
       <ModuleSidebarList data-track="agent-session-list">
         {projects.length === 0 && archivedSessions.length === 0 ? (
           <Empty className="border-0 px-4 py-8">

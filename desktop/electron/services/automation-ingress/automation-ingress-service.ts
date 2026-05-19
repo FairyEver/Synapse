@@ -23,10 +23,7 @@ import {
   AGENT_RUNTIME_SERVICE_ID,
   type AgentMessage,
 } from "../agent-runtime"
-import { reconstructFeishuReplyContext } from "../connectors"
-import type { FeishuConnectorService } from "../connectors"
 import type { ProcessIsolationResolver } from "../execution-isolation"
-import type { ReplyTarget } from "../reply-target"
 import type { WebhookConfigUpdate, WebhookConfigUpdateResult, WebhookStatus } from "./types"
 
 const CONFIG_ID = "webhook:default"
@@ -54,7 +51,6 @@ export interface AutomationIngressServiceDeps {
   readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
   readonly executionIsolation?: ProcessIsolationResolver
-  readonly feishuConnector?: Pick<FeishuConnectorService, "sendAutomationMessage">
   readonly logger?: StructuredLogger
   readonly now?: () => Date
 }
@@ -400,13 +396,9 @@ export class AutomationIngressService {
       content,
       workspaceKey: stringValue(body.workspaceKey),
       workspacePath: stringValue(body.workspacePath),
-      replyCtx: replyContextFromWebhook(project.projectId, body, sessionKey),
       createdAt: this.isoNow(),
     }
     const result = await agent.send(message)
-    const replyText = result.resultText
-      || (result.error ? summarizeReturnedAgentError(result.error) : undefined)
-    await this.maybeReply(body, message.replyCtx, replyText)
     return {
       status: result.error ? "failed" : "success",
       resultText: result.resultText,
@@ -469,7 +461,6 @@ export class AutomationIngressService {
         ? "success"
         : "failed"
     const replyText = output || result.error || statusText
-    await this.maybeReply(body, replyContextFromWebhook(project.projectId, body, run.sessionKey), replyText)
     if (statusText !== "success") {
       throw new WebhookError(statusText, result.error ?? replyText, result.timedOut ? 504 : 500)
     }
@@ -478,23 +469,6 @@ export class AutomationIngressService {
       resultText: truncate(replyText),
       exitCode: result.exitCode,
     }
-  }
-
-  private async maybeReply(
-    body: Record<string, unknown>,
-    replyCtx: unknown,
-    content: string | undefined,
-  ): Promise<void> {
-    if (body.mute === true || body.silent === true || !content?.trim() || !this.deps.feishuConnector) return
-    const ctx = recordValue(replyCtx)
-    if (!ctx || ctx.kind !== "feishu") return
-    const target: ReplyTarget = {
-      projectId: stringValue(ctx.projectId) ?? "",
-      sessionKey: stringValue(ctx.sessionKey) ?? "",
-      transport: { kind: "feishu", connectorId: stringValue(ctx.connectorId) },
-      replyCtx: ctx,
-    }
-    await this.deps.feishuConnector.sendAutomationMessage(target, truncate(content))
   }
 
   private authenticated(
@@ -658,29 +632,6 @@ function statusFromConfig(
     serviceRestartRequired: config.serviceRestartRequired,
     lastError: config.lastError,
   }
-}
-
-function replyContextFromWebhook(
-  projectId: string,
-  body: Record<string, unknown>,
-  sessionKey: string | undefined,
-): Record<string, unknown> | undefined {
-  const explicit = recordValue(body.replyCtx)
-  if (explicit) {
-    return body.mute === true ? { ...explicit, muted: true } : explicit
-  }
-  if (!sessionKey) return undefined
-  const connectorId = stringValue(body.connectorId)
-  const reconstructed = connectorId
-    ? reconstructFeishuReplyContext({
-      projectId,
-      connectorId,
-      sessionKey,
-      messageId: stringValue(body.messageId),
-    })
-    : null
-  if (!reconstructed) return body.mute === true ? { muted: true } : undefined
-  return body.mute === true ? { ...reconstructed, muted: true } : reconstructed
 }
 
 function appendPayloadContext(prompt: string, payload: unknown): string {

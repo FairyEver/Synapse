@@ -172,11 +172,6 @@ const statusSchema = z.object({
     queuedTurns: z.number(),
     pendingPermissions: z.number(),
   }).optional(),
-  feishu: z.object({
-    projectId: z.string(),
-    configured: z.boolean(),
-    running: z.boolean(),
-  }).optional(),
 })
 
 type DiagnosticsRequest = z.infer<typeof diagnosticsRequestSchema>

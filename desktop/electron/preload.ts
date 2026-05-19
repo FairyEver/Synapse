@@ -148,21 +148,6 @@ const IPC_CHANNELS = {
     "getAvailableAgents": "synapse:agent:get-available-agents",
     "event": "synapse:events:agent",
   },
-  "connectors": {
-    "feishuBeginSetup": "synapse:connectors:feishu:begin-setup",
-    "feishuPollSetup": "synapse:connectors:feishu:poll-setup",
-    "feishuSaveSetup": "synapse:connectors:feishu:save-setup",
-    "feishuSaveManualCredentials": "synapse:connectors:feishu:save-manual-credentials",
-    "feishuGetStatus": "synapse:connectors:feishu:get-status",
-    "feishuStart": "synapse:connectors:feishu:start",
-    "feishuStop": "synapse:connectors:feishu:stop",
-    "feishuList": "synapse:connectors:feishu:list",
-    "feishuGetWorkspaceConfig": "synapse:connectors:feishu:workspace-config:get",
-    "feishuUpdateWorkspaceConfig": "synapse:connectors:feishu:workspace-config:update",
-    "feishuListWorkspaceBindings": "synapse:connectors:feishu:workspace-bindings:list",
-    "feishuRouteWorkspaceBinding": "synapse:connectors:feishu:workspace-bindings:route",
-    "feishuUnbindWorkspaceBinding": "synapse:connectors:feishu:workspace-bindings:unbind",
-  },
   "task-scheduler": {
     "listTasks": "synapse:task-scheduler:tasks:list",
     "getTask": "synapse:task-scheduler:tasks:get",
@@ -697,36 +682,6 @@ const synapseBridge: SynapseBridge = {
       subscribe,
       EVENT_CHANNELS.agent.event,
     ),
-  },
-  connectors: {
-    feishu: {
-      beginSetup: (projectId) =>
-        invoke(IPC_CHANNELS.connectors.feishuBeginSetup)({ projectId }),
-      pollSetup: (setupId) =>
-        invoke(IPC_CHANNELS.connectors.feishuPollSetup)({ setupId }),
-      saveSetup: (setupId) =>
-        invoke(IPC_CHANNELS.connectors.feishuSaveSetup)({ setupId }),
-      saveManualCredentials: (payload) =>
-        invoke(IPC_CHANNELS.connectors.feishuSaveManualCredentials)(payload),
-      getStatus: (projectId) =>
-        invoke(IPC_CHANNELS.connectors.feishuGetStatus)({ projectId }),
-      start: (projectId) =>
-        invoke(IPC_CHANNELS.connectors.feishuStart)({ projectId }),
-      stop: (projectId) =>
-        invoke(IPC_CHANNELS.connectors.feishuStop)({ projectId }),
-      list: (projectId) =>
-        invoke(IPC_CHANNELS.connectors.feishuList)({ projectId }),
-      getWorkspaceConfig: (projectId) =>
-        invoke(IPC_CHANNELS.connectors.feishuGetWorkspaceConfig)({ projectId }),
-      updateWorkspaceConfig: (payload) =>
-        invoke(IPC_CHANNELS.connectors.feishuUpdateWorkspaceConfig)(payload),
-      listWorkspaceBindings: (projectId) =>
-        invoke(IPC_CHANNELS.connectors.feishuListWorkspaceBindings)({ projectId }),
-      routeWorkspaceBinding: (payload) =>
-        invoke(IPC_CHANNELS.connectors.feishuRouteWorkspaceBinding)(payload),
-      unbindWorkspaceBinding: (payload) =>
-        invoke(IPC_CHANNELS.connectors.feishuUnbindWorkspaceBinding)(payload),
-    },
   },
   ops: {
     diagnostics: (payload) => invoke(IPC_CHANNELS.ops.diagnostics)(payload ?? {}),

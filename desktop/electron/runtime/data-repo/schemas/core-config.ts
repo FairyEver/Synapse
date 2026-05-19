@@ -7,7 +7,7 @@
  *
  * T2.7: core.config v0 -> v1 (adds schemaVersion field).
  * T2.8: core.identity / repo.pending-pushes / repo.repositories.
- * T2.9: secrets / providers / projects / connectors / conversations / audit / outbox placeholders.
+ * T2.9: secrets / providers / projects / conversations / audit / outbox placeholders.
  *
  * SPEC §1 Level 3 decision (REPORT 3.2): existing services (configStore etc.)
  * keep their JSON IO for now; the schemas here exist so DataRepository can be

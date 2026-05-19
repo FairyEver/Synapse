@@ -33,7 +33,6 @@ export {
   agentCommandSettingsSchema,
   agentCommandsSchema,
   agentEventsSchema,
-  connectorsSchema,
   conversationsSchema,
   opsDiagnosticsSchema,
   outboxSchema,
@@ -49,7 +48,6 @@ export {
   webhookConfigSchema,
   webhookRunsSchema,
   workflowsSchema,
-  workspaceBindingsSchema,
   type AuditEntryV1,
   type AgentCompressStateEntryV1,
   type AgentCompressStatusV1,
@@ -58,13 +56,6 @@ export {
   type AgentCommandSettingsEntryV1,
   type AgentCommandSourceV1,
   type AgentEventEntryV1,
-  type ConnectorAllowlistV1,
-  type ConnectorDedupeStateV1,
-  type ConnectorEntryV1,
-  type ConnectorReconnectStateV1,
-  type ConnectorSessionKeyPolicyV1,
-  type ConnectorStatusV1,
-  type ConnectorWorkspaceConfigV1,
   type ConversationEntryV1,
   type ConversationResumePolicyV1,
   type ConversationUsageV1,
@@ -95,7 +86,6 @@ export {
   type WebhookRunEntryV1,
   type WebhookRunStatusV1,
   type WorkflowEntryV1,
-  type WorkspaceBindingEntryV1,
 } from "./placeholders"
 
 import { coreConfigSchema } from "./core-config"
@@ -109,7 +99,6 @@ import {
   agentCommandSettingsSchema,
   agentCommandsSchema,
   agentEventsSchema,
-  connectorsSchema,
   conversationsSchema,
   opsDiagnosticsSchema,
   outboxSchema,
@@ -125,7 +114,6 @@ import {
   webhookConfigSchema,
   webhookRunsSchema,
   workflowsSchema,
-  workspaceBindingsSchema,
 } from "./placeholders"
 import type { NamespaceSchema } from "../types"
 
@@ -139,7 +127,6 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   secretsSchema,
   providersSchema,
   projectsSchema,
-  workspaceBindingsSchema,
   agentCommandsSchema,
   agentCommandSettingsSchema,
   agentCompressStateSchema,
@@ -154,7 +141,6 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   relayRunsSchema,
   opsDiagnosticsSchema,
   workflowsSchema,
-  connectorsSchema,
   conversationsSchema,
   auditSchema,
   outboxSchema,

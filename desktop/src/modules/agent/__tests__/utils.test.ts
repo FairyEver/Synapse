@@ -28,12 +28,12 @@ describe("agent utils", () => {
     expect(agentCliLabel(undefined)).toBeUndefined()
   })
 
-  it("uses source labels for Feishu session rows", () => {
+  it("uses source labels for unnamed external session rows", () => {
     expect(sessionLabel({
       projectId: "project-1",
-      id: "feishu-conv",
-      sessionKey: "feishu:oc_group:ou_user",
-      platform: "feishu",
+      id: "external-conv",
+      sessionKey: "external:group:user",
+      platform: "external",
       sourceLabel: "Dev Group / User One",
       active: true,
       historyCount: 0,

@@ -1,5 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from "react"
-import { createRendererLogger } from "@/app-shell/logging"
+import { useEffect, useReducer, useRef } from "react"
 import type {
   SynapseAgentPendingPermission,
   SynapseAgentPermissionMode,
@@ -17,8 +16,6 @@ import { useChatConnection } from "./use-chat-connection"
 import type { SendMessageTarget } from "./use-chat-connection"
 import { useChatEvents } from "./use-chat-events"
 
-const logger = createRendererLogger("agent")
-
 type UseAgentChatState = {
   sessions: SynapseAgentSessionSummary[]
   archivedSessions: SynapseAgentSessionSummary[]
@@ -27,8 +24,6 @@ type UseAgentChatState = {
   status: SynapseAgentStatus | null
   providers: SynapseAgentProviderState | null
   commands: SynapseAgentPublishedCommand[]
-  followFeishu: boolean
-  setFollowFeishu: (follow: boolean) => void
   unreadByConversationId: UnreadState
   selectedProjectId?: string
   selectedConversationId?: string
@@ -59,7 +54,7 @@ type UseAgentChatState = {
 
 function useAgentChat(
   projectScope: AgentProjectScope,
-  options: { readonly inputDirty?: boolean } = {},
+  _options: { readonly inputDirty?: boolean } = {},
 ): UseAgentChatState {
   const [state, dispatch] = useReducer(chatReducer, initialChatState)
   const {
@@ -70,7 +65,6 @@ function useAgentChat(
     status,
     providers,
     commands,
-    followFeishu,
     unreadByConversationId,
     selectedProjectId,
     selectedConversationId,
@@ -82,8 +76,6 @@ function useAgentChat(
     currentConversationModel,
   } = state
 
-  const followFeishuRef = useRef(followFeishu)
-  const inputDirtyRef = useRef(options.inputDirty ?? false)
   const projectIdsRef = useRef(projectScope.projectIds)
   const defaultProjectIdRef = useRef(projectScope.defaultProjectId)
   const selectedProjectIdRef = useRef<string | undefined>(selectedProjectId)
@@ -95,8 +87,6 @@ function useAgentChat(
 
   const projectIdsKey = projectScope.projectIds.join("\0")
 
-  followFeishuRef.current = followFeishu
-  inputDirtyRef.current = options.inputDirty ?? false
   projectIdsRef.current = projectScope.projectIds
   defaultProjectIdRef.current = projectScope.defaultProjectId
   selectedProjectIdRef.current = selectedProjectId
@@ -116,24 +106,7 @@ function useAgentChat(
 
   const connection = useChatConnection(state, dispatch, connectionRefs)
 
-  const eventRefs = {
-    ...connectionRefs,
-    followFeishuRef,
-    inputDirtyRef,
-  }
-
-  useChatEvents(state, dispatch, eventRefs, connection, projectIdsKey)
-
-  const setFollowFeishu = useCallback((follow: boolean) => {
-    followFeishuRef.current = follow
-    dispatch({ type: "SET_FOLLOW_FEISHU", followFeishu: follow })
-    logger.info("Agent follow Feishu changed.", {
-      followFeishu: follow,
-      selectedProjectId: selectedProjectIdRef.current,
-      selectedConversationId: selectedConversationIdRef.current,
-      selectedSessionKey: selectedSessionKeyRef.current,
-    })
-  }, [])
+  useChatEvents(state, dispatch, connectionRefs, connection, projectIdsKey)
 
   const { clearTimeline, setSelectedSession, loadArchivedSessions, refresh } = connection
 
@@ -159,8 +132,6 @@ function useAgentChat(
     status,
     providers,
     commands,
-    followFeishu,
-    setFollowFeishu,
     unreadByConversationId,
     selectedProjectId,
     selectedConversationId,

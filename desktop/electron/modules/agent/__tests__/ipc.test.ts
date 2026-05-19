@@ -693,13 +693,13 @@ describe("agentIpcModule", () => {
     expect(JSON.stringify(details)).not.toContain("deploy secret-token")
   })
 
-  it("returns readable source labels for Feishu sessions", async () => {
+  it("returns readable source labels for external sessions", async () => {
     const listSessions = vi.fn().mockResolvedValue([{
       projectId: "project-1",
-      id: "feishu-conv",
-      sessionKey: "feishu:oc_group:ou_user",
-      platform: "feishu",
-      channelKey: "feishu:oc_group",
+      id: "external-conv",
+      sessionKey: "external:group:user",
+      platform: "external",
+      channelKey: "external:group",
       active: true,
       history: [],
       userMeta: {
@@ -718,14 +718,14 @@ describe("agentIpcModule", () => {
     })).resolves.toEqual([
       expect.objectContaining({
         projectId: "project-1",
-        id: "feishu-conv",
-        platform: "feishu",
+        id: "external-conv",
+        platform: "external",
         sourceLabel: "Dev Group / User One",
       }),
     ])
   })
 
-  it("opens AgentRuntime for configured project ids used by Feishu connectors", async () => {
+  it("opens AgentRuntime for configured project ids used by external sessions", async () => {
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [{
         uuid: "repo-1",
@@ -747,9 +747,9 @@ describe("agentIpcModule", () => {
     } as never)
     const listSessions = vi.fn().mockResolvedValue([{
       projectId: "project-1",
-      id: "feishu-conv",
-      sessionKey: "feishu:oc_group:ou_user",
-      platform: "feishu",
+      id: "external-conv",
+      sessionKey: "external:group:user",
+      platform: "external",
       active: true,
       history: [],
       createdAt: "2026-04-27T00:00:00.000Z",
@@ -764,8 +764,8 @@ describe("agentIpcModule", () => {
     })).resolves.toEqual([
       expect.objectContaining({
         projectId: "project-1",
-        id: "feishu-conv",
-        platform: "feishu",
+        id: "external-conv",
+        platform: "external",
       }),
     ])
     expect(harness.projectContainers.open).toHaveBeenCalledWith("project-1", {

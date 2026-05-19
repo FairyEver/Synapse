@@ -149,27 +149,27 @@ describe("AgentSessionRepository", () => {
 
     const repoA = await repository.getOrCreateActive({
       projectId: "project-1",
-      sessionKey: "feishu:oc_group:ou_user",
-      platform: "feishu",
-      channelKey: "feishu:oc_group",
+      sessionKey: "external:group:user",
+      platform: "external",
+      channelKey: "external:group",
       workspaceKey: "workspace:a",
       workspacePath: "/repo-a",
       content: "hello a",
     })
     const repoB = await repository.getOrCreateActive({
       projectId: "project-1",
-      sessionKey: "feishu:oc_group:ou_user",
-      platform: "feishu",
-      channelKey: "feishu:oc_group",
+      sessionKey: "external:group:user",
+      platform: "external",
+      channelKey: "external:group",
       workspaceKey: "workspace:b",
       workspacePath: "/repo-b",
       content: "hello b",
     })
 
     expect(repoA.id).not.toBe(repoB.id)
-    expect((await repository.getActive("feishu:oc_group:ou_user", "feishu", "workspace:a"))?.id)
+    expect((await repository.getActive("external:group:user", "external", "workspace:a"))?.id)
       .toBe(repoA.id)
-    expect((await repository.getActive("feishu:oc_group:ou_user", "feishu", "workspace:b"))?.id)
+    expect((await repository.getActive("external:group:user", "external", "workspace:b"))?.id)
       .toBe(repoB.id)
     expect(repoA.active).toBe(true)
     expect(repoB.active).toBe(true)

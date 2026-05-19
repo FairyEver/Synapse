@@ -46,14 +46,14 @@ afterEach(() => {
 })
 
 describe("AgentSessionSidebar", () => {
-  it("renders the follow Feishu control and unread marker", () => {
+  it("renders an unread marker for an inactive session", () => {
     const html = renderToStaticMarkup(
       <AgentSessionSidebar
         sessions={[{
           projectId: "project-1",
-          id: "feishu-conv",
-          sessionKey: "feishu:oc_group:ou_user",
-          platform: "feishu",
+          id: "external-conv",
+          sessionKey: "external:group:user",
+          platform: "external",
           sourceLabel: "Dev Group / User One",
           active: false,
           historyCount: 2,
@@ -64,18 +64,15 @@ describe("AgentSessionSidebar", () => {
         projects={[{ id: "project-1", name: "Test Project", path: "/tmp/test" }]}
         selectedProjectId="project-local"
         selectedConversationId="local-conv"
-        followFeishu={true}
-        unreadByConversationId={{ "project-1:feishu-conv": 2 }}
+        unreadByConversationId={{ "project-1:external-conv": 2 }}
         onCreateSession={vi.fn()}
         onSelect={vi.fn()}
         onDelete={vi.fn()}
         onDeleteOthers={vi.fn()}
         onRename={vi.fn()}
-        onFollowFeishuChange={vi.fn()}
       />,
     )
 
-    expect(html).toContain("跟随飞书")
     expect(html).toContain("Dev Group / User One")
     expect(html).toContain("2<span class=\"sr-only\"> 条未读</span>")
   })
@@ -127,14 +124,12 @@ describe("AgentSessionSidebar", () => {
           projects={[{ id: "project-1", name: "Test Project", path: "/tmp/test" }]}
           selectedProjectId="project-1"
           selectedConversationId={undefined}
-          followFeishu={false}
           unreadByConversationId={{}}
           onCreateSession={onCreateSession}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
           onDeleteOthers={vi.fn()}
           onRename={vi.fn()}
-          onFollowFeishuChange={vi.fn()}
         />,
       )
     })
@@ -211,14 +206,12 @@ describe("AgentSessionSidebar", () => {
           projects={[{ id: "project-1", name: "Test Project", path: "/tmp/test" }]}
           selectedProjectId="project-1"
           selectedConversationId={undefined}
-          followFeishu={false}
           unreadByConversationId={{}}
           onCreateSession={onCreateSession}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
           onDeleteOthers={vi.fn()}
           onRename={vi.fn()}
-          onFollowFeishuChange={vi.fn()}
         />,
       )
     })
@@ -269,14 +262,12 @@ describe("AgentSessionSidebar", () => {
           projects={[{ id: "project-1", name: "Test Project", path: "/tmp/test" }]}
           selectedProjectId="project-1"
           selectedConversationId={undefined}
-          followFeishu={false}
           unreadByConversationId={{}}
           onCreateSession={onCreateSession}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
           onDeleteOthers={vi.fn()}
           onRename={vi.fn()}
-          onFollowFeishuChange={vi.fn()}
         />,
       )
     })
@@ -347,14 +338,12 @@ describe("AgentSessionSidebar", () => {
           ]}
           selectedProjectId="project-1"
           selectedConversationId={undefined}
-          followFeishu={false}
           unreadByConversationId={{}}
           onCreateSession={onCreateSession}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
           onDeleteOthers={vi.fn()}
           onRename={vi.fn()}
-          onFollowFeishuChange={vi.fn()}
         />,
       )
     })

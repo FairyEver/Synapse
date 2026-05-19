@@ -6,7 +6,6 @@ import {
   agentCommandSettingsSchema,
   agentCommandsSchema,
   agentEventsSchema,
-  connectorsSchema,
   conversationsSchema,
   coreConfigSchema,
   coreIdentitySchema,
@@ -26,7 +25,6 @@ import {
   taskSchedulerTasksSchema,
   webhookConfigSchema,
   webhookRunsSchema,
-  workspaceBindingsSchema,
 } from "../index"
 
 describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
@@ -39,7 +37,6 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "agent.commands",
         "agent.compress_state",
         "agent.events",
-        "connectors",
         "conversations",
         "core.config",
         "core.identity",
@@ -59,7 +56,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "task-scheduler.tasks",
         "webhook.config",
         "webhook.runs",
-        "workspace.bindings",
+        "workflows",
       ].sort(),
     )
   })
@@ -81,8 +78,6 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(secretsSchema.backend).toBe("encrypted-json")
     expect(providersSchema.backend).toBe("json")
     expect(projectsSchema.backend).toBe("json")
-    expect(workspaceBindingsSchema.backend).toBe("json")
-    expect(connectorsSchema.backend).toBe("json")
     expect(conversationsSchema.backend).toBe("sqlite")
     expect(auditSchema.backend).toBe("jsonl")
     expect(outboxSchema.backend).toBe("sqlite")
@@ -170,37 +165,12 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       }),
     ).toBe(true)
     expect(
-      connectorsSchema.validate({
-        id: "c1",
-        schemaVersion: 1,
-        projectId: "proj-1",
-        platform: "feishu",
-        status: "connected",
-        allowlist: { mode: "users", userIds: ["u1"], adminIds: ["u1"] },
-        sessionKeyPolicy: { mode: "per-user" },
-        workspaceConfig: { enabled: true, baseDir: "/tmp/workspaces" },
-      }),
-    ).toBe(true)
-    expect(
-      workspaceBindingsSchema.validate({
-        id: "wb-1",
-        schemaVersion: 1,
-        projectId: "proj-1",
-        scope: "project",
-        platform: "feishu",
-        channelKey: "feishu:oc_group",
-        workspacePath: "/tmp/workspaces/backend",
-        boundAt: "2026-04-25T00:00:00Z",
-        updatedAt: "2026-04-25T00:00:00Z",
-      }),
-    ).toBe(true)
-    expect(
       conversationsSchema.validate({
         id: "conv-1",
         schemaVersion: 1,
         projectId: "proj-1",
-        sessionKey: "feishu:u1",
-        channelKey: "feishu:u1",
+        sessionKey: "external:u1",
+        channelKey: "external:u1",
         workspaceKey: "workspace:abc",
         workspacePath: "/tmp/workspaces/backend",
         history: [
@@ -255,7 +225,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         id: "job-1",
         schemaVersion: 1,
         projectId: "proj-1",
-        destination: { platform: "feishu", sessionKey: "feishu:u1" },
+        destination: { platform: "external", sessionKey: "external:u1" },
         payload: { kind: "text", content: "done" },
         attempts: 0,
         status: "pending",
@@ -365,16 +335,6 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
 
   it("business schemas reject missing project/session/status/outcome fields", () => {
     expect(
-      connectorsSchema.validate({
-        id: "c1",
-        schemaVersion: 1,
-        platform: "feishu",
-        status: "connected",
-        allowlist: { mode: "all" },
-        sessionKeyPolicy: { mode: "per-user" },
-      }),
-    ).toBe(false)
-    expect(
       conversationsSchema.validate({
         id: "conv-1",
         schemaVersion: 1,
@@ -400,7 +360,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
       outboxSchema.validate({
         id: "job-1",
         schemaVersion: 1,
-        destination: { platform: "feishu" },
+        destination: { platform: "external" },
         payload: { kind: "text" },
         attempts: 0,
         status: "pending",

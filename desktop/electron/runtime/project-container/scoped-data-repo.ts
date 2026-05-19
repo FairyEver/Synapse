@@ -16,7 +16,6 @@ import type { ProjectScopedDataRepo } from "./types"
 
 const PROJECT_SCOPED_NAMES = new Set([
   "providers",
-  "connectors",
   "conversations",
   "outbox",
   "audit",

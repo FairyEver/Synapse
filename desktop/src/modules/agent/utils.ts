@@ -8,7 +8,6 @@ const DEFAULT_LOCAL_SESSION_KEY = "local:renderer"
 const THINKING_DOT = "·"
 
 function sessionLabel(session: SynapseAgentSessionSummary): string {
-  if (session.platform === "feishu" && session.sourceLabel) return session.sourceLabel
   return session.name || session.sourceLabel || session.sessionKey || DEFAULT_LOCAL_SESSION_KEY
 }
 

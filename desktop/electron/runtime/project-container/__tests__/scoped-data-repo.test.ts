@@ -43,7 +43,7 @@ describe("ProjectScopedDataRepoImpl (Phase 0.7)", () => {
     const p1 = new ProjectScopedDataRepoImpl("p1", repo)
 
     await expect(
-      p1.namespace<Item>("connectors").upsert({
+      p1.namespace<Item>("conversations").upsert({
         id: "conn-1",
         projectId: "p2",
       }),

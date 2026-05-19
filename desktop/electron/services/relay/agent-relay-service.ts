@@ -13,8 +13,6 @@ import {
   AGENT_RUNTIME_SERVICE_ID,
   type AgentMessage,
 } from "../agent-runtime"
-import type { FeishuConnectorService } from "../connectors"
-import type { ReplyTarget } from "../reply-target"
 import type { SideChannelService } from "../side-channel"
 import type { RelayProjectSummary, RelaySendRequest, RelaySendResult } from "./types"
 
@@ -27,7 +25,6 @@ export interface AgentRelayServiceDeps {
   readonly runs: DataNamespace<RelayRunEntryV1>
   readonly listProjects: () => Promise<readonly RelayProjectSummary[]>
   readonly sideChannel?: SideChannelService
-  readonly feishuConnector?: Pick<FeishuConnectorService, "sendAutomationMessage">
   readonly auditSink?: AuditSink
   readonly logger?: StructuredLogger
   readonly now?: () => Date
@@ -45,15 +42,6 @@ export class AgentRelayService {
     const target = await this.resolveProject(request.targetProjectId)
     const targetSessionKey = relaySessionKey(request.sourceProjectId, request.sourceSessionKey)
     const run = await this.createRun(request, targetSessionKey)
-    const sourceTarget = this.deps.sideChannel?.getReplyTarget(
-      request.sourceProjectId,
-      request.sourceSessionKey,
-    )
-
-    if (request.visible && sourceTarget) {
-      await this.trySendVisible(sourceTarget, `Relay started: ${target.name ?? target.projectId}`)
-    }
-
     try {
       const container = await this.deps.projectContainers.open(target.projectId, {
         name: target.name,
@@ -106,12 +94,6 @@ export class AgentRelayService {
         lastError: failure?.summary,
       })
       this.recordAudit(status === "success" ? "allowed" : "failed", request, run.id, failure?.summary)
-      if (request.visible && sourceTarget) {
-        const visibleText = result.timedOut
-          ? result.partialText || "Relay is still running."
-          : result.resultText || (failure ? "Relay failed. Check diagnostics." : "Relay completed.")
-        await this.trySendVisible(sourceTarget, `Relay result: ${truncate(visibleText)}`)
-      }
       return {
         ok: true,
         runId: run.id,
@@ -241,22 +223,6 @@ export class AgentRelayService {
     const project = (await this.deps.listProjects()).find((item) => item.projectId === projectId)
     if (!project) throw new Error(`Project "${projectId}" was not found`)
     return project
-  }
-
-  private async trySendVisible(target: ReplyTarget, content: string): Promise<void> {
-    if (target.transport.kind !== "feishu" || !this.deps.feishuConnector) return
-    try {
-      await this.deps.feishuConnector.sendAutomationMessage(target, content)
-    } catch (error) {
-      const failure = relayFailureMetadata(error)
-      this.deps.logger?.warn("Relay visible record failed.", {
-        boundary: "agent-relay.visible-reply",
-        projectId: target.projectId,
-        sessionKey: target.sessionKey,
-        errorName: failure.errorName,
-        errorLength: failure.errorLength,
-      })
-    }
   }
 
   private recordAudit(

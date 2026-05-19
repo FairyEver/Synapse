@@ -154,7 +154,7 @@ describe("useChatEvents", () => {
           requestId: "req-1",
           toolName: "test_tool",
           toolInput: "{}",
-          toolInputRaw: "{}",
+          toolInputRaw: {},
         },
       },
     }
@@ -257,8 +257,6 @@ function HookProbe({
   const selectRequestIdRef = useRef(0)
   const timelineVersionRef = useRef(0)
   const pendingConversationIdsRef = useRef(new Set<string>())
-  const followFeishuRef = useRef(false)
-  const inputDirtyRef = useRef(false)
   const state = useMemo<ChatState>(() => ({
     ...initialChatState,
     selectedProjectId: "project-1",
@@ -281,8 +279,6 @@ function HookProbe({
     selectRequestIdRef,
     timelineVersionRef,
     pendingConversationIdsRef,
-    followFeishuRef,
-    inputDirtyRef,
   }, connection, "project-1")
 
   return null

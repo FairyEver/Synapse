@@ -10,59 +10,13 @@ import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtim
 import { InMemoryAuditSink } from "../../../runtime/security"
 import type { StructuredLogger } from "../../../runtime/service-registry"
 import type { AgentRuntimeService } from "../../agent-runtime"
-import type { FeishuConnectorService } from "../../connectors"
-import type { ReplyTarget } from "../../reply-target"
-import type { SideChannelService } from "../../side-channel"
 import { AgentRelayService } from "../agent-relay-service"
 
 describe("AgentRelayService", () => {
-  it("logs visible reply failures with relay context without raw error text", async () => {
-    const logger = fakeLogger()
-    const service = new AgentRelayService({
-      projectContainers: fakeProjectContainers(successAgent("relay result body")),
-      bindings: new MemoryNamespace<RelayBindingEntryV1>("relay.bindings"),
-      runs: new MemoryNamespace<RelayRunEntryV1>("relay.runs"),
-      listProjects: async () => [
-        { projectId: "source", name: "Source" },
-        { projectId: "target", name: "Target" },
-      ],
-      sideChannel: fakeSideChannel(),
-      feishuConnector: {
-        sendAutomationMessage: async () => {
-          throw new Error("feishu failed with secret prompt body")
-        },
-      } as Pick<FeishuConnectorService, "sendAutomationMessage">,
-      logger,
-      now: () => new Date("2026-05-14T00:00:00.000Z"),
-    })
-
-    await expect(service.send({
-      sourceProjectId: "source",
-      sourceSessionKey: "bridge:s1",
-      targetProjectId: "target",
-      message: "user prompt body",
-      visible: true,
-    })).resolves.toMatchObject({
-      resultText: "relay result body",
-      targetSessionKey: "relay:source:bridge:s1",
-    })
-
-    expect(logger.warn).toHaveBeenCalledWith("Relay visible record failed.", {
-      boundary: "agent-relay.visible-reply",
-      projectId: "source",
-      sessionKey: "bridge:s1",
-      errorName: "Error",
-      errorLength: 37,
-    })
-    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret prompt body")
-    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("user prompt body")
-  })
-
   it("logs relay Agent runtime failures with correlation context without persisting raw error text", async () => {
     const runs = new MemoryNamespace<RelayRunEntryV1>("relay.runs")
     const auditSink = new InMemoryAuditSink()
     const logger = fakeLogger()
-    const visibleMessages: string[] = []
     const service = new AgentRelayService({
       projectContainers: fakeProjectContainers(failingAgent("relay failed with secret prompt body")),
       bindings: new MemoryNamespace<RelayBindingEntryV1>("relay.bindings"),
@@ -71,12 +25,6 @@ describe("AgentRelayService", () => {
         { projectId: "source", name: "Source" },
         { projectId: "target", name: "Target" },
       ],
-      sideChannel: fakeSideChannel(),
-      feishuConnector: {
-        sendAutomationMessage: async (_target, content) => {
-          visibleMessages.push(content)
-        },
-      } as Pick<FeishuConnectorService, "sendAutomationMessage">,
       auditSink,
       logger,
       now: () => new Date("2026-05-14T00:00:00.000Z"),
@@ -87,7 +35,6 @@ describe("AgentRelayService", () => {
       sourceSessionKey: "bridge:s1",
       targetProjectId: "target",
       message: "user prompt body",
-      visible: true,
     })).rejects.toThrow("relay failed with secret prompt body")
 
     const run = (await runs.list())[0]
@@ -116,13 +63,9 @@ describe("AgentRelayService", () => {
       sourceSessionKey: "bridge:s1",
       targetProjectId: "target",
     })
-    expect(visibleMessages).toEqual([
-      "Relay started: Target",
-      "Relay failed. Check diagnostics.",
-    ])
-    expect(JSON.stringify({ run, audit: auditSink.list(), visibleMessages, logs: logger.warn.mock.calls }))
+    expect(JSON.stringify({ run, audit: auditSink.list(), logs: logger.warn.mock.calls }))
       .not.toContain("secret prompt body")
-    expect(JSON.stringify({ run, audit: auditSink.list(), visibleMessages, logs: logger.warn.mock.calls }))
+    expect(JSON.stringify({ run, audit: auditSink.list(), logs: logger.warn.mock.calls }))
       .not.toContain("user prompt body")
   })
 
@@ -257,17 +200,6 @@ function errorResultAgent(message: string): Pick<AgentRuntimeService, "sendSideS
       error: message,
     }),
   }
-}
-
-function fakeSideChannel(): SideChannelService {
-  return {
-    getReplyTarget: () => ({
-      projectId: "source",
-      sessionKey: "bridge:s1",
-      transport: { kind: "feishu", connectorId: "feishu-1" },
-      replyCtx: {},
-    }) satisfies ReplyTarget,
-  } as unknown as SideChannelService
 }
 
 function fakeLogger(): StructuredLogger & { warn: ReturnType<typeof vi.fn> } {

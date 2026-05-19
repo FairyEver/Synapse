@@ -326,61 +326,6 @@ describe("AutomationIngressService", () => {
     await service.stop()
   })
 
-  it("summarizes webhook prompt agent errors before sending automation replies", async () => {
-    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
-    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
-    const errorText = "SDK failed for api_key=sk-ant-test123456 secret prompt"
-    const sanitizedErrorText = "SDK failed for api_key=[redacted] secret prompt"
-    const safeErrorText = `执行失败：${sanitizedErrorText}`
-    const sendAutomationMessage = vi.fn(async () => {})
-    const service = new AutomationIngressService({
-      projectContainers: fakeProjectContainers({
-        send: async () => ({ error: errorText }),
-      }),
-      networkRegistry: createNetworkServiceRegistry(),
-      configs,
-      runs,
-      processRunner: unusedProcessRunner(),
-      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
-      feishuConnector: { sendAutomationMessage },
-    })
-    const config = await service.updateConfig({ enabled: true, resetToken: true })
-    await service.start()
-    const status = await service.getStatus()
-
-    const response = await fetch(`http://${status.bindAddress}:${String(status.assignedPort)}${status.path}`, {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.token ?? ""}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        project: "project-1",
-        sessionKey: "local:automation",
-        prompt: "run",
-        replyMode: "wait",
-        replyCtx: {
-          kind: "feishu",
-          projectId: "project-1",
-          sessionKey: "local:automation",
-          connectorId: "feishu-main",
-        },
-      }),
-    })
-
-    expect(response.status).toBe(200)
-    expect(sendAutomationMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        projectId: "project-1",
-        sessionKey: "local:automation",
-      }),
-      safeErrorText,
-    )
-    expect(JSON.stringify(sendAutomationMessage.mock.calls)).not.toContain("sk-ant-test123456")
-
-    await service.stop()
-  })
-
   it("logs thrown webhook prompt runs with run context and redacted error text", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")

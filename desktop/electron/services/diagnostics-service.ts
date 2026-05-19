@@ -744,12 +744,12 @@ class DiagnosticsService {
   }
 
   private async addOpsChecks(checks: SynapseDiagnosticsCheck[], projectId?: string): Promise<void> {
-    await this.capture(checks, "ops.status", "连接器", "运行状态", async () => {
+    await this.capture(checks, "ops.status", "运行", "运行状态", async () => {
       const status = await this.deps.collectOpsStatus(
         (serviceId) => this.deps.serviceRegistry.get(serviceId),
         projectId ? { projectId } : undefined,
       )
-      return this.ok("ops.status", "连接器", "运行状态", "运行状态已读取", status)
+      return this.ok("ops.status", "运行", "运行状态", "运行状态已读取", status)
     })
   }
 

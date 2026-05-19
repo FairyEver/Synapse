@@ -53,7 +53,6 @@ const MODULE_SOURCES = [
   { id: "repository", importPath: "../electron/modules/repository/ipc.ts" },
   { id: "update", importPath: "../electron/modules/update/ipc.ts" },
   { id: "agent", importPath: "../electron/modules/agent/ipc.ts" },
-  { id: "connectors", importPath: "../electron/modules/connectors/ipc.ts" },
   { id: "task-scheduler", importPath: "../electron/modules/task-scheduler/ipc.ts" },
   { id: "ops", importPath: "../electron/modules/ops/ipc.ts" },
   { id: "license", importPath: "../electron/modules/license/ipc.ts" },

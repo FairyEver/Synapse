@@ -36,19 +36,6 @@ import type {
 } from "./backup"
 import type { SynapseConfig, SynapseConfigPatch } from "./config"
 import type {
-  SynapseFeishuConnectorRuntimeStatus,
-  SynapseFeishuConnectorSummary,
-  SynapseFeishuManualCredentialsPayload,
-  SynapseFeishuSetupBeginResult,
-  SynapseFeishuSetupPollResult,
-  SynapseFeishuWorkspaceBinding,
-  SynapseFeishuWorkspaceBindingsSummary,
-  SynapseFeishuWorkspaceConfig,
-  SynapseFeishuWorkspaceConfigPayload,
-  SynapseFeishuWorkspaceRoutePayload,
-  SynapseFeishuWorkspaceUnbindPayload,
-} from "./connectors"
-import type {
   SynapseContentDownloadResult,
   SynapseContentDetail,
   SynapseContentHistoryEntry,
@@ -200,11 +187,6 @@ export type SynapseOpsDiagnostics = {
     busySessions: number
     queuedTurns: number
     pendingPermissions: number
-  }
-  feishu?: {
-    projectId: string
-    configured: boolean
-    running: boolean
   }
 }
 
@@ -679,33 +661,6 @@ export type SynapseBridge = {
     listCommands: (projectId: string) => Promise<SynapseAgentPublishedCommand[]>
     openReference: (args: { projectId: string; reference: string }) => Promise<{ ok: true; path: string }>
     onEvent: (listener: (event: SynapseAgentDomainEvent) => void) => () => void
-  }
-  connectors: {
-    feishu: {
-      beginSetup: (projectId: string) => Promise<SynapseFeishuSetupBeginResult>
-      pollSetup: (setupId: string) => Promise<SynapseFeishuSetupPollResult>
-      saveSetup: (setupId: string) => Promise<SynapseFeishuConnectorSummary>
-      saveManualCredentials: (
-        payload: SynapseFeishuManualCredentialsPayload,
-      ) => Promise<SynapseFeishuConnectorSummary>
-      getStatus: (projectId: string) => Promise<SynapseFeishuConnectorRuntimeStatus>
-      start: (projectId: string) => Promise<SynapseFeishuConnectorRuntimeStatus>
-      stop: (projectId: string) => Promise<SynapseFeishuConnectorRuntimeStatus>
-      list: (projectId: string) => Promise<SynapseFeishuConnectorSummary[]>
-      getWorkspaceConfig: (projectId: string) => Promise<SynapseFeishuWorkspaceConfig>
-      updateWorkspaceConfig: (
-        payload: SynapseFeishuWorkspaceConfigPayload,
-      ) => Promise<SynapseFeishuWorkspaceConfig>
-      listWorkspaceBindings: (
-        projectId: string,
-      ) => Promise<SynapseFeishuWorkspaceBindingsSummary>
-      routeWorkspaceBinding: (
-        payload: SynapseFeishuWorkspaceRoutePayload,
-      ) => Promise<SynapseFeishuWorkspaceBinding>
-      unbindWorkspaceBinding: (
-        payload: SynapseFeishuWorkspaceUnbindPayload,
-      ) => Promise<{ ok: true }>
-    }
   }
   ops: {
     diagnostics: (payload?: { projectId?: string }) => Promise<SynapseOpsDiagnostics>

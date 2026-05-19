@@ -54,7 +54,6 @@ import {
 import { ProviderReferenceScanner } from "../services/provider/provider-reference-scanner"
 import type { ConversationEntryV1 } from "../runtime/data-repo"
 import { BridgeAdapterService } from "../services/bridge-adapter"
-import { FeishuConnectorService } from "../services/connectors"
 import { SideChannelService } from "../services/side-channel"
 import { ExecutionIsolationService } from "../services/execution-isolation"
 import { AgentRelayService } from "../services/relay"
@@ -86,7 +85,6 @@ import type { NetworkServiceRegistry } from "../runtime/network"
 import { createNetworkServiceRegistry, sendOutboundHttpRequest } from "../runtime/network"
 import type { ProjectContainerRegistry } from "../runtime/project-container"
 import { createProjectContainerRegistry } from "../runtime/project-container"
-import { migrateRepositoryScopedConnectorData } from "./project-scope-migration"
 import { databaseService } from "../database/service"
 import { getHttpPort } from "../database/http-server"
 import { getCliDebugInfo } from "../database/cli-installer"
@@ -943,20 +941,17 @@ export const coreRelayDescriptor: ServiceDescriptor<AgentRelayService> = {
   dependsOn: [
     "core.project-containers",
     "core.side-channel",
-    "core.feishu-connector",
     "core.data-repository",
     "core.audit-sink",
   ],
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
     const sideChannel = ctx.registry.get<SideChannelService>("core.side-channel")
-    const feishuConnector = ctx.registry.get<FeishuConnectorService>("core.feishu-connector")
     const service = new AgentRelayService({
       projectContainers: ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
       bindings: dataRepository.namespace("relay.bindings"),
       runs: dataRepository.namespace("relay.runs"),
       sideChannel,
-      feishuConnector,
       listProjects: listConfiguredProjects,
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       logger: ctx.logger.child("relay"),
@@ -980,7 +975,6 @@ export const coreRelayDescriptor: ServiceDescriptor<AgentRelayService> = {
         metadata: context.request.metadata,
       })
     })
-    feishuConnector.registerRelayService(service)
     return service
   },
 }
@@ -995,7 +989,6 @@ export const coreAutomationIngressDescriptor: ServiceDescriptor<AutomationIngres
     "core.permission-guard",
     "core.audit-sink",
     "core.execution-isolation",
-    "core.feishu-connector",
   ],
   create(ctx) {
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
@@ -1011,7 +1004,6 @@ export const coreAutomationIngressDescriptor: ServiceDescriptor<AutomationIngres
       permissionGuard,
       auditSink,
       executionIsolation: ctx.registry.get<ExecutionIsolationService>("core.execution-isolation"),
-      feishuConnector: ctx.registry.get<FeishuConnectorService>("core.feishu-connector"),
       logger: ctx.logger.child("automation-ingress"),
     })
   },
@@ -1026,38 +1018,6 @@ export const coreAutomationIngressDescriptor: ServiceDescriptor<AutomationIngres
 function timeoutMinsToMs(value: number | undefined): number | undefined {
   if (value === undefined) return undefined
   return value * 60_000
-}
-
-export const coreFeishuConnectorDescriptor: ServiceDescriptor<FeishuConnectorService> = {
-  id: "core.feishu-connector",
-  criticality: "degraded",
-  dependsOn: [
-    "core.project-containers",
-    "core.side-channel",
-    "core.data-repository",
-    "core.permission-guard",
-    "core.audit-sink",
-  ],
-  async create(ctx) {
-    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
-    const config = await configStore.load()
-    await migrateRepositoryScopedConnectorData(dataRepository, config, ctx.logger.child("project-scope-migration"))
-    return new FeishuConnectorService({
-      projectContainers: ctx.registry.get<ProjectContainerRegistry>("core.project-containers"),
-      sideChannel: ctx.registry.get<SideChannelService>("core.side-channel"),
-      dataRepository,
-      listProjects: listConfiguredProjects,
-      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
-      auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
-      logger: ctx.logger.child("feishu-connector"),
-    })
-  },
-  start(service) {
-    service.start()
-  },
-  stop(service) {
-    return service.stop()
-  },
 }
 
 export const coreTaskSchedulerDescriptor: ServiceDescriptor<TaskSchedulerService> = {

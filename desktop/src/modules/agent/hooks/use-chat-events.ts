@@ -9,7 +9,6 @@ import {
   incrementUnreadForConversation,
   isSelectedConversation,
   shouldApplyPhaseUpdate,
-  shouldAutoFollowConversation,
 } from "../live-sync"
 import type { ChatAction, ChatState } from "./use-chat-reducer"
 import type { ChatConnectionRefs, ChatConnectionResult } from "./use-chat-connection"
@@ -17,10 +16,7 @@ import { errorLogMeta } from "../utils"
 
 const logger = createRendererLogger("agent")
 
-type ChatEventRefs = ChatConnectionRefs & {
-  readonly followFeishuRef: React.RefObject<boolean>
-  readonly inputDirtyRef: React.RefObject<boolean>
-}
+type ChatEventRefs = ChatConnectionRefs
 
 function useChatEvents(
   state: ChatState,
@@ -34,9 +30,6 @@ function useChatEvents(
     selectedProjectIdRef,
     selectedConversationIdRef,
     selectedSessionKeyRef,
-    selectRequestIdRef,
-    followFeishuRef,
-    inputDirtyRef,
     pendingConversationIdsRef,
   } = refs
   const { loadTimeline, refreshConversationSnapshot, refreshPendingPermissions, updateTimeline } = connection
@@ -128,13 +121,6 @@ function useChatEvents(
           sessionKey: selectedSessionKeyRef.current,
         }
         const selectedUpdate = isSelectedConversation(domainEvent.payload, selected)
-        const autoFollow = shouldAutoFollowConversation(domainEvent.payload, {
-          followFeishu: followFeishuRef.current,
-          inputDirty: inputDirtyRef.current,
-          selectedProjectId: selected.projectId,
-          selectedConversationId: selected.conversationId,
-          selectedSessionKey: selected.sessionKey,
-        })
         logger.info("Agent conversation update event received.", {
           projectId: domainEvent.payload.projectId,
           conversationId: domainEvent.payload.conversationId,
@@ -144,22 +130,10 @@ function useChatEvents(
           selectedConversationId: selected.conversationId,
           selectedSessionKey: selected.sessionKey,
           selectedUpdate,
-          autoFollow,
-          followFeishu: followFeishuRef.current,
-          inputDirty: inputDirtyRef.current,
         })
 
         void refreshConversationSnapshot(domainEvent.payload)
-        if (selectedUpdate || autoFollow) {
-          if (autoFollow) {
-            selectRequestIdRef.current += 1
-            selectedProjectIdRef.current = domainEvent.payload.projectId
-            selectedConversationIdRef.current = domainEvent.payload.conversationId
-            selectedSessionKeyRef.current = domainEvent.payload.sessionKey
-            dispatch({ type: "SET_SELECTED_PROJECT_ID", selectedProjectId: domainEvent.payload.projectId })
-            dispatch({ type: "SET_SELECTED_CONVERSATION_ID", selectedConversationId: domainEvent.payload.conversationId })
-            dispatch({ type: "SET_SELECTED_SESSION_KEY", selectedSessionKey: domainEvent.payload.sessionKey })
-          }
+        if (selectedUpdate) {
           dispatch({ type: "UPDATE_UNREAD", updater: (current) => clearConversationUnread(
             current,
             domainEvent.payload.projectId,
@@ -173,7 +147,6 @@ function useChatEvents(
               platform: domainEvent.payload.platform,
               boundary: "renderer.agent.live-timeline",
               selectedUpdate,
-              autoFollow,
               ...errorLogMeta(rawError),
             })
             dispatch({ type: "SET_ERROR", error: "加载会话失败" })
@@ -230,6 +203,16 @@ function useChatEvents(
       // (listPendingPermissions IPC) fails. A subsequent successful refresh
       // will overwrite with the authoritative server state.
       if (event.type === "permissionRequest") {
+        const conversationId = streamEventConversationId(domainEvent)
+        if (!conversationId) {
+          logger.warn("Agent permission request ignored without conversation scope.", {
+            projectId: domainEvent.payload.projectId,
+            sessionKey: domainEvent.payload.sessionKey,
+            platform: domainEvent.payload.platform,
+            requestId: event.requestId,
+          })
+          return
+        }
         dispatch({
           type: "UPDATE_PENDING_PERMISSIONS",
           updater: (current) => {
@@ -238,7 +221,7 @@ function useChatEvents(
               requestId: event.requestId,
               projectId: domainEvent.payload.projectId,
               sessionKey: domainEvent.payload.sessionKey,
-              conversationId: streamEventConversationId(domainEvent),
+              conversationId,
               toolName: event.toolName,
               toolInput: event.toolInput,
               toolInputRaw: event.toolInputRaw,
@@ -262,14 +245,11 @@ function useChatEvents(
     })
   }, [
     dispatch,
-    followFeishuRef,
-    inputDirtyRef,
     loadTimeline,
     projectIdsKey,
     projectIdsRef,
     refreshConversationSnapshot,
     refreshPendingPermissions,
-    selectRequestIdRef,
     selectedConversationIdRef,
     selectedProjectIdRef,
     selectedSessionKeyRef,
