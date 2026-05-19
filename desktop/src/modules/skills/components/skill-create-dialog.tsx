@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   FolderOpen,
   Paperclip,
@@ -230,13 +230,16 @@ function SkillCreateDialog({
   const [isCollectingFiles, setIsCollectingFiles] = useState(false)
   const [isDuplicateWarningOpen, setIsDuplicateWarningOpen] = useState(false)
 
+  useEffect(() => {
+    if (open) return
+    setAttachmentMessage(null)
+    setIsDraggingFiles(false)
+    setIsCollectingFiles(false)
+    setIsDuplicateWarningOpen(false)
+    dragDepthRef.current = 0
+  }, [open])
+
   const handleDialogOpenChange = (nextOpen: boolean) => {
-    if (!nextOpen) {
-      setAttachmentMessage(null)
-      setIsDraggingFiles(false)
-      setIsCollectingFiles(false)
-      dragDepthRef.current = 0
-    }
     baseHandleDialogOpenChange(nextOpen)
   }
 
