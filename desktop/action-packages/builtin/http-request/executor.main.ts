@@ -57,25 +57,54 @@ export function createHttpRequestAction(deps: {
       },
     }),
     execute: async ({ config, context }) => {
-      const response = await sendRequest({
-        method: config.method,
-        url: buildUrl(config),
-        headers: buildHeaders(config),
-        body: buildBody(config),
-        timeoutMs: config.timeoutMins === null ? undefined : (config.timeoutMins ?? 5) * 60_000,
-        abortSignal: context.abortSignal,
-      })
-      return {
-        status: "success",
-        summary: `${String(response.status)} ${response.statusText}`,
-        logs: response.body ? [{ label: "response", value: response.body }] : [],
-        outputs: {
-          status: response.status,
-          statusText: response.statusText,
-          headers: response.headers,
-          body: response.body,
-        },
-        metrics: { httpStatus: response.status },
+      const startMs = Date.now()
+      let url: string
+      try {
+        url = buildUrl(config)
+      } catch {
+        return {
+          status: "failed",
+          error: `无效的 URL：${config.url || "(空)"}`,
+          metrics: { durationMs: Date.now() - startMs },
+        }
+      }
+
+      try {
+        const response = await sendRequest({
+          method: config.method,
+          url,
+          headers: buildHeaders(config),
+          body: buildBody(config),
+          timeoutMs: config.timeoutMins === null ? undefined : (config.timeoutMins ?? 5) * 60_000,
+          abortSignal: context.abortSignal,
+        })
+        return {
+          status: "success",
+          summary: `${String(response.status)} ${response.statusText}`,
+          logs: response.body ? [{ label: "response", value: response.body }] : [],
+          outputs: {
+            status: response.status,
+            statusText: response.statusText,
+            headers: response.headers,
+            body: response.body,
+          },
+          metrics: { httpStatus: response.status, durationMs: Date.now() - startMs },
+        }
+      } catch (err) {
+        if (context.abortSignal.aborted) {
+          return {
+            status: "cancelled",
+            summary: "请求已取消",
+            metrics: { durationMs: Date.now() - startMs },
+          }
+        }
+        const message = err instanceof Error ? err.message : String(err)
+        const isTimeout = message.includes("timeout") || message.includes("aborted")
+        return {
+          status: isTimeout ? "timeout" : "failed",
+          error: isTimeout ? "请求超时" : `请求失败：${message}`,
+          metrics: { durationMs: Date.now() - startMs },
+        }
       }
     },
   }
