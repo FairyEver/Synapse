@@ -49,10 +49,12 @@ function useContentCreateForm<T extends Record<string, unknown>>(
     [logContext?.category],
   )
 
-  const baseline = useMemo(
-    () => normalize(initialValue ?? createEmpty()),
-    [initialValue],
-  )
+  const normalizedValue = normalize(initialValue ?? createEmpty())
+  const baselineRef = useRef(normalizedValue)
+  if (!isDeepEqual(baselineRef.current, normalizedValue)) {
+    baselineRef.current = normalizedValue
+  }
+  const baseline = baselineRef.current
   const [form, setForm] = useState<T>(() => baseline)
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
