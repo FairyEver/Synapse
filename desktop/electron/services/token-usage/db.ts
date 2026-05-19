@@ -6,7 +6,7 @@ import { timestampToLocalHour } from "./parsers/utils"
 
 let db: DatabaseSync | null = null
 
-function getDb(): DatabaseSync {
+export function getDb(): DatabaseSync {
   if (db) return db
   const dbPath = path.join(app.getPath("userData"), "token-usage.db")
   db = new DatabaseSync(dbPath)

@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import { scanAllClients } from "./scanner"
-import { getFingerprint, upsertFingerprint, upsertDailyUsage, upsertHourlyUsage, clearDailyUsageForClient, clearHourlyUsageForClient, clearFingerprintsForClient, clearAllData, setScanMeta } from "./db"
+import { getDb, getFingerprint, upsertFingerprint, upsertDailyUsage, upsertHourlyUsage, clearDailyUsageForClient, clearHourlyUsageForClient, clearFingerprintsForClient, clearAllData, setScanMeta } from "./db"
 import { getGraphResult, getModelReport, getDailyReport, getAgentReport, getHourlyReport, getHourlyProfile } from "./aggregator"
 import { claudeParser } from "./parsers/claude"
 import { codexParser } from "./parsers/codex"
@@ -136,26 +136,30 @@ async function doScan(): Promise<ScanProgress> {
     }
 
     // Phase 3: all files parsed successfully → clear old data, upsert fresh.
-    clearDailyUsageForClient(result.clientId)
-    clearHourlyUsageForClient(result.clientId)
-    clearFingerprintsForClient(result.clientId)
+    // Wrapped in a transaction so a crash between DELETE and UPSERT cannot lose data.
+    const commitClientData = getDb().transaction(() => {
+      clearDailyUsageForClient(result.clientId)
+      clearHourlyUsageForClient(result.clientId)
+      clearFingerprintsForClient(result.clientId)
 
-    for (let i = 0; i < result.files.length; i++) {
-      const { messages, stat } = parsed[i]
-      if (messages.length > 0) {
-        upsertDailyUsage(messages)
-        upsertHourlyUsage(messages)
-        progress.newMessages += messages.length
+      for (let i = 0; i < result.files.length; i++) {
+        const { messages, stat } = parsed[i]
+        if (messages.length > 0) {
+          upsertDailyUsage(messages)
+          upsertHourlyUsage(messages)
+          progress.newMessages += messages.length
+        }
+        upsertFingerprint({
+          filePath: result.files[i],
+          clientId: result.clientId,
+          size: stat.size,
+          mtimeMs: stat.mtimeMs,
+          bytesParsed: stat.size,
+        })
+        progress.parsedFiles++
       }
-      upsertFingerprint({
-        filePath: result.files[i],
-        clientId: result.clientId,
-        size: stat.size,
-        mtimeMs: stat.mtimeMs,
-        bytesParsed: stat.size,
-      })
-      progress.parsedFiles++
-    }
+    })
+    commitClientData()
 
     progress.scannedClients++
   }
