@@ -1021,7 +1021,7 @@ git commit -m "feat: expose workflow package bridge"
 - Create: `desktop/src/modules/workflow/components/__tests__/workflow-import-dialog.test.tsx`
 - Test: `pnpm --filter @synapse/desktop exec vitest run src/modules/workflow/components/__tests__/workflow-import-dialog.test.tsx`
 
-- [ ] **Step 1: Write failing dialog tests**
+- [x] **Step 1: Write failing dialog tests**
 
 Create `desktop/src/modules/workflow/components/__tests__/workflow-import-dialog.test.tsx`:
 
@@ -1135,7 +1135,7 @@ describe("WorkflowImportDialog", () => {
 })
 ```
 
-- [ ] **Step 2: Run dialog test to verify it fails**
+- [x] **Step 2: Run dialog test to verify it fails**
 
 Run:
 
@@ -1145,7 +1145,7 @@ pnpm --filter @synapse/desktop exec vitest run src/modules/workflow/components/_
 
 Expected: FAIL because the dialog component does not exist.
 
-- [ ] **Step 3: Implement dialog**
+- [x] **Step 3: Implement dialog**
 
 Create `desktop/src/modules/workflow/components/workflow-import-dialog.tsx`:
 
@@ -1304,7 +1304,7 @@ export type { WorkflowImportDialogProps }
 
 If the project's `Select` primitive is missing from `desktop/src/components/ui/`, add the official shadcn select component in a separate tiny commit before this task. If it exists, do not create a parallel select primitive.
 
-- [ ] **Step 4: Run dialog test**
+- [x] **Step 4: Run dialog test**
 
 Run:
 
@@ -1314,7 +1314,7 @@ pnpm --filter @synapse/desktop exec vitest run src/modules/workflow/components/_
 
 Expected: PASS.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/src/modules/workflow/components/workflow-import-dialog.tsx desktop/src/modules/workflow/components/__tests__/workflow-import-dialog.test.tsx
