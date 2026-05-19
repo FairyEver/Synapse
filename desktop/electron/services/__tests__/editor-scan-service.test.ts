@@ -142,6 +142,33 @@ describe("editor scan quick publish", () => {
     ])
   })
 
+  it("rejects read APIs outside configured editor scan roots", async () => {
+    const projectRoot = await createTempDir()
+    const rogueRoot = await createTempDir()
+    const rogueRulePath = path.join(rogueRoot, "AGENTS.md")
+    const rogueSkillDir = path.join(rogueRoot, "release-helper")
+    await mkdir(rogueSkillDir, { recursive: true })
+    await writeFile(rogueRulePath, "# Rogue Rule\n")
+    await writeFile(path.join(rogueSkillDir, "SKILL.md"), "# Rogue Skill\n")
+    const { auditEvents, security } = createAllowingSecurity()
+    mockEditorScanProject(projectRoot)
+
+    await expect(readItemContent(rogueRulePath, security)).rejects.toThrow("目标不在当前编辑器扫描范围内。")
+    await expect(listSkillFiles(rogueSkillDir, security)).rejects.toThrow("目标不在当前编辑器扫描范围内。")
+    await expect(prepareQuickPublishDraft({
+      itemType: "skill",
+      itemPath: rogueSkillDir,
+      itemName: "release-helper",
+      metadata: {},
+    }, security)).rejects.toThrow("目标不在当前编辑器扫描范围内。")
+
+    expect(auditEvents).toEqual([
+      expect.objectContaining({ action: "fs.read.outside-userdata", outcome: "failed", resource: rogueRulePath }),
+      expect.objectContaining({ action: "fs.read.outside-userdata", outcome: "failed", resource: rogueSkillDir }),
+      expect.objectContaining({ action: "fs.read.outside-userdata", outcome: "failed", resource: rogueSkillDir }),
+    ])
+  })
+
   it("merges Codex global skill directories and keeps the primary copy for duplicate names", async () => {
     const root = await createTempDir()
     const primaryDir = path.join(root, ".agents", "skills")

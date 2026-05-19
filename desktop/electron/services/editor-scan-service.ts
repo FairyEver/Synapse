@@ -47,7 +47,8 @@ const QUICK_PUBLISH_SENSITIVE_ATTACHMENT_EXTENSIONS = new Set([
 ])
 const RULE_TRASH_UNSUPPORTED_REASON = "当前 Rule 没有明确边界，请在 Finder 中处理。"
 const SAFE_RULE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/
-const EDITOR_SCAN_TRASH_SCOPE_ERROR = "目标不在当前编辑器扫描范围内。"
+const EDITOR_SCAN_SCOPE_ERROR = "目标不在当前编辑器扫描范围内。"
+const EDITOR_SCAN_TRASH_SCOPE_ERROR = EDITOR_SCAN_SCOPE_ERROR
 
 // --- helpers ---
 
@@ -108,6 +109,116 @@ function recordEditorReadAudit(
     outcome,
     resource,
   })
+}
+
+type EditorScanTrustedRoot = {
+  kind: "rule" | "skill"
+  path: string
+}
+
+function uniqueTrustedRoots(roots: EditorScanTrustedRoot[]): EditorScanTrustedRoot[] {
+  const seen = new Set<string>()
+  const unique: EditorScanTrustedRoot[] = []
+  for (const root of roots) {
+    const key = `${root.kind}:${root.path}`
+    if (seen.has(key)) continue
+    seen.add(key)
+    unique.push(root)
+  }
+  return unique
+}
+
+function getGlobalSkillPaths(scanConfig: ReturnType<(typeof editorAdapters)[number]["getScanPathConfig"]>): string[] {
+  return scanConfig.globalSkillPaths
+    ? [...scanConfig.globalSkillPaths]
+    : (scanConfig.globalSkillsPath ? [scanConfig.globalSkillsPath] : [])
+}
+
+async function getTrustedEditorReadRoots(): Promise<EditorScanTrustedRoot[]> {
+  const roots: EditorScanTrustedRoot[] = []
+
+  for (const adapter of editorAdapters) {
+    const scanConfig = adapter.getScanPathConfig()
+    for (const skillsPath of getGlobalSkillPaths(scanConfig)) {
+      roots.push({ kind: "skill", path: skillsPath })
+    }
+    if (scanConfig.globalRulesPath) {
+      roots.push({ kind: "rule", path: scanConfig.globalRulesPath })
+    }
+  }
+
+  const config = await configStore.load()
+  for (const project of config.global.projects) {
+    for (const adapter of editorAdapters) {
+      const paths = adapter.getScanPathConfig().projectPaths(project.path)
+      roots.push({ kind: "skill", path: paths.skillsPath })
+      roots.push({ kind: "rule", path: paths.rulesPath })
+    }
+  }
+
+  return uniqueTrustedRoots(roots)
+}
+
+function isDirectChildOf(childPath: string, rootPath: string): boolean {
+  return path.dirname(childPath) === rootPath
+}
+
+async function isTrustedEditorReadRootMatch(
+  targetPath: string,
+  root: EditorScanTrustedRoot,
+  itemType?: "rule" | "skill",
+): Promise<boolean> {
+  if (itemType && root.kind !== itemType) return false
+
+  const [targetRealPath, rootRealPath] = await Promise.all([
+    readRealPath(targetPath),
+    readRealPath(root.path),
+  ])
+  if (!targetRealPath || !rootRealPath) return false
+
+  let targetInfo
+  let rootInfo
+  try {
+    [targetInfo, rootInfo] = await Promise.all([
+      stat(targetRealPath),
+      stat(rootRealPath),
+    ])
+  } catch {
+    return false
+  }
+
+  if (root.kind === "skill") {
+    return rootInfo.isDirectory()
+      && targetInfo.isDirectory()
+      && isDirectChildOf(targetRealPath, rootRealPath)
+  }
+
+  if (rootInfo.isFile()) {
+    return targetInfo.isFile() && targetRealPath === rootRealPath
+  }
+
+  return rootInfo.isDirectory()
+    && targetInfo.isFile()
+    && isDirectChildOf(targetRealPath, rootRealPath)
+}
+
+async function assertTrustedEditorReadTarget(
+  security: EditorScanReadSecurityDeps | undefined,
+  targetPath: string,
+  metadata: Record<string, unknown>,
+  itemType?: "rule" | "skill",
+): Promise<void> {
+  if (!security) return
+
+  const roots = await getTrustedEditorReadRoots()
+  for (const root of roots) {
+    if (await isTrustedEditorReadRootMatch(targetPath, root, itemType)) {
+      return
+    }
+  }
+
+  recordEditorReadAudit(security, targetPath, "failed", metadata)
+  throw new Error(EDITOR_SCAN_SCOPE_ERROR)
 }
 
 async function checkEditorTrashPermission(
@@ -521,6 +632,7 @@ async function readItemContent(
 ): Promise<string> {
   const auditMetadata = { operation: "read-item-content" }
   await checkEditorReadPermission(security, filePath, auditMetadata)
+  await assertTrustedEditorReadTarget(security, filePath, auditMetadata)
   try {
     const info = await stat(filePath)
     let content: string
@@ -586,6 +698,7 @@ async function listSkillFiles(
 ): Promise<SkillFileEntry[]> {
   const auditMetadata = { operation: "list-skill-files" }
   await checkEditorReadPermission(security, dirPath, auditMetadata)
+  await assertTrustedEditorReadTarget(security, dirPath, auditMetadata, "skill")
   try {
     const info = await stat(dirPath)
     if (!info.isDirectory()) {
@@ -689,6 +802,7 @@ async function prepareQuickPublishDraft(
     operation: "prepare-quick-publish-draft",
   }
   await checkEditorReadPermission(security, request.itemPath, auditMetadata)
+  await assertTrustedEditorReadTarget(security, request.itemPath, auditMetadata, request.itemType)
   try {
     if (request.itemType === "rule") {
       const content = request.ruleContent ?? await readFile(request.itemPath, "utf8")
