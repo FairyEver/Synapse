@@ -10,6 +10,8 @@ import type { HttpRequestActionConfig } from "./schema"
 function sanitizeUrl(urlStr: string): string {
   try {
     const url = new URL(urlStr)
+    url.username = ""
+    url.password = ""
     for (const [key] of url.searchParams) {
       if (/token|secret|authorization|api[_-]?key|password|bearer|auth/i.test(key)) {
         url.searchParams.set(key, "[redacted]")
