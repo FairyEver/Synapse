@@ -33,6 +33,10 @@ export function attachBeforeQuitHandler(deps: BeforeQuitDeps): void {
   })
 
   app.on("before-quit", async (event) => {
+    if (!deps.isAllowedToQuit()) {
+      event.preventDefault()
+    }
+
     // Cancel any in-flight update download. Best-effort, never blocks.
     try {
       await updateService.cancelDownload()
@@ -54,8 +58,6 @@ export function attachBeforeQuitHandler(deps: BeforeQuitDeps): void {
       }
       return
     }
-
-    event.preventDefault()
 
     if (pendingPushFlowRunning) {
       return
