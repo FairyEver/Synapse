@@ -201,6 +201,22 @@ export const IPC_CHANNELS = {
     "getDetectedAgents": "synapse:token-usage:detected-agents",
     "clearData": "synapse:token-usage:clear-data",
   },
+  "usage-analysis": {
+    "ccRefresh": "synapse:usage-analysis:cc:refresh",
+    "ccOverview": "synapse:usage-analysis:cc:overview",
+    "ccTime": "synapse:usage-analysis:cc:time",
+    "ccModels": "synapse:usage-analysis:cc:models",
+    "ccProjects": "synapse:usage-analysis:cc:projects",
+    "ccTools": "synapse:usage-analysis:cc:tools",
+    "ccDetails": "synapse:usage-analysis:cc:details",
+    "codexRefresh": "synapse:usage-analysis:codex:refresh",
+    "codexOverview": "synapse:usage-analysis:codex:overview",
+    "codexTime": "synapse:usage-analysis:codex:time",
+    "codexModels": "synapse:usage-analysis:codex:models",
+    "codexProjects": "synapse:usage-analysis:codex:projects",
+    "codexTools": "synapse:usage-analysis:codex:tools",
+    "codexDetails": "synapse:usage-analysis:codex:details",
+  },
 } as const
 
 export type IpcChannelMap = typeof IPC_CHANNELS

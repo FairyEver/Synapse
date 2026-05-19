@@ -215,6 +215,22 @@ const IPC_CHANNELS = {
     "getDetectedAgents": "synapse:token-usage:detected-agents",
     "clearData": "synapse:token-usage:clear-data",
   },
+  "usage-analysis": {
+    "ccRefresh": "synapse:usage-analysis:cc:refresh",
+    "ccOverview": "synapse:usage-analysis:cc:overview",
+    "ccTime": "synapse:usage-analysis:cc:time",
+    "ccModels": "synapse:usage-analysis:cc:models",
+    "ccProjects": "synapse:usage-analysis:cc:projects",
+    "ccTools": "synapse:usage-analysis:cc:tools",
+    "ccDetails": "synapse:usage-analysis:cc:details",
+    "codexRefresh": "synapse:usage-analysis:codex:refresh",
+    "codexOverview": "synapse:usage-analysis:codex:overview",
+    "codexTime": "synapse:usage-analysis:codex:time",
+    "codexModels": "synapse:usage-analysis:codex:models",
+    "codexProjects": "synapse:usage-analysis:codex:projects",
+    "codexTools": "synapse:usage-analysis:codex:tools",
+    "codexDetails": "synapse:usage-analysis:codex:details",
+  },
 } as const satisfies IpcChannelMap
 
 // Event channels (not in generated IPC_CHANNELS because they're events, not methods)
@@ -756,6 +772,26 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["token-usage"].getAgentReport)(options),
     getDetectedAgents: invoke(IPC_CHANNELS["token-usage"].getDetectedAgents),
     clearData: invoke(IPC_CHANNELS["token-usage"].clearData),
+  },
+  usageAnalysis: {
+    cc: {
+      refresh: invoke(IPC_CHANNELS["usage-analysis"].ccRefresh),
+      getOverview: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccOverview)(range),
+      getTime: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccTime)(range),
+      getModels: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccModels)(range),
+      getProjects: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccProjects)(range),
+      getTools: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccTools)(range),
+      getDetails: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccDetails)(range),
+    },
+    codex: {
+      refresh: invoke(IPC_CHANNELS["usage-analysis"].codexRefresh),
+      getOverview: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexOverview)(range),
+      getTime: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexTime)(range),
+      getModels: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexModels)(range),
+      getProjects: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexProjects)(range),
+      getTools: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexTools)(range),
+      getDetails: (range) => invoke(IPC_CHANNELS["usage-analysis"].codexDetails)(range),
+    },
   },
   http: {
     testRequest: invoke(HTTP_CHANNELS.testRequest),

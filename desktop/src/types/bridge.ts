@@ -326,6 +326,117 @@ export type SynapseImportCcSwitchClaudeProvidersResult = {
   readonly skipped: readonly SynapseCcSwitchClaudeProviderPreviewItem[]
 }
 
+export type UsageAnalysisRangePreset = "7d" | "30d" | "90d" | "all"
+
+export type UsageAnalysisRangeInput = {
+  readonly preset: UsageAnalysisRangePreset
+}
+
+export type UsageAnalysisTokenBreakdown = {
+  readonly input: number
+  readonly output: number
+  readonly cacheRead: number
+  readonly cacheWrite: number
+  readonly reasoning: number
+}
+
+export type UsageAnalysisCostBreakdown = UsageAnalysisTokenBreakdown
+
+export type UsageAnalysisRefreshResult = {
+  readonly scannedFiles: number
+  readonly parsedFiles: number
+  readonly skippedFiles: number
+  readonly failedFiles: number
+  readonly usageEvents: number
+  readonly toolEvents: number
+  readonly elapsedMs: number
+}
+
+export type UsageAnalysisTimeBucket = {
+  readonly bucket: string
+  readonly tokens: number
+  readonly estimatedCost: number
+  readonly requests: number
+  readonly conversations: number
+  readonly toolCalls: number
+  readonly dominantModel: string
+}
+
+export type UsageAnalysisModelRow = {
+  readonly model: string
+  readonly provider?: string
+  readonly tokens: number
+  readonly estimatedCost: number
+  readonly input: number
+  readonly output: number
+  readonly cacheRead: number
+  readonly cacheWrite: number
+  readonly reasoning: number
+  readonly requests: number
+  readonly averageTokensPerRequest: number
+}
+
+export type UsageAnalysisProjectRow = {
+  readonly workspaceKey: string
+  readonly workspaceLabel: string
+  readonly sessions: number
+  readonly requests: number
+  readonly tokens: number
+  readonly estimatedCost: number
+  readonly toolCalls: number
+  readonly lastUsedAt: string
+}
+
+export type UsageAnalysisToolRow = {
+  readonly toolName: string
+  readonly category: string
+  readonly calls: number
+  readonly failures: number
+  readonly failureRate: number
+  readonly averageDurationMs: number
+}
+
+export type UsageAnalysisDetailRow = {
+  readonly id: string
+  readonly timestamp: string
+  readonly sessionId: string
+  readonly workspaceLabel: string
+  readonly model: string
+  readonly tokens: number
+  readonly estimatedCost: number
+  readonly tokenBreakdown: UsageAnalysisTokenBreakdown
+  readonly toolCalls: number
+  readonly durationMs?: number
+}
+
+export type UsageAnalysisOverviewReport = {
+  readonly generatedAt: string
+  readonly totals: {
+    readonly tokens: number
+    readonly estimatedCost: number
+    readonly requests: number
+    readonly conversations: number
+    readonly toolCalls: number
+    readonly activeDays: number
+  }
+  readonly tokenBreakdown: UsageAnalysisTokenBreakdown
+  readonly costBreakdown: UsageAnalysisCostBreakdown
+  readonly topModels: UsageAnalysisModelRow[]
+  readonly topProjects: UsageAnalysisProjectRow[]
+  readonly topTools: UsageAnalysisToolRow[]
+  readonly trend: UsageAnalysisTimeBucket[]
+}
+
+export type UsageAnalysisBridgeDomain = {
+  refresh: () => Promise<UsageAnalysisRefreshResult>
+  getOverview: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisOverviewReport>
+  getTime: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisTimeBucket[]>
+  getModels: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisModelRow[]>
+  getProjects: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisProjectRow[]>
+  getTools: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisToolRow[]>
+  getDetails: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisDetailRow[]>
+}
+
 export type SynapseBridge = {
   platform: string
   versions: {
@@ -780,6 +891,10 @@ export type SynapseBridge = {
     }[]>
     getDetectedAgents: () => Promise<{ id: string; name: string; fileCount: number }[]>
     clearData: () => Promise<void>
+  }
+  usageAnalysis: {
+    cc: UsageAnalysisBridgeDomain
+    codex: UsageAnalysisBridgeDomain
   }
   http: {
     testRequest: (config: Record<string, unknown>) => Promise<{

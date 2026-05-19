@@ -1556,7 +1556,7 @@ git commit -m "feat: add usage analysis reports"
 - Modify: `desktop/electron/bootstrap/descriptors.ts`
 - Modify: `desktop/electron/bootstrap/registry.ts`
 
-- [ ] **Step 1: Add channel constants**
+- [x] **Step 1: Add channel constants**
 
 Create `desktop/electron/usage-analysis/channels.ts`:
 
@@ -1579,7 +1579,7 @@ export const USAGE_ANALYSIS_CHANNELS = {
 } as const
 ```
 
-- [ ] **Step 2: Add IPC handlers**
+- [x] **Step 2: Add IPC handlers**
 
 Create `desktop/electron/usage-analysis/ipc-handlers.ts`:
 
@@ -1627,7 +1627,7 @@ export function registerUsageAnalysisHandlers(): void {
 }
 ```
 
-- [ ] **Step 3: Modify preload bridge**
+- [x] **Step 3: Modify preload bridge**
 
 In `desktop/electron/preload.ts`, import or inline `USAGE_ANALYSIS_CHANNELS` consistently with existing channel patterns. Add:
 
@@ -1675,11 +1675,11 @@ usageAnalysis: {
 },
 ```
 
-- [ ] **Step 4: Modify bridge types**
+- [x] **Step 4: Modify bridge types**
 
 In `desktop/src/types/bridge.ts`, add `usageAnalysis` with method return types matching the service reports. Import shared renderer-independent types only if they are already safe for renderer type imports; otherwise define structural Promise return types in `bridge.ts` as the file currently does for `tokenUsage`.
 
-- [ ] **Step 5: Register descriptor**
+- [x] **Step 5: Register descriptor**
 
 In `desktop/electron/bootstrap/descriptors.ts`, add:
 
@@ -1697,7 +1697,7 @@ export const coreUsageAnalysisDescriptor: ServiceDescriptor<{ initialized: true 
 
 In `desktop/electron/bootstrap/registry.ts`, import and register `coreUsageAnalysisDescriptor` near `coreTokenUsageDescriptor`.
 
-- [ ] **Step 6: Run hard constraints**
+- [x] **Step 6: Run hard constraints**
 
 Run:
 
@@ -1707,7 +1707,7 @@ pnpm --filter @synapse/desktop run check:hard-constraints
 
 Expected: pass. If it fails on generated IPC/channel policy, follow the repo’s generated channel workflow instead of bypassing it.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add desktop/electron/usage-analysis/channels.ts desktop/electron/usage-analysis/ipc-handlers.ts desktop/electron/preload.ts desktop/src/types/bridge.ts desktop/electron/bootstrap/descriptors.ts desktop/electron/bootstrap/registry.ts

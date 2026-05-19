@@ -66,6 +66,7 @@ const MODULE_SOURCES = [
  */
 const EXTRA_CHANNEL_SOURCES = [
   { id: "token-usage", importPath: "../electron/token-usage/channels.ts", exportName: "TOKEN_USAGE_CHANNELS" },
+  { id: "usage-analysis", importPath: "../electron/usage-analysis/channels.ts", exportName: "USAGE_ANALYSIS_CHANNELS" },
 ]
 
 const OUTPUT_PATH = path.resolve(

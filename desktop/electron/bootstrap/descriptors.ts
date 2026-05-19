@@ -1081,6 +1081,22 @@ export const coreTokenUsageDescriptor: ServiceDescriptor<{ initialized: true }> 
 }
 
 /**
+ * core.usage-analysis — registers IPC handlers for CC/Codex usage analysis.
+ *
+ * Status: degraded — local usage reports are non-critical.
+ */
+export const coreUsageAnalysisDescriptor: ServiceDescriptor<{ initialized: true }> = {
+  id: "core.usage-analysis",
+  criticality: "degraded",
+  dependsOn: [],
+  async create() {
+    const { registerUsageAnalysisHandlers } = await import("../usage-analysis/ipc-handlers.js")
+    registerUsageAnalysisHandlers()
+    return { initialized: true }
+  },
+}
+
+/**
  * core.http-test — registers IPC handler for ad-hoc HTTP request testing.
  *
  * Status: degraded — test requests are non-critical.
