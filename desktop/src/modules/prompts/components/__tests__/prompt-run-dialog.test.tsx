@@ -158,6 +158,43 @@ describe("PromptRunDialog", () => {
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-test")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("Bearer")
   })
+
+  it("shows a fixed provider load failure message without raw error text", async () => {
+    const listProviders = vi.fn().mockRejectedValue(
+      new Error("failed to read /Users/example/.synapse/providers.json token=sk-test"),
+    )
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders,
+        },
+      },
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <PromptRunDialog
+          open={true}
+          onOpenChange={vi.fn()}
+          item={promptItem}
+        />,
+      )
+    })
+
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("读取 Provider 失败")
+    expect(document.body.textContent).not.toContain("/Users/example")
+    expect(document.body.textContent).not.toContain("sk-test")
+  })
 })
 
 const promptItem: SynapseContentMeta<"prompt"> = {

@@ -73,7 +73,7 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
       })
       setProviders([])
       setSelectedProviderId("")
-      setProvidersError(rawError instanceof Error ? rawError.message : "读取 Provider 失败")
+      setProvidersError("读取 Provider 失败")
     } finally {
       if (requestId === providerRequestIdRef.current) {
         setProvidersLoading(false)
