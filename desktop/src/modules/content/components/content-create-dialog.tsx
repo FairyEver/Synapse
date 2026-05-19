@@ -99,13 +99,13 @@ function ContentCreateDialog({
             <AlertDialogHeader>
               <AlertDialogTitle>名称已存在</AlertDialogTitle>
               <AlertDialogDescription>
-                当前仓库已有同名内容。
+                当前仓库已有同名内容，继续保存将覆盖已有内容。
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>去修改</AlertDialogCancel>
               <AlertDialogAction onClick={onDuplicateWarningContinue}>
-                另存为新内容
+                继续保存
               </AlertDialogAction>
             </AlertDialogFooter>
           </AlertDialogContent>
