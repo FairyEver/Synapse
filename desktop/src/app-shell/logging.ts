@@ -1,6 +1,5 @@
 import type { SynapseLogLevel } from "@/types/log"
 import { getSynapseBridge } from "@/lib/electron-bridge"
-import { getDiagnosticSnapshot } from "@/lib/diagnostic-context"
 
 type RendererLogger = {
   debug: (message: string, details?: unknown) => void
@@ -117,32 +116,7 @@ function redactLogPath(value: string): string {
 }
 
 function installRendererLogForwarding(): () => void {
-  const logger = createRendererLogger("renderer.runtime")
-
-  const handleError = (event: ErrorEvent) => {
-    logger.error(event.message || "Renderer error event.", {
-      filename: event.filename,
-      lineno: event.lineno,
-      colno: event.colno,
-      stack: event.error instanceof Error ? event.error.stack : null,
-      diagnostics: getDiagnosticSnapshot(),
-    })
-  }
-
-  const handleUnhandledRejection = (event: PromiseRejectionEvent) => {
-    logger.error("Unhandled promise rejection in renderer.", {
-      reason: event.reason,
-      diagnostics: getDiagnosticSnapshot(),
-    })
-  }
-
-  window.addEventListener("error", handleError)
-  window.addEventListener("unhandledrejection", handleUnhandledRejection)
-
-  return () => {
-    window.removeEventListener("error", handleError)
-    window.removeEventListener("unhandledrejection", handleUnhandledRejection)
-  }
+  return () => {}
 }
 
 export {
