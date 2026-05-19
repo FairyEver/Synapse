@@ -9,6 +9,7 @@ type ZipArchiveMessages = {
 
 type ZipArchiveOptions = {
   messages?: ZipArchiveMessages
+  timeoutMs?: number
 }
 
 const DEFAULT_MESSAGES: Required<ZipArchiveMessages> = {
@@ -46,12 +47,15 @@ function formatArchiveFailureMessage(output: string, messages: Required<ZipArchi
   return firstLine ? `${messages.failed}\n${firstLine}` : messages.failed
 }
 
+const ARCHIVE_DEFAULT_TIMEOUT_MS = 5 * 60 * 1000
+
 function runArchiveCommand(
   command: string,
   args: string[],
   messages: Required<ZipArchiveMessages>,
   options?: {
     cwd?: string
+    timeoutMs?: number
   },
 ): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -61,6 +65,12 @@ function runArchiveCommand(
         ...process.env,
       },
     })
+
+    const timeoutMs = options?.timeoutMs ?? ARCHIVE_DEFAULT_TIMEOUT_MS
+    const timer = setTimeout(() => {
+      childProcess.kill("SIGTERM")
+      reject(new Error("压缩操作超时，请稍后重试。"))
+    }, timeoutMs)
 
     let stdout = ""
     let stderr = ""
@@ -74,10 +84,12 @@ function runArchiveCommand(
     })
 
     childProcess.on("error", (error) => {
+      clearTimeout(timer)
       reject(new Error(formatArchiveSpawnError(error, messages)))
     })
 
     childProcess.on("close", (code) => {
+      clearTimeout(timer)
       if (code === 0) {
         resolve()
         return
@@ -94,6 +106,7 @@ async function createZipArchive(
   options?: ZipArchiveOptions,
 ): Promise<void> {
   const messages = resolveMessages(options?.messages)
+  const timeoutMs = options?.timeoutMs
 
   if (process.platform === "win32") {
     const script = [
@@ -113,7 +126,7 @@ async function createZipArchive(
       "-NonInteractive",
       "-Command",
       script,
-    ], messages)
+    ], messages, { timeoutMs })
     return
   }
 
@@ -124,7 +137,7 @@ async function createZipArchive(
       "--keepParent",
       sourceDirectoryPath,
       outputFilePath,
-    ], messages)
+    ], messages, { timeoutMs })
     return
   }
 
@@ -132,7 +145,7 @@ async function createZipArchive(
     "zip",
     ["-r", "-q", outputFilePath, path.basename(sourceDirectoryPath)],
     messages,
-    { cwd: path.dirname(sourceDirectoryPath) },
+    { cwd: path.dirname(sourceDirectoryPath), timeoutMs },
   )
 }
 
