@@ -185,7 +185,7 @@ function ContentBrowserPage({
       return
     }
     const item = items.find((c) => c.id === request.contentId) ?? null
-    if (!item && items.length === 0 && refreshedOpenRequestIdRef.current !== request.requestId) {
+    if (!item && refreshedOpenRequestIdRef.current !== request.requestId) {
       refreshedOpenRequestIdRef.current = request.requestId
       void refresh()
       return
@@ -207,6 +207,7 @@ function ContentBrowserPage({
       }
     } else {
       logger.warn("Content detail external request target not found.", { contentId: request.contentId, contentType })
+      toast.error("找不到内容，请刷新后重试。")
     }
     onPendingContentOpenRequestConsumed?.(request.requestId)
   }, [addRecentlyViewed, contentType, isLoading, items, logger, onPendingContentOpenRequestConsumed, pendingContentOpenRequest, refresh, setActiveCategoryId])
