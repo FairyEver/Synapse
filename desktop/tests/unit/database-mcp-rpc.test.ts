@@ -103,4 +103,28 @@ describe("Database MCP RPC", () => {
 
     expect(payload).toEqual({ affected: 2, ids: [1, 3] })
   })
+
+  it("returns folder list data in the advertised shape", async () => {
+    const folders = [{
+      id: 1,
+      name: "Planning",
+      sortOrder: 0,
+      members: [{ tableName: "projects", sortOrder: 0 }],
+    }]
+    const payload = await callTool("database_folder_list", {
+      ok: true,
+      data: folders,
+    })
+
+    expect(payload).toEqual(folders)
+  })
+
+  it("returns created folder id in the advertised shape", async () => {
+    const payload = await callTool("database_folder_create", {
+      ok: true,
+      data: { id: 7 },
+    })
+
+    expect(payload).toEqual({ id: 7 })
+  })
 })

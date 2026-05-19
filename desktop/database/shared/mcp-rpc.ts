@@ -66,6 +66,8 @@ function normalizeToolResult(action: string, result: unknown): unknown {
     case "database.sql.read":
     case "database.sql.execute":
     case "database.choice_usage.get":
+    case "database.folder.list":
+    case "database.folder.create":
       return result.data
 
     case "database.row.list":
