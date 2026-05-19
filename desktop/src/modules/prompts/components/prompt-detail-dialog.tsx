@@ -1,3 +1,7 @@
+import type {
+  EditOverwriteRulePrefill,
+  EditOverwriteSkillPrefill,
+} from "@/app-shell/content-navigation"
 import {
   ContentDetailDialog,
   type ContentDetailDialogLabels,
@@ -13,6 +17,10 @@ type PromptDetailDialogProps = {
   onOpenChange: (open: boolean) => void
   open: boolean
   refreshSignal?: number
+  overwritePrefill?: {
+    requestId: string
+    prefill: EditOverwriteRulePrefill | EditOverwriteSkillPrefill
+  } | null
 }
 
 const PROMPT_LABELS: ContentDetailDialogLabels = {
@@ -36,6 +44,7 @@ function PromptDetailDialog({
   onOpenChange,
   open,
   refreshSignal = 0,
+  overwritePrefill = null,
 }: PromptDetailDialogProps) {
   return (
     <ContentDetailDialog
@@ -47,6 +56,7 @@ function PromptDetailDialog({
       onOpenChange={onOpenChange}
       open={open}
       refreshSignal={refreshSignal}
+      overwritePrefill={overwritePrefill}
       renderCreateDialog={(props) => <PromptCreateDialog {...props} />}
       renderVersionView={({ mode, version }) => (
         <PromptVersionView
