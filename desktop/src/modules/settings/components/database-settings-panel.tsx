@@ -128,7 +128,7 @@ function DetailField({ label, value }: DetailFieldProps) {
 
 function DatabaseSettingsPanel() {
   const { status, refresh: refreshStatus } = useDatabaseStatus()
-  const { promise } = useAppNotifications()
+  const { error: notifyError, promise } = useAppNotifications()
   const [cliStatus, setCliStatus] = useState<DatabaseCliStatus | null>(null)
   const [cliDebugInfo, setCliDebugInfo] = useState<DatabaseCliDebugInfo | null>(null)
   const [isCliDetailsOpen, setIsCliDetailsOpen] = useState(false)
@@ -168,7 +168,11 @@ function DatabaseSettingsPanel() {
         },
         { loading: "正在安装 CLI...", success: "CLI 已安装" },
       )
-    } catch {}
+    } catch (error) {
+      logger.warn("Failed to install CLI.", {
+        error: error instanceof Error ? error.name : typeof error,
+      })
+    }
   }, [promise])
 
   const refreshCliDebugInfo = useCallback(async () => {
@@ -239,7 +243,11 @@ function DatabaseSettingsPanel() {
         },
         { loading: "正在导出...", success: (value) => value ? "数据库已导出" : null },
       )
-    } catch {}
+    } catch (error) {
+      logger.warn("Database export failed.", {
+        error: error instanceof Error ? error.name : typeof error,
+      })
+    }
   }, [promise])
 
   const handleImport = useCallback(async () => {
@@ -254,14 +262,29 @@ function DatabaseSettingsPanel() {
         },
         { loading: "正在导入...", success: (value) => value ? "数据库已导入" : null },
       )
-    } catch {}
+    } catch (error) {
+      logger.warn("Database import failed.", {
+        error: error instanceof Error ? error.name : typeof error,
+      })
+    }
   }, [promise, refreshStatus])
 
   const handleOpenDbDirectory = useCallback(() => {
     if (!status?.dbDirectoryPath) return
     logger.info("Opening database directory.")
-    window.synapse?.shell.showItemInFolder(status.dbDirectoryPath)
-  }, [status?.dbDirectoryPath])
+    const shell = window.synapse?.shell
+    if (!shell?.showItemInFolder) {
+      notifyError("无法打开数据库目录。")
+      return
+    }
+    void shell.showItemInFolder(status.dbDirectoryPath).catch((error) => {
+      logger.warn("Failed to open database directory.", {
+        pathLength: status.dbDirectoryPath.length,
+        error: error instanceof Error ? error.name : typeof error,
+      })
+      notifyError("无法打开数据库目录。")
+    })
+  }, [notifyError, status?.dbDirectoryPath])
 
   return (
     <div className="flex flex-col gap-4">
