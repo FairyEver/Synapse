@@ -43,7 +43,11 @@ vi.mock("electron", () => ({
 
 import { createDefaultConfig } from "../../../src/lib/config"
 import type { SynapseRepositoryConfig } from "../../../src/types/config"
-import type { SynapseContentSnapshotRecord, SynapseContentType } from "../../../src/types/content"
+import type {
+  SynapseContentSnapshotRecord,
+  SynapseContentType,
+  SynapseCreateSkillPayload,
+} from "../../../src/types/content"
 import { configStore } from "../config-store"
 import {
   CONTENT_ATTACHMENTS_FILE_NAME,
@@ -281,5 +285,48 @@ describe("contentWriteService", () => {
       iconType: "image",
       iconImage: "icon.png",
     })
+  })
+
+  it("rejects skill attachments with case-only duplicate paths before writing content", async () => {
+    const root = await createTempRoot()
+    const repository: SynapseRepositoryConfig = {
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: root,
+      contentDirs: { skill: "skills" },
+    }
+    const config = createDefaultConfig()
+    config.activeRepoUuid = repository.uuid
+    config.repositories = [repository]
+
+    vi.spyOn(configStore, "load").mockResolvedValue(config)
+    vi.spyOn(repositoryStore, "getRepositoryState").mockResolvedValue({
+      repositoryUuid: repository.uuid,
+      localPath: root,
+      status: "ready",
+      isGitRepository: false,
+      gitRootPath: null,
+    })
+
+    const payload: SynapseCreateSkillPayload = {
+      title: "Skill",
+      name: "skill",
+      description: "Description",
+      category: "test",
+      icon: "wrench",
+      iconBg: "default",
+      iconType: "icon",
+      iconImage: "",
+      content: "# Skill",
+      files: [
+        { originalName: "assets/Readme.md", size: 1, bytes: new Uint8Array([1]) },
+        { originalName: "assets/readme.md", size: 1, bytes: new Uint8Array([2]) },
+      ],
+    }
+
+    await expect(contentWriteService.createSkill(payload, {
+      displayName: "User",
+      userId: "user",
+    })).rejects.toThrow("附件文件名重复：assets/readme.md")
   })
 })

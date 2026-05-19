@@ -4,6 +4,7 @@ import type {
   SkillCreateFieldErrors,
 } from "@/modules/skills/types"
 import { normalizeContentAttachmentPath } from "@/lib/content-attachments"
+import { normalizePathForCompare } from "@/lib/path-compare"
 import { normalizeSkillNameInput, validateSkillNameInput } from "@/lib/skill-name-input"
 import type { SynapseCreateSkillFilePayload } from "@/types/content"
 import {
@@ -38,6 +39,10 @@ function formatAttachmentList(paths: string[]): string {
 
 function normalizeSkillAttachmentName(originalName: string): string {
   return normalizeContentAttachmentPath(originalName)
+}
+
+function normalizeSkillAttachmentCompareKey(originalName: string): string {
+  return normalizePathForCompare(originalName, { platform: "win32" })
 }
 
 function normalizeCreateSkillFilePayload(
@@ -94,12 +99,13 @@ function validateCreateSkillPayload(payload: CreateSkillPayload): SkillCreateFie
       continue
     }
 
-    if (seenOriginalNames.has(file.originalName)) {
+    const compareKey = normalizeSkillAttachmentCompareKey(file.originalName)
+    if (seenOriginalNames.has(compareKey)) {
       duplicatedNames.push(file.originalName)
       continue
     }
 
-    seenOriginalNames.add(file.originalName)
+    seenOriginalNames.add(compareKey)
 
     if (file.size > MAX_SKILL_ATTACHMENT_SIZE) {
       oversizedNames.push(file.originalName)
@@ -141,7 +147,7 @@ function mergeCreateSkillFiles(
 ): { files: SkillCreateFilePayloadDraft[]; rejectedMessages: string[] } {
   const normalizedCurrentFiles = currentFiles.map((file) => normalizeCreateSkillFilePayload(file))
   const nextFilesByPath = new Map(
-    normalizedCurrentFiles.map((file) => [file.originalName, file] as const),
+    normalizedCurrentFiles.map((file) => [normalizeSkillAttachmentCompareKey(file.originalName), file] as const),
   )
   const duplicateNames: string[] = []
   const oversizedNames: string[] = []
@@ -162,7 +168,8 @@ function mergeCreateSkillFiles(
       continue
     }
 
-    if (nextFilesByPath.has(normalizedFile.originalName)) {
+    const compareKey = normalizeSkillAttachmentCompareKey(normalizedFile.originalName)
+    if (nextFilesByPath.has(compareKey)) {
       duplicateNames.push(normalizedFile.originalName)
       continue
     }
@@ -178,7 +185,7 @@ function mergeCreateSkillFiles(
       break
     }
 
-    nextFilesByPath.set(normalizedFile.originalName, normalizedFile)
+    nextFilesByPath.set(compareKey, normalizedFile)
   }
 
   const rejectedMessages: string[] = []

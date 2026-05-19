@@ -3,7 +3,10 @@ import { mkdir, mkdtemp, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
-import { normalizeContentAttachmentPath } from "../../src/lib/content-attachments"
+import {
+  assertUniqueContentAttachmentPaths,
+  normalizeContentAttachmentPath,
+} from "../../src/lib/content-attachments"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseContentAttachmentRecord,
@@ -274,16 +277,7 @@ async function resolveAttachmentRecords(
     ...file,
     originalName: normalizeContentAttachmentPath(file.originalName),
   }))
-  const seenOriginalNames = new Set<string>()
-  for (const file of normalizedFiles) {
-    if (!file.originalName) {
-      throw new Error("附件文件名不能为空。")
-    }
-    if (seenOriginalNames.has(file.originalName)) {
-      throw new Error(`附件文件名重复：${file.originalName}`)
-    }
-    seenOriginalNames.add(file.originalName)
-  }
+  assertUniqueContentAttachmentPaths(normalizedFiles.map((file) => file.originalName))
   const pendingWrites = normalizedFiles.filter((file) => !file.sha256 || file.bytes)
   const written = await attachmentsPoolService.writeAttachments(
     context.repositoryRootPath,
