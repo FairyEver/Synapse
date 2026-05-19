@@ -863,7 +863,6 @@ function sessionSnapshotForLog(
   return sessions.slice(0, 10).map((session) => ({
     projectId: session.projectId,
     id: session.id,
-    sessionKey: session.sessionKey,
     platform: session.platform,
     sourceLabel: session.sourceLabel,
     active: session.active,
