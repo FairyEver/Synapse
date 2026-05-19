@@ -139,9 +139,9 @@ export class NetworkServiceRegistryImpl implements NetworkServiceRegistry {
     const entry: InternalEntry = { descriptor, binding }
     this.entries.set(descriptor.id, entry)
     this.allocatedPorts.add(port)
-    descriptor.onPortAssigned?.(port)
 
     try {
+      descriptor.onPortAssigned?.(port)
       await this.emitAudit(entry, "registered")
       const lifecycle = await descriptor.start?.(binding)
       if (lifecycle) {
@@ -150,13 +150,18 @@ export class NetworkServiceRegistryImpl implements NetworkServiceRegistry {
       }
       return binding
     } catch (error) {
+      if (entry.lifecycle) {
+        try { await entry.lifecycle.stop() } catch { /* best-effort cleanup */ }
+      }
       this.entries.delete(descriptor.id)
       this.allocatedPorts.delete(port)
-      await this.emitAudit(
-        entry,
-        "failed",
-        error instanceof Error ? error.message : String(error),
-      )
+      try {
+        await this.emitAudit(
+          entry,
+          "failed",
+          error instanceof Error ? error.message : String(error),
+        )
+      } catch { /* audit is best-effort during rollback */ }
       throw error
     }
   }
@@ -166,17 +171,21 @@ export class NetworkServiceRegistryImpl implements NetworkServiceRegistry {
     if (!entry) return
     this.entries.delete(id)
     this.allocatedPorts.delete(entry.binding.port)
-    await this.emitAudit(entry, "unregistered")
+    try {
+      await this.emitAudit(entry, "unregistered")
+    } catch { /* audit failure must not prevent lifecycle stop */ }
     if (entry.lifecycle) {
       try {
         await entry.lifecycle.stop()
         await this.emitAudit(entry, "stopped")
       } catch (error) {
-        await this.emitAudit(
-          entry,
-          "failed",
-          error instanceof Error ? error.message : String(error),
-        )
+        try {
+          await this.emitAudit(
+            entry,
+            "failed",
+            error instanceof Error ? error.message : String(error),
+          )
+        } catch { /* best-effort */ }
         throw error
       }
     }
