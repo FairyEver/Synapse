@@ -401,7 +401,13 @@ class ContentHistoryService {
       return null
     }
 
-    const mainContent = await readFile(path.join(historyDirectoryPath, CONTENT_MAIN_FILE_NAME), "utf8")
+    let mainContent: string
+    try {
+      mainContent = await readFile(path.join(historyDirectoryPath, CONTENT_MAIN_FILE_NAME), "utf8")
+    } catch (error) {
+      if (isFileNotFoundError(error)) return null
+      throw error
+    }
     const attachmentsRecord = await readAttachmentsRecord(historyDirectoryPath)
     const currentVersion = await this.readResolvedVersion(repository, contentType, contentId)
 
