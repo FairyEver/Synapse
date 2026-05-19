@@ -113,7 +113,7 @@ function sanitizeValue(value: unknown): unknown {
 }
 
 function isSensitiveKey(key: string): boolean {
-  return /token|secret|authorization|api[_-]?key|password|bearer|auth|prompt|content/i.test(key)
+  return /\b(token|secret|authorization|api[_-]?key|password|bearer)\b/i.test(key)
 }
 
 function projectIdFromMetadata(metadata: Record<string, unknown> | undefined): string | undefined {
