@@ -1,10 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import { app } from "electron"
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
 import { configStore } from "../../../services/config-store"
 import { configIpcModule } from "../ipc"
 import type { SynapseConfig } from "../../../../src/types/config"
 
 const mocks = vi.hoisted(() => ({
+  fs: {
+    readdir: vi.fn(),
+    rm: vi.fn(),
+    unlink: vi.fn(),
+  },
+  licenseService: {
+    resetActivation: vi.fn(),
+    stop: vi.fn(),
+  },
   logger: {
     debug: vi.fn(),
     error: vi.fn(),
@@ -12,6 +22,8 @@ const mocks = vi.hoisted(() => ({
     warn: vi.fn(),
   },
 }))
+
+vi.mock("node:fs/promises", () => mocks.fs)
 
 vi.mock("electron", () => ({
   app: {
@@ -55,6 +67,10 @@ vi.mock("../../../database", () => ({
 describe("configIpcModule", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.licenseService.resetActivation.mockResolvedValue(undefined)
+    mocks.fs.readdir.mockResolvedValue([])
+    mocks.fs.rm.mockResolvedValue(undefined)
+    mocks.fs.unlink.mockResolvedValue(undefined)
   })
 
   it("preserves Agent config on get responses", async () => {
@@ -90,11 +106,36 @@ describe("configIpcModule", () => {
 
     expect(result.agent.defaultProviderModel).toEqual(providerModel)
   })
+
+  it("relaunches even when resetApp cannot delete every userData entry", async () => {
+    mocks.fs.readdir.mockResolvedValue([
+      { name: "stale-cache", isDirectory: () => true },
+      { name: "config.json", isDirectory: () => false },
+      { name: "synapse-database.db", isDirectory: () => false },
+    ])
+    mocks.fs.rm.mockRejectedValueOnce(new Error("locked"))
+    const harness = createHarness()
+
+    const result = await harness.invoke("synapse:config:reset-app", undefined)
+
+    expect(result).toEqual({
+      success: false,
+      failedCount: 1,
+      failedEntries: ["stale-cache"],
+    })
+    expect(app.relaunch).toHaveBeenCalledOnce()
+    expect(app.exit).toHaveBeenCalledWith(0)
+    expect(mocks.fs.unlink).toHaveBeenCalledTimes(1)
+    expect(mocks.fs.unlink).toHaveBeenCalledWith("/tmp/config.json")
+  })
 })
 
 function createHarness() {
   const harness = createInMemoryHarness()
   const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+    if (serviceId === "core.license") {
+      return mocks.licenseService as T
+    }
     throw new Error(`Unexpected service id: ${serviceId}`)
   }
 

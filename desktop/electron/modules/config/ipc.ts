@@ -286,11 +286,14 @@ export const configIpcModule: IpcModule = {
             failedCount: failedEntries.length,
             failedEntries,
           })
+          app.relaunch()
+          app.exit(0)
           return { success: false as const, failedCount: failedEntries.length, failedEntries }
         }
 
         app.relaunch()
         app.exit(0)
+        return { success: true as const }
       },
     },
   },

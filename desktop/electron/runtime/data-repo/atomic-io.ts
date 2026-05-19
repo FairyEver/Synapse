@@ -44,6 +44,11 @@ export async function readJsonFile<T>(filePath: string): Promise<T | null> {
     return JSON.parse(text) as T
   } catch (err) {
     if (isFileNotFoundError(err)) return null
+    if (err instanceof SyntaxError) {
+      await copyToTimestampedBackup(filePath)
+      await rm(filePath, { force: true })
+      return null
+    }
     throw err
   }
 }

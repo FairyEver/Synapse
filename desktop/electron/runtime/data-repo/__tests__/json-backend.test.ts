@@ -79,6 +79,29 @@ describe("atomic-io (T2.2)", () => {
       await rm(dir, { recursive: true, force: true })
     }
   })
+
+  it("readJsonFile backs up malformed JSON and lets namespaces recover as empty", async () => {
+    const dir = await tempDir()
+    try {
+      const file = path.join(dir, "config.json")
+      await writeFile(file, "{ bad json", "utf8")
+      const ns = new JsonNamespace<User>({
+        name: "config",
+        schemaVersion: 1,
+        backend: "json",
+        filePath: file,
+      })
+
+      expect(await ns.getSingleton()).toBeNull()
+      const entries = await readdir(dir)
+      const backupName = entries.find((entry) => /^config\.invalid-.*\.json$/.test(entry))
+
+      expect(backupName).toBeTruthy()
+      expect(await readFile(path.join(dir, backupName!), "utf8")).toBe("{ bad json")
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
 })
 
 describe("JsonNamespace (T2.2)", () => {

@@ -24,17 +24,19 @@ const LEGACY_CONFIG_FILE_NAME = "config.json"
 
 // Create DataRepository and config namespace
 function createConfigNamespace(): JsonNamespace<SynapseConfig> {
-  const userDataPath = app.getPath("userData")
-  const dataV1Path = path.join(userDataPath, "data-v1")
-  const filePath = path.join(dataV1Path, `${CORE_CONFIG_NAMESPACE}.json`)
-
   return new JsonNamespace({
     name: CORE_CONFIG_NAMESPACE,
     schemaVersion: CORE_CONFIG_SCHEMA_VERSION,
     backend: "json",
-    filePath,
+    filePath: resolveConfigNamespacePath(),
     defaults: createDefaultConfig,
   })
+}
+
+function resolveConfigNamespacePath(): string {
+  const userDataPath = app.getPath("userData")
+  const dataV1Path = path.join(userDataPath, "data-v1")
+  return path.join(dataV1Path, `${CORE_CONFIG_NAMESPACE}.json`)
 }
 
 // Migrate legacy config.json to DataRepository
@@ -125,7 +127,7 @@ class ConfigStore {
 
     // Ensure namespace has data (create default if empty)
     const existing = await namespace.getSingleton()
-    if (existing === null) {
+    if (existing === null || !existsSync(resolveConfigNamespacePath())) {
       // If legacy config existed but migration failed, don't create default config —
       // the original file remains on disk and user data is preserved.
       // Fail startup so the error surfaces instead of silently losing configuration.
