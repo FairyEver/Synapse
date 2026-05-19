@@ -9,7 +9,7 @@
  * implementation later without changing the registry contract.
  */
 
-import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises"
+import { mkdir, readFile, readdir, stat } from "node:fs/promises"
 import path from "node:path"
 import type {
   BackupArtifact,
@@ -18,6 +18,7 @@ import type {
   BackupStrategy,
 } from "./types"
 import { BackupFormatError } from "./errors"
+import { writeTextFileAtomic } from "./atomic-io"
 
 export class InMemoryBackupRegistry implements BackupRegistry {
   private readonly strategies = new Map<string, BackupStrategy>()
@@ -63,7 +64,7 @@ export class LocalArchiveStrategy implements BackupStrategy {
     const stamp = new Date().toISOString().replace(/[:.]/g, "-")
     const file = path.join(this.backupRoot, `${stamp}.json`)
     const text = JSON.stringify(payload, null, 2)
-    await writeFile(file, text, "utf8")
+    await writeTextFileAtomic(file, text)
     const fileStats = await stat(file)
     return {
       id: stamp,
