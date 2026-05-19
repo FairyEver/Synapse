@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { toast } from "sonner"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -41,6 +42,8 @@ function EditorBadge({
     try {
       await uninstall(contentId, editorId)
       setOpen(false)
+    } catch (_error) {
+      toast.error("卸载失败，请重试。")
     } finally {
       setBusy(false)
     }
