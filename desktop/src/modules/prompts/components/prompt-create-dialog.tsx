@@ -1,4 +1,4 @@
-import { useMemo } from "react"
+import { useMemo, useState } from "react"
 import {
   Field,
   FieldContent,
@@ -26,14 +26,18 @@ import { ContentAppearanceFields } from "@/modules/content/components/content-ap
 import { ContentCreateDialog } from "@/modules/content/components/content-create-dialog"
 import { useContentCreateForm } from "@/modules/content/hooks/use-content-create-form"
 import { useContentIconImage } from "@/modules/content/hooks/use-content-icon-image"
+import type { ContentCreateNotice } from "@/modules/content/types/create-notice"
 import type { SynapseContentIconType, SynapseCreatePromptPayload } from "@/types/content"
 
 type PromptCreateDialogProps = {
+  existingNames?: string[]
   initialValue?: SynapseCreatePromptPayload | null
   mode?: "create" | "edit"
+  notices?: ContentCreateNotice[]
   onOpenChange: (open: boolean) => void
   onSubmit: (payload: SynapseCreatePromptPayload) => Promise<void> | void
   open: boolean
+  sourceLabel?: string | null
   submitDisabled?: boolean
   submitDisabledReason?: string | null
   editingId?: string | null
@@ -53,11 +57,14 @@ const PROMPT_FORM_CONFIG = {
 }
 
 function PromptCreateDialog({
+  existingNames,
   initialValue = null,
   mode = "create",
+  notices = [],
   onOpenChange,
   onSubmit,
   open,
+  sourceLabel = null,
   submitDisabled = false,
   submitDisabledReason = null,
   editingId = null,
@@ -106,8 +113,28 @@ function PromptCreateDialog({
     updateField,
   })
 
+  const [isDuplicateWarningOpen, setIsDuplicateWarningOpen] = useState(false)
+
   const handleFormSubmit = (event: React.FormEvent<HTMLFormElement>) => {
-    handleSubmit(event, prepareFormForSubmit(form))
+    const prepared = prepareFormForSubmit(form)
+    const validationErrors = validateContentPayload(prepared, { labels: PROMPT_LABELS })
+    if (Object.keys(validationErrors).length > 0) {
+      handleSubmit(event, prepared)
+      return
+    }
+    const normalizedTitle = normalizeContentPayload(prepared).title
+    if (existingNames?.includes(normalizedTitle)) {
+      event.preventDefault()
+      setIsDuplicateWarningOpen(true)
+      return
+    }
+    handleSubmit(event, prepared)
+  }
+
+  const handleDuplicateWarningContinue = () => {
+    setIsDuplicateWarningOpen(false)
+    const syntheticEvent = { preventDefault: () => {} } as React.FormEvent<HTMLFormElement>
+    handleSubmit(syntheticEvent, prepareFormForSubmit(form))
   }
 
   const titleField = (
@@ -196,17 +223,22 @@ function PromptCreateDialog({
   return (
     <ContentCreateDialog
       isDiscardConfirmOpen={isDiscardConfirmOpen}
+      isDuplicateWarningOpen={isDuplicateWarningOpen}
       isSubmitting={isSubmitting}
       labels={{
         title: { create: "新建提示词", edit: "编辑提示词" },
         discardDescription: "当前还没有提交，关闭后已填写的提示词内容会被清空。",
       }}
       mode={mode}
+      notices={notices}
       onDialogOpenChange={handleDialogOpenChange}
       onDiscard={handleDiscard}
       onDiscardConfirmOpenChange={setIsDiscardConfirmOpen}
+      onDuplicateWarningContinue={handleDuplicateWarningContinue}
+      onDuplicateWarningOpenChange={setIsDuplicateWarningOpen}
       onSubmit={handleFormSubmit}
       open={open}
+      sourceLabel={sourceLabel}
       submitDisabled={submitDisabled}
       submitDisabledReason={submitDisabledReason}
       submitError={submitError}
