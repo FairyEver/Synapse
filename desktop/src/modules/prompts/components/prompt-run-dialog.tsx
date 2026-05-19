@@ -61,7 +61,10 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
       if (requestId !== providerRequestIdRef.current) return
       const visible = nextProviders.filter((provider) => !provider.archived)
       setProviders(nextProviders)
-      setSelectedProviderId(visible.find((provider) => provider.active)?.id ?? visible[0]?.id ?? "")
+      setSelectedProviderId((prev) => {
+        if (prev && visible.some((p) => p.id === prev)) return prev
+        return visible.find((provider) => provider.active)?.id ?? visible[0]?.id ?? ""
+      })
     } catch (rawError) {
       if (requestId !== providerRequestIdRef.current) return
       logger.error("Prompt run: load providers failed.", {
@@ -80,17 +83,16 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
 
   useEffect(() => {
     if (!open) return
+    if (selectedProjectId && projects.some((p) => p.id === selectedProjectId)) return
     const firstProject = projects[0]
     if (firstProject) {
       setSelectedProjectId(firstProject.id)
     }
-  }, [open, projects])
+  }, [open, projects, selectedProjectId])
 
   useEffect(() => {
     if (!open) {
       providerRequestIdRef.current += 1
-      setProviders([])
-      setSelectedProviderId("")
       setProvidersError(null)
       setProvidersLoading(false)
       return
