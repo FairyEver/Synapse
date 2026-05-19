@@ -14,7 +14,7 @@ export function createScriptAction(deps: {
     buildPermissionRequest: ({ config, context }) => ({
       action: "shell.exec",
       actor: context.actor,
-      resource: config.script.slice(0, 240),
+      resource: scriptActionManifest.id,
       context: {
         source: "task-scheduler",
         actionType: scriptActionManifest.id,

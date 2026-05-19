@@ -249,7 +249,7 @@ describe("builtin.command executor", () => {
 
     expect(request).toEqual(expect.objectContaining({
       action: "shell.exec",
-      resource: "echo ok",
+      resource: "builtin.command",
       context: expect.objectContaining({
         actionType: "builtin.command",
         taskId: "task:1",

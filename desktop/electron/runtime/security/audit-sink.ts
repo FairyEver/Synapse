@@ -43,10 +43,11 @@ export class DataRepositoryAuditSink implements AuditSink {
     const timestamp = event.timestamp ?? this.now().toISOString()
     const id = event.id ?? this.idFactory()
     const metadata = sanitizeMetadata(event.metadata)
+    const resource = sanitizeResource(event.resource)
     const cachedEvent: AuditEvent = {
       action: event.action,
       actor: event.actor,
-      resource: event.resource,
+      resource,
       outcome: event.outcome,
       id,
       timestamp,
@@ -64,7 +65,7 @@ export class DataRepositoryAuditSink implements AuditSink {
       actor: event.actor,
       resource: {
         type: event.action.split(".")[0] ?? "permission",
-        id: event.resource,
+        id: resource,
         projectId: projectIdFromMetadata(metadata),
       },
       outcome: event.outcome,
@@ -110,6 +111,13 @@ function sanitizeMetadata(
 ): Record<string, unknown> | undefined {
   if (!metadata) return undefined
   return sanitizeRecord(metadata)
+}
+
+function sanitizeResource(resource: string): string {
+  return resource.replace(
+    /(?<=\b(?:token|secret|authorization|api[_-]?key|password|bearer|auth)\s*[:=]\s*)\S+/gi,
+    "[redacted]",
+  )
 }
 
 function sanitizeRecord(record: Record<string, unknown>): Record<string, unknown> {

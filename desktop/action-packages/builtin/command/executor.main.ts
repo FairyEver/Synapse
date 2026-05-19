@@ -14,7 +14,7 @@ export function createCommandAction(deps: {
     buildPermissionRequest: ({ config, context }) => ({
       action: "shell.exec",
       actor: context.actor,
-      resource: config.command,
+      resource: commandActionManifest.id,
       context: {
         source: "task-scheduler",
         actionType: commandActionManifest.id,
