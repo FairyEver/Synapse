@@ -1,9 +1,10 @@
 import { useCallback, useMemo, useState } from "react"
-import { LoaderCircle, RotateCcw } from "lucide-react"
+import { LoaderCircle, RotateCcw, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { Alert, AlertDescription, AlertAction } from "@/components/ui/alert"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import { useAppNotifications } from "@/app-shell/notifications"
 import type { SynapseEditorId } from "@/types/editor"
@@ -146,21 +147,34 @@ function EditorScanModule() {
     }
 
     return (
-      <ScrollArea className="h-full">
-        <div className="flex flex-col gap-6">
-          {scopeTab === "global" ? (
-            <GlobalOverview result={globalResult} contentTab={contentTab} onItemClick={handleItemClick} />
-          ) : (
-            <ProjectOverview
-              projects={data?.projects ?? []}
-              selectedEditorId={selectedEditorId}
-              selectedEditorLabel={globalResult.editorLabel}
-              contentTab={contentTab}
-              onItemClick={handleItemClick}
-            />
-          )}
-        </div>
-      </ScrollArea>
+      <div className="flex h-full flex-col gap-2">
+        {error && (
+          <Alert variant="destructive">
+            <TriangleAlert />
+            <AlertDescription>刷新失败，当前显示的可能是过期数据</AlertDescription>
+            <AlertAction>
+              <Button variant="outline" size="sm" onClick={() => void handleRefresh()} disabled={loading}>
+                重试
+              </Button>
+            </AlertAction>
+          </Alert>
+        )}
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="flex flex-col gap-6">
+            {scopeTab === "global" ? (
+              <GlobalOverview result={globalResult} contentTab={contentTab} onItemClick={handleItemClick} />
+            ) : (
+              <ProjectOverview
+                projects={data?.projects ?? []}
+                selectedEditorId={selectedEditorId}
+                selectedEditorLabel={globalResult.editorLabel}
+                contentTab={contentTab}
+                onItemClick={handleItemClick}
+              />
+            )}
+          </div>
+        </ScrollArea>
+      </div>
     )
   }
 
