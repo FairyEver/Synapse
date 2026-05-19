@@ -135,7 +135,18 @@ export class TaskSchedulerExecutionService {
         result: persistableResult,
         error: persistableResult.error,
       })
-      await this.deps.tasks.markRunResult(task.id, { status: result.status })
+      try {
+        await this.deps.tasks.markRunResult(task.id, { status: result.status })
+      } catch (markError) {
+        this.logger.warn("markRunResult failed after successful run persistence.", {
+          source: "task-scheduler",
+          taskId: task.id,
+          runId: run.id,
+          status: result.status,
+          boundary: "task-scheduler-mark-run-result",
+          ...errorDiagnostic(markError),
+        })
+      }
       if (result.status === "success") {
         this.logger.info?.("Scheduled task action completed.", {
           source: "task-scheduler",
