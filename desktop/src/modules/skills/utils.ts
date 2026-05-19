@@ -3,7 +3,6 @@ import type {
   SkillCreateFilePayloadDraft,
   SkillCreateFieldErrors,
 } from "@/modules/skills/types"
-import { DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE } from "@/lib/content-appearance"
 import { normalizeContentAttachmentPath } from "@/lib/content-attachments"
 import { normalizeSkillNameInput, validateSkillNameInput } from "@/lib/skill-name-input"
 import type { SynapseCreateSkillFilePayload } from "@/types/content"
