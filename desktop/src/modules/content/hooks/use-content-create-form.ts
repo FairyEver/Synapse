@@ -158,6 +158,7 @@ function useContentCreateForm<T extends Record<string, unknown>>(
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>, payloadOverride?: T) => {
     event.preventDefault()
+    if (isSubmitting) return
 
     const target = payloadOverride ?? form
     const nextErrors = validate(target)
