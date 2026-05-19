@@ -7,6 +7,8 @@ import type { MainActionDefinition } from "../../../electron/action-runtime/acti
 import { httpRequestActionManifest } from "./manifest"
 import type { HttpRequestActionConfig } from "./schema"
 
+const MAX_RESPONSE_BODY_BYTES = 5 * 1024 * 1024
+
 function sanitizeUrl(urlStr: string): string {
   try {
     const url = new URL(urlStr)
@@ -79,6 +81,7 @@ export function createHttpRequestAction(deps: {
           body: buildBody(config),
           timeoutMs: config.timeoutMins === null ? undefined : (config.timeoutMins ?? 5) * 60_000,
           abortSignal: context.abortSignal,
+          maxResponseBodyBytes: MAX_RESPONSE_BODY_BYTES,
         })
         return {
           status: response.status >= 400 ? "failed" : "success",

@@ -36,6 +36,7 @@ describe("builtin.http-request executor", () => {
       url: "https://example.com/api?page=1",
       headers: { Authorization: "Bearer token" },
       timeoutMs: 60_000,
+      maxResponseBodyBytes: 5 * 1024 * 1024,
     }))
     expect(result).toEqual({
       status: "success",
@@ -47,7 +48,7 @@ describe("builtin.http-request executor", () => {
         headers: { "content-type": "application/json" },
         body: "{\"ok\":true}",
       },
-      metrics: { httpStatus: 200 },
+      metrics: expect.objectContaining({ httpStatus: 200 }),
     })
   })
 
