@@ -688,6 +688,60 @@ describe("editor scan trash", () => {
     expect(trashItem).not.toHaveBeenCalled()
   })
 
+  it("rejects path trash outside configured editor scan roots", async () => {
+    const projectRoot = await createTempDir()
+    const rogueRoot = await createTempDir()
+    const skillDir = path.join(rogueRoot, "release-helper")
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Release Helper\n")
+    trashItem.mockResolvedValue(undefined)
+    const { security } = createAllowingSecurity()
+    mockEditorScanProject(projectRoot)
+
+    await expect(trashScanItem({
+      itemType: "skill",
+      itemName: "release-helper",
+      itemPath: skillDir,
+      editorId: "codex",
+      scope: "project",
+      source: "external",
+      trash: { mode: "path" },
+      synapseContentId: null,
+    }, security)).rejects.toThrow("目标不在当前编辑器扫描范围内。")
+
+    expect(trashItem).not.toHaveBeenCalled()
+  })
+
+  it("rejects rule-section trash outside configured editor scan roots", async () => {
+    const projectRoot = await createTempDir()
+    const rogueRoot = await createTempDir()
+    const filePath = path.join(rogueRoot, "AGENTS.md")
+    const originalContent = [
+      "# Handwritten",
+      "",
+      "<!-- synapse-rule:first:begin -->",
+      "# First",
+      "<!-- synapse-rule:first:end -->",
+    ].join("\n")
+    await writeFile(filePath, originalContent)
+    const { security } = createAllowingSecurity()
+    mockEditorScanProject(projectRoot)
+
+    await expect(trashScanItem({
+      itemType: "rule",
+      itemName: "first",
+      itemPath: filePath,
+      editorId: "codex",
+      scope: "project",
+      source: "synapse",
+      trash: { mode: "rule-section", ruleId: "first" },
+      synapseContentId: "first",
+    }, security)).rejects.toThrow("目标不在当前编辑器扫描范围内。")
+
+    expect(await readFile(filePath, "utf8")).toBe(originalContent)
+    expect(trashItem).not.toHaveBeenCalled()
+  })
+
   it("does not trash when permission is denied", async () => {
     const root = await createTempDir()
     const rulePath = path.join(root, "project.md")

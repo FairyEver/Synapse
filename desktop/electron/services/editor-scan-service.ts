@@ -1,4 +1,4 @@
-import { lstat, readFile, readdir, stat } from "node:fs/promises"
+import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { shell } from "electron"
 import type {
@@ -47,6 +47,7 @@ const QUICK_PUBLISH_SENSITIVE_ATTACHMENT_EXTENSIONS = new Set([
 ])
 const RULE_TRASH_UNSUPPORTED_REASON = "当前 Rule 没有明确边界，请在 Finder 中处理。"
 const SAFE_RULE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/
+const EDITOR_SCAN_TRASH_SCOPE_ERROR = "目标不在当前编辑器扫描范围内。"
 
 // --- helpers ---
 
@@ -146,6 +147,75 @@ function recordEditorTrashAudit(
     outcome,
     resource,
   })
+}
+
+async function readRealPath(filePath: string): Promise<string | null> {
+  try {
+    return await realpath(filePath)
+  } catch {
+    return null
+  }
+}
+
+async function isTrustedTrashRootMatch(
+  request: EditorScanTrashRequest,
+  rootPath: string,
+): Promise<boolean> {
+  const [targetRealPath, rootRealPath] = await Promise.all([
+    readRealPath(request.itemPath),
+    readRealPath(rootPath),
+  ])
+
+  if (!targetRealPath || !rootRealPath) return false
+
+  let rootInfo
+  try {
+    rootInfo = await stat(rootRealPath)
+  } catch {
+    return false
+  }
+
+  if (rootInfo.isFile()) {
+    return targetRealPath === rootRealPath
+  }
+
+  if (!rootInfo.isDirectory()) return false
+
+  return path.dirname(targetRealPath) === rootRealPath
+}
+
+async function getTrustedTrashRoots(
+  request: EditorScanTrashRequest,
+): Promise<string[]> {
+  const adapter = editorAdapters.find((candidate) => candidate.id === request.editorId)
+  if (!adapter) return []
+
+  const scanConfig = adapter.getScanPathConfig()
+  const roots = request.itemType === "skill"
+    ? scanConfig.globalSkillPaths ?? (scanConfig.globalSkillsPath ? [scanConfig.globalSkillsPath] : [])
+    : (scanConfig.globalRulesPath ? [scanConfig.globalRulesPath] : [])
+
+  if (request.scope === "global") {
+    return Array.from(new Set(roots))
+  }
+
+  const config = await configStore.load()
+  return Array.from(new Set(config.global.projects.map((project) => {
+    const paths = scanConfig.projectPaths(project.path)
+    return request.itemType === "skill" ? paths.skillsPath : paths.rulesPath
+  })))
+}
+
+async function assertTrustedTrashTarget(request: EditorScanTrashRequest): Promise<void> {
+  const roots = await getTrustedTrashRoots(request)
+
+  for (const root of roots) {
+    if (await isTrustedTrashRootMatch(request, root)) {
+      return
+    }
+  }
+
+  throw new Error(EDITOR_SCAN_TRASH_SCOPE_ERROR)
 }
 
 function parseFrontmatter(text: string): { metadata: Record<string, string>; body: string } {
@@ -751,6 +821,8 @@ async function trashScanItem(
     if (request.trash.mode === "unsupported") {
       throw new Error(request.trash.disabledReason)
     }
+
+    await assertTrustedTrashTarget(request)
 
     if (request.trash.mode === "rule-section") {
       const existingContent = await readFile(request.itemPath, "utf8")
