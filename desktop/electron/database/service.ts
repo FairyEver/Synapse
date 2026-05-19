@@ -131,7 +131,10 @@ function referencesSystemTable(sql: string): boolean {
       continue
     }
     if (char === "_" && next && /[a-zA-Z]/.test(next)) {
-      return true
+      const prev = index > 0 ? sql[index - 1] : undefined
+      if (!prev || !/[a-zA-Z0-9_]/.test(prev)) {
+        return true
+      }
     }
   }
 
