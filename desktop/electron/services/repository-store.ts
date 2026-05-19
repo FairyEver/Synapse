@@ -140,7 +140,11 @@ class RepositoryStore {
         this.unwatchRepository(repository.uuid)
 
         for (const listener of this.disappearedListeners) {
-          listener(repository.uuid)
+          try {
+            listener(repository.uuid)
+          } catch (err) {
+            logger.warn("Repository disappeared listener threw.", { repositoryUuid: repository.uuid, error: err })
+          }
         }
       }
     } catch (error) {
