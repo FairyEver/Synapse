@@ -10,23 +10,68 @@ interface StatsViewProps {
 function calculateStreak(contributions: GraphResult["contributions"]): {
   current: number; longest: number
 } {
-  const sorted = [...contributions].sort((a, b) => a.date.localeCompare(b.date))
-  let current = 0
+  const activeDays = [...new Set(contributions
+    .filter((item) => item.totals.tokens > 0)
+    .map((item) => dateToDayIndex(item.date))
+    .filter((dayIndex): dayIndex is number => dayIndex !== null))]
+    .sort((a, b) => a - b)
+
+  if (activeDays.length === 0) return { current: 0, longest: 0 }
+
   let longest = 0
   let streak = 0
+  let previousDay: number | null = null
 
-  for (let i = sorted.length - 1; i >= 0; i--) {
-    if (sorted[i].totals.tokens > 0) {
+  for (const day of activeDays) {
+    if (previousDay !== null && day === previousDay + 1) {
       streak++
-      longest = Math.max(longest, streak)
     } else {
-      if (current === 0) current = streak
-      streak = 0
+      streak = 1
     }
+    longest = Math.max(longest, streak)
+    previousDay = day
   }
-  if (current === 0) current = streak
 
-  return { current, longest: Math.max(longest, streak) }
+  const today = dateToDayIndex(new Date())
+  const latestDay = activeDays[activeDays.length - 1]
+  if (today === null || latestDay < today - 1 || latestDay > today) {
+    return { current: 0, longest }
+  }
+
+  let current = 1
+  for (let i = activeDays.length - 2; i >= 0; i--) {
+    if (activeDays[i] !== latestDay - current) break
+    current++
+  }
+
+  return { current, longest }
+}
+
+function dateToDayIndex(value: string | Date): number | null {
+  const date = value instanceof Date ? getLocalDateParts(value) : parseDateString(value)
+  if (!date) return null
+  return Math.floor(Date.UTC(date.year, date.month - 1, date.day) / 86_400_000)
+}
+
+function parseDateString(value: string): { year: number; month: number; day: number } | null {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return null
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  const date = new Date(year, month - 1, day)
+  if (date.getFullYear() !== year || date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null
+  }
+  return { year, month, day }
+}
+
+function getLocalDateParts(date: Date): { year: number; month: number; day: number } {
+  return {
+    year: date.getFullYear(),
+    month: date.getMonth() + 1,
+    day: date.getDate(),
+  }
 }
 
 function findFavoriteModel(contributions: GraphResult["contributions"]): string {
