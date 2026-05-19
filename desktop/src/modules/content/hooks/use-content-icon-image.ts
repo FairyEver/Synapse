@@ -145,6 +145,7 @@ function useContentIconImage({
     iconImageBytesRef.current = null
     setIconImagePreview(null)
     updateField?.("iconImage", "")
+    updateField?.("iconType", "icon")
 
     if (hadIconImage) {
       logger.info("Content icon image removed.", {
