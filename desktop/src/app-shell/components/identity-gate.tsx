@@ -115,6 +115,7 @@ function IdentityGate({ children }: { children: ReactNode }) {
                       elapsedMs: Math.round(performance.now() - startedAt),
                       error: generationError,
                     })
+                    setRecoveryError(generationError instanceof Error ? generationError.message : "生成新 ID 失败，请重试。")
                   })
                   .finally(() => {
                     setIsSubmitting(false)
