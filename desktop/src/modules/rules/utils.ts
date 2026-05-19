@@ -53,9 +53,6 @@ function isCreateRulePayloadDirty(payload: SynapseCreateRulePayload): boolean {
 
 export {
   createEmptyRulePayload,
-  isCreateRulePayloadDirty,
   normalizeCreateRulePayload,
   validateCreateRulePayload,
 }
-
-export type { RuleCreateFieldErrors }
