@@ -89,6 +89,17 @@ export async function runShellAction(input: {
       metrics,
     }
   }
+  if (result.exitCode === null) {
+    const signalInfo = result.signal ? `信号 ${result.signal}` : "未知信号"
+    return {
+      status: "failed",
+      summary: `被终止（${signalInfo}）`,
+      logs,
+      outputs,
+      error: `shell command killed by signal ${result.signal ?? "unknown"}`,
+      metrics,
+    }
+  }
   if (result.exitCode !== 0 || result.error) {
     return {
       status: "failed",
