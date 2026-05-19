@@ -9,7 +9,6 @@ import { normalizeSkillNameInput, validateSkillNameInput } from "@/lib/skill-nam
 import type { SynapseCreateSkillFilePayload } from "@/types/content"
 import {
   createEmptyContentPayload,
-  isContentPayloadDirty as isContentPayloadDirtyBase,
   normalizeContentPayload,
   validateContentPayload,
 } from "@/modules/content/lib/content-payload"
@@ -125,12 +124,6 @@ function validateCreateSkillPayload(payload: CreateSkillPayload): SkillCreateFie
   return errors
 }
 
-function isCreateSkillPayloadDirty(payload: CreateSkillPayload): boolean {
-  return isContentPayloadDirtyBase(payload, (p) =>
-    p.name !== "" || p.files.length > 0,
-  )
-}
-
 function formatSkillAttachmentSize(size: number): string {
   if (size < 1024) {
     return `${size} B`
@@ -237,7 +230,6 @@ async function serializeCreateSkillFiles(
 export {
   createEmptySkillPayload,
   formatSkillAttachmentSize,
-  isCreateSkillPayloadDirty,
   MAX_SKILL_ATTACHMENT_SIZE,
   mergeCreateSkillFiles,
   normalizeCreateSkillPayload,
