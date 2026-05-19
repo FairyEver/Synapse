@@ -423,17 +423,22 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
     }
 
     const nextConflictState = conflictState
-    setConflictState(null)
 
     if (nextConflictState.mode === "delete") {
-      await handleDelete(true, nextConflictState.latestHistoryDirname)
+      try {
+        await handleDelete(true, nextConflictState.latestHistoryDirname)
+        setConflictState(null)
+      } catch {
+        // Error handled by notification system; keep conflictState for retry
+      }
       return
     }
 
     try {
       await handleSave(nextConflictState.payload, true, nextConflictState.latestHistoryDirname)
+      setConflictState(null)
     } catch {
-      // Error handled by notification system
+      // Error handled by notification system; keep conflictState for retry
     }
   }
 
