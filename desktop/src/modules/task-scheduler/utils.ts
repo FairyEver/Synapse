@@ -1,8 +1,11 @@
 import type {
   ScheduledTask,
   ScheduledTaskCreateInput,
+  ScheduledTaskActionRef,
+  ScheduledTaskScope,
   ScheduledTaskRun,
   ScheduledTaskStatus,
+  ScheduledTaskTrigger,
   ScheduledTaskUpdateInput,
 } from "@/types/task-scheduler"
 import type { SynapseAgentGlobalConfig, SynapseProjectConfig } from "@/types/config"
@@ -265,15 +268,73 @@ function serializeTasksForExport(tasks: ScheduledTask[]): TaskExportFile {
 function parseTaskImportFile(content: string): TaskExportFile {
   const data = JSON.parse(content) as unknown
   if (
-    typeof data !== "object" ||
-    data === null ||
-    !("version" in data) ||
-    !("tasks" in data) ||
-    !Array.isArray((data as { tasks: unknown }).tasks)
+    !isRecord(data) ||
+    data.version !== 1 ||
+    !Array.isArray(data.tasks)
   ) {
     throw new Error("文件格式无效")
   }
-  return data as TaskExportFile
+  const tasks = data.tasks
+  if (!tasks.every(isTaskExportEntry)) {
+    throw new Error("文件格式无效")
+  }
+  return {
+    version: 1,
+    exportedAt: typeof data.exportedAt === "string"
+      ? data.exportedAt
+      : "",
+    tasks,
+  }
+}
+
+function isTaskExportEntry(value: unknown): value is TaskExportFile["tasks"][number] {
+  if (!isRecord(value)) return false
+  return typeof value.name === "string" &&
+    (value.description === undefined || typeof value.description === "string") &&
+    (value.cwd === undefined || typeof value.cwd === "string") &&
+    isScheduledTaskScope(value.scope) &&
+    isScheduledTaskTrigger(value.trigger) &&
+    isScheduledTaskActionRef(value.action) &&
+    (value.activeDays === undefined || isActiveDays(value.activeDays)) &&
+    (value.missedRunPolicy === "skip" || value.missedRunPolicy === "run_once")
+}
+
+function isScheduledTaskScope(value: unknown): value is ScheduledTaskScope {
+  if (!isRecord(value)) return false
+  if (value.type === "global") return true
+  return value.type === "project" && typeof value.projectId === "string" && value.projectId.length > 0
+}
+
+function isScheduledTaskTrigger(value: unknown): value is ScheduledTaskTrigger {
+  if (!isRecord(value) || !isRecord(value.config)) return false
+  if (value.type === "builtin.cron") {
+    return typeof value.config.expr === "string" && value.config.expr.length > 0
+  }
+  if (value.type === "builtin.interval") {
+    const everyMinutes = value.config.everyMinutes
+    return Number.isInteger(everyMinutes) &&
+      typeof everyMinutes === "number" &&
+      everyMinutes > 0 &&
+      (
+        value.config.anchor === undefined ||
+        value.config.anchor === "created_at" ||
+        value.config.anchor === "last_completed_at"
+      )
+  }
+  return false
+}
+
+function isScheduledTaskActionRef(value: unknown): value is ScheduledTaskActionRef {
+  return isRecord(value) && typeof value.type === "string" && isRecord(value.config)
+}
+
+function isActiveDays(value: unknown): value is number[] {
+  return Array.isArray(value) &&
+    value.every((day) => Number.isInteger(day) && day >= 0 && day <= 6)
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null
 }
 
 export {

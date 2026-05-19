@@ -7,6 +7,7 @@ import {
   DEFAULT_TASK_FORM_STATE,
   formatTaskAction,
   formatTaskNextRun,
+  parseTaskImportFile,
 } from "../utils"
 import type { ScheduledTask } from "@/types/task-scheduler"
 
@@ -227,6 +228,13 @@ describe("task scheduler utils", () => {
       enabled: false,
       nextRunAt: undefined,
     }))).toBe("停用中")
+  })
+
+  it("rejects malformed imported task entries", () => {
+    expect(() => parseTaskImportFile(JSON.stringify({
+      version: 1,
+      tasks: [{}],
+    }))).toThrow("文件格式无效")
   })
 })
 
