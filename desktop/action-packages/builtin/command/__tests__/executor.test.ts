@@ -49,6 +49,47 @@ describe("builtin.command executor", () => {
     }))
   })
 
+  it("keeps process diagnostics out of persisted outputs", async () => {
+    const run = vi.fn(async () => ({
+      exitCode: 0,
+      signal: null,
+      stdout: "ok",
+      stderr: "",
+      timedOut: false,
+      durationMs: 12,
+      diagnostics: {
+        envKeys: ["PATH"],
+        pathSummary: "/Users/liyang/private/bin ... (2 entries)",
+        pathEntries: ["/Users/liyang/private/bin", "/opt/internal/bin"],
+        shell: "/bin/sh",
+        args: ["-lc", "echo ok"],
+      },
+    }))
+    const action = createCommandAction({
+      processRunner: { run },
+      platform: "darwin",
+    })
+
+    const result = await action.execute({
+      config: {
+        command: "echo ok",
+        shell: "posix",
+        timeoutMins: 1,
+      },
+      context: {
+        taskId: "task:1",
+        runId: "run:1",
+        triggeredBy: "schedule",
+        cwd: "/tmp",
+        actor: { kind: "user", id: "task-scheduler", display: "Task Scheduler" },
+        abortSignal: new AbortController().signal,
+      },
+    })
+
+    expect(result.outputs).toEqual({ stdout: "ok", stderr: "", exitCode: 0 })
+    expect(JSON.stringify(result.outputs)).not.toContain("/Users/liyang/private/bin")
+  })
+
   it("does not spread baseEnv/process.env into env so buildAllowedEnv can resolve shell PATH", async () => {
     const run = vi.fn(async () => ({
       exitCode: 0,

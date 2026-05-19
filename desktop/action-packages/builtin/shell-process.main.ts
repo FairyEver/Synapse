@@ -65,9 +65,6 @@ export async function runShellAction(input: {
     stderr: result.stderr ?? "",
     exitCode: result.exitCode,
   }
-  if (result.diagnostics) {
-    outputs.diagnostics = result.diagnostics
-  }
 
   if (result.timedOut) {
     return {
