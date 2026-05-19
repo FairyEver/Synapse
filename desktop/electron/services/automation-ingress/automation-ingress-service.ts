@@ -121,13 +121,25 @@ export class AutomationIngressService {
 
   async updateConfig(input: WebhookConfigUpdate): Promise<WebhookConfigUpdateResult> {
     const existing = await this.getOrCreateConfig()
+    const bindAddress = input.bindAddress?.trim() || existing.bindAddress
+    const preferredPort = input.preferredPort ?? existing.preferredPort
+    const path = normalizePath(input.path ?? existing.path)
+    const enabled = input.enabled ?? existing.enabled
+    const changedFields = configChangedFields(input)
+    await this.authorizeConfigUpdate(input, {
+      enabled,
+      bindAddress,
+      preferredPort,
+      path,
+      changedFields,
+    })
     const token = input.resetToken ? randomUUID() : existing.token
     const next: WebhookConfigEntryV1 = {
       ...existing,
-      enabled: input.enabled ?? existing.enabled,
-      bindAddress: input.bindAddress?.trim() || existing.bindAddress,
-      preferredPort: input.preferredPort ?? existing.preferredPort,
-      path: normalizePath(input.path ?? existing.path),
+      enabled,
+      bindAddress,
+      preferredPort,
+      path,
       token,
       maxBodyBytes: input.maxBodyBytes ?? existing.maxBodyBytes,
       rateLimitPerMinute: input.rateLimitPerMinute ?? existing.rateLimitPerMinute,
@@ -139,6 +151,73 @@ export class AutomationIngressService {
       status: statusFromConfig(next, this.binding),
       token: input.resetToken ? token : undefined,
     }
+  }
+
+  private async authorizeConfigUpdate(
+    input: WebhookConfigUpdate,
+    target: {
+      readonly enabled: boolean
+      readonly bindAddress: string
+      readonly preferredPort?: number
+      readonly path: string
+      readonly changedFields: readonly string[]
+    },
+  ): Promise<void> {
+    if (requiresListenConfigAuthorization(input, target.enabled)) {
+      await this.authorizeConfigPermission({
+        action: "network.listen",
+        resource: webhookListenResource(target),
+        changedFields: target.changedFields,
+      })
+    }
+    if (input.resetToken) {
+      await this.authorizeConfigPermission({
+        action: "secret.write",
+        resource: "automation.webhook.token",
+        changedFields: target.changedFields,
+      })
+    }
+  }
+
+  private async authorizeConfigPermission(input: {
+    readonly action: "network.listen" | "secret.write"
+    readonly resource: string
+    readonly changedFields: readonly string[]
+  }): Promise<void> {
+    const metadata = {
+      source: "automationIngress.updateConfig",
+      changedFields: [...input.changedFields],
+    }
+    const permission = await this.deps.permissionGuard?.check({
+      action: input.action,
+      actor: { kind: "user" },
+      resource: input.resource,
+      context: {
+        serviceId: NETWORK_SERVICE_ID,
+        source: "automationIngress.updateConfig",
+      },
+    })
+    if (permission && !permission.allowed) {
+      this.deps.auditSink?.record({
+        action: input.action,
+        actor: { kind: "user" },
+        resource: input.resource,
+        outcome: "denied",
+        metadata: {
+          ...metadata,
+          reason: permission.reason,
+          policyId: permission.policyId,
+        },
+      })
+      throw new Error(permission.reason)
+    }
+    this.deps.auditSink?.record({
+      action: input.action,
+      actor: { kind: "user" },
+      resource: input.resource,
+      outcome: "allowed",
+      metadata,
+    })
   }
 
   async listRuns(projectId?: string): Promise<readonly WebhookRunEntryV1[]> {
@@ -677,6 +756,40 @@ function normalizePath(value: string): string {
   const trimmed = value.trim()
   if (!trimmed) return DEFAULT_PATH
   return trimmed.startsWith("/") ? trimmed : `/${trimmed}`
+}
+
+function configChangedFields(input: WebhookConfigUpdate): string[] {
+  const fields: string[] = []
+  if (input.enabled !== undefined) fields.push("enabled")
+  if (input.bindAddress !== undefined) fields.push("bindAddress")
+  if (input.preferredPort !== undefined) fields.push("preferredPort")
+  if (input.path !== undefined) fields.push("path")
+  if (input.maxBodyBytes !== undefined) fields.push("maxBodyBytes")
+  if (input.rateLimitPerMinute !== undefined) fields.push("rateLimitPerMinute")
+  if (input.resetToken) fields.push("resetToken")
+  return fields
+}
+
+function requiresListenConfigAuthorization(
+  input: WebhookConfigUpdate,
+  enabled: boolean,
+): boolean {
+  return enabled && (
+    input.enabled === true
+    || input.bindAddress !== undefined
+    || input.preferredPort !== undefined
+    || input.path !== undefined
+    || input.maxBodyBytes !== undefined
+    || input.rateLimitPerMinute !== undefined
+  )
+}
+
+function webhookListenResource(input: {
+  readonly bindAddress: string
+  readonly preferredPort?: number
+  readonly path: string
+}): string {
+  return `${input.bindAddress}:${String(input.preferredPort ?? 0)}${input.path}`
 }
 
 function stringValue(value: unknown): string | undefined {

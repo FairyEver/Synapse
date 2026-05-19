@@ -9,12 +9,130 @@ import type {
 import { createNetworkServiceRegistry } from "../../../runtime/network"
 import type { ControlledProcessRunner } from "../../../runtime/process"
 import type { ProjectContainerRegistry } from "../../../runtime/project-container"
-import type { AuditSink } from "../../../runtime/security"
+import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import type { StructuredLogger } from "../../../runtime/service-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "../../agent-runtime"
 import { AutomationIngressService } from "../automation-ingress-service"
 
 describe("AutomationIngressService", () => {
+  it("rejects webhook listener updates when permission is denied before persisting", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const auditEvents: Parameters<AuditSink["record"]>[0][] = []
+    const permissionGuard: PermissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: false, reason: "denied by policy", policyId: "deny-webhook" })),
+    }
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "not used" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      permissionGuard,
+      auditSink: {
+        record: (event) => {
+          auditEvents.push(event)
+        },
+        list: () => [],
+        clearForTests: () => {},
+      },
+    })
+
+    await expect(service.updateConfig({
+      enabled: true,
+      bindAddress: "0.0.0.0",
+      preferredPort: 4567,
+      resetToken: true,
+    })).rejects.toThrow("denied by policy")
+
+    const persistedConfig = await configs.get("webhook:default")
+    expect(persistedConfig).toEqual(expect.objectContaining({
+      enabled: false,
+      bindAddress: "127.0.0.1",
+    }))
+    expect(persistedConfig?.preferredPort).toBeUndefined()
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "network.listen",
+      actor: { kind: "user" },
+      resource: "0.0.0.0:4567/hook",
+      context: {
+        serviceId: "automation.webhook",
+        source: "automationIngress.updateConfig",
+      },
+    })
+    expect(auditEvents).toEqual([
+      expect.objectContaining({
+        action: "network.listen",
+        actor: { kind: "user" },
+        resource: "0.0.0.0:4567/hook",
+        outcome: "denied",
+        metadata: expect.objectContaining({
+          source: "automationIngress.updateConfig",
+          policyId: "deny-webhook",
+          changedFields: expect.arrayContaining(["enabled", "bindAddress", "preferredPort", "resetToken"]),
+        }),
+      }),
+    ])
+  })
+
+  it("audits allowed webhook listener updates and token resets without exposing tokens", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const auditEvents: Parameters<AuditSink["record"]>[0][] = []
+    const permissionGuard: PermissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "not used" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      permissionGuard,
+      auditSink: {
+        record: (event) => {
+          auditEvents.push(event)
+        },
+        list: () => [],
+        clearForTests: () => {},
+      },
+    })
+
+    const result = await service.updateConfig({
+      enabled: true,
+      bindAddress: "0.0.0.0",
+      preferredPort: 4567,
+      resetToken: true,
+    })
+
+    expect(result.token).toEqual(expect.any(String))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "network.listen",
+      resource: "0.0.0.0:4567/hook",
+    }))
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "secret.write",
+      resource: "automation.webhook.token",
+    }))
+    expect(auditEvents).toEqual([
+      expect.objectContaining({
+        action: "network.listen",
+        outcome: "allowed",
+        resource: "0.0.0.0:4567/hook",
+      }),
+      expect.objectContaining({
+        action: "secret.write",
+        outcome: "allowed",
+        resource: "automation.webhook.token",
+      }),
+    ])
+    expect(JSON.stringify(auditEvents)).not.toContain(result.token ?? "")
+  })
+
   it("passes webhook messageId into AgentMessage for runtime correlation", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
