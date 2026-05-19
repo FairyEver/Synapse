@@ -1,4 +1,4 @@
-import { app, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent, type WebContents } from "electron"
+import { app, ipcMain, type IpcMainEvent, type IpcMainInvokeEvent } from "electron"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
 
@@ -57,23 +57,7 @@ function handleValidatedIpc<Args extends unknown[], Result>(
   })
 }
 
-function onValidatedIpc<Args extends unknown[]>(
-  channel: string,
-  listener: (event: IpcMainEvent, ...args: Args) => void,
-): void {
-  ipcMain.on(channel, (event, ...args) => {
-    assertTrustedIpcSender(event)
-    listener(event, ...(args as Args))
-  })
-}
-
-function isTrustedRendererContents(webContents: WebContents): boolean {
-  return isTrustedRendererUrl(webContents.getURL())
-}
-
 export {
   assertTrustedIpcSender,
   handleValidatedIpc,
-  isTrustedRendererContents,
-  onValidatedIpc,
 }
