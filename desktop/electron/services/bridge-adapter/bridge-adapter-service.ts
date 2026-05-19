@@ -485,10 +485,17 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       this.sendProtocolError(
         adapter,
         "permission_response_failed",
-        error instanceof Error ? error.message : String(error),
+        "Permission response failed",
         action.session_key,
         action.reply_ctx,
       )
+      this.deps.logger?.warn("Bridge permission response failed.", {
+        platform: adapter.platform,
+        sessionKey: action.session_key,
+        requestId: permission.requestId,
+        behavior: permission.behavior,
+        ...errorDiagnostic(error),
+      })
     }
   }
 
@@ -519,7 +526,12 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       if (error instanceof BridgeAdapterError) {
         return bridgeResponse(error.status, false, undefined, error.message)
       }
-      return bridgeResponse(500, false, undefined, error instanceof Error ? error.message : String(error))
+      this.deps.logger?.warn("Bridge session HTTP request failed.", {
+        method: request.method,
+        path: url.pathname,
+        ...errorDiagnostic(error),
+      })
+      return bridgeResponse(500, false, undefined, "Bridge session request failed")
     }
   }
 
@@ -1041,10 +1053,10 @@ function parseJsonRecord(body: Buffer): Record<string, unknown> {
       throw new Error("JSON body must be an object")
     }
     return value as Record<string, unknown>
-  } catch (error) {
+  } catch {
     throw new BridgeAdapterError(
       "invalid_json",
-      error instanceof Error ? error.message : String(error),
+      "invalid JSON body",
       400,
     )
   }

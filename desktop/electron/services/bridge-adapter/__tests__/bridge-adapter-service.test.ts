@@ -176,6 +176,35 @@ describe("BridgeAdapterService", () => {
     await service.stop()
   })
 
+  it("does not expose raw permission response failures to bridge adapters", async () => {
+    const agent = new FailingPermissionAgentRuntime("permission failed at /Users/liyang/private token=secret")
+    const { service, port } = await startBridge(agent)
+    const ws = await registeredBridge(port, "tok", ["text"])
+
+    ws.send(JSON.stringify({
+      type: "card_action",
+      session_key: "bridge:s1",
+      action: "perm:req-1:allow",
+      reply_ctx: "ctx",
+      project: "project-1",
+    }))
+
+    const response = await readJson(ws)
+    expect(response).toEqual(expect.objectContaining({
+      type: "error",
+      session_key: "bridge:s1",
+      reply_ctx: "ctx",
+      error: {
+        code: "permission_response_failed",
+        message: "Permission response failed",
+      },
+    }))
+    expect(JSON.stringify(response)).not.toContain("/Users/liyang/private")
+    expect(JSON.stringify(response)).not.toContain("secret")
+    ws.close()
+    await service.stop()
+  })
+
   it("sends reply, compact progress, typing, and side-channel payloads to fake adapter", async () => {
     const { service, port } = await startBridge()
     const ws = await registeredBridge(port, "tok", ["text", "typing", "update_message", "image"])
@@ -422,6 +451,28 @@ describe("BridgeAdapterService", () => {
     expect(await agent.getSession(second.id)).toBeNull()
     await service.stop()
   })
+
+  it("does not expose raw session HTTP failures to bridge adapters", async () => {
+    const agent = new FailingSessionAgentRuntime("session failed at /Users/liyang/private token=secret")
+    const { service, port } = await startBridge(agent)
+    const base = `http://127.0.0.1:${String(port)}/bridge/sessions`
+
+    const response = await fetch(base, {
+      method: "POST",
+      headers: { Authorization: "Bearer tok", "Content-Type": "application/json" },
+      body: JSON.stringify({ project: "project-1", session_key: "bridge:s1", name: "Main" }),
+    })
+    const body = await response.json()
+
+    expect(response.status).toBe(500)
+    expect(body).toEqual({
+      ok: false,
+      error: "Bridge session request failed",
+    })
+    expect(JSON.stringify(body)).not.toContain("/Users/liyang/private")
+    expect(JSON.stringify(body)).not.toContain("secret")
+    await service.stop()
+  })
 })
 
 async function startBridge(
@@ -634,6 +685,31 @@ class FailingAgentRuntime extends FakeAgentRuntime {
 
   override async send(message: AgentMessage): Promise<AgentRuntimeTurnResult> {
     this.messages.push(message)
+    throw new Error(this.failureMessage)
+  }
+}
+
+class FailingPermissionAgentRuntime extends FakeAgentRuntime {
+  constructor(private readonly failureMessage: string) {
+    super()
+  }
+
+  override async respondPermission(_request: AgentPermissionResponseRequest): Promise<void> {
+    throw new Error(this.failureMessage)
+  }
+}
+
+class FailingSessionAgentRuntime extends FakeAgentRuntime {
+  constructor(private readonly failureMessage: string) {
+    super()
+  }
+
+  override async createSession(input: {
+    readonly sessionKey: string
+    readonly platform?: string
+    readonly name?: string
+  }): Promise<ConversationEntryV1> {
+    void input
     throw new Error(this.failureMessage)
   }
 }
