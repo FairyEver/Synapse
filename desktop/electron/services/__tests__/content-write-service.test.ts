@@ -43,6 +43,7 @@ vi.mock("electron", () => ({
 
 import { createDefaultConfig } from "../../../src/lib/config"
 import type { SynapseRepositoryConfig } from "../../../src/types/config"
+import type { SynapseContentSnapshotRecord, SynapseContentType } from "../../../src/types/content"
 import { configStore } from "../config-store"
 import {
   CONTENT_ATTACHMENTS_FILE_NAME,
@@ -66,22 +67,32 @@ async function writeJson(filePath: string, value: unknown): Promise<void> {
   await writeFile(filePath, `${JSON.stringify(value, null, 2)}\n`, "utf8")
 }
 
-async function writeRuleFixture(root: string, historyDirname: string): Promise<void> {
-  const historyPath = path.join(root, "rules", "rule-1", HISTORY_DIRECTORY_NAME, historyDirname)
+async function writeContentFixture(
+  root: string,
+  options: {
+    contentDir: string
+    contentId: string
+    contentType: SynapseContentType
+    historyDirname: string
+    snapshot?: Partial<SynapseContentSnapshotRecord>
+  },
+): Promise<void> {
+  const contentPath = path.join(root, options.contentDir, options.contentId)
+  const historyPath = path.join(contentPath, HISTORY_DIRECTORY_NAME, options.historyDirname)
 
   await mkdir(historyPath, { recursive: true })
-  await writeJson(path.join(root, "rules", "rule-1", CONTENT_META_FILE_NAME), {
+  await writeJson(path.join(contentPath, CONTENT_META_FILE_NAME), {
     schemaVersion: 1,
-    id: "rule-1",
-    type: "rule",
+    id: options.contentId,
+    type: options.contentType,
     createdBy: "user",
     createdByDisplayName: "User",
     createdAt: "2026-05-19T00:00:00.000Z",
   })
   await writeJson(path.join(historyPath, "snapshot.json"), {
     schemaVersion: 1,
-    title: "Rule",
-    name: "rule",
+    title: "Content",
+    name: "content",
     description: "Description",
     category: "test",
     icon: "wrench",
@@ -91,11 +102,25 @@ async function writeRuleFixture(root: string, historyDirname: string): Promise<v
     modifiedByDisplayName: "User",
     modifiedAt: "2026-05-19T00:00:00.000Z",
     deleted: false,
+    ...options.snapshot,
   })
-  await writeFile(path.join(historyPath, CONTENT_MAIN_FILE_NAME), "# Rule\n", "utf8")
+  await writeFile(path.join(historyPath, CONTENT_MAIN_FILE_NAME), "# Content\n", "utf8")
   await writeJson(path.join(historyPath, CONTENT_ATTACHMENTS_FILE_NAME), {
     schemaVersion: 1,
     files: [],
+  })
+}
+
+async function writeRuleFixture(root: string, historyDirname: string): Promise<void> {
+  await writeContentFixture(root, {
+    contentDir: "rules",
+    contentId: "rule-1",
+    contentType: "rule",
+    historyDirname,
+    snapshot: {
+      title: "Rule",
+      name: "rule",
+    },
   })
 }
 
@@ -149,5 +174,112 @@ describe("contentWriteService", () => {
 
     await expect(readFile(path.join(result.gitPaths[0], CONTENT_MAIN_FILE_NAME), "utf8"))
       .resolves.toBe("# Updated\n")
+  })
+
+  it("preserves skill usage and image icon metadata when deleting content", async () => {
+    const root = await createTempRoot()
+    const baseHistoryDirname = "20260519000000Z__user__abc123"
+    const repository: SynapseRepositoryConfig = {
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: root,
+      contentDirs: { skill: "skills" },
+    }
+    const config = createDefaultConfig()
+    config.activeRepoUuid = repository.uuid
+    config.repositories = [repository]
+
+    await writeContentFixture(root, {
+      contentDir: "skills",
+      contentId: "skill-1",
+      contentType: "skill",
+      historyDirname: baseHistoryDirname,
+      snapshot: {
+        title: "Skill",
+        name: "skill",
+        usage: "Use it carefully.",
+        icon: "",
+        iconBg: "",
+        iconType: "image",
+        iconImage: "icon.png",
+      },
+    })
+    vi.spyOn(configStore, "load").mockResolvedValue(config)
+    vi.spyOn(repositoryStore, "getRepositoryState").mockResolvedValue({
+      repositoryUuid: repository.uuid,
+      localPath: root,
+      status: "ready",
+      isGitRepository: false,
+      gitRootPath: null,
+    })
+
+    const result = await contentWriteService.deleteContent("skill", "skill-1", {
+      displayName: "User",
+      userId: "user",
+    })
+
+    const snapshot = JSON.parse(
+      await readFile(path.join(root, "skills", "skill-1", HISTORY_DIRECTORY_NAME, result.latestHistoryDirname, "snapshot.json"), "utf8"),
+    ) as SynapseContentSnapshotRecord
+    expect(snapshot).toMatchObject({
+      deleted: true,
+      usage: "Use it carefully.",
+      iconType: "image",
+      iconImage: "icon.png",
+    })
+  })
+
+  it("preserves skill usage and image icon metadata when restoring content", async () => {
+    const root = await createTempRoot()
+    const baseHistoryDirname = "20260519000000Z__user__abc123"
+    const repository: SynapseRepositoryConfig = {
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: root,
+      contentDirs: { skill: "skills" },
+    }
+    const config = createDefaultConfig()
+    config.activeRepoUuid = repository.uuid
+    config.repositories = [repository]
+
+    await writeContentFixture(root, {
+      contentDir: "skills",
+      contentId: "skill-1",
+      contentType: "skill",
+      historyDirname: baseHistoryDirname,
+      snapshot: {
+        title: "Skill",
+        name: "skill",
+        usage: "Use it carefully.",
+        icon: "",
+        iconBg: "",
+        iconType: "image",
+        iconImage: "icon.png",
+        deleted: true,
+      },
+    })
+    vi.spyOn(configStore, "load").mockResolvedValue(config)
+    vi.spyOn(repositoryStore, "getRepositoryState").mockResolvedValue({
+      repositoryUuid: repository.uuid,
+      localPath: root,
+      status: "ready",
+      isGitRepository: false,
+      gitRootPath: null,
+    })
+
+    const result = await contentWriteService.restoreContent("skill", "skill-1", {
+      displayName: "User",
+      userId: "user",
+    })
+
+    const snapshot = JSON.parse(
+      await readFile(path.join(root, "skills", "skill-1", HISTORY_DIRECTORY_NAME, result.latestHistoryDirname, "snapshot.json"), "utf8"),
+    ) as SynapseContentSnapshotRecord
+    expect(snapshot).toMatchObject({
+      deleted: false,
+      usage: "Use it carefully.",
+      iconType: "image",
+      iconImage: "icon.png",
+    })
   })
 })
