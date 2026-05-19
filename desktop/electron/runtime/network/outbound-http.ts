@@ -111,6 +111,8 @@ const SENSITIVE_HEADER_PATTERN = /^(authorization|cookie|set-cookie|x-api-key|x-
 function sanitizeUrl(raw: string): string {
   try {
     const url = new URL(raw)
+    if (url.username) url.username = "[REDACTED]"
+    if (url.password) url.password = "[REDACTED]"
     for (const param of url.searchParams.keys()) {
       if (SENSITIVE_PARAM_NAMES.has(param.toLowerCase())) {
         url.searchParams.set(param, "[REDACTED]")
