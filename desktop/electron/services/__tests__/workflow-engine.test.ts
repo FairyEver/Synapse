@@ -336,6 +336,30 @@ describe("WorkflowEngine", () => {
     )
   })
 
+  it("does not use workflow id as a fallback project id for node executors", async () => {
+    const execute = vi.fn().mockResolvedValue({ status: "success" as const, output: "ok", durationMs: 1 })
+    nodeTypeRegistry.register(
+      { ...promptNodeManifest, type: "project-capture" },
+      { execute },
+    )
+    const def: WorkflowDefinition = {
+      id: "wf-not-project", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      params: [],
+      nodes: [
+        { id: "capture", name: "Capture", type: "project-capture", position: { x: 0, y: 0 }, config: { variables: [], prompt: "test" } },
+        nodeEnd,
+      ],
+      edges: [{ id: "e1", from: "capture", to: "end" }],
+    }
+
+    const engine = new WorkflowEngine(fakeAgent("unused"))
+    await engine.run(def, {}, "run-project", () => {})
+
+    expect(execute).toHaveBeenCalledWith(expect.objectContaining({
+      context: expect.objectContaining({ projectId: undefined }),
+    }))
+  })
+
   it("parallel root failure skips downstream but lets other running nodes finish", async () => {
     const nodeC = { id: "c", name: "C", type: "prompt", position: { x: 100, y: 100 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "c" } }
     const def: WorkflowDefinition = {

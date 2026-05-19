@@ -129,6 +129,46 @@ describe("createWorkflowDispatcher", () => {
     expect((result.data as Record<string, unknown>).nodeId).toHaveLength(36) // UUID format
   })
 
+  it("serializes concurrent workflow mutations so later writes include earlier changes", async () => {
+    let storedDefinition = {
+      id: "wf-1", name: "Test", description: "", version: "v1",
+      createdAt: 1, updatedAt: 2, params: [],
+      nodes: [{ id: "end", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} }],
+      edges: [],
+    }
+    const deps = makeDeps({
+      workflowService: {
+        ...makeDeps().workflowService,
+        get: vi.fn(async () => structuredClone(storedDefinition)),
+        save: vi.fn(async (definition) => {
+          await Promise.resolve()
+          storedDefinition = structuredClone(definition)
+          return { versionHash: `v_${storedDefinition.nodes.length}` }
+        }),
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    await Promise.all([
+      dispatcher.dispatch(
+        "workflow.node.create",
+        { workflowId: "wf-1", node: { name: "Prompt A", type: "prompt" } },
+        { source: "api" },
+      ),
+      dispatcher.dispatch(
+        "workflow.node.create",
+        { workflowId: "wf-1", node: { name: "Prompt B", type: "prompt" } },
+        { source: "api" },
+      ),
+    ])
+
+    expect(storedDefinition.nodes.map((node) => node.name).sort()).toEqual([
+      "End",
+      "Prompt A",
+      "Prompt B",
+    ])
+  })
+
   it("workflow.definition.delete calls cancelRunsForWorkflow", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)

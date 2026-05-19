@@ -12,6 +12,7 @@ import { createMainLogger } from "../services/log-store"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../workflow-nodes/switch/constants"
 
 const logger = createMainLogger("capability.workflow-dispatcher")
+const workflowMutationChains = new WeakMap<WorkflowDispatchDeps, Map<string, Promise<void>>>()
 
 export type WorkflowDispatchDeps = {
   workflowService: WorkflowService
@@ -68,14 +69,41 @@ async function atomicMutate(
   workflowId: string,
   mutate: (def: WorkflowDefinition) => void,
 ): Promise<DispatchResult> {
-  const def = await deps.workflowService.get(workflowId)
-  if (!def) throw new Error(`Workflow not found: ${workflowId}`)
-  mutate(def)
-  const validation = validateWorkflow(def)
-  const saveResult = await deps.workflowService.save(def)
-  if ("errors" in saveResult) throw new Error(`Save failed: ${(saveResult as WorkflowSaveError).errors.map((e) => e.message).join("; ")}`)
-  emitDefinitionUpdated(deps.eventBus, workflowId, "mcp", (saveResult as WorkflowSaveResult).versionHash)
-  return { ok: true, data: { versionHash: (saveResult as WorkflowSaveResult).versionHash, validation } }
+  return withWorkflowMutationLock(deps, workflowId, async () => {
+    const def = await deps.workflowService.get(workflowId)
+    if (!def) throw new Error(`Workflow not found: ${workflowId}`)
+    mutate(def)
+    const validation = validateWorkflow(def)
+    const saveResult = await deps.workflowService.save(def)
+    if ("errors" in saveResult) throw new Error(`Save failed: ${(saveResult as WorkflowSaveError).errors.map((e) => e.message).join("; ")}`)
+    emitDefinitionUpdated(deps.eventBus, workflowId, "mcp", (saveResult as WorkflowSaveResult).versionHash)
+    return { ok: true, data: { versionHash: (saveResult as WorkflowSaveResult).versionHash, validation } }
+  })
+}
+
+async function withWorkflowMutationLock<T>(
+  deps: WorkflowDispatchDeps,
+  workflowId: string,
+  task: () => Promise<T>,
+): Promise<T> {
+  let chains = workflowMutationChains.get(deps)
+  if (!chains) {
+    chains = new Map()
+    workflowMutationChains.set(deps, chains)
+  }
+
+  const previous = chains.get(workflowId) ?? Promise.resolve()
+  const run = previous.catch(() => undefined).then(task)
+  const done = run.then(() => undefined, () => undefined)
+  chains.set(workflowId, done)
+
+  try {
+    return await run
+  } finally {
+    if (chains.get(workflowId) === done) {
+      chains.delete(workflowId)
+    }
+  }
 }
 
 function autoPosition(nodes: WorkflowDefinition["nodes"]): { x: number; y: number } {
