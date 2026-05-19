@@ -370,6 +370,71 @@ describe("workflowIpcModule", () => {
 
     expect(runStatuses.get(runId)?.nodeResults["node-1"]?.progressLabel).toBe("Working")
   })
+
+  it("exports a workflow package through the package service", async () => {
+    const packageService = {
+      buildExportPackage: vi.fn(async () => ({
+        format: "synapse-workflow-package-v1",
+        exportedAt: "2026-05-19T10:00:00.000Z",
+        workflow: workflowDefinition(),
+        modelReferences: [],
+      })),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.package") return packageService as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const result = await harness.invoke("synapse:workflow:export-package-data", { workflowId: "workflow-1" })
+
+    expect(packageService.buildExportPackage).toHaveBeenCalledWith("workflow-1")
+    expect(result).toMatchObject({ format: "synapse-workflow-package-v1" })
+  })
+
+  it("previews a workflow package with mappings", async () => {
+    const preview = {
+      packagePath: "/tmp/workflow.synapse-workflow.json",
+      workflow: { id: "workflow-1", name: "Workflow", nodeCount: 1, modelReferenceCount: 0 },
+      modelReferences: [],
+      providerOptions: [],
+      suggestedMappings: [],
+    }
+    const packageService = { buildImportPreview: vi.fn(async () => preview) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.package") return packageService as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const result = await harness.invoke("synapse:workflow:inspect-import-package-data", {
+      packagePath: "/tmp/workflow.synapse-workflow.json",
+      packageData: { format: "synapse-workflow-package-v1", exportedAt: "2026-05-19T10:00:00.000Z", workflow: workflowDefinition(), modelReferences: [] },
+    })
+
+    expect(packageService.buildImportPreview).toHaveBeenCalled()
+    expect(result).toEqual(preview)
+  })
+
+  it("imports a workflow package through the package service", async () => {
+    const packageService = { importPackage: vi.fn(async () => ({ workflowId: "workflow-imported", versionHash: "v_1" })) }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.package") return packageService as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const result = await harness.invoke("synapse:workflow:import-package-data", {
+      packageData: { format: "synapse-workflow-package-v1", exportedAt: "2026-05-19T10:00:00.000Z", workflow: workflowDefinition(), modelReferences: [] },
+      mappings: [],
+    })
+
+    expect(packageService.importPackage).toHaveBeenCalled()
+    expect(result).toEqual({ workflowId: "workflow-imported", versionHash: "v_1" })
+  })
 })
 
 function workflowDefinition() {

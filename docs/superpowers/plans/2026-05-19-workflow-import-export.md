@@ -678,7 +678,7 @@ git commit -m "feat: register workflow package service"
 - Modify: `desktop/electron/modules/workflow/__tests__/ipc.test.ts`
 - Test: `pnpm --filter @synapse/desktop exec vitest run electron/modules/workflow/__tests__/ipc.test.ts`
 
-- [ ] **Step 1: Add failing IPC tests**
+- [x] **Step 1: Add failing IPC tests**
 
 Append tests to `desktop/electron/modules/workflow/__tests__/ipc.test.ts`:
 
@@ -744,7 +744,7 @@ it("imports a workflow package through the package service", async () => {
 
 These tests use data-only channels to avoid mocking Electron dialogs. Dialog-backed channels are added in the same handler file but can be tested through integration later.
 
-- [ ] **Step 2: Run IPC test to verify it fails**
+- [x] **Step 2: Run IPC test to verify it fails**
 
 Run:
 
@@ -754,7 +754,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/modules/workflow/__tests
 
 Expected: FAIL because the new channels do not exist.
 
-- [ ] **Step 3: Add zod schemas and data-only IPC methods**
+- [x] **Step 3: Add zod schemas and data-only IPC methods**
 
 In `desktop/electron/modules/workflow/ipc.ts`, import:
 
@@ -850,7 +850,7 @@ importPackageData: {
 },
 ```
 
-- [ ] **Step 4: Run IPC test**
+- [x] **Step 4: Run IPC test**
 
 Run:
 
@@ -860,7 +860,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/modules/workflow/__tests
 
 Expected: PASS for the data-only IPC tests and existing tests.
 
-- [ ] **Step 5: Add dialog-backed IPC methods**
+- [x] **Step 5: Add dialog-backed IPC methods**
 
 Still in `desktop/electron/modules/workflow/ipc.ts`, add helper:
 
@@ -927,7 +927,7 @@ importPackage: {
 
 Before finalizing this task, apply the repository's sensitive-operation rule: add `PermissionGuard.check()` and `AuditSink` records around `writeFile` and `readFile`, following the existing task scheduler IPC helpers in `desktop/electron/modules/task-scheduler/ipc.ts`. Use source strings `workflow.exportPackage`, `workflow.inspectImportPackage`, and `workflow.importPackage`.
 
-- [ ] **Step 6: Run hard constraints and IPC test**
+- [x] **Step 6: Run hard constraints and IPC test**
 
 Run:
 
@@ -938,7 +938,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/modules/workflow/__tests
 
 Expected: both PASS.
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add desktop/electron/modules/workflow/ipc.ts desktop/electron/modules/workflow/__tests__/ipc.test.ts

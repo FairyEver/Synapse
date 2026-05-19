@@ -1,7 +1,12 @@
 import { randomUUID } from "node:crypto"
+import { readFile, writeFile } from "node:fs/promises"
+import path from "node:path"
+import { BrowserWindow, dialog } from "electron"
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
+import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
 import type { WorkflowDefaultProviderModel, WorkflowService } from "../../services/workflow/workflow-service"
+import type { WorkflowPackageService } from "../../services/workflow/workflow-package-service"
 import type { WorkflowEngine } from "../../services/workflow/workflow-engine"
 import type { RunSnapshotService } from "../../services/workflow/run-snapshot-service"
 import type { WorkflowWindowManager } from "../../services/workflow/window-manager"
@@ -9,6 +14,7 @@ import type { EventBus } from "../../runtime/event-bus"
 import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "../../services/workflow/workflow-validator"
 import { truncateWithEllipsis } from "../../services/workflow/workflow-utils"
 import type { NodeRunResult, WorkflowDefinition, WorkflowEvent, WorkflowRunStatus, WorkflowRunSnapshot } from "../../../src/types/workflow"
+import type { SynapseWorkflowPackageV1, WorkflowModelMapping } from "../../../src/types/workflow-package"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
@@ -77,6 +83,71 @@ function rendererBaseUrl(): string {
   return process.env.VITE_DEV_SERVER_URL ?? "app://-"
 }
 
+function focusedWindow(): Electron.BrowserWindow | undefined {
+  return BrowserWindow.getFocusedWindow()
+    ?? BrowserWindow.getAllWindows().find((window) => window.isVisible() && !window.isDestroyed())
+    ?? undefined
+}
+
+async function checkFilePermission(options: {
+  readonly ctx: Parameters<IpcModule["methods"][string]["handler"]>[0]
+  readonly action: PermissionAction
+  readonly resource: string
+  readonly source: string
+}): Promise<AuditSink> {
+  const permissionGuard = options.ctx.resolve<PermissionGuard>("core.permission-guard")
+  const auditSink = options.ctx.resolve<AuditSink>("core.audit-sink")
+  const permission = await permissionGuard.check({
+    action: options.action,
+    actor: { kind: "user" },
+    resource: options.resource,
+    context: { source: options.source },
+  })
+  if (!permission.allowed) {
+    auditSink.record({
+      action: options.action,
+      actor: { kind: "user" },
+      resource: options.resource,
+      outcome: "denied",
+      metadata: {
+        source: options.source,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    throw new Error(permission.reason)
+  }
+  auditSink.record({
+    action: options.action,
+    actor: { kind: "user" },
+    resource: options.resource,
+    outcome: "allowed",
+    metadata: { source: options.source },
+  })
+  return auditSink
+}
+
+function recordFilePermissionFailure(options: {
+  readonly auditSink: AuditSink
+  readonly action: PermissionAction
+  readonly resource: string
+  readonly source: string
+  readonly error: unknown
+}): void {
+  const message = options.error instanceof Error ? options.error.message : String(options.error)
+  options.auditSink.record({
+    action: options.action,
+    actor: { kind: "user" },
+    resource: options.resource,
+    outcome: "failed",
+    metadata: {
+      source: options.source,
+      errorName: options.error instanceof Error ? options.error.name : typeof options.error,
+      errorLength: message.length,
+    },
+  })
+}
+
 /**
  * Deep-sanitize nodeResults for persistent storage: apply sanitizeError
  * to resolved variable values and resolved prompt text so that sensitive
@@ -132,6 +203,60 @@ const workflowDefinitionSchema = z.object({
   params: z.array(z.object({ name: z.string(), type: z.enum(["text", "number"]), default: z.union([z.string(), z.number(), z.null()]), description: z.string().optional() })),
   nodes: z.array(z.object({ id: z.string(), name: z.string(), type: z.string(), position: z.object({ x: z.number(), y: z.number() }), config: z.record(z.string(), z.unknown()) })),
   edges: z.array(z.object({ id: z.string(), from: z.string(), to: z.string(), branch: z.string().optional() })),
+})
+
+const modelTierSchema = z.enum(["default", "haiku", "sonnet", "opus"])
+
+const workflowModelOccurrenceSchema = z.union([
+  z.object({ kind: z.literal("workflowDefault") }),
+  z.object({
+    kind: z.literal("node"),
+    nodeId: z.string(),
+    nodeName: z.string(),
+    nodeType: z.string(),
+    inherited: z.boolean(),
+  }),
+])
+
+const workflowModelReferenceSchema = z.object({
+  id: z.string(),
+  sourceProviderId: z.string().optional(),
+  sourceProviderName: z.string().optional(),
+  sourceModelTier: modelTierSchema,
+  sourceModelName: z.string().optional(),
+  missingOnExporter: z.boolean().optional(),
+  occurrences: z.array(workflowModelOccurrenceSchema),
+})
+
+const workflowPackageSchema = z.object({
+  format: z.literal("synapse-workflow-package-v1"),
+  exportedAt: z.string(),
+  workflow: workflowDefinitionSchema,
+  modelReferences: z.array(workflowModelReferenceSchema),
+})
+
+const workflowModelMappingSchema = z.object({
+  sourceRefId: z.string(),
+  targetProviderId: z.string(),
+  targetModelTier: modelTierSchema,
+})
+
+const workflowImportPreviewSchema = z.object({
+  packagePath: z.string(),
+  workflow: z.object({
+    id: z.string(),
+    name: z.string(),
+    nodeCount: z.number(),
+    modelReferenceCount: z.number(),
+  }),
+  modelReferences: z.array(workflowModelReferenceSchema),
+  providerOptions: z.array(z.object({
+    providerId: z.string(),
+    providerName: z.string(),
+    active: z.boolean().optional(),
+    models: z.record(modelTierSchema, z.string().optional()),
+  })),
+  suggestedMappings: z.array(workflowModelMappingSchema),
 })
 
 const nodeRunResultSchema: z.ZodType<NodeRunResult> = z.object({
@@ -365,6 +490,118 @@ async function waitForRunCompletion(runId: string): Promise<void> {
 export const workflowIpcModule: IpcModule = {
   id: "workflow",
   methods: {
+    exportPackageData: {
+      channel: "synapse:workflow:export-package-data", kind: "invoke",
+      request: z.object({ workflowId: z.string() }),
+      response: workflowPackageSchema,
+      handler: async (ctx, { workflowId }: { workflowId: string }) =>
+        ctx.resolve<WorkflowPackageService>("core.workflow.package").buildExportPackage(workflowId),
+    },
+    inspectImportPackageData: {
+      channel: "synapse:workflow:inspect-import-package-data", kind: "invoke",
+      request: z.object({ packagePath: z.string(), packageData: workflowPackageSchema }),
+      response: workflowImportPreviewSchema,
+      handler: async (ctx, { packagePath, packageData }: { packagePath: string; packageData: SynapseWorkflowPackageV1 }) =>
+        ctx.resolve<WorkflowPackageService>("core.workflow.package").buildImportPreview(packagePath, packageData),
+    },
+    importPackageData: {
+      channel: "synapse:workflow:import-package-data", kind: "invoke",
+      request: z.object({ packageData: workflowPackageSchema, mappings: z.array(workflowModelMappingSchema) }),
+      response: z.union([
+        z.object({ workflowId: z.string(), versionHash: z.string() }),
+        z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) }),
+      ]),
+      handler: async (ctx, { packageData, mappings }: { packageData: SynapseWorkflowPackageV1; mappings: WorkflowModelMapping[] }) =>
+        ctx.resolve<WorkflowPackageService>("core.workflow.package").importPackage(packageData, mappings),
+    },
+    exportPackage: {
+      channel: "synapse:workflow:export-package", kind: "invoke",
+      request: z.object({ workflowId: z.string(), workflowName: z.string().optional() }),
+      response: z.object({ path: z.string() }).nullable(),
+      handler: async (ctx, { workflowId, workflowName }: { workflowId: string; workflowName?: string }) => {
+        const pkg = await ctx.resolve<WorkflowPackageService>("core.workflow.package").buildExportPackage(workflowId)
+        const safeName = (workflowName || pkg.workflow.name || "workflow").replace(/[\\/:*?"<>|]/g, "-")
+        const parentWindow = focusedWindow()
+        const result = parentWindow
+          ? await dialog.showSaveDialog(parentWindow, {
+            title: "导出工作流",
+            defaultPath: `${safeName}.synapse-workflow.json`,
+            filters: [{ name: "Synapse Workflow", extensions: ["json"] }],
+          })
+          : await dialog.showSaveDialog({
+            title: "导出工作流",
+            defaultPath: `${safeName}.synapse-workflow.json`,
+            filters: [{ name: "Synapse Workflow", extensions: ["json"] }],
+          })
+        if (result.canceled || !result.filePath) return null
+        const action: PermissionAction = "fs.write"
+        const source = "workflow.exportPackage"
+        const auditSink = await checkFilePermission({ ctx, action, resource: result.filePath, source })
+        try {
+          await writeFile(result.filePath, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8")
+        } catch (error) {
+          recordFilePermissionFailure({ auditSink, action, resource: result.filePath, source, error })
+          throw error
+        }
+        logger.info("workflow package exported", { workflowId, fileBase: path.basename(result.filePath) })
+        return { path: result.filePath }
+      },
+    },
+    inspectImportPackage: {
+      channel: "synapse:workflow:inspect-import-package", kind: "invoke",
+      request: z.void().optional(),
+      response: workflowImportPreviewSchema.nullable(),
+      handler: async (ctx) => {
+        const parentWindow = focusedWindow()
+        const result = parentWindow
+          ? await dialog.showOpenDialog(parentWindow, {
+            title: "导入工作流",
+            filters: [{ name: "Synapse Workflow", extensions: ["json"] }],
+            properties: ["openFile"],
+          })
+          : await dialog.showOpenDialog({
+            title: "导入工作流",
+            filters: [{ name: "Synapse Workflow", extensions: ["json"] }],
+            properties: ["openFile"],
+          })
+        if (result.canceled || result.filePaths.length === 0) return null
+        const packagePath = result.filePaths[0]
+        const action: PermissionAction = "fs.read.outside-userdata"
+        const source = "workflow.inspectImportPackage"
+        const auditSink = await checkFilePermission({ ctx, action, resource: packagePath, source })
+        let raw: unknown
+        try {
+          raw = JSON.parse(await readFile(packagePath, "utf-8"))
+        } catch (error) {
+          recordFilePermissionFailure({ auditSink, action, resource: packagePath, source, error })
+          throw error
+        }
+        const packageData = workflowPackageSchema.parse(raw) as SynapseWorkflowPackageV1
+        return ctx.resolve<WorkflowPackageService>("core.workflow.package").buildImportPreview(packagePath, packageData)
+      },
+    },
+    importPackage: {
+      channel: "synapse:workflow:import-package", kind: "invoke",
+      request: z.object({ packagePath: z.string(), mappings: z.array(workflowModelMappingSchema) }),
+      response: z.union([
+        z.object({ workflowId: z.string(), versionHash: z.string() }),
+        z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) }),
+      ]),
+      handler: async (ctx, { packagePath, mappings }: { packagePath: string; mappings: WorkflowModelMapping[] }) => {
+        const action: PermissionAction = "fs.read.outside-userdata"
+        const source = "workflow.importPackage"
+        const auditSink = await checkFilePermission({ ctx, action, resource: packagePath, source })
+        let raw: unknown
+        try {
+          raw = JSON.parse(await readFile(packagePath, "utf-8"))
+        } catch (error) {
+          recordFilePermissionFailure({ auditSink, action, resource: packagePath, source, error })
+          throw error
+        }
+        const packageData = workflowPackageSchema.parse(raw) as SynapseWorkflowPackageV1
+        return ctx.resolve<WorkflowPackageService>("core.workflow.package").importPackage(packageData, mappings)
+      },
+    },
     list: {
       channel: "synapse:workflow:list", kind: "invoke", request: z.void().optional(),
       response: z.array(z.object({ id: z.string(), name: z.string(), description: z.string().optional(), version: z.string(), nodeCount: z.number(), createdAt: z.number(), updatedAt: z.number() })),
