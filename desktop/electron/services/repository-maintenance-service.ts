@@ -625,6 +625,13 @@ class RepositoryMaintenanceService {
 
     await writeMaintenanceMetaValue(repository.uuid, LAST_MAINTENANCE_AT_KEY, completedAt)
 
+    if (attachmentsGcError) {
+      logger.error("Attachments GC failed during maintenance.", {
+        repositoryUuid: repository.uuid,
+        error: attachmentsGcError,
+      })
+    }
+
     return {
       compactedCount: compactionResult.compactedCount,
       deletedAttachmentCount: attachmentsGcResult.deletedCount,
