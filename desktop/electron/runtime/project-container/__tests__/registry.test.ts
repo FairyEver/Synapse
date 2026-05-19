@@ -43,6 +43,65 @@ describe("ProjectContainerRegistry (T5.1 + T5.2)", () => {
     expect(a).toBe(b)
   })
 
+  it("coalesces concurrent open() calls for the same project", async () => {
+    let releaseStart: (() => void) | undefined
+    const startGate = new Promise<void>((resolve) => {
+      releaseStart = resolve
+    })
+    const created: object[] = []
+    const reg = createProjectContainerRegistry({
+      globalRegistry: createServiceRegistry(),
+      globalEventBus: createEventBus({ defaultBackpressure: "drop-newest" }),
+      globalDataRepo: createDataRepository(),
+      buildLogger: () => noopLogger(),
+    })
+    reg.registerService({
+      id: "slow",
+      create() {
+        const instance = {}
+        created.push(instance)
+        return instance
+      },
+      start: () => startGate,
+    })
+
+    const first = reg.open("p1")
+    const second = reg.open("p1")
+
+    await Promise.resolve()
+    expect(created).toHaveLength(1)
+    releaseStart?.()
+    const [a, b] = await Promise.all([first, second])
+
+    expect(a).toBe(b)
+    expect(reg.list()).toHaveLength(1)
+  })
+
+  it("clears pending open state after start failure so the project can retry", async () => {
+    let attempts = 0
+    const reg = createProjectContainerRegistry({
+      globalRegistry: createServiceRegistry(),
+      globalEventBus: createEventBus({ defaultBackpressure: "drop-newest" }),
+      globalDataRepo: createDataRepository(),
+      buildLogger: () => noopLogger(),
+    })
+    reg.registerService({
+      id: "flaky",
+      create() {
+        attempts += 1
+        if (attempts === 1) throw new Error("start failed")
+        return { ok: true }
+      },
+    })
+
+    await expect(reg.open("p1")).rejects.toThrow("start failed")
+    const container = await reg.open("p1")
+
+    expect(container.projectId).toBe("p1")
+    expect(attempts).toBe(2)
+    expect(reg.list()).toHaveLength(1)
+  })
+
   it("scoped services get the projectId-aware ScopedEventBus", async () => {
     const eventBus = createEventBus({ defaultBackpressure: "drop-newest" })
     const seen: string[] = []

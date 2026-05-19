@@ -34,6 +34,7 @@ export class ProjectContainerRegistryImpl implements ProjectContainerRegistry {
   private readonly deps: ProjectContainerRegistryDeps
   private readonly serviceTemplates: ProjectScopedService[] = []
   private readonly containers = new Map<string, ContainerEntry>()
+  private readonly pendingOpens = new Map<string, Promise<ProjectContainer>>()
 
   constructor(deps: ProjectContainerRegistryDeps) {
     this.deps = deps
@@ -53,7 +54,24 @@ export class ProjectContainerRegistryImpl implements ProjectContainerRegistry {
   async open(projectId: string, metadata: Partial<ProjectMetadata> = {}): Promise<ProjectContainer> {
     const existing = this.containers.get(projectId)
     if (existing) return existing.container
+    const pending = this.pendingOpens.get(projectId)
+    if (pending) return pending
 
+    const opening = this.createAndStartContainer(projectId, metadata)
+    this.pendingOpens.set(projectId, opening)
+    try {
+      return await opening
+    } finally {
+      if (this.pendingOpens.get(projectId) === opening) {
+        this.pendingOpens.delete(projectId)
+      }
+    }
+  }
+
+  private async createAndStartContainer(
+    projectId: string,
+    metadata: Partial<ProjectMetadata>,
+  ): Promise<ProjectContainer> {
     const projectMeta: ProjectMetadata = {
       id: projectId,
       name: metadata.name ?? projectId,
