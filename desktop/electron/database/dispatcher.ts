@@ -329,13 +329,17 @@ function dispatchDatabaseAction(action: string, params: Record<string, unknown>,
   if (!handler) throw new Error(`Unknown action: ${action}`)
   const result = handler(params)
   if (MUTATING_ACTIONS.has(action)) {
-    databaseService.recordOperation({
-      source: context.source ?? "api",
-      action,
-      table: extractTableName(action, params),
-      affected: result.affected,
-      dryRun: params.dryRun === true,
-    })
+    try {
+      databaseService.recordOperation({
+        source: context.source ?? "api",
+        action,
+        table: extractTableName(action, params),
+        affected: result.affected,
+        dryRun: params.dryRun === true,
+      })
+    } catch {
+      // Never let an operation log failure break the dispatch result.
+    }
   }
   if (MUTATING_ACTIONS.has(action) && params.dryRun !== true && changeListener) {
     try {
