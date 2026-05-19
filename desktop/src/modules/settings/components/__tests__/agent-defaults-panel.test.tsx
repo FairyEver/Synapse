@@ -157,6 +157,28 @@ describe("AgentDefaultsPanel provider model", () => {
       agent: { defaultProviderModel: null },
     })
   })
+
+  it("logs provider model save failures without rethrowing from event handlers", async () => {
+    mocks.config = {
+      ...createDefaultConfig(),
+      agent: { defaultPermissionMode: "default", defaultProviderModel: { providerId: "p1", modelTier: "sonnet" } },
+    }
+    mocks.updateConfig.mockRejectedValueOnce(new Error("save failed"))
+
+    renderPanel()
+    const clearButton = document.querySelector('button[aria-label="清除默认供应商"]')
+    if (!(clearButton instanceof HTMLElement)) throw new Error("Clear button not rendered")
+
+    await act(async () => {
+      clearButton.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mocks.error).toHaveBeenCalledWith(
+      "Agent default provider model save failed.",
+      expect.any(Error),
+    )
+  })
 })
 
 function renderPanel(): void {

@@ -62,7 +62,6 @@ function AgentDefaultsContent() {
       )
     } catch (error) {
       logger.error("Agent default provider model save failed.", error)
-      throw error
     }
   }, [promise, updateConfig])
 

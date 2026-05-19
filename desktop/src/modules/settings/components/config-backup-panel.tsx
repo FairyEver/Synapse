@@ -19,6 +19,7 @@ function ConfigBackupPanel() {
   const { promise } = useAppNotifications()
   const logger = createRendererLogger("settings.backup")
   const [isImportOpen, setIsImportOpen] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
 
   return (
     <>
@@ -39,8 +40,11 @@ function ConfigBackupPanel() {
             <Button
               type="button"
               variant="outline"
+              disabled={isExporting}
               onClick={() => {
+                if (isExporting) return
                 logger.info("Config backup export initiated.")
+                setIsExporting(true)
                 void promise(
                   () => exportConfigBackup(),
                   {
@@ -48,7 +52,9 @@ function ConfigBackupPanel() {
                     success: (result) => result ? "配置已导出。" : null,
                     error: (error) => error instanceof Error ? error.message : "导出配置失败。",
                   },
-                ).catch((err) => { logger.warn("config backup export failed", err) })
+                )
+                  .catch((err) => { logger.warn("config backup export failed", err) })
+                  .finally(() => { setIsExporting(false) })
               }}
             >
               导出
