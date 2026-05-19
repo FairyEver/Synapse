@@ -21,6 +21,14 @@ let handlersRegistered = false
 let permissionGuard: PermissionGuard | undefined
 let auditSink: AuditSink | undefined
 
+function recordMutatingOperation(action: string, table?: string, affected?: number): void {
+  try {
+    databaseService.recordOperation({ source: "ipc", action, table, affected })
+  } catch {
+    // Never let operation log failure break the IPC response.
+  }
+}
+
 function setSecurity(guard: PermissionGuard | undefined, sink: AuditSink | undefined): void {
   permissionGuard = guard
   auditSink = sink
@@ -105,10 +113,12 @@ function registerDatabaseHandlers(): void {
     columns: Column[]
   }) => {
     databaseService.databaseTableCreate(params.name, params.columns, params.description)
+    recordMutatingOperation("database.table.create", params.name)
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseTableDelete, async (_event, name: string) => {
     databaseService.databaseTableDelete(name)
+    recordMutatingOperation("database.table.delete", name)
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseTableDescribe, async (_event, name: string) => {
@@ -124,6 +134,7 @@ function registerDatabaseHandlers(): void {
     description: string
   }) => {
     databaseService.databaseTableUpdate(params.table, params.description)
+    recordMutatingOperation("database.table.update", params.table)
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseColumnCreate, async (_event, params: {
@@ -131,6 +142,7 @@ function registerDatabaseHandlers(): void {
     column: Column & { default?: unknown }
   }) => {
     databaseService.databaseColumnCreate(params.table, params.column)
+    recordMutatingOperation("database.column.create", params.table)
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseColumnUpdate, async (_event, params: {
@@ -139,6 +151,7 @@ function registerDatabaseHandlers(): void {
     description: string
   }) => {
     databaseService.databaseColumnUpdate(params.table, params.column, params.description)
+    recordMutatingOperation("database.column.update", params.table)
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseChoiceUpdate, async (_event, params: {
@@ -147,6 +160,7 @@ function registerDatabaseHandlers(): void {
     choices: string[]
   }) => {
     databaseService.databaseChoiceUpdate(params.table, params.column, params.choices)
+    recordMutatingOperation("database.choice.update", params.table)
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseChoiceUsageGet, async (_event, params: {
@@ -160,14 +174,18 @@ function registerDatabaseHandlers(): void {
     table: string
     data: Record<string, unknown>
   }) => {
-    return databaseService.databaseRowCreate(params.table, params.data)
+    const result = databaseService.databaseRowCreate(params.table, params.data)
+    recordMutatingOperation("database.row.create", params.table, 1)
+    return result
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseRowsCreate, async (_event, params: {
     table: string
     rows: Record<string, unknown>[]
   }) => {
-    return databaseService.databaseRowsCreate(params.table, params.rows)
+    const result = databaseService.databaseRowsCreate(params.table, params.rows)
+    recordMutatingOperation("database.rows.create", params.table, params.rows.length)
+    return result
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseRowList, async (_event, params: DatabaseQueryParams) => {
@@ -179,14 +197,18 @@ function registerDatabaseHandlers(): void {
     id: number
     data: Record<string, unknown>
   }) => {
-    return databaseService.databaseRowUpdate(params.table, params.id, params.data)
+    const result = databaseService.databaseRowUpdate(params.table, params.id, params.data)
+    recordMutatingOperation("database.row.update", params.table, 1)
+    return result
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseRowDelete, async (_event, params: {
     table: string
     id: number
   }) => {
-    return databaseService.databaseRowDelete(params.table, params.id)
+    const result = databaseService.databaseRowDelete(params.table, params.id)
+    recordMutatingOperation("database.row.delete", params.table, 1)
+    return result
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseRowsUpdate, async (_event, params: {
@@ -194,14 +216,18 @@ function registerDatabaseHandlers(): void {
     where: DatabaseWhereClause
     data: Record<string, unknown>
   }) => {
-    return databaseService.databaseRowsUpdate(params.table, params.where, params.data)
+    const result = databaseService.databaseRowsUpdate(params.table, params.where, params.data)
+    recordMutatingOperation("database.rows.update", params.table, result?.affected)
+    return result
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseRowsDelete, async (_event, params: {
     table: string
     where: DatabaseWhereClause
   }) => {
-    return databaseService.databaseRowsDelete(params.table, params.where)
+    const result = databaseService.databaseRowsDelete(params.table, params.where)
+    recordMutatingOperation("database.rows.delete", params.table, result?.affected)
+    return result
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseRowCount, async (_event, params: {
@@ -216,6 +242,7 @@ function registerDatabaseHandlers(): void {
     to: string
   }) => {
     databaseService.databaseTableRename(params.from, params.to)
+    recordMutatingOperation("database.table.rename", params.to)
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseColumnRename, async (_event, params: {
@@ -224,6 +251,7 @@ function registerDatabaseHandlers(): void {
     to: string
   }) => {
     databaseService.databaseColumnRename(params.table, params.from, params.to)
+    recordMutatingOperation("database.column.rename", params.table)
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseColumnDelete, async (_event, params: {
@@ -231,13 +259,16 @@ function registerDatabaseHandlers(): void {
     column: string
   }) => {
     databaseService.databaseColumnDelete(params.table, params.column)
+    recordMutatingOperation("database.column.delete", params.table)
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseSqlExecute, async (_event, params: {
     sql: string
     params?: unknown[]
   }) => {
-    return databaseService.databaseSqlExecute(params.sql, params.params)
+    const result = databaseService.databaseSqlExecute(params.sql, params.params)
+    recordMutatingOperation("database.sql.execute")
+    return result
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseStatusGet, async () => {
@@ -418,7 +449,9 @@ function registerDatabaseHandlers(): void {
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderCreate, async (_event, params: {
     name: string
   }) => {
-    return databaseService.folderCreate(params.name)
+    const result = databaseService.folderCreate(params.name)
+    recordMutatingOperation("database.folder.create")
+    return result
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderRename, async (_event, params: {
@@ -426,12 +459,14 @@ function registerDatabaseHandlers(): void {
     name: string
   }) => {
     databaseService.folderRename(params.id, params.name)
+    recordMutatingOperation("database.folder.rename")
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderDelete, async (_event, params: {
     id: number
   }) => {
     databaseService.folderDelete(params.id)
+    recordMutatingOperation("database.folder.delete")
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderMoveTable, async (_event, params: {
@@ -439,6 +474,7 @@ function registerDatabaseHandlers(): void {
     folderId: number | null
   }) => {
     databaseService.folderMoveTable(params.tableName, params.folderId)
+    recordMutatingOperation("database.table.move", params.tableName)
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderReorder, async (_event, params: {
@@ -446,12 +482,14 @@ function registerDatabaseHandlers(): void {
     tableNames: string[]
   }) => {
     databaseService.folderReorder(params.folderId, params.tableNames)
+    recordMutatingOperation("database.folder.reorder")
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderReorderFolders, async (_event, params: {
     folderIds: number[]
   }) => {
     databaseService.folderReorderFolders(params.folderIds)
+    recordMutatingOperation("database.folder.reorder")
   })
 
   handlersRegistered = true
