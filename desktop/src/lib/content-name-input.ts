@@ -11,6 +11,10 @@ function normalizeContentNameInput(value: string): string {
   return value.trim().toLowerCase()
 }
 
+function getWindowsReservedNameSegment(value: string): string {
+  return value.split(".", 1)[0] ?? value
+}
+
 function validateContentNameInput(value: string): string | null {
   const normalized = normalizeContentNameInput(value)
 
@@ -26,7 +30,7 @@ function validateContentNameInput(value: string): string | null {
     return "只能使用小写字母、数字、连字符、点号；首尾必须是字母或数字。"
   }
 
-  if (WINDOWS_RESERVED_NAMES.has(normalized)) {
+  if (WINDOWS_RESERVED_NAMES.has(getWindowsReservedNameSegment(normalized))) {
     return "该名称是 Windows 系统保留字，请使用其他名称。"
   }
 
