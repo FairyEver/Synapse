@@ -346,7 +346,11 @@ export class ControlledProcessRunner {
     const onAbort = () => {
       child.kill("SIGTERM")
     }
-    request.abortSignal?.addEventListener("abort", onAbort, { once: true })
+    if (request.abortSignal?.aborted) {
+      child.kill("SIGTERM")
+    } else {
+      request.abortSignal?.addEventListener("abort", onAbort, { once: true })
+    }
 
     const closed = await new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
       child.once("error", (error) => {
@@ -506,7 +510,11 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
     const onAbort = () => {
       this.child.kill("SIGTERM")
     }
-    deps.request.abortSignal?.addEventListener("abort", onAbort, { once: true })
+    if (deps.request.abortSignal?.aborted) {
+      this.child.kill("SIGTERM")
+    } else {
+      deps.request.abortSignal?.addEventListener("abort", onAbort, { once: true })
+    }
 
     this.waitPromise = new Promise<{ code: number | null; signal: NodeJS.Signals | null }>((resolve) => {
       this.child.once("error", (error) => {
