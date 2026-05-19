@@ -436,6 +436,55 @@ describe("AutomationIngressService", () => {
     await service.stop()
   })
 
+  it("rejects invalid async webhook payloads before returning queued", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const logger = structuredLogger()
+    const send = vi.fn(async () => ({ resultText: "not used" }))
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      logger,
+    })
+    const config = await service.updateConfig({ enabled: true, resetToken: true })
+    await service.start()
+    const status = await service.getStatus()
+
+    const response = await fetch(`http://${status.bindAddress}:${String(status.assignedPort)}${status.path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.token ?? ""}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ project: "project-1" }),
+    })
+
+    expect(response.status).toBe(400)
+    expect(await response.json()).toEqual({
+      ok: false,
+      error: {
+        code: "invalid_payload",
+        message: "prompt and exec are mutually exclusive",
+      },
+    })
+    expect(await runs.list()).toEqual([])
+    expect(send).not.toHaveBeenCalled()
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Webhook request validation failed.",
+      expect.objectContaining({
+        boundary: "webhook.validation",
+        status: 400,
+        errorCode: "invalid_payload",
+      }),
+    )
+
+    await service.stop()
+  })
+
   it("redacts exec shell errors from processRunner in persisted lastError", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")

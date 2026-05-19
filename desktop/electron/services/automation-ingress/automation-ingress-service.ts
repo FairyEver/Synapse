@@ -59,6 +59,12 @@ export interface AutomationIngressServiceDeps {
   readonly now?: () => Date
 }
 
+interface PreparedWebhook {
+  readonly project: AutomationIngressProjectSummary
+  readonly prompt?: string
+  readonly exec?: string
+}
+
 export class AutomationIngressService {
   private readonly deps: AutomationIngressServiceDeps
   private readonly rateLimiter = new Map<string, number[]>()
@@ -159,7 +165,8 @@ export class AutomationIngressService {
     try {
       const body = parseJsonBody(request.body)
       const mode = stringValue(body.replyMode) === "wait" ? "wait" : "async"
-      const promise = this.executeWebhook(body, request, config.path)
+      const prepared = await this.prepareWebhook(body)
+      const promise = this.executeWebhook(prepared, body, request, config.path)
       if (mode === "wait") {
         promise.catch((error) => {
           this.deps.logger?.warn("Webhook wait-mode run failed after response.", {
@@ -200,16 +207,12 @@ export class AutomationIngressService {
   }
 
   private async executeWebhook(
+    prepared: PreparedWebhook,
     body: Record<string, unknown>,
     request: LocalHttpRequest,
     path: string,
   ): Promise<Record<string, unknown>> {
-    const project = await this.resolveProject(stringValue(body.projectId) ?? stringValue(body.project))
-    const prompt = stringValue(body.prompt)
-    const exec = stringValue(body.exec)
-    if (Boolean(prompt) === Boolean(exec)) {
-      throw new WebhookError("invalid_payload", "prompt and exec are mutually exclusive", 400)
-    }
+    const { project, prompt, exec } = prepared
     const sessionKey = stringValue(body.sessionKey) ?? stringValue(body.session_key)
     const run = await this.createRun({
       projectId: project.projectId,
@@ -332,6 +335,16 @@ export class AutomationIngressService {
       conversationId: result.conversationId,
       sdkSessionId: result.agentSessionId,
     }
+  }
+
+  private async prepareWebhook(body: Record<string, unknown>): Promise<PreparedWebhook> {
+    const project = await this.resolveProject(stringValue(body.projectId) ?? stringValue(body.project))
+    const prompt = stringValue(body.prompt)
+    const exec = stringValue(body.exec)
+    if (Boolean(prompt) === Boolean(exec)) {
+      throw new WebhookError("invalid_payload", "prompt and exec are mutually exclusive", 400)
+    }
+    return { project, prompt, exec }
   }
 
   private async executeShell(
