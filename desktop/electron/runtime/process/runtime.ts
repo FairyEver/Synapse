@@ -36,6 +36,16 @@ export interface ProcessRuntime {
   readonly restartPolicy: RestartPolicy
 }
 
+interface ProcessRuntimeLogger {
+  error(message: string, meta?: Record<string, unknown>): void
+  child?(prefix: string, bindings?: Record<string, unknown>): ProcessRuntimeLogger
+}
+
+interface MainProcessRuntimeOptions {
+  restartPolicy?: RestartPolicy
+  logger?: ProcessRuntimeLogger
+}
+
 interface MainHandleState {
   status: ProcessStatus
   listeners: Map<string, Set<(payload: unknown) => void>>
@@ -44,9 +54,11 @@ interface MainHandleState {
 export class MainProcessRuntime implements ProcessRuntime {
   readonly restartPolicy: RestartPolicy
   private readonly handles = new Map<string, ProcessHandle>()
+  private readonly logger?: ProcessRuntimeLogger
 
-  constructor(options: { restartPolicy?: RestartPolicy } = {}) {
+  constructor(options: MainProcessRuntimeOptions = {}) {
     this.restartPolicy = options.restartPolicy ?? "never"
+    this.logger = options.logger
   }
 
   async spawn<Init>(descriptor: ProcessDescriptor<Init>): Promise<ProcessHandle> {
@@ -64,6 +76,7 @@ export class MainProcessRuntime implements ProcessRuntime {
       status: "starting",
       listeners: new Map(),
     }
+    const logger = this.logger
 
     const handle: ProcessHandle = {
       kind: "main",
@@ -78,8 +91,11 @@ export class MainProcessRuntime implements ProcessRuntime {
           try {
             listener(payload)
           } catch (err) {
-            // eslint-disable-next-line no-console
-            console.error(`[process-runtime:${descriptor.id}] listener threw`, err)
+            logger?.error("ProcessRuntime listener failed.", {
+              processId: descriptor.id,
+              channel,
+              ...errorLogMeta(err),
+            })
           }
         }
       },
@@ -101,10 +117,12 @@ export class MainProcessRuntime implements ProcessRuntime {
 
     if (descriptor.run) {
       // Fire-and-forget. If `run` throws, mark crashed.
-      Promise.resolve(descriptor.run(descriptor.init, handle)).catch((err) => {
+      Promise.resolve().then(() => descriptor.run?.(descriptor.init, handle)).catch((err) => {
         state.status = "crashed"
-        // eslint-disable-next-line no-console
-        console.error(`[process-runtime:${descriptor.id}] run() threw`, err)
+        this.logger?.error("ProcessRuntime run failed.", {
+          processId: descriptor.id,
+          ...errorLogMeta(err),
+        })
       })
     }
 
@@ -116,6 +134,19 @@ export class MainProcessRuntime implements ProcessRuntime {
   }
 }
 
-export function createMainProcessRuntime(options?: { restartPolicy?: RestartPolicy }): MainProcessRuntime {
+function errorLogMeta(error: unknown): Record<string, unknown> {
+  if (error instanceof Error) {
+    return {
+      errorName: error.name,
+      errorMessageLength: error.message.length,
+      stackLength: error.stack?.length,
+    }
+  }
+  return {
+    errorName: typeof error,
+  }
+}
+
+export function createMainProcessRuntime(options?: MainProcessRuntimeOptions): MainProcessRuntime {
   return new MainProcessRuntime(options)
 }

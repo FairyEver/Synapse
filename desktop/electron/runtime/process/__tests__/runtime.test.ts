@@ -1,4 +1,5 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
+import { createRecordingLogger } from "../../lib/test-helpers"
 import { createMainProcessRuntime } from "../runtime"
 
 describe("MainProcessRuntime (T5.5)", () => {
@@ -62,5 +63,73 @@ describe("MainProcessRuntime (T5.5)", () => {
     await Promise.resolve()
     expect(ran).toBe(true)
     expect(handle.status).toBe("running")
+  })
+
+  it("logs listener failures through structured logger without console.error", async () => {
+    const logger = createRecordingLogger()
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+
+    try {
+      const rt = createMainProcessRuntime({ logger })
+      const handle = await rt.spawn({ id: "listener-process", kind: "main", init: {} })
+      handle.on("updates", () => {
+        throw new Error("secret token sk-test at /Users/liyang/private")
+      })
+
+      await handle.send("updates", { prompt: "sensitive payload" })
+
+      const record = logger.records.find((item) => item.message === "ProcessRuntime listener failed.")
+      expect(record).toEqual(expect.objectContaining({
+        level: "error",
+        meta: expect.objectContaining({
+          channel: "updates",
+          errorName: "Error",
+          processId: "listener-process",
+        }),
+      }))
+      expect(consoleError).not.toHaveBeenCalled()
+      const serialized = JSON.stringify(logger.records)
+      expect(serialized).not.toContain("sk-test")
+      expect(serialized).not.toContain("/Users/liyang")
+      expect(serialized).not.toContain("sensitive payload")
+    } finally {
+      consoleError.mockRestore()
+    }
+  })
+
+  it("logs run failures through structured logger and marks the process crashed", async () => {
+    const logger = createRecordingLogger()
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined)
+
+    try {
+      const rt = createMainProcessRuntime({ logger })
+      const handle = await rt.spawn({
+        id: "runner-process",
+        kind: "main",
+        init: {},
+        run: () => {
+          throw new Error("secret token sk-test at /Users/liyang/private")
+        },
+      })
+
+      await Promise.resolve()
+      await Promise.resolve()
+
+      expect(handle.status).toBe("crashed")
+      const record = logger.records.find((item) => item.message === "ProcessRuntime run failed.")
+      expect(record).toEqual(expect.objectContaining({
+        level: "error",
+        meta: expect.objectContaining({
+          errorName: "Error",
+          processId: "runner-process",
+        }),
+      }))
+      expect(consoleError).not.toHaveBeenCalled()
+      const serialized = JSON.stringify(logger.records)
+      expect(serialized).not.toContain("sk-test")
+      expect(serialized).not.toContain("/Users/liyang")
+    } finally {
+      consoleError.mockRestore()
+    }
   })
 })

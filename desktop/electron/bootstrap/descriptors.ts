@@ -803,8 +803,10 @@ export const coreAuditSinkDescriptor: ServiceDescriptor<AuditSink> = {
 export const coreProcessRuntimeDescriptor: ServiceDescriptor<ProcessRuntime> = {
   id: "core.process-runtime",
   criticality: "fatal",
-  create() {
-    return createMainProcessRuntime()
+  create(ctx) {
+    return createMainProcessRuntime({
+      logger: ctx.logger.child("process-runtime"),
+    })
   },
 }
 
