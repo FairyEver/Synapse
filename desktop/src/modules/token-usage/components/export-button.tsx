@@ -21,12 +21,12 @@ export function ExportButton({ models, agents, dailyRows, graphResult, isFilteri
     const data = {
       models: models.map((m) => ({
         model: m.model, provider: m.provider, client: m.client,
-        tokens: { input: m.input, output: m.output, cacheRead: m.cacheRead, cacheWrite: m.cacheWrite, total: m.input + m.output + m.cacheRead + m.cacheWrite + m.reasoning },
+        tokens: { input: m.input, output: m.output, cacheRead: m.cacheRead, cacheWrite: m.cacheWrite, reasoning: m.reasoning, total: m.input + m.output + m.cacheRead + m.cacheWrite + m.reasoning },
         cost: m.cost, messageCount: m.messageCount,
       })),
       agents: agents.map((a) => ({
         agent: a.client, clients: a.providers,
-        tokens: { input: a.input, output: a.output, cacheRead: a.cacheRead, cacheWrite: a.cacheWrite, total: a.input + a.output + a.cacheRead + a.cacheWrite + a.reasoning },
+        tokens: { input: a.input, output: a.output, cacheRead: a.cacheRead, cacheWrite: a.cacheWrite, reasoning: a.reasoning, total: a.input + a.output + a.cacheRead + a.cacheWrite + a.reasoning },
         cost: a.cost, messageCount: a.messageCount,
       })),
       daily: isFiltering ? null : dailyRows,
