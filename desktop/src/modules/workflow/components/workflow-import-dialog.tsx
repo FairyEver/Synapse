@@ -8,21 +8,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
+import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
+import { ChevronDown } from "lucide-react"
+import type { ModelTier, ProviderModelSelection } from "@/types/provider-model"
 import type {
   WorkflowImportPreview,
   WorkflowModelMapping,
   WorkflowModelReference,
   WorkflowPackageModelTier,
 } from "@/types/workflow-package"
-
-const MODEL_TIERS: readonly WorkflowPackageModelTier[] = ["default", "haiku", "sonnet", "opus"]
 
 interface WorkflowImportDialogProps {
   open: boolean
@@ -40,6 +34,7 @@ function WorkflowImportDialog({
   onImport,
 }: WorkflowImportDialogProps) {
   const [mappings, setMappings] = useState<Record<string, WorkflowModelMapping>>({})
+  const [selectingRefId, setSelectingRefId] = useState<string | null>(null)
   const activeProvider = preview?.providerOptions.find((provider) => provider.active) ?? preview?.providerOptions[0]
 
   useEffect(() => {
@@ -57,6 +52,8 @@ function WorkflowImportDialog({
     () => new Map((preview?.providerOptions ?? []).map((provider) => [provider.providerId, provider])),
     [preview],
   )
+
+  const selectingMapping = selectingRefId ? mappings[selectingRefId] : undefined
 
   function updateMapping(refId: string, patch: Partial<WorkflowModelMapping>) {
     setMappings((prev) => {
@@ -83,6 +80,14 @@ function WorkflowImportDialog({
     onImport(preview.modelReferences.map((ref) => mappings[ref.id]))
   }
 
+  function handleSelectModel(selection: ProviderModelSelection) {
+    if (!selectingRefId) return
+    updateMapping(selectingRefId, {
+      targetProviderId: selection.providerId,
+      targetModelTier: selection.modelTier,
+    })
+  }
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent aria-describedby={undefined} className="flex max-h-[calc(100vh-2rem)] flex-col sm:max-w-[760px]">
@@ -100,7 +105,6 @@ function WorkflowImportDialog({
               <div className="space-y-3">
                 {rows.map((ref) => {
                   const mapping = mappings[ref.id]
-                  const provider = mapping ? providerById.get(mapping.targetProviderId) : undefined
                   return (
                     <div key={ref.id} className="grid gap-3 border-b pb-3 md:grid-cols-[1.2fr_1fr_1.2fr]">
                       <div className="min-w-0">
@@ -108,37 +112,16 @@ function WorkflowImportDialog({
                         <div className="truncate text-xs text-muted-foreground">{ref.sourceModelTier}</div>
                       </div>
                       <div className="min-w-0 text-xs text-muted-foreground">{formatOccurrences(ref)}</div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <Select
-                          value={mapping?.targetProviderId ?? ""}
-                          onValueChange={(value) => updateMapping(ref.id, { targetProviderId: value })}
+                      <div className="min-w-0">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          className="h-8 w-full justify-between"
+                          onClick={() => setSelectingRefId(ref.id)}
                         >
-                          <SelectTrigger aria-label={`${ref.id} provider`} className="w-full">
-                            <SelectValue placeholder="供应商" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {preview.providerOptions.map((option) => (
-                              <SelectItem key={option.providerId} value={option.providerId}>
-                                {option.providerName}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                        <Select
-                          value={mapping?.targetModelTier ?? "default"}
-                          onValueChange={(value) => updateMapping(ref.id, { targetModelTier: value as WorkflowPackageModelTier })}
-                        >
-                          <SelectTrigger aria-label={`${ref.id} tier`} className="w-full">
-                            <SelectValue placeholder="模型" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {MODEL_TIERS.map((tier) => (
-                              <SelectItem key={tier} value={tier}>
-                                {provider?.models[tier] ?? tier}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
+                          <span className="truncate">{formatTargetModel(mapping, providerById)}</span>
+                          <ChevronDown className="size-3.5 text-muted-foreground" />
+                        </Button>
                       </div>
                     </div>
                   )
@@ -158,6 +141,17 @@ function WorkflowImportDialog({
             {importing ? "导入中..." : "导入"}
           </Button>
         </DialogFooter>
+        <ProviderModelSelectDialog
+          open={selectingRefId !== null}
+          onOpenChange={(nextOpen) => { if (!nextOpen) setSelectingRefId(null) }}
+          defaultSelection={selectingMapping
+            ? {
+              providerId: selectingMapping.targetProviderId,
+              modelTier: selectingMapping.targetModelTier as ModelTier,
+            }
+            : undefined}
+          onSelect={handleSelectModel}
+        />
       </DialogContent>
     </Dialog>
   )
@@ -172,6 +166,17 @@ function formatOccurrences(ref: WorkflowModelReference): string {
     if (occurrence.kind === "workflowDefault") return "全局"
     return occurrence.nodeName
   }).join("、")
+}
+
+function formatTargetModel(
+  mapping: WorkflowModelMapping | undefined,
+  providerById: ReadonlyMap<string, WorkflowImportPreview["providerOptions"][number]>,
+): string {
+  if (!mapping) return "选择供应商 + 模型"
+  const provider = providerById.get(mapping.targetProviderId)
+  const providerName = provider?.providerName ?? mapping.targetProviderId
+  const modelName = provider?.models[mapping.targetModelTier] ?? mapping.targetModelTier
+  return `${providerName} / ${modelName}`
 }
 
 export { WorkflowImportDialog }

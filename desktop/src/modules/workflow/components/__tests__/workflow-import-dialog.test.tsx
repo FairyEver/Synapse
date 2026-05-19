@@ -5,6 +5,7 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import type { WorkflowImportPreview, WorkflowModelMapping } from "@/types/workflow-package"
+import type { SynapseAgentProvider } from "@/types/bridge"
 import { WorkflowImportDialog } from "../workflow-import-dialog"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -20,6 +21,7 @@ afterEach(() => {
   container?.remove()
   container = null
   document.body.innerHTML = ""
+  vi.clearAllMocks()
 })
 
 function renderDialog(props: Partial<Parameters<typeof WorkflowImportDialog>[0]> = {}) {
@@ -110,4 +112,76 @@ describe("WorkflowImportDialog", () => {
       { sourceRefId: "ref-2", targetProviderId: "local-openai", targetModelTier: "default" },
     ])
   })
+
+  it("changes a row through the shared provider model dialog", async () => {
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn(async () => providers()),
+        },
+      } as unknown as Window["synapse"],
+    })
+    const { onImport } = renderDialog()
+    const mappingButton = Array.from(document.querySelectorAll("button"))
+      .find((node) => node.textContent?.includes("DeepSeek / deepseek-reasoner"))
+
+    await act(async () => {
+      mappingButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    const haikuButton = Array.from(document.querySelectorAll("button"))
+      .find((node) => node.textContent?.includes("Haiku (gpt-5-mini)"))
+    await act(async () => {
+      haikuButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    const confirmButton = Array.from(document.querySelectorAll("button"))
+      .find((node) => node.textContent === "确认")
+    await act(async () => {
+      confirmButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    const importButton = Array.from(document.querySelectorAll("button")).find((node) => node.textContent === "导入")
+    act(() => importButton?.dispatchEvent(new MouseEvent("click", { bubbles: true })))
+
+    expect(onImport).toHaveBeenCalledWith([
+      { sourceRefId: "ref-1", targetProviderId: "local-openai", targetModelTier: "haiku" },
+      { sourceRefId: "ref-2", targetProviderId: "local-openai", targetModelTier: "opus" },
+    ])
+  })
 })
+
+function providers(): SynapseAgentProvider[] {
+  return [
+    {
+      id: "local-openai",
+      name: "OpenAI",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      active: true,
+      model: "gpt-5-mini",
+      haikuModel: "gpt-5-mini",
+      sonnetModel: "gpt-5",
+      opusModel: "gpt-5-pro",
+      env: {},
+      createdAt: "2026-05-19T10:00:00.000Z",
+      updatedAt: "2026-05-19T10:00:00.000Z",
+    },
+    {
+      id: "local-deepseek",
+      name: "DeepSeek",
+      category: "cn_official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      model: "deepseek-chat",
+      haikuModel: "deepseek-chat",
+      sonnetModel: "deepseek-reasoner",
+      opusModel: "deepseek-reasoner",
+      env: {},
+      createdAt: "2026-05-19T10:00:00.000Z",
+      updatedAt: "2026-05-19T10:00:00.000Z",
+    },
+  ]
+}
