@@ -89,7 +89,14 @@ export class ProjectContainerRegistryImpl implements ProjectContainerRegistry {
   async close(projectId: string): Promise<void> {
     const entry = this.containers.get(projectId)
     if (!entry) return
-    await entry.container.dispose()
+    try {
+      await entry.container.dispose()
+    } catch (err) {
+      const logger = this.deps.buildLogger(projectId)
+      logger.error("Project container dispose encountered errors.", {
+        error: err instanceof Error ? err.message : String(err),
+      })
+    }
     this.containers.delete(projectId)
   }
 
@@ -167,6 +174,7 @@ class ProjectContainerImpl implements ProjectContainer {
   }
 
   async dispose(): Promise<void> {
+    const errors: Array<{ id: string; error: Error }> = []
     // Reverse order.
     for (const state of [...this.sortByDeps()].reverse()) {
       if (state.status !== "running") continue
@@ -176,9 +184,18 @@ class ProjectContainerImpl implements ProjectContainer {
         }
         state.status = "stopped"
       } catch (err) {
+        const error = err instanceof Error ? err : new Error(String(err))
         state.status = "failed"
-        state.lastError = err instanceof Error ? err : new Error(String(err))
+        state.lastError = error
+        errors.push({ id: state.template.id, error })
+        this.ctx.logger.error(`Service "${state.template.id}" stop failed.`, { error: error.message })
       }
+    }
+    if (errors.length > 0) {
+      throw new AggregateError(
+        errors.map((e) => e.error),
+        `${errors.length} project service(s) failed to stop: ${errors.map((e) => e.id).join(", ")}`,
+      )
     }
   }
 
