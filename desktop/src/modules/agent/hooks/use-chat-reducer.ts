@@ -50,7 +50,6 @@ type ChatAction =
   | { type: "SET_LOADING"; loading: boolean }
   | { type: "ADD_SENDING_CONVERSATION"; conversationId: string }
   | { type: "REMOVE_SENDING_CONVERSATION"; conversationId: string }
-  | { type: "SET_SENDING_CONVERSATION_IDS"; sendingConversationIds: Set<string> }
   | { type: "SET_ERROR"; error: string | null }
   | { type: "SET_CANCEL_PHASE"; cancelPhase: ChatState["cancelPhase"] }
   | { type: "SET_CURRENT_CONVERSATION_MODEL"; model: string | undefined }
@@ -136,8 +135,6 @@ function chatReducer(state: ChatState, action: ChatAction): ChatState {
       next.delete(action.conversationId)
       return { ...state, sendingConversationIds: next }
     }
-    case "SET_SENDING_CONVERSATION_IDS":
-      return { ...state, sendingConversationIds: action.sendingConversationIds }
     case "SET_CURRENT_CONVERSATION_MODEL":
       return { ...state, currentConversationModel: action.model }
     case "SET_ERROR":
