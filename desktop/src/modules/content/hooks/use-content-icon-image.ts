@@ -12,7 +12,10 @@ type UseContentIconImageOptions = {
   mode?: "create" | "edit"
   open?: boolean
   setErrors?: Dispatch<SetStateAction<Partial<Record<string, string>>>>
-  updateField?: (field: "iconImage", value: string) => void
+  updateField?: {
+    (field: "iconImage", value: string): void
+    (field: "iconType", value: SynapseContentIconType): void
+  }
 }
 
 type UseContentIconImageReturn = {
