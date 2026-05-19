@@ -79,7 +79,15 @@ function IdentityProvider({ children }: { children: ReactNode }) {
       return
     }
 
-    const nextRepoProfileMap = await listRepoProfiles(activeRepository.uuid)
+    let nextRepoProfileMap: Awaited<ReturnType<typeof listRepoProfiles>>
+    try {
+      nextRepoProfileMap = await listRepoProfiles(activeRepository.uuid)
+    } catch (error) {
+      setCurrentRepoProfileState(null)
+      setRepoProfileMap(EMPTY_PROFILE_MAP)
+      throw error
+    }
+
     const nextProfile = nextRepoProfileMap.get(localIdentityState.identity.userId)
     const nextRepoProfileState: SynapseRepoProfileState =
       nextProfile && nextProfile.displayName.trim().length > 0
