@@ -170,8 +170,10 @@ function columnNameArg(args: string[], usage: string): string {
 }
 
 function rowIdArg(args: string[], usage: string): number {
-  const rowId = Number.parseInt(args[3] ?? "", 10)
-  if (Number.isNaN(rowId)) fail(usage)
+  const raw = args[3] ?? ""
+  if (!/^[1-9]\d*$/.test(raw)) fail(usage)
+  const rowId = Number(raw)
+  if (!Number.isSafeInteger(rowId)) fail(usage)
   return rowId
 }
 

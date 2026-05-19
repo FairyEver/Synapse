@@ -50,6 +50,34 @@ describe("handleDatabaseCommand", () => {
     expect(lines.join("\n")).toContain("matched")
   })
 
+  it("rejects non-numeric row ids for single-row updates", async () => {
+    const apiCall = vi.fn()
+
+    await expect(handleDatabaseCommand([
+      "row",
+      "update",
+      "tasks",
+      "1abc",
+      "--data",
+      JSON.stringify({ done: true }),
+    ], apiCall, () => {})).rejects.toThrow(/Usage: synapse database row update/)
+
+    expect(apiCall).not.toHaveBeenCalled()
+  })
+
+  it("rejects non-numeric row ids for single-row deletes", async () => {
+    const apiCall = vi.fn()
+
+    await expect(handleDatabaseCommand([
+      "row",
+      "delete",
+      "tasks",
+      "1abc",
+    ], apiCall, () => {})).rejects.toThrow(/Usage: synapse database row delete/)
+
+    expect(apiCall).not.toHaveBeenCalled()
+  })
+
   it("rejects old flat database commands", async () => {
     await expect(handleDatabaseCommand(["tables"], vi.fn(), () => {})).rejects.toThrow(/Unknown database command/)
   })
