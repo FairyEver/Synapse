@@ -482,7 +482,12 @@ async function collectSkillFileSnapshots(
   entries: EditorScanQuickPublishSkillFile[],
   state: { fileCount: number; totalSize: number },
 ): Promise<void> {
-  const children = await readdir(currentDir)
+  let children: string[]
+  try {
+    children = await readdir(currentDir)
+  } catch {
+    return
+  }
 
   for (const name of children) {
     if (name.startsWith(".")) continue
@@ -490,7 +495,12 @@ async function collectSkillFileSnapshots(
 
     const fullPath = path.join(currentDir, name)
     const relativeName = toPortableRelativePath(path.relative(baseDir, fullPath))
-    const fileStat = await lstat(fullPath)
+    let fileStat: Awaited<ReturnType<typeof lstat>>
+    try {
+      fileStat = await lstat(fullPath)
+    } catch {
+      continue
+    }
     if (fileStat.isSymbolicLink()) continue
 
     if (fileStat.isDirectory()) {
@@ -517,7 +527,12 @@ async function collectSkillFileSnapshots(
       throw new Error("附件总大小超过 50MB。")
     }
 
-    const bytes = await readFile(fullPath)
+    let bytes: Buffer
+    try {
+      bytes = await readFile(fullPath)
+    } catch {
+      continue
+    }
     entries.push({
       originalName: relativeName,
       size: fileStat.size,
