@@ -181,7 +181,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
         },
         scope: { projectId: request.projectId },
         timestamp: t_recv,
-      })
+      }, { backpressure: "block" })
 
       eventBus.emit({
         domain: "agent",
@@ -197,7 +197,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
         },
         scope: { projectId: request.projectId },
         timestamp: t_recv,
-      })
+      }, { backpressure: "block" })
 
       try {
         const message = {
@@ -233,7 +233,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           },
           scope: { projectId: request.projectId },
           timestamp: t_done,
-        })
+        }, { backpressure: "block" })
         eventBus.emit({
           domain: "agent",
           type: "phase.update",
@@ -250,7 +250,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           },
           scope: { projectId: request.projectId },
           timestamp: t_done,
-        })
+        }, { backpressure: "block" })
         return {
           projectId: request.projectId,
           sessionKey,
@@ -287,7 +287,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
           },
           scope: { projectId: request.projectId },
           timestamp: t_fail,
-        })
+        }, { backpressure: "block" })
         throw rawError
       }
     },
