@@ -79,7 +79,7 @@ export async function runShellAction(input: {
       metrics,
     }
   }
-  if (input.context.abortSignal.aborted && result.signal !== null) {
+  if (input.context.abortSignal.aborted) {
     return {
       status: "cancelled",
       summary: "已停止",
