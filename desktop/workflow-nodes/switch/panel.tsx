@@ -7,6 +7,7 @@ import { ProviderModelSelectDialog } from "@/components/provider-model-select-di
 import type { ModelTier } from "@/types/provider-model"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowParam } from "@/types/workflow"
+import type { WorkflowValidationDisplayItem } from "@/modules/workflow/editor/validation-display"
 import type { SwitchNodeConfig, SwitchBranch } from "./schema"
 import { VariableBindingEditor } from "../variable-binding-editor"
 import { PromptEditor } from "../prompt-editor"
@@ -27,9 +28,10 @@ export interface SwitchNodePanelProps {
   defaultProjectName?: string
   defaultProviderId?: string
   defaultModelTier?: string
+  validationItems?: readonly WorkflowValidationDisplayItem[]
 }
 
-export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParams, projects, defaultProjectName, defaultProviderId, defaultModelTier }: SwitchNodePanelProps) {
+export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParams, projects, defaultProjectName, defaultProviderId, defaultModelTier, validationItems = [] }: SwitchNodePanelProps) {
   const [prompt, setPrompt] = useState(config.prompt)
   const [branches, setBranches] = useState<SwitchBranch[]>(config.branches)
   const [defaultBranch, setDefaultBranch] = useState<string>(config.defaultBranch ?? NO_DEFAULT)
@@ -75,6 +77,7 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
   const varSummary = config.variables.length > 0 ? `${config.variables.length}个` : undefined
   const promptSummary = prompt.length > 0 ? `${prompt.length}字` : undefined
   const branchSummary = `${branches.length}条`
+  const errorFor = (fieldKey: string) => validationItems.find((item) => item.fieldKey === fieldKey)?.summary
 
   return (
     <div className="grid gap-2">
@@ -115,6 +118,7 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
           projects={projects}
           placeholder={defaultProjectName ? `继承: ${defaultProjectName}` : "继承默认"}
         />
+        {errorFor("projectId") && <p className="text-xs text-destructive">{errorFor("projectId")}</p>}
       </CollapsibleSection>
 
       <CollapsibleSection title="判断指令" summary={promptSummary}>
@@ -126,6 +130,7 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
           placeholder="输入提示词…"
           rows={6}
         />
+        {errorFor("prompt") && <p className="text-xs text-destructive">{errorFor("prompt")}</p>}
       </CollapsibleSection>
 
       <CollapsibleSection title="路由规则" summary={branchSummary}>
@@ -151,6 +156,7 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={addBranch}>
             <Plus className="h-3 w-3 mr-1" />添加分支
           </Button>
+          {errorFor("branches") && <p className="text-xs text-destructive">{errorFor("branches")}</p>}
           <div className="grid gap-1 mt-1">
             <span className="text-[11px] text-muted-foreground">默认分支</span>
             <Select

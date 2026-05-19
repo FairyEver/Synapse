@@ -18,6 +18,7 @@ import { useUpstreamNodes } from "../hooks/use-upstream-nodes"
 import { ParamsEditorDialog } from "../components/params-editor-dialog"
 import { createRendererLogger } from "@/app-shell/logging"
 import { errorDiagnostic } from "../lib/error-utils"
+import type { WorkflowValidationDisplayItem } from "./validation-display"
 
 const logger = createRendererLogger("workflow.editor.node-config-panel")
 
@@ -33,9 +34,10 @@ interface NodeConfigPanelProps {
   projects: readonly SynapseProjectConfig[]
   defaultProjectName?: string
   onDefinitionChange?: (def: WorkflowDefinition) => void
+  validationItems?: readonly WorkflowValidationDisplayItem[]
 }
 
-export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange, onNameChange, onDeleteNode, onCopyNode, renameSignal, projects, defaultProjectName, onDefinitionChange }: NodeConfigPanelProps) {
+export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange, onNameChange, onDeleteNode, onCopyNode, renameSignal, projects, defaultProjectName, onDefinitionChange, validationItems = [] }: NodeConfigPanelProps) {
   // Hooks must be called before any early return (React Rules of Hooks).
   const upstreamNodes = useUpstreamNodes(nodeId ?? "", definition)
   const nameInputRef = useRef<HTMLInputElement>(null)
@@ -144,17 +146,30 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
               const PanelComponent = getPanel(node.type)
               if (!PanelComponent) return <div className="flex items-center justify-center h-full text-xs text-muted-foreground"><p>该节点类型暂不支持配置编辑</p></div>
               return (
-                <PanelComponent
-                  key={`${node.id}::${definition.version ?? "0"}`}
-                  config={node.config}
-                  onChange={(c) => onConfigChange(node.id, c)}
-                  upstreamNodes={upstreamNodes}
-                  workflowParams={definition.params}
-                  projects={projects}
-                  defaultProjectName={defaultProjectName}
-                  defaultProviderId={definition.defaultProviderId}
-                  defaultModelTier={definition.defaultModelTier}
-                />
+                <>
+                  {validationItems.length > 0 && (
+                    <div className="mb-3 rounded-md border border-destructive/40 bg-background px-3 py-2">
+                      <p className="text-xs font-medium text-destructive">当前节点需要处理</p>
+                      <div className="mt-1 grid gap-1">
+                        {validationItems.map((item) => (
+                          <p key={item.id} className="text-xs text-muted-foreground">{item.summary}</p>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  <PanelComponent
+                    key={`${node.id}::${definition.version ?? "0"}`}
+                    config={node.config}
+                    onChange={(c) => onConfigChange(node.id, c)}
+                    upstreamNodes={upstreamNodes}
+                    workflowParams={definition.params}
+                    projects={projects}
+                    defaultProjectName={defaultProjectName}
+                    defaultProviderId={definition.defaultProviderId}
+                    defaultModelTier={definition.defaultModelTier}
+                    validationItems={validationItems}
+                  />
+                </>
               )
             })()}
           </div>

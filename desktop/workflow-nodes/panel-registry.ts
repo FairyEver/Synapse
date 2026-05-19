@@ -1,6 +1,7 @@
 import type { ComponentType } from "react"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowParam } from "@/types/workflow"
+import type { WorkflowValidationDisplayItem } from "@/modules/workflow/editor/validation-display"
 import { PromptNodePanel } from "./prompt/panel"
 import { SwitchNodePanel } from "./switch/panel"
 import { EndNodePanel } from "./end/panel"
@@ -16,6 +17,7 @@ export interface NodePanelProps {
   defaultProjectName?: string
   defaultProviderId?: string
   defaultModelTier?: string
+  validationItems?: readonly WorkflowValidationDisplayItem[]
 }
 
 type PanelComponent = ComponentType<NodePanelProps>

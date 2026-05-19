@@ -1,9 +1,9 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { toast } from "sonner"
-import { AlertCircle, Loader2, RefreshCw, X } from "lucide-react"
+import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
 import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import type { WorkflowDefinition, ValidationError } from "@/types/workflow"
-import { Alert, AlertDescription, AlertTitle, AlertAction } from "@/components/ui/alert"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 // Side-effect: populate node type registry in the editor window's renderer process.
@@ -20,6 +20,8 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/componen
 import { ProviderLookupProvider } from "../../../../workflow-nodes/provider-lookup-context"
 import { errorDiagnostic } from "../lib/error-utils"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { buildWorkflowValidationDisplayItems, type WorkflowValidationDisplayItem } from "./validation-display"
+import { WorkflowErrorCard } from "./workflow-error-card"
 
 const logger = createRendererLogger("workflow.editor")
 
@@ -50,6 +52,14 @@ export function WorkflowEditorApp() {
   definitionRef.current = definition
   const isDirtyRef = useRef(false)
   const savingRef = useRef(false)
+  const validationItems = useMemo(
+    () => definition ? buildWorkflowValidationDisplayItems(definition, runErrors) : [],
+    [definition, runErrors],
+  )
+  const selectedNodeValidationItems = useMemo(
+    () => selectedNodeId ? validationItems.filter((item) => item.nodeId === selectedNodeId) : [],
+    [selectedNodeId, validationItems],
+  )
 
   const loadDefinition = useCallback(() => {
     if (!workflowId) return
@@ -190,6 +200,12 @@ export function WorkflowEditorApp() {
 
   const handleNodeSelect = useCallback((nodeId: string | null) => {
     setSelectedNodeId(nodeId)
+  }, [])
+
+  const handleValidationItemSelect = useCallback((item: WorkflowValidationDisplayItem) => {
+    if (!item.nodeId) return
+    setSelectedNodeId(item.nodeId)
+    canvasRef.current?.selectNode(item.nodeId)
   }, [])
 
   const handleRequestRename = useCallback((nodeId: string) => {
@@ -410,33 +426,6 @@ export function WorkflowEditorApp() {
     <ProviderLookupProvider>
     <ErrorBoundary fallbackTitle="工作流编辑器出现问题">
     <div className="flex flex-col h-screen">
-      {runErrors.length > 0 && (
-        <Alert variant="destructive" className="rounded-none border-x-0 border-t-0">
-          <AlertCircle className="h-4 w-4" />
-          <AlertTitle className="text-xs font-medium">校验失败</AlertTitle>
-          <AlertDescription className="text-xs">
-            <ul className="mt-0.5 space-y-0.5 list-none">
-              {runErrors.map((e, i) => (
-                <li
-                  key={i}
-                  className={e.nodeId ? "cursor-pointer hover:underline" : undefined}
-                  role={e.nodeId ? "button" : undefined}
-                  tabIndex={e.nodeId ? 0 : undefined}
-                  onClick={e.nodeId ? () => setSelectedNodeId(e.nodeId!) : undefined}
-                  onKeyDown={e.nodeId ? (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); setSelectedNodeId(e.nodeId!) } } : undefined}
-                >
-                  {e.message}
-                </li>
-              ))}
-            </ul>
-          </AlertDescription>
-          <AlertAction>
-            <Button size="icon" variant="ghost" className="h-6 w-6 text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => setRunErrors([])} aria-label="关闭错误提示">
-              <X className="h-3.5 w-3.5" />
-            </Button>
-          </AlertAction>
-        </Alert>
-      )}
       <ResizablePanelGroup orientation="horizontal" className="flex-1 min-h-0">
         <ResizablePanel
           id="node-palette"
@@ -457,6 +446,7 @@ export function WorkflowEditorApp() {
           <div className="relative h-full">
             <WorkflowCanvas ref={canvasRef} definition={definition} onChange={handleDefinitionChange} onNodeSelect={handleNodeSelect} onRequestRename={handleRequestRename} />
             <CanvasFloatingToolbar definition={definition} saving={saving} running={running} dirty={dirty} onSave={handleSave} onRun={handleRun} />
+            <WorkflowErrorCard items={validationItems} onSelectItem={handleValidationItemSelect} />
           </div>
         </ResizablePanel>
         <ResizableHandle withHandle />
@@ -484,6 +474,7 @@ export function WorkflowEditorApp() {
             projects={projects}
             defaultProjectName={defaultProjectName}
             onDefinitionChange={handleDefinitionChange}
+            validationItems={selectedNodeValidationItems}
           />
         </ResizablePanel>
       </ResizablePanelGroup>

@@ -1,0 +1,91 @@
+import { describe, expect, it } from "vitest"
+import type { ValidationError, WorkflowDefinition } from "@/types/workflow"
+import { buildWorkflowValidationDisplayItems } from "../validation-display"
+
+describe("buildWorkflowValidationDisplayItems", () => {
+  it("converts raw Zod issue arrays into friendly copy", () => {
+    const errors: ValidationError[] = [{
+      type: "invalid_config",
+      nodeId: "prompt-1",
+      message: JSON.stringify([
+        {
+          code: "invalid_type",
+          expected: "string",
+          received: "undefined",
+          path: ["projectId"],
+          message: "Required",
+        },
+      ]),
+    }]
+
+    const items = buildWorkflowValidationDisplayItems(definition(), errors)
+
+    expect(items).toHaveLength(1)
+    expect(items[0]).toMatchObject({
+      id: "node:prompt-1:0",
+      summary: "请选择项目，或设置工作流默认项目。",
+      location: "提示词节点",
+      nodeId: "prompt-1",
+      fieldKey: "projectId",
+      type: "invalid_config",
+    })
+    expect(items[0].summary).not.toContain("invalid_type")
+    expect(items[0].summary).not.toContain("projectId")
+    expect(items[0].summary).not.toContain("[")
+  })
+
+  it("keeps branch and workflow-level validation copy concise", () => {
+    const errors: ValidationError[] = [
+      {
+        type: "invalid_switch_edge",
+        nodeId: "switch-1",
+        message: "Switch 节点「判断」的分支「兜底」没有连接到下游节点",
+      },
+      {
+        type: "missing_end_node",
+        message: "工作流必须包含一个结束节点",
+      },
+    ]
+
+    const items = buildWorkflowValidationDisplayItems(definition(), errors)
+
+    expect(items[0]).toMatchObject({
+      summary: "分支“兜底”需要连接到下游节点。",
+      location: "判断",
+      nodeId: "switch-1",
+    })
+    expect(items[1]).toMatchObject({
+      summary: "工作流需要一个结束节点。",
+      location: "工作流",
+    })
+    expect(items[1]).not.toHaveProperty("nodeId")
+  })
+})
+
+function definition(): WorkflowDefinition {
+  return {
+    id: "workflow-1",
+    name: "Demo",
+    version: "v1",
+    createdAt: 0,
+    updatedAt: 0,
+    params: [],
+    nodes: [
+      {
+        id: "prompt-1",
+        name: "提示词节点",
+        type: "prompt",
+        position: { x: 0, y: 0 },
+        config: { variables: [], prompt: "" },
+      },
+      {
+        id: "switch-1",
+        name: "判断",
+        type: "switch",
+        position: { x: 100, y: 0 },
+        config: { variables: [], prompt: "", branches: [{ id: "fallback", label: "兜底" }] },
+      },
+    ],
+    edges: [],
+  }
+}

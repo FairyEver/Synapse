@@ -112,6 +112,32 @@ describe("WorkflowCanvas", () => {
     expect(lastDefinition?.nodes.map((node) => node.id)).toEqual(["start-1", "end-1"])
     expect(lastDefinition?.edges).toEqual([])
   })
+
+  it("selects a node through the imperative handle", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const canvasRef = createRef<WorkflowCanvasHandle>()
+    const onNodeSelect = vi.fn()
+
+    await act(async () => {
+      root.render(
+        <WorkflowCanvas
+          ref={canvasRef}
+          definition={definitionWithConnectedPrompt()}
+          onChange={vi.fn()}
+          onNodeSelect={onNodeSelect}
+        />,
+      )
+    })
+
+    await act(async () => {
+      canvasRef.current?.selectNode("prompt-1")
+    })
+
+    expect(onNodeSelect).toHaveBeenCalledWith("prompt-1")
+  })
 })
 
 function definition(): WorkflowDefinition {

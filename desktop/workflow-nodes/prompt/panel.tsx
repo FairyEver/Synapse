@@ -5,6 +5,7 @@ import { ProviderModelSelectDialog } from "@/components/provider-model-select-di
 import type { ModelTier } from "@/types/provider-model"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowParam } from "@/types/workflow"
+import type { WorkflowValidationDisplayItem } from "@/modules/workflow/editor/validation-display"
 import type { PromptNodeConfig } from "./schema"
 import { VariableBindingEditor } from "../variable-binding-editor"
 import { PromptEditor } from "../prompt-editor"
@@ -23,9 +24,10 @@ export interface PromptNodePanelProps {
   defaultProjectName?: string
   defaultProviderId?: string
   defaultModelTier?: string
+  validationItems?: readonly WorkflowValidationDisplayItem[]
 }
 
-export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParams, projects, defaultProjectName, defaultProviderId, defaultModelTier }: PromptNodePanelProps) {
+export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParams, projects, defaultProjectName, defaultProviderId, defaultModelTier, validationItems = [] }: PromptNodePanelProps) {
   const [prompt, setPrompt] = useState(config.prompt)
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
   const lastCommittedRef = useRef<PromptNodeConfig>(config)
@@ -40,6 +42,7 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
 
   const varSummary = config.variables.length > 0 ? `${config.variables.length}个` : undefined
   const promptSummary = prompt.length > 0 ? `${prompt.length}字` : undefined
+  const errorFor = (fieldKey: string) => validationItems.find((item) => item.fieldKey === fieldKey)?.summary
 
   return (
     <div className="grid gap-2">
@@ -80,6 +83,7 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
           projects={projects}
           placeholder={defaultProjectName ? `继承: ${defaultProjectName}` : "继承默认"}
         />
+        {errorFor("projectId") && <p className="text-xs text-destructive">{errorFor("projectId")}</p>}
       </CollapsibleSection>
 
       <CollapsibleSection title="指令" summary={promptSummary}>
@@ -90,6 +94,7 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
           variables={config.variables}
           placeholder="输入提示词，用 {{变量名}} 引用变量…"
         />
+        {errorFor("prompt") && <p className="text-xs text-destructive">{errorFor("prompt")}</p>}
       </CollapsibleSection>
     </div>
   )

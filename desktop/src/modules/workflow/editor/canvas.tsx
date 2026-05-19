@@ -48,6 +48,7 @@ export interface WorkflowCanvasHandle {
   updateEdgeLabels: (sourceNodeId: string, branches: Array<{ id: string; label: string }>) => void
   deleteNodes: (nodeIds: string[]) => void
   copyNodes: (nodeIds: string[]) => void
+  selectNode: (nodeId: string) => void
 }
 
 function defToFlow(def: WorkflowDefinition) {
@@ -122,6 +123,8 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
   // Refs for imperative handle — declared early so useImperativeHandle closure can access them
   const deleteNodesRef = useRef<(nodeIds: string[]) => void>(() => {})
   const copyNodesRef = useRef<(nodeIds: string[]) => void>(() => {})
+  const onNodeSelectRef = useRef(onNodeSelect)
+  onNodeSelectRef.current = onNodeSelect
 
   useImperativeHandle(ref, () => ({
     updateNodeConfig: (nodeId, config) => {
@@ -162,6 +165,10 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
     },
     deleteNodes: (nodeIds) => deleteNodesRef.current(nodeIds),
     copyNodes: (nodeIds) => copyNodesRef.current(nodeIds),
+    selectNode: (nodeId) => {
+      setNodes((nds) => nds.map((node) => ({ ...node, selected: node.id === nodeId })))
+      onNodeSelectRef.current?.(nodeId)
+    },
   }))
 
   const getSelectedNodeIds = useCallback((): string[] => {
@@ -479,9 +486,6 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
   pasteNodesRef.current = pasteNodes
   const getSelectedNodeIdsRef = useRef(getSelectedNodeIds)
   getSelectedNodeIdsRef.current = getSelectedNodeIds
-  const onNodeSelectRef = useRef(onNodeSelect)
-  onNodeSelectRef.current = onNodeSelect
-
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName

@@ -57,7 +57,11 @@ vi.mock("../node-palette", () => ({
 }))
 
 vi.mock("../node-config-panel", () => ({
-  NodeConfigPanel: () => <div data-testid="node-config-panel" />,
+  NodeConfigPanel: ({ validationItems = [] }: { validationItems?: Array<{ summary: string }> }) => (
+    <div data-testid="node-config-panel">
+      {validationItems.map((item) => <p key={item.summary}>{item.summary}</p>)}
+    </div>
+  ),
 }))
 
 vi.mock("@/components/ui/resizable", () => ({
@@ -225,6 +229,85 @@ describe("WorkflowEditorApp", () => {
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example")
   })
+
+  it("shows node repair hints without raw validation JSON", async () => {
+    const rawMessage = JSON.stringify([{ code: "invalid_type", path: ["projectId"], message: "Required" }])
+    const workflowApi = {
+      get: vi.fn().mockResolvedValue(definitionWithPrompt()),
+      openRunner: vi.fn(),
+      runDefinition: vi.fn().mockResolvedValue({
+        errors: [{ type: "invalid_config", nodeId: "prompt-1", message: rawMessage }],
+      }),
+      save: vi.fn().mockResolvedValue({ versionHash: "v2" }),
+      onEditorRefocus: vi.fn(() => vi.fn()),
+      onDefinitionUpdated: vi.fn(() => vi.fn()),
+    }
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: { workflow: workflowApi },
+    })
+    window.history.replaceState({}, "", "/?workflowId=workflow-1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowEditorApp />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      buttonByText("Run workflow").dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("需要处理 1 处")
+    expect(document.body.textContent).toContain("请选择项目，或设置工作流默认项目。")
+    expect(document.body.textContent).not.toContain("invalid_type")
+    expect(document.body.textContent).not.toContain("[")
+  })
+
+  it("collapses the floating validation card", async () => {
+    const workflowApi = {
+      get: vi.fn().mockResolvedValue(definitionWithPrompt()),
+      openRunner: vi.fn(),
+      runDefinition: vi.fn().mockResolvedValue({
+        errors: [{ type: "missing_end_node", message: "工作流必须包含一个结束节点" }],
+      }),
+      save: vi.fn().mockResolvedValue({ versionHash: "v2" }),
+      onEditorRefocus: vi.fn(() => vi.fn()),
+      onDefinitionUpdated: vi.fn(() => vi.fn()),
+    }
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: { workflow: workflowApi },
+    })
+    window.history.replaceState({}, "", "/?workflowId=workflow-1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowEditorApp />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      buttonByText("Run workflow").dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      buttonByLabel("关闭错误提示").click()
+    })
+
+    expect(document.body.textContent).toContain("1 处需要处理")
+    expect(document.body.textContent).not.toContain("需要处理 1 处")
+  })
 })
 
 function definition(): WorkflowDefinition {
@@ -240,9 +323,30 @@ function definition(): WorkflowDefinition {
   }
 }
 
+function definitionWithPrompt(): WorkflowDefinition {
+  return {
+    ...definition(),
+    nodes: [
+      {
+        id: "prompt-1",
+        name: "提示词节点",
+        type: "prompt",
+        position: { x: 0, y: 0 },
+        config: { variables: [], prompt: "hello" },
+      },
+    ],
+  }
+}
+
 function buttonByText(text: string): HTMLButtonElement {
   const button = Array.from(document.body.querySelectorAll("button"))
     .find((candidate) => candidate.textContent?.trim() === text)
   if (!button) throw new Error(`Button not found: ${text}`)
+  return button
+}
+
+function buttonByLabel(label: string): HTMLButtonElement {
+  const button = document.body.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+  if (!button) throw new Error(`Button not found: ${label}`)
   return button
 }
