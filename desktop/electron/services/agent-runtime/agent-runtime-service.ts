@@ -300,11 +300,15 @@ export class AgentRuntimeService {
 
       if (input.sessionPolicy === "fresh" || !input.lastConversationId) {
         const name = formatScheduledSessionName()
-        result = await this.conversationRouter.sendNewSession(message, name, { abortSignal: ac.signal })
+        result = await this.conversationRouter.sendNewSession(message, name, {
+          abortSignal: ac.signal,
+          liveEventTimeoutMs: scheduledLiveEventTimeoutMs(input.timeoutMs),
+        })
       } else {
         try {
           result = await this.conversationRouter.sendToConversation(message, input.lastConversationId, {
             abortSignal: ac.signal,
+            liveEventTimeoutMs: scheduledLiveEventTimeoutMs(input.timeoutMs),
           })
         } catch (resumeError) {
           const isNotFound = resumeError instanceof Error
@@ -312,7 +316,10 @@ export class AgentRuntimeService {
           if (!isNotFound) throw resumeError
           this.logScheduledResumeFallback(input, message, resumeError)
           const name = formatScheduledSessionName()
-          result = await this.conversationRouter.sendNewSession(message, name, { abortSignal: ac.signal })
+          result = await this.conversationRouter.sendNewSession(message, name, {
+            abortSignal: ac.signal,
+            liveEventTimeoutMs: scheduledLiveEventTimeoutMs(input.timeoutMs),
+          })
         }
       }
 
@@ -1162,6 +1169,10 @@ function summarizeScheduledResumeError(error: unknown): { errorName: string; err
 
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
+}
+
+function scheduledLiveEventTimeoutMs(timeoutMs: number): number | undefined {
+  return timeoutMs > 0 ? undefined : 0
 }
 
 function truncateRunes(value: string, maxRunes: number): string {

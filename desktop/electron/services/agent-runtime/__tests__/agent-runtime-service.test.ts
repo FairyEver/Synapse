@@ -663,6 +663,36 @@ describe("AgentRuntimeService", () => {
     }
   })
 
+  it("does not apply the live event timeout when scheduled timeout is disabled", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new TimeoutAwareSession([
+      { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+    ], "sdk-1")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      now: fixedNow,
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "plan",
+      prompt: "scheduled prompt",
+      sessionPolicy: "fresh",
+      timeoutMs: 0,
+    })
+
+    expect(result).toMatchObject({
+      status: "success",
+      summary: "done",
+    })
+    expect(session.timeoutCalls).toEqual([])
+  })
+
   it("logs scheduled resume fallback without prompt content", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn() }
@@ -781,6 +811,15 @@ class ScriptedSession implements AgentLiveSession {
 
   async close(): Promise<void> {
     this.closed = true
+  }
+}
+
+class TimeoutAwareSession extends ScriptedSession {
+  readonly timeoutCalls: number[] = []
+
+  async nextEventWithTimeout(timeoutMs: number): Promise<AgentEvent | null> {
+    this.timeoutCalls.push(timeoutMs)
+    return null
   }
 }
 

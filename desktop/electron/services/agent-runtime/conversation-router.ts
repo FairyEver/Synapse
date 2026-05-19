@@ -78,17 +78,17 @@ export class ConversationRouter {
 
   async send(
     message: AgentMessage,
-    options: { readonly abortSignal?: AbortSignal } = {},
+    options: { readonly abortSignal?: AbortSignal; readonly liveEventTimeoutMs?: number } = {},
   ): Promise<AgentRuntimeTurnResult> {
     this.assertProject(message)
     const conversation = await this.getOrCreateConversation(message)
-    return this.enqueueTurn(message, conversation, options.abortSignal)
+    return this.enqueueTurn(message, conversation, options)
   }
 
   async sendToConversation(
     message: AgentMessage,
     conversationId: string,
-    options: { readonly abortSignal?: AbortSignal } = {},
+    options: { readonly abortSignal?: AbortSignal; readonly liveEventTimeoutMs?: number } = {},
   ): Promise<AgentRuntimeTurnResult> {
     this.assertProject(message)
     const conversation = await this.repository.get(conversationId)
@@ -98,13 +98,13 @@ export class ConversationRouter {
     const effectiveConversation = message.modeOverride
       ? await this.repository.savePermissionMode(conversation.id, message.modeOverride)
       : conversation
-    return this.enqueueTurn(message, effectiveConversation, options.abortSignal)
+    return this.enqueueTurn(message, effectiveConversation, options)
   }
 
   async sendNewSession(
     message: AgentMessage,
     name: string,
-    options: { readonly abortSignal?: AbortSignal } = {},
+    options: { readonly abortSignal?: AbortSignal; readonly liveEventTimeoutMs?: number } = {},
   ): Promise<AgentRuntimeTurnResult> {
     this.assertProject(message)
     const providerId = await this.resolveNewConversationProviderId(message)
@@ -122,7 +122,7 @@ export class ConversationRouter {
       userMeta: userMetaFromMessage(message),
       resumePolicy: "fresh",
     })
-    return this.enqueueTurn({ ...message, providerId }, conversation, options.abortSignal)
+    return this.enqueueTurn({ ...message, providerId }, conversation, options)
   }
 
   async sendSideSessionWithTimeout(
@@ -214,7 +214,7 @@ export class ConversationRouter {
   private async enqueueTurn(
     message: AgentMessage,
     conversation: ConversationEntryV1,
-    abortSignal?: AbortSignal,
+    options: { readonly abortSignal?: AbortSignal; readonly liveEventTimeoutMs?: number } = {},
   ): Promise<AgentRuntimeTurnResult> {
     this.deps.replyTargets?.rememberReplyTarget(replyTargetFromMessage(message, conversation.id))
     const governance = this.deps.governance?.evaluateMessage(message)
@@ -244,14 +244,15 @@ export class ConversationRouter {
       const turn = {
         message,
         conversationId: conversation.id,
-        abortSignal,
+        abortSignal: options.abortSignal,
+        liveEventTimeoutMs: options.liveEventTimeoutMs,
         resolve,
       }
       state.queue.push(turn)
       if (!state.busy) {
         state.busy = true
         void this.processQueue(state)
-      } else if (abortSignal) {
+      } else if (options.abortSignal) {
         const onAbort = () => {
           const idx = state.queue.indexOf(turn)
           if (idx >= 0) {
@@ -259,10 +260,10 @@ export class ConversationRouter {
             resolve(this.buildCancelledResult(message, conversation.id))
           }
         }
-        if (abortSignal.aborted) {
+        if (options.abortSignal.aborted) {
           onAbort()
         } else {
-          abortSignal.addEventListener("abort", onAbort, { once: true })
+          options.abortSignal.addEventListener("abort", onAbort, { once: true })
         }
       }
     })
@@ -287,7 +288,13 @@ export class ConversationRouter {
             turn.resolve(this.buildCancelledResult(turn.message, turn.conversationId))
             continue
           }
-          const result = await this.processTurn(state, turn.message, turn.conversationId, ac.signal)
+          const result = await this.processTurn(
+            state,
+            turn.message,
+            turn.conversationId,
+            ac.signal,
+            turn.liveEventTimeoutMs,
+          )
           if (ac.signal.aborted) {
             turn.resolve(this.buildCancelledResult(turn.message, turn.conversationId))
           } else {
@@ -325,6 +332,7 @@ export class ConversationRouter {
     message: AgentMessage,
     conversationId: string,
     abortSignal?: AbortSignal,
+    liveEventTimeoutMs?: number,
   ): Promise<AgentRuntimeTurnResult> {
     state.activeTurns += 1
     state.lastActivity = Date.now()
@@ -351,7 +359,15 @@ export class ConversationRouter {
           message,
           abortSignal,
         })
-        const result = await this.processLiveTurn(state, message, conversation, liveSession, turnId, abortSignal)
+        const result = await this.processLiveTurn(
+          state,
+          message,
+          conversation,
+          liveSession,
+          turnId,
+          abortSignal,
+          liveEventTimeoutMs,
+        )
 
         if (isBackgroundPlatform) {
           const tDone = this.isoNow()
@@ -399,6 +415,7 @@ export class ConversationRouter {
     liveSession: AgentLiveSession,
     turnId: string,
     abortSignal?: AbortSignal,
+    liveEventTimeoutMs = DEFAULT_LIVE_EVENT_TIMEOUT_MS,
   ): Promise<AgentRuntimeTurnResult> {
     const events: AgentEvent[] = []
     let resultText = ""
@@ -413,7 +430,7 @@ export class ConversationRouter {
     }
 
     while (!error && liveSession.alive()) {
-      const event = await nextLiveEventWithTimeout(liveSession, DEFAULT_LIVE_EVENT_TIMEOUT_MS)
+      const event = await nextLiveEventWithTimeout(liveSession, liveEventTimeoutMs)
       if (!event) {
         error = liveSession.alive() ? "Agent session timed out." : "Agent session ended"
         if (liveSession.alive()) {
@@ -666,7 +683,6 @@ export class ConversationRouter {
     let timeout: ReturnType<typeof setTimeout> | undefined
     await new Promise<void>((resolve) => {
       let settled = false
-      let pending: PendingPermissionState
       const abort = (): void => {
         this.sessionManager.settlePendingPermission(pending)
       }
@@ -677,7 +693,7 @@ export class ConversationRouter {
         abortSignal?.removeEventListener("abort", abort)
         resolve()
       }
-      pending = {
+      const pending: PendingPermissionState = {
         requestId: event.requestId,
         projectId: this.deps.projectId,
         stateKey: state.key,
@@ -1178,6 +1194,9 @@ async function nextLiveEventWithTimeout(
   liveSession: AgentLiveSession,
   timeoutMs: number,
 ): Promise<AgentEvent | null> {
+  if (timeoutMs <= 0) {
+    return liveSession.nextEvent()
+  }
   if (liveSession.nextEventWithTimeout) {
     return liveSession.nextEventWithTimeout(timeoutMs)
   }

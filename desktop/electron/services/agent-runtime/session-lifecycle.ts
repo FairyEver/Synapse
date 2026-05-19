@@ -28,6 +28,7 @@ export interface QueuedTurn {
   readonly message: AgentMessage
   readonly conversationId: string
   readonly abortSignal?: AbortSignal
+  readonly liveEventTimeoutMs?: number
   resolve(result: unknown): void
 }
 
