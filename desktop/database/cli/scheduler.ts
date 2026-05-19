@@ -75,6 +75,10 @@ export async function handleSchedulerCommand(
       const taskId = requireArg(args[2], "Usage: synapse scheduler task update <taskId> --data '{...}'")
       const data = parseData(args, "Usage: synapse scheduler task update <taskId> --data '{...}'")
       if (!isRecord(data)) throw new Error("Invalid JSON for --data: expected object.")
+      const RESERVED_KEYS = ["taskId", "action"]
+      for (const key of RESERVED_KEYS) {
+        if (key in data) throw new Error(`Reserved key "${key}" is not allowed in --data.`)
+      }
       const result = await apiCall("scheduler.task.update", { taskId, ...data }) as { data?: { id?: string } }
       print(`Task updated: ${result.data?.id ?? taskId}`)
       break

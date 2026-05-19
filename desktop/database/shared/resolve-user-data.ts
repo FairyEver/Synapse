@@ -61,7 +61,7 @@ async function apiCall(
         Authorization: `Bearer ${info.token}`,
         "X-Synapse-Client": source,
       },
-      body: JSON.stringify({ action, ...params }),
+      body: JSON.stringify({ ...params, action }),
       signal: controller.signal,
     })
   } catch (error) {
