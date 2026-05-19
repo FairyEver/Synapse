@@ -6,6 +6,8 @@ const SENSITIVE_PARAMS = new Set(["token", "key", "secret", "password", "auth", 
 function sanitizeUrl(raw: string): string {
   try {
     const url = new URL(raw)
+    if (url.username) url.username = "[REDACTED]"
+    if (url.password) url.password = "[REDACTED]"
     for (const param of url.searchParams.keys()) {
       if (SENSITIVE_PARAMS.has(param.toLowerCase())) {
         url.searchParams.set(param, "[REDACTED]")
