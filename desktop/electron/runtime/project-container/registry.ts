@@ -166,8 +166,11 @@ class ProjectContainerImpl implements ProjectContainer {
         const err = rawErr instanceof Error ? rawErr : new Error(String(rawErr))
         state.status = "failed"
         state.lastError = err
-        // Phase 0.5: project-scoped failures bubble up. Phase 0.6 may add
-        // criticality flag like ServiceRegistry.
+        await this.dispose().catch((disposeErr) => {
+          this.ctx.logger.error("Cleanup of already-started services failed during start() rollback.", {
+            error: disposeErr instanceof Error ? disposeErr.message : String(disposeErr),
+          })
+        })
         throw err
       }
     }
