@@ -1330,7 +1330,7 @@ git commit -m "feat: add workflow import mapping dialog"
 - Modify: existing tests under `desktop/src/modules/workflow/**/__tests__/`
 - Test: `pnpm --filter @synapse/desktop exec vitest run src/modules/workflow/__tests__/workflow-module.test.tsx src/modules/workflow/components/__tests__/workflow-list.test.tsx src/modules/workflow/components/__tests__/workflow-card.test.tsx`
 
-- [ ] **Step 1: Extend card test for export action**
+- [x] **Step 1: Extend card test for export action**
 
 In `desktop/src/modules/workflow/components/__tests__/workflow-card.test.tsx`, extend the interaction test to pass `onExport={onExport}` and assert:
 
@@ -1340,7 +1340,7 @@ exportButton?.click()
 expect(onExport).toHaveBeenCalled()
 ```
 
-- [ ] **Step 2: Run card test to verify it fails**
+- [x] **Step 2: Run card test to verify it fails**
 
 Run:
 
@@ -1350,7 +1350,7 @@ pnpm --filter @synapse/desktop exec vitest run src/modules/workflow/components/_
 
 Expected: FAIL because `WorkflowCard` has no export button.
 
-- [ ] **Step 3: Add export button to WorkflowCard**
+- [x] **Step 3: Add export button to WorkflowCard**
 
 Modify `WorkflowCardProps` in `desktop/src/modules/workflow/components/workflow-card.tsx`:
 
@@ -1382,7 +1382,7 @@ Import `Download` from `lucide-react`, then add this button before delete:
 </Button>
 ```
 
-- [ ] **Step 4: Run card test**
+- [x] **Step 4: Run card test**
 
 Run:
 
@@ -1392,7 +1392,7 @@ pnpm --filter @synapse/desktop exec vitest run src/modules/workflow/components/_
 
 Expected: PASS.
 
-- [ ] **Step 5: Wire export in WorkflowList**
+- [x] **Step 5: Wire export in WorkflowList**
 
 In `desktop/src/modules/workflow/components/workflow-list.tsx`, add:
 
@@ -1419,7 +1419,7 @@ Pass to card:
 onExport={() => void handleExport(meta.id, meta.name)}
 ```
 
-- [ ] **Step 6: Wire import in WorkflowModule**
+- [x] **Step 6: Wire import in WorkflowModule**
 
 In `desktop/src/modules/workflow/index.tsx`, import `Upload` and `WorkflowImportDialog`, add state:
 
@@ -1491,7 +1491,7 @@ Render the dialog:
 
 Remember to import `WorkflowImportPreview` and `WorkflowModelMapping` from `@/types/workflow-package`.
 
-- [ ] **Step 7: Extend workflow module/list tests**
+- [x] **Step 7: Extend workflow module/list tests**
 
 In `desktop/src/modules/workflow/__tests__/workflow-module.test.tsx`, add bridge mocks for:
 
@@ -1505,7 +1505,7 @@ Add a test that clicks `导入` and expects `inspectImportPackage` to be called.
 
 In `desktop/src/modules/workflow/components/__tests__/workflow-list.test.tsx`, add `exportPackage` to the workflow bridge mock and assert clicking `[data-track="workflow-card-export"]` calls it with the workflow id and name.
 
-- [ ] **Step 8: Run workflow UI tests**
+- [x] **Step 8: Run workflow UI tests**
 
 Run:
 
@@ -1515,7 +1515,7 @@ pnpm --filter @synapse/desktop exec vitest run src/modules/workflow/__tests__/wo
 
 Expected: PASS.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add desktop/src/modules/workflow/index.tsx desktop/src/modules/workflow/components/workflow-list.tsx desktop/src/modules/workflow/components/workflow-card.tsx desktop/src/modules/workflow/components/__tests__/workflow-card.test.tsx desktop/src/modules/workflow/components/__tests__/workflow-list.test.tsx desktop/src/modules/workflow/__tests__/workflow-module.test.tsx

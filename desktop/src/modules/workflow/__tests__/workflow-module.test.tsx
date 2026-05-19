@@ -10,18 +10,27 @@ import { WorkflowModule } from "../index"
 const {
   loggerWarn,
   toastError,
+  toastSuccess,
   workflowCreate,
+  workflowExportPackage,
+  workflowImportPackage,
+  workflowInspectImportPackage,
   workflowOpenEditor,
 } = vi.hoisted(() => ({
   loggerWarn: vi.fn(),
   toastError: vi.fn(),
+  toastSuccess: vi.fn(),
   workflowCreate: vi.fn(),
+  workflowExportPackage: vi.fn(),
+  workflowImportPackage: vi.fn(),
+  workflowInspectImportPackage: vi.fn(),
   workflowOpenEditor: vi.fn(),
 }))
 
 vi.mock("sonner", () => ({
   toast: {
     error: toastError,
+    success: toastSuccess,
   },
 }))
 
@@ -38,6 +47,10 @@ vi.mock("../components/workflow-list", () => ({
   WorkflowList: () => <div data-testid="workflow-list" />,
 }))
 
+vi.mock("../components/workflow-import-dialog", () => ({
+  WorkflowImportDialog: () => null,
+}))
+
 vi.mock("../../../workflow-nodes/register.renderer", () => ({}))
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -50,6 +63,9 @@ beforeEach(() => {
     value: {
       workflow: {
         create: workflowCreate,
+        exportPackage: workflowExportPackage,
+        importPackage: workflowImportPackage,
+        inspectImportPackage: workflowInspectImportPackage,
         openEditor: workflowOpenEditor,
       },
     } as unknown as Window["synapse"],
@@ -81,7 +97,9 @@ describe("WorkflowModule", () => {
     })
 
     await act(async () => {
-      container.querySelector<HTMLButtonElement>("button")?.click()
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("新建"))
+        ?.click()
       await Promise.resolve()
     })
 
@@ -95,5 +113,26 @@ describe("WorkflowModule", () => {
     expect(JSON.stringify(toastError.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain("/Users/example/repo")
+  })
+
+  it("starts workflow import from the toolbar", async () => {
+    workflowInspectImportPackage.mockResolvedValue(null)
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowModule />)
+    })
+
+    await act(async () => {
+      Array.from(container.querySelectorAll("button"))
+        .find((button) => button.textContent?.includes("导入"))
+        ?.click()
+      await Promise.resolve()
+    })
+
+    expect(workflowInspectImportPackage).toHaveBeenCalledTimes(1)
   })
 })

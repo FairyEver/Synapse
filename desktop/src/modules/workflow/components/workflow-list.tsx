@@ -120,6 +120,21 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     void refresh()
   }
 
+  const handleExport = async (id: string, name: string) => {
+    try {
+      const result = await requireBridgeDomain("workflow").exportPackage(id, name)
+      if (!result) return
+      toast.success("工作流已导出")
+    } catch (err) {
+      logger.warn("Workflow export failed.", {
+        boundary: "renderer.workflow.list.export",
+        workflowId: id,
+        ...errorDiagnostic(err),
+      })
+      toast.error("导出失败，请重试")
+    }
+  }
+
   const handleConfirmRun = async (params: Record<string, unknown>) => {
     if (!runTarget) return
     const def = runTarget
@@ -230,6 +245,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
             }}
             onRun={() => void handleRun(meta.id)}
             onHistory={() => setHistoryWorkflowId(meta.id)}
+            onExport={() => void handleExport(meta.id, meta.name)}
             onDelete={() => void handleDelete(meta.id)} />
         ))}
       </div>

@@ -7,14 +7,14 @@ import {
   AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
 import type { WorkflowMeta, WorkflowRunStatus } from "@/types/workflow"
-import { GitBranch, Play, Trash2, History, Loader2 } from "lucide-react"
+import { Download, GitBranch, Play, Trash2, History, Loader2 } from "lucide-react"
 import { RUN_STATE_BADGE } from "../lib/status-display"
 
 export type WorkflowCardRunState = WorkflowRunStatus["status"]
 
-interface WorkflowCardProps { meta: WorkflowMeta; running?: boolean; runState?: WorkflowCardRunState; onOpen: () => void; onRun: () => void; onHistory: () => void; onDelete: () => void }
+interface WorkflowCardProps { meta: WorkflowMeta; running?: boolean; runState?: WorkflowCardRunState; onOpen: () => void; onRun: () => void; onHistory: () => void; onExport: () => void; onDelete: () => void }
 
-export function WorkflowCard({ meta, running, runState, onOpen, onRun, onHistory, onDelete }: WorkflowCardProps) {
+export function WorkflowCard({ meta, running, runState, onOpen, onRun, onHistory, onExport, onDelete }: WorkflowCardProps) {
   const badge = runState ? RUN_STATE_BADGE[runState] : null
   const suppressClickRef = useRef(false)
 
@@ -56,6 +56,16 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onHistory
             onClick={(e) => { e.stopPropagation(); onHistory() }}
           >
             <History className="h-3.5 w-3.5" />
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant="ghost"
+            aria-label="导出工作流"
+            data-track="workflow-card-export"
+            onClick={(e) => { e.stopPropagation(); onExport() }}
+          >
+            <Download className="h-3.5 w-3.5" />
           </Button>
           <AlertDialog onOpenChange={(open) => { suppressClickRef.current = open }}>
             <AlertDialogTrigger asChild>

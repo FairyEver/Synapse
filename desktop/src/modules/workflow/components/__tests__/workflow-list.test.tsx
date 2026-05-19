@@ -14,6 +14,7 @@ const {
   toastSuccess,
   track,
   workflowGet,
+  workflowExportPackage,
   workflowRunDefinition,
   workflowOpenRunner,
   workflowOnEvent,
@@ -23,6 +24,7 @@ const {
   toastSuccess: vi.fn(),
   track: vi.fn(),
   workflowGet: vi.fn(),
+  workflowExportPackage: vi.fn(),
   workflowRunDefinition: vi.fn(),
   workflowOpenRunner: vi.fn(),
   workflowOnEvent: vi.fn(() => vi.fn()),
@@ -49,8 +51,19 @@ vi.mock("@/lib/ui-tracking", () => ({
 }))
 
 vi.mock("../workflow-card", () => ({
-  WorkflowCard: ({ meta, onRun }: { meta: { id: string }; onRun: () => void }) => (
-    <button type="button" data-testid={`run-${meta.id}`} onClick={onRun}>run</button>
+  WorkflowCard: ({
+    meta,
+    onExport,
+    onRun,
+  }: {
+    meta: { id: string }
+    onExport: () => void
+    onRun: () => void
+  }) => (
+    <>
+      <button type="button" data-testid={`run-${meta.id}`} onClick={onRun}>run</button>
+      <button type="button" data-track="workflow-card-export" onClick={onExport}>export</button>
+    </>
   ),
 }))
 
@@ -121,6 +134,7 @@ beforeEach(() => {
     value: {
       workflow: {
         get: workflowGet,
+        exportPackage: workflowExportPackage,
         runDefinition: workflowRunDefinition,
         openRunner: workflowOpenRunner,
         onEvent: workflowOnEvent,
@@ -212,5 +226,25 @@ describe("WorkflowList", () => {
     expect(JSON.stringify(toastError.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(loggerWarn.mock.calls)).not.toContain("/Users/example/repo")
+  })
+
+  it("exports a workflow from the card action", async () => {
+    workflowExportPackage.mockResolvedValue({ path: "/tmp/parameterized.synapse-workflow.json" })
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowList onCreate={vi.fn()} />)
+    })
+
+    await act(async () => {
+      container.querySelector<HTMLButtonElement>('[data-track="workflow-card-export"]')?.click()
+      await Promise.resolve()
+    })
+
+    expect(workflowExportPackage).toHaveBeenCalledWith("workflow-param", "Parameterized")
+    expect(toastSuccess).toHaveBeenCalledWith("工作流已导出")
   })
 })

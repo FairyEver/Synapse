@@ -41,6 +41,7 @@ describe("WorkflowCard", () => {
   it("gives icon actions stable labels and tracking names", async () => {
     const onRun = vi.fn()
     const onHistory = vi.fn()
+    const onExport = vi.fn()
     const onDelete = vi.fn()
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -54,6 +55,7 @@ describe("WorkflowCard", () => {
           onOpen={vi.fn()}
           onRun={onRun}
           onHistory={onHistory}
+          onExport={onExport}
           onDelete={onDelete}
         />,
       )
@@ -61,20 +63,24 @@ describe("WorkflowCard", () => {
 
     const runButton = container.querySelector<HTMLButtonElement>('[aria-label="运行工作流"]')
     const historyButton = container.querySelector<HTMLButtonElement>('[aria-label="查看运行历史"]')
+    const exportButton = container.querySelector<HTMLButtonElement>('[aria-label="导出工作流"]')
     const deleteButton = container.querySelector<HTMLButtonElement>('[aria-label="删除工作流"]')
 
     expect(runButton).toBeTruthy()
     expect(historyButton).toBeTruthy()
+    expect(exportButton).toBeTruthy()
     expect(deleteButton).toBeTruthy()
 
     await act(async () => {
       runButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
       historyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      exportButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
       deleteButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
     })
 
     expect(onRun).toHaveBeenCalledTimes(1)
     expect(onHistory).toHaveBeenCalledTimes(1)
+    expect(onExport).toHaveBeenCalledTimes(1)
     expect(mocks.track).toHaveBeenCalledWith({
       component: "button",
       name: "workflow-card-run",
@@ -83,6 +89,11 @@ describe("WorkflowCard", () => {
     expect(mocks.track).toHaveBeenCalledWith({
       component: "button",
       name: "workflow-card-history",
+      action: "click",
+    })
+    expect(mocks.track).toHaveBeenCalledWith({
+      component: "button",
+      name: "workflow-card-export",
       action: "click",
     })
     expect(mocks.track).toHaveBeenCalledWith({
