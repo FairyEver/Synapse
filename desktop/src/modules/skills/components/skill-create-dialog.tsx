@@ -465,6 +465,7 @@ function SkillCreateDialog({
       isDuplicateWarningOpen={isDuplicateWarningOpen}
       isSubmitting={isSubmitting}
       extraSubmitDisabled={isCollectingFiles}
+      extraSubmitDisabledReason={isCollectingFiles ? "正在整理附件…" : null}
       labels={{
         title: { create: "新建 Skill", edit: "编辑 Skill" },
         discardDescription: "当前还没有保存，关闭后已填写的 Skill 内容和附件会被清空。",

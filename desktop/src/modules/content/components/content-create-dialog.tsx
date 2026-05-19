@@ -30,6 +30,7 @@ type ContentCreateDialogLabels = {
 type ContentCreateDialogProps = {
   children: ReactNode
   extraSubmitDisabled?: boolean
+  extraSubmitDisabledReason?: string | null
   isDiscardConfirmOpen: boolean
   isDuplicateWarningOpen?: boolean
   isSubmitting: boolean
@@ -52,6 +53,7 @@ type ContentCreateDialogProps = {
 function ContentCreateDialog({
   children,
   extraSubmitDisabled = false,
+  extraSubmitDisabledReason = null,
   isDiscardConfirmOpen,
   isDuplicateWarningOpen = false,
   isSubmitting,
@@ -139,8 +141,8 @@ function ContentCreateDialog({
                         </Button>
                       </span>
                     </TooltipTrigger>
-                    {submitDisabled && submitDisabledReason ? (
-                      <TooltipContent>{submitDisabledReason}</TooltipContent>
+                    {(submitDisabled && submitDisabledReason) || (extraSubmitDisabled && extraSubmitDisabledReason) ? (
+                      <TooltipContent>{submitDisabledReason ?? extraSubmitDisabledReason}</TooltipContent>
                     ) : null}
                   </Tooltip>
                 </TooltipProvider>
