@@ -133,9 +133,9 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           },
           error: (error) => error instanceof Error ? error.message : "保存失败。",
         },
-      )
+      ).catch(() => undefined)
       if (result?.status !== "saved") {
-        throw new Error("保存未完成，请重试。")
+        return
       }
     }
 
