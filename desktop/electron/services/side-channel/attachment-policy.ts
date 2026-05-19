@@ -41,13 +41,13 @@ export async function prepareSideChannelAttachments(
   let total = 0
 
   for (const image of options.images ?? []) {
-    const attachment = await prepareAttachment("image", image, options)
+    const attachment = await prepareAttachment("image", image, options, total)
     total += attachment.size
     assertTotalSize(total)
     attachments.push(attachment)
   }
   for (const file of options.files ?? []) {
-    const attachment = await prepareAttachment("file", file, options)
+    const attachment = await prepareAttachment("file", file, options, total)
     total += attachment.size
     assertTotalSize(total)
     attachments.push(attachment)
@@ -65,13 +65,15 @@ async function prepareAttachment(
   kind: "image" | "file",
   input: SideChannelAttachmentInput,
   options: PrepareAttachmentOptions,
+  currentTotal: number,
 ): Promise<SideChannelPreparedAttachment> {
-  const source = await readAttachmentInput(input, options)
+  const source = await readAttachmentInput(input, options, currentTotal)
   const mimeType = normalizeMimeType(
     input.mimeType ?? input.mime_type ?? detectMimeType(source.fileName, source.bytes),
   )
   assertMime(kind, mimeType)
   assertSingleSize(source.bytes.byteLength)
+  assertTotalSize(currentTotal + source.bytes.byteLength)
   return {
     kind,
     fileName: sanitizeAttachmentFileName(input.fileName ?? input.file_name ?? source.fileName),
@@ -84,6 +86,7 @@ async function prepareAttachment(
 async function readAttachmentInput(
   input: SideChannelAttachmentInput,
   options: PrepareAttachmentOptions,
+  currentTotal: number,
 ): Promise<{ readonly bytes: Buffer; readonly fileName: string }> {
   const inline = input.dataBase64 ?? input.data
   if (inline !== undefined) {
@@ -95,7 +98,9 @@ async function readAttachmentInput(
   if (!input.path) {
     throw new AttachmentPolicyError("attachment_source_required", "attachment path or data is required")
   }
-  await assertPathAllowed(input.path, options)
+  const size = await assertPathAllowed(input.path, options)
+  assertSingleSize(size)
+  assertTotalSize(currentTotal + size)
   const bytes = await readAttachmentFile(input.path)
   return {
     bytes,
@@ -106,7 +111,7 @@ async function readAttachmentInput(
 async function assertPathAllowed(
   rawPath: string,
   options: PrepareAttachmentOptions,
-): Promise<void> {
+): Promise<number> {
   const target = path.resolve(rawPath)
   const linkInfo = await statPath(target, lstat)
   if (linkInfo.isSymbolicLink()) {
@@ -119,7 +124,7 @@ async function assertPathAllowed(
   const allowedRoots = [options.workspacePath, path.join(tmpdir(), "synapse-side-channel")].filter((value): value is string =>
     typeof value === "string" && value.trim().length > 0)
   const allowed = await isInsideAnyRoot(target, allowedRoots)
-  if (allowed) return
+  if (allowed) return info.size
 
   const decision = await options.permissionGuard?.check({
     action: "fs.read.outside-userdata",
@@ -127,7 +132,7 @@ async function assertPathAllowed(
     resource: target,
     context: { source: "side-channel" },
   })
-  if (decision?.allowed) return
+  if (decision?.allowed) return info.size
   throw new AttachmentPolicyError(
     "path_escape_rejected",
     decision?.reason ?? "attachment path is outside allowed roots",
