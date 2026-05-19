@@ -8,6 +8,7 @@
 // Transport layers wrap errors in their own protocol format.
 
 import { databaseService } from "./service"
+import { getMutatingActions } from "../../database/shared/capability-registry"
 import type { Column, DatabaseOperationSource, DatabaseQueryParams, DatabaseWhereClause } from "./types"
 
 type DispatchResult = {
@@ -283,29 +284,7 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   },
 }
 
-const MUTATING_ACTIONS = new Set<string>([
-  "database.table.create",
-  "database.table.delete",
-  "database.table.update",
-  "database.column.create",
-  "database.column.update",
-  "database.choice.update",
-  "database.row.create",
-  "database.rows.create",
-  "database.row.update",
-  "database.row.delete",
-  "database.rows.update",
-  "database.rows.delete",
-  "database.table.rename",
-  "database.column.rename",
-  "database.column.delete",
-  "database.sql.execute",
-  "database.folder.create",
-  "database.folder.rename",
-  "database.folder.delete",
-  "database.folder.reorder",
-  "database.table.move",
-])
+const MUTATING_ACTIONS = new Set<string>(getMutatingActions())
 
 type DatabaseChangeEvent = { action: string; table?: string }
 type DatabaseChangeListener = (event: DatabaseChangeEvent) => void
