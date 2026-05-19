@@ -103,35 +103,58 @@ export class DataRepositoryImpl implements DataRepository {
       const data = ns.data as { singleton?: unknown; items?: unknown[] }
 
       if (!options.merge) {
-        // Replace mode: clear the namespace first.
-        const existing = await entry.handle.list()
+        // Replace mode: snapshot existing data before clearing so we can
+        // restore if the import fails partway through.
+        const snapshot = await entry.handle.list()
+        const singletonSnapshot = await entry.handle.getSingleton()
+
+        const existing = snapshot
         for (const item of existing) {
           const id = (item as { id?: string }).id
           if (typeof id === "string") {
             await entry.handle.remove(id)
           }
         }
-      }
 
-      if (data.singleton !== undefined && data.singleton !== null) {
-        // Schema validate gives us runtime safety on user-supplied backup
-        // payloads. The `as never` cast satisfies the heterogeneous handle
-        // map's type signature; validate() above is what makes the assignment
-        // sound.
-        if (entry.schema.validate(data.singleton)) {
-          await entry.handle.setSingleton(data.singleton as never)
-        }
-      }
-      if (Array.isArray(data.items)) {
-        for (const item of data.items) {
-          if (
-            item
-            && typeof item === "object"
-            && typeof (item as { id?: string }).id === "string"
-            && entry.schema.validate(item)
-          ) {
-            await entry.handle.upsert(item as never)
+        try {
+          await this.importNamespaceData(entry, data)
+        } catch (err) {
+          // Restore from snapshot to prevent data loss.
+          for (const item of snapshot) {
+            const id = (item as { id?: string }).id
+            if (typeof id === "string") {
+              await entry.handle.upsert(item as never)
+            }
           }
+          if (singletonSnapshot !== null) {
+            await entry.handle.setSingleton(singletonSnapshot as never)
+          }
+          throw err
+        }
+      } else {
+        await this.importNamespaceData(entry, data)
+      }
+    }
+  }
+
+  private async importNamespaceData(
+    entry: RegistrationEntry<unknown>,
+    data: { singleton?: unknown; items?: unknown[] },
+  ): Promise<void> {
+    if (data.singleton !== undefined && data.singleton !== null) {
+      if (entry.schema.validate(data.singleton)) {
+        await entry.handle.setSingleton(data.singleton as never)
+      }
+    }
+    if (Array.isArray(data.items)) {
+      for (const item of data.items) {
+        if (
+          item
+          && typeof item === "object"
+          && typeof (item as { id?: string }).id === "string"
+          && entry.schema.validate(item)
+        ) {
+          await entry.handle.upsert(item as never)
         }
       }
     }
