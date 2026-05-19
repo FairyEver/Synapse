@@ -697,7 +697,7 @@ git commit -m "feat: add usage analysis database"
 - Create: `desktop/electron/services/usage-analysis/scan.ts`
 - Test: `desktop/electron/services/usage-analysis/__tests__/scan.test.ts`
 
-- [ ] **Step 1: Write scan utility tests**
+- [x] **Step 1: Write scan utility tests**
 
 Create `desktop/electron/services/usage-analysis/__tests__/scan.test.ts`:
 
@@ -739,7 +739,7 @@ describe("usage analysis scan utilities", () => {
 })
 ```
 
-- [ ] **Step 2: Run the failing test**
+- [x] **Step 2: Run the failing test**
 
 Run:
 
@@ -749,7 +749,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: fail because `../scan` does not exist.
 
-- [ ] **Step 3: Implement scan utilities**
+- [x] **Step 3: Implement scan utilities**
 
 Create `desktop/electron/services/usage-analysis/scan.ts`:
 
@@ -802,7 +802,7 @@ export function fingerprintFile(filePath: string): UsageFileFingerprint {
 }
 ```
 
-- [ ] **Step 4: Run scan tests**
+- [x] **Step 4: Run scan tests**
 
 Run:
 
@@ -812,7 +812,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/
 
 Expected: pass.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add desktop/electron/services/usage-analysis/scan.ts desktop/electron/services/usage-analysis/__tests__/scan.test.ts
