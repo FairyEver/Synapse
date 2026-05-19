@@ -189,6 +189,43 @@ describe("CustomCommandRegistry", () => {
     }
   })
 
+  it("keeps single-segment slash commands in command diagnostics", async () => {
+    const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-command-"))
+    const commandDir = path.join(workspace, ".agents", "commands")
+    await fs.mkdir(commandDir, { recursive: true })
+    const badPath = path.join(commandDir, "bad.md")
+    await fs.writeFile(badPath, "Bad command")
+
+    const logger = createRecordingLogger()
+    const readFileSpy = vi.spyOn(fs, "readFile").mockRejectedValue(
+      new Error("Command /mode failed while loading custom command"),
+    )
+
+    try {
+      const registry = new CustomCommandRegistry({
+        projectId: "project-1",
+        commands: new MemoryNamespace<AgentCommandEntryV1>("agent.commands"),
+        workspacePath: workspace,
+        now: fixedNow,
+        logger,
+      })
+
+      await registry.list()
+
+      expect(logger.records).toContainEqual(expect.objectContaining({
+        level: "warn",
+        message: "Agent command file skipped.",
+        meta: expect.objectContaining({
+          commandName: "bad",
+          error: "Command /mode failed while loading custom command",
+        }),
+      }))
+    } finally {
+      readFileSpy.mockRestore()
+      await fs.rm(workspace, { recursive: true, force: true })
+    }
+  })
+
   it("redacts secret-like values in file command diagnostics", async () => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), "synapse-command-"))
     const commandDir = path.join(workspace, ".agents", "commands")

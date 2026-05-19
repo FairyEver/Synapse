@@ -73,9 +73,9 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly pumpPromise: Promise<void>
   private readonly toolNamesByUseId = new Map<string, string>()
   private closed = false
-  private finished = false
+  private queryFinished = false
   get finished(): boolean {
-    return this.finished
+    return this.queryFinished
   }
 
   private sdkSessionId: string | undefined
@@ -103,7 +103,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
   async send(message: AgentMessage): Promise<boolean> {
     if (this.closed) return false
-    if (this.finished) {
+    if (this.queryFinished) {
       this.logger?.warn("Claude SDK send rejected after query finished.", {
         boundary: "claude-sdk-send",
         projectId: this.projectId,
@@ -160,7 +160,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   }
 
   alive(): boolean {
-    return !this.closed && (!this.finished || this.eventQueue.hasValues())
+    return !this.closed && (!this.queryFinished || this.eventQueue.hasValues())
   }
 
   async cancelCurrentTurn(): Promise<boolean> {
@@ -184,7 +184,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
   async close(): Promise<void> {
     if (this.closed) return
     this.closed = true
-    this.finished = true
+    this.queryFinished = true
     this.inputQueue.close()
     this.denyPendingPermissions("Session closed before permission was resolved.")
     this.abortController?.abort()
@@ -293,7 +293,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
         this.eventQueue.push(this.errorEvent(error))
       }
     } finally {
-      this.finished = true
+      this.queryFinished = true
       this.inputQueue.close()
       this.denyPendingPermissions("SDK query finished before permission was resolved.")
       this.abortCleanup?.()

@@ -460,7 +460,8 @@ describe("ClaudeSDKSession", () => {
     await expect(event).resolves.toMatchObject({ type: "error" })
     expect(session.alive()).toBe(false)
 
-    await expect(session.send(message("late message"))).resolves.toBeUndefined()
+    expect(session.finished).toBe(true)
+    await expect(session.send(message("late message"))).resolves.toBe(false)
     expect(logger.warn).toHaveBeenCalledWith("Claude SDK send rejected after query finished.", {
       boundary: "claude-sdk-send",
       conversationId: "conversation-1",
