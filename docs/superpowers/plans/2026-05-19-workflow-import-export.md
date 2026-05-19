@@ -1528,7 +1528,7 @@ git commit -m "feat: wire workflow import export ui"
 - No new files
 - Test: hard constraints, focused tests, typecheck
 
-- [ ] **Step 1: Run hard constraints**
+- [x] **Step 1: Run hard constraints**
 
 Run:
 
@@ -1538,7 +1538,7 @@ pnpm --filter @synapse/desktop run check:hard-constraints
 
 Expected: PASS.
 
-- [ ] **Step 2: Run focused workflow tests**
+- [x] **Step 2: Run focused workflow tests**
 
 Run:
 
@@ -1548,7 +1548,7 @@ pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/workf
 
 Expected: PASS.
 
-- [ ] **Step 3: Run typecheck**
+- [x] **Step 3: Run typecheck**
 
 Run:
 
@@ -1558,7 +1558,9 @@ pnpm --filter @synapse/desktop run typecheck
 
 Expected: PASS.
 
-- [ ] **Step 4: Inspect final diff**
+Actual: `tsconfig.json` and `tsconfig.electron.json` passed, then `tsconfig.test.json` failed on existing agent-runtime/network test typing issues and a stale `src/runtime/i18n` import.
+
+- [x] **Step 4: Inspect final diff**
 
 Run:
 
@@ -1569,7 +1571,7 @@ git diff --stat HEAD
 
 Expected: only workflow package/import-export files from this plan are changed. Existing unrelated dirty files from before this implementation may still appear; do not revert them.
 
-- [ ] **Step 5: Commit remaining verification fixes**
+- [x] **Step 5: Commit remaining verification fixes**
 
 If Task 8 required any small fixes, commit them:
 
