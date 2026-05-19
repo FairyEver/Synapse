@@ -62,9 +62,12 @@ function serviceMock(): TaskSchedulerService {
   } as unknown as TaskSchedulerService
 }
 
-function actionRegistry(): MainActionRegistry {
+function actionRegistry(options: { includeAgent?: boolean } = {}): MainActionRegistry {
   const registry = new MainActionRegistry()
   registry.register(testAction())
+  if (options.includeAgent) {
+    registry.register(testAgentAction())
+  }
   return registry
 }
 
@@ -90,6 +93,34 @@ function testAction(): MainActionDefinition<TestActionConfig> {
       context: { taskId: context.taskId, runId: context.runId },
     }),
     execute: async (_input: ActionExecutionInput<TestActionConfig>) => ({ status: "success" }),
+  }
+}
+
+const testAgentActionSchema = z.object({
+  projectId: z.string().min(1),
+  agentType: z.string().min(1),
+  mode: z.string().min(1),
+  prompt: z.string().min(1),
+})
+type TestAgentActionConfig = z.infer<typeof testAgentActionSchema>
+
+function testAgentAction(): MainActionDefinition<TestAgentActionConfig> {
+  return {
+    manifest: {
+      id: "builtin.agent",
+      title: "Agent",
+      permissions: ["agent.spawn"],
+      defaultConfig: { projectId: "", agentType: "claude-code", mode: "plan", prompt: "" },
+      configFields: [],
+      configSchema: testAgentActionSchema,
+    },
+    buildPermissionRequest: ({ config, context }) => ({
+      action: "agent.spawn",
+      actor: context.actor,
+      resource: config.projectId,
+      context: { taskId: context.taskId, runId: context.runId },
+    }),
+    execute: async (_input: ActionExecutionInput<TestAgentActionConfig>) => ({ status: "success" }),
   }
 }
 
@@ -148,7 +179,8 @@ describe("task scheduler external api", () => {
     vi.mocked(service.schedulerTaskEnable).mockResolvedValueOnce(agentTask)
     vi.mocked(service.schedulerTaskDisable).mockResolvedValueOnce(agentTask)
 
-    const createResult = await dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.create", {
+    const registry = actionRegistry({ includeAgent: true })
+    const createResult = await dispatchSchedulerAction(service, registry, "scheduler.task.create", {
       name: "Agent task",
       description: "Send summary",
       scope: { type: "global" },
@@ -297,6 +329,30 @@ describe("task scheduler external api", () => {
     })
     expect(result.ok).toBe(true)
     expect((result.data as { activeDays: number[] }).activeDays).toEqual([0, 1, 2, 3, 4, 5, 6])
+  })
+
+  it("scheduler.task.create rejects unknown action types before persistence", async () => {
+    const service = serviceMock()
+    await expect(dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.create", {
+      name: "Unknown action",
+      scope: { type: "global" },
+      schedule: { type: "cron", expr: "0 9 * * *" },
+      action: { type: "builtin.missing", config: {} },
+    })).rejects.toThrow('Task action "builtin.missing" is not registered')
+
+    expect(service.schedulerTaskCreate).not.toHaveBeenCalled()
+  })
+
+  it("scheduler.task.create rejects invalid action config before persistence", async () => {
+    const service = serviceMock()
+    await expect(dispatchSchedulerAction(service, actionRegistry(), "scheduler.task.create", {
+      name: "Invalid config",
+      scope: { type: "global" },
+      schedule: { type: "cron", expr: "0 9 * * *" },
+      action: { type: "builtin.command", config: { command: "" } },
+    })).rejects.toThrow()
+
+    expect(service.schedulerTaskCreate).not.toHaveBeenCalled()
   })
 
   it("scheduler.task.create rejects empty activeDays", async () => {

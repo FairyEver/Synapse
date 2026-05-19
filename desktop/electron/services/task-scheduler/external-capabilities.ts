@@ -77,7 +77,7 @@ export async function dispatchSchedulerAction(
     }
 
     case "scheduler.task.create": {
-      const input = toCreateInput(parseCreateParams(params))
+      const input = toCreateInput(parseCreateParams(params), actions)
       return { ok: true, data: toPublicTaskSummary(await service.schedulerTaskCreate(input)) }
     }
 
@@ -287,14 +287,15 @@ function parseUpdateParams(params: Record<string, unknown>): SchedulerTaskUpdate
   return input
 }
 
-function toCreateInput(input: SchedulerTaskCreateParams): ScheduledTaskCreateInput {
+function toCreateInput(input: SchedulerTaskCreateParams, actions: MainActionRegistry): ScheduledTaskCreateInput {
+  const parsedConfig = actions.parseConfig(input.action.type, input.action.config)
   return {
     name: input.name,
     description: input.description,
     scope: input.scope,
     cwd: input.cwd,
     trigger: toTrigger(input.schedule),
-    action: input.action,
+    action: { type: input.action.type, config: parsedConfig },
     enabled: input.enabled,
     missedRunPolicy: input.missedRunPolicy,
     ...(input.activeDays !== undefined ? { activeDays: [...input.activeDays] } : {}),
