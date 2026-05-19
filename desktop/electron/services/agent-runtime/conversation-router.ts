@@ -131,6 +131,15 @@ export class ConversationRouter {
     timeoutMs: number,
   ): Promise<AgentRuntimeRelayResult> {
     this.assertProject(message)
+
+    const governance = this.deps.governance?.evaluateMessage(message)
+    if (governance && !governance.allowed) {
+      return {
+        ...this.finishWithError(message, "", governance.reason ?? "Message blocked"),
+        timedOut: false,
+      }
+    }
+
     const ac = new AbortController()
     const providerId = await this.resolveNewConversationProviderId(message)
     const conversation = await this.repository.createSideSession({
