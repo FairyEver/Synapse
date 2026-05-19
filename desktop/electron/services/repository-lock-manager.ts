@@ -38,7 +38,42 @@ class RepositoryLockManager {
         holdDurationMs: holdDuration,
       })
       this.forceRelease(repositoryUuid)
-      return this.grantLock(repositoryUuid, operation)
+      const lockAfterForce = this.locks.get(repositoryUuid)
+      if (!lockAfterForce) {
+        return this.grantLock(repositoryUuid, operation)
+      }
+      return new Promise<() => void>((resolve, reject) => {
+        const timeout = setTimeout(() => {
+          const lock = this.locks.get(repositoryUuid)
+          if (lock) {
+            lock.queue = lock.queue.filter((entry) => entry.resolve !== resolveEntry)
+          }
+          reject(new Error(
+            `获取仓库锁超时（当前操作: ${lockAfterForce.operation}，等待操作: ${operation}）`,
+          ))
+        }, LOCK_ACQUIRE_TIMEOUT_MS)
+
+        const resolveEntry = (token: number) => {
+          clearTimeout(timeout)
+          resolve(() => this.release(repositoryUuid, token))
+        }
+
+        lockAfterForce.queue.push({
+          resolve: resolveEntry,
+          reject: (error: Error) => {
+            clearTimeout(timeout)
+            reject(error)
+          },
+          operation,
+        })
+
+        logger.debug("Lock queued after force-release.", {
+          repositoryUuid,
+          operation,
+          currentOperation: lockAfterForce.operation,
+          queueLength: lockAfterForce.queue.length,
+        })
+      })
     }
 
     return new Promise<() => void>((resolve, reject) => {
