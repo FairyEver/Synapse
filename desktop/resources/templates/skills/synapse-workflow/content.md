@@ -24,6 +24,14 @@ To discover available providers, call `workflow_node_type_describe` with `nodeTy
 
 Valid `modelTier` values: `"default"`, `"haiku"`, `"sonnet"`, `"opus"`. Use the provider's `id` as `providerId` and pick a tier whose model is available. In your final reply, use the same terms: `providerId = ...`, `modelTier = ...`; do not rename them to "默认档", "模型档位", or other aliases.
 
+Users may paste a provider/model reference copied from Synapse settings in this format:
+
+```text
+synapse-provider-model://<providerId>/<modelTier>
+```
+
+When you see this URI, parse it as `providerId = <providerId>` and `modelTier = <modelTier>`. For example, `synapse-provider-model://local-claude-code/sonnet` means `providerId = "local-claude-code"` and `modelTier = "sonnet"`. Use those two fields in workflow defaults or prompt/switch node config.
+
 ## Creating a Workflow (Standard Flow)
 
 1. Call `workflow_node_type_list` to see available node types.

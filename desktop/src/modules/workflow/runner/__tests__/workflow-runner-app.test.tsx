@@ -5,6 +5,7 @@ import { act } from "react"
 import type { ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { WorkflowDefinition } from "@/types/workflow"
 
 const rendererLogger = vi.hoisted(() => ({
   error: vi.fn(),
@@ -28,12 +29,35 @@ vi.mock("../../hooks/use-workflow-events", () => ({
 
 vi.mock("@/components/ui/resizable", () => ({
   ResizableHandle: () => <div data-testid="resize-handle" />,
-  ResizablePanel: ({ children }: { readonly children: ReactNode }) => <div>{children}</div>,
+  ResizablePanel: ({
+    children,
+    defaultSize,
+    maxSize,
+    minSize,
+  }: {
+    readonly children: ReactNode
+    readonly defaultSize?: number
+    readonly maxSize?: number
+    readonly minSize?: number
+  }) => (
+    <div
+      data-testid={defaultSize ? "selected-result-resizable-panel" : "main-resizable-panel"}
+      data-default-size={defaultSize}
+      data-max-size={maxSize}
+      data-min-size={minSize}
+    >
+      {children}
+    </div>
+  ),
   ResizablePanelGroup: ({ children }: { readonly children: ReactNode }) => <div>{children}</div>,
 }))
 
 vi.mock("../dag-view", () => ({
-  DagView: () => <div data-testid="dag-view" />,
+  DagView: ({ onNodeSelect }: { readonly onNodeSelect: (nodeId: string) => void }) => (
+    <button type="button" data-testid="dag-view" onClick={() => onNodeSelect("node-1")}>
+      DAG
+    </button>
+  ),
 }))
 
 vi.mock("../timeline-view", () => ({
@@ -181,6 +205,38 @@ describe("WorkflowRunnerApp", () => {
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("token=secret-value")
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("/Users/example/repo")
   })
+
+  it("uses a wider result panel when a node is selected", async () => {
+    installWorkflowBridge({
+      runStatus: vi.fn(async () => ({
+        definition: workflowDefinition(),
+        params: {},
+      })),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowRunnerApp />)
+      await Promise.resolve()
+    })
+
+    const dagButton = container.querySelector("[data-testid='dag-view']")
+    expect(dagButton).toBeInstanceOf(HTMLButtonElement)
+
+    await act(async () => {
+      dagButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    const resultPanel = container.querySelector("[data-testid='selected-result-resizable-panel']")
+    expect(resultPanel).toBeInstanceOf(HTMLDivElement)
+    expect(resultPanel?.getAttribute("data-default-size")).toBe("460")
+    expect(resultPanel?.getAttribute("data-max-size")).toBe("900")
+    expect(resultPanel?.getAttribute("data-min-size")).toBe("320")
+  })
 })
 
 function installWorkflowBridge(overrides: {
@@ -207,5 +263,24 @@ function installWorkflowBridge(overrides: {
       rerun: vi.fn(),
       openEditor: vi.fn(),
     },
+  }
+}
+
+function workflowDefinition(): WorkflowDefinition {
+  return {
+    id: "workflow-1",
+    name: "Workflow",
+    version: "1",
+    createdAt: 1,
+    updatedAt: 1,
+    nodes: [{
+      id: "node-1",
+      name: "Prompt node",
+      type: "prompt",
+      position: { x: 0, y: 0 },
+      config: {},
+    }],
+    edges: [],
+    params: [],
   }
 }

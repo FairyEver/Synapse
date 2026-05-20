@@ -364,6 +364,7 @@ export function WorkflowRunnerApp() {
             <DagView
               definition={definition}
               nodeResults={nodeResults}
+              runState={runState}
               selectedNodeId={selectedNodeId}
               onNodeSelect={setSelectedNodeId}
             />
@@ -380,9 +381,9 @@ export function WorkflowRunnerApp() {
           <>
             <ResizableHandle withHandle />
             <ResizablePanel
-              defaultSize={350}
-              minSize={250}
-              maxSize={600}
+              defaultSize={460}
+              minSize={320}
+              maxSize={900}
               groupResizeBehavior="preserve-pixel-size"
             >
               <NodeResultPanel

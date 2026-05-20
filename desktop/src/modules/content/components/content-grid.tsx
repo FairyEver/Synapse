@@ -161,8 +161,7 @@ function ContentListCard({
         </button>
       </div>
 
-      <EditorInstallBadges contentId={item.id} />
-      <ContentCardActionArea
+      <ContentCardFooter
         item={item}
         onInstallDialogOpenChange={onInstallDialogOpenChange}
       />
@@ -170,7 +169,7 @@ function ContentListCard({
   )
 }
 
-function ContentCardActionArea({
+function ContentCardFooter({
   item,
   onInstallDialogOpenChange,
 }: {
@@ -179,7 +178,7 @@ function ContentCardActionArea({
 }) {
   return (
     <div
-      className="mt-2 flex justify-end"
+      className="mt-2 flex items-center gap-2"
       onClick={(event) => {
         event.stopPropagation()
       }}
@@ -187,10 +186,15 @@ function ContentCardActionArea({
         event.stopPropagation()
       }}
     >
-      <ContentActionSplitButton
-        item={item}
-        onInstallDialogOpenChange={onInstallDialogOpenChange}
-      />
+      <div className="min-w-0 flex-1">
+        <EditorInstallBadges contentId={item.id} />
+      </div>
+      <div className="shrink-0">
+        <ContentActionSplitButton
+          item={item}
+          onInstallDialogOpenChange={onInstallDialogOpenChange}
+        />
+      </div>
     </div>
   )
 }
@@ -288,8 +292,7 @@ function SkillContentListCard({
         </div>
       </div>
 
-      <EditorInstallBadges contentId={item.id} />
-      <ContentCardActionArea
+      <ContentCardFooter
         item={item}
         onInstallDialogOpenChange={onInstallDialogOpenChange}
       />

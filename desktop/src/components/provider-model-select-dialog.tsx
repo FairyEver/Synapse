@@ -36,9 +36,9 @@ type ProviderModelSelectDialogProps = {
 
 const TIER_CONFIG: ReadonlyArray<{ tier: ModelTier; label: string }> = [
   { tier: "default", label: "主模型" },
-  { tier: "haiku", label: "Haiku" },
-  { tier: "sonnet", label: "Sonnet" },
   { tier: "opus", label: "Opus" },
+  { tier: "sonnet", label: "Sonnet" },
+  { tier: "haiku", label: "Haiku" },
 ]
 
 const EMPTY_EXCLUDED_PROVIDERS: readonly string[] = []

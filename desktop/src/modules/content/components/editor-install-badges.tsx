@@ -96,7 +96,7 @@ function EditorInstallBadges({ contentId }: { contentId: string }) {
   if (entries.length === 0) return null
 
   return (
-    <div className="flex items-center gap-1.5 pt-2">
+    <div className="flex min-w-0 items-center gap-1.5">
       {entries.map((entry) => (
         entry.scope === "global" ? (
           <EditorBadge

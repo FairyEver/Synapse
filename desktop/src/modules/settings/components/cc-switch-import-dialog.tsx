@@ -239,9 +239,9 @@ function CcSwitchProviderRow({
 function ModelMap({ item }: { readonly item: SynapseCcSwitchClaudeProviderPreviewItem }) {
   const entries = [
     ["主模型", item.model],
-    ["Haiku", item.haikuModel],
-    ["Sonnet", item.sonnetModel],
     ["Opus", item.opusModel],
+    ["Sonnet", item.sonnetModel],
+    ["Haiku", item.haikuModel],
   ] as const
 
   return (

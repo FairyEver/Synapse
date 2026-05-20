@@ -21,7 +21,7 @@ import {
   type NodeChange,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { Clipboard, LayoutGrid } from "lucide-react"
+import { Clipboard, LayoutGrid, Maximize2 } from "lucide-react"
 import { nodeTypes } from "./node-wrappers"
 import { BranchEdge } from "./custom-edge"
 import { CanvasActionsContext, type NodeClipboard } from "./canvas-context"
@@ -34,7 +34,7 @@ import { resolveBranchLabel } from "../lib/branch-label"
 const logger = createRendererLogger("workflow.editor.canvas")
 
 const edgeTypes = { branch: BranchEdge }
-const CANVAS_FIT_VIEW_OPTIONS = { padding: 0.1, duration: 200, maxZoom: 1 }
+const CANVAS_FIT_VIEW_OPTIONS = { padding: 0.1, duration: 200, maxZoom: 1, minZoom: 0.05 }
 const EMPTY_CANVAS_VIEWPORT = { x: 0, y: 0, zoom: 1 }
 const CONFIG_NAME_DATA_KEY = "__synapseConfigName"
 
@@ -577,6 +577,16 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
           >
             <LayoutGrid className="size-4" />
             自动布局
+          </button>
+          <button
+            className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground [&>svg]:size-4 [&>svg]:shrink-0"
+            onClick={() => {
+              handleFitView()
+              setPaneMenu(null)
+            }}
+          >
+            <Maximize2 className="size-4" />
+            适应画布
           </button>
           <button
             className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground disabled:pointer-events-none disabled:opacity-50 [&>svg]:size-4 [&>svg]:shrink-0"

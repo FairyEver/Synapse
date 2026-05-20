@@ -111,6 +111,49 @@ describe("ProviderPanel diagnostics", () => {
 })
 
 describe("ProviderPanel dialog editor", () => {
+  it("copies provider model ids from model rows", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window.navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([customProvider({
+            haikuModel: "claude-haiku-4-5",
+            sonnetModel: "claude-sonnet-4-5",
+            opusModel: "claude-opus-4-5",
+          })]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    expect([...document.body.querySelectorAll<HTMLButtonElement>('[aria-label^="复制"]')]
+      .map((button) => button.getAttribute("aria-label"))).toEqual([
+        "复制主模型 ID",
+        "复制 Opus 模型 ID",
+        "复制 Sonnet 模型 ID",
+        "复制 Haiku 模型 ID",
+      ])
+
+    const copyButton = document.body.querySelector<HTMLButtonElement>('[aria-label="复制 Sonnet 模型 ID"]')
+    expect(copyButton?.textContent).toBe("")
+
+    await act(async () => {
+      copyButton?.click()
+      await Promise.resolve()
+    })
+
+    expect(writeText).toHaveBeenCalledWith("synapse-provider-model://custom-provider/sonnet")
+    expect(toast).toHaveBeenCalledWith("模型 ID 已复制")
+  })
+
   it("keeps row actions in a dedicated non-wrapping column", async () => {
     Object.defineProperty(window, "synapse", {
       configurable: true,

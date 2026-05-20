@@ -1,5 +1,5 @@
 import { type FormEvent, type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { ChevronDownIcon, DownloadIcon, Plus } from "lucide-react"
+import { ChevronDownIcon, ClipboardCopy, DownloadIcon, Plus } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
@@ -45,10 +45,17 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Textarea } from "@/components/ui/textarea"
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { CcSwitchImportDialog } from "./cc-switch-import-dialog"
 import { ProviderDeleteDialog } from "./provider-delete-dialog"
 import { ProviderPresetPickerDialog, type ProviderPresetOption } from "./provider-preset-picker-dialog"
+import type { ModelTier } from "@/types/provider-model"
 import type {
   SynapseAgentProvider,
   SynapseAgentProviderApiKeyField,
@@ -577,14 +584,72 @@ function ProviderModelList({ provider }: { readonly provider: SynapseAgentProvid
   }
 
   return (
-    <div className="flex flex-col gap-1">
-      {models.map((model) => (
-        <div key={model.label} className="flex min-w-0 items-baseline gap-2">
-          <span className="w-14 shrink-0 text-xs text-muted-foreground">{model.label}</span>
-          <span className="min-w-0 truncate">{model.value}</span>
-        </div>
-      ))}
-    </div>
+    <TooltipProvider>
+      <div className="flex flex-col gap-1">
+        {models.map((model) => (
+          <div key={model.label} className="flex min-w-0 items-center gap-2">
+            <span className="w-14 shrink-0 text-xs text-muted-foreground">{model.label}</span>
+            <span className="min-w-0 truncate">{model.value}</span>
+            <CopyProviderModelIdButton
+              providerId={provider.id}
+              modelTier={model.tier}
+              label={model.label}
+            />
+          </div>
+        ))}
+      </div>
+    </TooltipProvider>
+  )
+}
+
+function CopyProviderModelIdButton({
+  providerId,
+  modelTier,
+  label,
+}: {
+  readonly providerId: string
+  readonly modelTier: ModelTier
+  readonly label: string
+}) {
+  const copyLabel = providerModelCopyLabel(label)
+
+  const handleCopy = () => {
+    if (!navigator.clipboard?.writeText) {
+      toast("复制失败")
+      return
+    }
+
+    const value = providerModelUri(providerId, modelTier)
+    void navigator.clipboard.writeText(value).then(() => {
+      toast("模型 ID 已复制")
+    }).catch((rawError: unknown) => {
+      logger.error("Provider model id copy failed.", {
+        action: "copyProviderModelId",
+        boundary: "settings.providers.model-id-copy",
+        providerId,
+        modelTier,
+        ...providerErrorDiagnostic(rawError),
+      })
+      toast("复制失败")
+    })
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon"
+          aria-label={copyLabel}
+          className="size-6 shrink-0 text-muted-foreground"
+          onClick={handleCopy}
+        >
+          <ClipboardCopy className="size-3.5" />
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>{copyLabel}</TooltipContent>
+    </Tooltip>
   )
 }
 
@@ -633,16 +698,24 @@ function ProviderTextAction({
   )
 }
 
-function providerModelRows(provider: SynapseAgentProvider): Array<{ label: string; value: string }> {
+function providerModelRows(provider: SynapseAgentProvider): Array<{ label: string; value: string; tier: ModelTier }> {
   return [
-    { label: "主模型", value: provider.model },
-    { label: "Haiku", value: provider.haikuModel },
-    { label: "Sonnet", value: provider.sonnetModel },
-    { label: "Opus", value: provider.opusModel },
+    { label: "主模型", value: provider.model, tier: "default" },
+    { label: "Opus", value: provider.opusModel, tier: "opus" },
+    { label: "Sonnet", value: provider.sonnetModel, tier: "sonnet" },
+    { label: "Haiku", value: provider.haikuModel, tier: "haiku" },
   ].flatMap((item) => {
     const value = optionalTrimmed(item.value)
-    return value ? [{ label: item.label, value }] : []
+    return value ? [{ label: item.label, value, tier: item.tier as ModelTier }] : []
   })
+}
+
+function providerModelUri(providerId: string, modelTier: ModelTier): string {
+  return `synapse-provider-model://${providerId}/${modelTier}`
+}
+
+function providerModelCopyLabel(label: string): string {
+  return label === "主模型" ? "复制主模型 ID" : `复制 ${label} 模型 ID`
 }
 
 function providerCategoryLabel(category: SynapseAgentProviderCategory): string {
@@ -1046,12 +1119,12 @@ function ProviderApiAndModelFields({
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor="provider-haiku-model">Haiku 默认模型</FieldLabel>
+            <FieldLabel htmlFor="provider-opus-model">Opus 默认模型</FieldLabel>
             <Input
-              id="provider-haiku-model"
-              value={values.haikuModel}
+              id="provider-opus-model"
+              value={values.opusModel}
               disabled={disabled}
-              onChange={(event) => onValueChange("haikuModel", event.target.value)}
+              onChange={(event) => onValueChange("opusModel", event.target.value)}
             />
           </Field>
           <Field>
@@ -1064,12 +1137,12 @@ function ProviderApiAndModelFields({
             />
           </Field>
           <Field>
-            <FieldLabel htmlFor="provider-opus-model">Opus 默认模型</FieldLabel>
+            <FieldLabel htmlFor="provider-haiku-model">Haiku 默认模型</FieldLabel>
             <Input
-              id="provider-opus-model"
-              value={values.opusModel}
+              id="provider-haiku-model"
+              value={values.haikuModel}
               disabled={disabled}
-              onChange={(event) => onValueChange("opusModel", event.target.value)}
+              onChange={(event) => onValueChange("haikuModel", event.target.value)}
             />
           </Field>
         </div>

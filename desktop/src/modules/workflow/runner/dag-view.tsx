@@ -1,4 +1,4 @@
-import { useContext, useMemo } from "react"
+import { useCallback, useContext, useEffect, useMemo } from "react"
 import {
   ReactFlow,
   Background,
@@ -11,12 +11,27 @@ import {
   type Node,
   type Edge,
   type EdgeProps,
+  useReactFlow,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
+import type { WorkflowDefinition, NodeRunResult, WorkflowRunStatus } from "@/types/workflow"
 import { Badge } from "@/components/ui/badge"
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu"
+import { Maximize2 } from "lucide-react"
 import { RunnerNodeResultsContext, runnerNodeTypes } from "./runner-node-wrappers"
 import { resolveBranchLabel } from "../lib/branch-label"
+import {
+  FIT_WORKFLOW_NODES_OPTIONS,
+  WORKFLOW_RUNNER_MIN_ZOOM,
+  fitWorkflowNodes,
+  focusRunningNodes,
+  getRunningNodeIds,
+} from "./viewport-focus"
 
 const edgeTypes = { default: RunnerEdge, branch: RunnerEdge }
 
@@ -65,11 +80,14 @@ function RunnerEdge({
 interface DagViewProps {
   definition: WorkflowDefinition
   nodeResults: Record<string, NodeRunResult>
+  runState: WorkflowRunStatus["status"]
   selectedNodeId?: string | null
   onNodeSelect: (nodeId: string | null) => void
 }
 
-function DagViewInner({ definition, nodeResults, selectedNodeId, onNodeSelect }: DagViewProps) {
+function DagViewInner({ definition, nodeResults, runState, selectedNodeId, onNodeSelect }: DagViewProps) {
+  const reactFlow = useReactFlow()
+
   const nodes: Node[] = useMemo(() =>
     definition.nodes.map((n) => ({
       id: n.id,
@@ -98,27 +116,76 @@ function DagViewInner({ definition, nodeResults, selectedNodeId, onNodeSelect }:
     [definition],
   )
 
+  const runningNodeIds = useMemo(
+    () => getRunningNodeIds(definition, nodeResults),
+    [definition, nodeResults],
+  )
+  const runningNodeKey = runningNodeIds.join("\n")
+  const shouldFitInitialView = Object.keys(nodeResults).length === 0
+  const allNodeIds = useMemo(
+    () => definition.nodes.map((node) => node.id),
+    [definition],
+  )
+  const allNodeKey = allNodeIds.join("\n")
+
+  const handleFitAllNodes = useCallback(() => {
+    void fitWorkflowNodes(allNodeIds, reactFlow)
+  }, [allNodeIds, reactFlow])
+
+  useEffect(() => {
+    const activeNodeIds = runningNodeKey ? runningNodeKey.split("\n") : []
+    if (!reactFlow.viewportInitialized || activeNodeIds.length === 0) return
+    const frame = window.requestAnimationFrame(() => {
+      void focusRunningNodes(activeNodeIds, reactFlow)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [reactFlow, reactFlow.viewportInitialized, runningNodeKey])
+
+  useEffect(() => {
+    if (!reactFlow.viewportInitialized || runState === "running" || !allNodeKey) return
+    const frame = window.requestAnimationFrame(() => {
+      void fitWorkflowNodes(allNodeKey.split("\n"), reactFlow)
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [allNodeKey, reactFlow, reactFlow.viewportInitialized, runState])
+
   return (
     <RunnerNodeResultsContext.Provider value={nodeResults}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        nodeTypes={runnerNodeTypes}
-        edgeTypes={edgeTypes}
-        onNodeClick={(_e, node) => onNodeSelect(node.id)}
-        onPaneClick={() => onNodeSelect(null)}
-        panOnScroll
-        panOnScrollMode={PanOnScrollMode.Free}
-        selectionMode={SelectionMode.Partial}
-        nodesDraggable={false}
-        nodesConnectable={false}
-        edgesReconnectable={false}
-        fitView
-        fitViewOptions={{ padding: 0.2 }}
-      >
-        <Background />
-        <Controls showInteractive={false} />
-      </ReactFlow>
+      <ContextMenu>
+        <ContextMenuTrigger asChild>
+          <div className="h-full w-full">
+            <ReactFlow
+              nodes={nodes}
+              edges={edges}
+              nodeTypes={runnerNodeTypes}
+              edgeTypes={edgeTypes}
+              onNodeClick={(_e, node) => onNodeSelect(node.id)}
+              onPaneClick={() => onNodeSelect(null)}
+              panOnScroll
+              panOnScrollMode={PanOnScrollMode.Free}
+              selectionMode={SelectionMode.Partial}
+              nodesDraggable={false}
+              nodesConnectable={false}
+              edgesReconnectable={false}
+              minZoom={WORKFLOW_RUNNER_MIN_ZOOM}
+              fitView={shouldFitInitialView}
+              fitViewOptions={FIT_WORKFLOW_NODES_OPTIONS}
+            >
+              <Background />
+              <Controls
+                showInteractive={false}
+                fitViewOptions={FIT_WORKFLOW_NODES_OPTIONS}
+              />
+            </ReactFlow>
+          </div>
+        </ContextMenuTrigger>
+        <ContextMenuContent>
+          <ContextMenuItem onSelect={handleFitAllNodes}>
+            <Maximize2 className="size-4" />
+            适应画布
+          </ContextMenuItem>
+        </ContextMenuContent>
+      </ContextMenu>
     </RunnerNodeResultsContext.Provider>
   )
 }

@@ -8,7 +8,8 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import type { WorkflowDefinition } from "@/types/workflow"
 import type { WorkflowCanvasHandle } from "../canvas"
 
-const { setViewportMock, reactFlowProps, controlsProps } = vi.hoisted(() => ({
+const { fitViewMock, setViewportMock, reactFlowProps, controlsProps } = vi.hoisted(() => ({
+  fitViewMock: vi.fn(),
   setViewportMock: vi.fn(),
   reactFlowProps: [] as Array<Record<string, unknown>>,
   controlsProps: [] as Array<Record<string, unknown>>,
@@ -37,7 +38,7 @@ vi.mock("@xyflow/react", async () => {
     useEdgesState: (initial: unknown[]) => React.useState(initial),
     useReactFlow: () => ({
       screenToFlowPosition: ({ x, y }: { x: number; y: number }) => ({ x, y }),
-      fitView: vi.fn(),
+      fitView: fitViewMock,
       setViewport: setViewportMock,
     }),
     useOnSelectionChange: vi.fn(),
@@ -94,8 +95,41 @@ describe("WorkflowCanvas", () => {
       root.render(<WorkflowCanvas definition={definitionWithEndOnly()} onChange={vi.fn()} />)
     })
 
-    expect(reactFlowProps.at(-1)?.fitViewOptions).toMatchObject({ padding: 0.1, duration: 200, maxZoom: 1 })
-    expect(controlsProps.at(-1)?.fitViewOptions).toMatchObject({ padding: 0.1, duration: 200, maxZoom: 1 })
+    expect(reactFlowProps.at(-1)?.fitViewOptions).toMatchObject({ padding: 0.1, duration: 200, maxZoom: 1, minZoom: 0.05 })
+    expect(controlsProps.at(-1)?.fitViewOptions).toMatchObject({ padding: 0.1, duration: 200, maxZoom: 1, minZoom: 0.05 })
+  })
+
+  it("fits the full editor canvas from the pane context menu", async () => {
+    const rafSpy = vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
+      callback(0)
+      return 1
+    })
+    const cancelAnimationFrameSpy = vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {})
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowCanvas definition={definitionWithConnectedPrompt()} onChange={vi.fn()} />)
+    })
+
+    await act(async () => {
+      const onPaneContextMenu = reactFlowProps.at(-1)?.onPaneContextMenu as (event: {
+        preventDefault: () => void
+        clientX: number
+        clientY: number
+      }) => void
+      onPaneContextMenu({ preventDefault: vi.fn(), clientX: 12, clientY: 24 })
+    })
+
+    await act(async () => {
+      buttonByText("适应画布").click()
+    })
+
+    expect(fitViewMock).toHaveBeenCalledWith({ padding: 0.1, duration: 200, maxZoom: 1, minZoom: 0.05 })
+    rafSpy.mockRestore()
+    cancelAnimationFrameSpy.mockRestore()
   })
 
   it("resets the viewport when fit view is clicked on an empty canvas", async () => {
