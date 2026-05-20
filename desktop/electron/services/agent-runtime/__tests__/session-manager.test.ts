@@ -271,7 +271,9 @@ class FakeLiveSession implements AgentLiveSession {
     }
   }
 
-  async send(): Promise<void> {}
+  async send(): Promise<boolean> {
+    return true
+  }
 
   async respondPermission(
     _requestId: string,

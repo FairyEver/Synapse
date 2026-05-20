@@ -34,10 +34,9 @@ describe("scan item detail dialog layout", () => {
     )
 
     expect(source).toContain("名称已存在")
-    expect(source).toContain("当前仓库已有同名内容。")
-    expect(source).toContain("另存为新内容")
+    expect(source).toContain("当前仓库已有同名内容，继续保存将覆盖已有内容。")
+    expect(source).toContain("继续保存")
     expect(source).not.toContain("名称重复")
-    expect(source).not.toContain("继续保存")
   })
 
   it("offers editor copy from scan item details", async () => {

@@ -87,7 +87,7 @@ describe("ContentInstallService security", () => {
     await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
   })
 
-  it("rejects Skill replacement when backing up the existing target fails and records a failed audit", async () => {
+  it("replaces Skill when a stale backup directory already exists", async () => {
     const root = await createTempRoot()
     const targetPath = path.join(root, "skills", "test-skill")
     const conflictingBackupPath = `${targetPath}-backup`
@@ -127,16 +127,19 @@ describe("ContentInstallService security", () => {
       actor: { kind: "user" },
       auditSink,
       permissionGuard: createPermissionGuard(),
-    })).rejects.toThrow("备份旧 Skill 失败，未替换目标。")
+    })).resolves.toMatchObject({
+      contentId: "skill-1",
+      targetPath,
+    })
 
-    expect(auditSink.list()).toEqual([
-      expect.objectContaining({
-        action: "fs.write",
-        actor: { kind: "user" },
-        outcome: "failed",
-        resource: targetPath,
-      }),
-    ])
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# New Skill\n")
+    await expect(readFile(path.join(conflictingBackupPath, "locked.txt"), "utf8")).rejects.toThrow()
+    expect(auditSink.list()).toContainEqual(expect.objectContaining({
+      action: "fs.write",
+      actor: { kind: "user" },
+      outcome: "allowed",
+      resource: targetPath,
+    }))
   })
 
   it("restores the old Skill directory when replacement fails after backup", async () => {

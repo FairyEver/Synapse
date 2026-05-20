@@ -35,9 +35,12 @@ describe("endNodeExecutor", () => {
     expect(result.output).toBe("")
   })
 
-  it("rejects unresolved placeholders", async () => {
+  it("returns a failed result for unresolved placeholders", async () => {
     await expect(endNodeExecutor.execute(makeInput("{{missing}} value")))
-      .rejects.toThrow("模板变量「missing」未绑定")
+      .resolves.toMatchObject({
+        status: "failed",
+        error: expect.stringContaining("模板变量「missing」未绑定"),
+      })
   })
 
   it("does not call Agent", async () => {

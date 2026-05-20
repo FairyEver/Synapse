@@ -97,6 +97,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.window-manager",
         "core.workflow",
         "core.workflow.engine",
+        "core.workflow.package",
         "core.workflow.run-aborts",
         "core.workflow.run-statuses",
         "core.workflow.snapshots",

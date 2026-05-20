@@ -431,7 +431,7 @@ describe("AgentRuntimeService", () => {
     await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
   })
 
-  it("does not persist permission mode when the live SDK switch fails", async () => {
+  it("persists permission mode before reporting a live SDK switch failure", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const session = new ModeSwitchSession(new Error("sdk denied mode"))
     const service = new AgentRuntimeService({
@@ -453,7 +453,7 @@ describe("AgentRuntimeService", () => {
       actor: { kind: "user", id: "user-1" },
     })).rejects.toThrow("sdk denied mode")
 
-    await expect(conversations.get(id)).resolves.not.toMatchObject({
+    await expect(conversations.get(id)).resolves.toMatchObject({
       agentConfig: { mode: "acceptEdits" },
     })
 

@@ -91,7 +91,7 @@ describe("TaskCard", () => {
     expect(onToggleEnabled).not.toHaveBeenCalled()
   })
 
-  it("disables manual runs while a task is already running", async () => {
+  it("offers stop instead of manual run while a task is already running", async () => {
     const onRun = vi.fn()
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -117,14 +117,17 @@ describe("TaskCard", () => {
       )
     })
 
+    const stopButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("停止"))
     const runButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
-      .find((button) => button.textContent?.includes("运行中"))
+      .find((button) => button.textContent?.includes("运行"))
 
-    expect(runButton).toBeTruthy()
-    expect(runButton?.disabled).toBe(true)
+    expect(stopButton).toBeTruthy()
+    expect(stopButton?.disabled).toBe(false)
+    expect(runButton).toBeUndefined()
 
     await act(async () => {
-      runButton?.click()
+      stopButton?.click()
     })
 
     expect(onRun).not.toHaveBeenCalled()

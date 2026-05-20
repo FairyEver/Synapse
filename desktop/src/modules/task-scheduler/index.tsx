@@ -191,9 +191,14 @@ const [isExporting, setIsExporting] = useState(false)
         setIsExportOpen(false)
       }
     } catch (exportError) {
+      const selectedTasks = tasks.filter((t) => selectedIds.includes(t.id))
       logger.warn("Task export failed.", {
         action: "exportTasks",
         boundary: "renderer.task-scheduler.export",
+        selectedCount: selectedTasks.length,
+        agentTaskCount: selectedTasks.filter((task) => task.action.type === "builtin.agent").length,
+        actionTypes: [...new Set(selectedTasks.map((task) => task.action.type))],
+        triggerTypes: [...new Set(selectedTasks.map((task) => task.trigger.type))],
         ...errorLogMeta(exportError),
       })
       notify({ message: "导出失败", tone: "destructive" })
@@ -203,15 +208,29 @@ const [isExporting, setIsExporting] = useState(false)
   }
 
   async function handleImportStart() {
+    let content: string | undefined
     try {
       const result = await importTasksFromFile()
       if (!result.success || !result.content) return
-      const parsed = parseTaskImportFile(result.content)
-      setImportEntries(parsed.tasks)
+      content = result.content
     } catch (importError) {
       logger.warn("Task import failed.", {
         action: "importTasks",
         boundary: "renderer.task-scheduler.import.read",
+        ...errorLogMeta(importError),
+      })
+      notify({ message: "导入失败", tone: "destructive" })
+      return
+    }
+
+    try {
+      const parsed = parseTaskImportFile(content)
+      setImportEntries(parsed.tasks)
+    } catch (importError) {
+      logger.warn("Task import parse failed.", {
+        action: "importTasks",
+        boundary: "renderer.task-scheduler.import.parse",
+        contentLength: content.length,
         ...errorLogMeta(importError),
       })
       notify({ message: "导入失败", tone: "destructive" })

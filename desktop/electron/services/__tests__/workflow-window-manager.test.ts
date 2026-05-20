@@ -20,6 +20,7 @@ type FakeBrowserWindow = {
   focus: () => void
   loadURL: (url: string) => Promise<void>
   on: (event: string, handler: () => void) => void
+  close: () => void
   destroy: () => void
 }
 
@@ -55,6 +56,10 @@ const electronMock = vi.hoisted(() => {
       },
       on: (event: string, handler: () => void) => {
         if (event === "closed") win.closedHandler = handler
+      },
+      close: () => {
+        win.destroyed = true
+        win.closedHandler?.()
       },
       destroy: () => {
         win.destroyed = true

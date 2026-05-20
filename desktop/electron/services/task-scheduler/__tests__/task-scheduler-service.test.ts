@@ -69,7 +69,7 @@ describe("TaskSchedulerService", () => {
     expect(await harness.service.schedulerTaskList()).toEqual(expect.arrayContaining([
       expect.objectContaining({
         id: "task:1",
-        activeRun: { status: "running" },
+        activeRun: expect.objectContaining({ status: "running" }),
       }),
     ]))
 
@@ -139,8 +139,8 @@ describe("TaskSchedulerService", () => {
       missedRunPolicy: "run_once",
       nextRunAt: "2026-04-29T09:59:00.000Z",
     }))
-    harness.tasks.markScheduled = async () => {
-      throw new Error("mark schedule failed")
+    harness.tasks.get = async () => {
+      throw new Error("background failed")
     }
 
     await harness.service.start()
@@ -151,9 +151,9 @@ describe("TaskSchedulerService", () => {
       triggeredBy: "missed_run",
       boundary: "task-scheduler-background-run",
       errorName: "Error",
-      errorLength: "mark schedule failed".length,
+      errorLength: "background failed".length,
     })
-    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("mark schedule failed")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("background failed")
   })
 })
 

@@ -141,6 +141,7 @@ function sanitizeValue(value: unknown): unknown {
 function isSensitiveKey(key: string): boolean {
   const normalized = key.replace(/[-_\s]/g, "").toLowerCase()
   if (normalized.includes("sessionkey")) return true
+  if (/^(prompt|message|content|body|text|reason|error|errors|stack)$/.test(normalized)) return true
   return /\b(token|secret|authorization|api[_-]?key|password|bearer)\b/i.test(key)
 }
 

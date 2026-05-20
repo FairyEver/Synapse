@@ -866,8 +866,9 @@ class ScriptedSession implements AgentLiveSession {
     this.events = [...events]
   }
 
-  async send(message: AgentMessage): Promise<void> {
+  async send(message: AgentMessage): Promise<boolean> {
     this.sent.push(message.content)
+    return true
   }
 
   async respondPermission(
@@ -898,7 +899,9 @@ class EndedWithoutTerminalSession implements AgentLiveSession {
 
   constructor(private readonly sessionId: string) {}
 
-  async send(): Promise<void> {}
+  async send(): Promise<boolean> {
+    return true
+  }
 
   async respondPermission(): Promise<void> {}
 
@@ -923,7 +926,7 @@ class ThrowingSendSession implements AgentLiveSession {
 
   constructor(private readonly message: string) {}
 
-  async send(): Promise<void> {
+  async send(): Promise<boolean> {
     throw new Error(this.message)
   }
 
@@ -948,7 +951,9 @@ class TimeoutSession implements AgentLiveSession {
   readonly agentType = "claude-sdk"
   closed = false
 
-  async send(): Promise<void> {}
+  async send(): Promise<boolean> {
+    return true
+  }
   async respondPermission(): Promise<void> {}
 
   nextEvent(): Promise<AgentEvent | null> {
@@ -978,8 +983,9 @@ class ControlledSession implements AgentLiveSession {
 
   constructor(private readonly sessionId: string) {}
 
-  async send(message: AgentMessage): Promise<void> {
+  async send(message: AgentMessage): Promise<boolean> {
     this.sent.push(message.content)
+    return true
   }
 
   async respondPermission(): Promise<void> {}

@@ -87,9 +87,9 @@ describe("sendOutboundHttpRequest", () => {
     const controller = new AbortController()
     controller.abort()
     let signalWasAborted = false
-    const fetchImpl = vi.fn(async (_url: string, opts: { signal: AbortSignal }) => {
-      signalWasAborted = opts.signal?.aborted ?? false
-      if (opts.signal?.aborted) {
+    const fetchImpl = vi.fn(async (_url: Parameters<typeof fetch>[0], opts?: Parameters<typeof fetch>[1]) => {
+      signalWasAborted = opts?.signal?.aborted ?? false
+      if (opts?.signal?.aborted) {
         throw new DOMException("Aborted", "AbortError")
       }
       return new Response("ok", { status: 200 })

@@ -85,14 +85,16 @@ vi.mock("../components/task-form-dialog", () => ({
   }) => (
     <button
       type="button"
-      onClick={() => onCreate({
-        name: "Agent save task",
-        scope: { type: "global" },
-        trigger: { type: "builtin.interval", config: { everyMinutes: 1, anchor: "created_at" } },
-        action: { type: "builtin.agent", config: { prompt: "secret prompt", projectId: "project-1" } },
-        enabled: true,
-        missedRunPolicy: "skip",
-      })}
+      onClick={() => {
+        void onCreate({
+          name: "Agent save task",
+          scope: { type: "global" },
+          trigger: { type: "builtin.interval", config: { everyMinutes: 1, anchor: "created_at" } },
+          action: { type: "builtin.agent", config: { prompt: "secret prompt", projectId: "project-1" } },
+          enabled: true,
+          missedRunPolicy: "skip",
+        }).catch(() => undefined)
+      }}
     >
       submit create
     </button>

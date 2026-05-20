@@ -9,7 +9,7 @@ import type {
 import { ReplyOutboxService } from "../outbox-service"
 
 describe("ReplyOutboxService", () => {
-  it("records sent local renderer events", async () => {
+  it("records pending local renderer events before dispatch completes", async () => {
     const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
     const service = new ReplyOutboxService({
       projectId: "project-1",
@@ -49,8 +49,8 @@ describe("ReplyOutboxService", () => {
             threadId: "thread-1",
           },
         },
-        attempts: 1,
-        status: "sent",
+        attempts: 0,
+        status: "pending",
       }),
     ])
   })

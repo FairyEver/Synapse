@@ -12,6 +12,9 @@ const childProcessMock = vi.hoisted(() => ({
     }
   }),
 }))
+const fsPromisesMock = vi.hoisted(() => ({
+  realpath: vi.fn(async (value: string) => value),
+}))
 const logStoreMock = vi.hoisted(() => ({
   logger: {
     warn: vi.fn(),
@@ -20,6 +23,17 @@ const logStoreMock = vi.hoisted(() => ({
 
 vi.mock("electron", () => electronMock)
 vi.mock("node:child_process", () => childProcessMock)
+vi.mock("node:fs/promises", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("node:fs/promises")>()
+  return {
+    ...actual,
+    default: {
+      ...actual,
+      realpath: fsPromisesMock.realpath,
+    },
+    realpath: fsPromisesMock.realpath,
+  }
+})
 vi.mock("../../../services/log-store", () => ({
   createMainLogger: vi.fn(() => logStoreMock.logger),
 }))
@@ -40,6 +54,7 @@ vi.mock("../../../services/config-store", () => ({
 describe("agent tool IPC methods", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    fsPromisesMock.realpath.mockImplementation(async (value: string) => value)
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [{
         uuid: "project-1",

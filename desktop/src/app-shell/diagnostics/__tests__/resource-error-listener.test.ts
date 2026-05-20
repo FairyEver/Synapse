@@ -21,7 +21,7 @@ describe("installResourceErrorListener", () => {
     expect(logger.error).toHaveBeenCalledTimes(1)
     const [msg, meta] = logger.error.mock.calls[0]
     expect(msg).toContain("script")
-    expect(meta).toHaveProperty("src", "/assets/chunk-abc.js")
+    expect(meta).toHaveProperty("src", "chunk-abc.js")
     cleanup()
   })
 

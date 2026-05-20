@@ -21,6 +21,7 @@ describe("createElectronTransportInstall", () => {
     electronMock.handlers.clear()
     electronMock.ipcMain.handle.mockClear()
     electronMock.ipcMain.removeHandler.mockClear()
+    process.env.VITE_DEV_SERVER_URL = "http://localhost:5173"
   })
 
   it("logs failed IPC invokes with channel and elapsed time", async () => {
@@ -38,7 +39,7 @@ describe("createElectronTransportInstall", () => {
     })
 
     const handler = electronMock.handlers.get("synapse:test:fail")
-    await expect(handler?.({}, {
+    await expect(handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
       token: "secret",
       value: "ok",
       content: "deploy private branch with customer secret",

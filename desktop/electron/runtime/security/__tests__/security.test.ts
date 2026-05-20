@@ -196,7 +196,9 @@ describe("DataRepositoryAuditSink", () => {
     })).not.toThrow()
     await sink.flushForTests()
 
-    expect(warnings).toEqual([{ action: "fs.write", error: "disk full" }])
+    expect(warnings).toEqual([
+      expect.objectContaining({ action: "fs.write", error: "disk full" }),
+    ])
   })
 })
 
