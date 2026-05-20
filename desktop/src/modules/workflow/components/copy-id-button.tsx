@@ -22,6 +22,7 @@ const LABELS: Record<CopyIdKind, string> = {
 
 export function CopyIdButton({ id, kind, className }: CopyIdButtonProps) {
   const label = LABELS[kind]
+  const displayId = id.slice(0, 6).toUpperCase()
 
   const handleCopy = (event: MouseEvent<HTMLButtonElement>) => {
     event.preventDefault()
@@ -53,13 +54,12 @@ export function CopyIdButton({ id, kind, className }: CopyIdButtonProps) {
       aria-label={`复制${label} ID`}
       data-track={`workflow-${kind}-copy-id`}
       className={cn(
-        "h-5 max-w-full justify-start px-1.5 font-mono text-[11px] font-normal text-muted-foreground",
+        "h-5 shrink-0 px-1.5 font-mono text-[10px] font-medium text-muted-foreground",
         className,
       )}
       onClick={handleCopy}
     >
-      <span className="shrink-0 font-sans">ID</span>
-      <span className="truncate">{id}</span>
+      {displayId}
     </Button>
   )
 }

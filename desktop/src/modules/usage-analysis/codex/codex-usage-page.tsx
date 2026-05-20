@@ -3,7 +3,7 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
 import { TodayReportView } from "../shared/components/today-report-view"
-import type { UsageRangePreset, UsageViewId } from "../shared/types"
+import type { UsageRangePreset, UsageTrendBucketGranularity, UsageViewId } from "../shared/types"
 import { useCodexModels, useCodexOverview, useCodexTime } from "./hooks"
 import { CodexModelsPage } from "./pages/models"
 import { CodexOverviewPage } from "./pages/overview"
@@ -15,6 +15,7 @@ export function CodexUsagePage() {
   const { error: showError } = useAppNotifications()
   const [view, setView] = useState<UsageViewId>("today")
   const [range, setRange] = useState<UsageRangePreset>("30d")
+  const [trendBucket, setTrendBucket] = useState<UsageTrendBucketGranularity>("day")
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -43,8 +44,8 @@ export function CodexUsagePage() {
       }}
     >
       {view === "today" ? <CodexTodayPage refreshKey={refreshKey} /> : null}
-      {view === "overview" ? <CodexOverviewPage range={range} refreshKey={refreshKey} /> : null}
-      {view === "time" ? <CodexTimePage range={range} refreshKey={refreshKey} /> : null}
+      {view === "overview" ? <CodexOverviewPage range={range} refreshKey={refreshKey} trendBucket={trendBucket} onTrendBucketChange={setTrendBucket} /> : null}
+      {view === "time" ? <CodexTimePage range={range} refreshKey={refreshKey} trendBucket={trendBucket} onTrendBucketChange={setTrendBucket} /> : null}
       {view === "models" ? <CodexModelsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "projects" ? <CodexProjectsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "tools" ? <CodexToolsPage range={range} refreshKey={refreshKey} /> : null}

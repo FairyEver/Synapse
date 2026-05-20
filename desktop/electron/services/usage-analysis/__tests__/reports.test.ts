@@ -195,7 +195,7 @@ describe("usage analysis reports", () => {
     expect(overview.totals.conversations).toBe(1)
   })
 
-  it("keeps seven day overview hourly trend beyond thirty buckets", async () => {
+  it("uses daily buckets by default and hourly buckets when requested", async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date(2026, 4, 20, 12))
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
@@ -221,11 +221,13 @@ describe("usage analysis reports", () => {
     const service = new CcUsageAnalysisService({ db, roots: [path.join(dir, ".claude", "projects")] })
     await service.refresh()
 
-    const overview = service.getOverview({ preset: "7d" })
+    const dailyOverview = service.getOverview({ preset: "7d" })
+    const hourlyOverview = service.getOverview({ preset: "7d", bucket: "hour" })
 
-    expect(overview.trend).toHaveLength(31)
-    expect(overview.trend[0].bucket).toBe("2026-05-19 00")
-    expect(overview.trend.at(-1)?.bucket).toBe("2026-05-20 06")
+    expect(dailyOverview.trend.map((row) => row.bucket)).toEqual(["2026-05-19", "2026-05-20"])
+    expect(hourlyOverview.trend).toHaveLength(31)
+    expect(hourlyOverview.trend[0].bucket).toBe("2026-05-19 00")
+    expect(hourlyOverview.trend.at(-1)?.bucket).toBe("2026-05-20 06")
   })
 
   it("serves today time report from hourly buckets", async () => {

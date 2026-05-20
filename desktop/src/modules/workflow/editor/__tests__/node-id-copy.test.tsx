@@ -53,7 +53,7 @@ describe("workflow node id copy", () => {
     })
 
     const copyIdButton = container.querySelector<HTMLButtonElement>('[aria-label="复制节点 ID"]')
-    expect(copyIdButton?.textContent).toContain("prompt-123")
+    expect(copyIdButton?.textContent).toBe("PROMPT")
 
     await act(async () => {
       copyIdButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))

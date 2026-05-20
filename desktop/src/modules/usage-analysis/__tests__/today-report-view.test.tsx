@@ -19,6 +19,8 @@ describe("TodayReportView", () => {
     expect(html).toContain("Token 结构")
     expect(html).toContain("模型结构")
     expect(html).toContain("今日节奏")
+    expect(html).toContain("grid-cols-4")
+    expect(html).not.toContain("lg:grid-cols-4")
     expect(html).not.toContain("工具调用排行")
     expect(html).not.toContain("项目 Token 排行")
   })

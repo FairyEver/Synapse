@@ -331,9 +331,11 @@ export type SynapseImportCcSwitchClaudeProvidersResult = {
 }
 
 export type UsageAnalysisRangePreset = "today" | "7d" | "30d" | "90d" | "all"
+export type UsageAnalysisTimeBucketGranularity = "day" | "hour"
 
 export type UsageAnalysisRangeInput = {
   readonly preset: UsageAnalysisRangePreset
+  readonly bucket?: UsageAnalysisTimeBucketGranularity
 }
 
 export type UsageAnalysisDetailInput = UsageAnalysisRangeInput & {

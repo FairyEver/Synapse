@@ -13,9 +13,9 @@ export function EndNodeCard({ config, name, selected, status, progressLabel: _pr
     <div className={cn("rounded-lg border bg-card px-3 py-2 w-56", selected && "ring-2 ring-primary", statusClass(status))}>
       <div className="flex items-center gap-2 mb-1">
         <Icon className="h-3.5 w-3.5 text-primary shrink-0" />
-        <span className="text-xs font-medium text-foreground truncate">{name || "结束"}</span>
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{name || "结束"}</span>
+        {nodeId ? <CopyIdButton id={nodeId} kind="node" /> : null}
       </div>
-      {nodeId ? <CopyIdButton id={nodeId} kind="node" className="mb-1" /> : null}
       <p className="text-xs text-muted-foreground truncate">{config.template.slice(0, 40) || "返回文本"}</p>
     </div>
   )

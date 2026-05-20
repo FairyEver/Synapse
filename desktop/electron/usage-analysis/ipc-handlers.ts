@@ -9,11 +9,16 @@ let registered = false
 
 type UsageRangeIpcPayload = {
   readonly preset?: unknown
+  readonly bucket?: unknown
 }
 
 export function normalizeUsageRangeForIpc(range: UsageRangeIpcPayload | undefined): UsageRangeInput {
   const preset = range?.preset
   if (preset === "today" || preset === "7d" || preset === "30d" || preset === "90d" || preset === "all") {
+    const bucket = range?.bucket
+    if (bucket === "day" || bucket === "hour") {
+      return { preset, bucket }
+    }
     return { preset }
   }
   return { preset: "30d" }

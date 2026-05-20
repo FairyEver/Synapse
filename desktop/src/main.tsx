@@ -35,7 +35,9 @@ void (async () => {
       <StrictMode>
         <AppErrorBoundary>
           <AppConfigProvider>
-            <WorkflowEditorApp />
+            <AppNotificationsProvider>
+              <WorkflowEditorApp />
+            </AppNotificationsProvider>
           </AppConfigProvider>
         </AppErrorBoundary>
       </StrictMode>,

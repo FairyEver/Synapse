@@ -41,7 +41,8 @@ export function TodayReportView({ overviewState, timeState, modelsState }: Today
   const report = overviewState.data
   const timeRows = timeState.data ?? []
   const modelRows = modelsState.data ?? []
-  const loading = overviewState.loading || timeState.loading || modelsState.loading
+  const loading = (overviewState.loading || timeState.loading || modelsState.loading)
+    && (!overviewState.data || !timeState.data || !modelsState.data)
   const error = overviewState.error ?? timeState.error ?? modelsState.error
   const empty = !report || report.totals.tokens === 0
 
@@ -49,7 +50,7 @@ export function TodayReportView({ overviewState, timeState, modelsState }: Today
     <ReportState loading={loading} error={error} empty={empty}>
       {report ? (
         <div className="flex flex-col gap-4">
-          <MetricGrid metrics={buildTodayMetricRows(report, timeRows)} />
+          <MetricGrid metrics={buildTodayMetricRows(report, timeRows)} columns="four" />
           <UsageTodayHourlyChart title="今日时段" rows={timeRows} />
           <div className="grid gap-4 md:grid-cols-2">
             <UsageBreakdownChart title="Token 结构" rows={buildTodayTokenStructureRows(report.tokenBreakdown)} valueFormatter={formatInteger} compact />

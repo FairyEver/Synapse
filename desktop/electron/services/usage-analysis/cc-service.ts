@@ -78,12 +78,6 @@ interface AggregateValue {
 
 const TOOL_CALLS_AGGREGATE_MODEL = "__synapse_tool_calls__"
 
-function getTrendBucketLimit(range: UsageRangeInput): number {
-  if (range.preset === "today") return 24
-  if (range.preset === "7d") return 168
-  return 30
-}
-
 function tokenTotal(row: UsageEventRow): number {
   return row.input_tokens + row.output_tokens + row.cache_read_tokens + row.cache_write_tokens + row.reasoning_tokens
 }
@@ -150,7 +144,7 @@ export class CcUsageAnalysisService {
       topModels: this.getModels(range).slice(0, 5),
       topProjects: this.getProjects(range).slice(0, 5),
       topTools: this.queryTools(range, 5),
-      trend: this.getTime(range).slice(-getTrendBucketLimit(range)),
+      trend: this.getTime(range),
     }
   }
 
@@ -159,7 +153,7 @@ export class CcUsageAnalysisService {
     if (range.preset === "today") {
       return this.queryTodayTime(range)
     }
-    const usesHourlyBuckets = range.preset === "today" || range.preset === "7d"
+    const usesHourlyBuckets = range.bucket === "hour"
     const bucketColumn = usesHourlyBuckets ? "hour" : "date"
     const tableName = usesHourlyBuckets ? `${this.prefix}_hourly_usage` : `${this.prefix}_daily_usage`
     const usageFilter = this.createAggregateRangeWhere(range, bucketColumn, [`model != ?`], [TOOL_CALLS_AGGREGATE_MODEL])

@@ -69,7 +69,7 @@ describe("WorkflowCard", () => {
     })
 
     const copyIdButton = container.querySelector<HTMLButtonElement>('[aria-label="复制工作流 ID"]')
-    expect(copyIdButton?.textContent).toContain("workflow-1")
+    expect(copyIdButton?.textContent).toBe("WORKFL")
 
     await act(async () => {
       copyIdButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))

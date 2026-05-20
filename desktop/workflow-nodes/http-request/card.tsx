@@ -15,12 +15,12 @@ export function HttpRequestNodeCard({ config, name, selected, status, progressLa
     <div className={cn("relative rounded-lg border bg-card px-3 py-2 w-56", status === "running" && "pb-4", selected && "ring-2 ring-primary", statusClass(status))}>
       <div className="flex items-center gap-2 mb-1.5">
         <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        <span className="text-xs font-medium text-foreground truncate">{name || "HTTP 请求"}</span>
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{name || "HTTP 请求"}</span>
+        {nodeId ? <CopyIdButton id={nodeId} kind="node" /> : null}
         {status === "running" && timer && (
-          <span className="ml-auto text-[10px] font-mono text-muted-foreground shrink-0">{timer}</span>
+          <span className="text-[10px] font-mono text-muted-foreground shrink-0">{timer}</span>
         )}
       </div>
-      {nodeId ? <CopyIdButton id={nodeId} kind="node" className="mb-1.5" /> : null}
       {status === "running" && progressLabel ? (
         <p className="text-[11px] text-muted-foreground truncate">{progressLabel}</p>
       ) : (

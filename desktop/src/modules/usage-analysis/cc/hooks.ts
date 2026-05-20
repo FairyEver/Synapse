@@ -1,19 +1,19 @@
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { toUsageRangeInput } from "../shared/range"
 import { useReportLoader } from "../shared/use-report-loader"
-import type { UsageReportRangePreset } from "../shared/types"
+import type { UsageReportRangePreset, UsageTrendBucketGranularity } from "../shared/types"
 
-export function useCcOverview(range: UsageReportRangePreset, refreshKey: number) {
+export function useCcOverview(range: UsageReportRangePreset, refreshKey: number, bucket?: UsageTrendBucketGranularity) {
   return useReportLoader(
-    () => requireSynapseBridge().usageAnalysis.cc.getOverview(toUsageRangeInput(range)),
-    [range, refreshKey],
+    () => requireSynapseBridge().usageAnalysis.cc.getOverview(toUsageRangeInput(range, bucket)),
+    [range, refreshKey, bucket],
   )
 }
 
-export function useCcTime(range: UsageReportRangePreset, refreshKey: number) {
+export function useCcTime(range: UsageReportRangePreset, refreshKey: number, bucket?: UsageTrendBucketGranularity) {
   return useReportLoader(
-    () => requireSynapseBridge().usageAnalysis.cc.getTime(toUsageRangeInput(range)),
-    [range, refreshKey],
+    () => requireSynapseBridge().usageAnalysis.cc.getTime(toUsageRangeInput(range, bucket)),
+    [range, refreshKey, bucket],
   )
 }
 

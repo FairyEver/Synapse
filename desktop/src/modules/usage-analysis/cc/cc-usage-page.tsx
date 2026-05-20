@@ -3,7 +3,7 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
 import { TodayReportView } from "../shared/components/today-report-view"
-import type { UsageRangePreset, UsageViewId } from "../shared/types"
+import type { UsageRangePreset, UsageTrendBucketGranularity, UsageViewId } from "../shared/types"
 import { useCcModels, useCcOverview, useCcTime } from "./hooks"
 import { CcModelsPage } from "./pages/models"
 import { CcOverviewPage } from "./pages/overview"
@@ -15,6 +15,7 @@ export function CcUsagePage() {
   const { error: showError } = useAppNotifications()
   const [view, setView] = useState<UsageViewId>("today")
   const [range, setRange] = useState<UsageRangePreset>("30d")
+  const [trendBucket, setTrendBucket] = useState<UsageTrendBucketGranularity>("day")
   const [refreshKey, setRefreshKey] = useState(0)
   const [refreshing, setRefreshing] = useState(false)
 
@@ -43,8 +44,8 @@ export function CcUsagePage() {
       }}
     >
       {view === "today" ? <CcTodayPage refreshKey={refreshKey} /> : null}
-      {view === "overview" ? <CcOverviewPage range={range} refreshKey={refreshKey} /> : null}
-      {view === "time" ? <CcTimePage range={range} refreshKey={refreshKey} /> : null}
+      {view === "overview" ? <CcOverviewPage range={range} refreshKey={refreshKey} trendBucket={trendBucket} onTrendBucketChange={setTrendBucket} /> : null}
+      {view === "time" ? <CcTimePage range={range} refreshKey={refreshKey} trendBucket={trendBucket} onTrendBucketChange={setTrendBucket} /> : null}
       {view === "models" ? <CcModelsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "projects" ? <CcProjectsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "tools" ? <CcToolsPage range={range} refreshKey={refreshKey} /> : null}

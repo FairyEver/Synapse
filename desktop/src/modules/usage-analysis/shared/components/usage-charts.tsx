@@ -4,6 +4,7 @@ import type { EChartsOption } from "echarts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useUsageEChartsTheme } from "../echarts-theme"
+import type { UsageTrendBucketGranularity } from "../types"
 
 interface TrendPoint {
   readonly bucket: string
@@ -38,6 +39,8 @@ interface RankPoint {
 interface UsageTrendChartProps {
   readonly title: string
   readonly rows: readonly TrendPoint[]
+  readonly bucket?: UsageTrendBucketGranularity
+  readonly onBucketChange?: (bucket: UsageTrendBucketGranularity) => void
 }
 
 interface UsageTodayHourlyChartProps {
@@ -70,6 +73,11 @@ const TREND_MODES: { readonly value: TrendMode; readonly label: string }[] = [
   { value: "cacheWrite", label: "缓存写" },
 ]
 
+const TREND_BUCKETS: { readonly value: UsageTrendBucketGranularity; readonly label: string }[] = [
+  { value: "hour", label: "按小时" },
+  { value: "day", label: "按天" },
+]
+
 const TOKEN_COMPONENTS: { readonly key: TokenComponentKey; readonly label: string }[] = [
   { key: "input", label: "输入" },
   { key: "output", label: "输出" },
@@ -82,7 +90,7 @@ const RANK_BAR_HEIGHT = 18
 const RANK_BAR_GAP = 9
 const RANK_VERTICAL_PADDING = 50
 
-export function UsageTrendChart({ title, rows }: UsageTrendChartProps) {
+export function UsageTrendChart({ title, rows, bucket = "day", onBucketChange }: UsageTrendChartProps) {
   const theme = useUsageEChartsTheme()
   const [mode, setMode] = useState<TrendMode>("tokens")
   const data = useMemo(() => rows.filter((row) => row.tokens > 0 || row.requests > 0 || row.toolCalls > 0), [rows])
@@ -185,13 +193,22 @@ export function UsageTrendChart({ title, rows }: UsageTrendChartProps) {
       title={title}
       empty={data.length === 0}
       action={(
-        <Tabs value={mode} onValueChange={(value) => setMode(value as TrendMode)}>
-          <TabsList>
-            {TREND_MODES.map((item) => (
-              <TabsTrigger key={item.value} value={item.value}>{item.label}</TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        <div className="flex flex-wrap items-center gap-2">
+          <Tabs value={bucket} onValueChange={(value) => onBucketChange?.(value as UsageTrendBucketGranularity)}>
+            <TabsList>
+              {TREND_BUCKETS.map((item) => (
+                <TabsTrigger key={item.value} value={item.value}>{item.label}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <Tabs value={mode} onValueChange={(value) => setMode(value as TrendMode)}>
+            <TabsList>
+              {TREND_MODES.map((item) => (
+                <TabsTrigger key={item.value} value={item.value}>{item.label}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
       )}
     >
       <ReactECharts className="h-80 w-full" option={option} opts={{ renderer: "canvas" }} notMerge lazyUpdate />

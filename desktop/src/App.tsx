@@ -55,6 +55,12 @@ type ContentDialogHandlerMap = Record<SynapseContentType, Record<DialogKind, (op
 
 const logger = createRendererLogger("app")
 
+const CONTENT_TAB_LABELS: Record<SynapseContentType, string> = {
+  rule: "规则",
+  skill: "技能",
+  prompt: "提示词",
+}
+
 function createEmptyDialogStateMap(): ContentDialogStateMap {
   return Object.fromEntries(
     getAllContentTypeIds().map((contentType) => [contentType, {
@@ -75,6 +81,10 @@ const CONTENT_MODULE_COMPONENTS: Record<SynapseContentType, ComponentType<{
   rule: RulesModule,
   skill: SkillsModule,
   prompt: PromptsModule,
+}
+
+function shouldShowWorkflowEntry(): boolean {
+  return !(getSynapseBridge()?.isPackaged ?? !import.meta.env.DEV)
 }
 
 function MainApp() {
@@ -133,15 +143,15 @@ function MainApp() {
     () => [
       ...CONTENT_TYPE_DEFINITIONS.map((definition) => ({
         id: definition.id,
-        label: definition.tabLabel,
+        label: CONTENT_TAB_LABELS[definition.id],
       })),
-      { id: "agent" as const, label: "Agent" },
-      { id: "database" as const, label: "数据库" },
-      { id: "task-scheduler" as const, label: "定时任务" },
-      { id: "editor-scan" as const, label: "IDE" },
+      { id: "agent" as const, label: "对话" },
+      { id: "database" as const, label: "数据" },
+      { id: "task-scheduler" as const, label: "定时" },
+      { id: "editor-scan" as const, label: "本机" },
       { id: "usage-cc" as const, label: "CC" },
       { id: "usage-codex" as const, label: "Codex" },
-      ...(import.meta.env.DEV ? [{ id: "workflow" as const, label: "工作流" }] : []),
+      ...(shouldShowWorkflowEntry() ? [{ id: "workflow" as const, label: "工作流" }] : []),
       { id: "settings" as const, label: "设置" },
     ],
     [],
@@ -392,7 +402,7 @@ function MainApp() {
               <CodexUsageAnalysisModule />
             </ErrorBoundary>
           ) : null}
-          {activeTab === "workflow" ? (
+          {activeTab === "workflow" && shouldShowWorkflowEntry() ? (
             <ErrorBoundary fallbackTitle="工作流模块出现问题">
               <WorkflowModule />
             </ErrorBoundary>

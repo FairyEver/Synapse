@@ -5,7 +5,7 @@ import { SwitchNodeCard } from "../../../../workflow-nodes/switch/card"
 import { EndNodeCard } from "../../../../workflow-nodes/end/card"
 import { HttpRequestNodeCard } from "../../../../workflow-nodes/http-request/card"
 import { ScriptNodeCard } from "../../../../workflow-nodes/script/card"
-import { getSwitchHeaderHeight, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
+import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
 import type { SwitchNodeConfig } from "../../../../workflow-nodes/switch/schema"
 import type { EndNodeConfig } from "../../../../workflow-nodes/end/schema"
@@ -28,7 +28,6 @@ export function PromptNodeWrapper({ id, data, selected }: NodeProps) {
 export function SwitchNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
   const branches = (data as { branches?: Array<{ id: string; label: string }> }).branches ?? []
-  const headerHeight = getSwitchHeaderHeight(true)
   return (
     <NodeContextMenu nodeId={id} nodeType="switch">
       <div>
@@ -40,7 +39,7 @@ export function SwitchNodeWrapper({ id, data, selected }: NodeProps) {
             type="source"
             position={Position.Right}
             id={b.id}
-            style={{ top: `${headerHeight + (i + 0.5) * SWITCH_BRANCH_H}px` }}
+            style={{ top: `${SWITCH_HEADER_H + (i + 0.5) * SWITCH_BRANCH_H}px` }}
           />
         ))}
       </div>
