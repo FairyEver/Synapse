@@ -136,7 +136,7 @@ function WindsurfRuleProjectInstallForm({
           <DialogTitle>Windsurf 规则元数据</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-2">
             <Label htmlFor="windsurf-rule-trigger">trigger</Label>
             <NativeSelect

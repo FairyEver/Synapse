@@ -19,7 +19,7 @@ function IdentityPanel() {
   if (!localIdentityState || localIdentityState.status !== "ready") {
     return (
       <SettingsGroup>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           <Skeleton className="h-9 w-full" />
           <Skeleton className="h-9 w-32" />
         </div>
@@ -30,7 +30,7 @@ function IdentityPanel() {
   return (
     <>
       <SettingsGroup>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-2">
             <Label htmlFor="identity-user-id">用户 ID（本地）</Label>
             <InputGroup>

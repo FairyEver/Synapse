@@ -41,7 +41,7 @@ export function RunView({ snapshot, outputLines, trimmed, onStop, onBack }: RunV
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           {isFinished && (
             <button
               type="button"

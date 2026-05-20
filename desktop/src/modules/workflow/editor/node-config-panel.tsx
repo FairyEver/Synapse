@@ -154,38 +154,40 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
               {manifest?.title ?? node.type} · {connectionSummary}
             </p>
           </div>
-          <ScrollArea className="flex-1 p-3">
-            {(() => {
-              const PanelComponent = getPanel(node.type)
-              if (!PanelComponent) return <div className="flex items-center justify-center h-full text-xs text-muted-foreground"><p>该节点类型暂不支持配置编辑</p></div>
-              return (
-                <>
-                  {validationItems.length > 0 && (
-                    <div className="mb-3 rounded-md border border-destructive/40 bg-background px-3 py-2">
-                      <p className="text-xs font-medium text-destructive">当前节点需要处理</p>
-                      <div className="mt-1 grid gap-1">
-                        {validationItems.map((item) => (
-                          <p key={item.id} className="text-xs text-muted-foreground">{item.summary}</p>
-                        ))}
+          <ScrollArea className="flex-1">
+            <div className="p-3">
+              {(() => {
+                const PanelComponent = getPanel(node.type)
+                if (!PanelComponent) return <div className="flex items-center justify-center h-full text-xs text-muted-foreground"><p>该节点类型暂不支持配置编辑</p></div>
+                return (
+                  <>
+                    {validationItems.length > 0 && (
+                      <div className="mb-3 rounded-md border border-destructive/40 bg-background px-3 py-2">
+                        <p className="text-xs font-medium text-destructive">当前节点需要处理</p>
+                        <div className="mt-1 grid gap-1">
+                          {validationItems.map((item) => (
+                            <p key={item.id} className="text-xs text-muted-foreground">{item.summary}</p>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  )}
-                  <PanelComponent
-                    key={`${node.id}::${definition.version ?? "0"}`}
-                    config={node.config}
-                    onChange={(c) => onConfigChange(node.id, c)}
-                    upstreamNodes={upstreamNodes}
-                    workflowParams={definition.params}
-                    projects={projects}
-                    defaultProjectName={defaultProjectName}
-                    defaultProviderId={definition.defaultProviderId}
-                    defaultModelTier={definition.defaultModelTier}
-                    defaultNodeTimeoutMins={definition.defaultNodeTimeoutMins}
-                    validationItems={validationItems}
-                  />
-                </>
-              )
-            })()}
+                    )}
+                    <PanelComponent
+                      key={`${node.id}::${definition.version ?? "0"}`}
+                      config={node.config}
+                      onChange={(c) => onConfigChange(node.id, c)}
+                      upstreamNodes={upstreamNodes}
+                      workflowParams={definition.params}
+                      projects={projects}
+                      defaultProjectName={defaultProjectName}
+                      defaultProviderId={definition.defaultProviderId}
+                      defaultModelTier={definition.defaultModelTier}
+                      defaultNodeTimeoutMins={definition.defaultNodeTimeoutMins}
+                      validationItems={validationItems}
+                    />
+                  </>
+                )
+              })()}
+            </div>
           </ScrollArea>
         </>
       ) : (
@@ -213,8 +215,8 @@ function GlobalSettingsForm({ definition, projects, onChange }: {
       <div className="border-b px-3 py-2.5">
         <p className="text-sm font-medium">工作流设置</p>
       </div>
-      <ScrollArea className="flex-1 p-3">
-        <div className="space-y-4">
+      <ScrollArea className="flex-1">
+        <div className="space-y-4 p-3">
         <div className="space-y-1.5">
           <Label className="text-xs">名称</Label>
           <Input

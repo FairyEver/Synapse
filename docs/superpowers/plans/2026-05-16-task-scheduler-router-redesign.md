@@ -874,7 +874,7 @@ function TaskLatestRun({ run, task }: TaskLatestRunProps) {
 
   return (
     <div className="rounded-lg border border-border bg-card p-4">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-2">
         {isRunning ? (
           <div className="flex items-center gap-2">
             <LoaderCircle className="size-4 animate-spin text-muted-foreground" />
@@ -1054,7 +1054,7 @@ function TaskDetailPage() {
 
   if (error || !task) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-3">
+      <div className="flex h-full flex-col items-center justify-center gap-2">
         <p className="text-sm text-muted-foreground">{error ?? "任务不存在"}</p>
         <Button variant="outline" size="sm" onClick={() => navigate("/task-scheduler")}>
           返回列表
@@ -1094,7 +1094,7 @@ function TaskDetailPage() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto p-4">
-        <div className="mx-auto flex max-w-2xl flex-col gap-4">
+        <div className="mx-auto flex max-w-2xl flex-col gap-2">
           <TaskSummaryBar
             task={task}
             projects={config.global.projects}

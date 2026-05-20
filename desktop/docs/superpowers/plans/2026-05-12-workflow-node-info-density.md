@@ -537,7 +537,7 @@ export function PromptNodePanel({ config, onChange, upstreamNodes, workflowParam
   }
 
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-2">
       <div className="grid gap-1.5">
         <Label className="text-xs">Agent</Label>
         <Select

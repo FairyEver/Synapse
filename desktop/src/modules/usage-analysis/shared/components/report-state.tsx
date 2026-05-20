@@ -13,7 +13,7 @@ interface ReportStateProps {
 export function ReportState({ loading, error, empty, children }: ReportStateProps) {
   if (loading) {
     return (
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
         <Skeleton className="h-24" />
         <Skeleton className="h-64" />
       </div>

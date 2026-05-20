@@ -125,7 +125,7 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           {item ? (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <ContentItemIcon
                 className="size-8 shrink-0 [&_svg]:size-4"
                 contentId={item.id}
@@ -150,7 +150,7 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
           )}
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-2">
             <Label>项目</Label>
             <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>

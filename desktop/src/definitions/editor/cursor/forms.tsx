@@ -129,7 +129,7 @@ function CursorRuleProjectInstallForm({
           <DialogTitle>Cursor 规则元数据</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-2">
             <Label htmlFor="cursor-frontmatter-description">description</Label>
             <Input
@@ -156,7 +156,7 @@ function CursorRuleProjectInstallForm({
             </p>
           </div>
 
-          <div className="flex items-start justify-between gap-4 rounded-lg border border-border bg-muted/20 px-3 py-3">
+          <div className="flex items-start justify-between gap-2 rounded-lg border border-border bg-muted/20 px-3 py-3">
             <div className="flex flex-col gap-1">
               <Label htmlFor="cursor-frontmatter-always-apply" className="cursor-pointer">
                 alwaysApply

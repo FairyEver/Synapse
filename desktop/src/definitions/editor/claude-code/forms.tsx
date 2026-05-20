@@ -88,7 +88,7 @@ function ClaudeCodeRuleProjectInstallForm({
           <DialogTitle>Claude Code 规则元数据</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-2">
             <Label htmlFor="claude-code-frontmatter-paths">paths</Label>
             <Input

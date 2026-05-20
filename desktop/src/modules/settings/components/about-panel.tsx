@@ -245,8 +245,8 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-col items-center gap-3">
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-col items-center gap-2">
         {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
         <img
           src={synapseLogo}
@@ -262,15 +262,15 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
       </div>
 
       <SettingsGroup>
-        <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center justify-between gap-2">
           <div className="flex flex-col gap-1">
             <p className="text-sm font-medium">当前版本</p>
             <p className="text-sm text-muted-foreground">v{updateState.currentVersion}</p>
           </div>
         </div>
 
-        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
-          <div className="flex min-w-0 flex-col gap-3">
+        <div className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto] md:items-start">
+          <div className="flex min-w-0 flex-col gap-2">
             <div className="flex flex-col gap-1">
               <p className="text-sm font-medium">软件更新</p>
               <p className={statusClassName}>{actionError ?? updateState.message}</p>

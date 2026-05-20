@@ -28,7 +28,7 @@ export function ConfigView({ config, onChange, onSave, onStart }: ConfigViewProp
   return (
     <div className="max-w-2xl mx-auto space-y-6">
       <ConfigForm config={config} onChange={onChange} />
-      <div className="flex gap-3">
+      <div className="flex gap-2">
         <button
           type="button"
           onClick={handleSave}

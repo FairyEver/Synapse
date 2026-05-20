@@ -74,7 +74,7 @@ function ContentDetailPanel<T extends SynapseContentType>({
   if (displayedVersion) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
           {selectedHistoryDirname ? (
             <ContentHistorySelect
               className="min-w-0 flex-1"
@@ -85,7 +85,7 @@ function ContentDetailPanel<T extends SynapseContentType>({
             />
           ) : null}
 
-          <div className="ml-auto flex shrink-0 items-center gap-3">
+          <div className="ml-auto flex shrink-0 items-center gap-2">
             {toolbarAction ? <div className="shrink-0">{toolbarAction}</div> : null}
 
             <Tabs

@@ -324,7 +324,7 @@ function VariableSaveConfirmationDialog({
           void onSave()
         }}
       >
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <VariableSection label="新增变量" variables={newVariables} />
           {hasBothSections ? <Separator /> : null}
           <VariableSection label="更新变量" variables={updatedVariables} />

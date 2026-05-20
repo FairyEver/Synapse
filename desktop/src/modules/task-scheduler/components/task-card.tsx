@@ -91,9 +91,9 @@ function TaskCard({
 
   return (
     <div
-      className={`flex h-full flex-col rounded-xl bg-card p-4 text-card-foreground ring-1 ring-foreground/10 ${disabled ? "opacity-70" : ""}`}
+      className={`flex h-full flex-col rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10 ${disabled ? "opacity-70" : ""}`}
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-2">
         <Badge variant={badge.variant}>{badge.label}</Badge>
         <Switch
           size="sm"
@@ -106,7 +106,7 @@ function TaskCard({
         />
       </div>
 
-      <div className="mt-4 flex items-start justify-between gap-3">
+      <div className="mt-4 flex items-start justify-between gap-2">
         <div className="min-w-0">
           <h3 className="truncate text-sm font-medium">{task.name}</h3>
           <p className="mt-1 truncate text-xs text-muted-foreground">

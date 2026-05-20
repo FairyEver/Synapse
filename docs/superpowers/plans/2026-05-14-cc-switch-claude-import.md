@@ -1541,7 +1541,7 @@ function CcSwitchImportDialog({
     }
     if (error) {
       return (
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
           <p className="text-sm text-destructive">{error}</p>
           <Button type="button" variant="outline" size="sm" onClick={() => void loadPreview()}>
             <RefreshCw data-icon="inline-start" />
@@ -1552,7 +1552,7 @@ function CcSwitchImportDialog({
     }
     if (items.length === 0) {
       return (
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
           <p className="text-sm text-muted-foreground">未找到 CC Switch 配置</p>
           <Button type="button" variant="outline" size="sm" onClick={() => void handleChooseSource()}>
             <FileUp data-icon="inline-start" />

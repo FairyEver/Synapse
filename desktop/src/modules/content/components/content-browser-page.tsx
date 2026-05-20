@@ -406,13 +406,13 @@ function ContentBrowserPage({
       >
         <section className="h-full min-h-0">
           <div className="flex min-h-full flex-col gap-2.5 px-2 py-2.5">
-            <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="min-w-0">
                 <h2 className="text-base font-medium text-foreground">
                   {isDeletedView ? "最近删除" : definition.pluralLabel}
                 </h2>
               </div>
-              <div className="flex shrink-0 items-center gap-3">
+              <div className="flex shrink-0 items-center gap-2">
                 {!isDeletedView && (
                   <Select
                     data-track="content-sort-order"

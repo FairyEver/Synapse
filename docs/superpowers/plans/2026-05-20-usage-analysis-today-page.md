@@ -935,10 +935,10 @@ export function TodayReportView({ overviewState, timeState, modelsState }: Today
   return (
     <ReportState loading={loading} error={error} empty={!report || report.totals.tokens === 0}>
       {report ? (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <MetricGrid metrics={buildTodayMetricRows(report, timeRows)} />
           <UsageTodayHourlyChart title="今日时段" rows={timeRows} />
-          <div className="grid gap-4 lg:grid-cols-2">
+          <div className="grid gap-2 lg:grid-cols-2">
             <UsageBreakdownChart
               title="Token 结构"
               rows={buildTodayTokenStructureRows(report.tokenBreakdown)}

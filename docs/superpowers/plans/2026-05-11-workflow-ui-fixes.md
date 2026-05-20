@@ -23,7 +23,7 @@ In `workflow-list.tsx` line 41, replace:
 ```
 with:
 ```tsx
-<div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-4">
+<div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2">
 ```
 
 - [ ] **Step 2: Commit**

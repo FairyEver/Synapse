@@ -565,7 +565,7 @@ After the API Key field and before model fields, add:
 
 ```tsx
 {mode === "create" && selectedPreset && selectedPreset.templateValues.length > 0 ? (
-  <div className="grid gap-4 sm:grid-cols-2">
+  <div className="grid gap-2 sm:grid-cols-2">
     {selectedPreset.templateValues.map((item) => (
       <Field key={item.key}>
         <FieldLabel htmlFor={`provider-template-${item.key}`}>{item.label}</FieldLabel>

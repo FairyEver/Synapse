@@ -132,7 +132,7 @@ function SliderNumberField({
       <Label id={`${id}-label`} htmlFor={id}>
         {label}
       </Label>
-      <div className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-3">
+      <div className="grid grid-cols-[minmax(0,1fr)_5rem] items-center gap-2">
         <Slider
           aria-labelledby={`${id}-label`}
           min={1}
@@ -345,9 +345,9 @@ export function ActivationCodesPage() {
   }
 
   return (
-    <div className="grid gap-4">
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-4">
+    <div className="grid gap-2">
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
           <div className="flex items-center gap-2">
             <Checkbox
               id="include-archived"
@@ -369,7 +369,7 @@ export function ActivationCodesPage() {
               <DialogTitle>新建激活码</DialogTitle>
               <DialogDescription className="sr-only">系统生成激活码。</DialogDescription>
             </DialogHeader>
-            <form className="grid gap-4" onSubmit={createActivationCode}>
+            <form className="grid gap-2" onSubmit={createActivationCode}>
               <SliderNumberField
                 id="max-devices"
                 label="设备数"

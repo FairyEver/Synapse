@@ -23,8 +23,8 @@
 
 ### 网格规格
 
-- 布局：`grid grid-cols-3 gap-3`
-- 与内容模块（Rules/Skills/Prompts）的 `gap-3` 保持一致
+- 布局：`grid grid-cols-3 gap-2`
+- 与内容模块（Rules/Skills/Prompts）的 `gap-2` 保持一致
 - 容器背景：`bg-muted/30`（与当前页面一致）
 
 ## 卡片设计

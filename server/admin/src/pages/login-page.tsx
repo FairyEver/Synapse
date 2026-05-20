@@ -40,7 +40,7 @@ export function LoginPage({
           <CardTitle>管理员登录</CardTitle>
         </CardHeader>
         <CardContent>
-          <form className="grid gap-4" onSubmit={handleSubmit}>
+          <form className="grid gap-2" onSubmit={handleSubmit}>
             <div className="grid gap-2">
               <Label htmlFor="admin-email">邮箱</Label>
               <Input

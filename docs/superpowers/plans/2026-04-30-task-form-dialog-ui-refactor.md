@@ -254,7 +254,7 @@ return (
     >
       <FieldGroup className="gap-6">
         <TaskFormSection title="基础信息">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             <TaskField label="名称" htmlFor="task-form-name">
               <Input
                 id="task-form-name"
@@ -305,7 +305,7 @@ return (
         </TaskFormSection>
 
         <TaskFormSection title="触发计划">
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             <TaskField label="触发方式" htmlFor="task-form-trigger-type">
               <Select
                 value={form.triggerType}
@@ -361,7 +361,7 @@ return (
         </TaskFormSection>
 
         <TaskFormSection title="执行内容">
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-3">
             <TaskField label="执行类型" htmlFor="task-form-action-mode">
               <Select
                 value={form.actionMode}
@@ -464,9 +464,9 @@ Replace the existing `Field` helper with these local helpers, leaving `ToggleFie
 ```tsx
 function TaskFormSection({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <section className="grid gap-4">
+    <section className="grid gap-2">
       <h3 className="text-sm font-medium text-foreground">{title}</h3>
-      <div className="grid gap-4">{children}</div>
+      <div className="grid gap-2">{children}</div>
     </section>
   )
 }

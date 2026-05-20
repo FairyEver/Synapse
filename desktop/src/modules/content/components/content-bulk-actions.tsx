@@ -44,7 +44,7 @@ function ContentBulkActions({
 
   return (
     <>
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-2">
         <Tabs
           data-track="deleted-filter"
           value={deletedFilter}

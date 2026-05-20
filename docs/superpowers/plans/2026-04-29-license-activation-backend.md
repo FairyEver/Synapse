@@ -2033,7 +2033,7 @@ export default function App() {
             </h1>
           </div>
         </header>
-        <main className="flex flex-1 flex-col gap-4 p-4 pt-0">
+        <main className="flex flex-1 flex-col gap-2 p-4 pt-0">
           <div className="text-sm text-muted-foreground">Loading</div>
         </main>
       </SidebarInset>
@@ -2166,7 +2166,7 @@ export function LoginPage({ onLoggedIn }: LoginPageProps) {
         </CardHeader>
         <CardContent>
           <form
-            className="flex flex-col gap-4"
+            className="flex flex-col gap-2"
             onSubmit={(event) => {
               event.preventDefault()
               setSubmitting(true)
@@ -2236,19 +2236,19 @@ Create the remaining pages with operational copy only:
 
 ```tsx
 export function AccountsPage() {
-  return <div className="flex flex-col gap-4">账号</div>
+  return <div className="flex flex-col gap-2">账号</div>
 }
 
 export function AccountDetailPage() {
-  return <div className="flex flex-col gap-4">账号详情</div>
+  return <div className="flex flex-col gap-2">账号详情</div>
 }
 
 export function DevicesPage() {
-  return <div className="flex flex-col gap-4">设备</div>
+  return <div className="flex flex-col gap-2">设备</div>
 }
 
 export function SystemPage() {
-  return <div className="flex flex-col gap-4">系统</div>
+  return <div className="flex flex-col gap-2">系统</div>
 }
 ```
 
@@ -2853,7 +2853,7 @@ export function LicenseGate({ state, onActivate, children }: LicenseGateProps) {
         </CardHeader>
         <CardContent>
           <form
-            className="flex flex-col gap-4"
+            className="flex flex-col gap-2"
             onSubmit={(event) => {
               event.preventDefault()
               setSubmitting(true)

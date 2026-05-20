@@ -42,7 +42,7 @@ export function AccountDetailPage({ accountId }: { readonly accountId: string })
 
   return (
     <div className="grid gap-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="grid gap-1">
           <div className="text-base font-medium">{data.email}</div>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -56,7 +56,7 @@ export function AccountDetailPage({ accountId }: { readonly accountId: string })
         </Button>
       </div>
 
-      <section className="grid gap-3">
+      <section className="grid gap-2">
         <h2 className="text-sm font-medium">授权</h2>
         {!data.licenses.length ? <PageState>暂无授权</PageState> : null}
         {data.licenses.length ? (
@@ -92,7 +92,7 @@ export function AccountDetailPage({ accountId }: { readonly accountId: string })
         ) : null}
       </section>
 
-      <section className="grid gap-3">
+      <section className="grid gap-2">
         <h2 className="text-sm font-medium">设备</h2>
         {!data.licenses.some((license) => license.devices.length > 0) ? (
           <PageState>暂无设备</PageState>

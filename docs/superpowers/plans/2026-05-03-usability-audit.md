@@ -71,7 +71,7 @@ const [isRetrying, setIsRetrying] = useState(false)
 if (error) {
   return (
     <IdentityScreenShell>
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-2">
         <h1 className="text-lg font-medium text-foreground">无法读取身份信息</h1>
         <p className="text-sm text-muted-foreground">{error}</p>
         <div className="flex justify-end">
@@ -267,7 +267,7 @@ class AppErrorBoundary extends Component<Props, State> {
     if (this.state.hasError) {
       return (
         <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
-          <div className="flex w-full max-w-md flex-col gap-4 rounded-xl border border-border bg-card p-6">
+          <div className="flex w-full max-w-md flex-col gap-2 rounded-lg border border-border bg-card p-6">
             <h1 className="text-lg font-medium text-foreground">应用遇到了问题</h1>
             <p className="text-sm text-muted-foreground">
               {this.state.error?.message ?? "发生了未知错误。"}

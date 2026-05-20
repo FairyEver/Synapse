@@ -14,7 +14,7 @@ interface MetricGridProps {
 
 export function MetricGrid({ metrics, columns = "default" }: MetricGridProps) {
   return (
-    <div className={cn("grid gap-3", columns === "four" ? "grid-cols-4" : "md:grid-cols-3 xl:grid-cols-6")}>
+    <div className={cn("grid gap-2", columns === "four" ? "grid-cols-4" : "md:grid-cols-3 xl:grid-cols-6")}>
       {metrics.map((metric) => (
         <Card key={metric.label} size="sm">
           <CardHeader>

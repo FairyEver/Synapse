@@ -1002,7 +1002,7 @@ function CreateSessionDialog({
         <DialogHeader>
           <DialogTitle>新建会话</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-4 py-2">
+        <div className="flex flex-col gap-2 py-2">
           <div className="flex flex-col gap-2">
             <Label htmlFor="project-select">项目</Label>
             <Select value={selectedProjectId} onValueChange={setSelectedProjectId}>

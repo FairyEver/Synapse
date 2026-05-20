@@ -125,9 +125,9 @@ function DiagnosticsPanel() {
   }, [report, showError, success])
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2">
       <SettingsGroup>
-        <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="flex flex-wrap items-start justify-between gap-2">
           <div className="flex min-w-0 flex-col gap-2">
             <p className="text-sm font-medium text-foreground">结论</p>
             {report ? (
@@ -324,7 +324,7 @@ function createCompatibilityTab({
     value: "compatibility",
     title: "兼容性",
     content: (
-      <div className="flex min-w-0 flex-col gap-3">
+      <div className="flex min-w-0 flex-col gap-2">
         {windowsCompatibilityEntries.length > 0 ? (
           <SettingsGroup>
             <InfoSection
@@ -372,7 +372,7 @@ function InfoSection({
   entries: [string, unknown][]
 }) {
   return (
-    <div className="flex min-w-0 flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-2">
       <p className="text-sm font-medium text-foreground">{title}</p>
       <div className="flex flex-col gap-2">
         {entries.map(([key, value]) => (
@@ -385,7 +385,7 @@ function InfoSection({
 
 function CheckRow({ check }: { check: SynapseDiagnosticsCheck }) {
   return (
-    <div className="flex min-w-0 flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-2">
       <div className="flex flex-wrap items-start justify-between gap-2">
         <div className="min-w-0">
           <div className="font-medium">{check.name}</div>

@@ -108,7 +108,7 @@ function ContentImageField({
   // --- Empty state ---
   if (!iconImagePreview) {
     return (
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
         <div
           className={cn(
             "flex flex-col items-center gap-2 rounded-lg border border-dashed p-6 transition-colors",
@@ -150,7 +150,7 @@ function ContentImageField({
   }
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2 rounded-lg border p-3">
         <img
           src={iconImagePreview}
@@ -265,7 +265,7 @@ function ContentAppearanceFields({
           </Field>
         </TabsContent>
 
-        <TabsContent value="image" className="flex flex-col gap-4">
+        <TabsContent value="image" className="flex flex-col gap-2">
           <ContentImageField
             iconImagePreview={iconImagePreview}
             iconImageError={iconImageError}

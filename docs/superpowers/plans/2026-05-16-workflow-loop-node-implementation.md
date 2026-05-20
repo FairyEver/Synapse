@@ -1430,7 +1430,7 @@ export function LoopContainer({ config, name, expanded, onToggle, children }: Lo
   }
 
   return (
-    <div className="relative border-2 border-dashed border-muted-foreground/30 rounded-xl bg-background/80 min-w-[400px] min-h-[300px] p-2">
+    <div className="relative border-2 border-dashed border-muted-foreground/30 rounded-lg bg-background/80 min-w-[400px] min-h-[300px] p-2">
       {/* Header */}
       <div className="flex items-center justify-between px-2 py-1 border-b border-dashed mb-2">
         <div className="flex items-center gap-2">

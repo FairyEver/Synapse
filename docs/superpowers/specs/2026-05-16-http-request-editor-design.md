@@ -168,7 +168,7 @@ Basic Auth:
 
 1. **不浪费一行**：Method toggle 和 URL 之间无空行，Method 用紧凑 `sm` 尺寸
 2. **分隔线分组**：Auth/Query/Headers 用薄分隔线 + 标签头分组，不设折叠交互，KV 编辑器空态时仅一行「+添加」按钮
-3. **紧凑间距**：字段间用 `gap-2` 而非 `gap-4`，内部用 `gap-1`
+3. **紧凑间距**：字段间用 `gap-2` 而非 `gap-2`，内部用 `gap-1`
 4. **KV 行紧凑**：删除按钮仅图标，无文字；key/value Input 用 `h-8` 而非默认 `h-10`
 5. **JSON 编辑器**：120px 最小高度，360px 封顶带滚动
 6. **无冗余标签**：Method 标签与 toggle 同行右边；Body 标签与 type toggle 同行

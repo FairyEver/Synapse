@@ -4,7 +4,7 @@ import { ProviderPanel } from "@/modules/settings/components/provider-panel"
 
 function ClaudeCodePanel() {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2">
       <AgentRuntimePanel>
         <AgentDefaultsContent />
       </AgentRuntimePanel>

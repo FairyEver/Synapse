@@ -193,14 +193,14 @@ function SettingsModule() {
         />
       }
     >
-      <div className="flex flex-col gap-4 p-4">
+      <div className="flex flex-col gap-2 p-2">
         {activeCategory === "admin" && activeRepository ? (
           <p className="text-sm text-muted-foreground">
             {activeRepository.name}
           </p>
         ) : null}
         {error ? (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <p className="text-sm text-destructive">{error}</p>
             <Button
               variant="outline"
@@ -224,7 +224,7 @@ function SettingsModule() {
         ) : null}
 
         {isReady && activeCategory === "admin" && activeRepository === null ? (
-          <div className="flex min-h-60 flex-col items-center justify-center gap-4">
+          <div className="flex min-h-60 flex-col items-center justify-center gap-2">
             <p className="text-sm text-muted-foreground">请先添加本地目录</p>
             <Button
               variant="outline"

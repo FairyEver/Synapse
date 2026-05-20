@@ -139,7 +139,7 @@ export default function App() {
               <h1 className="text-sm font-medium">{titleForRoute(route)}</h1>
             </div>
           </header>
-          <main className="flex flex-1 flex-col gap-4 p-4 pt-0">
+          <main className="flex flex-1 flex-col gap-2 p-4 pt-0">
             {route.name === "activation-codes" ? <ActivationCodesPage /> : null}
             {route.name === "accounts" ? <AccountsPage /> : null}
             {route.name === "account-detail" ? (

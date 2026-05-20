@@ -566,7 +566,7 @@ export function LicenseGate({ children }: { readonly children: ReactNode }) {
         </CardTitle>
       </CardHeader>
       <CardContent>
-        <form className="grid gap-4" onSubmit={handleSubmit}>
+        <form className="grid gap-2" onSubmit={handleSubmit}>
           <div className="grid gap-2">
             <Label htmlFor="license-email">邮箱</Label>
             <Input

@@ -556,9 +556,9 @@ function TaskFormSection({
   title: string
 }) {
   return (
-    <section ref={sectionRef} id={id} className="grid gap-3">
+    <section ref={sectionRef} id={id} className="grid gap-2">
       <h3 className="text-sm font-medium text-foreground">{title}</h3>
-      <div className="grid gap-3">{children}</div>
+      <div className="grid gap-2">{children}</div>
     </section>
   )
 }

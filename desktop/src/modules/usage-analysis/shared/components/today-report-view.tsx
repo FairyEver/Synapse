@@ -51,10 +51,10 @@ export function TodayReportView({ overviewState, timeState, modelsState }: Today
   return (
     <ReportState loading={loading} error={error} empty={empty}>
       {report ? (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <MetricGrid metrics={buildTodayMetricRows(report, timeRows)} columns="four" />
           <UsageTodayHourlyChart title="今日时段" rows={timeRows} />
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-2 md:grid-cols-2">
             <UsageBreakdownChart title="Token 结构" rows={buildTodayTokenStructureRows(report.tokenBreakdown)} valueFormatter={formatInteger} compact />
             <UsageBreakdownChart title="模型结构" rows={buildTodayModelStructureRows(modelRows)} valueFormatter={formatInteger} compact />
           </div>

@@ -159,7 +159,7 @@ function MarkdownViewer({
   }
 
   return (
-    <Tabs defaultValue="rendered" className={cn("gap-4", className)}>
+    <Tabs defaultValue="rendered" className={cn("gap-2", className)}>
       <TabsList className="mx-auto">
         <TabsTrigger value="rendered">
           <EyeIcon />

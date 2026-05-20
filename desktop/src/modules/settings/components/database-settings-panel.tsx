@@ -101,7 +101,7 @@ type StatusRowProps = {
 
 function StatusRow({ label, value }: StatusRowProps) {
   return (
-    <div className="flex items-start gap-4 text-sm">
+    <div className="flex items-start gap-2 text-sm">
       <span className="shrink-0 text-muted-foreground">{label}</span>
       <div className="min-w-0 flex-1 break-all text-right text-foreground">
         {value}
@@ -287,7 +287,7 @@ function DatabaseSettingsPanel() {
   }, [notifyError, status?.dbDirectoryPath])
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2">
       <Card>
         <CardHeader className="pb-0">
           <CardTitle>服务状态</CardTitle>
@@ -321,7 +321,7 @@ function DatabaseSettingsPanel() {
             )}
           </CardAction>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+        <CardContent className="flex flex-col gap-2">
           <StatusRow
             label="Shell 可用"
             value={
@@ -363,7 +363,7 @@ function DatabaseSettingsPanel() {
         <CardHeader className="pb-0">
           <CardTitle>数据管理</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-3">
+        <CardContent className="flex flex-col gap-2">
           <div className="flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={handleExport}>
               导出数据库
@@ -390,7 +390,7 @@ function DatabaseSettingsPanel() {
               </AlertDialogContent>
             </AlertDialog>
           </div>
-          <div className="flex items-start gap-4 text-sm">
+          <div className="flex items-start gap-2 text-sm">
             <span className="shrink-0 text-muted-foreground">数据库目录</span>
             {status?.dbDirectoryPath ? (
               <button
@@ -418,7 +418,7 @@ function DatabaseSettingsPanel() {
           </DialogHeader>
 
           <ScrollArea className="max-h-[60vh] w-full">
-            <div className="flex min-w-0 flex-col gap-4 pr-4">
+            <div className="flex min-w-0 flex-col gap-2 pr-4">
               <div className="grid min-w-0 grid-cols-2 gap-x-6 gap-y-3 sm:grid-cols-4">
                 <DetailField label="状态" value={getCliStatusLabel(cliDebugInfo?.status ?? null)} />
                 <DetailField label="平台" value={cliDebugInfo?.platform ?? "—"} />
@@ -442,7 +442,7 @@ function DatabaseSettingsPanel() {
 
               <Separator />
 
-              <div className="grid min-w-0 gap-3">
+              <div className="grid min-w-0 gap-2">
                 <DetailField
                   label="CLI 路径"
                   value={<code className="font-mono text-xs">{cliDebugInfo?.status.path ?? "—"}</code>}
@@ -499,7 +499,7 @@ function DatabaseSettingsPanel() {
             </DialogDescription>
           </DialogHeader>
 
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col gap-2">
             <div className="rounded-md bg-muted p-3">
               <code className="font-mono text-sm text-foreground">
                 {cliDebugInfo?.testCommand ?? "synapse help"}

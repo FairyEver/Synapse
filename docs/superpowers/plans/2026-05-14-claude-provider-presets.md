@@ -1339,8 +1339,8 @@ function ProviderPresetDialog({
         <DialogHeader>
           <DialogTitle>从预设添加</DialogTitle>
         </DialogHeader>
-        <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-          <div className="flex flex-col gap-3">
+        <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
+          <div className="flex flex-col gap-2">
             <Field>
               <FieldLabel htmlFor="provider-preset-search">搜索</FieldLabel>
               <div className="flex items-center gap-2">
@@ -1392,7 +1392,7 @@ function ProviderPresetDialog({
               </Table>
             </div>
           </div>
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
             <Field>
               <FieldLabel htmlFor="provider-preset-api-key">API Key</FieldLabel>
               <Input

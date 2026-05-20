@@ -131,7 +131,7 @@ In `desktop/src/modules/agent/components/agent-message-event.tsx`, replace the `
       <div className={cn(
         "min-w-0 whitespace-pre-wrap break-words text-sm leading-7",
         outgoing
-          ? "max-w-[72%] rounded-xl bg-muted px-4 py-2 text-foreground"
+          ? "max-w-[72%] rounded-lg bg-muted px-4 py-2 text-foreground"
           : "max-w-[76ch] px-1 py-2 text-foreground",
       )}>
         {segments.map((segment, index) => segment.kind === "text" ? (
@@ -235,8 +235,8 @@ Expected: FAIL because the current composer uses `rounded-md` and tighter paddin
 In `desktop/src/modules/agent/index.tsx`, change the first right-panel wrapper from:
 
 ```tsx
-      <div className="flex h-full min-h-0 flex-col gap-3">
-        <div className="flex items-center justify-between gap-3">
+      <div className="flex h-full min-h-0 flex-col gap-2">
+        <div className="flex items-center justify-between gap-2">
 ```
 
 to:

@@ -204,7 +204,7 @@ function VariablesPanel() {
   }
 
   const formFields = (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2">
       <div className="flex flex-col gap-2">
         <Label htmlFor="variable-name">名称</Label>
         <Input
@@ -241,7 +241,7 @@ function VariablesPanel() {
   )
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2">
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           在内容中使用 <code className="rounded bg-muted px-1 py-0.5 font-mono text-xs">{"${{ NAME }}"}</code> 占位符，安装时自动替换。

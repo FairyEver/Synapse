@@ -117,7 +117,7 @@ function SwitchRepositoryOnboardingDialog() {
           <DialogTitle>设置你在”{pendingSwitchOnboarding.repositoryName}”里的显示名</DialogTitle>
         </DialogHeader>
 
-        <FieldGroup className="gap-4">
+        <FieldGroup className="gap-2">
           <Field>
             <FieldLabel htmlFor="switch-onboarding-user-id">用户 ID</FieldLabel>
             <Input

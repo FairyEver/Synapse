@@ -709,14 +709,14 @@ Refactor `ProviderPanelView` to render:
 
 ```tsx
 <Card>
-  <CardHeader className="flex flex-row items-center justify-between gap-3">
+  <CardHeader className="flex flex-row items-center justify-between gap-2">
     <CardTitle className="text-base">Claude 供应商</CardTitle>
     <Button type="button" size="sm" onClick={onAdd}>
       <Plus data-icon="inline-start" />
       新建
     </Button>
   </CardHeader>
-  <CardContent className="flex flex-col gap-4">
+  <CardContent className="flex flex-col gap-2">
     <ProviderSelector
       providers={visibleProviders}
       selectedProviderId={selectedProvider?.id}
@@ -780,7 +780,7 @@ Do not copy cc-switch inline styles, hex colors, emoji hints, or gradient partne
 Render fields in this order:
 
 ```tsx
-<div className="grid gap-4 sm:grid-cols-2">
+<div className="grid gap-2 sm:grid-cols-2">
   <Field>
     <FieldLabel htmlFor="provider-name">供应商名称</FieldLabel>
     <Input
@@ -849,7 +849,7 @@ Use existing `Collapsible`:
       高级选项
     </Button>
   </CollapsibleTrigger>
-  <CollapsibleContent className="grid gap-4 sm:grid-cols-2">
+  <CollapsibleContent className="grid gap-2 sm:grid-cols-2">
     <Field>
       <FieldLabel htmlFor="provider-id">ID</FieldLabel>
       <Input

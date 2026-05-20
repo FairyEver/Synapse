@@ -2243,7 +2243,7 @@ export function CommandConfigForm({
   readonly onChange: (value: CommandActionConfig) => void
 }) {
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-2">
       <Field>
         <FieldLabel htmlFor="task-action-command-shell">Shell</FieldLabel>
         <FieldContent>
@@ -2298,7 +2298,7 @@ import type { ActionRunResult } from "../../action-packages/types"
 
 function ActionResultView({ result }: { readonly result: ActionRunResult }) {
   return (
-    <div className="grid gap-3">
+    <div className="grid gap-2">
       {result.summary ? <p className="text-sm text-muted-foreground">{result.summary}</p> : null}
       {result.metrics ? <MetricsView metrics={result.metrics} /> : null}
       {result.error ? <OutputBlock label="错误" value={result.error} /> : null}

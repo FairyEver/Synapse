@@ -215,7 +215,7 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
       <DialogContent className="max-w-xl">
         <DialogHeader><DialogTitle>编辑工作流参数</DialogTitle></DialogHeader>
         <ScrollArea className="max-h-[60vh] py-2 pr-1">
-          <div className="grid gap-3">
+          <div className="grid gap-2">
           {draft.length === 0 && (
             <p className="text-sm text-muted-foreground">暂无参数。</p>
           )}

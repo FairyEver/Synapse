@@ -1935,7 +1935,7 @@ export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="border-b px-4 py-2">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
           <Tabs value={props.view} onValueChange={(next) => props.onViewChange(next as UsageViewId)}>
             <TabsList>
               {VIEWS.map((view) => (

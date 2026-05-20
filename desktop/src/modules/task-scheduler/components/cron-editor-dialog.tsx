@@ -173,7 +173,7 @@ function CronEditorFields({
   onTemplateChange,
 }: CronEditorFieldsProps) {
   return (
-    <FieldGroup className="gap-4">
+    <FieldGroup className="gap-2">
       <Tabs
         data-track="cron-editor-tabs"
         value={activeTab}
@@ -218,7 +218,7 @@ function CommonTemplateFields({
   onTemplateChange: (patch: Partial<CronTemplateDraft>) => void
 }) {
   return (
-    <FieldGroup className="gap-3">
+    <FieldGroup className="gap-2">
       <Field>
         <FieldLabel htmlFor="cron-editor-template">计划</FieldLabel>
         <FieldContent>

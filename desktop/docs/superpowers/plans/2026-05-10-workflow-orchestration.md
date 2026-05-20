@@ -1859,7 +1859,7 @@ export function RunParamsDialog({ open, params, onConfirm, onCancel }: RunParams
     <Dialog open={open} onOpenChange={(o) => !o && onCancel()}>
       <DialogContent>
         <DialogHeader><DialogTitle>设置运行参数</DialogTitle></DialogHeader>
-        <div className="grid gap-4 py-4">
+        <div className="grid gap-2 py-4">
           {params.length === 0 && <p className="text-sm text-muted-foreground">此工作流无需参数。</p>}
           {params.map((p) => (
             <div key={p.name} className="grid gap-1.5">

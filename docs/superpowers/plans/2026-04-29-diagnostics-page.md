@@ -2052,10 +2052,10 @@ function DiagnosticsPanel() {
 
   return (
     <>
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
         <Card>
           <CardHeader>
-            <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="flex flex-wrap items-start justify-between gap-2">
               <div className="flex min-w-0 flex-col gap-2">
                 <CardTitle>诊断</CardTitle>
                 {report ? (
@@ -2138,9 +2138,9 @@ function DiagnosticsReportDetails({ report }: { report: SynapseDiagnosticsReport
           <CardHeader>
             <CardTitle className="text-base">{group}</CardTitle>
           </CardHeader>
-          <CardContent className="flex flex-col gap-3">
+          <CardContent className="flex flex-col gap-2">
             {checks.map((check, index) => (
-              <div key={check.id} className="flex flex-col gap-3">
+              <div key={check.id} className="flex flex-col gap-2">
                 {index > 0 ? <Separator /> : null}
                 <CheckRow check={check} />
               </div>
@@ -2154,7 +2154,7 @@ function DiagnosticsReportDetails({ report }: { report: SynapseDiagnosticsReport
 
 function CheckRow({ check }: { check: SynapseDiagnosticsCheck }) {
   return (
-    <div className="flex min-w-0 flex-col gap-3">
+    <div className="flex min-w-0 flex-col gap-2">
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
           <div className="font-medium">{check.name}</div>

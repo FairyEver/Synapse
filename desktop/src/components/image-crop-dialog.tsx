@@ -147,7 +147,7 @@ const ImageCropDialog = forwardRef<ImageCropDialogRef, ImageCropDialogProps>(
             </DialogHeader>
 
             {imageSrc && (
-              <div className="flex flex-col items-center gap-4">
+              <div className="flex flex-col items-center gap-2">
                 <div
                   className="overflow-hidden rounded-lg"
                   onWheel={handleWheel}

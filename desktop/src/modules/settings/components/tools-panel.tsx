@@ -3,7 +3,7 @@ import { EditorDirectoriesContent } from "@/modules/settings/components/editor-d
 
 function ToolsPanel() {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2">
       <Card>
         <CardHeader>
           <CardTitle className="text-base">IDE</CardTitle>

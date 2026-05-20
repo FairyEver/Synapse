@@ -24,7 +24,7 @@ function ConfigBackupPanel() {
   return (
     <>
       <SettingsGroup>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           <p className="text-sm font-medium text-foreground">配置</p>
           <div className="flex gap-2">
             <Button

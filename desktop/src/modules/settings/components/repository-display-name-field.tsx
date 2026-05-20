@@ -191,7 +191,7 @@ function RepositoryDisplayNameField({
           <DialogHeader>
             <DialogTitle>设置作者署名</DialogTitle>
           </DialogHeader>
-          <div className="flex flex-col gap-4 py-4">
+          <div className="flex flex-col gap-2 py-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor={`display-name-${repositoryUuid}`}>作者署名</Label>
               <Input

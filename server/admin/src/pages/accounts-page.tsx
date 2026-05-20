@@ -36,7 +36,7 @@ export function AccountsPage() {
   const hasAccounts = accounts.length > 0
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-2">
       <div className="-mx-1 flex flex-nowrap items-center gap-2 overflow-x-auto px-1 py-1">
         <Input
           id="account-email-search"

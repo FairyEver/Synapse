@@ -19,7 +19,7 @@ function RepositoryMaintenancePanel({ repositoryUuid }: RepositoryMaintenancePan
 
   return (
     <SettingsGroup>
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
         <div className="flex flex-col gap-1">
           <p className="text-sm font-medium text-foreground">整理历史记录</p>
         </div>

@@ -660,7 +660,7 @@ function RepositoryListEditor({
       </Dialog>
 
       {repositories.length > 0 && (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           {repositories.map((repository) => {
             const isActive = repository.uuid === activeRepoUuid
 
@@ -686,7 +686,7 @@ function RepositoryListEditor({
         </div>
       )}
 
-      <div className="mt-4 flex flex-col gap-4">
+      <div className="mt-4 flex flex-col gap-2">
         {!hasRepositoryBridge ? (
           <Input
             value={manualPath}

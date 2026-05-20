@@ -228,9 +228,9 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   }
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2">
       {projects.length > 0 && (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           {projects.map((project) => (
             <Card key={project.id}>
               <CardHeader className="pb-2">
@@ -292,7 +292,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
           <DialogHeader>
             <DialogTitle>添加项目</DialogTitle>
           </DialogHeader>
-          <FieldGroup className="gap-4">
+          <FieldGroup className="gap-2">
             <Field>
               <Label htmlFor="dialog-project-name">项目名称</Label>
               <Input
@@ -351,7 +351,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
           <DialogHeader>
             <DialogTitle>修改项目</DialogTitle>
           </DialogHeader>
-          <FieldGroup className="gap-4">
+          <FieldGroup className="gap-2">
             <Field>
               <Label htmlFor="edit-project-name">项目名称</Label>
               <Input

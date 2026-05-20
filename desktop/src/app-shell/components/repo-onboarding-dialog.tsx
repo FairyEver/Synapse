@@ -135,7 +135,7 @@ function RepoOnboardingDialog() {
           <DialogTitle>设置你在”{activeRepository.name}”里的显示名</DialogTitle>
         </DialogHeader>
 
-        <FieldGroup className="gap-4">
+        <FieldGroup className="gap-2">
           <Field>
             <FieldLabel htmlFor="repo-onboarding-user-id">用户 ID</FieldLabel>
             <InputGroup>

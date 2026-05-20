@@ -411,9 +411,9 @@ function TaskCard({
 
   return (
     <div
-      className={`rounded-xl bg-card p-4 text-card-foreground ring-1 ring-foreground/10 transition-colors hover:bg-muted/40 ${disabled ? "opacity-70" : ""}`}
+      className={`rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10 transition-colors hover:bg-muted/40 ${disabled ? "opacity-70" : ""}`}
     >
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-2">
         <Badge variant={badge.variant}>{badge.label}</Badge>
         <Switch
           size="sm"

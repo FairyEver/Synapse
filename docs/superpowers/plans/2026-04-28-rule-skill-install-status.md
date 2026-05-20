@@ -1474,7 +1474,7 @@ function EditorInstallStatusPanel({
   if (error) {
     return (
       <section className="rounded-lg border border-border bg-background px-3 py-3">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
           <p className="text-sm font-medium text-foreground">安装状态</p>
           <Button type="button" variant="outline" size="sm" onClick={onRefresh}>
             <RefreshCw data-icon="inline-start" />
@@ -1488,7 +1488,7 @@ function EditorInstallStatusPanel({
 
   return (
     <section className="rounded-lg border border-border bg-background px-3 py-3">
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex items-center justify-between gap-2">
         <p className="text-sm font-medium text-foreground">安装状态</p>
         <Button type="button" variant="ghost" size="sm" disabled={isLoading} onClick={onRefresh}>
           {isLoading ? <LoaderCircle className="animate-spin" data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}

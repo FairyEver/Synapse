@@ -632,7 +632,7 @@ function ContentListCard({
     <div
       className="flex flex-col rounded-lg bg-background px-3 py-3 transition-shadow hover:ring-2 hover:ring-muted-foreground/25"
     >
-      <div className="flex items-start gap-3">
+      <div className="flex items-start gap-2">
         <button
           type="button"
           className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"

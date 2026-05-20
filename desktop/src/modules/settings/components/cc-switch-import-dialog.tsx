@@ -135,7 +135,7 @@ function CcSwitchImportDialog({
           <DialogTitle>从 CCS 导入</DialogTitle>
         </DialogHeader>
 
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center justify-between gap-2">
           <div className="min-w-0 text-sm text-muted-foreground">
             {preview?.source?.path ?? "默认位置"}
           </div>
@@ -219,7 +219,7 @@ function CcSwitchProviderRow({
       </div>
 
       <div className="min-w-0 flex-1">
-        <div className="flex items-start justify-between gap-3">
+        <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <div className="truncate font-medium">{item.name}</div>
             <div className="truncate text-xs text-muted-foreground">{item.baseUrl || "-"}</div>

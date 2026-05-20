@@ -32,7 +32,7 @@ function ModuleSidebar({
     <aside
       data-layout={dataLayout}
       className={cn(
-        "flex h-full min-h-0 flex-col gap-2 px-2 py-2.5",
+        "flex h-full min-h-0 flex-col gap-2 p-2",
         variant === "card" && "rounded-2xl bg-background p-2 ring-1 ring-foreground/10",
         className,
       )}

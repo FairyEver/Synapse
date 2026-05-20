@@ -259,7 +259,7 @@ function RuleCreateDialog({
     >
       <FieldGroup className="gap-5">
         {isEditMode ? (
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-3">
             {titleField}
             {nameField}
             {categoryField}

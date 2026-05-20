@@ -502,7 +502,7 @@ function SkillCreateDialog({
     >
       <div className="flex flex-col gap-5">
         {isEditMode ? (
-          <div className="grid gap-4 sm:grid-cols-3">
+          <div className="grid gap-2 sm:grid-cols-3">
             {titleField}
             {nameField}
             {categoryField}
@@ -517,8 +517,8 @@ function SkillCreateDialog({
         {descriptionField}
         {!isEditMode ? categoryField : null}
         {contentField}
-        <div className="flex flex-col gap-3">
-          <div className="flex items-start justify-between gap-3">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-start justify-between gap-2">
             <div>
               <Label>附件</Label>
               <p className="mt-1 text-sm text-muted-foreground">

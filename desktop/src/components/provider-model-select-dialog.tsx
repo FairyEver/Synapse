@@ -182,9 +182,9 @@ function ProviderModelSelectDialog({
         <DialogHeader>
           <DialogTitle>选择供应商 + 模型</DialogTitle>
         </DialogHeader>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           {error ? (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2">
               <p className="text-sm text-destructive">{error}</p>
               <Button type="button" variant="outline" size="sm" onClick={() => void loadProviders()}>
                 重试

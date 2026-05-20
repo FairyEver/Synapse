@@ -168,7 +168,7 @@ function CreateTableDialog({ open, onOpenChange, onSubmit }: CreateTableDialogPr
           <DialogTitle>新建表</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-2">
             <Label htmlFor="table-name">表名</Label>
             <Input

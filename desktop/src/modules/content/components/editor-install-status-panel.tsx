@@ -162,7 +162,7 @@ function renderInstallStatusTargetList({
             key={`${entry.editorId}-${entry.scope}-${entry.projectId ?? "global"}-${entry.status}`}
             className="grid gap-2 py-3 first:pt-0 last:pb-0"
           >
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
                 <div className="flex min-w-0 items-center gap-2">
                   <p data-install-status-row-title="" className="truncate font-medium">
@@ -234,7 +234,7 @@ function EditorInstallStatusDetailList({
 
   return (
     <TooltipProvider>
-      <Tabs defaultValue={defaultEditorId} className="gap-3">
+      <Tabs defaultValue={defaultEditorId} className="gap-2">
         <TabsList variant="line" className="mx-auto h-auto! w-fit justify-center gap-0 overflow-visible py-1">
           {editorGroups.map((group) => (
             <Tooltip key={group.editorId}>
@@ -255,7 +255,7 @@ function EditorInstallStatusDetailList({
 
         {editorGroups.map((group) => (
           <TabsContent key={group.editorId} value={group.editorId} className="mt-0">
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-2">
               <p data-install-status-editor-heading="" className="font-medium">
                 {group.editorLabel}
               </p>
@@ -289,7 +289,7 @@ function EditorInstallStatusPanel({
 
       <DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col overflow-hidden sm:max-w-[420px]">
         <DialogHeader className="pr-8">
-          <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center justify-between gap-2">
             <DialogTitle>安装状态</DialogTitle>
             <Button
               type="button"

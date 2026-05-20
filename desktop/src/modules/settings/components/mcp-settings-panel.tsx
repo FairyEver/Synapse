@@ -169,7 +169,7 @@ function McpSettingsPanel() {
           />
         </CardAction>
       </CardHeader>
-      <CardContent className="flex flex-col gap-3">
+      <CardContent className="flex flex-col gap-2">
         {mcpHttpStatusError ? (
           <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
             <span>{mcpHttpStatusError}</span>
@@ -194,7 +194,7 @@ function McpSettingsPanel() {
         {mcpServers.map((server) => (
           <div
             key={server.id}
-            className="flex items-center justify-between gap-3"
+            className="flex items-center justify-between gap-2"
           >
             <div className="flex min-w-0 items-center gap-2">
               <img

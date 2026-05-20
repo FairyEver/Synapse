@@ -98,6 +98,6 @@ describe("UsageAnalysisShell", () => {
     )
 
     expect(html).not.toContain('data-slot="scroll-area" class="relative min-h-0 overflow-hidden min-h-0 flex-1 px-4 py-3"')
-    expect(html).toContain('class="min-h-full px-4 py-3"')
+    expect(html).toContain('class="min-h-full p-2"')
   })
 })

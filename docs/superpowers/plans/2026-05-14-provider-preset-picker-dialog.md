@@ -386,7 +386,7 @@ function ProviderPresetPickerDialog({
           <DialogTitle>选择供应商预设</DialogTitle>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           <Input
             ref={inputRef}
             value={query}
@@ -442,7 +442,7 @@ function ProviderPresetPickerDialog({
           </Button>
 
           <ScrollArea className="h-80">
-            <div className="flex flex-col gap-4 pr-3">
+            <div className="flex flex-col gap-2 pr-3">
               {groups.length === 0 ? (
                 <p className="py-8 text-center text-sm text-muted-foreground">没有匹配的预设</p>
               ) : groups.map((group) => (

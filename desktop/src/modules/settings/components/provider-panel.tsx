@@ -433,7 +433,7 @@ function ProviderPanelView({
 
   return (
     <Card>
-      <CardHeader className="flex flex-row items-center justify-between gap-3">
+      <CardHeader className="flex flex-row items-center justify-between gap-2">
         <div className="flex min-w-0 items-center gap-2">
           <CardTitle className="text-base">Claude 供应商</CardTitle>
         </div>
@@ -450,7 +450,7 @@ function ProviderPanelView({
       </CardHeader>
       <CardContent>
         {error ? (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <p className="text-sm text-destructive">{error}</p>
             <Button type="button" variant="outline" size="sm" onClick={onRetry}>
               重试
@@ -530,7 +530,7 @@ function ProviderDetailDialog({
         </DialogHeader>
 
         {provider ? (
-          <div className="flex flex-col gap-4">
+          <div className="flex flex-col gap-2">
             <div className="grid gap-2 text-sm sm:grid-cols-2">
               <ProviderDetailItem label="ID" value={provider.id} />
               <ProviderDetailItem label="类型" value={providerCategoryLabel(provider.category)} />
@@ -579,7 +579,7 @@ function ProviderModelList({ provider }: { readonly provider: SynapseAgentProvid
   return (
     <div className="flex flex-col gap-1">
       {models.map((model) => (
-        <div key={model.label} className="flex min-w-0 items-baseline gap-3">
+        <div key={model.label} className="flex min-w-0 items-baseline gap-2">
           <span className="w-14 shrink-0 text-xs text-muted-foreground">{model.label}</span>
           <span className="min-w-0 truncate">{model.value}</span>
         </div>
@@ -604,7 +604,7 @@ function ProviderRowActions({
   if (provider.readonly) return null
 
   return (
-    <div className="flex justify-end gap-4">
+    <div className="flex justify-end gap-2">
       <ProviderTextAction onClick={() => onEdit(provider)}>编辑</ProviderTextAction>
       {provider.active ? null : (
         <ProviderTextAction onClick={() => onSetActive(provider)}>设为默认</ProviderTextAction>
@@ -776,7 +776,7 @@ function ProviderFormDialog({
         <FormDialog
           title={mode === "create" ? "新建 Claude 供应商" : "编辑 Claude 供应商"}
           contentClassName="sm:max-w-4xl"
-          bodyClassName="flex flex-col gap-4"
+          bodyClassName="flex flex-col gap-2"
           onSubmit={onSubmit}
           footer={(
             <>
@@ -880,7 +880,7 @@ function ProviderInlineEditor({
     <div className="flex flex-col gap-5">
       <FieldGroup>
         {mode === "create" && selectedPreset && selectedPreset.templateValues.length > 0 ? (
-          <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             {selectedPreset.templateValues.map((item) => (
               <Field key={item.key}>
                 <FieldLabel htmlFor={`provider-template-${item.key}`}>{item.label}</FieldLabel>
@@ -896,7 +896,7 @@ function ProviderInlineEditor({
           </div>
         ) : null}
 
-        <div className={`grid gap-4 ${presetField ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
+        <div className={`grid gap-2 ${presetField ? "md:grid-cols-4" : "md:grid-cols-3"}`}>
           {presetField}
           <Field>
             <FieldLabel htmlFor="provider-name">供应商名称</FieldLabel>
@@ -930,7 +930,7 @@ function ProviderInlineEditor({
             />
           </Field>
         </div>
-        <div className="grid gap-4 md:grid-cols-2">
+        <div className="grid gap-2 md:grid-cols-2">
           <Field>
             <FieldLabel htmlFor="provider-base-url">请求地址</FieldLabel>
             <Input
@@ -989,7 +989,7 @@ function ProviderApiAndModelFields({
 }) {
   return (
     <>
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className="grid gap-2 md:grid-cols-2">
         <Field>
           <FieldLabel>API 格式</FieldLabel>
           <Select value="anthropic" disabled>
@@ -1028,14 +1028,14 @@ function ProviderApiAndModelFields({
         </Field>
       </div>
 
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
         <div className="flex flex-col gap-1">
           <p className="text-sm font-medium">模型映射</p>
           <FieldDescription>
             如果供应商原生提供 Claude 系列模型，通常无需配置。仅在需要将请求映射到不同模型名称时填写。
           </FieldDescription>
         </div>
-        <div className="grid grid-cols-4 gap-4">
+        <div className="grid grid-cols-4 gap-2">
           <Field>
             <FieldLabel htmlFor="provider-model">主模型</FieldLabel>
             <Input

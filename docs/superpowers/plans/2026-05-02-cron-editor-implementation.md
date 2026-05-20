@@ -589,7 +589,7 @@ contentClassName="sm:max-w-[560px]"
 bodyClassName="overflow-y-auto"
 ```
 
-Use one `FieldGroup` with `gap-4`, not a sidebar and not nested cards.
+Use one `FieldGroup` with `gap-2`, not a sidebar and not nested cards.
 
 - [ ] **Step 6: Run component tests**
 

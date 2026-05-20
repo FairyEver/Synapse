@@ -47,8 +47,8 @@ function AgentRuntimeRow({ item }: AgentRuntimeRowProps) {
   const icon = agentIconById.get(item.id)
 
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-4">
-      <div className="flex min-w-0 items-center gap-3">
+    <div className="flex items-center justify-between gap-2 px-4 py-4">
+      <div className="flex min-w-0 items-center gap-2">
         {icon ? (
           <img src={icon} alt="" className="size-10 shrink-0 rounded-lg" />
         ) : null}

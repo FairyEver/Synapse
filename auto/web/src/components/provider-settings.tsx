@@ -56,7 +56,7 @@ export function ProviderSettings({ config, onChange }: ProviderSettingsProps) {
             className="w-full border border-input rounded-md px-2.5 py-1.5 text-sm bg-background font-mono"
           />
         </Field>
-        <div className="col-span-2 flex items-center gap-4 pt-1">
+        <div className="col-span-2 flex items-center gap-2 pt-1">
           <label className="flex items-center gap-2 text-sm cursor-pointer">
             <input
               type="checkbox"
@@ -112,7 +112,7 @@ export function ProviderSettings({ config, onChange }: ProviderSettingsProps) {
           className="w-full border border-input rounded-md px-2.5 py-1.5 text-sm bg-background font-mono"
         />
       </Field>
-      <div className="col-span-2 flex items-center gap-4 pt-1">
+      <div className="col-span-2 flex items-center gap-2 pt-1">
         <label className="flex items-center gap-2 text-sm cursor-pointer">
           <input
             type="checkbox"

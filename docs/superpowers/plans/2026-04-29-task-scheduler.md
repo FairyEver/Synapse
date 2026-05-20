@@ -1354,7 +1354,7 @@ Create `index.tsx` with:
 function TaskSchedulerModule() {
   const { tasks, loading, refresh, bridge, listRuns } = useTaskScheduler()
   return (
-    <div className="flex h-full min-h-0 flex-col gap-4">
+    <div className="flex h-full min-h-0 flex-col gap-2">
       {/* header, filters, table, dialogs */}
     </div>
   )

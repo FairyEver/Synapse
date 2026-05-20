@@ -30,8 +30,8 @@ export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
   return (
     <div className="flex h-full flex-col overflow-hidden">
       <div className="border-b px-4 py-2">
-        <div className="flex items-center justify-between gap-3">
-          <div className="flex min-w-0 items-center gap-3">
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex min-w-0 items-center gap-2">
             <h2 className="shrink-0 text-sm font-medium">{props.title}</h2>
             <Tabs value={props.view} onValueChange={(next) => props.onViewChange(next as UsageViewId)}>
               <TabsList>
@@ -60,7 +60,7 @@ export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
         </div>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-        <div className="min-h-full px-4 py-3">
+        <div className="min-h-full p-2">
           {props.children}
         </div>
       </ScrollArea>

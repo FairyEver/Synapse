@@ -220,7 +220,7 @@ function LogExportPanel() {
           <CardTitle>日志</CardTitle>
           <CardDescription>导出应用运行日志，用于排查问题。</CardDescription>
         </CardHeader>
-        <CardContent className="flex flex-wrap gap-3">
+        <CardContent className="flex flex-wrap gap-2">
           <Button
             variant="outline"
             size="sm"

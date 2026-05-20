@@ -69,7 +69,7 @@ export function BackupPage() {
   }
 
   return (
-    <div className="grid gap-4">
+    <div className="grid gap-2">
       <div className="flex items-center">
         <Button onClick={handleBackup} disabled={backingUp}>
           {backingUp ? "备份中…" : "立即备份"}

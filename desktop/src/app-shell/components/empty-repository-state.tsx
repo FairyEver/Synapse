@@ -293,7 +293,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
               在 {createParentPath} 下创建新仓库
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-col gap-4 py-4">
+          <div className="flex flex-col gap-2 py-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="repo-name">仓库名称 <span className="text-destructive">*</span></Label>
               <Input
@@ -386,12 +386,12 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
             </p>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2">
+          <div className="grid gap-2 md:grid-cols-2">
             <button
               type="button"
               onClick={handleChooseDirectory}
               className={cn(
-                "flex w-full items-start gap-4 rounded-lg border border-border bg-card p-4 text-left transition-colors",
+                "flex w-full items-start gap-2 rounded-lg border border-border bg-card p-4 text-left transition-colors",
                 "hover:bg-accent hover:text-accent-foreground",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               )}
@@ -409,7 +409,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
               type="button"
               onClick={handleCreateNewRepository}
               className={cn(
-                "flex w-full items-start gap-4 rounded-lg border border-border bg-card p-4 text-left transition-colors",
+                "flex w-full items-start gap-2 rounded-lg border border-border bg-card p-4 text-left transition-colors",
                 "hover:bg-accent hover:text-accent-foreground",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               )}

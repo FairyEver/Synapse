@@ -188,7 +188,7 @@ function ChoicesEditorDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           <ScrollArea className="max-h-72 rounded-md border">
             <div className="flex flex-col">
             {rows.length === 0 ? (

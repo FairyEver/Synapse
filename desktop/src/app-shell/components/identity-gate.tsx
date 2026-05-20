@@ -13,7 +13,7 @@ const logger = createRendererLogger("app.identity-gate")
 function IdentityScreenShell({ children }: { children: ReactNode }) {
   return (
     <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
-      <div className="flex w-full max-w-xl flex-col gap-6 rounded-xl border border-border bg-card p-6">
+      <div className="flex w-full max-w-xl flex-col gap-6 rounded-lg border border-border bg-card p-6">
         {children}
       </div>
     </main>
@@ -52,7 +52,7 @@ function IdentityGate({ children }: { children: ReactNode }) {
   if (error) {
     return (
       <IdentityScreenShell>
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-2">
           <h1 className="text-lg font-medium text-foreground">无法读取身份信息</h1>
           <p className="text-sm text-muted-foreground">{error}</p>
           <div className="flex justify-end">
@@ -71,7 +71,7 @@ function IdentityGate({ children }: { children: ReactNode }) {
   if (localIdentityState?.status === "needs-recovery") {
     return (
       <IdentityScreenShell>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-2">
             <h1 className="text-xl font-medium text-foreground">身份 ID 无法读取</h1>
           </div>

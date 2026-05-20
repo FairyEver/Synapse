@@ -213,7 +213,7 @@ function ContentImageField({
   // --- 空状态 ---
   if (!iconImagePreview) {
     return (
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-2">
         <div
           className={cn(
             "flex flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 transition-colors",
@@ -266,7 +266,7 @@ function ContentImageField({
 找到 `TabsContent value="image"`（约第 95-135 行），替换为：
 
 ```typescript
-<TabsContent value="image" className="flex flex-col gap-4">
+<TabsContent value="image" className="flex flex-col gap-2">
   <ContentImageField
     iconImagePreview={iconImagePreview}
     iconImageError={iconImageError}
@@ -317,7 +317,7 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
 ```typescript
   // --- 有图状态 ---
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-2">
       <div
         className={cn(
           "group relative size-24 overflow-hidden rounded-lg border-2 transition-colors",
