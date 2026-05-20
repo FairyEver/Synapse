@@ -13,7 +13,7 @@
     "quit": "node scripts/quit.mjs",
     "quit:docker": "docker compose -f server/compose.yml down",
     "quit:processes": "node scripts/quit-processes.mjs",
-    "bump:commit:push": "pnpm --filter @synapse/desktop run bump:commit:push",
+    "desktop:bump:commit:push": "pnpm --filter @synapse/desktop run bump:commit:push",
     "auto": "pnpm --filter @synapse/auto run start"
   }
 }
