@@ -1,4 +1,5 @@
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { cn } from "@/lib/utils"
 
 interface MetricItem {
   readonly label: string
@@ -8,11 +9,12 @@ interface MetricItem {
 
 interface MetricGridProps {
   readonly metrics: readonly MetricItem[]
+  readonly columns?: "default" | "four"
 }
 
-export function MetricGrid({ metrics }: MetricGridProps) {
+export function MetricGrid({ metrics, columns = "default" }: MetricGridProps) {
   return (
-    <div className="grid gap-3 md:grid-cols-3 xl:grid-cols-6">
+    <div className={cn("grid gap-3", columns === "four" ? "grid-cols-4" : "md:grid-cols-3 xl:grid-cols-6")}>
       {metrics.map((metric) => (
         <Card key={metric.label} size="sm">
           <CardHeader>

@@ -3,12 +3,13 @@ import { switchNodeManifest } from "./manifest"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "./constants"
 import type { SwitchNodeConfig } from "./schema"
 import { NodeProgressBar, useRunningTimer } from "@/modules/workflow/runner/node-progress-bar"
+import { CopyIdButton } from "@/modules/workflow/components/copy-id-button"
 import { useProviderLookup } from "../provider-lookup-context"
 import { statusClass, type NodeStatus } from "../node-status-utils"
 
-export function SwitchNodeCard({ config, name, selected, status, progressLabel, startedAt }: {
+export function SwitchNodeCard({ config, name, selected, status, progressLabel, startedAt, nodeId }: {
   config: SwitchNodeConfig; name?: string; selected?: boolean; status?: NodeStatus
-  progressLabel?: string; startedAt?: number
+  progressLabel?: string; startedAt?: number; nodeId?: string
 }) {
   const Icon = switchNodeManifest.icon
   const timer = useRunningTimer(startedAt, status === "running")
@@ -25,9 +26,10 @@ export function SwitchNodeCard({ config, name, selected, status, progressLabel, 
       <div className="px-3 py-2 flex flex-col justify-center shrink-0" style={{ height: SWITCH_HEADER_H }}>
         <div className="flex items-center gap-2 mb-1.5">
           <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-          <span className="text-xs font-medium text-foreground truncate">{name || "Switch"}</span>
+          <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{name || "Switch"}</span>
+          {nodeId ? <CopyIdButton id={nodeId} kind="node" /> : null}
           {status === "running" && timer && (
-            <span className="ml-auto text-[10px] font-mono text-muted-foreground shrink-0">{timer}</span>
+            <span className="text-[10px] font-mono text-muted-foreground shrink-0">{timer}</span>
           )}
         </div>
         {status === "running" && progressLabel ? (

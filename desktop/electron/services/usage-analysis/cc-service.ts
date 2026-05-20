@@ -76,6 +76,8 @@ interface AggregateValue {
   requests: number
 }
 
+const TOOL_CALLS_AGGREGATE_MODEL = "__synapse_tool_calls__"
+
 function tokenTotal(row: UsageEventRow): number {
   return row.input_tokens + row.output_tokens + row.cache_read_tokens + row.cache_write_tokens + row.reasoning_tokens
 }
@@ -113,6 +115,7 @@ export class CcUsageAnalysisService {
   }
 
   getOverview(range: UsageRangeInput): UsageOverviewReport {
+    this.ensureAggregatesReady()
     const totalsRow = this.queryUsageTotals(range)
     return {
       generatedAt: new Date().toISOString(),
@@ -140,23 +143,29 @@ export class CcUsageAnalysisService {
       },
       topModels: this.getModels(range).slice(0, 5),
       topProjects: this.getProjects(range).slice(0, 5),
-      topTools: this.getTools(range).slice(0, 5),
-      trend: this.getTime(range).slice(-30),
+      topTools: this.queryTools(range, 5),
+      trend: this.getTime(range),
     }
   }
 
   getTime(range: UsageRangeInput): UsageTimeBucket[] {
-    const bucketColumn = range.preset === "7d" ? "hour" : "date"
-    const usageFilter = this.createRangeWhere(range)
-    const toolFilter = this.createRangeWhere(range)
+    this.ensureAggregatesReady()
+    if (range.preset === "today") {
+      return this.queryTodayTime(range)
+    }
+    const usesHourlyBuckets = range.bucket === "hour"
+    const bucketColumn = usesHourlyBuckets ? "hour" : "date"
+    const tableName = usesHourlyBuckets ? `${this.prefix}_hourly_usage` : `${this.prefix}_daily_usage`
+    const usageFilter = this.createAggregateRangeWhere(range, bucketColumn, [`model != ?`], [TOOL_CALLS_AGGREGATE_MODEL])
+    const toolFilter = this.createAggregateRangeWhere(range, bucketColumn, [`model = ?`], [TOOL_CALLS_AGGREGATE_MODEL])
     const usageRows = this.db.prepare(`
       SELECT
         ${bucketColumn} AS bucket,
         SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens,
         SUM(total_cost) AS estimated_cost,
-        COUNT(*) AS requests,
-        COUNT(DISTINCT session_id) AS conversations
-      FROM ${this.prefix}_usage_events
+        SUM(requests) AS requests,
+        SUM(conversations) AS conversations
+      FROM ${tableName}
       ${usageFilter.whereSql}
       GROUP BY ${bucketColumn}
       ORDER BY ${bucketColumn} ASC
@@ -171,13 +180,13 @@ export class CcUsageAnalysisService {
         SUM(cache_write_tokens) AS cache_write,
         SUM(reasoning_tokens) AS reasoning,
         SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens
-      FROM ${this.prefix}_usage_events
+      FROM ${tableName}
       ${usageFilter.whereSql}
       GROUP BY ${bucketColumn}, model
     `).all(...usageFilter.params) as Record<string, unknown>[]
     const toolRows = this.db.prepare(`
-      SELECT ${bucketColumn} AS bucket, COUNT(*) AS tool_calls
-      FROM ${this.prefix}_tool_events
+      SELECT ${bucketColumn} AS bucket, SUM(tool_calls) AS tool_calls
+      FROM ${tableName}
       ${toolFilter.whereSql}
       GROUP BY ${bucketColumn}
     `).all(...toolFilter.params) as Record<string, unknown>[]
@@ -217,12 +226,13 @@ export class CcUsageAnalysisService {
       })
     }
 
+    const conversationsByBucket = this.queryConversationsByBucket(range, bucketColumn)
     return [...byBucket.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([bucket, value]) => ({
       bucket,
       tokens: value.tokens,
       estimatedCost: value.estimatedCost,
       requests: value.requests,
-      conversations: value.conversations,
+      conversations: conversationsByBucket.get(bucket) ?? value.conversations,
       toolCalls: toolCallsByBucket.get(bucket) ?? 0,
       dominantModel: (modelsByBucket.get(bucket) ?? []).sort((a, b) => compareDesc(a.tokens, b.tokens))[0]?.model ?? "",
       modelBreakdown: (modelsByBucket.get(bucket) ?? []).sort((a, b) => compareDesc(a.tokens, b.tokens)),
@@ -230,7 +240,121 @@ export class CcUsageAnalysisService {
   }
 
   getModels(range: UsageRangeInput): UsageModelRow[] {
-    const filter = this.createRangeWhere(range)
+    this.ensureAggregatesReady()
+    if (range.preset === "today") {
+      return this.queryModelsFromEvents(range)
+    }
+    const filter = this.createAggregateRangeWhere(range, "date", [`model != ?`], [TOOL_CALLS_AGGREGATE_MODEL])
+    const rows = this.db.prepare(`
+      SELECT
+        model,
+        provider,
+        SUM(input_tokens) AS input,
+        SUM(output_tokens) AS output,
+        SUM(cache_read_tokens) AS cache_read,
+        SUM(cache_write_tokens) AS cache_write,
+        SUM(reasoning_tokens) AS reasoning,
+        SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens,
+        SUM(total_cost) AS estimated_cost,
+        SUM(requests) AS requests
+      FROM ${this.prefix}_daily_usage
+      ${filter.whereSql}
+      GROUP BY provider, model
+      ORDER BY tokens DESC
+    `).all(...filter.params) as Record<string, unknown>[]
+    return rows.map((row) => ({
+      model: String(row.model ?? "unknown"),
+      provider: String(row.provider ?? ""),
+      tokens: toNumber(row.tokens),
+      estimatedCost: toNumber(row.estimated_cost),
+      input: toNumber(row.input),
+      output: toNumber(row.output),
+      cacheRead: toNumber(row.cache_read),
+      cacheWrite: toNumber(row.cache_write),
+      reasoning: toNumber(row.reasoning),
+      requests: toNumber(row.requests),
+      averageTokensPerRequest: toNumber(row.requests) > 0 ? toNumber(row.tokens) / toNumber(row.requests) : 0,
+    }))
+  }
+
+  private queryTodayTime(range: UsageRangeInput): UsageTimeBucket[] {
+    const usageFilter = this.createEventRangeWhere(range)
+    const toolFilter = this.createEventRangeWhere(range)
+    const usageRows = this.db.prepare(`
+      SELECT
+        hour AS bucket,
+        SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens,
+        SUM(total_cost) AS estimated_cost,
+        COUNT(*) AS requests,
+        COUNT(DISTINCT session_id) AS conversations
+      FROM ${this.prefix}_usage_events
+      ${usageFilter.whereSql}
+      GROUP BY hour
+      ORDER BY hour ASC
+    `).all(...usageFilter.params) as Record<string, unknown>[]
+    const modelRows = this.db.prepare(`
+      SELECT
+        hour AS bucket,
+        model,
+        SUM(input_tokens) AS input,
+        SUM(output_tokens) AS output,
+        SUM(cache_read_tokens) AS cache_read,
+        SUM(cache_write_tokens) AS cache_write,
+        SUM(reasoning_tokens) AS reasoning,
+        SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens
+      FROM ${this.prefix}_usage_events
+      ${usageFilter.whereSql}
+      GROUP BY hour, model
+    `).all(...usageFilter.params) as Record<string, unknown>[]
+    const toolRows = this.db.prepare(`
+      SELECT hour AS bucket, COUNT(*) AS tool_calls
+      FROM ${this.prefix}_tool_events
+      ${toolFilter.whereSql}
+      GROUP BY hour
+    `).all(...toolFilter.params) as Record<string, unknown>[]
+    const toolCallsByBucket = new Map(toolRows.map((row) => [String(row.bucket ?? ""), toNumber(row.tool_calls)]))
+    const modelsByBucket = new Map<string, {
+      model: string
+      tokens: number
+      input: number
+      output: number
+      cacheRead: number
+      cacheWrite: number
+      reasoning: number
+    }[]>()
+    for (const row of modelRows) {
+      const bucket = String(row.bucket ?? "")
+      const models = modelsByBucket.get(bucket) ?? []
+      models.push({
+        model: String(row.model ?? "unknown"),
+        tokens: toNumber(row.tokens),
+        input: toNumber(row.input),
+        output: toNumber(row.output),
+        cacheRead: toNumber(row.cache_read),
+        cacheWrite: toNumber(row.cache_write),
+        reasoning: toNumber(row.reasoning),
+      })
+      modelsByBucket.set(bucket, models)
+    }
+
+    return usageRows.map((row) => {
+      const bucket = String(row.bucket ?? "")
+      const modelBreakdown = (modelsByBucket.get(bucket) ?? []).sort((a, b) => compareDesc(a.tokens, b.tokens))
+      return {
+        bucket,
+        tokens: toNumber(row.tokens),
+        estimatedCost: toNumber(row.estimated_cost),
+        requests: toNumber(row.requests),
+        conversations: toNumber(row.conversations),
+        toolCalls: toolCallsByBucket.get(bucket) ?? 0,
+        dominantModel: modelBreakdown[0]?.model ?? "",
+        modelBreakdown,
+      }
+    })
+  }
+
+  private queryModelsFromEvents(range: UsageRangeInput): UsageModelRow[] {
+    const filter = this.createEventRangeWhere(range)
     const rows = this.db.prepare(`
       SELECT
         model,
@@ -264,7 +388,51 @@ export class CcUsageAnalysisService {
   }
 
   getProjects(range: UsageRangeInput): UsageProjectRow[] {
-    const filter = this.createRangeWhere(range)
+    this.ensureAggregatesReady()
+    if (range.preset === "today") {
+      return this.queryProjectsFromEvents(range)
+    }
+    const filter = this.createAggregateRangeWhere(range, "date", [`model != ?`], [TOOL_CALLS_AGGREGATE_MODEL])
+    const rows = this.db.prepare(`
+      SELECT
+        workspace_key,
+        SUM(conversations) AS sessions,
+        SUM(requests) AS requests,
+        SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens,
+        SUM(total_cost) AS estimated_cost
+      FROM ${this.prefix}_daily_usage
+      ${filter.whereSql}
+      GROUP BY workspace_key
+      ORDER BY tokens DESC
+    `).all(...filter.params) as Record<string, unknown>[]
+    const toolFilter = this.createAggregateRangeWhere(range, "date", [`model = ?`], [TOOL_CALLS_AGGREGATE_MODEL])
+    const toolRows = this.db.prepare(`
+      SELECT workspace_key, SUM(tool_calls) AS tool_calls
+      FROM ${this.prefix}_daily_usage
+      ${toolFilter.whereSql}
+      GROUP BY workspace_key
+    `).all(...toolFilter.params) as Record<string, unknown>[]
+    const toolCallsByWorkspace = new Map(toolRows.map((row) => [String(row.workspace_key ?? ""), toNumber(row.tool_calls)]))
+    const metadataByWorkspace = this.queryWorkspaceMetadata(range, rows.map((row) => String(row.workspace_key ?? "")))
+    return rows.map((row) => {
+      const workspaceKey = String(row.workspace_key ?? "")
+      const metadata = metadataByWorkspace.get(workspaceKey)
+      const lastTimestamp = toNumber(metadata?.lastTimestampMs)
+      return {
+        workspaceKey,
+        workspaceLabel: metadata?.workspaceLabel || workspaceKey || "unknown",
+        sessions: metadata?.sessions ?? toNumber(row.sessions),
+        requests: toNumber(row.requests),
+        tokens: toNumber(row.tokens),
+        estimatedCost: toNumber(row.estimated_cost),
+        toolCalls: toolCallsByWorkspace.get(workspaceKey) ?? 0,
+        lastUsedAt: lastTimestamp > 0 ? isoFromTimestamp(lastTimestamp) : "",
+      }
+    })
+  }
+
+  private queryProjectsFromEvents(range: UsageRangeInput): UsageProjectRow[] {
+    const filter = this.createEventRangeWhere(range)
     const rows = this.db.prepare(`
       SELECT
         workspace_key,
@@ -303,7 +471,12 @@ export class CcUsageAnalysisService {
   }
 
   getTools(range: UsageRangeInput): UsageToolRow[] {
-    const filter = this.createRangeWhere(range)
+    this.ensureAggregatesReady()
+    return this.queryTools(range)
+  }
+
+  private queryTools(range: UsageRangeInput, limit?: number): UsageToolRow[] {
+    const filter = this.createEventRangeWhere(range)
     const rows = this.db.prepare(`
       SELECT
         tool_name,
@@ -315,7 +488,8 @@ export class CcUsageAnalysisService {
       ${filter.whereSql}
       GROUP BY category, tool_name
       ORDER BY calls DESC
-    `).all(...filter.params) as Record<string, unknown>[]
+      ${typeof limit === "number" ? "LIMIT ?" : ""}
+    `).all(...filter.params, ...(typeof limit === "number" ? [limit] : [])) as Record<string, unknown>[]
     return rows.map((row) => {
       const calls = toNumber(row.calls)
       const failures = toNumber(row.failures)
@@ -331,10 +505,11 @@ export class CcUsageAnalysisService {
   }
 
   getDetails(range: UsageDetailInput): UsageDetailRow[] {
+    this.ensureAggregatesReady()
     const limit = Math.min(Math.max(Math.trunc(range.limit ?? 200), 1), 1000)
     const offset = Math.max(Math.trunc(range.offset ?? 0), 0)
-    const usageFilter = this.createRangeWhere(range, "u.date")
-    const toolFilter = this.createRangeWhere(range)
+    const usageFilter = this.createEventRangeWhere(range, "u.date", "u.timestamp_ms")
+    const toolFilter = this.createEventRangeWhere(range)
     const rows = this.db.prepare(`
       SELECT u.*, COALESCE(t.tool_calls, 0) AS tool_calls
       FROM ${this.prefix}_usage_events u
@@ -367,16 +542,85 @@ export class CcUsageAnalysisService {
     }))
   }
 
-  private createRangeWhere(range: UsageRangeInput, column = "date"): { whereSql: string; params: string[] } {
+  private ensureAggregatesReady(): void {
+    const usageRow = this.db.prepare(`SELECT EXISTS(SELECT 1 FROM ${this.prefix}_usage_events LIMIT 1) AS exists_value`).get() as { exists_value?: number } | undefined
+    if (toNumber(usageRow?.exists_value) === 0) return
+    if (this.hasMissingUsageAggregates() || this.hasStaleToolAggregates() || this.hasStaleCostAggregates()) {
+      rebuildAggregates(this.db, this.prefix)
+    }
+  }
+
+  private hasMissingUsageAggregates(): boolean {
+    const row = this.db.prepare(`
+      SELECT
+        EXISTS(SELECT 1 FROM ${this.prefix}_daily_usage LIMIT 1) AS has_daily,
+        EXISTS(SELECT 1 FROM ${this.prefix}_hourly_usage LIMIT 1) AS has_hourly
+    `).get() as { has_daily?: number; has_hourly?: number } | undefined
+    return toNumber(row?.has_daily) === 0 || toNumber(row?.has_hourly) === 0
+  }
+
+  private hasStaleToolAggregates(): boolean {
+    const toolRow = this.db.prepare(`SELECT EXISTS(SELECT 1 FROM ${this.prefix}_tool_events LIMIT 1) AS exists_value`).get() as { exists_value?: number } | undefined
+    if (toNumber(toolRow?.exists_value) === 0) return false
+    return this.sumToolAggregateCalls("daily") === 0 || this.sumToolAggregateCalls("hourly") === 0
+  }
+
+  private sumToolAggregateCalls(bucket: "daily" | "hourly"): number {
+    const aggregateRow = this.db.prepare(`
+      SELECT COALESCE(SUM(tool_calls), 0) AS tool_calls
+      FROM ${this.prefix}_${bucket}_usage
+      WHERE model = ?
+    `).get(TOOL_CALLS_AGGREGATE_MODEL) as { tool_calls?: number } | undefined
+    return toNumber(aggregateRow?.tool_calls)
+  }
+
+  private hasStaleCostAggregates(): boolean {
+    const row = this.db.prepare(`
+      SELECT
+        COALESCE(SUM(total_cost), 0) AS total_cost,
+        COALESCE(SUM(cost_input + cost_output + cost_cache_read + cost_cache_write + cost_reasoning), 0) AS component_cost
+      FROM ${this.prefix}_daily_usage
+      WHERE model != ?
+    `).get(TOOL_CALLS_AGGREGATE_MODEL) as { total_cost?: number; component_cost?: number } | undefined
+    return toNumber(row?.total_cost) > 0 && toNumber(row?.component_cost) === 0
+  }
+
+  private createAggregateRangeWhere(
+    range: UsageRangeInput,
+    column = "date",
+    extraWhere: readonly string[] = [],
+    extraParams: readonly (string | number | null)[] = [],
+  ): { whereSql: string; params: (string | number | null)[] } {
     const filter = createUsageRangeFilter(range)
-    const params: string[] = []
-    const where: string[] = []
+    const params: (string | number | null)[] = [...extraParams]
+    const where: string[] = [...extraWhere]
     if (filter.sinceDate) {
       where.push(`${column} >= ?`)
-      params.push(filter.sinceDate)
+      params.push(column === "hour" ? filter.sinceHour ?? `${filter.sinceDate} 00` : filter.sinceDate)
     }
     if (filter.untilDate) {
       where.push(`${column} <= ?`)
+      params.push(column === "hour" ? filter.untilHour ?? `${filter.untilDate} 23` : filter.untilDate)
+    }
+    return { whereSql: where.length ? `WHERE ${where.join(" AND ")}` : "", params }
+  }
+
+  private createEventRangeWhere(range: UsageRangeInput, dateColumn = "date", timestampColumn = "timestamp_ms"): { whereSql: string; params: (string | number)[] } {
+    const filter = createUsageRangeFilter(range)
+    const params: (string | number)[] = []
+    const where: string[] = []
+    if (filter.sinceTimestampMs !== undefined) {
+      where.push(`${timestampColumn} >= ?`)
+      params.push(filter.sinceTimestampMs)
+    } else if (filter.sinceDate) {
+      where.push(`${dateColumn} >= ?`)
+      params.push(filter.sinceDate)
+    }
+    if (filter.untilTimestampMs !== undefined) {
+      where.push(`${timestampColumn} <= ?`)
+      params.push(filter.untilTimestampMs)
+    } else if (filter.untilDate) {
+      where.push(`${dateColumn} <= ?`)
       params.push(filter.untilDate)
     }
     return { whereSql: where.length ? `WHERE ${where.join(" AND ")}` : "", params }
@@ -391,7 +635,59 @@ export class CcUsageAnalysisService {
     conversations: number
     activeDays: number
   } {
-    const filter = this.createRangeWhere(range)
+    if (range.preset === "today") {
+      return this.queryUsageTotalsFromEvents(range)
+    }
+    const filter = this.createAggregateRangeWhere(range, "date", [`model != ?`], [TOOL_CALLS_AGGREGATE_MODEL])
+    const row = this.db.prepare(`
+      SELECT
+        COALESCE(SUM(input_tokens), 0) AS input,
+        COALESCE(SUM(output_tokens), 0) AS output,
+        COALESCE(SUM(cache_read_tokens), 0) AS cache_read,
+        COALESCE(SUM(cache_write_tokens), 0) AS cache_write,
+        COALESCE(SUM(reasoning_tokens), 0) AS reasoning,
+        COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens), 0) AS tokens,
+        COALESCE(SUM(total_cost), 0) AS estimated_cost,
+        COALESCE(SUM(cost_input), 0) AS cost_input,
+        COALESCE(SUM(cost_output), 0) AS cost_output,
+        COALESCE(SUM(cost_cache_read), 0) AS cost_cache_read,
+        COALESCE(SUM(cost_cache_write), 0) AS cost_cache_write,
+        COALESCE(SUM(cost_reasoning), 0) AS cost_reasoning,
+        COALESCE(SUM(requests), 0) AS requests,
+        COALESCE(SUM(conversations), 0) AS conversations,
+        COUNT(DISTINCT date) AS active_days
+      FROM ${this.prefix}_daily_usage
+      ${filter.whereSql}
+    `).get(...filter.params) as Record<string, unknown> | undefined
+    return {
+      input: toNumber(row?.input),
+      output: toNumber(row?.output),
+      cacheRead: toNumber(row?.cache_read),
+      cacheWrite: toNumber(row?.cache_write),
+      reasoning: toNumber(row?.reasoning),
+      tokens: toNumber(row?.tokens),
+      estimatedCost: toNumber(row?.estimated_cost),
+      requests: toNumber(row?.requests),
+      costInput: toNumber(row?.cost_input),
+      costOutput: toNumber(row?.cost_output),
+      costCacheRead: toNumber(row?.cost_cache_read),
+      costCacheWrite: toNumber(row?.cost_cache_write),
+      costReasoning: toNumber(row?.cost_reasoning),
+      conversations: this.queryConversationTotal(range) ?? toNumber(row?.conversations),
+      activeDays: toNumber(row?.active_days),
+    }
+  }
+
+  private queryUsageTotalsFromEvents(range: UsageRangeInput): AggregateValue & {
+    costInput: number
+    costOutput: number
+    costCacheRead: number
+    costCacheWrite: number
+    costReasoning: number
+    conversations: number
+    activeDays: number
+  } {
+    const filter = this.createEventRangeWhere(range)
     const row = this.db.prepare(`
       SELECT
         COALESCE(SUM(input_tokens), 0) AS input,
@@ -432,13 +728,68 @@ export class CcUsageAnalysisService {
   }
 
   private queryToolCallTotal(range: UsageRangeInput): number {
-    const filter = this.createRangeWhere(range)
+    if (range.preset === "today") {
+      const filter = this.createEventRangeWhere(range)
+      const row = this.db.prepare(`
+        SELECT COUNT(*) AS calls
+        FROM ${this.prefix}_tool_events
+        ${filter.whereSql}
+      `).get(...filter.params) as { calls?: number } | undefined
+      return toNumber(row?.calls)
+    }
+    const filter = this.createAggregateRangeWhere(range, "date", [`model = ?`], [TOOL_CALLS_AGGREGATE_MODEL])
     const row = this.db.prepare(`
-      SELECT COUNT(*) AS calls
-      FROM ${this.prefix}_tool_events
+      SELECT COALESCE(SUM(tool_calls), 0) AS calls
+      FROM ${this.prefix}_daily_usage
       ${filter.whereSql}
     `).get(...filter.params) as { calls?: number } | undefined
     return toNumber(row?.calls)
+  }
+
+  private queryConversationTotal(range: UsageRangeInput): number | null {
+    const filter = this.createEventRangeWhere(range)
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS rows_count, COUNT(DISTINCT session_id) AS conversations
+      FROM ${this.prefix}_usage_events
+      ${filter.whereSql}
+    `).get(...filter.params) as { rows_count?: number; conversations?: number } | undefined
+    return toNumber(row?.rows_count) > 0 ? toNumber(row?.conversations) : null
+  }
+
+  private queryConversationsByBucket(range: UsageRangeInput, bucketColumn: "date" | "hour"): Map<string, number> {
+    const filter = this.createEventRangeWhere(range)
+    const rows = this.db.prepare(`
+      SELECT ${bucketColumn} AS bucket, COUNT(DISTINCT session_id) AS conversations
+      FROM ${this.prefix}_usage_events
+      ${filter.whereSql}
+      GROUP BY ${bucketColumn}
+    `).all(...filter.params) as Record<string, unknown>[]
+    return new Map(rows.map((row) => [String(row.bucket ?? ""), toNumber(row.conversations)]))
+  }
+
+  private queryWorkspaceMetadata(
+    range: UsageRangeInput,
+    workspaceKeys: readonly string[],
+  ): Map<string, { workspaceLabel: string; sessions: number; lastTimestampMs: number }> {
+    const keys = [...new Set(workspaceKeys.filter(Boolean))]
+    if (keys.length === 0) return new Map()
+    const filter = this.createEventRangeWhere(range)
+    const placeholders = keys.map(() => "?").join(", ")
+    const rows = this.db.prepare(`
+      SELECT
+        workspace_key,
+        MAX(workspace_label) AS workspace_label,
+        COUNT(DISTINCT session_id) AS sessions,
+        MAX(timestamp_ms) AS last_timestamp_ms
+      FROM ${this.prefix}_usage_events
+      ${filter.whereSql ? `${filter.whereSql} AND` : "WHERE"} workspace_key IN (${placeholders})
+      GROUP BY workspace_key
+    `).all(...filter.params, ...keys) as Record<string, unknown>[]
+    return new Map(rows.map((row) => [String(row.workspace_key ?? ""), {
+      workspaceLabel: String(row.workspace_label ?? ""),
+      sessions: toNumber(row.sessions),
+      lastTimestampMs: toNumber(row.last_timestamp_ms),
+    }]))
   }
 }
 
@@ -681,7 +1032,8 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
     db.exec(`
       INSERT INTO ${prefix}_daily_usage (
         date, model, provider, workspace_key, input_tokens, output_tokens, cache_read_tokens,
-        cache_write_tokens, reasoning_tokens, total_cost, requests, conversations, tool_calls
+        cache_write_tokens, reasoning_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
+        cost_reasoning, total_cost, requests, conversations, tool_calls
       )
       SELECT
         date,
@@ -693,6 +1045,11 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
         SUM(cache_read_tokens),
         SUM(cache_write_tokens),
         SUM(reasoning_tokens),
+        SUM(cost_input),
+        SUM(cost_output),
+        SUM(cost_cache_read),
+        SUM(cost_cache_write),
+        SUM(cost_reasoning),
         SUM(total_cost),
         COUNT(*),
         COUNT(DISTINCT session_id),
@@ -701,9 +1058,38 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
       GROUP BY date, model, provider, workspace_key
     `)
     db.exec(`
+      INSERT INTO ${prefix}_daily_usage (
+        date, model, provider, workspace_key, input_tokens, output_tokens, cache_read_tokens,
+        cache_write_tokens, reasoning_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
+        cost_reasoning, total_cost, requests, conversations, tool_calls
+      )
+      SELECT
+        date,
+        '${TOOL_CALLS_AGGREGATE_MODEL}',
+        '',
+        workspace_key,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        COUNT(*)
+      FROM ${prefix}_tool_events
+      GROUP BY date, workspace_key
+    `)
+    db.exec(`
       INSERT INTO ${prefix}_hourly_usage (
         hour, model, provider, workspace_key, input_tokens, output_tokens, cache_read_tokens,
-        cache_write_tokens, reasoning_tokens, total_cost, requests, conversations, tool_calls
+        cache_write_tokens, reasoning_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
+        cost_reasoning, total_cost, requests, conversations, tool_calls
       )
       SELECT
         hour,
@@ -715,12 +1101,45 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
         SUM(cache_read_tokens),
         SUM(cache_write_tokens),
         SUM(reasoning_tokens),
+        SUM(cost_input),
+        SUM(cost_output),
+        SUM(cost_cache_read),
+        SUM(cost_cache_write),
+        SUM(cost_reasoning),
         SUM(total_cost),
         COUNT(*),
         COUNT(DISTINCT session_id),
         0
       FROM ${prefix}_usage_events
       GROUP BY hour, model, provider, workspace_key
+    `)
+    db.exec(`
+      INSERT INTO ${prefix}_hourly_usage (
+        hour, model, provider, workspace_key, input_tokens, output_tokens, cache_read_tokens,
+        cache_write_tokens, reasoning_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
+        cost_reasoning, total_cost, requests, conversations, tool_calls
+      )
+      SELECT
+        hour,
+        '${TOOL_CALLS_AGGREGATE_MODEL}',
+        '',
+        workspace_key,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0,
+        COUNT(*)
+      FROM ${prefix}_tool_events
+      GROUP BY hour, workspace_key
     `)
     db.exec("COMMIT")
   } catch (error) {

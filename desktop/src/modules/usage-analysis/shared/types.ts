@@ -4,12 +4,15 @@ import type {
   UsageAnalysisOverviewReport,
   UsageAnalysisProjectRow,
   UsageAnalysisRangePreset,
+  UsageAnalysisTimeBucketGranularity,
   UsageAnalysisTimeBucket,
   UsageAnalysisToolRow,
 } from "@/types/bridge"
 
-export type UsageRangePreset = UsageAnalysisRangePreset
-export type UsageViewId = "overview" | "time" | "models" | "projects" | "tools"
+export type UsageReportRangePreset = UsageAnalysisRangePreset
+export type UsageRangePreset = Exclude<UsageAnalysisRangePreset, "today">
+export type UsageTrendBucketGranularity = UsageAnalysisTimeBucketGranularity
+export type UsageViewId = "today" | "overview" | "time" | "models" | "projects" | "tools"
 export type UsageOverviewReport = UsageAnalysisOverviewReport
 export type UsageTimeBucket = UsageAnalysisTimeBucket
 export type UsageModelRow = UsageAnalysisModelRow

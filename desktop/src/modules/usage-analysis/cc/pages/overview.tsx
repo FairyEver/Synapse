@@ -1,7 +1,20 @@
 import { OverviewReportView } from "../../shared/components/report-views"
-import type { UsageRangePreset } from "../../shared/types"
+import type { UsageRangePreset, UsageTrendBucketGranularity } from "../../shared/types"
 import { useCcOverview } from "../hooks"
 
-export function CcOverviewPage({ range, refreshKey }: { readonly range: UsageRangePreset; readonly refreshKey: number }) {
-  return <OverviewReportView state={useCcOverview(range, refreshKey)} />
+interface CcOverviewPageProps {
+  readonly range: UsageRangePreset
+  readonly refreshKey: number
+  readonly trendBucket: UsageTrendBucketGranularity
+  readonly onTrendBucketChange: (bucket: UsageTrendBucketGranularity) => void
+}
+
+export function CcOverviewPage({ range, refreshKey, trendBucket, onTrendBucketChange }: CcOverviewPageProps) {
+  return (
+    <OverviewReportView
+      state={useCcOverview(range, refreshKey, trendBucket)}
+      trendBucket={trendBucket}
+      onTrendBucketChange={onTrendBucketChange}
+    />
+  )
 }

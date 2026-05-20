@@ -9,6 +9,7 @@ import {
 import type { WorkflowMeta, WorkflowRunStatus } from "@/types/workflow"
 import { Download, GitBranch, Play, Trash2, History, Loader2 } from "lucide-react"
 import { RUN_STATE_BADGE } from "../lib/status-display"
+import { CopyIdButton } from "./copy-id-button"
 
 export type WorkflowCardRunState = WorkflowRunStatus["status"]
 
@@ -25,9 +26,12 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onHistory
       onClick={() => { if (!suppressClickRef.current) onOpen() }}
       onKeyDown={(e) => { if ((e.key === "Enter" || e.key === " ") && !suppressClickRef.current) { if (e.target !== e.currentTarget) return; e.preventDefault(); onOpen() } }}>
       <CardHeader className="pb-2">
-        <CardTitle className="text-sm font-medium flex items-center gap-2">
-          <GitBranch className="h-4 w-4 text-muted-foreground" />
-          {meta.name}
+        <CardTitle className="flex items-center justify-between gap-2 text-sm font-medium">
+          <span className="flex min-w-0 items-center gap-2">
+            <GitBranch className="h-4 w-4 shrink-0 text-muted-foreground" />
+            <span className="truncate">{meta.name}</span>
+          </span>
+          <CopyIdButton id={meta.id} kind="workflow" />
         </CardTitle>
       </CardHeader>
       <CardContent className="flex items-center justify-between">

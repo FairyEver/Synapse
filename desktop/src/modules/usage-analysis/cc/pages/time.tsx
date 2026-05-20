@@ -1,7 +1,20 @@
 import { TimeReportView } from "../../shared/components/report-views"
-import type { UsageRangePreset } from "../../shared/types"
+import type { UsageRangePreset, UsageTrendBucketGranularity } from "../../shared/types"
 import { useCcTime } from "../hooks"
 
-export function CcTimePage({ range, refreshKey }: { readonly range: UsageRangePreset; readonly refreshKey: number }) {
-  return <TimeReportView state={useCcTime(range, refreshKey)} />
+interface CcTimePageProps {
+  readonly range: UsageRangePreset
+  readonly refreshKey: number
+  readonly trendBucket: UsageTrendBucketGranularity
+  readonly onTrendBucketChange: (bucket: UsageTrendBucketGranularity) => void
+}
+
+export function CcTimePage({ range, refreshKey, trendBucket, onTrendBucketChange }: CcTimePageProps) {
+  return (
+    <TimeReportView
+      state={useCcTime(range, refreshKey, trendBucket)}
+      trendBucket={trendBucket}
+      onTrendBucketChange={onTrendBucketChange}
+    />
+  )
 }

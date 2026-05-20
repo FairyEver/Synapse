@@ -1,7 +1,20 @@
 import { OverviewReportView } from "../../shared/components/report-views"
-import type { UsageRangePreset } from "../../shared/types"
+import type { UsageRangePreset, UsageTrendBucketGranularity } from "../../shared/types"
 import { useCodexOverview } from "../hooks"
 
-export function CodexOverviewPage({ range, refreshKey }: { readonly range: UsageRangePreset; readonly refreshKey: number }) {
-  return <OverviewReportView state={useCodexOverview(range, refreshKey)} />
+interface CodexOverviewPageProps {
+  readonly range: UsageRangePreset
+  readonly refreshKey: number
+  readonly trendBucket: UsageTrendBucketGranularity
+  readonly onTrendBucketChange: (bucket: UsageTrendBucketGranularity) => void
+}
+
+export function CodexOverviewPage({ range, refreshKey, trendBucket, onTrendBucketChange }: CodexOverviewPageProps) {
+  return (
+    <OverviewReportView
+      state={useCodexOverview(range, refreshKey, trendBucket)}
+      trendBucket={trendBucket}
+      onTrendBucketChange={onTrendBucketChange}
+    />
+  )
 }

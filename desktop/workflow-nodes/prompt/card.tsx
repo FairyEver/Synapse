@@ -2,12 +2,13 @@ import { cn } from "@/lib/utils"
 import { promptNodeManifest } from "./manifest"
 import type { PromptNodeConfig } from "./schema"
 import { NodeProgressBar, useRunningTimer } from "@/modules/workflow/runner/node-progress-bar"
+import { CopyIdButton } from "@/modules/workflow/components/copy-id-button"
 import { useProviderLookup } from "../provider-lookup-context"
 import { statusClass, type NodeStatus } from "../node-status-utils"
 
-export function PromptNodeCard({ config, name, selected, status, progressLabel, startedAt }: {
+export function PromptNodeCard({ config, name, selected, status, progressLabel, startedAt, nodeId }: {
   config: PromptNodeConfig; name?: string; selected?: boolean; status?: NodeStatus
-  progressLabel?: string; startedAt?: number
+  progressLabel?: string; startedAt?: number; nodeId?: string
 }) {
   const Icon = promptNodeManifest.icon
   const timer = useRunningTimer(startedAt, status === "running")
@@ -18,9 +19,10 @@ export function PromptNodeCard({ config, name, selected, status, progressLabel, 
     <div className={cn("relative rounded-lg border bg-card px-3 py-2 w-56", status === "running" && "pb-4", selected && "ring-2 ring-primary", statusClass(status))}>
       <div className="flex items-center gap-2 mb-1.5">
         <Icon className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
-        <span className="text-xs font-medium text-foreground truncate">{name || "Prompt"}</span>
+        <span className="min-w-0 flex-1 truncate text-xs font-medium text-foreground">{name || "Prompt"}</span>
+        {nodeId ? <CopyIdButton id={nodeId} kind="node" /> : null}
         {status === "running" && timer && (
-          <span className="ml-auto text-[10px] font-mono text-muted-foreground shrink-0">{timer}</span>
+          <span className="text-[10px] font-mono text-muted-foreground shrink-0">{timer}</span>
         )}
       </div>
       {status === "running" && progressLabel ? (

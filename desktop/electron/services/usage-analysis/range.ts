@@ -2,7 +2,7 @@ import type { UsageRangeFilter, UsageRangeInput } from "./types"
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-const RANGE_DAYS: Record<Exclude<UsageRangeInput["preset"], "all">, number> = {
+const RANGE_DAYS: Record<Exclude<UsageRangeInput["preset"], "today" | "all">, number> = {
   "7d": 7,
   "30d": 30,
   "90d": 90,
@@ -24,8 +24,21 @@ export function localHourKey(timestampMs: number): string {
 
 export function createUsageRangeFilter(input: UsageRangeInput, now = new Date()): UsageRangeFilter {
   if (input.preset === "all") return {}
-  const days = RANGE_DAYS[input.preset]
   const end = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  if (input.preset === "today") {
+    const startMs = end.getTime()
+    const nowMs = now.getTime()
+    const today = localDateKey(startMs)
+    return {
+      sinceDate: today,
+      untilDate: today,
+      sinceHour: localHourKey(startMs),
+      untilHour: localHourKey(nowMs),
+      sinceTimestampMs: startMs,
+      untilTimestampMs: nowMs,
+    }
+  }
+  const days = RANGE_DAYS[input.preset]
   const start = new Date(end.getTime() - (days - 1) * DAY_MS)
   return {
     sinceDate: localDateKey(start.getTime()),

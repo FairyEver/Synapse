@@ -4,6 +4,7 @@ import type { EChartsOption } from "echarts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { useUsageEChartsTheme } from "../echarts-theme"
+import type { UsageTrendBucketGranularity } from "../types"
 
 interface TrendPoint {
   readonly bucket: string
@@ -38,6 +39,13 @@ interface RankPoint {
 interface UsageTrendChartProps {
   readonly title: string
   readonly rows: readonly TrendPoint[]
+  readonly bucket?: UsageTrendBucketGranularity
+  readonly onBucketChange?: (bucket: UsageTrendBucketGranularity) => void
+}
+
+interface UsageTodayHourlyChartProps {
+  readonly title: string
+  readonly rows: readonly TrendPoint[]
 }
 
 interface UsageBreakdownChartProps {
@@ -55,6 +63,7 @@ interface UsageRankChartProps {
 }
 
 type TrendMode = "tokens" | "input" | "output" | "cacheRead" | "cacheWrite"
+type TokenComponentKey = Exclude<TrendMode, "tokens"> | "reasoning"
 
 const TREND_MODES: { readonly value: TrendMode; readonly label: string }[] = [
   { value: "tokens", label: "全部" },
@@ -64,11 +73,24 @@ const TREND_MODES: { readonly value: TrendMode; readonly label: string }[] = [
   { value: "cacheWrite", label: "缓存写" },
 ]
 
+const TREND_BUCKETS: { readonly value: UsageTrendBucketGranularity; readonly label: string }[] = [
+  { value: "hour", label: "按小时" },
+  { value: "day", label: "按天" },
+]
+
+const TOKEN_COMPONENTS: { readonly key: TokenComponentKey; readonly label: string }[] = [
+  { key: "input", label: "输入" },
+  { key: "output", label: "输出" },
+  { key: "cacheRead", label: "缓存读" },
+  { key: "cacheWrite", label: "缓存写" },
+  { key: "reasoning", label: "推理" },
+]
+
 const RANK_BAR_HEIGHT = 18
 const RANK_BAR_GAP = 9
 const RANK_VERTICAL_PADDING = 50
 
-export function UsageTrendChart({ title, rows }: UsageTrendChartProps) {
+export function UsageTrendChart({ title, rows, bucket = "day", onBucketChange }: UsageTrendChartProps) {
   const theme = useUsageEChartsTheme()
   const [mode, setMode] = useState<TrendMode>("tokens")
   const data = useMemo(() => rows.filter((row) => row.tokens > 0 || row.requests > 0 || row.toolCalls > 0), [rows])
@@ -171,15 +193,103 @@ export function UsageTrendChart({ title, rows }: UsageTrendChartProps) {
       title={title}
       empty={data.length === 0}
       action={(
-        <Tabs value={mode} onValueChange={(value) => setMode(value as TrendMode)}>
-          <TabsList>
-            {TREND_MODES.map((item) => (
-              <TabsTrigger key={item.value} value={item.value}>{item.label}</TabsTrigger>
-            ))}
-          </TabsList>
-        </Tabs>
+        <div className="flex flex-wrap items-center gap-2">
+          <Tabs value={bucket} onValueChange={(value) => onBucketChange?.(value as UsageTrendBucketGranularity)}>
+            <TabsList>
+              {TREND_BUCKETS.map((item) => (
+                <TabsTrigger key={item.value} value={item.value}>{item.label}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+          <Tabs value={mode} onValueChange={(value) => setMode(value as TrendMode)}>
+            <TabsList>
+              {TREND_MODES.map((item) => (
+                <TabsTrigger key={item.value} value={item.value}>{item.label}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
       )}
     >
+      <ReactECharts className="h-80 w-full" option={option} opts={{ renderer: "canvas" }} notMerge lazyUpdate />
+    </ChartCard>
+  )
+}
+
+export function UsageTodayHourlyChart({ title, rows }: UsageTodayHourlyChartProps) {
+  const theme = useUsageEChartsTheme()
+  const data = useMemo(() => rows.filter((row) => row.tokens > 0 || row.requests > 0), [rows])
+  const option = useMemo<EChartsOption>(() => ({
+    color: theme.chart,
+    animation: false,
+    grid: { top: 34, right: 16, bottom: 28, left: 56 },
+    legend: {
+      top: 0,
+      right: 0,
+      textStyle: { color: theme.mutedForeground },
+    },
+    tooltip: {
+      trigger: "axis",
+      axisPointer: { type: "line", lineStyle: { color: theme.border, width: 1 } },
+      appendToBody: true,
+      confine: true,
+      transitionDuration: 0,
+      position: positionTooltipAwayFromPointer,
+      formatter: (params: unknown) => formatTodayHourlyTooltip(params, data),
+    },
+    xAxis: {
+      type: "category",
+      data: data.map((row) => formatHourBucket(row.bucket)),
+      axisLine: { show: false },
+      axisTick: { show: false },
+      axisLabel: { color: theme.mutedForeground },
+    },
+    yAxis: [
+      {
+        type: "value",
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { lineStyle: { color: theme.border } },
+        axisLabel: { color: theme.mutedForeground, formatter: (value: number) => formatCompact(value) },
+      },
+      {
+        type: "value",
+        axisLine: { show: false },
+        axisTick: { show: false },
+        splitLine: { show: false },
+        axisLabel: { color: theme.mutedForeground, formatter: (value: number) => formatCompact(value) },
+      },
+    ],
+    series: [
+      ...TOKEN_COMPONENTS.map((component, index) => ({
+        name: component.label,
+        type: "bar" as const,
+        stack: "tokens",
+        data: data.map((row) => valueForTokenComponent(row, component.key)),
+        barMaxWidth: 36,
+        itemStyle: {
+          color: theme.chart[index % theme.chart.length],
+          borderRadius: index === TOKEN_COMPONENTS.length - 1 ? [4, 4, 0, 0] : [0, 0, 0, 0],
+        },
+        emphasis: { disabled: true },
+        blur: { itemStyle: { color: theme.chart[index % theme.chart.length], opacity: 1 } },
+      })),
+      {
+        name: "请求",
+        type: "line",
+        yAxisIndex: 1,
+        smooth: true,
+        symbolSize: 3,
+        lineStyle: { width: 1, color: theme.chart[5 % theme.chart.length] },
+        itemStyle: { color: theme.chart[5 % theme.chart.length], borderColor: theme.chart[5 % theme.chart.length], borderWidth: 0 },
+        emphasis: { disabled: true },
+        data: data.map((row) => row.requests),
+      },
+    ],
+  }), [data, theme])
+
+  return (
+    <ChartCard title={title} empty={data.length === 0}>
       <ReactECharts className="h-80 w-full" option={option} opts={{ renderer: "canvas" }} notMerge lazyUpdate />
     </ChartCard>
   )
@@ -332,6 +442,10 @@ function formatBucket(bucket: string): string {
   return bucket.length >= 10 ? bucket.slice(5, 10) : bucket
 }
 
+function formatHourBucket(bucket: string): string {
+  return bucket.length >= 13 ? `${bucket.slice(11, 13)}:00` : formatBucket(bucket)
+}
+
 function positionTooltipAwayFromPointer(
   point: number[],
   _params: unknown,
@@ -356,6 +470,10 @@ function valueForModel(row: TrendPoint, modelName: string, mode: TrendMode): num
   return model ? valueForMode(model, mode) : 0
 }
 
+function valueForTokenComponent(row: TrendPoint, key: TokenComponentKey): number {
+  return row.modelBreakdown?.reduce((sum, model) => sum + model[key], 0) ?? 0
+}
+
 function formatTrendTooltip(params: unknown, rows: readonly TrendPoint[]): string {
   const items = (Array.isArray(params) ? params : [params]).filter(isTooltipObject)
   const title = String(items[0]?.axisValue ?? items[0]?.axisValueLabel ?? "")
@@ -373,6 +491,23 @@ function formatTrendTooltip(params: unknown, rows: readonly TrendPoint[]): strin
     `<div>${title} <span>${formatCompact(total)} Token</span></div>`,
     ...bars.map((item) => `${item.marker}${item.name}: ${formatCompact(item.value)}`),
     ...(row ? [`请求: ${formatCompact(row.requests)}`, `工具: ${formatCompact(row.toolCalls)}`] : lines),
+  ].join("<br/>")
+}
+
+function formatTodayHourlyTooltip(params: unknown, rows: readonly TrendPoint[]): string {
+  const items = (Array.isArray(params) ? params : [params]).filter(isTooltipObject)
+  const title = String(items[0]?.axisValue ?? items[0]?.axisValueLabel ?? "")
+  const row = rows.find((item) => formatHourBucket(item.bucket) === title)
+  const bars = items
+    .filter((item) => item.componentSubType === "bar")
+    .map((item) => ({ marker: item.marker ?? "", name: item.seriesName ?? "", value: readTooltipValue(item) }))
+    .filter((item) => item.value > 0)
+  const total = bars.reduce((sum, item) => sum + item.value, 0)
+
+  return [
+    `<div>${title} <span>${formatCompact(total)} Token</span></div>`,
+    ...bars.map((item) => `${item.marker}${item.name}: ${formatCompact(item.value)}`),
+    ...(row ? [`请求: ${formatCompact(row.requests)}`] : []),
   ].join("<br/>")
 }
 

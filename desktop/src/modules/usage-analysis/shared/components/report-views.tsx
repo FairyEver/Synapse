@@ -16,6 +16,7 @@ import type {
   UsageModelRow,
   UsageOverviewReport,
   UsageProjectRow,
+  UsageTrendBucketGranularity,
   UsageTimeBucket,
   UsageToolRow,
 } from "../types"
@@ -110,11 +111,18 @@ function costChartRows(breakdown: UsageOverviewReport["costBreakdown"]) {
   ]
 }
 
-export function OverviewReportView({ state }: { readonly state: LoaderState<UsageOverviewReport> }) {
+interface TrendBucketProps {
+  readonly trendBucket: UsageTrendBucketGranularity
+  readonly onTrendBucketChange: (bucket: UsageTrendBucketGranularity) => void
+}
+
+export function OverviewReportView({ state, trendBucket, onTrendBucketChange }: {
+  readonly state: LoaderState<UsageOverviewReport>
+} & TrendBucketProps) {
   const report = state.data
   const projectLabels = report ? createProjectLabelMap(report.topProjects) : new Map<string, string>()
   return (
-    <ReportState loading={state.loading} error={state.error} empty={!report || report.totals.tokens === 0}>
+    <ReportState loading={state.loading && !report} error={state.error} empty={!report || report.totals.tokens === 0}>
       {report ? (
         <div className="flex flex-col gap-4">
           <MetricGrid
@@ -127,7 +135,7 @@ export function OverviewReportView({ state }: { readonly state: LoaderState<Usag
               { label: "活跃天", value: formatInteger(report.totals.activeDays) },
             ]}
           />
-          <UsageTrendChart title="Token 趋势" rows={report.trend} />
+          <UsageTrendChart title="Token 趋势" rows={report.trend} bucket={trendBucket} onBucketChange={onTrendBucketChange} />
           <div className="grid gap-4 md:grid-cols-2">
             <UsageBreakdownChart title="Token 类型占比" rows={tokenChartRows(report.tokenBreakdown)} valueFormatter={formatInteger} compact />
             <UsageBreakdownChart title="费用类型占比" rows={costChartRows(report.costBreakdown)} valueFormatter={formatCurrency} compact />
@@ -143,12 +151,14 @@ export function OverviewReportView({ state }: { readonly state: LoaderState<Usag
   )
 }
 
-export function TimeReportView({ state }: { readonly state: LoaderState<UsageTimeBucket[]> }) {
+export function TimeReportView({ state, trendBucket, onTrendBucketChange }: {
+  readonly state: LoaderState<UsageTimeBucket[]>
+} & TrendBucketProps) {
   const rows = state.data ?? []
   return (
-    <ReportState loading={state.loading} error={state.error} empty={rows.length === 0}>
+    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
       <div className="flex flex-col gap-4">
-        <UsageTrendChart title="Token / 请求 / 工具" rows={rows} />
+        <UsageTrendChart title="Token / 请求 / 工具" rows={rows} bucket={trendBucket} onBucketChange={onTrendBucketChange} />
         <Table>
           <TableHeader>
             <TableRow>
@@ -181,7 +191,7 @@ export function TimeReportView({ state }: { readonly state: LoaderState<UsageTim
 export function ModelsReportView({ state }: { readonly state: LoaderState<UsageModelRow[]> }) {
   const rows = state.data ?? []
   return (
-    <ReportState loading={state.loading} error={state.error} empty={rows.length === 0}>
+    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
       <div className="flex flex-col gap-4">
         <UsageRankChart title="Token 排行" rows={rows.map((row) => ({ label: row.model, value: row.tokens, extra: row.estimatedCost }))} valueFormatter={formatInteger} extraFormatter={(value) => `费用 ${formatCurrency(value)}`} />
         <UsageBreakdownChart title="模型费用占比" rows={rows.map((row) => ({ label: row.model, value: row.estimatedCost }))} valueFormatter={formatCurrency} />
@@ -195,7 +205,7 @@ export function ProjectsReportView({ state }: { readonly state: LoaderState<Usag
   const rows = state.data ?? []
   const projectLabels = createProjectLabelMap(rows)
   return (
-    <ReportState loading={state.loading} error={state.error} empty={rows.length === 0}>
+    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
       <div className="flex flex-col gap-4">
         <UsageRankChart title="Token 排行" rows={rows.map((row) => ({ label: projectLabels.get(projectKey(row)) ?? row.workspaceLabel, value: row.tokens, extra: row.requests }))} valueFormatter={formatInteger} extraFormatter={(value) => `请求 ${formatInteger(value)}`} />
         <UsageRankChart title="工具调用排行" rows={rows.map((row) => ({ label: projectLabels.get(projectKey(row)) ?? row.workspaceLabel, value: row.toolCalls, extra: row.sessions }))} valueFormatter={formatInteger} extraFormatter={(value) => `会话 ${formatInteger(value)}`} />
@@ -208,7 +218,7 @@ export function ProjectsReportView({ state }: { readonly state: LoaderState<Usag
 export function ToolsReportView({ state }: { readonly state: LoaderState<UsageToolRow[]> }) {
   const rows = state.data ?? []
   return (
-    <ReportState loading={state.loading} error={state.error} empty={rows.length === 0}>
+    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
       <div className="flex flex-col gap-4">
         <UsageRankChart title="调用排行" rows={rows.map((row) => ({ label: row.toolName, value: row.calls, extra: row.failureRate }))} valueFormatter={formatInteger} extraFormatter={(value) => `失败率 ${formatPercent(value)}`} />
         <UsageBreakdownChart title="失败占比" rows={rows.map((row) => ({ label: row.toolName, value: row.failures }))} valueFormatter={formatInteger} />
@@ -221,7 +231,7 @@ export function ToolsReportView({ state }: { readonly state: LoaderState<UsageTo
 export function DetailsReportView({ state }: { readonly state: LoaderState<UsageDetailRow[]> }) {
   const rows = state.data ?? []
   return (
-    <ReportState loading={state.loading} error={state.error} empty={rows.length === 0}>
+    <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
       <div className="flex flex-col gap-2">
         <div className="text-sm text-muted-foreground">最近 200 条</div>
         <Table>

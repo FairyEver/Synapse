@@ -10,6 +10,11 @@ import { WorkflowCard } from "../workflow-card"
 
 const mocks = vi.hoisted(() => ({
   track: vi.fn(),
+  toast: vi.fn(),
+}))
+
+vi.mock("sonner", () => ({
+  toast: mocks.toast,
 }))
 
 vi.mock("@/lib/ui-tracking", async (importOriginal) => {
@@ -38,6 +43,43 @@ afterEach(() => {
 })
 
 describe("WorkflowCard", () => {
+  it("copies the workflow id without opening the workflow", async () => {
+    const writeText = vi.fn(async () => undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    })
+    const onOpen = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <WorkflowCard
+          meta={workflowMeta}
+          onOpen={onOpen}
+          onRun={vi.fn()}
+          onHistory={vi.fn()}
+          onExport={vi.fn()}
+          onDelete={vi.fn()}
+        />,
+      )
+    })
+
+    const copyIdButton = container.querySelector<HTMLButtonElement>('[aria-label="复制工作流 ID"]')
+    expect(copyIdButton?.textContent).toBe("WORKFL")
+
+    await act(async () => {
+      copyIdButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(writeText).toHaveBeenCalledWith("workflow-1")
+    expect(onOpen).not.toHaveBeenCalled()
+    expect(mocks.toast).toHaveBeenCalledWith("ID 已复制")
+  })
+
   it("gives icon actions stable labels and tracking names", async () => {
     const onRun = vi.fn()
     const onHistory = vi.fn()

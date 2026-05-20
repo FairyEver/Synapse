@@ -1,8 +1,10 @@
 export type UsageTool = "cc" | "codex"
-export type UsageRangePreset = "7d" | "30d" | "90d" | "all"
+export type UsageRangePreset = "today" | "7d" | "30d" | "90d" | "all"
+export type UsageTimeBucketGranularity = "day" | "hour"
 
 export interface UsageRangeInput {
   readonly preset: UsageRangePreset
+  readonly bucket?: UsageTimeBucketGranularity
 }
 
 export interface UsageDetailInput extends UsageRangeInput {
@@ -13,6 +15,10 @@ export interface UsageDetailInput extends UsageRangeInput {
 export interface UsageRangeFilter {
   readonly sinceDate?: string
   readonly untilDate?: string
+  readonly sinceHour?: string
+  readonly untilHour?: string
+  readonly sinceTimestampMs?: number
+  readonly untilTimestampMs?: number
 }
 
 export interface UsageTokenBreakdown {
