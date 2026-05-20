@@ -112,4 +112,65 @@ describe("workflow node provider settings", () => {
     }))
     expect(container.textContent).toContain("使用工作流默认：Bailian 公司 · deepseek-v4-pro")
   })
+
+  it("shows editable switch branch keys and labels", () => {
+    const onChange = vi.fn()
+    const container = renderPanel(
+      React.createElement(SwitchNodePanel, {
+        config: {
+          providerId: undefined,
+          modelTier: undefined,
+          variables: [],
+          prompt: "route",
+          branches: [{ id: "branch1", label: "分支 1" }],
+        },
+        onChange,
+        upstreamNodes: [],
+        workflowParams: [],
+        projects: [],
+      }),
+    )
+
+    expect(container.textContent).toContain("路由键")
+    expect(container.textContent).toContain("显示名")
+    expect(container.querySelector<HTMLInputElement>("input[aria-label='路由键 分支 1']")?.value).toBe("branch1")
+    expect(container.querySelector<HTMLInputElement>("input[aria-label='显示名 branch1']")?.value).toBe("分支 1")
+  })
+
+  it("commits switch branch key edits", () => {
+    const onChange = vi.fn()
+    const container = renderPanel(
+      React.createElement(SwitchNodePanel, {
+        config: {
+          providerId: undefined,
+          modelTier: undefined,
+          variables: [],
+          prompt: "route",
+          branches: [{ id: "branch1", label: "分支 1" }],
+          defaultBranch: "branch1",
+        },
+        onChange,
+        upstreamNodes: [],
+        workflowParams: [],
+        projects: [],
+      }),
+    )
+
+    const keyInput = container.querySelector<HTMLInputElement>("input[aria-label='路由键 分支 1']")
+    setInputValue(keyInput, "approved")
+
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      branches: [{ id: "approved", label: "分支 1" }],
+      defaultBranch: "approved",
+    }))
+  })
 })
+
+function setInputValue(input: HTMLInputElement | null, value: string) {
+  if (!input) throw new Error("Input not found")
+  const valueSetter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
+  act(() => {
+    valueSetter?.call(input, value)
+    input.dispatchEvent(new Event("input", { bubbles: true }))
+  })
+}

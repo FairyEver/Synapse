@@ -4,6 +4,7 @@ import {
   ResizablePanel,
   ResizablePanelGroup,
 } from "@/components/ui/resizable"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 type SidebarContentLayoutProps = {
@@ -49,22 +50,29 @@ function SidebarContentLayout({
       <ResizableHandle withHandle />
 
       <ResizablePanel>
-        <div
-          className={cn(
-            "h-full min-h-0 min-w-0 bg-background px-2 py-2.5",
-            contentScrollable ? "overflow-y-auto" : "overflow-hidden",
-            contentClassName,
-          )}
-        >
-          <div
+        {contentScrollable ? (
+          <ScrollArea
             className={cn(
-              "min-w-0",
-              contentScrollable ? "min-h-full" : "h-full min-h-0 overflow-hidden",
+              "h-full min-h-0 min-w-0 bg-background px-2 py-2.5",
+              contentClassName,
             )}
           >
-            {children}
+            <div className="min-h-full min-w-0">
+              {children}
+            </div>
+          </ScrollArea>
+        ) : (
+          <div
+            className={cn(
+              "h-full min-h-0 min-w-0 overflow-hidden bg-background px-2 py-2.5",
+              contentClassName,
+            )}
+          >
+            <div className="h-full min-h-0 overflow-hidden">
+              {children}
+            </div>
           </div>
-        </div>
+        )}
       </ResizablePanel>
     </ResizablePanelGroup>
   )

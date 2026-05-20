@@ -34,7 +34,7 @@ import { resolveBranchLabel } from "../lib/branch-label"
 const logger = createRendererLogger("workflow.editor.canvas")
 
 const edgeTypes = { branch: BranchEdge }
-const CANVAS_FIT_VIEW_OPTIONS = { padding: 0.1, duration: 200 }
+const CANVAS_FIT_VIEW_OPTIONS = { padding: 0.1, duration: 200, maxZoom: 1 }
 const EMPTY_CANVAS_VIEWPORT = { x: 0, y: 0, zoom: 1 }
 const CONFIG_NAME_DATA_KEY = "__synapseConfigName"
 
@@ -45,7 +45,7 @@ export interface WorkflowCanvasHandle {
   updateNodeConfig: (nodeId: string, config: Record<string, unknown>) => void
   updateNodeName: (nodeId: string, name: string) => void
   removeEdgesByIds: (edgeIds: string[]) => void
-  updateEdgeLabels: (sourceNodeId: string, branches: Array<{ id: string; label: string }>) => void
+  syncSwitchBranchEdges: (sourceNodeId: string, workflowEdges: readonly WorkflowEdge[], branches: Array<{ id: string; label: string }>) => void
   deleteNodes: (nodeIds: string[]) => void
   copyNodes: (nodeIds: string[]) => void
   selectNode: (nodeId: string) => void
@@ -152,15 +152,20 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
       const idSet = new Set(edgeIds)
       setEdges((eds) => eds.filter((e) => !idSet.has(e.id)))
     },
-    updateEdgeLabels: (sourceNodeId, branches) => {
+    syncSwitchBranchEdges: (sourceNodeId, workflowEdges, branches) => {
       const labelMap = new Map(branches.map((b) => [b.id, b.label]))
-      setEdges((eds) => eds.map((e) => {
-        if (e.source !== sourceNodeId || !e.sourceHandle) return e
-        const newLabel = labelMap.get(e.sourceHandle)
-        if (!newLabel) return e
-        const currentLabel = (e.data as { label?: string } | undefined)?.label
-        if (currentLabel === newLabel) return e
-        return { ...e, type: "branch", data: { ...e.data, label: newLabel } }
+      const sourceEdges = new Map(workflowEdges.filter((edge) => edge.from === sourceNodeId).map((edge) => [edge.id, edge]))
+      setEdges((eds) => eds.flatMap((edge) => {
+        if (edge.source !== sourceNodeId) return [edge]
+        const workflowEdge = sourceEdges.get(edge.id)
+        if (!workflowEdge) return []
+        const label = workflowEdge.branch ? labelMap.get(workflowEdge.branch) : undefined
+        return [{
+          ...edge,
+          sourceHandle: workflowEdge.branch ?? null,
+          type: label ? "branch" : undefined,
+          data: label ? { ...edge.data, label } : {},
+        }]
       }))
     },
     deleteNodes: (nodeIds) => deleteNodesRef.current(nodeIds),
@@ -552,7 +557,8 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
         onPaneContextMenu={onPaneContextMenu}
         edgeTypes={edgeTypes}
         selectionOnDrag selectionMode={SelectionMode.Partial}
-        fitView panOnScroll panOnScrollMode={PanOnScrollMode.Free}>
+        fitView fitViewOptions={CANVAS_FIT_VIEW_OPTIONS}
+        panOnScroll panOnScrollMode={PanOnScrollMode.Free}>
         <Background />
         <Controls fitViewOptions={CANVAS_FIT_VIEW_OPTIONS} onFitView={handleFitView} />
       </ReactFlow>

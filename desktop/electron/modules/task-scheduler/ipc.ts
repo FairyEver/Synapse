@@ -107,6 +107,7 @@ const runTriggerSchema = z.enum(["schedule", "manual", "missed_run"])
 const activeDaysSchema = z.array(z.number().int().min(0).max(6)).min(1)
 const activeRunSchema = z.object({
   status: z.literal("running"),
+  id: z.string().min(1).optional(),
 })
 const actionRunResultSchema = z.object({
   status: z.enum(["success", "failed", "timeout", "cancelled"]),

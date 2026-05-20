@@ -9,11 +9,17 @@ import { debounce, track } from "@/lib/ui-tracking"
 function ScrollArea({
   className,
   children,
+  onViewportScroll,
+  scrollbars = "vertical",
+  viewportClassName,
   viewportRef,
   "data-track": dataTrack,
   ...props
 }: React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
   "data-track"?: string
+  onViewportScroll?: React.UIEventHandler<HTMLDivElement>
+  scrollbars?: "vertical" | "horizontal" | "both"
+  viewportClassName?: string
   viewportRef?: React.Ref<HTMLDivElement>
 }) {
   const lastScrollTopRef = React.useRef(0)
@@ -48,29 +54,33 @@ function ScrollArea({
       <ScrollAreaPrimitive.Viewport
         ref={viewportRef}
         data-slot="scroll-area-viewport"
-        className="size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1"
+        className={cn(
+          "size-full rounded-[inherit] transition-[color,box-shadow] outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-1",
+          viewportClassName,
+        )}
         onScroll={(event) => {
-          if (!dataTrack) {
-            return
+          if (dataTrack) {
+            const target = event.currentTarget
+            const scrollTop = target.scrollTop
+            const scrollable = Math.max(1, target.scrollHeight - target.clientHeight)
+            const direction = scrollTop >= lastScrollTopRef.current ? "down" : "up"
+            lastScrollTopRef.current = scrollTop
+            logScroll?.({
+              clientHeight: target.clientHeight,
+              direction,
+              percent: Math.round((scrollTop / scrollable) * 100),
+              scrollHeight: target.scrollHeight,
+              scrollTop,
+            })
           }
 
-          const target = event.currentTarget
-          const scrollTop = target.scrollTop
-          const scrollable = Math.max(1, target.scrollHeight - target.clientHeight)
-          const direction = scrollTop >= lastScrollTopRef.current ? "down" : "up"
-          lastScrollTopRef.current = scrollTop
-          logScroll?.({
-            clientHeight: target.clientHeight,
-            direction,
-            percent: Math.round((scrollTop / scrollable) * 100),
-            scrollHeight: target.scrollHeight,
-            scrollTop,
-          })
+          onViewportScroll?.(event)
         }}
       >
         {children}
       </ScrollAreaPrimitive.Viewport>
-      <ScrollBar />
+      {scrollbars === "vertical" || scrollbars === "both" ? <ScrollBar /> : null}
+      {scrollbars === "horizontal" || scrollbars === "both" ? <ScrollBar orientation="horizontal" /> : null}
       <ScrollAreaPrimitive.Corner />
     </ScrollAreaPrimitive.Root>
   )

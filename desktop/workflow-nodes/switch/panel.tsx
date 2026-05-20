@@ -21,6 +21,7 @@ import { DEFAULT_AGENT_TIMEOUT_MINS } from "../agent-timeout"
 const TIER_LABELS: Record<ModelTier, string> = { default: "主模型", haiku: "Haiku", sonnet: "Sonnet", opus: "Opus" }
 
 const NO_DEFAULT = "__none__"
+const BRANCH_ID_RE = /^[a-z][a-z0-9_]*$/
 
 export interface SwitchNodePanelProps {
   config: SwitchNodeConfig
@@ -74,9 +75,20 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
     commit({ branches: next, defaultBranch: nextDefault === NO_DEFAULT ? undefined : nextDefault })
   }
 
+  const updateBranchId = (i: number, id: string) => {
+    const committedId = lastCommittedRef.current.branches[i]?.id ?? branches[i]?.id
+    const next = branches.map((b, j) => (j === i ? { ...b, id } : b))
+    setBranches(next)
+    if (!canCommitBranchIds(next)) return
+    const nextDefault = defaultBranch === committedId ? id : defaultBranch
+    setDefaultBranch(nextDefault)
+    commit({ branches: next, defaultBranch: nextDefault === NO_DEFAULT ? undefined : nextDefault })
+  }
+
   const updateBranchLabel = (i: number, label: string) => {
     const next = branches.map((b, j) => (j === i ? { ...b, label } : b))
     setBranches(next)
+    if (!canCommitBranchIds(next)) return
     commit({ branches: next })
   }
 
@@ -91,6 +103,7 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
   const nodeProviderLabel = config.providerId
     ? `${getProviderName(config.providerId) ?? config.providerId} · ${getModelName(config.providerId, config.modelTier ?? "default") ?? TIER_LABELS[config.modelTier ?? "default"]}`
     : "选择供应商 + 模型"
+  const branchIdError = getBranchIdError(branches)
 
   return (
     <div className="grid gap-2">
@@ -194,12 +207,22 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
 
       <CollapsibleSection title="路由规则" summary={branchSummary}>
         <div className="grid gap-1.5">
+          <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_1.75rem] items-center gap-1.5">
+            <Label className="text-[11px] text-muted-foreground">路由键</Label>
+            <Label className="text-[11px] text-muted-foreground">显示名</Label>
+          </div>
           {branches.map((b, i) => (
-            <div key={b.id} className="flex items-center gap-1.5">
-              <span className="text-[11px] text-muted-foreground w-14 truncate shrink-0">{b.id}</span>
+            <div key={i} className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_1.75rem] items-center gap-1.5">
               <Input
-                className="h-7 text-xs flex-1"
+                className="h-7 text-xs"
+                value={b.id}
+                aria-label={`路由键 ${b.label || b.id}`}
+                onChange={(e) => updateBranchId(i, e.target.value)}
+              />
+              <Input
+                className="h-7 text-xs"
                 value={b.label}
+                aria-label={`显示名 ${b.id}`}
                 onChange={(e) => updateBranchLabel(i, e.target.value)}
               />
               <Button
@@ -212,6 +235,7 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
               </Button>
             </div>
           ))}
+          {branchIdError && <p className="text-xs text-destructive">{branchIdError}</p>}
           <Button size="sm" variant="outline" className="h-7 text-xs" onClick={addBranch}>
             <Plus className="h-3 w-3 mr-1" />添加分支
           </Button>
@@ -240,4 +264,18 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
       </CollapsibleSection>
     </div>
   )
+}
+
+function canCommitBranchIds(branches: readonly SwitchBranch[]): boolean {
+  return getBranchIdError(branches) === undefined
+}
+
+function getBranchIdError(branches: readonly SwitchBranch[]): string | undefined {
+  const seen = new Set<string>()
+  for (const branch of branches) {
+    if (!BRANCH_ID_RE.test(branch.id)) return "路由键只能使用小写字母、数字、下划线，并以字母开头"
+    if (seen.has(branch.id)) return "路由键不能重复"
+    seen.add(branch.id)
+  }
+  return undefined
 }

@@ -12,6 +12,7 @@ import type {
 } from "./types"
 
 const TIMER_MAX_DELAY_MS = 2_147_483_647
+const STOP_SETTLE_WAIT_MS = 3_000
 
 export interface TaskSchedulerServiceDeps {
   readonly tasks: ScheduledTaskRepository
@@ -135,6 +136,12 @@ export class TaskSchedulerService {
   async stopRun(runId: string): Promise<{ readonly stopped: boolean }> {
     const run = await this.deps.runs.get(runId)
     const stopped = this.deps.execution.stopRun(runId)
+    if (stopped) {
+      await Promise.race([
+        this.deps.execution.waitForRunToSettle(runId),
+        delay(STOP_SETTLE_WAIT_MS),
+      ])
+    }
     this.deps.logger?.info("Scheduled task stop requested.", {
       ...(run ? { taskId: run.taskId } : {}),
       runId,
@@ -336,6 +343,10 @@ export class TaskSchedulerService {
       activeRun: { status: "running", id: runId },
     }
   }
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function errorMetadata(error: unknown): { readonly errorName: string; readonly errorLength: number } {

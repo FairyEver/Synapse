@@ -94,6 +94,23 @@ describe("TaskSchedulerService", () => {
     expect(await harness.runs.get(running!.id)).toEqual(expect.objectContaining({ status: "cancelled" }))
   })
 
+  it("settles runtime state before reporting a stop as complete", async () => {
+    const harness = createHarness({ action: longRunningAction() })
+    await harness.taskItems.upsert(createTask({ id: "task:1" }))
+
+    const runPromise = harness.service.runNow("task:1")
+    await waitFor(async () => harness.service.schedulerRuntimeInspect().runningTaskIds.includes("task:1"))
+    const running = (await harness.runs.listByTask("task:1")).find((run) => run.status === "running")
+    expect(running).toBeDefined()
+
+    await expect(harness.service.stopRun(running!.id)).resolves.toEqual({ stopped: true })
+
+    const task = (await harness.service.schedulerTaskList()).find((item) => item.id === "task:1")
+    expect(task).toBeDefined()
+    expect(task).not.toHaveProperty("activeRun")
+    await runPromise
+  })
+
   it("logs stopRun requests with the run id and result", async () => {
     const logger = structuredLogger()
     const harness = createHarness({ action: longRunningAction(), logger })

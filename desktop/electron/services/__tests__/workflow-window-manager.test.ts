@@ -3,6 +3,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 
 type FakeBrowserWindow = {
   readonly id: number
+  readonly options: Electron.BrowserWindowConstructorOptions
   destroyed: boolean
   focused: boolean
   loadedUrls: string[]
@@ -29,9 +30,10 @@ const electronMock = vi.hoisted(() => {
   let nextId = 1
   let nextLoadError: Error | undefined
 
-  function createWindow(): FakeBrowserWindow {
+  function createWindow(options: Electron.BrowserWindowConstructorOptions = {}): FakeBrowserWindow {
     const win: FakeBrowserWindow = {
       id: nextId++,
+      options,
       destroyed: false,
       focused: false,
       loadedUrls: [],
@@ -80,8 +82,8 @@ const electronMock = vi.hoisted(() => {
     setNextLoadError: (error: Error) => {
       nextLoadError = error
     },
-    BrowserWindow: vi.fn(function BrowserWindow() {
-      return createWindow()
+    BrowserWindow: vi.fn(function BrowserWindow(options: Electron.BrowserWindowConstructorOptions) {
+      return createWindow(options)
     }),
   }
 })
@@ -150,6 +152,20 @@ describe("WorkflowWindowManager", () => {
     expect(editor.isDestroyed()).toBe(true)
     expect(runner.isDestroyed()).toBe(false)
     expect(manager.getOpenEditorIds()).toEqual([])
+  })
+
+  it("opens editor windows wider and taller than before with main window minimum bounds", () => {
+    const manager = new WorkflowWindowManager()
+
+    const editor = manager.open("workflow-1", "app://-")
+
+    expect(editor.options).toMatchObject({
+      width: 1350,
+      height: 900,
+      minWidth: 1000,
+      minHeight: 600,
+      title: "Workflow Editor",
+    })
   })
 
   it("closes the runner window when opening the editor for the same workflow", async () => {

@@ -1,11 +1,16 @@
 import { LoaderCircle, RotateCcw, Trash2 } from "lucide-react"
+import { toast } from "sonner"
 import { Button } from "@/components/ui/button"
 import { getCategoryLabel } from "@/lib/content-categories"
 import { resolveDisplayName } from "@/lib/display-name"
 import { useRepoProfileMap } from "@/app-shell/identity-context"
 import { ContentActionSplitButton } from "@/modules/content/components/content-action-split-button"
 import { ContentItemIcon } from "@/modules/content/components/content-item-icon"
-import { ContentItemMeta } from "@/modules/content/components/content-item-meta"
+import {
+  ContentItemBadges,
+  ContentItemMeta,
+  ContentItemText,
+} from "@/modules/content/components/content-item-meta"
 import { EditorInstallBadges } from "@/modules/content/components/editor-install-badges"
 import type { SynapseContentMeta, SynapseContentType } from "@/types/content"
 
@@ -115,6 +120,18 @@ function ContentListCard({
     item.createdByDisplayName,
   )
 
+  if (contentType === "skill" && item.type === "skill") {
+    return (
+      <SkillContentListCard
+        authorLabel={authorLabel}
+        categoryLabel={categoryLabel}
+        item={item}
+        onInstallDialogOpenChange={onInstallDialogOpenChange}
+        onOpen={onOpen}
+      />
+    )
+  }
+
   return (
     <div
       className="flex flex-col rounded-lg bg-background px-3 py-3 transition-shadow hover:ring-2 hover:ring-muted-foreground/25"
@@ -157,6 +174,136 @@ function ContentListCard({
             onInstallDialogOpenChange={onInstallDialogOpenChange}
           />
         </div>
+      </div>
+
+      <EditorInstallBadges contentId={item.id} />
+    </div>
+  )
+}
+
+function ContentCardActionArea({
+  item,
+  onInstallDialogOpenChange,
+}: {
+  item: SynapseContentMeta
+  onInstallDialogOpenChange?: (open: boolean) => void
+}) {
+  return (
+    <div
+      className="shrink-0 self-start"
+      onClick={(event) => {
+        event.stopPropagation()
+      }}
+      onKeyDown={(event) => {
+        event.stopPropagation()
+      }}
+    >
+      <ContentActionSplitButton
+        item={item}
+        onInstallDialogOpenChange={onInstallDialogOpenChange}
+      />
+    </div>
+  )
+}
+
+async function copySkillName(skillName: string): Promise<void> {
+  if (!navigator.clipboard?.writeText) {
+    toast("复制失败")
+    return
+  }
+
+  try {
+    await navigator.clipboard.writeText(skillName)
+    toast("Skill 名称已复制到剪贴板")
+  } catch {
+    toast("复制失败")
+  }
+}
+
+function SkillNameCopyButton({ skillName }: { skillName: string }) {
+  return (
+    <Button
+      type="button"
+      variant="ghost"
+      size="sm"
+      className="h-6 max-w-full justify-start px-0 text-xs font-mono text-muted-foreground hover:text-foreground"
+      aria-label="复制 Skill 名称"
+      title="复制 Skill 名称"
+      onClick={(event) => {
+        event.stopPropagation()
+        void copySkillName(skillName)
+      }}
+    >
+      <span className="truncate">{skillName}</span>
+    </Button>
+  )
+}
+
+function SkillContentListCard({
+  authorLabel,
+  categoryLabel,
+  item,
+  onInstallDialogOpenChange,
+  onOpen,
+}: {
+  authorLabel: string
+  categoryLabel: string
+  item: SynapseContentMeta<"skill">
+  onInstallDialogOpenChange?: (open: boolean) => void
+  onOpen: () => void
+}) {
+  const skillName = item.name?.trim()
+
+  return (
+    <div
+      className="flex flex-col rounded-lg bg-background px-3 py-3 transition-shadow hover:ring-2 hover:ring-muted-foreground/25"
+    >
+      <div className="flex items-start gap-3">
+        <button
+          type="button"
+          className="shrink-0 cursor-pointer rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          onClick={onOpen}
+        >
+          <ContentItemIcon
+            contentId={item.id}
+            contentType={item.type}
+            icon={item.icon}
+            iconType={item.iconType}
+            iconImage={item.iconImage}
+            title={item.title}
+            tone={item.iconBg}
+          />
+        </button>
+
+        <div className="min-w-0 flex-1">
+          <button
+            type="button"
+            className="block min-w-0 cursor-pointer rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            onClick={onOpen}
+          >
+            <ContentItemText
+              description={item.usage?.trim() || item.description}
+              title={item.title}
+            />
+          </button>
+
+          {skillName ? (
+            <div className="mt-1">
+              <SkillNameCopyButton skillName={skillName} />
+            </div>
+          ) : null}
+
+          <ContentItemBadges
+            author={authorLabel}
+            category={categoryLabel}
+            className="mt-2"
+          />
+        </div>
+
+        <ContentCardActionArea
+          item={item}
+          onInstallDialogOpenChange={onInstallDialogOpenChange}
+        />
       </div>
 
       <EditorInstallBadges contentId={item.id} />

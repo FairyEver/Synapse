@@ -8,20 +8,28 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 import type { WorkflowDefinition } from "@/types/workflow"
 import type { WorkflowCanvasHandle } from "../canvas"
 
-const { setViewportMock } = vi.hoisted(() => ({
+const { setViewportMock, reactFlowProps, controlsProps } = vi.hoisted(() => ({
   setViewportMock: vi.fn(),
+  reactFlowProps: [] as Array<Record<string, unknown>>,
+  controlsProps: [] as Array<Record<string, unknown>>,
 }))
 
 vi.mock("@xyflow/react", async () => {
   const React = await vi.importActual<typeof import("react")>("react")
   return {
-    ReactFlow: ({ children }: { children?: React.ReactNode }) => <div data-testid="react-flow">{children}</div>,
+    ReactFlow: (props: { children?: React.ReactNode }) => {
+      reactFlowProps.push(props as unknown as Record<string, unknown>)
+      return <div data-testid="react-flow">{props.children}</div>
+    },
     Background: () => <div data-testid="background" />,
-    Controls: ({ onFitView }: { onFitView?: () => void }) => (
-      <button type="button" aria-label="适应视图" onClick={onFitView}>
+    Controls: (props: { onFitView?: () => void }) => {
+      controlsProps.push(props as unknown as Record<string, unknown>)
+      return (
+      <button type="button" aria-label="适应视图" onClick={props.onFitView}>
         fit
       </button>
-    ),
+      )
+    },
     ReactFlowProvider: ({ children }: { children?: React.ReactNode }) => <>{children}</>,
     PanOnScrollMode: { Free: "free" },
     SelectionMode: { Partial: "partial" },
@@ -70,10 +78,26 @@ afterEach(() => {
   }
   roots.length = 0
   document.body.innerHTML = ""
+  reactFlowProps.length = 0
+  controlsProps.length = 0
   vi.clearAllMocks()
 })
 
 describe("WorkflowCanvas", () => {
+  it("caps fit view zoom at 100% for a single end node", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowCanvas definition={definitionWithEndOnly()} onChange={vi.fn()} />)
+    })
+
+    expect(reactFlowProps.at(-1)?.fitViewOptions).toMatchObject({ padding: 0.1, duration: 200, maxZoom: 1 })
+    expect(controlsProps.at(-1)?.fitViewOptions).toMatchObject({ padding: 0.1, duration: 200, maxZoom: 1 })
+  })
+
   it("resets the viewport when fit view is clicked on an empty canvas", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -182,6 +206,21 @@ function definitionWithConnectedPrompt(): WorkflowDefinition {
     edges: [
       { id: "edge-1", from: "start-1", to: "prompt-1" },
       { id: "edge-2", from: "prompt-1", to: "end-1" },
+    ],
+  }
+}
+
+function definitionWithEndOnly(): WorkflowDefinition {
+  return {
+    ...definition(),
+    nodes: [
+      {
+        id: "end-1",
+        name: "End",
+        type: "end",
+        position: { x: 600, y: 200 },
+        config: { outputType: "text", template: "", variables: [] },
+      },
     ],
   }
 }

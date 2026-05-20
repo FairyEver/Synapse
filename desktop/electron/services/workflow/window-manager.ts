@@ -1,10 +1,17 @@
 import { BrowserWindow } from "electron"
+import { DEFAULT_WINDOW_BOUNDS } from "../../../src/constants/defaults"
 import type { WindowManager } from "../../runtime/window"
 import { managedBrowserWindow } from "../../runtime/window"
 import { createMainLogger } from "../log-store"
 import { RendererHealthService } from "../renderer-health"
 
 const logger = createMainLogger("service.workflow.window-manager")
+const WORKFLOW_EDITOR_WINDOW_BOUNDS = {
+  width: 1350,
+  height: 900,
+  minWidth: DEFAULT_WINDOW_BOUNDS.minWidth,
+  minHeight: DEFAULT_WINDOW_BOUNDS.minHeight,
+}
 
 export class WorkflowWindowManager {
   private readonly editorWindows = new Map<string, BrowserWindow>()
@@ -24,7 +31,8 @@ export class WorkflowWindowManager {
     }
 
     const win = new BrowserWindow({
-      width: 1200, height: 800, title: "Workflow Editor",
+      ...WORKFLOW_EDITOR_WINDOW_BOUNDS,
+      title: "Workflow Editor",
       webPreferences: { preload: require.resolve("../../preload"), contextIsolation: true, sandbox: false },
     })
 

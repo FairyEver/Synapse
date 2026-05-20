@@ -22,6 +22,7 @@ import { errorDiagnostic } from "../lib/error-utils"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { buildWorkflowValidationDisplayItems, type WorkflowValidationDisplayItem } from "./validation-display"
 import { WorkflowErrorCard } from "./workflow-error-card"
+import { syncSwitchBranchReferences } from "./switch-branch-sync"
 
 const logger = createRendererLogger("workflow.editor")
 
@@ -159,26 +160,30 @@ export function WorkflowEditorApp() {
     setDefinition((def) => {
       if (!def) return def
       const node = def.nodes.find((n) => n.id === nodeId)
-      const updatedNodes = def.nodes.map((n) => n.id === nodeId ? { ...n, config } : n)
+      let nextConfig = config
+      let updatedEdges = def.edges
 
       // When a Switch node's branches change, remove edges referencing deleted branches
       // and sync edge labels for remaining branches
-      let updatedEdges = def.edges
       if (node?.type === "switch") {
-        const branches = Array.isArray(config.branches) ? config.branches as Array<{ id: string; label: string }> : []
+        const syncResult = syncSwitchBranchReferences({
+          nodeId,
+          previousConfig: node.config,
+          nextConfig: config,
+          edges: def.edges,
+        })
+        nextConfig = syncResult.config
+        updatedEdges = syncResult.edges
+        const branches = Array.isArray(nextConfig.branches) ? nextConfig.branches as Array<{ id: string; label: string }> : []
         const newBranchIds = new Set(branches.map((b) => b.id))
-        const orphanedEdgeIds = def.edges
-          .filter((e) => e.from === nodeId && e.branch && !newBranchIds.has(e.branch))
-          .map((e) => e.id)
-        if (orphanedEdgeIds.length > 0) {
-          updatedEdges = def.edges.filter((e) => !orphanedEdgeIds.includes(e.id))
-          canvasRef.current?.removeEdgesByIds(orphanedEdgeIds)
+        if (syncResult.orphanedEdgeIds.length > 0) {
+          canvasRef.current?.removeEdgesByIds(syncResult.orphanedEdgeIds)
         }
-        // Sync edge labels to match current branch labels
-        canvasRef.current?.updateEdgeLabels(nodeId, branches)
-        logger.debug("synced switch edge labels", { nodeId, branchCount: branches.length })
+        canvasRef.current?.syncSwitchBranchEdges(nodeId, updatedEdges, branches)
+        logger.debug("synced switch edge labels", { nodeId, branchCount: newBranchIds.size })
       }
 
+      const updatedNodes = def.nodes.map((n) => n.id === nodeId ? { ...n, config: nextConfig } : n)
       const updated = { ...def, nodes: updatedNodes, edges: updatedEdges }
       definitionRef.current = updated
       return updated

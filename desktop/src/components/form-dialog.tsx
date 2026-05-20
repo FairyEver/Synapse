@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 type FormDialogProps = {
@@ -44,9 +45,9 @@ function FormDialog({
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
 
-        <div className={cn("min-h-0 flex-1 overflow-y-auto px-5 py-4", bodyClassName)}>
+        <ScrollArea className={cn("min-h-0 flex-1 px-5 py-4", bodyClassName)}>
           {children}
-        </div>
+        </ScrollArea>
 
         <DialogFooter className="mx-0 mb-0 shrink-0 flex-col gap-3 rounded-none rounded-b-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
           {footer}

@@ -18,14 +18,23 @@ type ContentItemMetaProps = {
   title: string
 }
 
-function ContentItemMeta({
-  author,
-  category,
-  className,
+type ContentItemTextProps = {
+  description: string
+  descriptionWrap?: boolean
+  title: string
+}
+
+type ContentItemBadgesProps = {
+  author: string
+  category: string
+  className?: string
+}
+
+function ContentItemText({
   description,
   descriptionWrap,
   title,
-}: ContentItemMetaProps) {
+}: ContentItemTextProps) {
   const descRef = useRef<HTMLParagraphElement>(null)
   const [isClamped, setIsClamped] = useState(false)
   const [showFull, setShowFull] = useState(false)
@@ -46,7 +55,7 @@ function ContentItemMeta({
   }, [description, descriptionWrap])
 
   return (
-    <div className={cn("min-w-0", className)}>
+    <>
       <div className="min-w-0 flex flex-col gap-1.5">
         <p className="truncate text-sm font-medium leading-4 text-foreground">{title}</p>
         <p
@@ -68,16 +77,6 @@ function ContentItemMeta({
           </button>
         )}
       </div>
-
-      <div className="mt-2 flex flex-wrap items-center gap-1.5">
-        <Badge variant="outline" className="max-w-full truncate">
-          @{author}
-        </Badge>
-        <Badge variant="secondary" className="max-w-full truncate">
-          {category}
-        </Badge>
-      </div>
-
       {descriptionWrap && (
         <Dialog open={showFull} onOpenChange={setShowFull}>
           <DialogContent className="max-h-[70vh] overflow-y-auto sm:max-w-[500px]">
@@ -91,8 +90,45 @@ function ContentItemMeta({
           </DialogContent>
         </Dialog>
       )}
+    </>
+  )
+}
+
+function ContentItemBadges({ author, category, className }: ContentItemBadgesProps) {
+  return (
+    <div className={cn("flex flex-wrap items-center gap-1.5", className)}>
+      <Badge variant="outline" className="max-w-full truncate">
+        @{author}
+      </Badge>
+      <Badge variant="secondary" className="max-w-full truncate">
+        {category}
+      </Badge>
     </div>
   )
 }
 
-export { ContentItemMeta }
+function ContentItemMeta({
+  author,
+  category,
+  className,
+  description,
+  descriptionWrap,
+  title,
+}: ContentItemMetaProps) {
+  return (
+    <div className={cn("min-w-0", className)}>
+      <ContentItemText
+        description={description}
+        descriptionWrap={descriptionWrap}
+        title={title}
+      />
+      <ContentItemBadges
+        author={author}
+        category={category}
+        className="mt-2"
+      />
+    </div>
+  )
+}
+
+export { ContentItemBadges, ContentItemMeta, ContentItemText }

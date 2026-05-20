@@ -1,4 +1,4 @@
-import { useMemo, useRef, type ReactNode, type UIEventHandler } from "react"
+import { useMemo, type ReactNode, type UIEventHandler } from "react"
 import { Plus, Search, type LucideIcon } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -6,6 +6,7 @@ import {
   InputGroupAddon,
   InputGroupInput,
 } from "@/components/ui/input-group"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import {
   debounce,
@@ -133,52 +134,14 @@ function ModuleSidebarList({
   "data-track": dataTrack,
   onScroll,
 }: ModuleSidebarListProps) {
-  const lastScrollTopRef = useRef(0)
-  const logScroll = useMemo(
-    () => dataTrack
-      ? debounce((snapshot: {
-        clientHeight: number
-        direction: "down" | "up"
-        percent: number
-        scrollHeight: number
-        scrollTop: number
-      }) => {
-        track({
-          component: "module-sidebar-list",
-          name: dataTrack,
-          action: "scroll",
-          value: snapshot.percent,
-          metadata: snapshot,
-        })
-      }, 500)
-      : null,
-    [dataTrack],
-  )
-
   return (
-    <div
-      className={cn("min-h-0 flex-1 overflow-y-auto", className)}
+    <ScrollArea
+      className={cn("min-h-0 flex-1", className)}
       data-track={dataTrack}
-      onScroll={(event) => {
-        if (dataTrack) {
-          const target = event.currentTarget
-          const scrollTop = target.scrollTop
-          const scrollable = Math.max(1, target.scrollHeight - target.clientHeight)
-          const direction = scrollTop >= lastScrollTopRef.current ? "down" : "up"
-          lastScrollTopRef.current = scrollTop
-          logScroll?.({
-            clientHeight: target.clientHeight,
-            direction,
-            percent: Math.round((scrollTop / scrollable) * 100),
-            scrollHeight: target.scrollHeight,
-            scrollTop,
-          })
-        }
-        onScroll?.(event)
-      }}
+      onViewportScroll={onScroll}
     >
       <div className="flex flex-col">{children}</div>
-    </div>
+    </ScrollArea>
   )
 }
 
