@@ -1,8 +1,6 @@
 import { Fragment, type ReactNode } from "react"
-import { RefreshCw } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
@@ -12,7 +10,6 @@ import type { SynapseAgentRuntimeStatusItem } from "@/types/agent"
 type AgentRuntimePanelProps = {
   readonly children?: ReactNode
   readonly projectId?: string
-  readonly onRefresh?: () => void
 }
 
 type AgentRuntimeRowProps = {
@@ -50,13 +47,13 @@ function AgentRuntimeRow({ item }: AgentRuntimeRowProps) {
   const icon = agentIconById.get(item.id)
 
   return (
-    <div className="flex items-center justify-between gap-4 px-4 py-3">
+    <div className="flex items-center justify-between gap-4 px-4 py-4">
       <div className="flex min-w-0 items-center gap-3">
         {icon ? (
-          <img src={icon} alt="" className="size-8 shrink-0 rounded-md" />
+          <img src={icon} alt="" className="size-10 shrink-0 rounded-lg" />
         ) : null}
         <div className="min-w-0">
-          <div className="font-medium">{item.label}</div>
+          <div className="truncate font-medium">{item.label}</div>
           {detail ? (
             <div className="truncate text-sm text-muted-foreground" title={detail}>
               {detail}
@@ -71,32 +68,15 @@ function AgentRuntimeRow({ item }: AgentRuntimeRowProps) {
   )
 }
 
-function AgentRuntimePanel({ children, projectId, onRefresh }: AgentRuntimePanelProps) {
-  const { status, loading, error, refresh } = useAgentRuntimeStatus(projectId)
+function AgentRuntimePanel({ children, projectId }: AgentRuntimePanelProps) {
+  const { status, loading, error } = useAgentRuntimeStatus(projectId)
   const agents = status?.agents ?? []
 
   return (
-    <Card>
-      <CardHeader>
-        <div className="flex items-center justify-between gap-3">
-          <CardTitle className="text-base">智能体</CardTitle>
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={loading}
-            onClick={() => {
-              refresh()
-              onRefresh?.()
-            }}
-          >
-            <RefreshCw data-icon="inline-start" className={loading ? "animate-spin" : undefined} />
-            重新检测
-          </Button>
-        </div>
-      </CardHeader>
+    <Card className="py-0">
       <CardContent className="p-0">
         {loading && agents.length === 0 ? (
-          <div className="flex flex-col gap-3 px-4 py-4">
+          <div className="flex flex-col gap-3 px-4 py-5">
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
           </div>
@@ -106,7 +86,7 @@ function AgentRuntimePanel({ children, projectId, onRefresh }: AgentRuntimePanel
           </div>
         ) : agents.length === 0 && !loading ? (
           <div className="px-4 py-6 text-center text-sm text-muted-foreground">
-            未检测到智能体运行时
+            未检测到模型运行时
           </div>
         ) : (
           agents.map((item, index) => (
@@ -119,7 +99,7 @@ function AgentRuntimePanel({ children, projectId, onRefresh }: AgentRuntimePanel
         {children ? (
           <>
             {agents.length > 0 ? <Separator /> : null}
-            <div className="px-4 py-3">
+            <div className="px-4 py-4">
               {children}
             </div>
           </>

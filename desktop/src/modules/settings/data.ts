@@ -44,8 +44,8 @@ const settingsCategories: SettingsCategory[] = [
   {
     id: "claude-code",
     icon: Bot,
-    label: "智能体",
-    description: "智能体与 Provider。",
+    label: "模型",
+    description: "模型与 Provider。",
   },
   {
     id: "variables",

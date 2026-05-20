@@ -57,10 +57,9 @@ vi.mock("@/modules/settings/hooks/use-agent-runtime-status", () => ({
 }))
 
 describe("AgentRuntimePanel", () => {
-  it("renders agent runtime readiness without the legacy CLI tools title", () => {
+  it("renders agent runtime readiness without the panel header", () => {
     const html = renderToStaticMarkup(<AgentRuntimePanel projectId="project-1" />)
 
-    expect(html).toContain("智能体")
     expect(html).toContain("Codex")
     expect(html).toContain("codex-agent.png")
     expect(html).toContain("可用")
@@ -68,6 +67,7 @@ describe("AgentRuntimePanel", () => {
     expect(html).toContain("claude-code-agent.png")
     expect(html).toContain("未就绪")
     expect(html).toContain("未检测到 claude")
+    expect(html).not.toContain("重新检测")
     expect(html).not.toContain("命令行工具")
   })
 })

@@ -13,6 +13,7 @@ const SETTINGS_FIELD_CONTROL_CLASSNAME = "w-full md:w-full md:max-w-sm"
 type SettingsFieldRowProps = {
   children: ReactNode
   className?: string
+  contentClassName?: string
   controlClassName?: string
   description?: string
   error?: string | null
@@ -22,6 +23,7 @@ type SettingsFieldRowProps = {
 function SettingsFieldRow({
   children,
   className,
+  contentClassName,
   controlClassName = SETTINGS_FIELD_CONTROL_CLASSNAME,
   description,
   error,
@@ -34,7 +36,7 @@ function SettingsFieldRow({
       className={className}
     >
       <FieldTitle>{label}</FieldTitle>
-      <FieldContent className="w-full md:max-w-sm">
+      <FieldContent className={cn("w-full md:max-w-sm", contentClassName)}>
         <div className={cn("w-full", controlClassName)}>{children}</div>
         {description ? <FieldDescription>{description}</FieldDescription> : null}
         <FieldError>{error}</FieldError>

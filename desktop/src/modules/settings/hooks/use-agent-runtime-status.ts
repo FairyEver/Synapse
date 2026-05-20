@@ -65,7 +65,7 @@ function useAgentRuntimeStatus(projectId?: string) {
           })
           if (showLoading) {
             setStatus(null)
-            setError("加载智能体运行时状态失败")
+            setError("加载模型运行时状态失败")
           }
         }
       })

@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { FieldGroup } from "@/components/ui/field"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -76,64 +77,70 @@ function AgentDefaultsContent() {
 
   return (
     <>
-      <SettingsFieldRow
-        label="默认权限模式"
-        controlClassName="w-full md:w-[220px]"
-      >
-        <AgentPermissionModeMenu
-          selectedMode={selectedMode}
-          contentClassName="w-56"
-          onSelect={selectPermissionMode}
-          trigger={(
+      <FieldGroup className="gap-2">
+        <SettingsFieldRow
+          className="min-h-9 items-center"
+          contentClassName="md:max-w-none md:items-end"
+          label="默认权限模式"
+          controlClassName="w-full md:w-72"
+        >
+          <AgentPermissionModeMenu
+            selectedMode={selectedMode}
+            contentClassName="w-56"
+            onSelect={selectPermissionMode}
+            trigger={(
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-between"
+                aria-label="默认权限"
+              >
+                <span className="truncate">{permissionModeLabels[selectedMode]}</span>
+                <ChevronDown data-icon="inline-end" />
+              </Button>
+            )}
+          />
+        </SettingsFieldRow>
+        <SettingsFieldRow
+          className="min-h-9 items-center"
+          contentClassName="md:max-w-none md:items-end"
+          label="默认供应商和模型"
+          controlClassName="w-full md:w-72"
+        >
+          <div className="flex min-w-0 items-center gap-2">
             <Button
               type="button"
               variant="outline"
-              className="w-full justify-between"
-              aria-label="默认权限"
+              className="min-w-0 flex-1 justify-between"
+              aria-label="默认供应商"
+              onClick={() => setProviderDialogOpen(true)}
             >
-              <span className="truncate">{permissionModeLabels[selectedMode]}</span>
-              <ChevronDown className="size-4 text-muted-foreground" />
+              <span className="min-w-0 truncate text-muted-foreground">
+                {defaultPM ? resolvedLabel || "..." : "选择供应商 + 模型"}
+              </span>
+              <ChevronDown data-icon="inline-end" />
             </Button>
-          )}
-        />
-      </SettingsFieldRow>
-      <SettingsFieldRow
-        label="默认供应商和模型"
-        description="新建 Agent 对话、定时任务和工作流节点将默认使用此供应商和模型。"
-        controlClassName="w-full md:w-[220px]"
-      >
-        <div className="flex items-center gap-2">
-          <Button
-            type="button"
-            variant="outline"
-            className="w-full justify-between"
-            aria-label="默认供应商"
-            onClick={() => setProviderDialogOpen(true)}
-          >
-            <span className="truncate text-muted-foreground">
-              {defaultPM ? resolvedLabel || "..." : "选择供应商 + 模型"}
-            </span>
-            <ChevronDown className="size-4 text-muted-foreground" />
-          </Button>
-          {defaultPM ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              aria-label="清除默认供应商"
-              onClick={() => void saveDefaultProviderModel(null)}
-            >
-              清除
-            </Button>
-          ) : null}
-        </div>
-        <ProviderModelSelectDialog
-          open={providerDialogOpen}
-          onOpenChange={setProviderDialogOpen}
-          defaultSelection={defaultPM ?? undefined}
-          onSelect={(selection) => saveDefaultProviderModel(selection)}
-        />
-      </SettingsFieldRow>
+            {defaultPM ? (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="shrink-0"
+                aria-label="清除默认供应商"
+                onClick={() => void saveDefaultProviderModel(null)}
+              >
+                清除
+              </Button>
+            ) : null}
+          </div>
+          <ProviderModelSelectDialog
+            open={providerDialogOpen}
+            onOpenChange={setProviderDialogOpen}
+            defaultSelection={defaultPM ?? undefined}
+            onSelect={(selection) => saveDefaultProviderModel(selection)}
+          />
+        </SettingsFieldRow>
+      </FieldGroup>
       <AlertDialog open={pendingMode !== null} onOpenChange={(open) => {
         if (!open) {
           setPendingMode(null)
@@ -170,7 +177,7 @@ function AgentDefaultsPanel() {
   return (
     <Card>
       <CardHeader>
-        <CardTitle className="text-base">智能体默认设置</CardTitle>
+        <CardTitle className="text-base">模型默认设置</CardTitle>
       </CardHeader>
       <CardContent>
         <AgentDefaultsContent />
