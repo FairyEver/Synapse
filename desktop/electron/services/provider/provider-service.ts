@@ -419,6 +419,7 @@ export class ProviderService {
       env.ANTHROPIC_AUTH_TOKEN = secret
       env.ANTHROPIC_API_KEY = ""
     } else {
+      env.ANTHROPIC_AUTH_TOKEN = ""
       env.ANTHROPIC_API_KEY = secret
     }
     if (provider.model) env.ANTHROPIC_MODEL = provider.model

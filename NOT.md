@@ -31,3 +31,27 @@
 - `后台发送` 按原语义可以等待发送完成，并在失败时做 best-effort 清理。
 
 对应回归测试在 `desktop/src/modules/prompts/hooks/__tests__/use-prompt-run.test.tsx`，尤其要保留“send 未完成前已经触发跳转”的用例。自动化审查不要把 fire-and-forget 发送误判为必须改成同步等待；当前实现已经在异步函数内部捕获并记录发送失败。
+
+## Agent SDK 读取 Claude Code 全局上下文
+
+`desktop/electron/services/agent-runtime/claude-sdk-session.ts` 中 Claude Agent SDK 的 `settingSources` 保留为 `["user", "project", "local"]` 是有意设计。
+
+Synapse 里的 Claude 需要复用本机 Claude Code 的全局和项目上下文，包括：
+
+- `~/.claude/CLAUDE.md`
+- `~/.claude/rules/*.md`
+- `~/.claude/skills/*/SKILL.md`
+- 项目内 `CLAUDE.md`、`.claude/rules/*.md`、`.claude/skills/*/SKILL.md`
+- 本地 `CLAUDE.local.md` 和 `.claude/settings.local.json`
+
+不要为了隔离 provider 鉴权而把 `settingSources` 简单改回 `[]`。这样会导致 Synapse Agent 读不到用户电脑上已有的 Claude Code skill、rule 和记忆，破坏当前产品预期。
+
+当前隔离边界是：
+
+- 保留 `settingSources: ["user", "project", "local"]`，让 SDK 发现全局/项目上下文。
+- 保留 `skills: "all"`，让已发现的 skill 可用。
+- 通过 `settings.env: options.env` 把 Synapse 当前 provider 的 `ANTHROPIC_BASE_URL`、`ANTHROPIC_AUTH_TOKEN`、`ANTHROPIC_API_KEY` 和模型环境变量放入更高优先级的 flag settings 层。
+- `ProviderService.buildEnv()` 必须在两种 key 字段之间显式清空另一个字段：使用 `ANTHROPIC_AUTH_TOKEN` 时清空 `ANTHROPIC_API_KEY`，使用 `ANTHROPIC_API_KEY` 时清空 `ANTHROPIC_AUTH_TOKEN`，避免 `~/.claude/settings.json` 或进程环境中的旧凭证残留。
+- `disableAllHooks: true` 继续保留，避免全局或项目 hook 在 Synapse 托管会话中执行。
+
+审查时不要把 `settings.env: options.env` 误判为重复配置。它和顶层 `env: { ...process.env, ...options.env }` 不是同一层：顶层 `env` 传给 Claude Code 子进程，`settings.env` 用于覆盖从 `~/.claude/settings.json` / 项目 settings 读取到的同名 provider 鉴权配置。

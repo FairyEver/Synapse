@@ -214,6 +214,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
       settings: {
         enableAllProjectMcpServers: true,
         disableAllHooks: true,
+        env: options.env,
       },
       env: {
         ...process.env,

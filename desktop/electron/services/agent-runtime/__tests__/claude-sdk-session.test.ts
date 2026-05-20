@@ -77,6 +77,9 @@ describe("ClaudeSDKSession", () => {
       PATH: process.env.PATH,
       FOO: "bar",
     }))
+    expect(getOptions().settings).toMatchObject({
+      env: { FOO: "bar" },
+    })
   })
 
   it.each(packagedRuntimeCases)(

@@ -122,6 +122,7 @@ describe("ProviderService", () => {
     })
 
     await expect(service.buildEnv("anthropic")).resolves.toMatchObject({
+      ANTHROPIC_AUTH_TOKEN: "",
       ANTHROPIC_API_KEY: "sk-test",
     })
     await expect(providers.get("anthropic")).resolves.toMatchObject({
