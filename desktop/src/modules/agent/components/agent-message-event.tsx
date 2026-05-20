@@ -80,10 +80,12 @@ function AssistantMessageBody({
   readonly onOpenReference: (reference: string) => void
 }) {
   const containerRef = useRef<HTMLDivElement>(null)
+  const streaming = item.streaming === true
   const preprocessed = wrapLocalReferences(item.content)
-  const renderedHtml = renderMarkdown(preprocessed)
+  const renderedHtml = streaming ? "" : renderMarkdown(preprocessed)
 
   useEffect(() => {
+    if (streaming) return
     const container = containerRef.current
     if (!container) return
     const preElements = container.querySelectorAll("pre")
@@ -92,7 +94,7 @@ function AssistantMessageBody({
       pre.classList.add("relative")
       pre.insertAdjacentHTML("beforeend", COPY_BUTTON_HTML)
     }
-  }, [renderedHtml])
+  }, [renderedHtml, streaming])
 
   const handleClick = async (event: React.MouseEvent<HTMLDivElement>) => {
     const target = event.target
@@ -171,13 +173,22 @@ function AssistantMessageBody({
 
   return (
     <div className="group/message max-w-[76ch] px-1 py-2">
-      <div
-        ref={containerRef}
-        data-allow-select="true"
-        className={cn(MARKDOWN_BODY_CLASSNAME, "[&_pre:hover_.code-copy-btn]:opacity-100")}
-        onClick={handleClick}
-        dangerouslySetInnerHTML={{ __html: renderedHtml }}
-      />
+      {streaming ? (
+        <div
+          data-allow-select="true"
+          className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground"
+        >
+          {item.content}
+        </div>
+      ) : (
+        <div
+          ref={containerRef}
+          data-allow-select="true"
+          className={cn(MARKDOWN_BODY_CLASSNAME, "[&_pre:hover_.code-copy-btn]:opacity-100")}
+          onClick={handleClick}
+          dangerouslySetInnerHTML={{ __html: renderedHtml }}
+        />
+      )}
       <AgentMessageToolbar
         timestamp={item.timestamp}
         content={item.content}

@@ -164,6 +164,33 @@ describe("AgentMessageEvent", () => {
     expect(wrapped).toBe("Reading `./src/private/file.ts while open ./docs/readme.md")
   })
 
+  it("renders streaming assistant drafts as literal text until final markdown arrives", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-streaming",
+            kind: "message",
+            role: "assistant",
+            content: "1. **skill",
+            timestamp: "2026-04-27T03:15:00.000Z",
+            streaming: true,
+          }}
+          profile={profile}
+          onOpenReference={vi.fn()}
+        />,
+      )
+    })
+
+    expect(container.querySelector("ol")).toBeNull()
+    expect(container.querySelector("strong")).toBeNull()
+    expect(container.textContent).toContain("1. **skill")
+  })
+
   it("keeps sentence punctuation outside auto-wrapped local reference links", () => {
     const wrapped = wrapLocalReferences("Open ./README.md. Then inspect desktop/src/App.tsx:12;")
 

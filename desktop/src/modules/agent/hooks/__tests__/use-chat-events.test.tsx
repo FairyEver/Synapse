@@ -7,7 +7,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { act } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { SynapseAgentDomainEvent } from "@/types/agent"
+import type { SynapseAgentDomainEvent, SynapseAgentTimelineItem } from "@/types/agent"
 import { initialChatState } from "../use-chat-reducer"
 import type { ChatAction, ChatState } from "../use-chat-reducer"
 import { useChatEvents } from "../use-chat-events"
@@ -67,6 +67,7 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  vi.useRealTimers()
 })
 
 describe("useChatEvents", () => {
@@ -234,12 +235,80 @@ describe("useChatEvents", () => {
       }),
     )
   })
+
+  it("batches rapid SDK stream deltas before updating the timeline", async () => {
+    vi.useFakeTimers()
+    const updateTimeline = vi.fn()
+    const dispatch: React.Dispatch<ChatAction> = vi.fn()
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe
+          dispatch={dispatch}
+          updateTimeline={updateTimeline}
+        />,
+      )
+    })
+
+    const first: SynapseAgentDomainEvent = {
+      domain: "agent",
+      type: "stream",
+      timestamp: "2026-05-14T00:00:00.000Z",
+      scope: { sessionId: "conversation-1" },
+      payload: {
+        projectId: "project-1",
+        sessionKey: "local:renderer",
+        platform: "renderer",
+        event: {
+          type: "stream",
+          deltaType: "text_delta",
+          text: "hello",
+        },
+      },
+    }
+    const second: SynapseAgentDomainEvent = {
+      ...first,
+      timestamp: "2026-05-14T00:00:00.001Z",
+      payload: {
+        ...first.payload,
+        event: {
+          type: "stream",
+          deltaType: "text_delta",
+          text: " world",
+        },
+      },
+    }
+
+    await act(async () => {
+      bridgeState.listener?.(first)
+      bridgeState.listener?.(second)
+    })
+
+    expect(updateTimeline).not.toHaveBeenCalled()
+
+    await act(async () => {
+      vi.advanceTimersByTime(50)
+    })
+
+    expect(updateTimeline).toHaveBeenCalledTimes(1)
+    const updater = updateTimeline.mock.calls[0]?.[0] as ((current: []) => unknown[]) | undefined
+    expect(updater?.([])).toEqual([
+      expect.objectContaining({
+        kind: "message",
+        role: "assistant",
+        content: "hello world",
+      }),
+    ])
+  })
 })
 
 function HookProbe({
   dispatch,
   loadTimeline,
   refreshPendingPermissions,
+  updateTimeline,
 }: {
   readonly dispatch: React.Dispatch<ChatAction>
   readonly loadTimeline?: (target: {
@@ -248,6 +317,7 @@ function HookProbe({
     readonly conversationId?: string
   }) => Promise<void>
   readonly refreshPendingPermissions?: () => Promise<void>
+  readonly updateTimeline?: (updater: (current: SynapseAgentTimelineItem[]) => SynapseAgentTimelineItem[]) => void
 }): ReactNode {
   const projectIdsRef = useRef(["project-1"])
   const defaultProjectIdRef = useRef<string | undefined>("project-1")
@@ -267,8 +337,8 @@ function HookProbe({
     loadTimeline: loadTimeline ?? vi.fn(async () => {}),
     refreshConversationSnapshot: vi.fn(async () => {}),
     refreshPendingPermissions: refreshPendingPermissions ?? vi.fn(async () => {}),
-    updateTimeline: vi.fn(),
-  }), [loadTimeline, refreshPendingPermissions])
+    updateTimeline: updateTimeline ?? vi.fn(),
+  }), [loadTimeline, refreshPendingPermissions, updateTimeline])
 
   useChatEvents(state, dispatch, {
     projectIdsRef,

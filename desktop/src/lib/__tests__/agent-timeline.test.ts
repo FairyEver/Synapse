@@ -251,7 +251,54 @@ describe("agent timeline conversion", () => {
       kind: "message",
       role: "assistant",
       content: "Partial final answer.",
+      streaming: false,
       metadata: { usage: { output_tokens: 3 } },
+    }))
+  })
+
+  it("marks stream text as a draft until final assistant content arrives", () => {
+    const streamed = appendAgentTimelineEvent([], {
+      type: "stream",
+      deltaType: "text_delta",
+      text: "1. **skill",
+    }, "2026-05-14T02:01:00.000Z", "claude")
+    expect(streamed[0]).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      content: "1. **skill",
+      streaming: true,
+    }))
+
+    const final = appendAgentTimelineEvent(streamed, {
+      type: "assistant",
+      content: "1. **skill**",
+    }, "2026-05-14T02:01:01.000Z", "claude")
+
+    expect(final[0]).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      content: "1. **skill**",
+      streaming: false,
+    }))
+  })
+
+  it("marks streamed assistant text complete when an empty result closes the turn", () => {
+    const streamed = appendAgentTimelineEvent([], {
+      type: "stream",
+      deltaType: "text_delta",
+      text: "Final text",
+    }, "2026-05-14T02:02:00.000Z", "claude")
+    const closed = appendAgentTimelineEvent(streamed, {
+      type: "result",
+      content: "",
+      done: true,
+    }, "2026-05-14T02:02:01.000Z", "claude")
+
+    expect(closed[0]).toEqual(expect.objectContaining({
+      kind: "message",
+      role: "assistant",
+      content: "Final text",
+      streaming: false,
     }))
   })
 })

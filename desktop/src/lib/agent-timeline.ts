@@ -39,7 +39,7 @@ export function agentEventToTimelineItem(
       const thinking = streamThinking(event)
       return thinking
         ? { ...base, kind: "thinking", content: thinking }
-        : { ...base, kind: "message", role: "assistant", content: streamText(event) }
+        : { ...base, kind: "message", role: "assistant", content: streamText(event), streaming: true }
     }
     case "assistant":
       return { ...base, kind: "message", role: "assistant", content: assistantText(event) }
@@ -200,7 +200,7 @@ export function appendAgentTimelineEvent(
         if (assistant.kind === "message" && assistant.role === "assistant") {
           return [
             ...current.slice(0, assistantIndex),
-            { ...assistant, content: `${assistant.content}${item.content}`, timestamp },
+            { ...assistant, content: `${assistant.content}${item.content}`, timestamp, streaming: true },
             ...current.slice(assistantIndex + 1),
           ]
         }
@@ -232,7 +232,7 @@ export function appendAgentTimelineEvent(
   }
   if (event.type === "assistant" && item.kind === "message" && last?.kind === "message" && last.role === "assistant") {
     if (isStreamedAssistantDraft(last)) {
-      return [...current.slice(0, -1), { ...last, content: item.content, timestamp }]
+      return [...current.slice(0, -1), { ...last, content: item.content, timestamp, streaming: false }]
     }
     if (last.content === item.content) return [...current]
     if (item.content.startsWith(last.content)) {
@@ -246,7 +246,7 @@ export function appendAgentTimelineEvent(
     if (assistant?.kind === "message" && assistant.role === "assistant") {
       return [
         ...current.slice(0, assistantIndex),
-        { ...assistant, content: item.content, timestamp },
+        { ...assistant, content: item.content, timestamp, streaming: false },
         ...current.slice(assistantIndex + 1),
       ]
     }
@@ -336,7 +336,9 @@ function latestThinkingDraftIndex(items: readonly SynapseAgentTimelineItem[]): n
 }
 
 function isStreamedAssistantDraft(item: SynapseAgentTimelineItem): boolean {
-  return item.kind === "message" && item.role === "assistant" && item.id.includes(":stream:")
+  return item.kind === "message"
+    && item.role === "assistant"
+    && (item.streaming === true || (item.streaming !== false && item.id.includes(":stream:")))
 }
 
 function isTimelineMergeBoundary(item: SynapseAgentTimelineItem): boolean {
@@ -410,8 +412,10 @@ function mergeResultIntoAssistantMessage(
 ): SynapseAgentMessageTimelineItem {
   const metadata = resultMetadata(event)
   const content = event.content.trim().length > 0 ? event.content : item.content
-  if (!metadata && content === item.content) return item
-  return { ...item, content, metadata: metadata ?? item.metadata, timestamp }
+  if (!metadata && content === item.content) {
+    return item.streaming ? { ...item, streaming: false, timestamp } : item
+  }
+  return { ...item, content, metadata: metadata ?? item.metadata, timestamp, streaming: false }
 }
 
 function assistantText(event: Extract<SynapseAgentEvent, { type: "assistant" }>): string {

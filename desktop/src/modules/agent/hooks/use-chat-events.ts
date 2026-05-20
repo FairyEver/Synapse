@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { appendAgentTimelineEvent } from "@/lib/agent-timeline"
-import type { SynapseAgentDomainEvent } from "@/types/agent"
+import type { SynapseAgentDomainEvent, SynapseAgentStreamDomainEvent } from "@/types/agent"
 import { reducePhaseEvent } from "../utils/phase-reducer"
 import {
   clearConversationUnread,
@@ -15,6 +15,9 @@ import type { ChatConnectionRefs, ChatConnectionResult } from "./use-chat-connec
 import { errorLogMeta } from "../utils"
 
 const logger = createRendererLogger("agent")
+// Token-level SDK deltas can arrive hundreds of times per second; batching
+// them keeps live text layout stable while preserving event order.
+const STREAM_EVENT_FLUSH_DELAY_MS = 50
 
 type ChatEventRefs = ChatConnectionRefs
 
@@ -38,12 +41,46 @@ function useChatEvents(
   sessionsRef.current = state.sessions
   const agentTypeRef = useRef(state.status?.agentType)
   agentTypeRef.current = state.status?.agentType
+  const streamEventsRef = useRef<SynapseAgentStreamDomainEvent[]>([])
+  const streamFlushTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
 
   useEffect(() => {
     if (projectIdsRef.current.length === 0) return undefined
     const bridge = getSynapseBridge()
     if (!bridge) return undefined
-    return bridge.agent.onEvent((domainEvent) => {
+    const clearStreamFlushTimer = () => {
+      if (!streamFlushTimerRef.current) return
+      clearTimeout(streamFlushTimerRef.current)
+      streamFlushTimerRef.current = undefined
+    }
+    const agentTypeForSelectedSession = () =>
+      sessionsRef.current.find((session) =>
+        session.projectId === selectedProjectIdRef.current
+        && session.id === selectedConversationIdRef.current)?.agentType
+      ?? agentTypeRef.current
+    const flushStreamEvents = () => {
+      if (streamEventsRef.current.length === 0) return
+      clearStreamFlushTimer()
+      const selected = {
+        projectId: selectedProjectIdRef.current,
+        conversationId: selectedConversationIdRef.current,
+        sessionKey: selectedSessionKeyRef.current,
+      }
+      const events = streamEventsRef.current.filter((event) =>
+        matchesSelectedEvent(event, selected))
+      streamEventsRef.current = []
+      if (events.length === 0) return
+      const agentType = agentTypeForSelectedSession()
+      updateTimeline((current) => events.reduce(
+        (next, event) => appendAgentTimelineEvent(next, event.payload.event, event.timestamp, agentType),
+        current,
+      ))
+    }
+    const scheduleStreamFlush = () => {
+      if (streamFlushTimerRef.current) return
+      streamFlushTimerRef.current = setTimeout(flushStreamEvents, STREAM_EVENT_FLUSH_DELAY_MS)
+    }
+    const unsubscribe = bridge.agent.onEvent((domainEvent) => {
       if (!projectIdsRef.current.includes(domainEvent.payload.projectId)) {
         logger.info("Agent event ignored for untracked project.", {
           currentProjectIds: projectIdsRef.current,
@@ -56,6 +93,9 @@ function useChatEvents(
           platform: "platform" in domainEvent.payload ? domainEvent.payload.platform : undefined,
         })
         return
+      }
+      if (!isSdkStreamDeltaEvent(domainEvent)) {
+        flushStreamEvents()
       }
       if (domainEvent.type === "phase.update") {
         const payload = domainEvent.payload
@@ -187,10 +227,12 @@ function useChatEvents(
         selectedConversationId: selectedConversationIdRef.current,
         selectedSessionKey: selectedSessionKeyRef.current,
       })
-      const agentType = sessionsRef.current.find((session) =>
-        session.projectId === selectedProjectIdRef.current
-        && session.id === selectedConversationIdRef.current)?.agentType
-        ?? agentTypeRef.current
+      if (isSdkStreamDeltaEvent(domainEvent)) {
+        streamEventsRef.current.push(domainEvent)
+        scheduleStreamFlush()
+        return
+      }
+      const agentType = agentTypeForSelectedSession()
       updateTimeline((current) =>
         appendAgentTimelineEvent(current, domainEvent.payload.event, domainEvent.timestamp, agentType))
       const event = domainEvent.payload.event
@@ -243,6 +285,11 @@ function useChatEvents(
         })
       }
     })
+    return () => {
+      clearStreamFlushTimer()
+      streamEventsRef.current = []
+      unsubscribe()
+    }
   }, [
     dispatch,
     loadTimeline,
@@ -258,6 +305,12 @@ function useChatEvents(
 }
 
 export { useChatEvents }
+
+function isSdkStreamDeltaEvent(
+  event: SynapseAgentDomainEvent,
+): event is SynapseAgentStreamDomainEvent & { readonly type: "stream" } {
+  return event.type === "stream" && event.payload.event.type === "stream"
+}
 export type { ChatEventRefs }
 
 function isTerminalPhase(phase: string, status: string): boolean {

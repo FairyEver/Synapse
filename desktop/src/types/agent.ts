@@ -154,6 +154,7 @@ export interface SynapseAgentMessageTimelineItem extends SynapseAgentTimelineBas
   readonly kind: "message"
   readonly role: "user" | "assistant" | "system" | "tool"
   readonly content: string
+  readonly streaming?: boolean
   readonly legacy?: boolean
   readonly metadata?: SynapseAgentResultMetadata
 }
