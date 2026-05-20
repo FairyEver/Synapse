@@ -138,7 +138,7 @@ function TaskCard({
         </div>
       </div>
 
-      <div className="mt-4 grid grid-cols-2 gap-3 rounded-lg border border-border bg-muted/50 p-3">
+      <div className="mt-4 grid grid-cols-2 gap-2 rounded-lg border border-border bg-muted/50 p-3">
         <div className="min-w-0">
           <p className="text-xs text-muted-foreground">下次执行</p>
           <p className="mt-1 truncate text-sm font-medium">{nextRun}</p>

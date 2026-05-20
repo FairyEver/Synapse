@@ -309,7 +309,7 @@ function ContentGrid({
 }: ContentGridProps) {
   if (isDeletedView) {
     return (
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         {items.map((item) => (
           <DeletedContentCard
             key={item.id}
@@ -325,7 +325,7 @@ function ContentGrid({
   }
 
   return (
-    <div className="grid grid-cols-2 gap-3">
+    <div className="grid grid-cols-2 gap-2">
       {items.map((item) => (
         <ContentListCard
           key={item.id}

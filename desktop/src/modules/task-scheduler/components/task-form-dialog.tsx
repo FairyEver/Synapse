@@ -458,7 +458,7 @@ function TaskFormDialog({
                 sectionRef={setSectionRef("task-form-section-run-settings")}
                 title="运行设置"
               >
-                <div data-layout="task-form-run-settings-list" className="grid grid-cols-2 gap-3">
+                <div data-layout="task-form-run-settings-list" className="grid grid-cols-2 gap-2">
                   <ToggleField
                     checked={form.enabled}
                     id="task-form-enabled"

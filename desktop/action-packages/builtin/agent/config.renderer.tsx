@@ -102,7 +102,7 @@ export function AgentConfigForm({
         </FieldContent>
       </Field>
 
-      <div className="grid grid-cols-2 gap-3">
+      <div className="grid grid-cols-2 gap-2">
         <Field>
           <FieldLabel htmlFor="task-action-agent-session-policy">会话策略</FieldLabel>
           <FieldContent>

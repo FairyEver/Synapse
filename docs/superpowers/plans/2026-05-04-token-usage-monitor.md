@@ -2330,7 +2330,7 @@ export function StatsView({ graphResult }: StatsViewProps) {
   return (
     <div className="flex flex-col gap-6">
       <ContributionGraph contributions={contribDays} />
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {stats.map((s) => (
           <div key={s.label} className="rounded-md border p-3">
             <div className="text-xs text-muted-foreground">{s.label}</div>
