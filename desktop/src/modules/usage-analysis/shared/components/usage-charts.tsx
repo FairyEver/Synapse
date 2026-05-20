@@ -62,11 +62,12 @@ interface UsageRankChartProps {
   readonly extraFormatter?: (value: number) => string
 }
 
-type TrendMode = "tokens" | "input" | "output" | "cacheRead" | "cacheWrite"
-type TokenComponentKey = Exclude<TrendMode, "tokens"> | "reasoning"
+type TrendMode = "tokens" | "newTokens" | "input" | "output" | "cacheRead" | "cacheWrite"
+type TokenComponentKey = "input" | "output" | "cacheRead" | "cacheWrite" | "reasoning"
 
 const TREND_MODES: { readonly value: TrendMode; readonly label: string }[] = [
   { value: "tokens", label: "全部" },
+  { value: "newTokens", label: "新增" },
   { value: "input", label: "输入" },
   { value: "output", label: "输出" },
   { value: "cacheRead", label: "缓存读" },
@@ -462,6 +463,7 @@ function positionTooltipAwayFromPointer(
 }
 
 function valueForMode(model: TrendModelPoint, mode: TrendMode): number {
+  if (mode === "newTokens") return newTokensForModel(model)
   return model[mode]
 }
 
@@ -472,6 +474,10 @@ function valueForModel(row: TrendPoint, modelName: string, mode: TrendMode): num
 
 function valueForTokenComponent(row: TrendPoint, key: TokenComponentKey): number {
   return row.modelBreakdown?.reduce((sum, model) => sum + model[key], 0) ?? 0
+}
+
+function newTokensForModel(model: TrendModelPoint): number {
+  return model.input + model.output + model.cacheWrite + model.reasoning
 }
 
 function formatTrendTooltip(params: unknown, rows: readonly TrendPoint[]): string {

@@ -3,7 +3,10 @@ import {
   buildTodayMetricRows,
   buildTodayModelStructureRows,
   buildTodayTokenStructureRows,
+  calculateNewTokens,
   describeDominantTokenComponent,
+  describeTokenStructure,
+  formatCacheReadShare,
   formatTodayHour,
   getRecentHourBucket,
 } from "../shared/today"
@@ -66,22 +69,20 @@ describe("today usage helpers", () => {
   it("builds today status metrics", () => {
     const metrics = buildTodayMetricRows(overview, timeRows, new Date(2026, 4, 20, 12, 0, 0))
 
-    expect(metrics.map((metric) => metric.label)).toEqual(["今日 Token", "今日费用", "最近 1 小时", "今日预计"])
-    expect(metrics[2].value).toBe("400")
-    expect(metrics[2].subValue).toBe("4 请求")
-    expect(metrics[3].value).not.toBe("-")
-    expect(metrics[3].subValue).not.toBe("-")
+    expect(metrics.map((metric) => metric.label)).toEqual(["今日 Token", "新增 Token", "缓存读", "最近 1 小时"])
+    expect(metrics[0].subValue).toBe("US$1.20")
+    expect(metrics[1]).toMatchObject({ value: "600", subValue: "不含缓存读" })
+    expect(metrics[2]).toMatchObject({ value: "600", subValue: "50%" })
+    expect(metrics[3].value).toBe("400")
+    expect(metrics[3].subValue).toBe("4 请求 · 新增 200")
   })
 
-  it("hides today projection when usage is zero or the day just started", () => {
-    expect(buildTodayMetricRows({ ...overview, totals: { ...overview.totals, tokens: 0, estimatedCost: 0 } }, [], new Date(2026, 4, 20, 12, 0, 0))[3]).toMatchObject({
+  it("formats empty cache and recent-hour metric states", () => {
+    expect(buildTodayMetricRows({ ...overview, tokenBreakdown: { ...overview.tokenBreakdown, cacheRead: 0 } }, [], new Date(2026, 4, 20, 12, 0, 0))[2]).toMatchObject({
       value: "-",
       subValue: "-",
     })
-    expect(buildTodayMetricRows(overview, timeRows, new Date(2026, 4, 20, 0, 10, 0))[3]).toMatchObject({
-      value: "-",
-      subValue: "-",
-    })
+    expect(buildTodayMetricRows(overview, [], new Date(2026, 4, 20, 0, 10, 0))[3]).toMatchObject({ value: "-" })
   })
 
   it("builds token structure rows in fixed label order", () => {
@@ -102,6 +103,28 @@ describe("today usage helpers", () => {
       cacheWrite: 0,
       reasoning: 0,
     })).toBe("缓存读 70%")
+  })
+
+  it("does not repeat cache read when it is already dominant", () => {
+    expect(describeTokenStructure({
+      input: 100,
+      output: 50,
+      cacheRead: 350,
+      cacheWrite: 0,
+      reasoning: 0,
+    })).toBe("缓存读 70%")
+    expect(describeTokenStructure({
+      input: 300,
+      output: 100,
+      cacheRead: 100,
+      cacheWrite: 0,
+      reasoning: 0,
+    })).toBe("输入 60% · 缓存读 20%")
+  })
+
+  it("calculates non-cache and cache-read share", () => {
+    expect(calculateNewTokens(overview.tokenBreakdown)).toBe(600)
+    expect(formatCacheReadShare(overview.tokenBreakdown)).toBe("50%")
   })
 
   it("returns the last active hourly bucket as recent hour", () => {

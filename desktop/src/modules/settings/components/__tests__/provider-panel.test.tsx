@@ -111,6 +111,29 @@ describe("ProviderPanel diagnostics", () => {
 })
 
 describe("ProviderPanel dialog editor", () => {
+  it("keeps row actions in a dedicated non-wrapping column", async () => {
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([customProvider()]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    const actionHead = Array.from(document.body.querySelectorAll("th"))
+      .find((cell) => cell.textContent === "操作")
+    const actionCell = buttonByText(document.body, "设为默认").closest("td")
+
+    expect(actionHead?.className).toContain("w-64")
+    expect(actionCell?.className).toContain("whitespace-nowrap")
+    expect(buttonByText(document.body, "设为默认").className).toContain("whitespace-nowrap")
+  })
+
   it("keeps the provider table outside and renders the cc-switch-like form only in the dialog", async () => {
     Object.defineProperty(window, "synapse", {
       configurable: true,

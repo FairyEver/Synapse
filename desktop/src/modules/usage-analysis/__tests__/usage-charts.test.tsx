@@ -10,5 +10,6 @@ describe("UsageTrendChart", () => {
     expect(html).toContain("按小时")
     expect(html.indexOf("按小时")).toBeLessThan(html.indexOf("按天"))
     expect(html.indexOf("按天")).toBeLessThan(html.indexOf("全部"))
+    expect(html).toContain("新增")
   })
 })

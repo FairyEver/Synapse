@@ -45,6 +45,20 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("loads local Claude Code rules, memory, skills, and project MCP configuration", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory)
+
+    expect(getOptions()).toMatchObject({
+      settingSources: ["user", "project", "local"],
+      skills: "all",
+      settings: {
+        enableAllProjectMcpServers: true,
+        disableAllHooks: true,
+      },
+    })
+  })
+
   it("enables the SDK bypass permission confirmation for bypass mode", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, { mode: "bypassPermissions" })

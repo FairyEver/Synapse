@@ -14,6 +14,8 @@ describe("usage analysis report views", () => {
     )
 
     expect(html).toContain("Token 趋势")
+    expect(html).toContain("新增 Token")
+    expect(html).toContain("缓存读")
     expect(html).toContain("按小时")
   })
 })

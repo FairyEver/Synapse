@@ -13,7 +13,8 @@ import {
   buildTodayMetricRows,
   buildTodayModelStructureRows,
   buildTodayTokenStructureRows,
-  describeDominantTokenComponent,
+  calculateNewTokens,
+  describeTokenStructure,
   formatTodayHour,
 } from "../today"
 import type {
@@ -72,6 +73,8 @@ function TodayRhythmTable({ rows }: { readonly rows: readonly UsageTimeBucket[] 
           <TableRow>
             <TableHead>时段</TableHead>
             <TableHead className="text-right">Token</TableHead>
+            <TableHead className="text-right">新增</TableHead>
+            <TableHead className="text-right">缓存读</TableHead>
             <TableHead className="text-right">费用</TableHead>
             <TableHead className="text-right">请求</TableHead>
             <TableHead>主要模型</TableHead>
@@ -80,18 +83,27 @@ function TodayRhythmTable({ rows }: { readonly rows: readonly UsageTimeBucket[] 
         </TableHeader>
         <TableBody>
           {rows.map((row) => (
-            <TableRow key={row.bucket}>
-              <TableCell>{formatTodayHour(row.bucket)}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatInteger(row.tokens)}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatCurrency(row.estimatedCost)}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatInteger(row.requests)}</TableCell>
-              <TableCell>{row.dominantModel || "-"}</TableCell>
-              <TableCell>{describeDominantTokenComponent(bucketTokenBreakdown(row))}</TableCell>
-            </TableRow>
+            <TodayRhythmRow key={row.bucket} row={row} />
           ))}
         </TableBody>
       </Table>
     </div>
+  )
+}
+
+function TodayRhythmRow({ row }: { readonly row: UsageTimeBucket }) {
+  const breakdown = bucketTokenBreakdown(row)
+  return (
+    <TableRow>
+      <TableCell>{formatTodayHour(row.bucket)}</TableCell>
+      <TableCell className="text-right tabular-nums">{formatInteger(row.tokens)}</TableCell>
+      <TableCell className="text-right tabular-nums">{formatInteger(calculateNewTokens(breakdown))}</TableCell>
+      <TableCell className="text-right tabular-nums">{formatInteger(breakdown.cacheRead)}</TableCell>
+      <TableCell className="text-right tabular-nums">{formatCurrency(row.estimatedCost)}</TableCell>
+      <TableCell className="text-right tabular-nums">{formatInteger(row.requests)}</TableCell>
+      <TableCell>{row.dominantModel || "-"}</TableCell>
+      <TableCell>{describeTokenStructure(breakdown)}</TableCell>
+    </TableRow>
   )
 }
 

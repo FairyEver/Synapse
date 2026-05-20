@@ -101,6 +101,16 @@ function tokenChartRows(breakdown: UsageOverviewReport["tokenBreakdown"]) {
   ]
 }
 
+function newTokens(breakdown: UsageOverviewReport["tokenBreakdown"]): number {
+  return breakdown.input + breakdown.output + breakdown.cacheWrite + breakdown.reasoning
+}
+
+function cacheReadShare(breakdown: UsageOverviewReport["tokenBreakdown"]): string {
+  const total = breakdown.input + breakdown.output + breakdown.cacheRead + breakdown.cacheWrite + breakdown.reasoning
+  if (total <= 0 || breakdown.cacheRead <= 0) return "-"
+  return formatPercent(breakdown.cacheRead / total)
+}
+
 function costChartRows(breakdown: UsageOverviewReport["costBreakdown"]) {
   return [
     { label: "输入", value: breakdown.input },
@@ -128,11 +138,11 @@ export function OverviewReportView({ state, trendBucket, onTrendBucketChange }: 
           <MetricGrid
             metrics={[
               { label: "Token", value: formatInteger(report.totals.tokens) },
+              { label: "新增 Token", value: formatInteger(newTokens(report.tokenBreakdown)), subValue: "不含缓存读" },
+              { label: "缓存读", value: formatInteger(report.tokenBreakdown.cacheRead), subValue: cacheReadShare(report.tokenBreakdown) },
               { label: "估算费用", value: formatCurrency(report.totals.estimatedCost) },
               { label: "请求", value: formatInteger(report.totals.requests) },
               { label: "会话", value: formatInteger(report.totals.conversations) },
-              { label: "工具", value: formatInteger(report.totals.toolCalls) },
-              { label: "活跃天", value: formatInteger(report.totals.activeDays) },
             ]}
           />
           <UsageTrendChart title="Token 趋势" rows={report.trend} bucket={trendBucket} onBucketChange={onTrendBucketChange} />

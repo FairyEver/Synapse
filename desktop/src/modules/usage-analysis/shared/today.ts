@@ -19,8 +19,6 @@ interface TokenBreakdownLike {
   readonly reasoning: number
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000
-const MIN_PROJECTION_ELAPSED_MS = 15 * 60 * 1000
 const MAX_MODEL_STRUCTURE_ROWS = 5
 
 const TOKEN_COMPONENTS: { readonly key: keyof TokenBreakdownLike; readonly label: string }[] = [
@@ -34,24 +32,35 @@ const TOKEN_COMPONENTS: { readonly key: keyof TokenBreakdownLike; readonly label
 export function buildTodayMetricRows(
   overview: UsageOverviewReport,
   timeRows: readonly UsageTimeBucket[],
-  now = new Date(),
+  _now = new Date(),
 ): TodayMetricRow[] {
   const recentHour = getRecentHourBucket(timeRows)
-  const projectedTokens = projectFullDayValue(overview.totals.tokens, now)
-  const projectedCost = projectFullDayValue(overview.totals.estimatedCost, now)
+  const newTokens = calculateNewTokens(overview.tokenBreakdown)
+  const cacheReadShare = formatCacheReadShare(overview.tokenBreakdown)
+  const recentHourBreakdown = recentHour ? bucketTokenBreakdown(recentHour) : null
 
   return [
-    { label: "今日 Token", value: formatInteger(overview.totals.tokens) },
-    { label: "今日费用", value: formatCurrency(overview.totals.estimatedCost) },
+    {
+      label: "今日 Token",
+      value: formatInteger(overview.totals.tokens),
+      subValue: overview.totals.estimatedCost > 0 ? formatCurrency(overview.totals.estimatedCost) : undefined,
+    },
+    {
+      label: "新增 Token",
+      value: formatInteger(newTokens),
+      subValue: "不含缓存读",
+    },
+    {
+      label: "缓存读",
+      value: formatInteger(overview.tokenBreakdown.cacheRead),
+      subValue: cacheReadShare,
+    },
     {
       label: "最近 1 小时",
       value: recentHour ? formatInteger(recentHour.tokens) : "-",
-      subValue: recentHour ? `${formatInteger(recentHour.requests)} 请求` : undefined,
-    },
-    {
-      label: "今日预计",
-      value: formatInteger(projectedTokens),
-      subValue: formatCurrency(projectedCost),
+      subValue: recentHour
+        ? `${formatInteger(recentHour.requests)} 请求 · 新增 ${formatInteger(calculateNewTokens(recentHourBreakdown ?? emptyBreakdown()))}`
+        : undefined,
     },
   ]
 }
@@ -89,18 +98,24 @@ export function describeDominantTokenComponent(breakdown: TokenBreakdownLike): s
   return `${dominant.label} ${formatPercent(dominant.value / total)}`
 }
 
-export function formatTodayHour(bucket: string): string {
-  return bucket.length >= 13 ? `${bucket.slice(11, 13)}:00` : bucket
+export function describeTokenStructure(breakdown: TokenBreakdownLike): string {
+  const dominant = describeDominantTokenComponent(breakdown)
+  if (dominant === "-" || breakdown.cacheRead <= 0 || dominant.startsWith("缓存读 ")) return dominant
+  return `${dominant} · 缓存读 ${formatCacheReadShare(breakdown)}`
 }
 
-function projectFullDayValue(value: number, now: Date): number {
-  if (value <= 0) return 0
+export function calculateNewTokens(breakdown: TokenBreakdownLike): number {
+  return breakdown.input + breakdown.output + breakdown.cacheWrite + breakdown.reasoning
+}
 
-  const startOfDay = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-  const elapsedMs = now.getTime() - startOfDay.getTime()
-  if (elapsedMs <= MIN_PROJECTION_ELAPSED_MS) return 0
+export function formatCacheReadShare(breakdown: TokenBreakdownLike): string {
+  const total = TOKEN_COMPONENTS.reduce((sum, component) => sum + breakdown[component.key], 0)
+  if (total <= 0 || breakdown.cacheRead <= 0) return "-"
+  return formatPercent(breakdown.cacheRead / total)
+}
 
-  return value / Math.min(1, elapsedMs / DAY_MS)
+export function formatTodayHour(bucket: string): string {
+  return bucket.length >= 13 ? `${bucket.slice(11, 13)}:00` : bucket
 }
 
 function formatInteger(value: number): string {
@@ -119,4 +134,24 @@ function formatCurrency(value: number): string {
 
 function formatPercent(value: number): string {
   return new Intl.NumberFormat("zh-CN", { style: "percent", maximumFractionDigits: 0 }).format(value)
+}
+
+function bucketTokenBreakdown(row: UsageTimeBucket): TokenBreakdownLike {
+  return row.modelBreakdown.reduce<TokenBreakdownLike>((total, model) => ({
+    input: total.input + model.input,
+    output: total.output + model.output,
+    cacheRead: total.cacheRead + model.cacheRead,
+    cacheWrite: total.cacheWrite + model.cacheWrite,
+    reasoning: total.reasoning + model.reasoning,
+  }), emptyBreakdown())
+}
+
+function emptyBreakdown(): TokenBreakdownLike {
+  return {
+    input: 0,
+    output: 0,
+    cacheRead: 0,
+    cacheWrite: 0,
+    reasoning: 0,
+  }
 }

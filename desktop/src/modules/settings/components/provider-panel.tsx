@@ -460,9 +460,9 @@ function ProviderPanelView({
           <Table className="table-fixed">
             <TableHeader>
               <TableRow>
-                <TableHead className="w-1/4">名称</TableHead>
-                <TableHead className="w-1/2">模型</TableHead>
-                <TableHead className="w-1/4 text-right">操作</TableHead>
+                <TableHead className="w-48">名称</TableHead>
+                <TableHead>模型</TableHead>
+                <TableHead className="w-64 text-right">操作</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -494,7 +494,7 @@ function ProviderPanelView({
                   <TableCell className="min-w-0 whitespace-normal">
                     <ProviderModelList provider={provider} />
                   </TableCell>
-                  <TableCell className="whitespace-normal">
+                  <TableCell className="w-64 whitespace-nowrap text-right">
                     <ProviderRowActions
                       provider={provider}
                       onEdit={onEdit}
@@ -625,7 +625,7 @@ function ProviderTextAction({
   return (
     <button
       type="button"
-      className="text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+      className="shrink-0 whitespace-nowrap text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       onClick={onClick}
     >
       {children}

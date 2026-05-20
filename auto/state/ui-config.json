@@ -5,7 +5,7 @@
   "intervalSeconds": 10,
   "timeoutMinutes": 30,
   "maxLogs": 200,
-  "provider": "codex",
+  "provider": "claude-code",
   "codex": {
     "command": "codex",
     "model": "gpt-5.5",

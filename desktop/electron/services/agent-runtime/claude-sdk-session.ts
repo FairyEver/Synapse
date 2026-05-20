@@ -209,7 +209,12 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private buildQueryOptions(options: ClaudeSDKSessionOptions): Record<string, unknown> {
     const queryOptions: Partial<Options> = {
       cwd: options.cwd,
-      settingSources: [],
+      settingSources: ["user", "project", "local"],
+      skills: "all",
+      settings: {
+        enableAllProjectMcpServers: true,
+        disableAllHooks: true,
+      },
       env: {
         ...process.env,
         ...options.env,
