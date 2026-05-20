@@ -60,7 +60,7 @@ import { AgentRelayService } from "../services/relay"
 import { AutomationIngressService } from "../services/automation-ingress"
 import { DiagnosticsService } from "../services/diagnostics-service"
 import { createConfigBackupPayload } from "../services/config-backup-service"
-import { clearDeprecatedLicenseStore } from "./deprecated-license-cleanup"
+import { clearDeprecatedStores } from "./deprecated-store-cleanup"
 import {
   ScheduledTaskRepository,
   ScheduledTaskRunRepository,
@@ -726,14 +726,14 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
   },
 }
 
-export const deprecatedLicenseCleanupDescriptor: ServiceDescriptor<{ clear: () => Promise<void> }> = {
-  id: "core.deprecated-license-cleanup",
+export const deprecatedStoreCleanupDescriptor: ServiceDescriptor<{ clear: () => Promise<void> }> = {
+  id: "core.deprecated-store-cleanup",
   criticality: "fatal",
   create(ctx) {
     return {
-      clear: () => clearDeprecatedLicenseStore(
+      clear: () => clearDeprecatedStores(
         app.getPath("userData"),
-        ctx.logger.child("deprecated-license-cleanup"),
+        ctx.logger.child("deprecated-store-cleanup"),
       ),
     }
   },

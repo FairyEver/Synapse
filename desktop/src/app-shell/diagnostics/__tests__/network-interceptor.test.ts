@@ -14,11 +14,11 @@ describe("installNetworkInterceptor", () => {
       ok: false,
       status: 429,
       statusText: "Too Many Requests",
-      url: "https://api.example.com/license/validate",
+      url: "https://api.example.com/requests/validate",
     })
 
     const cleanup = installNetworkInterceptor(logger)
-    await globalThis.fetch("https://api.example.com/license/validate", { method: "POST" })
+    await globalThis.fetch("https://api.example.com/requests/validate", { method: "POST" })
 
     expect(logger.warn).toHaveBeenCalledTimes(1)
     const [msg, meta] = logger.warn.mock.calls[0]

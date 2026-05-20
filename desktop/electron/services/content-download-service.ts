@@ -26,7 +26,7 @@ async function getActiveRepository(): Promise<SynapseRepositoryConfig> {
   const repository = getActiveRepositoryConfig(config)
 
   if (!repository) {
-    throw new Error("当前还没有激活的本地目录。")
+    throw new Error("当前还没有选中的本地目录。")
   }
 
   return repository
@@ -160,7 +160,7 @@ class ContentDownloadService {
             )
           } else {
             if (!repositoryRootPath) {
-              throw new Error("当前还没有激活的本地目录。")
+              throw new Error("当前还没有选中的本地目录。")
             }
 
             await attachmentsPoolService.copyAttachmentToPath(

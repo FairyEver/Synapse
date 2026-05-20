@@ -368,7 +368,7 @@ export class ProviderService {
     }
     const target = await this.getProvider(id)
     if (target.archived) {
-      throw new Error(`Cannot activate archived provider: ${id}`)
+      throw new Error(`Cannot set archived provider active: ${id}`)
     }
     const now = this.isoNow()
     const providers = await this.providers.list({ scope: "global", kind: PROVIDER_KIND } as Partial<ProviderEntryV1>)

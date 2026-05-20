@@ -528,7 +528,7 @@ describe("ProviderService", () => {
     expect(JSON.stringify(auditSink.list())).not.toContain("/Users/test")
   })
 
-  it("rejects activating an archived provider", async () => {
+  it("rejects setting an archived provider active", async () => {
     const { service } = makeProviderService()
 
     await service.createProvider({
@@ -548,7 +548,7 @@ describe("ProviderService", () => {
     })
     await service.archiveProvider("archived")
 
-    await expect(service.setActiveProvider("archived")).rejects.toThrow("Cannot activate archived provider: archived")
+    await expect(service.setActiveProvider("archived")).rejects.toThrow("Cannot set archived provider active: archived")
     await expect(service.getActiveProvider()).resolves.toMatchObject({ id: "anthropic" })
   })
 

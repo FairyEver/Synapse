@@ -341,8 +341,8 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
       await refresh()
       toast("已设为默认")
     } catch (rawError) {
-      logger.error("Provider activate failed.", {
-        boundary: "settings.providers.activate",
+      logger.error("Provider set active failed.", {
+        boundary: "settings.providers.set-active",
         action: "setActiveProvider",
         providerId: provider.id,
         ...providerErrorDiagnostic(rawError),

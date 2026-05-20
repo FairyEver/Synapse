@@ -578,12 +578,12 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreUpdateDescriptor.dependsOn).toEqual(["core.config", "core.window-manager"])
   })
 
-  it("deprecatedLicenseCleanupDescriptor runs without dependencies", async () => {
-    const { deprecatedLicenseCleanupDescriptor } = await importBootstrap()
-    expect(deprecatedLicenseCleanupDescriptor.id).toBe("core.deprecated-license-cleanup")
-    expect(deprecatedLicenseCleanupDescriptor.criticality).toBe("fatal")
-    expect(deprecatedLicenseCleanupDescriptor.dependsOn).toBeUndefined()
-    expect(deprecatedLicenseCleanupDescriptor.start).toBeTypeOf("function")
+  it("deprecatedStoreCleanupDescriptor runs without dependencies", async () => {
+    const { deprecatedStoreCleanupDescriptor } = await importBootstrap()
+    expect(deprecatedStoreCleanupDescriptor.id).toBe("core.deprecated-store-cleanup")
+    expect(deprecatedStoreCleanupDescriptor.criticality).toBe("fatal")
+    expect(deprecatedStoreCleanupDescriptor.dependsOn).toBeUndefined()
+    expect(deprecatedStoreCleanupDescriptor.start).toBeTypeOf("function")
   })
 
   it("repoWatchDescriptor depends on core.config and exposes stop", async () => {

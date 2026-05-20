@@ -58,7 +58,7 @@ async function readCurrentDetail(
   const context = await getActiveRepositoryContext()
 
   if (!context) {
-    throw new Error("当前还没有激活的本地目录。")
+    throw new Error("当前还没有选中的本地目录。")
   }
 
   const detail = await contentHistoryService.readCurrentDetail(
@@ -152,7 +152,7 @@ class ContentService {
     const context = await getActiveRepositoryContext()
 
     if (!context) {
-      throw new Error("当前还没有激活的本地目录。")
+      throw new Error("当前还没有选中的本地目录。")
     }
 
     const version = await contentHistoryService.readHistoryVersion(

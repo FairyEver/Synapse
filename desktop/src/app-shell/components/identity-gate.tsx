@@ -165,7 +165,7 @@ function IdentityGate({ children }: { children: ReactNode }) {
           </div>
 
           {!activeRepository ? (
-            <p className="text-sm text-muted-foreground">当前没有激活目录，只能先生成新 ID。</p>
+            <p className="text-sm text-muted-foreground">当前没有选中的目录，只能先生成新 ID。</p>
           ) : null}
         </div>
       </IdentityScreenShell>

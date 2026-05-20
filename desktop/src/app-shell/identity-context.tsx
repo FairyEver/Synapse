@@ -167,7 +167,7 @@ function IdentityProvider({ children }: { children: ReactNode }) {
   const updateCurrentRepoDisplayName = useCallback(
     async (displayName: string) => {
       if (!activeRepository) {
-        throw new Error("当前还没有激活的本地目录。")
+        throw new Error("当前还没有选中的本地目录。")
       }
 
       const nextProfile = await updateRepoDisplayName(activeRepository.uuid, displayName)

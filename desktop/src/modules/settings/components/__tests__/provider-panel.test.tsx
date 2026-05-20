@@ -76,7 +76,7 @@ describe("ProviderPanel diagnostics", () => {
 
   it("logs active provider failures with provider correlation and sanitized toast copy", async () => {
     const listProviders = vi.fn().mockResolvedValue([customProvider()])
-    const setActiveProvider = vi.fn().mockRejectedValue(new Error("secret activation token detail"))
+    const setActiveProvider = vi.fn().mockRejectedValue(new Error("secret provider token detail"))
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: {
@@ -97,16 +97,16 @@ describe("ProviderPanel diagnostics", () => {
       await Promise.resolve()
     })
 
-    expect(rendererLogger.error).toHaveBeenCalledWith("Provider activate failed.", {
+    expect(rendererLogger.error).toHaveBeenCalledWith("Provider set active failed.", {
       action: "setActiveProvider",
-      boundary: "settings.providers.activate",
-      errorLength: 30,
+      boundary: "settings.providers.set-active",
+      errorLength: 28,
       errorName: "Error",
       providerId: "custom-provider",
     })
     expect(toast).toHaveBeenCalledWith("切换失败")
-    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret activation token detail")
-    expect(JSON.stringify(toast.mock.calls)).not.toContain("secret activation token detail")
+    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret provider token detail")
+    expect(JSON.stringify(toast.mock.calls)).not.toContain("secret provider token detail")
   })
 })
 

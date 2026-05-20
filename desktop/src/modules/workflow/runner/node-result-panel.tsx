@@ -114,7 +114,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
         )}
         {activeBranchLabel && (
           <div className="grid gap-1">
-            <p className="font-medium text-muted-foreground">激活分支</p>
+            <p className="font-medium text-muted-foreground">命中分支</p>
             <span className="font-mono">{activeBranchLabel}</span>
           </div>
         )}
