@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import path from "node:path"
 
 const electronMock = vi.hoisted(() => ({
   shell: {
@@ -74,6 +75,7 @@ describe("agent tool IPC methods", () => {
 
   it("records a failed audit when opening an Agent reference rejects", async () => {
     const auditSink = fakeAuditSink()
+    const expectedPath = path.resolve("/repo", "src/app.ts")
     electronMock.shell.openPath.mockRejectedValue(new Error("shell failed for /repo/src/app.ts"))
 
     await expect(toolMethods.openReference.handler(createContext({ auditSink }), {
@@ -84,7 +86,7 @@ describe("agent tool IPC methods", () => {
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.read.outside-userdata",
       outcome: "failed",
-      resource: "/repo/src/app.ts",
+      resource: expectedPath,
       metadata: expect.objectContaining({
         projectId: "project-1",
         command: "open-reference",
@@ -98,6 +100,7 @@ describe("agent tool IPC methods", () => {
 
   it("records sanitized audit metadata when opening an Agent reference returns an error", async () => {
     const auditSink = fakeAuditSink()
+    const expectedPath = path.resolve("/repo", "src/app.ts")
     const rawError = "shell failed for /repo/src/app.ts token=sk-secret"
     electronMock.shell.openPath.mockResolvedValue(rawError)
 
@@ -109,7 +112,7 @@ describe("agent tool IPC methods", () => {
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.read.outside-userdata",
       outcome: "failed",
-      resource: "/repo/src/app.ts",
+      resource: expectedPath,
       metadata: expect.objectContaining({
         projectId: "project-1",
         command: "open-reference",

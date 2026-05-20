@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import path from "node:path"
 import { app } from "electron"
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
 import { configStore } from "../../../services/config-store"
@@ -126,7 +127,7 @@ describe("configIpcModule", () => {
     expect(app.relaunch).toHaveBeenCalledOnce()
     expect(app.exit).toHaveBeenCalledWith(0)
     expect(mocks.fs.unlink).toHaveBeenCalledTimes(1)
-    expect(mocks.fs.unlink).toHaveBeenCalledWith("/tmp/config.json")
+    expect(mocks.fs.unlink).toHaveBeenCalledWith(path.join("/tmp", "config.json"))
   })
 })
 

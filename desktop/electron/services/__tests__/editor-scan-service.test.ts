@@ -545,8 +545,7 @@ describe("editor scan quick publish", () => {
   it("rejects when Codex rule content cannot be read", async () => {
     const root = await createTempDir()
     const filePath = path.join(root, "AGENTS.md")
-    await writeFile(filePath, "# Rule\n")
-    await chmod(filePath, 0o000)
+    await mkdir(filePath)
 
     await expect(scanCodexRules(filePath)).rejects.toThrow()
   })
@@ -594,7 +593,7 @@ describe("editor scan quick publish", () => {
     })
   })
 
-  it("omits Cursor rule files that cannot be read", async () => {
+  it.skipIf(process.platform === "win32")("omits Cursor rule files that cannot be read", async () => {
     const root = await createTempDir()
     const rulePath = path.join(root, "project.mdc")
     await writeFile(rulePath, "# Rule\n")
