@@ -3,6 +3,9 @@ import type {
   SDKMessage,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
+import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
 
 import {
@@ -60,6 +63,42 @@ describe("ClaudeSDKSession", () => {
       PATH: process.env.PATH,
       FOO: "bar",
     }))
+  })
+
+  it.each(packagedRuntimeCases)(
+    "uses the unpacked Claude binary for $platform-$arch packaged apps",
+    ({ platform, arch, packageName, binaryName }) => {
+      withPackagedRuntime({
+        platform,
+        arch,
+        files: [["node_modules", packageName, binaryName]],
+      }, ({ unpackedPath }) => {
+        const { factory, getOptions } = createQueryFactory()
+        createSession(factory)
+
+        expect(getOptions().pathToClaudeCodeExecutable).toBe(
+          unpackedPath("node_modules", packageName, binaryName),
+        )
+      })
+    },
+  )
+
+  it("prefers the Linux musl unpacked Claude binary when both Linux variants exist", () => {
+    withPackagedRuntime({
+      platform: "linux",
+      arch: "x64",
+      files: [
+        ["node_modules", "@anthropic-ai/claude-agent-sdk-linux-x64-musl", "claude"],
+        ["node_modules", "@anthropic-ai/claude-agent-sdk-linux-x64", "claude"],
+      ],
+    }, ({ unpackedPath }) => {
+      const { factory, getOptions } = createQueryFactory()
+      createSession(factory)
+
+      expect(getOptions().pathToClaudeCodeExecutable).toBe(
+        unpackedPath("node_modules", "@anthropic-ai/claude-agent-sdk-linux-x64-musl", "claude"),
+      )
+    })
   })
 
   it("nextEvent returns bridged SDK messages", async () => {
@@ -556,6 +595,81 @@ describe("ClaudeSDKSession", () => {
     })
   })
 })
+
+interface PackagedRuntimeCase {
+  readonly platform: NodeJS.Platform
+  readonly arch: NodeJS.Architecture
+  readonly packageName: string
+  readonly binaryName: string
+}
+
+const packagedRuntimeCases: readonly PackagedRuntimeCase[] = [
+  {
+    platform: "darwin",
+    arch: "arm64",
+    packageName: "@anthropic-ai/claude-agent-sdk-darwin-arm64",
+    binaryName: "claude",
+  },
+  {
+    platform: "win32",
+    arch: "x64",
+    packageName: "@anthropic-ai/claude-agent-sdk-win32-x64",
+    binaryName: "claude.exe",
+  },
+  {
+    platform: "linux",
+    arch: "x64",
+    packageName: "@anthropic-ai/claude-agent-sdk-linux-x64",
+    binaryName: "claude",
+  },
+]
+
+function withPackagedRuntime(
+  options: {
+    readonly platform: NodeJS.Platform
+    readonly arch: NodeJS.Architecture
+    readonly files: readonly (readonly string[])[]
+  },
+  run: (helpers: { unpackedPath(...segments: string[]): string }) => void,
+): void {
+  const resourcesPath = mkdtempSync(path.join(tmpdir(), "synapse-resources-"))
+  const unpackedPath = (...segments: string[]): string =>
+    path.join(resourcesPath, "app.asar.unpacked", ...segments)
+  const resourcesDescriptor = Object.getOwnPropertyDescriptor(process, "resourcesPath")
+  const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform")
+  const archDescriptor = Object.getOwnPropertyDescriptor(process, "arch")
+
+  try {
+    for (const fileSegments of options.files) {
+      const filePath = unpackedPath(...fileSegments)
+      mkdirSync(path.dirname(filePath), { recursive: true })
+      writeFileSync(filePath, "")
+    }
+    Object.defineProperty(process, "resourcesPath", {
+      configurable: true,
+      value: resourcesPath,
+    })
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      value: options.platform,
+    })
+    Object.defineProperty(process, "arch", {
+      configurable: true,
+      value: options.arch,
+    })
+
+    run({ unpackedPath })
+  } finally {
+    if (resourcesDescriptor) {
+      Object.defineProperty(process, "resourcesPath", resourcesDescriptor)
+    } else {
+      Reflect.deleteProperty(process, "resourcesPath")
+    }
+    if (platformDescriptor) Object.defineProperty(process, "platform", platformDescriptor)
+    if (archDescriptor) Object.defineProperty(process, "arch", archDescriptor)
+    rmSync(resourcesPath, { recursive: true, force: true })
+  }
+}
 
 function createSession(
   queryFactory: QueryFactory,

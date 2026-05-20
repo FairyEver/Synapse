@@ -6,6 +6,8 @@ import type {
   SDKMessage,
   SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
+import { existsSync } from "node:fs"
+import path from "node:path"
 
 import type { StructuredLogger } from "../../runtime/service-registry"
 import { bridgeSdkMessage, type AgentEventEnvelope } from "./sdk-event-bridge"
@@ -216,6 +218,10 @@ export class ClaudeSDKSession implements AgentLiveSession {
       canUseTool: (toolName, input, context) => this.canUseTool(toolName, input, context),
     }
 
+    const packagedClaudeExecutable = resolvePackagedClaudeExecutable()
+    if (packagedClaudeExecutable) {
+      queryOptions.pathToClaudeCodeExecutable = packagedClaudeExecutable
+    }
     if (options.model) queryOptions.model = options.model
     if (options.maxTurns !== undefined) queryOptions.maxTurns = options.maxTurns
     if (options.sdkSessionId) queryOptions.resume = options.sdkSessionId
@@ -481,6 +487,39 @@ function toPermissionResult(decision: AgentPermissionDecision): PermissionResult
 
 function permissionCancelledResult(): PermissionResult {
   return { behavior: "deny", message: "Permission request was cancelled." }
+}
+
+function resolvePackagedClaudeExecutable(
+  resourcesPath = (process as NodeJS.Process & { readonly resourcesPath?: string }).resourcesPath,
+  platform = process.platform,
+  arch = process.arch,
+  fileExists: (filePath: string) => boolean = existsSync,
+): string | undefined {
+  if (!resourcesPath) return undefined
+  for (const packageName of nativeClaudePackageNames(platform, arch)) {
+    const executablePath = path.join(
+      resourcesPath,
+      "app.asar.unpacked",
+      "node_modules",
+      packageName,
+      platform === "win32" ? "claude.exe" : "claude",
+    )
+    if (fileExists(executablePath)) return executablePath
+  }
+  return undefined
+}
+
+function nativeClaudePackageNames(platform: string, arch: string): readonly string[] {
+  if (platform === "linux") {
+    return [
+      `@anthropic-ai/claude-agent-sdk-linux-${arch}-musl`,
+      `@anthropic-ai/claude-agent-sdk-linux-${arch}`,
+    ]
+  }
+  if (platform === "darwin" || platform === "win32") {
+    return [`@anthropic-ai/claude-agent-sdk-${platform}-${arch}`]
+  }
+  return []
 }
 
 function errorMessage(error: unknown): string {
