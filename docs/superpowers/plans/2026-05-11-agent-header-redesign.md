@@ -73,7 +73,7 @@ pnpm --filter @synapse/desktop run typecheck
 找到以下现有代码块（约 L227–L287）：
 
 ```tsx
-<div className="flex items-center justify-between gap-3 px-0 py-0">
+<div className="flex items-center justify-between gap-2 px-0 py-0">
   <div className="flex min-w-0 items-center gap-2">
     <h2 className="truncate text-sm font-medium">Agent</h2>
     {selectedCliLabel ? (
@@ -140,7 +140,7 @@ pnpm --filter @synapse/desktop run typecheck
 
 ```tsx
 <TooltipProvider>
-  <div className="flex items-center justify-between gap-3 px-0 py-0">
+  <div className="flex items-center justify-between gap-2 px-0 py-0">
     {/* 左区：agent 类型 badge + 会话名称 */}
     <div className="flex min-w-0 items-center gap-2">
       {selectedCliLabel ? (

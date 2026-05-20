@@ -583,7 +583,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
             {item.type === "skill" ? "Skill" : "Rule"} 详情
           </DialogDescription>
 
-          <div className="flex min-w-0 flex-col gap-3 pr-8">
+          <div className="flex min-w-0 flex-col gap-2 pr-8">
             <div className="flex min-w-0 flex-col gap-2">
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-medium">{item.name}</span>
@@ -683,7 +683,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
             ) : null}
           </div>
 
-          <div className="flex items-center gap-3 border-t px-5 py-3">
+          <div className="flex items-center gap-2 border-t px-5 py-3">
             <button
               type="button"
               className="flex min-w-0 flex-1 items-center gap-1 text-xs text-muted-foreground/50 transition-colors hover:text-foreground"

@@ -439,7 +439,7 @@ Run: `cd desktop && sed -n '190,220p' src/modules/settings/index.tsx`
 ```tsx
 if (error) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 p-8">
+    <div className="flex flex-col items-center justify-center gap-2 p-8">
       <p className="text-sm text-destructive">{error}</p>
       <Button variant="outline" size="sm" onClick={() => refresh()}>
         重试
@@ -483,7 +483,7 @@ Run: `cd desktop && sed -n '168,200p' src/modules/task-scheduler/index.tsx`
 ```tsx
 if (error) {
   return (
-    <div className="flex flex-col items-center justify-center gap-3 p-8">
+    <div className="flex flex-col items-center justify-center gap-2 p-8">
       <p className="text-sm text-destructive">{error}</p>
       <Button variant="outline" size="sm" onClick={() => refresh()}>
         重试

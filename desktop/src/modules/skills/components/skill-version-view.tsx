@@ -36,7 +36,7 @@ function SkillVersionView({ mode, surface, version }: SkillVersionViewProps) {
                 {version.attachments.map((attachment) => (
                   <li
                     key={`${attachment.sha256}:${attachment.originalName}`}
-                    className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
+                    className="flex items-center justify-between gap-2 px-4 py-3 text-sm"
                   >
                     <span className="min-w-0 break-all text-foreground">
                       {attachment.originalName}

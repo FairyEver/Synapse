@@ -569,7 +569,7 @@ function SkillCreateDialog({
             }}
             onDrop={handleDrop}
           >
-            <div className="flex flex-col items-center gap-3 text-center">
+            <div className="flex flex-col items-center gap-2 text-center">
               <div className="space-y-1">
                 <p className="text-sm font-medium text-foreground">
                   {isCollectingFiles ? "正在整理附件..." : "拖入文件或文件夹"}
@@ -650,7 +650,7 @@ function SkillCreateDialog({
                 {form.files.map((file) => (
                   <div
                     key={file.originalName}
-                    className="flex items-start justify-between gap-3 border-b px-3 py-3 last:border-b-0"
+                    className="flex items-start justify-between gap-2 border-b px-3 py-3 last:border-b-0"
                   >
                     <div className="min-w-0">
                       <p className="break-all text-sm font-medium text-foreground">

@@ -167,7 +167,7 @@ const ImageCropDialog = forwardRef<ImageCropDialogRef, ImageCropDialogProps>(
                   />
                 </div>
 
-                <div className="flex w-full items-center gap-3 px-1">
+                <div className="flex w-full items-center gap-2 px-1">
                   <span className="text-xs text-muted-foreground">缩放</span>
                   <Slider
                     data-track="content-icon-image-crop-scale"

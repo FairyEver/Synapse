@@ -514,7 +514,7 @@ export function LicenseGate({ children }: { readonly children: ReactNode }) {
   if (!isReady) {
     return (
       <LicenseScreenShell>
-        <CardContent className="flex items-center gap-3 pt-6 text-sm text-muted-foreground">
+        <CardContent className="flex items-center gap-2 pt-6 text-sm text-muted-foreground">
           <LoaderCircle className="animate-spin" />
           正在读取授权
         </CardContent>

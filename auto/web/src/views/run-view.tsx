@@ -112,7 +112,7 @@ function BatchSummary({ batch }: { batch: { status: string; durationMs: number; 
   const errorCount = batch.workers.filter(w => w.status === 'error' || w.status === 'timeout').length
 
   return (
-    <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/50 p-3">
+    <div className="flex items-center gap-2 rounded-lg border border-border bg-muted/50 p-3">
       <Icon className={`h-5 w-5 ${cfg.className}`} />
       <div className="text-sm">
         <span className="font-medium">

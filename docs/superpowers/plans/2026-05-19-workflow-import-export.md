@@ -1231,7 +1231,7 @@ function WorkflowImportDialog({ open, preview, importing = false, onOpenChange, 
         </DialogHeader>
         {preview ? (
           <>
-            <div className="flex items-center gap-3 border-b pb-3 text-sm">
+            <div className="flex items-center gap-2 border-b pb-3 text-sm">
               <span className="font-medium">{preview.workflow.name}</span>
               <span className="text-muted-foreground">{preview.workflow.nodeCount} 个节点</span>
               <span className="text-muted-foreground">{preview.workflow.modelReferenceCount} 个模型</span>
@@ -1242,7 +1242,7 @@ function WorkflowImportDialog({ open, preview, importing = false, onOpenChange, 
                   const mapping = mappings[ref.id]
                   const provider = mapping ? providerById.get(mapping.targetProviderId) : undefined
                   return (
-                    <div key={ref.id} className="grid gap-3 border-b pb-3 md:grid-cols-[1.2fr_1fr_1.2fr]">
+                    <div key={ref.id} className="grid gap-2 border-b pb-3 md:grid-cols-[1.2fr_1fr_1.2fr]">
                       <div className="min-w-0">
                         <div className="truncate text-sm font-medium">{formatSourceModel(ref)}</div>
                         <div className="truncate text-xs text-muted-foreground">{ref.sourceModelTier}</div>

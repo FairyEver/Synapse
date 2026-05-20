@@ -442,7 +442,7 @@ function DatabaseModule() {
         {loadError ? (
           <div className="flex h-full flex-col">
             <div className="flex flex-1 items-center justify-center">
-              <div className="flex flex-col items-center gap-3 text-center">
+              <div className="flex flex-col items-center gap-2 text-center">
                 <TriangleAlert className="size-10 text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">读取失败</p>
                 <p className="text-xs text-muted-foreground">{loadError.message}</p>
@@ -482,7 +482,7 @@ function DatabaseModule() {
         ) : isLoadingSelection ? (
           <div className="flex h-full flex-col">
             <div className="flex flex-1 items-center justify-center">
-              <div className="flex flex-col items-center gap-3 text-center">
+              <div className="flex flex-col items-center gap-2 text-center">
                 <LoaderCircle className="size-10 animate-spin text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">正在加载</p>
               </div>
@@ -491,7 +491,7 @@ function DatabaseModule() {
         ) : (
           <div className="flex h-full flex-col">
             <div className="flex flex-1 items-center justify-center">
-              <div className="flex flex-col items-center gap-3 text-center">
+              <div className="flex flex-col items-center gap-2 text-center">
                 <Package className="size-10 text-muted-foreground/50" />
                 <p className="text-sm text-muted-foreground">还没有数据表</p>
                 <p className="text-xs text-muted-foreground">创建一张表开始使用</p>

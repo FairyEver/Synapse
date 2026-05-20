@@ -1313,7 +1313,7 @@ export function WorkerPanel({ worker, lines, trimmedCount, defaultOpen }: Worker
       <CollapsibleTrigger asChild>
         <button
           className={cn(
-            'w-full flex items-center gap-3 px-4 py-2.5 rounded-lg border',
+            'w-full flex items-center gap-2 px-4 py-2.5 rounded-lg border',
             'hover:bg-accent transition-colors text-left',
           )}
         >
@@ -1541,7 +1541,7 @@ export function RunView({ snapshot, outputLines, trimmed }: RunViewProps) {
   return (
     <div className="flex gap-6 max-w-4xl">
       <div className="flex-1 space-y-4">
-        <div className="flex items-center gap-3 flex-wrap">
+        <div className="flex items-center gap-2 flex-wrap">
           <Badge variant={snapshot?.status === 'error' ? 'destructive' : 'secondary'}>
             {statusLabel[snapshot?.status ?? ''] ?? snapshot?.status ?? '-'}
           </Badge>
@@ -1614,7 +1614,7 @@ export function AppShell({
   return (
     <div className="min-h-screen p-6">
       <Tabs defaultValue="config">
-        <div className="flex items-center gap-3 mb-6">
+        <div className="flex items-center gap-2 mb-6">
           <h1 className="text-lg font-semibold">auto</h1>
           <TabsList>
             <TabsTrigger value="config">配置</TabsTrigger>

@@ -1301,7 +1301,7 @@ function AgentTimeline({
 }) {
   return (
     <ScrollArea className="min-h-0 min-w-0 flex-1">
-      <div className="flex min-w-0 flex-col gap-3 py-1 pr-2">
+      <div className="flex min-w-0 flex-col gap-2 py-1 pr-2">
         {items.length === 0 ? (
           <p className="py-10 text-center text-sm text-muted-foreground">暂无消息</p>
         ) : items.map((item) => (

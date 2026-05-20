@@ -111,7 +111,7 @@ function ContentImageField({
       <div className="flex flex-col gap-4">
         <div
           className={cn(
-            "flex flex-col items-center gap-3 rounded-lg border border-dashed p-6 transition-colors",
+            "flex flex-col items-center gap-2 rounded-lg border border-dashed p-6 transition-colors",
             isDragOver ? "border-primary" : "border-border",
           )}
           onDragOver={handleDragOver}
@@ -151,7 +151,7 @@ function ContentImageField({
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-3 rounded-lg border p-3">
+      <div className="flex items-center gap-2 rounded-lg border p-3">
         <img
           src={iconImagePreview}
           alt="内容图标"

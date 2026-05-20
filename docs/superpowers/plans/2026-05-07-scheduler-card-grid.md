@@ -82,7 +82,7 @@ function TaskCard({
 
   return (
     <div
-      className={`flex flex-col gap-3 rounded-lg bg-background px-4 py-4 transition-shadow hover:ring-2 hover:ring-muted-foreground/25${!task.enabled ? " opacity-60" : ""}`}
+      className={`flex flex-col gap-2 rounded-lg bg-background px-4 py-4 transition-shadow hover:ring-2 hover:ring-muted-foreground/25${!task.enabled ? " opacity-60" : ""}`}
     >
       {/* Title row */}
       <div className="flex items-center gap-2">

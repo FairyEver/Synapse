@@ -41,7 +41,7 @@ function IdentityGate({ children }: { children: ReactNode }) {
   if (!isReady) {
     return (
       <IdentityScreenShell>
-        <div className="flex items-center gap-3 text-sm text-muted-foreground">
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
           <LoaderCircle className="animate-spin" />
           正在读取身份信息
         </div>

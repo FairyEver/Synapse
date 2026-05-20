@@ -531,7 +531,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
             <DialogTitle className="sr-only">{resolvedItem.title}</DialogTitle>
             <DialogDescription className="sr-only">{resolvedItem.description}</DialogDescription>
 
-            <div className="flex min-w-0 items-start gap-3 pr-8">
+            <div className="flex min-w-0 items-start gap-2 pr-8">
               <ContentItemIcon
                 contentId={item.id}
                 contentType={item.type}

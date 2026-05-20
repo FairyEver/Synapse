@@ -61,7 +61,7 @@ function TaskCardGrid({
   }
 
   return (
-    <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+    <div className="grid grid-cols-1 gap-2 md:grid-cols-3">
       {tasks.map((task) => (
         <TaskCard
           key={task.id}

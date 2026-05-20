@@ -825,7 +825,7 @@ function TaskSummaryBar({ task, projects }: TaskSummaryBarProps) {
       : "已启用"
 
   return (
-    <div className="flex flex-wrap items-center gap-3 rounded-lg border border-border bg-card p-4">
+    <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-card p-4">
       <Badge variant={statusVariant}>{statusLabel}</Badge>
       <span className="text-sm text-muted-foreground">{formatTaskTrigger(task)}</span>
       <span className="text-sm text-muted-foreground">下次: {formatTaskNextRun(task)}</span>
@@ -1067,7 +1067,7 @@ function TaskDetailPage() {
 
   return (
     <div className="flex h-full min-h-0 flex-col bg-surface">
-      <header className="flex items-center gap-3 border-b border-border px-4 py-3">
+      <header className="flex items-center gap-2 border-b border-border px-4 py-3">
         <Button variant="ghost" size="icon-sm" onClick={() => navigate("/task-scheduler")}>
           <ArrowLeft className="size-4" />
           <span className="sr-only">返回列表</span>

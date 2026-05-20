@@ -44,7 +44,7 @@ function AppResetPanel() {
         onOpenChange={setIsOpen}
         title="重置应用"
         description={
-          <div className="flex flex-col gap-3 text-sm text-muted-foreground">
+          <div className="flex flex-col gap-2 text-sm text-muted-foreground">
             {userId ? (
               <div className="rounded-md border border-border bg-muted/50 p-3">
                 <p className="text-sm font-medium text-foreground">

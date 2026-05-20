@@ -38,7 +38,7 @@ interface WorkflowParamCardProps {
 
 function WorkflowParamCard({ param, index, total, isDuplicate, onChange, onDelete, onMoveUp, onMoveDown }: WorkflowParamCardProps) {
   return (
-    <div className={`rounded-lg bg-muted/50 p-3 grid gap-3 ${isDuplicate ? "ring-1 ring-destructive" : ""}`}>
+    <div className={`rounded-lg bg-muted/50 p-3 grid gap-2 ${isDuplicate ? "ring-1 ring-destructive" : ""}`}>
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">参数 {index + 1}</span>
         <div className="flex items-center gap-0.5">

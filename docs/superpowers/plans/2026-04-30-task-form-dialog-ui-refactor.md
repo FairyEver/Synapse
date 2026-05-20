@@ -420,7 +420,7 @@ return (
             />
           </TaskField>
 
-          <div className="grid gap-3 sm:grid-cols-2">
+          <div className="grid gap-2 sm:grid-cols-2">
             <ToggleField
               checked={form.enabled}
               label="启用"
@@ -433,7 +433,7 @@ return (
             />
           </div>
 
-          <div className="grid gap-3 sm:grid-cols-[auto_1fr] sm:items-end">
+          <div className="grid gap-2 sm:grid-cols-[auto_1fr] sm:items-end">
             <ToggleField
               checked={form.timeoutEnabled}
               label="超时"

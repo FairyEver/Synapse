@@ -19,11 +19,11 @@
 
 In `workflow-list.tsx` line 41, replace:
 ```tsx
-<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 p-4">
+<div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2 p-4">
 ```
 with:
 ```tsx
-<div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4">
+<div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-4">
 ```
 
 - [ ] **Step 2: Commit**
@@ -428,7 +428,7 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader><DialogTitle>编辑工作流参数</DialogTitle></DialogHeader>
-        <div className="grid gap-3 py-2">
+        <div className="grid gap-2 py-2">
           {draft.length === 0 && (
             <p className="text-sm text-muted-foreground">暂无参数。</p>
           )}

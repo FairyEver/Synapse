@@ -314,7 +314,7 @@ function LogExportPanel() {
                 return (
                   <label
                     key={file.name}
-                    className="flex cursor-pointer items-center gap-3 rounded-md px-2 py-1.5 hover:bg-accent"
+                    className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 hover:bg-accent"
                   >
                     <Checkbox
                       data-track="log-file-picker-checkbox"

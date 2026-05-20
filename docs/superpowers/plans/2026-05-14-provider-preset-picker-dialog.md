@@ -492,7 +492,7 @@ function ProviderPresetRow({
   return (
     <button
       type="button"
-      className="flex w-full items-center gap-3 rounded-lg border border-border px-3 py-2 text-left hover:bg-muted"
+      className="flex w-full items-center gap-2 rounded-lg border border-border px-3 py-2 text-left hover:bg-muted"
       onClick={() => onSelect(option.value)}
     >
       <span className="min-w-0 flex-1">

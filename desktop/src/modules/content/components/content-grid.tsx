@@ -54,7 +54,7 @@ function DeletedContentCard({
 
   return (
     <div
-      className="flex items-start gap-3 rounded-lg bg-background px-3 py-3 opacity-60"
+      className="flex items-start gap-2 rounded-lg bg-background px-3 py-3 opacity-60"
     >
       <ContentItemIcon
         contentId={item.id}
@@ -139,7 +139,7 @@ function ContentListCard({
       <div className="flex items-start gap-3">
         <button
           type="button"
-          className="flex min-w-0 flex-1 cursor-pointer items-start gap-3 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+          className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
           onClick={onOpen}
         >
           <ContentItemIcon

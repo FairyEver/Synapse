@@ -49,7 +49,7 @@ function FormDialog({
           {children}
         </ScrollArea>
 
-        <DialogFooter className="mx-0 mb-0 shrink-0 flex-col gap-3 rounded-none rounded-b-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
+        <DialogFooter className="mx-0 mb-0 shrink-0 flex-col gap-2 rounded-none rounded-b-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-end">
           {footer}
         </DialogFooter>
       </form>

@@ -193,7 +193,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
   if (loading) return (
     <div className="flex h-full flex-col">
       <div className="flex flex-1 items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-center">
+        <div className="flex flex-col items-center gap-2 text-center">
           <Loader2 className="size-10 animate-spin text-muted-foreground/50" />
           <p className="text-sm text-muted-foreground">加载中…</p>
         </div>
@@ -214,7 +214,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
   if (items.length === 0) return (
     <div className="flex h-full flex-col">
       <div className="flex flex-1 items-center justify-center">
-        <div className="flex flex-col items-center gap-3 text-center">
+        <div className="flex flex-col items-center gap-2 text-center">
           <FileJson className="size-10 text-muted-foreground/50" />
           <p className="text-sm text-muted-foreground">还没有工作流</p>
           <p className="text-xs text-muted-foreground">创建工作流来自动化你的任务</p>
@@ -228,7 +228,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
 
   return (
     <>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 p-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-4">
         {items.map((meta) => (
           <WorkflowCard key={meta.id} meta={meta}
             runState={runStates[meta.id]}

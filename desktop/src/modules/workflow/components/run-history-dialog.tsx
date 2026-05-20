@@ -146,7 +146,7 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
               return (
               <div
                 key={s.runId}
-                className="flex items-center gap-3 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                className="flex items-center gap-2 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
                 tabIndex={0}
                 role="button"
                 onClick={() => handleOpenRunner(s.runId)}

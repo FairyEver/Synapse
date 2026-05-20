@@ -216,7 +216,7 @@ function ContentImageField({
       <div className="flex flex-col gap-4">
         <div
           className={cn(
-            "flex flex-col items-center gap-3 rounded-lg border-2 border-dashed p-6 transition-colors",
+            "flex flex-col items-center gap-2 rounded-lg border-2 border-dashed p-6 transition-colors",
             isDragOver ? "border-primary" : "border-border",
           )}
           onDragOver={handleDragOver}
@@ -346,7 +346,7 @@ Co-Authored-By: Claude Opus 4.7 <noreply@anthropic.com>"
         />
 
         {/* hover 浮层 */}
-        <div className="absolute inset-0 flex items-center justify-center gap-3 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
+        <div className="absolute inset-0 flex items-center justify-center gap-2 bg-black/50 opacity-0 transition-opacity group-hover:opacity-100">
           <Button
             variant="ghost"
             size="icon"

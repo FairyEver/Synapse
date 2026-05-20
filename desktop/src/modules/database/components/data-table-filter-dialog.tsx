@@ -220,7 +220,7 @@ function DataTableFilterDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange} data-track="database-filter-dialog">
-      <DialogContent className="overflow-hidden gap-3 p-3 sm:max-w-md">
+      <DialogContent className="overflow-hidden gap-2 p-3 sm:max-w-md">
         <DialogHeader className="pr-8">
           <DialogTitle>设置筛选条件</DialogTitle>
         </DialogHeader>

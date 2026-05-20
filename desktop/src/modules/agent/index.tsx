@@ -379,7 +379,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     <SidebarContentLayout sidebar={sidebar} contentScrollable={false} sidebarResizable>
       <div className="relative flex h-full min-h-0 flex-col gap-0 bg-background px-2 py-2.5">
         <TooltipProvider>
-          <div className="flex items-center justify-between gap-3 px-0 py-0">
+          <div className="flex items-center justify-between gap-2 px-0 py-0">
             {/* 左区：agent 类型 badge + 会话名称 */}
             <div className="flex min-w-0 items-center gap-2">
               {selectedCliLabel ? (

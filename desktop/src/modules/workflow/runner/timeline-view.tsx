@@ -72,7 +72,7 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
         {results.map((r) => (
           <div
             key={r.nodeId}
-            className={`flex items-center gap-3 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${r.nodeId === selectedNodeId ? "bg-muted" : ""}`}
+            className={`flex items-center gap-2 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${r.nodeId === selectedNodeId ? "bg-muted" : ""}`}
             tabIndex={0}
             role="button"
             onClick={() => handleNodeSelect(r)}

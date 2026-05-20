@@ -36,7 +36,7 @@ export function AgentConfigForm({
 
   return (
     <FieldGroup>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-2 md:grid-cols-2">
         <Field>
           <FieldLabel htmlFor="task-action-agent-provider">供应商 + 模型</FieldLabel>
           <FieldContent>

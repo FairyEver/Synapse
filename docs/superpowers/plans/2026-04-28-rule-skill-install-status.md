@@ -1511,7 +1511,7 @@ function EditorInstallStatusPanel({
               </Badge>
             </div>
             <CollapsibleContent>
-              <div className="flex items-center justify-between gap-3 px-2 py-2">
+              <div className="flex items-center justify-between gap-2 px-2 py-2">
                 <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                   {entry.targetPath ?? entry.message ?? "目标不可用"}
                 </p>

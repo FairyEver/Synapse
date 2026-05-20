@@ -306,7 +306,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
 
           {updateState.status === "downloading" || updateState.status === "downloaded" ? (
             <div className="flex min-w-0 flex-col gap-2 md:col-span-2">
-              <div className="flex items-center justify-between gap-3 text-xs text-muted-foreground">
+              <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>{updateState.status === "downloaded" ? "下载完成" : "下载进度"}</span>
                 {updateState.downloadPercent !== null ? (
                   <span>{Math.round(updateState.downloadPercent)}%</span>

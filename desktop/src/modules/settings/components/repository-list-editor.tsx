@@ -503,7 +503,7 @@ function RepositoryListEditor({
         }}
         title="警告"
         description={(
-          <div className="flex flex-col gap-3 text-sm text-muted-foreground">
+          <div className="flex flex-col gap-2 text-sm text-muted-foreground">
             <p>
               初始化会清空该目录下除 <code>.git/</code> 目录之外的所有内容，包括
               <code>.gitignore</code> 等 Git 配置文件，且无法撤销。

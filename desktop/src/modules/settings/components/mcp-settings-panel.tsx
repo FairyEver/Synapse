@@ -171,7 +171,7 @@ function McpSettingsPanel() {
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {mcpHttpStatusError ? (
-          <div className="flex items-center justify-between gap-3 text-sm text-muted-foreground">
+          <div className="flex items-center justify-between gap-2 text-sm text-muted-foreground">
             <span>{mcpHttpStatusError}</span>
             <Button variant="outline" size="sm" onClick={() => void refreshMcpHttpStatus()}>
               重试

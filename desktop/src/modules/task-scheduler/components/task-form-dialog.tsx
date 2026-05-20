@@ -276,7 +276,7 @@ function TaskFormDialog({
               >
                 <div
                   data-layout="task-form-basic-grid"
-                  className="grid gap-3 md:grid-cols-3"
+                  className="grid gap-2 md:grid-cols-3"
                 >
                   <TaskField
                     className="md:col-span-3"
@@ -305,7 +305,7 @@ function TaskFormDialog({
                 sectionRef={setSectionRef("task-form-section-trigger")}
                 title="触发计划"
               >
-                <div data-layout="task-form-trigger-grid" className="grid gap-3 md:grid-cols-3">
+                <div data-layout="task-form-trigger-grid" className="grid gap-2 md:grid-cols-3">
                   <TaskField label="触发方式" htmlFor="task-form-trigger-type-cron">
                     <ToggleGroup
                       aria-label="触发方式"
@@ -602,7 +602,7 @@ function AgentActionFields({
 
   return (
     <>
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-2 md:grid-cols-2">
         <TaskField label="项目" htmlFor="task-form-agent-project">
           <Select
             value={config.projectId ?? ""}
@@ -686,7 +686,7 @@ function AgentActionFields({
         />
       </TaskField>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className="grid gap-2 md:grid-cols-2">
         <TaskField label="会话策略" htmlFor="task-action-agent-session-fresh">
           <ToggleGroup
             aria-label="Session policy"

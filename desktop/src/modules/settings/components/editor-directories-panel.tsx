@@ -151,7 +151,7 @@ function EditorDirectoriesContent() {
       {directories.map((dir, index) => (
         <Fragment key={dir.editorId}>
           {index > 0 ? <Separator /> : null}
-          <div className="flex flex-col gap-3 px-4 py-3">
+          <div className="flex flex-col gap-2 px-4 py-3">
             <div className="flex items-center gap-2 font-medium">
               <EditorIcon editorId={dir.editorId} />
               {dir.label}

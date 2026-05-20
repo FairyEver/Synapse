@@ -531,7 +531,7 @@ function ProviderDetailDialog({
 
         {provider ? (
           <div className="flex flex-col gap-4">
-            <div className="grid gap-3 text-sm sm:grid-cols-2">
+            <div className="grid gap-2 text-sm sm:grid-cols-2">
               <ProviderDetailItem label="ID" value={provider.id} />
               <ProviderDetailItem label="类型" value={providerCategoryLabel(provider.category)} />
               <ProviderDetailItem label="请求地址" value={provider.baseUrl} />

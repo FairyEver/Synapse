@@ -208,7 +208,7 @@ function CcSwitchProviderRow({
   readonly onCheckedChange: (checked: boolean) => void
 }) {
   return (
-    <div className="flex gap-3 rounded-lg bg-muted/40 px-3 py-3">
+    <div className="flex gap-2 rounded-lg bg-muted/40 px-3 py-3">
       <div className="flex pt-1">
         <Checkbox
           aria-label={`导入 ${item.name}`}

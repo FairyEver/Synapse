@@ -76,7 +76,7 @@ function AgentRuntimePanel({ children, projectId }: AgentRuntimePanelProps) {
     <Card className="py-0">
       <CardContent className="p-0">
         {loading && agents.length === 0 ? (
-          <div className="flex flex-col gap-3 px-4 py-5">
+          <div className="flex flex-col gap-2 px-4 py-5">
             <Skeleton className="h-10 w-full" />
             <Skeleton className="h-10 w-full" />
           </div>

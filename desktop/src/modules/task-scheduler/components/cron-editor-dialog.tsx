@@ -242,7 +242,7 @@ function CommonTemplateFields({
         </FieldContent>
       </Field>
 
-      <FieldGroup className="grid gap-3 sm:grid-cols-2">
+      <FieldGroup className="grid gap-2 sm:grid-cols-2">
         {template.kind === "every_minutes" ? (
           <NumberField
             id="cron-editor-every-minutes"
