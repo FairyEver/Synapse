@@ -172,6 +172,90 @@ describe("TaskSchedulerService", () => {
     })
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("background failed")
   })
+
+  it("marks invalid stored tasks as disabled without mutating stored data", async () => {
+    const harness = createHarness()
+    await harness.taskItems.upsert(createTask({
+      id: "task:1",
+      enabled: true,
+      action: { type: "builtin.test", config: {} },
+    }))
+
+    const [task] = await harness.service.schedulerTaskList()
+
+    expect(task).toEqual(expect.objectContaining({
+      id: "task:1",
+      enabled: false,
+      validation: {
+        status: "needs_update",
+        issues: [{ field: "action.config", message: "检查执行内容" }],
+      },
+    }))
+    expect(await harness.taskItems.get("task:1")).toEqual(expect.objectContaining({
+      enabled: true,
+      action: { type: "builtin.test", config: {} },
+    }))
+
+    await harness.service.start()
+    expect(harness.service.schedulerRuntimeInspect().timers).not.toContain("task:1")
+  })
+
+  it("blocks manual runs for invalid stored tasks", async () => {
+    const harness = createHarness()
+    await harness.taskItems.upsert(createTask({
+      id: "task:1",
+      action: { type: "builtin.test", config: {} },
+    }))
+
+    await expect(harness.service.runNow("task:1")).rejects.toThrow("任务配置需要更新")
+    expect(await harness.runs.listByTask("task:1")).toEqual([])
+  })
+
+  it("records scheduled invalid tasks as skipped", async () => {
+    const harness = createHarness()
+    await harness.taskItems.upsert(createTask({
+      id: "task:1",
+      action: { type: "builtin.test", config: {} },
+    }))
+
+    const result = await harness.service.triggerForTest("task:1", "schedule")
+
+    expect(result).toEqual(expect.objectContaining({
+      status: "skipped",
+      error: "任务配置需要更新",
+    }))
+  })
+
+  it("rejects enabling invalid stored tasks", async () => {
+    const harness = createHarness()
+    await harness.taskItems.upsert(createTask({
+      id: "task:1",
+      enabled: false,
+      action: { type: "builtin.test", config: {} },
+    }))
+
+    await expect(harness.service.schedulerTaskEnable("task:1")).rejects.toThrow("任务配置需要更新")
+    expect(await harness.taskItems.get("task:1")).toEqual(expect.objectContaining({ enabled: false }))
+  })
+
+  it("marks tasks with unknown actions as needing update", async () => {
+    const harness = createHarness()
+    await harness.taskItems.upsert(createTask({
+      id: "task:1",
+      action: { type: "builtin.removed", config: {} },
+    }))
+
+    await expect(harness.service.schedulerTaskList()).resolves.toEqual([
+      expect.objectContaining({
+        id: "task:1",
+        enabled: false,
+        validation: {
+          status: "needs_update",
+          issues: [{ field: "action.type", message: "选择执行动作" }],
+        },
+      }),
+    ])
+  })
 })
 
 function createHarness(options: {
@@ -204,6 +288,7 @@ function createHarness(options: {
   const serviceDeps = {
     tasks,
     runs,
+    actions,
     execution,
     defaultCwd: "/tmp",
     now: () => new Date("2026-04-29T10:00:00.000Z"),

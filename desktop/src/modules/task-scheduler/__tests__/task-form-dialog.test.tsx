@@ -184,7 +184,7 @@ describe("TaskFormDialog", () => {
     expect(html).toContain("task-form-section-fields")
     expect(html).toContain("task-form-section-sidebar")
     expect(html).toContain("task-form-section-scroll")
-    expect(html).toContain("min-h-0 overflow-y-auto")
+    expect(html).toContain('data-slot="scroll-area"')
   })
 
   it("does not render a standalone scope selector", () => {
@@ -626,6 +626,53 @@ describe("TaskFormDialog", () => {
     expect(html).toContain("task-form-trigger-grid")
     expect(html).toContain("task-form-run-settings-list")
     expect(html).toContain("task-form-run-setting-row")
+  })
+
+  it("opens a needs-update warning before editing invalid tasks", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <TaskFormDialog
+          open
+          busy={false}
+          platform="darwin"
+          projects={[{ id: "project-1", name: "Project One", path: "/tmp/project-one" }]}
+          state={{
+            mode: "edit",
+            task: createTask({
+              validation: {
+                status: "needs_update",
+                issues: [
+                  { field: "action.config.providerId", message: "选择供应商" },
+                  { field: "action.config.modelTier", message: "选择模型" },
+                ],
+              },
+            }),
+          }}
+          onCreate={async () => undefined}
+          onOpenChange={noop}
+          onUpdate={async () => undefined}
+        />,
+      )
+    })
+
+    expect(document.body.textContent).toContain("任务需要更新")
+    expect(document.body.textContent).toContain("选择供应商")
+    expect(document.body.textContent).toContain("选择模型")
+
+    const editButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("去编辑"))
+    expect(editButton).toBeTruthy()
+
+    await act(async () => {
+      editButton?.click()
+    })
+
+    expect(document.body.textContent).toContain("保存修改")
   })
 })
 

@@ -1,4 +1,5 @@
 import { computeNextRunAt, resolveStartupSchedule } from "./schedule-calculator"
+import type { MainActionRegistry } from "../../action-runtime/action-registry"
 import type { TaskSchedulerExecutionService } from "./execution-service"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ScheduledTaskRunRepository } from "./run-repository"
@@ -9,14 +10,17 @@ import type {
   ScheduledTaskRunEntry,
   ScheduledTaskRunTrigger,
   ScheduledTaskUpdateInput,
+  ScheduledTaskValidation,
 } from "./types"
 
 const TIMER_MAX_DELAY_MS = 2_147_483_647
 const STOP_SETTLE_WAIT_MS = 3_000
+const NEEDS_UPDATE_MESSAGE = "任务配置需要更新"
 
 export interface TaskSchedulerServiceDeps {
   readonly tasks: ScheduledTaskRepository
   readonly runs: ScheduledTaskRunRepository
+  readonly actions: MainActionRegistry
   readonly execution: TaskSchedulerExecutionService
   readonly defaultCwd: string
   readonly logger?: StructuredLogger
@@ -68,8 +72,8 @@ export class TaskSchedulerService {
 
   async schedulerTaskCreate(input: ScheduledTaskCreateInput): Promise<ScheduledTaskEntry> {
     const task = await this.deps.tasks.create(input)
-    if (this.started && task.enabled) await this.schedule(task.id, task.nextRunAt)
-    return task
+    if (this.started && task.enabled && this.isTaskValid(task)) await this.schedule(task.id, task.nextRunAt)
+    return this.withRuntimeState(task)
   }
 
   async schedulerTaskUpdate(id: string, patch: ScheduledTaskUpdateInput): Promise<ScheduledTaskEntry> {
@@ -77,10 +81,10 @@ export class TaskSchedulerService {
     this.cancel(id)
     try {
       const task = await this.deps.tasks.update(id, patch)
-      if (this.started && task.enabled) await this.schedule(task.id, task.nextRunAt)
-      return task
+      if (this.started && task.enabled && this.isTaskValid(task)) await this.schedule(task.id, task.nextRunAt)
+      return this.withRuntimeState(task)
     } catch (err) {
-      if (this.started && oldTask?.enabled && oldTask.nextRunAt) {
+      if (this.started && oldTask?.enabled && oldTask.nextRunAt && this.isTaskValid(oldTask)) {
         await this.schedule(oldTask.id, oldTask.nextRunAt)
       }
       throw err
@@ -93,7 +97,7 @@ export class TaskSchedulerService {
     try {
       return { deleted: await this.deps.tasks.delete(id) }
     } catch (err) {
-      if (this.started && oldTask?.enabled && oldTask.nextRunAt) {
+      if (this.started && oldTask?.enabled && oldTask.nextRunAt && this.isTaskValid(oldTask)) {
         await this.schedule(oldTask.id, oldTask.nextRunAt)
       }
       throw err
@@ -110,13 +114,16 @@ export class TaskSchedulerService {
 
   private async setTaskEnabled(id: string, enabled: boolean): Promise<ScheduledTaskEntry> {
     const oldTask = await this.deps.tasks.get(id)
+    if (enabled && oldTask && !this.isTaskValid(oldTask)) {
+      throw new Error(NEEDS_UPDATE_MESSAGE)
+    }
     this.cancel(id)
     try {
       const task = await this.deps.tasks.setEnabled(id, enabled)
-      if (this.started && task.enabled) await this.schedule(task.id, task.nextRunAt)
-      return task
+      if (this.started && task.enabled && this.isTaskValid(task)) await this.schedule(task.id, task.nextRunAt)
+      return this.withRuntimeState(task)
     } catch (err) {
-      if (this.started && oldTask?.enabled && oldTask.nextRunAt) {
+      if (this.started && oldTask?.enabled && oldTask.nextRunAt && this.isTaskValid(oldTask)) {
         await this.schedule(oldTask.id, oldTask.nextRunAt)
       }
       throw err
@@ -126,6 +133,9 @@ export class TaskSchedulerService {
   async runNow(id: string): Promise<ScheduledTaskRunEntry | null> {
     const task = await this.deps.tasks.get(id)
     if (!task) return null
+    if (!this.isTaskValid(task)) {
+      throw new Error(NEEDS_UPDATE_MESSAGE)
+    }
     return this.executeOrSkip(task, "manual")
   }
 
@@ -174,6 +184,7 @@ export class TaskSchedulerService {
   }
 
   private async scheduleOnStartup(task: ScheduledTaskEntry): Promise<void> {
+    if (!this.isTaskValid(task)) return
     const decision = resolveStartupSchedule({
       enabled: task.enabled,
       nextRunAt: task.nextRunAt,
@@ -202,6 +213,7 @@ export class TaskSchedulerService {
     this.cancel(id)
     const task = await this.deps.tasks.get(id)
     if (!task?.enabled) return
+    if (!this.isTaskValid(task)) return
     const nextRunAt = this.resolveNextRunAt(task, preferredNextRunAt)
     try {
       await this.deps.tasks.markScheduled(id, nextRunAt.toISOString())
@@ -248,6 +260,9 @@ export class TaskSchedulerService {
     if (!task) return null
     if (!task.enabled) {
       return this.recordSkipped(task.id, triggeredBy, "task is disabled")
+    }
+    if (!this.isTaskValid(task)) {
+      return this.recordSkipped(task.id, triggeredBy, NEEDS_UPDATE_MESSAGE)
     }
     if (task.activeDays && task.activeDays.length < 7) {
       const timezone = task.trigger.type === "builtin.cron" ? task.trigger.config.timezone : undefined
@@ -336,12 +351,24 @@ export class TaskSchedulerService {
   }
 
   private withRuntimeState(task: ScheduledTaskEntry): ScheduledTaskEntry {
-    if (!this.runningTaskIds.has(task.id)) return task
+    const validation = this.validateTask(task)
+    const baseTask = validation.status === "valid"
+      ? task
+      : { ...task, enabled: false, validation }
+    if (!this.runningTaskIds.has(task.id)) return baseTask
     const runId = this.deps.execution.getActiveRunIdForTask(task.id)
     return {
-      ...task,
+      ...baseTask,
       activeRun: { status: "running", id: runId },
     }
+  }
+
+  private isTaskValid(task: ScheduledTaskEntry): boolean {
+    return this.validateTask(task).status === "valid"
+  }
+
+  private validateTask(task: ScheduledTaskEntry): ScheduledTaskValidation {
+    return this.deps.actions.validateStoredConfig(task.action.type, task.action.config)
   }
 }
 

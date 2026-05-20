@@ -3,6 +3,7 @@ import { Check, ChevronDown, Clipboard, Terminal, X } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
 import {
@@ -121,9 +122,11 @@ function AgentToolEvent({
           <div className="group relative flex flex-col gap-2 pb-2 pt-1">
             {body ? (
               <>
-                <pre data-allow-select="true" className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/50 px-2 py-1.5 font-mono text-xs leading-5 text-muted-foreground">
-                  {previewText(body, rule?.previewChars ?? profile.toolPreviewChars)}
-                </pre>
+                <ScrollArea className="max-h-60 rounded bg-muted/50 px-2 py-1.5" scrollbars="both">
+                  <pre data-allow-select="true" className="whitespace-pre-wrap break-words font-mono text-xs leading-5 text-muted-foreground">
+                    {previewText(body, rule?.previewChars ?? profile.toolPreviewChars)}
+                  </pre>
+                </ScrollArea>
                 <Button
                   type="button"
                   variant="ghost"

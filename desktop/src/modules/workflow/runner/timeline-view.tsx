@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { track } from "@/lib/ui-tracking"
 import type { WorkflowDefinition, NodeRunResult } from "@/types/workflow"
 import { NODE_STATUS_LABEL, NODE_STATUS_VARIANT } from "../lib/status-display"
@@ -66,7 +67,7 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
   }
 
   return (
-    <div className="h-full overflow-auto p-4">
+    <ScrollArea className="h-full p-4">
       <div className="space-y-2">
         {results.map((r) => (
           <div
@@ -106,7 +107,7 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
           </div>
         ))}
       </div>
-    </div>
+    </ScrollArea>
   )
 }
 

@@ -38,6 +38,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import type { ColumnKind, DatabaseTableSchema } from "@/types/database"
 import { createRendererLogger } from "@/app-shell/logging"
 import { sanitizeTrackValue } from "@/lib/ui-tracking"
@@ -178,7 +179,8 @@ function TableSchemaSheet({
           <DialogTitle>{schema.name} 表结构</DialogTitle>
         </DialogHeader>
 
-        <div className="flex max-h-[calc(100vh-12rem)] min-h-0 flex-col gap-5 overflow-y-auto px-5 py-4">
+        <ScrollArea className="max-h-[calc(100vh-12rem)] min-h-0 px-5 py-4">
+          <div className="flex min-h-0 flex-col gap-5">
           <div className="flex flex-col gap-2">
             <Label htmlFor="table-description">表备注</Label>
             <Input
@@ -203,7 +205,7 @@ function TableSchemaSheet({
             />
           </div>
 
-          <div className="min-h-0 overflow-auto rounded-md border">
+          <ScrollArea className="min-h-0 rounded-md border" scrollbars="both">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -272,8 +274,7 @@ function TableSchemaSheet({
                 ))}
               </TableBody>
             </Table>
-          </div>
-
+          </ScrollArea>
           <div className="flex flex-col gap-2">
             <Label>添加列</Label>
             <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_7.5rem_minmax(0,1.25fr)_auto]">
@@ -321,7 +322,8 @@ function TableSchemaSheet({
               />
             ) : null}
           </div>
-        </div>
+          </div>
+        </ScrollArea>
 
         {editingChoicesColumn ? (
           <ChoicesEditorDialog

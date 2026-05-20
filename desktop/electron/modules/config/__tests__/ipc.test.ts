@@ -12,10 +12,6 @@ const mocks = vi.hoisted(() => ({
     rm: vi.fn(),
     unlink: vi.fn(),
   },
-  licenseService: {
-    resetActivation: vi.fn(),
-    stop: vi.fn(),
-  },
   logger: {
     debug: vi.fn(),
     error: vi.fn(),
@@ -68,7 +64,6 @@ vi.mock("../../../database", () => ({
 describe("configIpcModule", () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mocks.licenseService.resetActivation.mockResolvedValue(undefined)
     mocks.fs.readdir.mockResolvedValue([])
     mocks.fs.rm.mockResolvedValue(undefined)
     mocks.fs.unlink.mockResolvedValue(undefined)
@@ -134,9 +129,6 @@ describe("configIpcModule", () => {
 function createHarness() {
   const harness = createInMemoryHarness()
   const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
-    if (serviceId === "core.license") {
-      return mocks.licenseService as T
-    }
     throw new Error(`Unexpected service id: ${serviceId}`)
   }
 

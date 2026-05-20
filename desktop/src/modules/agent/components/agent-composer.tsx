@@ -9,6 +9,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { track } from "@/lib/ui-tracking"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
@@ -120,7 +121,8 @@ function AgentComposer({
           data-multiline={multiline || undefined}
         >
           {visiblePendingMessages.length > 0 ? (
-            <div className="mb-2 flex max-h-40 flex-col overflow-y-auto">
+            <ScrollArea className="mb-2 max-h-40">
+              <div className="flex flex-col">
               {visiblePendingMessages.map((message) => (
                 <div
                   key={message.id}
@@ -157,7 +159,8 @@ function AgentComposer({
                   </Button>
                 </div>
               ))}
-            </div>
+              </div>
+            </ScrollArea>
           ) : null}
           <div className="flex items-center gap-2">
             <Textarea

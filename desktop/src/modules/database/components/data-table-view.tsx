@@ -26,6 +26,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -589,10 +590,12 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
         </Menubar>
       </div>
 
-      <div
-        className="min-h-0 flex-1 overflow-auto rounded-lg border bg-background"
+      <ScrollArea
+        className="min-h-0 flex-1 rounded-lg border bg-background"
         data-track="database-table-scroll"
-        onScroll={(event) => {
+        scrollbars="both"
+        trackScroll={false}
+        onViewportScroll={(event) => {
           const target = event.currentTarget
           const scrollTop = target.scrollTop
           const scrollable = Math.max(1, target.scrollHeight - target.clientHeight)
@@ -763,7 +766,7 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
             ) : null}
           </TableBody>
         </Table>
-      </div>
+      </ScrollArea>
 
       <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
         <Button

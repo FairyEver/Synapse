@@ -1,4 +1,7 @@
-import type { ActionRunResult } from "../../action-packages/types"
+import type {
+  ActionRunResult,
+  ActionStoredConfigValidation,
+} from "../../action-packages/types"
 
 export type ScheduledTaskTrigger =
   | { type: "builtin.cron"; config: { expr: string; timezone?: string } }
@@ -17,6 +20,7 @@ export type ScheduledTaskStatus = "success" | "failed" | "timeout" | "cancelled"
 export type ScheduledTaskRunStatus = "running" | ScheduledTaskStatus
 export type ScheduledTaskRunTrigger = "schedule" | "manual" | "missed_run"
 export type ScheduledTaskActiveRun = { status: "running"; id?: string }
+export type ScheduledTaskValidation = ActionStoredConfigValidation
 
 export type ScheduledTask = {
   id: string
@@ -37,6 +41,7 @@ export type ScheduledTask = {
   lastRunAt?: string
   lastStatus?: ScheduledTaskStatus
   activeRun?: ScheduledTaskActiveRun
+  validation?: ScheduledTaskValidation
   runCount: number
 }
 

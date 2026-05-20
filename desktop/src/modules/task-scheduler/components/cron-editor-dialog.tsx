@@ -128,7 +128,7 @@ function CronEditorDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <FormDialog
         title="编辑 Cron"
-        bodyClassName="overflow-y-auto"
+        bodyClassName="min-h-0"
         contentClassName="sm:max-w-[560px]"
         footer={(
           <>

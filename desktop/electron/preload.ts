@@ -180,11 +180,6 @@ const IPC_CHANNELS = {
     "compressGet": "synapse:ops:compress:get",
     "compressUpdate": "synapse:ops:compress:update",
   },
-  "license": {
-    "getStatus": "synapse:license:get-status",
-    "activate": "synapse:license:activate",
-    "renew": "synapse:license:renew",
-  },
   "workflow": {
     "exportPackageData": "synapse:workflow:export-package-data",
     "inspectImportPackageData": "synapse:workflow:inspect-import-package-data",
@@ -478,11 +473,6 @@ const synapseBridge: SynapseBridge = {
     readAll: invoke(IPC_CHANNELS.log.readAll),
     readFiles: (fileNames: string[]) => invoke(IPC_CHANNELS.log.readFiles)(fileNames),
     write: (payload) => invoke(IPC_CHANNELS.log.write)(payload),
-  },
-  license: {
-    activate: (payload) => invoke(IPC_CHANNELS.license.activate)(payload),
-    getStatus: invoke(IPC_CHANNELS.license.getStatus),
-    renew: invoke(IPC_CHANNELS.license.renew),
   },
   editor: {
     getGlobalDirectories: invoke(IPC_CHANNELS.editor.getGlobalDirectories),

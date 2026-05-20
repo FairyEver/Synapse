@@ -159,24 +159,13 @@ function ContentListCard({
             title={item.title}
           />
         </button>
-
-        <div
-          className="shrink-0 self-start"
-          onClick={(event) => {
-            event.stopPropagation()
-          }}
-          onKeyDown={(event) => {
-            event.stopPropagation()
-          }}
-        >
-          <ContentActionSplitButton
-            item={item}
-            onInstallDialogOpenChange={onInstallDialogOpenChange}
-          />
-        </div>
       </div>
 
       <EditorInstallBadges contentId={item.id} />
+      <ContentCardActionArea
+        item={item}
+        onInstallDialogOpenChange={onInstallDialogOpenChange}
+      />
     </div>
   )
 }
@@ -190,7 +179,7 @@ function ContentCardActionArea({
 }) {
   return (
     <div
-      className="shrink-0 self-start"
+      className="mt-2 flex justify-end"
       onClick={(event) => {
         event.stopPropagation()
       }}
@@ -222,11 +211,9 @@ async function copySkillName(skillName: string): Promise<void> {
 
 function SkillNameCopyButton({ skillName }: { skillName: string }) {
   return (
-    <Button
+    <button
       type="button"
-      variant="ghost"
-      size="sm"
-      className="h-6 max-w-full justify-start px-0 text-xs font-mono text-muted-foreground hover:text-foreground"
+      className="block max-w-full truncate text-left font-mono text-xs leading-4 text-muted-foreground transition-colors hover:text-foreground focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
       aria-label="复制 Skill 名称"
       title="复制 Skill 名称"
       onClick={(event) => {
@@ -235,7 +222,7 @@ function SkillNameCopyButton({ skillName }: { skillName: string }) {
       }}
     >
       <span className="truncate">{skillName}</span>
-    </Button>
+    </button>
   )
 }
 
@@ -278,7 +265,7 @@ function SkillContentListCard({
         <div className="min-w-0 flex-1">
           <button
             type="button"
-            className="block min-w-0 cursor-pointer rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
+            className="block min-w-0 w-full max-w-full cursor-pointer rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
             onClick={onOpen}
           >
             <ContentItemText
@@ -288,7 +275,7 @@ function SkillContentListCard({
           </button>
 
           {skillName ? (
-            <div className="mt-1">
+            <div className="mt-0.5">
               <SkillNameCopyButton skillName={skillName} />
             </div>
           ) : null}
@@ -299,14 +286,13 @@ function SkillContentListCard({
             className="mt-2"
           />
         </div>
-
-        <ContentCardActionArea
-          item={item}
-          onInstallDialogOpenChange={onInstallDialogOpenChange}
-        />
       </div>
 
       <EditorInstallBadges contentId={item.id} />
+      <ContentCardActionArea
+        item={item}
+        onInstallDialogOpenChange={onInstallDialogOpenChange}
+      />
     </div>
   )
 }

@@ -14,7 +14,7 @@
     "dev:electron:build": "node scripts/generate-definitions-registry.mjs && node scripts/generate-ipc.mjs && tsc -p tsconfig.electron.json --watch --preserveWatchOutput",
     "dev:electron:app": "node scripts/dev-electron-app.mjs",
     "icons": "node scripts/build-icons.mjs",
-    "build": "node scripts/sync-license-keys.mjs && pnpm generate:definitions-registry && pnpm build:renderer && pnpm build:electron && pnpm build:database",
+    "build": "pnpm generate:definitions-registry && pnpm build:renderer && pnpm build:electron && pnpm build:database",
     "build:renderer": "vite build",
     "build:electron": "node scripts/generate-ipc.mjs && tsc -p tsconfig.electron.json",
     "generate:definitions-registry": "node scripts/generate-definitions-registry.mjs",

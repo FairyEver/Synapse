@@ -3,7 +3,6 @@ import { LoaderCircle, Package, TriangleAlert } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
-  AlertDialogAction,
   AlertDialogCancel,
   AlertDialogContent,
   AlertDialogDescription,
@@ -438,78 +437,80 @@ function DatabaseModule() {
   }
 
   return (
-    <SidebarContentLayout sidebar={sidebar} contentScrollable={false} contentClassName="bg-surface">
-      {loadError ? (
-        <div className="flex h-full flex-col">
-          <div className="flex flex-1 items-center justify-center">
-            <div className="flex flex-col items-center gap-3 text-center">
-              <TriangleAlert className="size-10 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">读取失败</p>
-              <p className="text-xs text-muted-foreground">{loadError.message}</p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={handleRetryLoad}
-              >
-                重试
-              </Button>
+    <SidebarContentLayout sidebar={sidebar} contentScrollable={false} contentClassName="bg-surface" sidebarResizable>
+      <div className="h-full min-h-0 px-2 py-2.5">
+        {loadError ? (
+          <div className="flex h-full flex-col">
+            <div className="flex flex-1 items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <TriangleAlert className="size-10 text-muted-foreground/50" />
+                <p className="text-sm text-muted-foreground">读取失败</p>
+                <p className="text-xs text-muted-foreground">{loadError.message}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleRetryLoad}
+                >
+                  重试
+                </Button>
+              </div>
             </div>
           </div>
-        </div>
-      ) : selectedTable && schema ? (
-        <div className="flex h-full flex-col">
-          <div className="min-h-0 flex-1">
-            <DataTableView
-              ref={dataTableViewRef}
-              tableName={selectedTable}
-              columns={schema.columns}
-              schema={schema}
-              rows={rows}
-              total={total}
-              page={page}
-              pageSize={pageSize}
-              onPageChange={setPage}
-              onInsert={handleInsert}
-              onUpdate={handleUpdate}
-              onDelete={handleDelete}
-              onShowSchema={() => setIsSchemaSheetOpen(true)}
-              onExportTable={handleExportTable}
-              filter={filter}
-              onFilterChange={handleFilterChange}
-            />
-          </div>
-        </div>
-      ) : isLoadingSelection ? (
-        <div className="flex h-full flex-col">
-          <div className="flex flex-1 items-center justify-center">
-            <div className="flex flex-col items-center gap-3 text-center">
-              <LoaderCircle className="size-10 animate-spin text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">正在加载</p>
+        ) : selectedTable && schema ? (
+          <div className="flex h-full flex-col">
+            <div className="min-h-0 flex-1">
+              <DataTableView
+                ref={dataTableViewRef}
+                tableName={selectedTable}
+                columns={schema.columns}
+                schema={schema}
+                rows={rows}
+                total={total}
+                page={page}
+                pageSize={pageSize}
+                onPageChange={setPage}
+                onInsert={handleInsert}
+                onUpdate={handleUpdate}
+                onDelete={handleDelete}
+                onShowSchema={() => setIsSchemaSheetOpen(true)}
+                onExportTable={handleExportTable}
+                filter={filter}
+                onFilterChange={handleFilterChange}
+              />
             </div>
           </div>
-        </div>
-      ) : (
-        <div className="flex h-full flex-col">
-          <div className="flex flex-1 items-center justify-center">
-            <div className="flex flex-col items-center gap-3 text-center">
-              <Package className="size-10 text-muted-foreground/50" />
-              <p className="text-sm text-muted-foreground">还没有数据表</p>
-              <p className="text-xs text-muted-foreground">创建一张表开始使用</p>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => {
-                  void handleOpenCreateDialog().catch((error) => {
-                    logger.warn("Open create dialog failed.", { error })
-                  })
-                }}
-              >
-                新建表
-              </Button>
+        ) : isLoadingSelection ? (
+          <div className="flex h-full flex-col">
+            <div className="flex flex-1 items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <LoaderCircle className="size-10 animate-spin text-muted-foreground/50" />
+                <p className="text-sm text-muted-foreground">正在加载</p>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="flex h-full flex-col">
+            <div className="flex flex-1 items-center justify-center">
+              <div className="flex flex-col items-center gap-3 text-center">
+                <Package className="size-10 text-muted-foreground/50" />
+                <p className="text-sm text-muted-foreground">还没有数据表</p>
+                <p className="text-xs text-muted-foreground">创建一张表开始使用</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    void handleOpenCreateDialog().catch((error) => {
+                      logger.warn("Open create dialog failed.", { error })
+                    })
+                  }}
+                >
+                  新建表
+                </Button>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
 
       <CreateTableDialog
         open={isCreateDialogOpen}

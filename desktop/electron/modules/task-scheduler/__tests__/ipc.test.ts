@@ -198,6 +198,48 @@ describe("taskSchedulerIpcModule", () => {
     expect(tasks[0]?.activeRun).toEqual({ status: "running", id: "run:1" })
   })
 
+  it("preserves needs-update validation through list IPC validation", async () => {
+    const service = {
+      schedulerTaskList: vi.fn(async () => [{
+        id: "task:1",
+        schemaVersion: 2,
+        name: "Build",
+        scope: { type: "global" },
+        trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
+        action: { type: "builtin.command", config: {} },
+        enabled: false,
+        activeDays: [0, 1, 2, 3, 4, 5, 6],
+        missedRunPolicy: "skip",
+        overlapPolicy: "skip",
+        createdAt: "2026-04-29T00:00:00.000Z",
+        updatedAt: "2026-04-29T00:00:00.000Z",
+        validation: {
+          status: "needs_update",
+          issues: [{ field: "action.config", message: "检查执行内容" }],
+        },
+        runCount: 1,
+      }]),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.task-scheduler") return service as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(taskSchedulerIpcModule, { moduleId: "task-scheduler", resolve })
+
+    const tasks = await harness.invoke("synapse:task-scheduler:tasks:list", undefined) as Array<{
+      validation?: {
+        readonly status: "needs_update"
+        readonly issues: readonly { readonly field: string; readonly message: string }[]
+      }
+    }>
+
+    expect(tasks[0]?.validation).toEqual({
+      status: "needs_update",
+      issues: [{ field: "action.config", message: "检查执行内容" }],
+    })
+  })
+
   it("logs manual run failures with sanitized IPC context", async () => {
     const service = {
       runTaskNow: vi.fn(async () => {

@@ -1,4 +1,5 @@
 import type { ActionRunResult } from "../../action-packages/types"
+import { ScrollArea } from "@/components/ui/scroll-area"
 
 interface DiagnosticsData {
   readonly envKeys?: readonly string[]
@@ -41,7 +42,9 @@ function OutputBlock({ label, value }: { readonly label: string; readonly value:
   return (
     <div className="flex min-w-0 flex-col gap-1">
       <p className="text-xs font-medium">{label}</p>
-      <pre className="max-h-40 overflow-auto rounded-md bg-muted p-2.5 text-xs break-all whitespace-pre-wrap">{value}</pre>
+      <ScrollArea className="max-h-40 rounded-md bg-muted p-2.5" scrollbars="both">
+        <pre className="text-xs break-all whitespace-pre-wrap">{value}</pre>
+      </ScrollArea>
     </div>
   )
 }

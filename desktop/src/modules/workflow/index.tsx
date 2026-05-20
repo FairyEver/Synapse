@@ -2,6 +2,7 @@ import { useState } from "react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import { WorkflowList } from "./components/workflow-list"
 import { Loader2, Plus, Upload } from "lucide-react"
@@ -106,7 +107,7 @@ export function WorkflowModule() {
           </Button>
         </div>
       </div>
-      <div className="flex-1 overflow-auto"><WorkflowList key={listKey} onCreate={handleCreate} /></div>
+      <ScrollArea className="flex-1"><WorkflowList key={listKey} onCreate={handleCreate} /></ScrollArea>
       <WorkflowImportDialog
         open={!!importPreview}
         preview={importPreview}

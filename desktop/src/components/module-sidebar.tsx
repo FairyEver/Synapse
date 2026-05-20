@@ -32,7 +32,7 @@ function ModuleSidebar({
     <aside
       data-layout={dataLayout}
       className={cn(
-        "flex h-full min-h-0 flex-col gap-2",
+        "flex h-full min-h-0 flex-col gap-2 px-2 py-2.5",
         variant === "card" && "rounded-2xl bg-background p-2 ring-1 ring-foreground/10",
         className,
       )}
@@ -140,7 +140,7 @@ function ModuleSidebarList({
       data-track={dataTrack}
       onViewportScroll={onScroll}
     >
-      <div className="flex flex-col">{children}</div>
+      <div className="flex flex-col px-0.5 py-0.5">{children}</div>
     </ScrollArea>
   )
 }

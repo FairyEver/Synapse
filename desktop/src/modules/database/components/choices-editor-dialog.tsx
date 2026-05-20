@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 import { createRendererLogger } from "@/app-shell/logging"
 import { sanitizeTrackValue } from "@/lib/ui-tracking"
@@ -188,7 +189,8 @@ function ChoicesEditorDialog({
         </DialogHeader>
 
         <div className="flex flex-col gap-3">
-          <div className="flex max-h-72 flex-col overflow-y-auto rounded-md border">
+          <ScrollArea className="max-h-72 rounded-md border">
+            <div className="flex flex-col">
             {rows.length === 0 ? (
               <div className="px-3 py-6 text-center text-xs text-muted-foreground">
                 还没有选项，添加一个开始。
@@ -264,7 +266,8 @@ function ChoicesEditorDialog({
                 )
               })
             )}
-          </div>
+            </div>
+          </ScrollArea>
 
           <div className="flex items-center gap-2">
             <Input

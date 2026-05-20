@@ -166,11 +166,6 @@ export const IPC_CHANNELS = {
     "compressGet": "synapse:ops:compress:get",
     "compressUpdate": "synapse:ops:compress:update",
   },
-  "license": {
-    "getStatus": "synapse:license:get-status",
-    "activate": "synapse:license:activate",
-    "renew": "synapse:license:renew",
-  },
   "workflow": {
     "exportPackageData": "synapse:workflow:export-package-data",
     "inspectImportPackageData": "synapse:workflow:inspect-import-package-data",

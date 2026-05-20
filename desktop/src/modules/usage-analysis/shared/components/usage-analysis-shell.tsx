@@ -1,6 +1,7 @@
 import type { ReactNode } from "react"
 import { RefreshCw } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { RangePicker } from "./range-picker"
 import type { UsageRangePreset, UsageViewId } from "../types"
@@ -58,9 +59,11 @@ export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
           </div>
         </div>
       </div>
-      <div className="min-h-0 flex-1 overflow-auto px-4 py-3">
-        {props.children}
-      </div>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="min-h-full px-4 py-3">
+          {props.children}
+        </div>
+      </ScrollArea>
     </div>
   )
 }

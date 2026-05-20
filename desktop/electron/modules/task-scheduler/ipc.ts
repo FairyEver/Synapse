@@ -109,6 +109,19 @@ const activeRunSchema = z.object({
   status: z.literal("running"),
   id: z.string().min(1).optional(),
 })
+const taskValidationSchema = z.discriminatedUnion("status", [
+  z.object({
+    status: z.literal("valid"),
+    issues: z.tuple([]),
+  }),
+  z.object({
+    status: z.literal("needs_update"),
+    issues: z.array(z.object({
+      field: z.string().min(1),
+      message: z.string().min(1),
+    })).min(1),
+  }),
+])
 const actionRunResultSchema = z.object({
   status: z.enum(["success", "failed", "timeout", "cancelled"]),
   summary: z.string().optional(),
@@ -141,6 +154,7 @@ const taskSchema = z.object({
   lastRunAt: z.string().optional(),
   lastStatus: taskStatusSchema.optional(),
   activeRun: activeRunSchema.optional(),
+  validation: taskValidationSchema.optional(),
   runCount: z.number(),
 })
 

@@ -1,5 +1,5 @@
 import type { ActionManifest } from "../../types"
-import { agentActionConfigSchema, type AgentActionConfig } from "./schema"
+import { agentActionConfigSchema, validateAgentStoredConfig, type AgentActionConfig } from "./schema"
 import { SYNAPSE_AGENT_PERMISSION_MODES } from "../../../src/types/agent"
 
 export const agentActionManifest = {
@@ -76,4 +76,5 @@ export const agentActionManifest = {
     },
   ],
   configSchema: agentActionConfigSchema,
+  validateStoredConfig: validateAgentStoredConfig,
 } satisfies ActionManifest<AgentActionConfig>

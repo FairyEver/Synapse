@@ -2,6 +2,7 @@ import { useEffect, useState } from "react"
 import { ShieldAlert, ShieldCheck, ShieldX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import type { SynapseAgentPermissionRequestTimelineItem } from "@/types/agent"
@@ -81,9 +82,9 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
       {/* 代码区 */}
       {body && !codeCollapsed ? (
         <div className="border-t border-border bg-muted">
-          <pre className="max-h-48 overflow-auto whitespace-pre-wrap break-words p-3 font-mono text-xs leading-5 text-foreground">
-            {body}
-          </pre>
+          <ScrollArea className="max-h-48 p-3" scrollbars="both">
+            <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-5 text-foreground">{body}</pre>
+          </ScrollArea>
         </div>
       ) : null}
 

@@ -4,6 +4,7 @@ import { AlertDialog, AlertDialogCancel, AlertDialogContent, AlertDialogDescript
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Plus, Trash2, ChevronUp, ChevronDown } from "lucide-react"
@@ -14,8 +15,12 @@ function toDraft(p: WorkflowParam): DraftParam {
   return { ...p, _key: crypto.randomUUID() }
 }
 function fromDraft(d: DraftParam): WorkflowParam {
-  const { _key, ...rest } = d
-  return rest
+  return {
+    name: d.name,
+    type: d.type,
+    default: d.default,
+    description: d.description,
+  }
 }
 
 // ─── WorkflowParamCard ────────────────────────────────────────────────────────
@@ -209,7 +214,8 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-xl">
         <DialogHeader><DialogTitle>编辑工作流参数</DialogTitle></DialogHeader>
-        <div className="grid gap-3 py-2 max-h-[60vh] overflow-auto pr-1">
+        <ScrollArea className="max-h-[60vh] py-2 pr-1">
+          <div className="grid gap-3">
           {draft.length === 0 && (
             <p className="text-sm text-muted-foreground">暂无参数。</p>
           )}
@@ -234,7 +240,8 @@ export function ParamsEditorDialog({ open, params, onChange, onClose }: ParamsEd
           >
             <Plus className="h-3 w-3" />添加参数
           </Button>
-        </div>
+          </div>
+        </ScrollArea>
         <DialogFooter>
           <Button variant="ghost" onClick={handleCancel}>取消</Button>
           <Button onClick={handleSave} disabled={hasDuplicates}>保存</Button>

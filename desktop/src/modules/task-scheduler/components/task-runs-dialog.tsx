@@ -252,9 +252,9 @@ function RunResult({
 
 function OutputBlock({ value }: { readonly value: string }) {
   return (
-    <pre className="max-h-40 overflow-auto rounded-md bg-muted p-2.5 text-xs break-all whitespace-pre-wrap">
-      {value}
-    </pre>
+    <ScrollArea className="max-h-40 rounded-md bg-muted p-2.5" scrollbars="both">
+      <pre className="text-xs break-all whitespace-pre-wrap">{value}</pre>
+    </ScrollArea>
   )
 }
 

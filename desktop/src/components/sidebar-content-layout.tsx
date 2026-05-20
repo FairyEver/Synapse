@@ -15,6 +15,7 @@ type SidebarContentLayoutProps = {
   sidebarClassName?: string
   contentClassName?: string
   contentScrollable?: boolean
+  sidebarResizable?: boolean
 }
 
 function SidebarContentLayout({
@@ -25,6 +26,7 @@ function SidebarContentLayout({
   sidebarClassName,
   contentClassName,
   contentScrollable = true,
+  sidebarResizable = false,
 }: SidebarContentLayoutProps) {
   return (
     <ResizablePanelGroup
@@ -34,12 +36,13 @@ function SidebarContentLayout({
       <ResizablePanel
         defaultSize={220}
         minSize={220}
-        maxSize={420}
+        maxSize={sidebarResizable ? 420 : 220}
+        disabled={!sidebarResizable}
         groupResizeBehavior="preserve-pixel-size"
       >
         <div
           className={cn(
-            "h-full min-h-0 min-w-0 overflow-hidden bg-background px-2 py-2.5",
+            "h-full min-h-0 min-w-0 overflow-hidden bg-background",
             sidebarClassName,
           )}
         >
@@ -47,13 +50,13 @@ function SidebarContentLayout({
         </div>
       </ResizablePanel>
 
-      <ResizableHandle withHandle />
+      {sidebarResizable ? <ResizableHandle withHandle /> : null}
 
       <ResizablePanel>
         {contentScrollable ? (
           <ScrollArea
             className={cn(
-              "h-full min-h-0 min-w-0 bg-background px-2 py-2.5",
+              "h-full min-h-0 min-w-0 bg-background",
               contentClassName,
             )}
           >
@@ -64,7 +67,7 @@ function SidebarContentLayout({
         ) : (
           <div
             className={cn(
-              "h-full min-h-0 min-w-0 overflow-hidden bg-background px-2 py-2.5",
+              "h-full min-h-0 min-w-0 overflow-hidden bg-background",
               contentClassName,
             )}
           >

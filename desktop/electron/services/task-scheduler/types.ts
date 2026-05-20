@@ -1,4 +1,7 @@
-import type { ActionRunResult } from "../../../action-packages/types"
+import type {
+  ActionRunResult,
+  ActionStoredConfigValidation,
+} from "../../../action-packages/types"
 
 export const TASK_SCHEDULER_SERVICE_ID = "core.task-scheduler"
 
@@ -31,6 +34,7 @@ export type ScheduledTaskStatus = "success" | "failed" | "timeout" | "cancelled"
 export type ScheduledTaskRunStatus = "running" | ScheduledTaskStatus
 export type ScheduledTaskRunTrigger = "schedule" | "manual" | "missed_run"
 export type ScheduledTaskActiveRun = { readonly status: "running"; readonly id?: string }
+export type ScheduledTaskValidation = ActionStoredConfigValidation
 
 export interface ScheduledTaskEntryV2 extends Record<string, unknown> {
   readonly id: string
@@ -51,6 +55,7 @@ export interface ScheduledTaskEntryV2 extends Record<string, unknown> {
   readonly lastRunAt?: string
   readonly lastStatus?: ScheduledTaskStatus
   readonly activeRun?: ScheduledTaskActiveRun
+  readonly validation?: ScheduledTaskValidation
   readonly runCount: number
   readonly configVersion: number
 }

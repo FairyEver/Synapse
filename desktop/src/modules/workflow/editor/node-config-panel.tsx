@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import { Select, SelectContent, SelectGroup, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { WorkflowDefinition } from "@/types/workflow"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
@@ -60,8 +61,20 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
   }
 
   const node = nodeId ? definition.nodes.find((n) => n.id === nodeId) : null
-  let manifest: ReturnType<typeof nodeTypeRegistry.getManifest> | null = null
-  try { manifest = node ? nodeTypeRegistry.getManifest(node.type) : null } catch (err) { logger.warn("getManifest failed", { nodeId: node?.id, nodeType: node?.type, boundary: "renderer.workflow.node-config-panel.getManifest", ...errorDiagnostic(err) }); manifest = null }
+  const manifest = (() => {
+    if (!node) return null
+    try {
+      return nodeTypeRegistry.getManifest(node.type)
+    } catch (err) {
+      logger.warn("getManifest failed", {
+        nodeId: node.id,
+        nodeType: node.type,
+        boundary: "renderer.workflow.node-config-panel.getManifest",
+        ...errorDiagnostic(err),
+      })
+      return null
+    }
+  })()
   const Icon = manifest?.icon
 
   const inCount = node ? definition.edges.filter((e) => e.to === node.id).length : 0
@@ -141,7 +154,7 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
               {manifest?.title ?? node.type} · {connectionSummary}
             </p>
           </div>
-          <div className="flex-1 overflow-auto p-3">
+          <ScrollArea className="flex-1 p-3">
             {(() => {
               const PanelComponent = getPanel(node.type)
               if (!PanelComponent) return <div className="flex items-center justify-center h-full text-xs text-muted-foreground"><p>该节点类型暂不支持配置编辑</p></div>
@@ -173,7 +186,7 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
                 </>
               )
             })()}
-          </div>
+          </ScrollArea>
         </>
       ) : (
         <GlobalSettingsForm definition={definition} projects={projects} onChange={onDefinitionChange} />
@@ -200,7 +213,8 @@ function GlobalSettingsForm({ definition, projects, onChange }: {
       <div className="border-b px-3 py-2.5">
         <p className="text-sm font-medium">工作流设置</p>
       </div>
-      <div className="flex-1 overflow-auto p-3 space-y-4">
+      <ScrollArea className="flex-1 p-3">
+        <div className="space-y-4">
         <div className="space-y-1.5">
           <Label className="text-xs">名称</Label>
           <Input
@@ -289,7 +303,8 @@ function GlobalSettingsForm({ definition, projects, onChange }: {
             编辑参数
           </Button>
         </div>
-      </div>
+        </div>
+      </ScrollArea>
       <ParamsEditorDialog
         open={paramsOpen}
         params={definition.params}

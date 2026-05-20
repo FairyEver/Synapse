@@ -469,9 +469,11 @@ function DatabaseSettingsPanel() {
 
               <div className="flex min-w-0 flex-col gap-2">
                 <p className="text-sm font-medium">完整调试信息</p>
-                <pre className="w-full max-w-full overflow-auto whitespace-pre-wrap break-all rounded-md bg-muted p-3 text-xs text-foreground">
-                  {isCliDebugLoading && !cliDebugInfo ? "正在读取..." : cliDebugInfo ? formatCliDebugInfo(cliDebugInfo) : "暂无数据"}
-                </pre>
+                <ScrollArea className="w-full max-w-full rounded-md bg-muted p-3" scrollbars="both">
+                  <pre className="whitespace-pre-wrap break-all text-xs text-foreground">
+                    {isCliDebugLoading && !cliDebugInfo ? "正在读取..." : cliDebugInfo ? formatCliDebugInfo(cliDebugInfo) : "暂无数据"}
+                  </pre>
+                </ScrollArea>
               </div>
             </div>
           </ScrollArea>

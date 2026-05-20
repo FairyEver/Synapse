@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
 
 type ContentItemMetaProps = {
@@ -56,12 +57,12 @@ function ContentItemText({
 
   return (
     <>
-      <div className="min-w-0 flex flex-col gap-1.5">
-        <p className="truncate text-sm font-medium leading-4 text-foreground">{title}</p>
+      <div className="min-w-0 w-full max-w-full flex flex-col gap-1.5">
+        <p className="max-w-full truncate text-sm font-medium leading-4 text-foreground">{title}</p>
         <p
           ref={descRef}
           className={cn(
-            "text-sm leading-4 text-muted-foreground",
+            "max-w-full text-sm leading-4 text-muted-foreground",
             descriptionWrap ? "line-clamp-3 break-words whitespace-pre-wrap" : "truncate",
           )}
         >
@@ -79,14 +80,16 @@ function ContentItemText({
       </div>
       {descriptionWrap && (
         <Dialog open={showFull} onOpenChange={setShowFull}>
-          <DialogContent className="max-h-[70vh] overflow-y-auto sm:max-w-[500px]">
+          <DialogContent className="max-h-[70vh] overflow-hidden sm:max-w-[500px]">
             <DialogHeader>
               <DialogTitle>{title}</DialogTitle>
               <DialogDescription className="sr-only">完整介绍</DialogDescription>
             </DialogHeader>
-            <p className="whitespace-pre-wrap break-words text-sm leading-5 text-muted-foreground">
-              {description}
-            </p>
+            <ScrollArea className="min-h-0">
+              <p className="whitespace-pre-wrap break-words text-sm leading-5 text-muted-foreground">
+                {description}
+              </p>
+            </ScrollArea>
           </DialogContent>
         </Dialog>
       )}

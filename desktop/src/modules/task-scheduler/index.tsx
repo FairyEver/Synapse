@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
+import { useState, type ReactNode } from "react"
 import {
   Download,
   LoaderCircle,
@@ -11,9 +11,7 @@ import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
 import { cancelWatchNextAgentSession, requestWatchNextAgentSession } from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
-import type { SynapseAgentProvider } from "@/types/bridge"
 import { Button } from "@/components/ui/button"
 import {
   AlertDialog,
@@ -31,6 +29,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import type {
   ScheduledTask,
   ScheduledTaskCreateInput,
@@ -88,21 +87,6 @@ function TaskSchedulerModule() {
   const platform = getRendererPlatform()
   const { tasks, loading, error, refresh } = useTaskSchedulerTasks()
   const { notify, promise } = useAppNotifications()
-  const [providers, setProviders] = useState<readonly SynapseAgentProvider[]>([])
-  const providerRequestRef = useRef(0)
-  const loadProviders = useCallback(async () => {
-    const requestId = ++providerRequestRef.current
-    try {
-      const list = await requireSynapseBridge().agent.listProviders()
-      if (requestId === providerRequestRef.current) setProviders(list)
-    } catch (err) {
-      logger.warn("Provider list failed.", {
-        boundary: "renderer.task-scheduler.providers",
-        ...errorLogMeta(err),
-      })
-    }
-  }, [])
-  useEffect(() => { void loadProviders() }, [loadProviders])
   const [formState, setFormState] = useState<TaskFormDialogState>({ mode: "create" })
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [historyTask, setHistoryTask] = useState<ScheduledTask | null>(null)
@@ -340,8 +324,8 @@ const [isExporting, setIsExporting] = useState(false)
 
   return (
     <TooltipProvider>
-      <div className="flex h-full min-h-0 flex-col gap-2.5 bg-surface px-2 py-2.5">
-        <div className="flex flex-wrap items-center justify-end gap-3">
+      <div className="flex h-full min-h-0 flex-col bg-surface">
+        <div className="flex shrink-0 flex-wrap items-center justify-end gap-3 px-2 py-2.5">
           <div className="flex items-center gap-2">
             <IconButton
               label="刷新"
@@ -376,62 +360,63 @@ const [isExporting, setIsExporting] = useState(false)
           </div>
         </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain p-0.5">
-          {error && !loading ? (
-            <div className="flex items-center gap-3 p-4">
-              <p className="text-sm text-destructive">{error}</p>
-              <Button variant="outline" size="sm" onClick={() => void refresh()}>
-                重试
-              </Button>
-            </div>
-          ) : null}
-          {loading ? (
-            <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
-              <LoaderCircle className="h-4 w-4 animate-spin" />
-              加载中
-            </div>
-          ) : null}
-          {!loading && !error ? (
-            <TaskCardGrid
-              busy={busy}
-              runningTaskIds={runningTaskIds}
-              projects={config.global.projects}
-              providers={providers}
-              tasks={tasks}
-              onCreateNew={() => {
-                setFormState({ mode: "create" })
-                setIsFormOpen(true)
-              }}
-              onDelete={(task) => setDeleteTarget(task)}
-              onEdit={(task) => {
-                setFormState({ mode: "edit", task })
-                setIsFormOpen(true)
-              }}
-              onHistory={(task) => setHistoryTask(task)}
-              onRun={(task) => {
-                void handleRunTask(task)
-              }}
-              onStop={(task) => {
-                const runId = task.activeRun?.id
-                if (!runId) return
-                void runMutation(
-                  () => stopRunOrThrow(runId),
-                  { loading: "正在停止运行...", success: "运行已停止。", error: "停止运行失败。" },
-                )
-              }}
-              onToggleEnabled={(task, enabled) => {
-                void runMutation(
-                  () => setTaskEnabled(task.id, enabled),
-                  {
-                    loading: enabled ? "正在启用任务..." : "正在停用任务...",
-                    success: enabled ? "任务已启用。" : "任务已停用。",
-                    error: "更新任务失败。",
-                  },
-                )
-              }}
-            />
-          ) : null}
-        </div>
+        <ScrollArea className="min-h-0 flex-1 overscroll-contain">
+          <div className="min-h-full px-2 pb-2.5 pt-2.5">
+            {error && !loading ? (
+              <div className="flex items-center gap-3 p-4">
+                <p className="text-sm text-destructive">{error}</p>
+                <Button variant="outline" size="sm" onClick={() => void refresh()}>
+                  重试
+                </Button>
+              </div>
+            ) : null}
+            {loading ? (
+              <div className="flex items-center gap-2 p-4 text-sm text-muted-foreground">
+                <LoaderCircle className="h-4 w-4 animate-spin" />
+                加载中
+              </div>
+            ) : null}
+            {!loading && !error ? (
+              <TaskCardGrid
+                busy={busy}
+                runningTaskIds={runningTaskIds}
+                projects={config.global.projects}
+                tasks={tasks}
+                onCreateNew={() => {
+                  setFormState({ mode: "create" })
+                  setIsFormOpen(true)
+                }}
+                onDelete={(task) => setDeleteTarget(task)}
+                onEdit={(task) => {
+                  setFormState({ mode: "edit", task })
+                  setIsFormOpen(true)
+                }}
+                onHistory={(task) => setHistoryTask(task)}
+                onRun={(task) => {
+                  void handleRunTask(task)
+                }}
+                onStop={(task) => {
+                  const runId = task.activeRun?.id
+                  if (!runId) return
+                  void runMutation(
+                    () => stopRunOrThrow(runId),
+                    { loading: "正在停止运行...", success: "运行已停止。", error: "停止运行失败。" },
+                  )
+                }}
+                onToggleEnabled={(task, enabled) => {
+                  void runMutation(
+                    () => setTaskEnabled(task.id, enabled),
+                    {
+                      loading: enabled ? "正在启用任务..." : "正在停用任务...",
+                      success: enabled ? "任务已启用。" : "任务已停用。",
+                      error: "更新任务失败。",
+                    },
+                  )
+                }}
+              />
+            ) : null}
+          </div>
+        </ScrollArea>
 
         <TaskFormDialog
           busy={busy}

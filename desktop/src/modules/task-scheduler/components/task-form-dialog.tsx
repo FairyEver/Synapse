@@ -12,6 +12,16 @@ import {
 } from "@/components/module-sidebar"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
 import { useProviderModelLabel } from "@/lib/provider-model"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog } from "@/components/ui/dialog"
 import {
@@ -36,6 +46,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
@@ -96,14 +107,19 @@ function TaskFormDialog({
   )
   const [error, setError] = useState<string | null>(null)
   const [activeSectionId, setActiveSectionId] = useState<TaskFormSectionId>(TASK_FORM_SECTIONS[0].id)
+  const [needsUpdateOpen, setNeedsUpdateOpen] = useState(false)
   const formScrollRef = useRef<HTMLDivElement | null>(null)
   const sectionRefs = useRef<Partial<Record<TaskFormSectionId, HTMLElement | null>>>({})
+  const needsUpdateIssues = state.mode === "edit" && state.task.validation?.status === "needs_update"
+    ? state.task.validation.issues
+    : []
 
   useEffect(() => {
     if (open) {
       setForm(createTaskFormState(state.task, defaultProjectId, platform))
       setError(null)
       setActiveSectionId(TASK_FORM_SECTIONS[0].id)
+      setNeedsUpdateOpen(state.mode === "edit" && state.task.validation?.status === "needs_update")
     }
   }, [defaultProjectId, open, platform, state])
 
@@ -207,38 +223,39 @@ function TaskFormDialog({
   }
 
   return (
-    <Dialog data-track="task-scheduler-form-dialog" open={open} onOpenChange={onOpenChange}>
-      <FormDialog
-        title={state.mode === "edit" ? "编辑任务" : "新建任务"}
-        bodyClassName="overflow-hidden"
-        contentClassName="h-[calc(100vh-2rem)] sm:max-w-2xl"
-        footer={(
-          <>
-            <FieldError className="sm:mr-auto">{error}</FieldError>
-            <div className="flex flex-col-reverse gap-2 sm:flex-row">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={busy}
-                onClick={() => onOpenChange(false)}
-              >
-                取消
-              </Button>
-              <Button type="submit" disabled={busy || !canSubmit}>
-                {busy ? "正在保存..." : state.mode === "edit" ? "保存修改" : "保存"}
-              </Button>
-            </div>
-          </>
-        )}
-        onSubmit={handleSubmit}
-      >
+    <>
+      <Dialog data-track="task-scheduler-form-dialog" open={open} onOpenChange={onOpenChange}>
+        <FormDialog
+          title={state.mode === "edit" ? "编辑任务" : "新建任务"}
+          bodyClassName="overflow-hidden"
+          contentClassName="h-[calc(100vh-2rem)] sm:max-w-2xl"
+          footer={(
+            <>
+              <FieldError className="sm:mr-auto">{error}</FieldError>
+              <div className="flex flex-col-reverse gap-2 sm:flex-row">
+                <Button
+                  type="button"
+                  variant="outline"
+                  disabled={busy}
+                  onClick={() => onOpenChange(false)}
+                >
+                  取消
+                </Button>
+                <Button type="submit" disabled={busy || !canSubmit}>
+                  {busy ? "正在保存..." : state.mode === "edit" ? "保存修改" : "保存"}
+                </Button>
+              </div>
+            </>
+          )}
+          onSubmit={handleSubmit}
+        >
         <div
           data-layout="task-form-dialog-layout"
           className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-1 md:grid-cols-[9rem_minmax(0,1fr)] md:grid-rows-1 md:gap-1"
         >
           <aside
             data-layout="task-form-section-sidebar"
-            className="min-w-0 overflow-x-auto md:min-h-0 md:overflow-y-auto md:overflow-x-visible"
+            className="min-w-0 overflow-hidden md:min-h-0"
           >
             <TaskFormSectionNav
               activeSectionId={activeSectionId}
@@ -246,10 +263,10 @@ function TaskFormDialog({
             />
           </aside>
 
-          <div
-            ref={formScrollRef}
+          <ScrollArea
+            viewportRef={formScrollRef}
             data-layout="task-form-section-scroll"
-            className="min-h-0 overflow-y-auto pl-[3px] pr-1"
+            className="min-h-0 pl-[3px] pr-1"
           >
             <FieldGroup data-layout="task-form-section-fields" className="gap-5">
               <TaskFormSection
@@ -459,10 +476,38 @@ function TaskFormDialog({
                 </div>
               </TaskFormSection>
             </FieldGroup>
-          </div>
+          </ScrollArea>
         </div>
-      </FormDialog>
-    </Dialog>
+        </FormDialog>
+      </Dialog>
+      <AlertDialog open={needsUpdateOpen} onOpenChange={setNeedsUpdateOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>任务需要更新</AlertDialogTitle>
+            <AlertDialogDescription>
+              修改以下内容后才能启用或运行。
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <ul className="grid gap-1 text-sm">
+            {needsUpdateIssues.map((issue) => (
+              <li key={`${issue.field}:${issue.message}`} className="text-foreground">
+                {issue.message}
+              </li>
+            ))}
+          </ul>
+          <AlertDialogFooter>
+            <AlertDialogCancel
+              onClick={() => {
+                onOpenChange(false)
+              }}
+            >
+              取消
+            </AlertDialogCancel>
+            <AlertDialogAction>去编辑</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }
 
@@ -480,7 +525,6 @@ function TaskFormSectionNav({
       variant="bare"
     >
       <ModuleSidebarList
-        className="overflow-x-auto md:overflow-x-hidden"
         data-track="task-form-section-list"
       >
         {TASK_FORM_SECTIONS.map((section) => (

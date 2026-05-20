@@ -2,7 +2,6 @@ import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState }
 import { AppShellActions } from "@/app-shell/components/app-shell-actions"
 import { EmptyRepositoryState } from "@/app-shell/components/empty-repository-state"
 import { IdentityGate } from "@/app-shell/components/identity-gate"
-import { LicenseGate } from "@/app-shell/components/license-gate"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
 import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
@@ -428,21 +427,15 @@ function App() {
 
   if (standaloneContentWindowRequest) {
     return (
-      <LicenseGate>
-        <IdentityGate>
-          <ErrorBoundary fallbackTitle="内容详情出现问题">
-            <ContentDetailWindowPage request={standaloneContentWindowRequest} />
-          </ErrorBoundary>
-        </IdentityGate>
-      </LicenseGate>
+      <IdentityGate>
+        <ErrorBoundary fallbackTitle="内容详情出现问题">
+          <ContentDetailWindowPage request={standaloneContentWindowRequest} />
+        </ErrorBoundary>
+      </IdentityGate>
     )
   }
 
-  return (
-    <LicenseGate>
-      <MainApp key={resetKey} />
-    </LicenseGate>
-  )
+  return <MainApp key={resetKey} />
 }
 
 export default App

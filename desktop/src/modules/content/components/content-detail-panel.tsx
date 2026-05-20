@@ -7,6 +7,7 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ContentHistorySelect } from "@/modules/content/components/content-history-select"
 import type { SynapseLoadedContentVersion } from "@/modules/content/hooks/use-content-detail-state"
@@ -101,24 +102,26 @@ function ContentDetailPanel<T extends SynapseContentType>({
           </div>
         </div>
 
-        <div className="mt-4 min-h-0 flex-1 overflow-auto">
-          {previewError ? (
-            <Empty className={stateContainerClassName ?? "min-h-[360px] rounded-lg border border-border bg-muted/20"}>
-              <EmptyHeader>
-                <EmptyMedia variant="icon">
-                  <AlertTriangle />
-                </EmptyMedia>
-                <EmptyTitle>{errorTitle}</EmptyTitle>
-                <EmptyDescription>{previewError}</EmptyDescription>
-              </EmptyHeader>
-            </Empty>
-          ) : (
-            renderVersion({
-              mode: viewMode,
-              version: displayedVersion,
-            })
-          )}
-        </div>
+        <ScrollArea className="mt-4 min-h-0 flex-1 overflow-hidden">
+          <div className="min-w-0 max-w-full">
+            {previewError ? (
+              <Empty className={stateContainerClassName ?? "min-h-[360px] rounded-lg border border-border bg-muted/20"}>
+                <EmptyHeader>
+                  <EmptyMedia variant="icon">
+                    <AlertTriangle />
+                  </EmptyMedia>
+                  <EmptyTitle>{errorTitle}</EmptyTitle>
+                  <EmptyDescription>{previewError}</EmptyDescription>
+                </EmptyHeader>
+              </Empty>
+            ) : (
+              renderVersion({
+                mode: viewMode,
+                version: displayedVersion,
+              })
+            )}
+          </div>
+        </ScrollArea>
       </div>
     )
   }

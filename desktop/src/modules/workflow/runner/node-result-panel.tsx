@@ -1,5 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { X } from "lucide-react"
 import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
 import { track } from "@/lib/ui-tracking"
@@ -65,7 +66,8 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
           <X className="h-3.5 w-3.5" />
         </Button>
       </div>
-      <div className="flex-1 overflow-auto p-3 text-xs space-y-3">
+      <ScrollArea className="flex-1 p-3">
+        <div className="space-y-3 text-xs">
         {Object.keys(result.input.variables).length > 0 && (
           <div className="grid gap-1">
             <p className="font-medium text-muted-foreground">输入变量</p>
@@ -123,7 +125,8 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
             {result.status === "skipped" ? "节点因工作流分支逻辑被跳过，未执行" : result.status === "pending" ? "节点等待执行" : result.status === "running" ? "节点正在执行…" : result.status === "cancelled" ? "节点执行被取消" : "（无可展示的输出）"}
           </p>
         )}
-      </div>
+        </div>
+      </ScrollArea>
     </div>
   )
 }

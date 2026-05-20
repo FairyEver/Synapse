@@ -12,10 +12,17 @@ import type { ProviderLookup } from "../provider-lookup-context"
 
 vi.mock("@/lib/ui-tracking", () => ({
   track: vi.fn(),
+  extractLabel: vi.fn(() => "button"),
 }))
 
 vi.mock("../prompt-editor", () => ({
-  PromptEditor: ({ value }: { value: string }) => React.createElement("textarea", { readOnly: true, value }),
+  PromptEditor: ({ value, onChange, onBlur }: { value: string; onChange?: (value: string) => void; onBlur?: () => void }) =>
+    React.createElement("textarea", {
+      readOnly: true,
+      value,
+      onChange: (event: React.ChangeEvent<HTMLTextAreaElement>) => onChange?.(event.currentTarget.value),
+      onBlur,
+    }),
 }))
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -135,6 +142,71 @@ describe("workflow node provider settings", () => {
     expect(container.textContent).toContain("显示名")
     expect(container.querySelector<HTMLInputElement>("input[aria-label='路由键 分支 1']")?.value).toBe("branch1")
     expect(container.querySelector<HTMLInputElement>("input[aria-label='显示名 branch1']")?.value).toBe("分支 1")
+  })
+
+  it("shows switch route rules before the prompt instructions", () => {
+    const container = renderPanel(
+      React.createElement(SwitchNodePanel, {
+        config: {
+          providerId: undefined,
+          modelTier: undefined,
+          variables: [],
+          prompt: "route",
+          branches: [{ id: "branch1", label: "分支 1" }],
+        },
+        onChange: vi.fn(),
+        upstreamNodes: [],
+        workflowParams: [],
+        projects: [],
+      }),
+    )
+
+    const text = container.textContent ?? ""
+
+    expect(text.indexOf("路由规则")).toBeGreaterThan(-1)
+    expect(text.indexOf("判断指令")).toBeGreaterThan(-1)
+    expect(text.indexOf("路由规则")).toBeLessThan(text.indexOf("判断指令"))
+  })
+
+  it("fills switch prompt instructions from the configured route branches", () => {
+    const onChange = vi.fn()
+    const container = renderPanel(
+      React.createElement(SwitchNodePanel, {
+        config: {
+          providerId: undefined,
+          modelTier: undefined,
+          variables: [],
+          prompt: "",
+          branches: [
+            { id: "approved", label: "通过" },
+            { id: "rejected", label: "拒绝" },
+            { id: "needs_review", label: "人工复核" },
+          ],
+          defaultBranch: "needs_review",
+        },
+        onChange,
+        upstreamNodes: [],
+        workflowParams: [],
+        projects: [],
+      }),
+    )
+
+    const button = Array.from(container.querySelectorAll("button")).find((item) => item.textContent?.includes("套用路由模板"))
+
+    act(() => {
+      button?.click()
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+
+    expect(textarea?.value).toContain("可选分支")
+    expect(textarea?.value).toContain("- approved：通过")
+    expect(textarea?.value).toContain("- rejected：拒绝")
+    expect(textarea?.value).toContain("- needs_review：人工复核")
+    expect(textarea?.value).toContain("只输出路由键")
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      prompt: expect.stringContaining("默认分支：needs_review"),
+    }))
   })
 
   it("commits switch branch key edits", () => {

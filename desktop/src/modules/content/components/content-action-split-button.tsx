@@ -1,11 +1,9 @@
 import { Fragment, useMemo, useState } from "react"
 import {
   ChevronDown,
-  Copy,
   Download,
   LoaderCircle,
   PackagePlus,
-  Play,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ButtonGroup } from "@/components/ui/button-group"
@@ -46,7 +44,6 @@ function ContentActionSplitButton({
     installDialog,
     installMenuItems,
     isBusy,
-    isCopying,
     isDownloading,
     loadInstallTargets,
   } = useContentDownloadActions({
@@ -91,7 +88,6 @@ function ContentActionSplitButton({
             title={hasProjects ? undefined : "请先在设置中添加项目"}
             onClick={() => setRunDialogOpen(true)}
           >
-            <Play className="size-3" data-icon="inline-start" />
             运行
           </Button>
         ) : null}
@@ -104,11 +100,6 @@ function ContentActionSplitButton({
               void handleCopy()
             }}
           >
-            {isCopying ? (
-              <LoaderCircle className="animate-spin" data-icon="inline-start" />
-            ) : (
-              <Copy data-icon="inline-start" />
-            )}
             复制
           </Button>
         ) : canInstall ? (

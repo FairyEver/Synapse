@@ -12,6 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -306,7 +307,7 @@ function EditorInstallStatusPanel({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 overflow-auto">
+        <ScrollArea className="min-h-0">
           {error ? (
             <p className="text-sm text-destructive">{error}</p>
           ) : (
@@ -315,7 +316,7 @@ function EditorInstallStatusPanel({
               onOpenInstallTarget={onOpenInstallTarget}
             />
           )}
-        </div>
+        </ScrollArea>
       </DialogContent>
     </Dialog>
   )

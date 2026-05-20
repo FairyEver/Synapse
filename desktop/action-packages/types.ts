@@ -24,6 +24,21 @@ export type ActionRunMetrics = {
 
 export type ActionConfig = Record<string, unknown>
 
+export type ActionStoredConfigIssue = {
+  readonly field: string
+  readonly message: string
+}
+
+export type ActionStoredConfigValidation =
+  | {
+      readonly status: "valid"
+      readonly issues: readonly []
+    }
+  | {
+      readonly status: "needs_update"
+      readonly issues: readonly ActionStoredConfigIssue[]
+    }
+
 export type ActionPermissionName =
   | "shell.exec"
   | "network.connect"
@@ -51,5 +66,6 @@ export type ActionManifest<TConfig extends ActionConfig = ActionConfig> = {
   readonly permissions: readonly ActionPermissionName[]
   readonly defaultConfig: TConfig
   readonly configSchema: z.ZodType<TConfig>
+  readonly validateStoredConfig?: (config: ActionConfig) => ActionStoredConfigValidation
   readonly configFields: readonly ActionConfigFieldDescriptor[]
 }

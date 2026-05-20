@@ -182,7 +182,7 @@ function SettingsModule() {
 
   return (
     <SidebarContentLayout
-      contentClassName="bg-surface p-4"
+      contentClassName="bg-surface"
       sidebar={
         <SettingsCategorySidebar
           categories={visibleCategories}
@@ -193,7 +193,7 @@ function SettingsModule() {
         />
       }
     >
-      <div className="flex flex-col gap-4">
+      <div className="flex flex-col gap-4 p-4">
         {activeCategory === "admin" && activeRepository ? (
           <p className="text-sm text-muted-foreground">
             {activeRepository.name}

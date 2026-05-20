@@ -40,6 +40,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import {
   Empty,
   EmptyDescription,
@@ -667,7 +668,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
                   </Tabs>
                 </div>
 
-                <div className="mt-4 min-h-0 flex-1 overflow-auto">
+                <ScrollArea className="mt-4 min-h-0 flex-1">
                   <ScanItemContentArea
                     content={content}
                     error={error}
@@ -677,7 +678,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
                     skillFilesLoading={skillFilesLoading}
                     skillFilesError={skillFilesError}
                   />
-                </div>
+                </ScrollArea>
               </div>
             ) : null}
           </div>

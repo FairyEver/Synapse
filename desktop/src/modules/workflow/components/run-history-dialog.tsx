@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
 import { toast } from "sonner"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
@@ -137,7 +138,8 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
         ) : snapshots.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4">暂无运行记录。</p>
         ) : (
-          <div className="space-y-2 max-h-[60vh] overflow-auto">
+          <ScrollArea className="max-h-[60vh]">
+            <div className="space-y-2">
             {snapshots.map((s) => {
               const firstError = getFirstError(s)
               const duration = formatDuration(s.startedAt, s.endedAt)
@@ -170,7 +172,8 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
               </div>
               )
             })}
-          </div>
+            </div>
+          </ScrollArea>
         )}
       </DialogContent>
     </Dialog>

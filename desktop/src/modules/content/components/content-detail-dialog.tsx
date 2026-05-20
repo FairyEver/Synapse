@@ -526,7 +526,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
       </AlertDialog>
 
       <Dialog open={open} onOpenChange={onOpenChange} data-track="content-detail-dialog">
-        <DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]">
+        <DialogContent className="flex h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]">
           <DialogHeader className="px-5 pt-5">
             <DialogTitle className="sr-only">{resolvedItem.title}</DialogTitle>
             <DialogDescription className="sr-only">{resolvedItem.description}</DialogDescription>
@@ -597,7 +597,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
           <Separator className="mt-5" />
 
           <div className={cn(
-            "flex min-h-0 flex-1 flex-col px-5 py-4 transition-opacity duration-200",
+            "flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-4 transition-opacity duration-200",
             contentReady ? "opacity-100" : "opacity-0",
           )}>
             {contentReady ? (

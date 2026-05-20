@@ -2,6 +2,7 @@ import type {
   ActionConfig,
   ActionManifest,
   ActionRunResult,
+  ActionStoredConfigValidation,
 } from "../../action-packages/types"
 import type {
   ActorIdentity,
@@ -60,5 +61,28 @@ export class MainActionRegistry {
 
   parseConfig(id: string, config: ActionConfig): ActionConfig {
     return this.get(id).manifest.configSchema.parse(config)
+  }
+
+  validateStoredConfig(id: string, config: ActionConfig): ActionStoredConfigValidation {
+    const action = this.actions.get(id)
+    if (!action) {
+      return {
+        status: "needs_update",
+        issues: [{ field: "action.type", message: "选择执行动作" }],
+      }
+    }
+    if (action.manifest.validateStoredConfig) {
+      return action.manifest.validateStoredConfig(config)
+    }
+
+    const parsed = action.manifest.configSchema.safeParse(config)
+    if (parsed.success) {
+      return { status: "valid", issues: [] }
+    }
+
+    return {
+      status: "needs_update",
+      issues: [{ field: "action.config", message: "检查执行内容" }],
+    }
   }
 }

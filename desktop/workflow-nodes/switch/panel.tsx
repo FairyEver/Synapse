@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { AlertTriangle, ChevronDown, Plus, Trash2 } from "lucide-react"
+import { AlertTriangle, ChevronDown, FileText, Plus, Trash2 } from "lucide-react"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
 import type { ModelTier } from "@/types/provider-model"
 import type { SynapseProjectConfig } from "@/types/config"
@@ -104,6 +104,11 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
     ? `${getProviderName(config.providerId) ?? config.providerId} · ${getModelName(config.providerId, config.modelTier ?? "default") ?? TIER_LABELS[config.modelTier ?? "default"]}`
     : "选择供应商 + 模型"
   const branchIdError = getBranchIdError(branches)
+  const applyRoutePromptTemplate = () => {
+    const nextPrompt = buildSwitchPromptTemplate(branches, defaultBranch === NO_DEFAULT ? undefined : defaultBranch)
+    setPrompt(nextPrompt)
+    commit({ prompt: nextPrompt })
+  }
 
   return (
     <div className="grid gap-2">
@@ -193,18 +198,6 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
         {errorFor("projectId") && <p className="text-xs text-destructive">{errorFor("projectId")}</p>}
       </CollapsibleSection>
 
-      <CollapsibleSection title="判断指令" summary={promptSummary}>
-        <PromptEditor
-          value={prompt}
-          onChange={setPrompt}
-          onBlur={() => commit({ prompt })}
-          variables={config.variables}
-          placeholder="输入提示词…"
-          rows={6}
-        />
-        {errorFor("prompt") && <p className="text-xs text-destructive">{errorFor("prompt")}</p>}
-      </CollapsibleSection>
-
       <CollapsibleSection title="路由规则" summary={branchSummary}>
         <div className="grid gap-1.5">
           <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1fr)_1.75rem] items-center gap-1.5">
@@ -262,8 +255,50 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
           </div>
         </div>
       </CollapsibleSection>
+
+      <CollapsibleSection title="判断指令" summary={promptSummary}>
+        <div className="grid gap-2">
+          <div className="flex justify-end">
+            <Button type="button" size="sm" variant="outline" onClick={applyRoutePromptTemplate}>
+              <FileText data-icon="inline-start" />
+              套用路由模板
+            </Button>
+          </div>
+          <PromptEditor
+            value={prompt}
+            onChange={setPrompt}
+            onBlur={() => commit({ prompt })}
+            variables={config.variables}
+            placeholder="输入提示词…"
+            rows={6}
+          />
+          {errorFor("prompt") && <p className="text-xs text-destructive">{errorFor("prompt")}</p>}
+        </div>
+      </CollapsibleSection>
     </div>
   )
+}
+
+function buildSwitchPromptTemplate(branches: readonly SwitchBranch[], defaultBranch?: string): string {
+  const branchLines = branches.map((branch) => `- ${branch.id}：${branch.label || branch.id}`).join("\n")
+  const branchIds = branches.map((branch) => branch.id).join("、")
+  const fallbackLine = defaultBranch ? `默认分支：${defaultBranch}` : "没有默认分支时，也必须从可选分支中选择最匹配的一项。"
+
+  return [
+    "请根据输入内容选择一个路由分支。",
+    "",
+    "判断步骤：",
+    "1. 先阅读输入内容，提取影响路由的关键信息。",
+    "2. 再对照可选分支，选择最匹配的一项。",
+    "3. 无法明确判断时，按默认分支处理。",
+    "",
+    "可选分支：",
+    branchLines,
+    "",
+    fallbackLine,
+    "",
+    `输出要求：只输出路由键，不要输出解释。可选路由键：${branchIds}`,
+  ].join("\n")
 }
 
 function canCommitBranchIds(branches: readonly SwitchBranch[]): boolean {

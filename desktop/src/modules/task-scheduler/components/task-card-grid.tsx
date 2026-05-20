@@ -9,7 +9,6 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty"
-import type { SynapseAgentProvider } from "@/types/bridge"
 import type { SynapseProjectConfig } from "@/types/config"
 import type { ScheduledTask } from "@/types/task-scheduler"
 import { TaskCard } from "./task-card"
@@ -17,7 +16,6 @@ import { TaskCard } from "./task-card"
 type TaskCardGridProps = {
   tasks: ScheduledTask[]
   projects: readonly SynapseProjectConfig[]
-  providers: readonly SynapseAgentProvider[]
   busy: boolean
   runningTaskIds: ReadonlySet<string>
   onRun: (task: ScheduledTask) => void
@@ -32,7 +30,6 @@ type TaskCardGridProps = {
 function TaskCardGrid({
   tasks,
   projects,
-  providers,
   busy,
   runningTaskIds,
   onRun,
@@ -70,7 +67,6 @@ function TaskCardGrid({
           key={task.id}
           task={task}
           projects={projects}
-          providers={providers}
           busy={busy || runningTaskIds.has(task.id)}
           onRun={() => onRun(task)}
           onStop={() => onStop(task)}

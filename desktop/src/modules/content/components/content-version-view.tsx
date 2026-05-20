@@ -13,7 +13,7 @@ type ContentVersionViewProps = {
 
 function ContentVersionView({ children, deletedMessage, mode, surface, version }: ContentVersionViewProps) {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-w-0 max-w-full flex-col gap-4">
       {version.deleted ? (
         <InlineNotice message={deletedMessage} tone="destructive" />
       ) : null}

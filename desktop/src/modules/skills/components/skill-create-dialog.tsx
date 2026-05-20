@@ -17,6 +17,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
+import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { getCategoryDefinitions } from "@/lib/content-categories"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -645,7 +646,7 @@ function SkillCreateDialog({
                   共 {formatSkillAttachmentSize(totalAttachmentSize)}
                 </span>
               </div>
-              <div className="max-h-56 overflow-y-auto">
+              <ScrollArea className="max-h-56">
                 {form.files.map((file) => (
                   <div
                     key={file.originalName}
@@ -679,7 +680,7 @@ function SkillCreateDialog({
                     </Button>
                   </div>
                 ))}
-              </div>
+              </ScrollArea>
             </div>
           ) : (
             <p className="text-sm text-muted-foreground">

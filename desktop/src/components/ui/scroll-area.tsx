@@ -11,6 +11,7 @@ function ScrollArea({
   children,
   onViewportScroll,
   scrollbars = "vertical",
+  trackScroll = true,
   viewportClassName,
   viewportRef,
   "data-track": dataTrack,
@@ -19,6 +20,7 @@ function ScrollArea({
   "data-track"?: string
   onViewportScroll?: React.UIEventHandler<HTMLDivElement>
   scrollbars?: "vertical" | "horizontal" | "both"
+  trackScroll?: boolean
   viewportClassName?: string
   viewportRef?: React.Ref<HTMLDivElement>
 }) {
@@ -48,7 +50,7 @@ function ScrollArea({
     <ScrollAreaPrimitive.Root
       data-slot="scroll-area"
       data-track={dataTrack}
-      className={cn("relative", className)}
+      className={cn("relative min-h-0 overflow-hidden", className)}
       {...props}
     >
       <ScrollAreaPrimitive.Viewport
@@ -59,7 +61,7 @@ function ScrollArea({
           viewportClassName,
         )}
         onScroll={(event) => {
-          if (dataTrack) {
+          if (dataTrack && trackScroll) {
             const target = event.currentTarget
             const scrollTop = target.scrollTop
             const scrollable = Math.max(1, target.scrollHeight - target.clientHeight)
@@ -97,14 +99,14 @@ function ScrollBar({
       data-orientation={orientation}
       orientation={orientation}
       className={cn(
-        "flex touch-none p-px transition-colors select-none data-horizontal:h-2.5 data-horizontal:flex-col data-horizontal:border-t data-horizontal:border-t-transparent data-vertical:h-full data-vertical:w-2.5 data-vertical:border-l data-vertical:border-l-transparent",
+        "flex touch-none p-px transition-colors select-none data-horizontal:h-1.5 data-horizontal:flex-col data-vertical:h-full data-vertical:w-1.5",
         className
       )}
       {...props}
     >
       <ScrollAreaPrimitive.ScrollAreaThumb
         data-slot="scroll-area-thumb"
-        className="relative flex-1 rounded-full bg-border"
+        className="relative flex-1 rounded-full bg-border/60 transition-colors hover:bg-border"
       />
     </ScrollAreaPrimitive.ScrollAreaScrollbar>
   )

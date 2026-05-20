@@ -11,7 +11,6 @@ describe("TaskCardGrid", () => {
       <TaskCardGrid
         tasks={[]}
         projects={[]}
-        providers={[]}
         busy
         runningTaskIds={new Set()}
         onRun={noopTaskHandler}

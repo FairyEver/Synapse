@@ -193,7 +193,8 @@ describe("TaskSchedulerModule", () => {
 
     const html = renderToStaticMarkup(<TaskSchedulerModule />)
 
-    expect(html).toContain("overflow-y-auto overscroll-contain")
+    expect(html).toContain("overscroll-contain")
+    expect(html).toContain('data-slot="scroll-area"')
   })
 
   it("renders trigger info for interval tasks", () => {
@@ -280,7 +281,7 @@ describe("TaskSchedulerModule", () => {
     expect(html).toContain("停用中")
   })
 
-  it("renders secondary actions behind the task card more-actions trigger", () => {
+  it("renders secondary actions on the task card", () => {
     mocks.useTaskSchedulerTasks.mockReturnValue({
       tasks: [createTask({ name: "Backup" })],
       loading: false,
@@ -290,7 +291,10 @@ describe("TaskSchedulerModule", () => {
 
     const html = renderToStaticMarkup(<TaskSchedulerModule />)
 
-    expect(html).toContain("更多操作")
+    expect(html).toContain('aria-label="编辑"')
+    expect(html).toContain('aria-label="历史"')
+    expect(html).toContain('aria-label="删除"')
+    expect(html).not.toContain("更多操作")
   })
 
   it("logs mutation failures without exposing raw backend error text", async () => {

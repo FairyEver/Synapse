@@ -81,4 +81,23 @@ describe("UsageAnalysisShell", () => {
     expect(html).toContain("animate-spin")
     expect(html).toContain("刷新中")
   })
+
+  it("keeps report padding inside the scroll viewport content", () => {
+    const html = renderToStaticMarkup(
+      <UsageAnalysisShell
+        title="Codex"
+        view="today"
+        range="30d"
+        refreshing={false}
+        onViewChange={() => undefined}
+        onRangeChange={() => undefined}
+        onRefresh={() => undefined}
+      >
+        <div>report</div>
+      </UsageAnalysisShell>,
+    )
+
+    expect(html).not.toContain('data-slot="scroll-area" class="relative min-h-0 overflow-hidden min-h-0 flex-1 px-4 py-3"')
+    expect(html).toContain('class="min-h-full px-4 py-3"')
+  })
 })
