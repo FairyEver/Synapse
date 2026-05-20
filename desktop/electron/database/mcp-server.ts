@@ -1,5 +1,4 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
-import { randomBytes } from "node:crypto"
 import { createMainLogger } from "../services/log-store"
 import type { SynapseActionRouter } from "../capabilities/action-router"
 import { MCP_TOOL_ACTIONS } from "../../synapse-capabilities/shared/registry"
@@ -19,7 +18,6 @@ const MAX_BODY_SIZE = 1024 * 1024
 
 let server: Server | null = null
 let activePort = 0
-let activeToken = ""
 let actionRouter: SynapseActionRouter | null = null
 
 async function executeTool(toolName: string, args: Record<string, unknown>): Promise<unknown> {
@@ -124,13 +122,6 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
     return
   }
 
-  const authHeader = req.headers.authorization
-  if (!activeToken || authHeader !== `Bearer ${activeToken}`) {
-    res.writeHead(401, { "Content-Type": "application/json" })
-    res.end(JSON.stringify({ error: "Unauthorized" }))
-    return
-  }
-
   let body: JsonRpcRequest
   try {
     body = JSON.parse(await readBody(req)) as JsonRpcRequest
@@ -174,7 +165,6 @@ function tryListen(port: number): Promise<number> {
 
 async function startMcpServer(router: SynapseActionRouter): Promise<number> {
   actionRouter = router
-  activeToken = randomBytes(32).toString("hex")
   for (let i = 0; i < MCP_PORT_ATTEMPTS; i++) {
     const port = MCP_DEFAULT_PORT + i
     try {
@@ -195,7 +185,6 @@ async function startMcpServer(router: SynapseActionRouter): Promise<number> {
 function stopMcpServer(): Promise<void> {
   return new Promise((resolve) => {
     activePort = 0
-    activeToken = ""
     actionRouter = null
     if (!server) { resolve(); return }
     server.close(() => {
@@ -211,7 +200,7 @@ function getMcpServerPort(): number {
 }
 
 function getMcpServerToken(): string {
-  return activeToken
+  return ""
 }
 
 function isMcpServerRunning(): boolean {
