@@ -49,6 +49,92 @@ export const WORKFLOW_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntr
 
 const SYSTEM_MODEL_DESCRIPTION = `Synapse workflows are directed acyclic graphs (DAGs). Nodes execute in topological order; independent nodes run in parallel. Every workflow must have exactly one "end" node and no cycles. Nodes connect via directed edges (from → to); switch-node edges may carry a "branch" field. Switch branches are mutually exclusive: connect each branch only to its own downstream nodes, then merge after those branch-specific nodes if needed. Nodes define a "variables" list that binds upstream node outputs or workflow params; reference them in prompt templates with {{variableName}}. Call this tool first to discover available node types, then call workflow_node_type_describe for config details.`
 
+const modelTierSchema = {
+  type: "string",
+  enum: ["default", "haiku", "sonnet", "opus"],
+  description: "Model tier used with providerId. Discover valid providerId/modelTier pairs with workflow_node_type_describe.",
+}
+
+const variableBindingSchema = {
+  type: "object",
+  properties: {
+    name: { type: "string", description: "Variable name referenced as {{name}}." },
+    source: {
+      type: "object",
+      description: "Variable source: { type: 'param', param }, { type: 'node_output', node }, or { type: 'static', value }.",
+    },
+  },
+  required: ["name", "source"],
+}
+
+const workflowDefinitionSchema = {
+  type: "object",
+  description: "Full WorkflowDefinition object. Include workflow defaults such as defaultProjectId, defaultProviderId, defaultModelTier, and defaultNodeTimeoutMins when prompt/switch nodes inherit them.",
+  properties: {
+    id: { type: "string" },
+    name: { type: "string" },
+    description: { type: "string" },
+    version: { type: "string" },
+    createdAt: { type: "number" },
+    updatedAt: { type: "number" },
+    defaultProjectId: { type: "string", description: "Workflow-level default project/repository id. Prompt and switch nodes need this unless their config sets projectId." },
+    defaultProviderId: { type: "string", description: "Workflow-level default providerId. Prompt and switch nodes need this unless their config sets providerId." },
+    defaultModelTier: modelTierSchema,
+    defaultNodeTimeoutMins: { type: "number", description: "Workflow-level default timeout in minutes for prompt and switch nodes." },
+    params: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          name: { type: "string" },
+          type: { type: "string", enum: ["text", "number"] },
+          default: { description: "Default value. Use null for required params." },
+          description: { type: "string" },
+        },
+        required: ["name", "type"],
+      },
+    },
+    nodes: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          name: { type: "string" },
+          type: { type: "string" },
+          position: { type: "object", properties: { x: { type: "number" }, y: { type: "number" } }, required: ["x", "y"] },
+          config: {
+            type: "object",
+            description: "Node config. Prompt/switch support providerId, modelTier, projectId, timeoutMins, prompt, and variables.",
+            properties: {
+              providerId: { type: "string" },
+              modelTier: modelTierSchema,
+              projectId: { type: "string" },
+              timeoutMins: { type: "number" },
+              variables: { type: "array", items: variableBindingSchema },
+            },
+          },
+        },
+        required: ["id", "name", "type", "position", "config"],
+      },
+    },
+    edges: {
+      type: "array",
+      items: {
+        type: "object",
+        properties: {
+          id: { type: "string" },
+          from: { type: "string" },
+          to: { type: "string" },
+          branch: { type: "string" },
+        },
+        required: ["id", "from", "to"],
+      },
+    },
+  },
+  required: ["id", "name", "params", "nodes", "edges"],
+}
+
 export function buildWorkflowTools(): McpToolDefinition[] {
   return [
     // Discovery
@@ -83,16 +169,16 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     },
     {
       name: "workflow_definition_inspect",
-      description: "Validate a workflow definition and return { valid, errors, warnings }.",
+      description: "Validate a workflow definition and return { valid, errors, warnings }. Errors include nodeId, nodeName, field, details.missingField, providerId/modelTier/projectId, timeoutMs, and retryable when available.",
       inputSchema: {
         type: "object",
-        properties: { definition: { type: "object", description: "Full WorkflowDefinition object to validate." } },
+        properties: { definition: workflowDefinitionSchema },
         required: ["definition"],
       },
     },
     {
       name: "workflow_run_get",
-      description: "Get workflow run status by runId. Returns run status including per-node results, or null if not found.",
+      description: "Get workflow run status by runId. Returns run status including per-node results with durationMs, input size context, timeoutMs/retryable diagnostics when available, or null if not found.",
       inputSchema: {
         type: "object",
         properties: { runId: { type: "string", description: "Run ID returned by workflow_run_execute." } },
@@ -114,10 +200,16 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     // Whole write
     {
       name: "workflow_definition_create",
-      description: "Create a new empty workflow with a default end node. Returns { id, versionHash }.",
+      description: "Create a new empty workflow with a default end node. Returns { id, versionHash }. Prompt/switch nodes need defaultProjectId plus providerId/modelTier defaults unless each node sets projectId/providerId/modelTier itself.",
       inputSchema: {
         type: "object",
-        properties: { name: { type: "string", description: "Optional workflow name. Defaults to \"新工作流\"." } },
+        properties: {
+          name: { type: "string", description: "Optional workflow name. Defaults to \"新工作流\"." },
+          defaultProjectId: { type: "string", description: "Workflow-level default project/repository id for prompt and switch nodes." },
+          defaultProviderId: { type: "string", description: "Workflow-level default providerId for prompt and switch nodes. Discover with workflow_node_type_describe." },
+          defaultModelTier: modelTierSchema,
+          defaultNodeTimeoutMins: { type: "number", description: "Workflow-level default timeout in minutes for prompt and switch nodes." },
+        },
       },
     },
     {
@@ -125,7 +217,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
       description: "Replace a full workflow definition. The definition must include the workflow id. Validates before saving.",
       inputSchema: {
         type: "object",
-        properties: { definition: { type: "object", description: "Full WorkflowDefinition object including id." } },
+        properties: { definition: workflowDefinitionSchema },
         required: ["definition"],
       },
     },

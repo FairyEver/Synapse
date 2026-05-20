@@ -43,6 +43,21 @@ function requireArray(params: Record<string, unknown>, key: string): unknown[] {
   return v
 }
 
+function optionalNonEmptyString(params: Record<string, unknown>, key: string): string | undefined {
+  const value = params[key]
+  return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+function optionalModelTier(params: Record<string, unknown>): WorkflowDefinition["defaultModelTier"] | undefined {
+  const value = params.defaultModelTier
+  return value === "default" || value === "haiku" || value === "sonnet" || value === "opus" ? value : undefined
+}
+
+function optionalPositiveInteger(params: Record<string, unknown>, key: string): number | undefined {
+  const value = params[key]
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : undefined
+}
+
 function requirePosition(value: unknown, label: string): { x: number; y: number } {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`Invalid position in ${label}: expected object with x and y numbers`)
@@ -187,13 +202,23 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   },
 
   "workflow.definition.create": async (params, deps) => {
-    const result = await deps.workflowService.create()
+    const defaultProjectId = optionalNonEmptyString(params, "defaultProjectId")
+    const defaultProviderId = optionalNonEmptyString(params, "defaultProviderId")
+    const defaultModelTier = optionalModelTier(params)
+    const defaultProviderModel = defaultProviderId && defaultModelTier
+      ? { providerId: defaultProviderId, modelTier: defaultModelTier }
+      : undefined
+    const result = await deps.workflowService.create(defaultProjectId, defaultProviderModel)
     if ("errors" in result) throw new Error(`Create failed: ${result.errors.map((e) => e.message).join("; ")}`)
     let versionHash = result.versionHash
-    if (typeof params.name === "string" && params.name) {
+    const defaultNodeTimeoutMins = optionalPositiveInteger(params, "defaultNodeTimeoutMins")
+    if (typeof params.name === "string" && params.name || defaultProviderId || defaultModelTier || defaultNodeTimeoutMins !== undefined) {
       const def = await deps.workflowService.get(result.id)
       if (def) {
-        def.name = params.name
+        if (typeof params.name === "string" && params.name) def.name = params.name
+        if (defaultProviderId) def.defaultProviderId = defaultProviderId
+        if (defaultModelTier) def.defaultModelTier = defaultModelTier
+        if (defaultNodeTimeoutMins !== undefined) def.defaultNodeTimeoutMins = defaultNodeTimeoutMins
         const saveResult = await deps.workflowService.save(def)
         if ("errors" in saveResult) throw new Error(`Save failed: ${(saveResult as WorkflowSaveError).errors.map((e) => e.message).join("; ")}`)
         versionHash = (saveResult as WorkflowSaveResult).versionHash

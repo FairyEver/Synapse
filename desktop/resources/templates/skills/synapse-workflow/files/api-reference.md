@@ -88,13 +88,14 @@ List all workflow definitions.
 Get full workflow definition by ID.
 
 **Params:** `workflowId` (string, required)
-**Returns:** Full `WorkflowDefinition` object (nodes, edges, params) or `null`
+**Returns:** Full `WorkflowDefinition` object (nodes, edges, params, `defaultProjectId?`, `defaultProviderId?`, `defaultModelTier?`, `defaultNodeTimeoutMins?`) or `null`
 ### workflow_definition_inspect
 
 Validate a workflow definition without saving.
 
 **Params:** `definition` (object, required) — full WorkflowDefinition
 **Returns:** `{ valid, errors, warnings }`
+**Notes:** Validation errors may include `nodeId`, `nodeName`, `field`, `retryable`, and `details` such as `missingField`, `providerId`, `modelTier`, `projectId`, and `timeoutMs`.
 
 ### workflow_run_get
 
@@ -103,6 +104,7 @@ Get execution status by run ID.
 **Params:** `runId` (string, required)
 **Returns:** `{ status, nodeResults, error? }` or snapshot from history, or `null`
 **Notes:** Checks in-memory active runs first, then persisted snapshots.
+Node results include `durationMs` when available. For failures, inspect the failed node's `error`, `durationMs`, effective provider/model/project fields, timeout config, and upstream input size before retrying.
 
 ### workflow_run_list
 
@@ -119,9 +121,9 @@ List run history for a workflow (newest first).
 
 Create a new empty workflow with a default end node.
 
-**Params:** `name?` (string)
+**Params:** `name?` (string), `defaultProjectId?` (string), `defaultProviderId?` (string), `defaultModelTier?` (`"default"|"haiku"|"sonnet"|"opus"`), `defaultNodeTimeoutMins?` (number)
 **Returns:** `{ id, versionHash }`
-**Notes:** After creation, use `workflow_definition_update` to set `defaultProviderId` and `defaultModelTier` so all prompt/switch nodes inherit them.
+**Notes:** Prompt/switch nodes require an effective project, provider, and model tier. Set workflow defaults here or set `projectId`/`providerId`/`modelTier` on each prompt/switch node.
 
 ### workflow_definition_update
 
@@ -129,7 +131,7 @@ Replace a full workflow definition. Validates before saving.
 
 **Params:** `definition` (object, required) — must include `id`
 **Returns:** `{ versionHash }`
-**Notes:** Config is replaced entirely, not merged. Include `defaultProviderId` and `defaultModelTier` to set workflow-level provider defaults.
+**Notes:** Config is replaced entirely, not merged. Include `defaultProjectId`, `defaultProviderId`, `defaultModelTier`, and optional `defaultNodeTimeoutMins` to set workflow-level defaults.
 
 ### workflow_definition_delete
 

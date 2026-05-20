@@ -11,6 +11,7 @@ import {
   buildAllMcpTools,
   getActionDomainId,
 } from "../../synapse-capabilities/shared/registry"
+import { buildWorkflowTools } from "../../synapse-capabilities/shared/workflow-domain"
 
 describe("Synapse capability domains", () => {
   it("keeps Database capabilities in the Database domain", () => {
@@ -84,5 +85,37 @@ describe("Scheduler capability domain", () => {
     const getTool = tools.find((tool) => tool.name === "scheduler_task_get")
     expect(getTool?.inputSchema.required).toEqual(["taskId"])
     expect(Object.keys(getTool?.inputSchema.properties ?? {})).toEqual(["taskId"])
+  })
+})
+
+describe("Workflow MCP tool schemas", () => {
+  function tool(name: string) {
+    const found = buildWorkflowTools().find((item) => item.name === name)
+    if (!found) throw new Error(`Missing workflow tool ${name}`)
+    return found
+  }
+
+  it("exposes workflow-level default project, provider, model tier, and timeout fields", () => {
+    const createProperties = tool("workflow_definition_create").inputSchema.properties
+    expect(createProperties).toHaveProperty("defaultProjectId")
+    expect(createProperties).toHaveProperty("defaultProviderId")
+    expect(createProperties).toHaveProperty("defaultModelTier")
+    expect(createProperties).toHaveProperty("defaultNodeTimeoutMins")
+
+    const updateDefinition = tool("workflow_definition_update").inputSchema.properties.definition as {
+      properties?: Record<string, unknown>
+    }
+    expect(updateDefinition.properties).toHaveProperty("defaultProjectId")
+    expect(updateDefinition.properties).toHaveProperty("defaultProviderId")
+    expect(updateDefinition.properties).toHaveProperty("defaultModelTier")
+    expect(updateDefinition.properties).toHaveProperty("defaultNodeTimeoutMins")
+  })
+
+  it("documents executable workflow errors with node and timeout diagnostics", () => {
+    expect(tool("workflow_definition_inspect").description).toContain("field")
+    expect(tool("workflow_definition_inspect").description).toContain("nodeName")
+    expect(tool("workflow_run_get").description).toContain("durationMs")
+    expect(tool("workflow_run_get").description).toContain("timeoutMs")
+    expect(tool("workflow_run_get").description).toContain("retryable")
   })
 })

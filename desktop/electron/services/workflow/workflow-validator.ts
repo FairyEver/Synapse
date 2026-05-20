@@ -2,6 +2,7 @@ import type { WorkflowDefinition, ValidationResult, ValidationError, ValidationW
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { createMainLogger } from "../log-store"
 import { computeEndReachable } from "./workflow-utils"
+import { agentTimeoutMinsToMs, resolveAgentTimeoutMins } from "../../../workflow-nodes/agent-timeout"
 
 const logger = createMainLogger("service.workflow.validator")
 
@@ -35,6 +36,35 @@ function ancestors(nodeId: string, rev: Map<string, string[]>): Set<string> {
 
 function switchBranchTargetKey(targetIds: string[]): string {
   return [...new Set(targetIds)].sort().join("\u0000")
+}
+
+function missingWorkflowDefaultError(input: {
+  node: WorkflowDefinition["nodes"][number]
+  field: "defaultProviderId" | "defaultModelTier" | "defaultProjectId"
+  nodeField: "providerId" | "modelTier" | "projectId"
+  label: string
+  cfg: Record<string, unknown>
+  defaultNodeTimeoutMins?: number
+}): ValidationError {
+  const timeoutMins = typeof input.cfg.timeoutMins === "number"
+    ? input.cfg.timeoutMins
+    : input.defaultNodeTimeoutMins
+  return {
+    type: "invalid_config",
+    nodeId: input.node.id,
+    nodeName: input.node.name,
+    field: input.field,
+    message: `节点「${input.node.name}」缺少 ${input.nodeField}，且工作流缺少 ${input.field}（${input.label}未配置）`,
+    retryable: false,
+    details: {
+      missingField: input.field,
+      nodeField: input.nodeField,
+      providerId: typeof input.cfg.providerId === "string" && input.cfg.providerId ? input.cfg.providerId : undefined,
+      modelTier: typeof input.cfg.modelTier === "string" && input.cfg.modelTier ? input.cfg.modelTier : undefined,
+      projectId: typeof input.cfg.projectId === "string" && input.cfg.projectId.trim() ? input.cfg.projectId : undefined,
+      timeoutMs: agentTimeoutMinsToMs(resolveAgentTimeoutMins(timeoutMins)),
+    },
+  }
 }
 
 export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
@@ -116,13 +146,22 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
       const hasModelTier = typeof cfg.modelTier === "string" && cfg.modelTier.length > 0
       const hasProjectId = typeof cfg.projectId === "string" && cfg.projectId.trim().length > 0
       if (!hasProviderId && !def.defaultProviderId) {
-        errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」未配置供应商，且工作流未设置默认供应商` })
+        errors.push(missingWorkflowDefaultError({
+          node, field: "defaultProviderId", nodeField: "providerId", label: "供应商", cfg,
+          defaultNodeTimeoutMins: def.defaultNodeTimeoutMins,
+        }))
       }
       if (!hasModelTier && !def.defaultModelTier) {
-        errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」未配置模型层级，且工作流未设置默认模型` })
+        errors.push(missingWorkflowDefaultError({
+          node, field: "defaultModelTier", nodeField: "modelTier", label: "模型层级", cfg,
+          defaultNodeTimeoutMins: def.defaultNodeTimeoutMins,
+        }))
       }
       if (!hasProjectId && !hasDefaultProjectId) {
-        errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」未配置项目，且工作流未设置默认项目` })
+        errors.push(missingWorkflowDefaultError({
+          node, field: "defaultProjectId", nodeField: "projectId", label: "项目", cfg,
+          defaultNodeTimeoutMins: def.defaultNodeTimeoutMins,
+        }))
       }
     }
 

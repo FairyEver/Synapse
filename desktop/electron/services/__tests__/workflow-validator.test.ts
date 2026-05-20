@@ -141,7 +141,19 @@ describe("validateWorkflow", () => {
       edges: [{ id: "e1", from: "np", to: "end" }],
     })
     expect(r.valid).toBe(false)
-    expect(r.errors.some((e) => e.type === "invalid_config" && e.nodeId === "np" && e.message.includes("项目"))).toBe(true)
+    const error = r.errors.find((e) => e.type === "invalid_config" && e.nodeId === "np" && e.message.includes("defaultProjectId"))
+    expect(error).toMatchObject({
+      field: "defaultProjectId",
+      nodeId: "np",
+      nodeName: "NP",
+      retryable: false,
+    })
+    expect(error?.details).toMatchObject({
+      missingField: "defaultProjectId",
+      providerId: "test-provider",
+      modelTier: "sonnet",
+      timeoutMs: 30 * 60_000,
+    })
   })
 
   it("passes when prompt node has project and workflow has no default project", () => {
@@ -164,7 +176,35 @@ describe("validateWorkflow", () => {
       edges: [{ id: "e1", from: "sw", to: "end", branch: "yes" }],
     })
     expect(r.valid).toBe(false)
-    expect(r.errors.some((e) => e.type === "invalid_config" && e.nodeId === "sw" && e.message.includes("项目"))).toBe(true)
+    expect(r.errors.some((e) => e.type === "invalid_config" && e.nodeId === "sw" && e.field === "defaultProjectId")).toBe(true)
+  })
+
+  it("reports missing provider and model tier using canonical field names", () => {
+    const nodeNoProvider = { id: "np", name: "NP", type: "prompt", position: { x: 0, y: 0 }, config: { variables: [], prompt: "hi" } }
+    const r = validateWorkflow({
+      ...base,
+      defaultProviderId: undefined,
+      defaultModelTier: undefined,
+      nodes: [nodeNoProvider, { ...nodeEnd, config: { ...nodeEnd.config, variables: [{ name: "result", source: { type: "node_output", node: "np" } }] } }],
+      edges: [{ id: "e1", from: "np", to: "end" }],
+    })
+
+    expect(r.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        type: "invalid_config",
+        nodeId: "np",
+        nodeName: "NP",
+        field: "defaultProviderId",
+        details: expect.objectContaining({ missingField: "defaultProviderId", modelTier: undefined }),
+      }),
+      expect.objectContaining({
+        type: "invalid_config",
+        nodeId: "np",
+        nodeName: "NP",
+        field: "defaultModelTier",
+        details: expect.objectContaining({ missingField: "defaultModelTier", providerId: undefined }),
+      }),
+    ]))
   })
 
   // Edge case: switch branch with no outgoing edge

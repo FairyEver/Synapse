@@ -58,7 +58,9 @@ export type WorkflowEvent =
   | { type: "workflow:snapshot-save-failed"; runId: string; workflowId: string; status: WorkflowRunResult["status"] }
 export interface ValidationError {
   type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch" | "missing_end_node" | "multiple_end_nodes" | "missing_param"
-  nodeId?: string; edgeId?: string; message: string
+  nodeId?: string; nodeName?: string; edgeId?: string; field?: string; message: string
+  retryable?: boolean
+  details?: Record<string, unknown>
 }
 export interface ValidationWarning { type: "disconnected_node" | "multiple_start_nodes" | "duplicate_switch_branch_targets"; nodeId?: string; message: string }
 export interface ValidationResult { valid: boolean; errors: ValidationError[]; warnings: ValidationWarning[] }

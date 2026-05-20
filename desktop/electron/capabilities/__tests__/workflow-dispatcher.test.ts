@@ -62,6 +62,49 @@ describe("createWorkflowDispatcher", () => {
     expect(result.data).toEqual({ id: "wf-new", versionHash: "v_new" })
   })
 
+  it("workflow.definition.create accepts workflow default project, provider, model tier, and timeout", async () => {
+    const created = {
+      id: "wf-new", name: "新工作流", description: "", version: "v_new",
+      createdAt: 1, updatedAt: 2, params: [],
+      defaultProjectId: "project-1",
+      defaultProviderId: "local-claude-code",
+      defaultModelTier: "sonnet" as const,
+      nodes: [{ id: "end", name: "End", type: "end", position: { x: 600, y: 200 }, config: { outputType: "text", template: "", variables: [] } }],
+      edges: [],
+    }
+    const deps = makeDeps({
+      workflowService: {
+        ...makeDeps().workflowService,
+        create: vi.fn(async () => ({ id: "wf-new", versionHash: "v_new" })),
+        get: vi.fn(async () => structuredClone(created)),
+        save: vi.fn(async () => ({ versionHash: "v_saved" })),
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const result = await dispatcher.dispatch("workflow.definition.create", {
+      name: "Review Flow",
+      defaultProjectId: "project-1",
+      defaultProviderId: "local-claude-code",
+      defaultModelTier: "sonnet",
+      defaultNodeTimeoutMins: 12,
+    }, { source: "mcp-http" })
+
+    expect(deps.workflowService.create).toHaveBeenCalledWith("project-1", {
+      providerId: "local-claude-code",
+      modelTier: "sonnet",
+    })
+    const savedDef = (deps.workflowService.save as ReturnType<typeof vi.fn>).mock.calls[0][0]
+    expect(savedDef).toMatchObject({
+      name: "Review Flow",
+      defaultProjectId: "project-1",
+      defaultProviderId: "local-claude-code",
+      defaultModelTier: "sonnet",
+      defaultNodeTimeoutMins: 12,
+    })
+    expect(result.data).toEqual({ id: "wf-new", versionHash: "v_saved" })
+  })
+
   it("workflow.definition.get returns null for missing", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
