@@ -4,6 +4,7 @@ import type { DataNamespace, DataRepository, WorkflowEntryV1 } from "../../runti
 import { validateWorkflow } from "./workflow-validator"
 import { createMainLogger } from "../log-store"
 import { errorCode, sanitizeAgentError, truncateWithEllipsis } from "./workflow-utils"
+import { DEFAULT_AGENT_TIMEOUT_MINS } from "../../../workflow-nodes/agent-timeout"
 
 const logger = createMainLogger("service.workflow")
 
@@ -68,6 +69,7 @@ export class WorkflowService {
         defaultProjectId: entry.defaultProjectId as string | undefined,
         defaultProviderId: entry.defaultProviderId as string | undefined,
         defaultModelTier: entry.defaultModelTier as WorkflowDefinition["defaultModelTier"],
+        defaultNodeTimeoutMins: entry.defaultNodeTimeoutMins as number | undefined,
         params: entry.params as WorkflowDefinition["params"],
         nodes: entry.nodes as WorkflowDefinition["nodes"],
         edges: entry.edges as WorkflowDefinition["edges"],
@@ -103,6 +105,7 @@ export class WorkflowService {
       defaultProjectId: def.defaultProjectId,
       defaultProviderId: def.defaultProviderId,
       defaultModelTier: def.defaultModelTier,
+      defaultNodeTimeoutMins: def.defaultNodeTimeoutMins,
       params: def.params as WorkflowEntryV1["params"],
       nodes: def.nodes as WorkflowEntryV1["nodes"],
       edges: def.edges as WorkflowEntryV1["edges"],
@@ -130,6 +133,7 @@ export class WorkflowService {
       defaultProjectId,
       defaultProviderId: defaultProviderModel?.providerId,
       defaultModelTier: defaultProviderModel?.modelTier,
+      defaultNodeTimeoutMins: DEFAULT_AGENT_TIMEOUT_MINS,
       nodes: [{ id: "end", name: "结束", type: "end", position: { x: 600, y: 200 }, config: { outputType: "text", template: "", variables: [] } }],
       edges: [],
     }

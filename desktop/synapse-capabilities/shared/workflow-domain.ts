@@ -47,7 +47,7 @@ export const WORKFLOW_MCP_TOOL_ACTIONS: Record<string, string> = Object.fromEntr
 // MCP tool definitions (JSON Schema input schemas)
 // ---------------------------------------------------------------------------
 
-const SYSTEM_MODEL_DESCRIPTION = `Synapse workflows are directed acyclic graphs (DAGs). Nodes execute in topological order; independent nodes run in parallel. Every workflow must have exactly one "end" node and no cycles. Nodes connect via directed edges (from → to); switch-node edges may carry a "branch" field. Nodes define a "variables" list that binds upstream node outputs or workflow params; reference them in prompt templates with {{variableName}}. Call this tool first to discover available node types, then call workflow_node_type_describe for config details.`
+const SYSTEM_MODEL_DESCRIPTION = `Synapse workflows are directed acyclic graphs (DAGs). Nodes execute in topological order; independent nodes run in parallel. Every workflow must have exactly one "end" node and no cycles. Nodes connect via directed edges (from → to); switch-node edges may carry a "branch" field. Switch branches are mutually exclusive: connect each branch only to its own downstream nodes, then merge after those branch-specific nodes if needed. Nodes define a "variables" list that binds upstream node outputs or workflow params; reference them in prompt templates with {{variableName}}. Call this tool first to discover available node types, then call workflow_node_type_describe for config details.`
 
 export function buildWorkflowTools(): McpToolDefinition[] {
   return [
@@ -218,7 +218,7 @@ export function buildWorkflowTools(): McpToolDefinition[] {
     },
     {
       name: "workflow_edge_create",
-      description: "Add a directed edge between two nodes. For switch nodes, include a branch field.",
+      description: "Add a directed edge between two nodes. For switch nodes, include a branch field and connect only the matching branch's downstream nodes; do not connect every branch to the same set of branch-specific nodes.",
       inputSchema: {
         type: "object",
         properties: {

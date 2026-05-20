@@ -33,6 +33,24 @@ describe("promptNodeExecutor", () => {
     })
     expect((sendToAgent.mock.calls[0][0] as { prompt: string }).prompt).toBe("Hello world")
   })
+  it("uses a 30 minute Agent timeout by default", async () => {
+    const sendToAgent = vi.fn().mockResolvedValue({ status: "success" as const, response: "ok", durationMs: 5 })
+    await promptNodeExecutor.execute({
+      config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "test" },
+      resolvedVariables: {},
+      context: ctx, agentDeps: { sendToAgent },
+    })
+    expect(sendToAgent).toHaveBeenCalledWith(expect.objectContaining({ timeoutMins: 30 }))
+  })
+  it("passes a custom Agent timeout in minutes", async () => {
+    const sendToAgent = vi.fn().mockResolvedValue({ status: "success" as const, response: "ok", durationMs: 5 })
+    await promptNodeExecutor.execute({
+      config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "test", timeoutMins: 45 },
+      resolvedVariables: {},
+      context: ctx, agentDeps: { sendToAgent },
+    })
+    expect(sendToAgent).toHaveBeenCalledWith(expect.objectContaining({ timeoutMins: 45 }))
+  })
   it("returns success with agent response as output", async () => {
     const r = await promptNodeExecutor.execute({
       config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "test" },

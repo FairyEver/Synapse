@@ -99,6 +99,7 @@ import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "..
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
 import { sanitizeError } from "../services/error-sanitize"
 import type { WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
+import { agentTimeoutMinsToMs, DEFAULT_AGENT_TIMEOUT_MINS } from "../../workflow-nodes/agent-timeout"
 import { nodeTypeRegistry } from "../../workflow-nodes/registry"
 import "../../workflow-nodes/register.main"
 
@@ -1147,7 +1148,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
   create(ctx) {
     const registry = ctx.registry
     const engineLogger = createMainLogger("service.workflow.engine.agent-deps")
-    const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({ providerId, modelTier, prompt, projectId, abortSignal }) => {
+    const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({ providerId, modelTier, prompt, projectId, abortSignal, timeoutMins }) => {
       try {
         if (!projectId) {
           throw new Error("Workflow prompt project is required")
@@ -1166,7 +1167,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
         const result = await agentRuntime.sendScheduled({
           projectId: effectiveProjectId, agentType: "claude-code", mode: "bypassPermissions", prompt,
           providerId, modelTier,
-          sessionPolicy: "fresh", timeoutMs: 120_000, abortSignal,
+          sessionPolicy: "fresh", timeoutMs: agentTimeoutMinsToMs(timeoutMins ?? DEFAULT_AGENT_TIMEOUT_MINS), abortSignal,
         })
         return { status: result.status === "success" ? "success" : "failed", response: result.summary ?? "", error: result.error, durationMs: result.durationMs }
       } catch (err) {

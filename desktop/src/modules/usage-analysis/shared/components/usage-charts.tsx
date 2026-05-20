@@ -219,7 +219,7 @@ export function UsageTrendChart({ title, rows, bucket = "day", onBucketChange }:
 
 export function UsageTodayHourlyChart({ title, rows }: UsageTodayHourlyChartProps) {
   const theme = useUsageEChartsTheme()
-  const data = useMemo(() => rows.filter((row) => row.tokens > 0 || row.requests > 0), [rows])
+  const data = useMemo(() => [...rows], [rows])
   const option = useMemo<EChartsOption>(() => ({
     color: theme.chart,
     animation: false,
@@ -240,10 +240,10 @@ export function UsageTodayHourlyChart({ title, rows }: UsageTodayHourlyChartProp
     },
     xAxis: {
       type: "category",
-      data: data.map((row) => formatHourBucket(row.bucket)),
+      data: data.map((row) => formatTodayHourSegment(row.bucket)),
       axisLine: { show: false },
       axisTick: { show: false },
-      axisLabel: { color: theme.mutedForeground },
+      axisLabel: { color: theme.mutedForeground, interval: 0 },
     },
     yAxis: [
       {
@@ -447,6 +447,12 @@ function formatHourBucket(bucket: string): string {
   return bucket.length >= 13 ? `${bucket.slice(11, 13)}:00` : formatBucket(bucket)
 }
 
+function formatTodayHourSegment(bucket: string): string {
+  if (bucket.length < 13) return formatBucket(bucket)
+  const hour = Number(bucket.slice(11, 13))
+  return Number.isFinite(hour) ? String(hour + 1).padStart(2, "0") : formatHourBucket(bucket)
+}
+
 function positionTooltipAwayFromPointer(
   point: number[],
   _params: unknown,
@@ -503,7 +509,7 @@ function formatTrendTooltip(params: unknown, rows: readonly TrendPoint[]): strin
 function formatTodayHourlyTooltip(params: unknown, rows: readonly TrendPoint[]): string {
   const items = (Array.isArray(params) ? params : [params]).filter(isTooltipObject)
   const title = String(items[0]?.axisValue ?? items[0]?.axisValueLabel ?? "")
-  const row = rows.find((item) => formatHourBucket(item.bucket) === title)
+  const row = rows.find((item) => formatTodayHourSegment(item.bucket) === title)
   const bars = items
     .filter((item) => item.componentSubType === "bar")
     .map((item) => ({ marker: item.marker ?? "", name: item.seriesName ?? "", value: readTooltipValue(item) }))

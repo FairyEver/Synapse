@@ -11,6 +11,7 @@ import { ReportState } from "./report-state"
 import { UsageBreakdownChart, UsageTodayHourlyChart } from "./usage-charts"
 import {
   buildTodayMetricRows,
+  buildTodayTimeRows,
   buildTodayModelStructureRows,
   buildTodayTokenStructureRows,
   calculateNewTokens,
@@ -40,7 +41,7 @@ interface TokenBreakdown {
 
 export function TodayReportView({ overviewState, timeState, modelsState }: TodayReportViewProps) {
   const report = overviewState.data
-  const timeRows = timeState.data ?? []
+  const timeRows = report ? buildTodayTimeRows(timeState.data ?? [], report.generatedAt) : []
   const modelRows = modelsState.data ?? []
   const loading = (overviewState.loading || timeState.loading || modelsState.loading)
     && (!overviewState.data || !timeState.data || !modelsState.data)

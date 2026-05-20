@@ -3,6 +3,7 @@ import type { SwitchNodeConfig } from "./schema"
 import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
 import { agentErrorDiagnostic, sanitizeAgentError, agentFailureMessage, agentProviderFailureFromResponse } from "../../electron/services/workflow/workflow-utils"
 import { createMainLogger } from "../../electron/services/log-store"
+import { resolveAgentTimeoutMins } from "../agent-timeout"
 
 const logger = createMainLogger("workflow.node.switch-executor")
 
@@ -87,7 +88,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
     })
 
     input.onProgress?.("awaiting_response", "等待响应…")
-    const agentResult = await agentDeps.sendToAgent({ providerId: config.providerId ?? "", modelTier: config.modelTier ?? "default", prompt, projectId: context.projectId ?? "", abortSignal: context.abortSignal })
+    const agentResult = await agentDeps.sendToAgent({ providerId: config.providerId ?? "", modelTier: config.modelTier ?? "default", prompt, projectId: context.projectId ?? "", abortSignal: context.abortSignal, timeoutMins: resolveAgentTimeoutMins(config.timeoutMins) })
     const durationMs = Date.now() - start
 
     if (agentResult.status === "failed") {

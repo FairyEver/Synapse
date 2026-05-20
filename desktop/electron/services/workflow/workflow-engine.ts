@@ -2,6 +2,7 @@ import type { WorkflowDefinition, WorkflowRunResult, WorkflowEvent, NodeRunResul
 import type { AgentSendDeps, NodeRuntimeDeps } from "../../../workflow-nodes/types"
 import type { ActorIdentity } from "../../runtime/security"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
+import { DEFAULT_AGENT_TIMEOUT_MINS } from "../../../workflow-nodes/agent-timeout"
 import { interpolatePrompt, resolveVariables } from "./variable-resolver"
 import { ReactiveScheduler } from "./workflow-scheduler"
 import type { NodeExecOutcome, NodeTask, SchedulerCallbacks } from "./workflow-scheduler"
@@ -156,6 +157,7 @@ export class WorkflowEngine {
                 ...(rawCfg as Record<string, unknown>),
                 providerId: (rawCfg as Record<string, unknown>).providerId || def.defaultProviderId,
                 modelTier: (rawCfg as Record<string, unknown>).modelTier || def.defaultModelTier,
+                timeoutMins: (rawCfg as Record<string, unknown>).timeoutMins ?? def.defaultNodeTimeoutMins ?? DEFAULT_AGENT_TIMEOUT_MINS,
               }
             : rawCfg
           const vars = (cfg as Record<string, unknown>)["variables"]

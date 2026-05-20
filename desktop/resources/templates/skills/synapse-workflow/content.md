@@ -56,6 +56,12 @@ Use `{{variableName}}` to interpolate bound variables into prompt text. All refe
 
 A switch node's config includes `branches: [{ id, label }]` and an optional `defaultBranch`. The AI evaluates the prompt and returns one branch id. Only edges with matching `branch` field activate downstream nodes.
 
+Switch branches are mutually exclusive paths:
+- Connect each branch only to the nodes that belong to that branch.
+- A branch may fan out to multiple parallel nodes, but those parallel nodes must be specific to that branch.
+- Do not connect every branch to the same set of branch-specific nodes. If the paths need to merge, first connect each branch to its own nodes, then connect those nodes to a shared downstream node.
+- After reconnecting switch edges, inspect the saved definition and verify each `branch` maps to the intended target node IDs.
+
 ## Best Practices
 
 - Always store returned `nodeId` and `edgeId` after creation — you cannot retrieve them later without fetching the full definition.
@@ -63,6 +69,7 @@ A switch node's config includes `branches: [{ id, label }]` and an optional `def
 - Always query available providers before setting `providerId` — do not guess provider IDs.
 - Prefer setting `defaultProviderId`/`defaultModelTier` on the workflow rather than repeating on every node.
 - Validate with `workflow_definition_inspect` before executing.
+- Treat `duplicate_switch_branch_targets` warnings as a likely wiring mistake unless the workflow intentionally merges branches immediately.
 - Build incrementally: create nodes → connect edges → configure → auto-layout → validate → run.
 - For complex workflows, sketch the DAG structure first (which nodes, which edges) before making calls.
 - After creating, deleting, or reconnecting nodes, call `workflow_layout_update` before the final validation or handoff. This method recalculates node positions without opening the UI.

@@ -12,6 +12,7 @@ export const switchNodeManifest: NodeManifest<SwitchNodeConfig> = {
   configFields: [
     { name: "providerId", kind: "text", label: "供应商" },
     { name: "modelTier", kind: "select", label: "模型" },
+    { name: "timeoutMins", kind: "number", label: "超时分钟", optional: true },
     { name: "variables", kind: "variable-binding-list", label: "变量绑定" },
     { name: "prompt", kind: "text", label: "判断 Prompt" },
     { name: "branches", kind: "branch-list", label: "分支" },

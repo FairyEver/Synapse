@@ -336,6 +336,40 @@ describe("WorkflowEngine", () => {
     )
   })
 
+  it("resolves Agent timeout from workflow default when node omits it", async () => {
+    const nodeNoTimeout = { id: "nt", name: "NT", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "test" } }
+    const def: WorkflowDefinition = {
+      id: "wf-default-timeout", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      defaultNodeTimeoutMins: 45,
+      params: [],
+      nodes: [nodeNoTimeout, nodeEnd],
+      edges: [{ id: "e1", from: "nt", to: "end" }],
+    }
+    const agent = fakeAgent("ok")
+    const engine = new WorkflowEngine(agent)
+    await engine.run(def, {}, "run-timeout-default", () => {})
+    expect(agent.sendToAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ timeoutMins: 45 }),
+    )
+  })
+
+  it("node-level Agent timeout takes priority over workflow default", async () => {
+    const nodeWithTimeout = { id: "wt", name: "WT", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "test", timeoutMins: 5 } }
+    const def: WorkflowDefinition = {
+      id: "wf-timeout-override", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      defaultNodeTimeoutMins: 45,
+      params: [],
+      nodes: [nodeWithTimeout, nodeEnd],
+      edges: [{ id: "e1", from: "wt", to: "end" }],
+    }
+    const agent = fakeAgent("ok")
+    const engine = new WorkflowEngine(agent)
+    await engine.run(def, {}, "run-timeout-override", () => {})
+    expect(agent.sendToAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ timeoutMins: 5 }),
+    )
+  })
+
   it("does not use workflow id as a fallback project id for node executors", async () => {
     const execute = vi.fn().mockResolvedValue({ status: "success" as const, output: "ok", durationMs: 1 })
     nodeTypeRegistry.register(

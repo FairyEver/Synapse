@@ -167,6 +167,7 @@ export function NodeConfigPanel({ collapsed, nodeId, definition, onConfigChange,
                     defaultProjectName={defaultProjectName}
                     defaultProviderId={definition.defaultProviderId}
                     defaultModelTier={definition.defaultModelTier}
+                    defaultNodeTimeoutMins={definition.defaultNodeTimeoutMins}
                     validationItems={validationItems}
                   />
                 </>
@@ -234,6 +235,17 @@ function GlobalSettingsForm({ definition, projects, onChange }: {
             onOpenChange={setProviderDialogOpen}
             defaultSelection={definition.defaultProviderId ? { providerId: definition.defaultProviderId, modelTier: definition.defaultModelTier ?? "default" } : undefined}
             onSelect={(s) => onChange?.({ ...definition, defaultProviderId: s.providerId, defaultModelTier: s.modelTier })}
+          />
+        </div>
+        <div className="space-y-1.5">
+          <Label htmlFor="workflow-default-node-timeout" className="text-xs">默认节点超时(分钟)</Label>
+          <Input
+            id="workflow-default-node-timeout"
+            className="h-7 text-sm"
+            type="number"
+            min={1}
+            value={definition.defaultNodeTimeoutMins ?? 30}
+            onChange={(e) => onChange?.({ ...definition, defaultNodeTimeoutMins: e.target.value === "" ? undefined : Number(e.target.value) })}
           />
         </div>
         <div className="space-y-1.5">

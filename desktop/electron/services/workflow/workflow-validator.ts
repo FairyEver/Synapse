@@ -33,6 +33,10 @@ function ancestors(nodeId: string, rev: Map<string, string[]>): Set<string> {
   return visited
 }
 
+function switchBranchTargetKey(targetIds: string[]): string {
+  return [...new Set(targetIds)].sort().join("\u0000")
+}
+
 export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
   const errors: ValidationError[] = []; const warnings: ValidationWarning[] = []
   const hasDefaultProjectId = typeof def.defaultProjectId === "string" && def.defaultProjectId.trim().length > 0
@@ -277,6 +281,31 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
           })
         }
       }
+    }
+
+    const duplicateBranchTargets = new Map<string, { targetIds: string[]; branchLabels: string[] }>()
+    for (const branch of branches as Array<{ id: string; label: string }>) {
+      const targetIds = [...new Set(def.edges.filter((e) => e.from === node.id && e.branch === branch.id).map((e) => e.to))].sort()
+      if (targetIds.length <= 1) continue
+      const key = switchBranchTargetKey(targetIds)
+      const group = duplicateBranchTargets.get(key) ?? { targetIds, branchLabels: [] }
+      group.branchLabels.push(branch.label)
+      duplicateBranchTargets.set(key, group)
+    }
+    for (const group of duplicateBranchTargets.values()) {
+      if (group.branchLabels.length < 2) continue
+      warnings.push({
+        type: "duplicate_switch_branch_targets",
+        nodeId: node.id,
+        message: `Switch 节点「${node.name}」的分支「${group.branchLabels.join(" / ")}」连接到了同一批下游节点，疑似把互斥分支误连到所有节点；如需汇合，请先连接各分支专属节点再汇合`,
+      })
+      logger.warn("switch branches share identical multi-target downstream nodes", {
+        workflowId: def.id,
+        nodeId: node.id,
+        nodeName: node.name,
+        branchLabels: group.branchLabels,
+        targetIds: group.targetIds,
+      })
     }
   }
 

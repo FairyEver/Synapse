@@ -177,9 +177,28 @@ describe("validateWorkflow", () => {
   // Edge case: switch branch edge exists but path cannot reach end node
   it("errors when switch branch path cannot reach end node", () => {
     const sw = { id: "sw", name: "S", type: "switch", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }, { id: "no", label: "N" }] } }
-    const nodeC = { id: "c", name: "C", type: "prompt", position: { x: 400, y: 200 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "" } }
+    const nodeC = { id: "c", name: "C", type: "prompt", position: { x: 400, y: 200 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "hi" } }
     const r = validateWorkflow({ ...base, nodes: [sw, nodeB, nodeC, nodeEnd], edges: [{ id: "e1", from: "sw", to: "b", branch: "yes" }, { id: "e2", from: "sw", to: "c", branch: "no" }, { id: "e3", from: "b", to: "end" }] })
     expect(r.errors.some((e) => e.type === "invalid_switch_edge" && e.message.includes("N"))).toBe(true)
+  })
+
+  it("warns when multiple switch branches connect to the same multi-node downstream set", () => {
+    const sw = { id: "sw", name: "S", type: "switch", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }, { id: "no", label: "N" }] } }
+    const nodeC = { id: "c", name: "C", type: "prompt", position: { x: 400, y: 200 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "hi" } }
+    const r = validateWorkflow({
+      ...base,
+      nodes: [sw, nodeB, nodeC, nodeEnd],
+      edges: [
+        { id: "e1", from: "sw", to: "b", branch: "yes" },
+        { id: "e2", from: "sw", to: "c", branch: "yes" },
+        { id: "e3", from: "sw", to: "b", branch: "no" },
+        { id: "e4", from: "sw", to: "c", branch: "no" },
+        { id: "e5", from: "b", to: "end" },
+        { id: "e6", from: "c", to: "end" },
+      ],
+    })
+    expect(r.valid).toBe(true)
+    expect(r.warnings.some((w) => w.type === "duplicate_switch_branch_targets" && w.nodeId === "sw")).toBe(true)
   })
 
   // Edge case: non-switch node edge incorrectly carries a branch field

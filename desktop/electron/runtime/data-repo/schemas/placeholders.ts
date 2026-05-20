@@ -868,6 +868,7 @@ export interface WorkflowEntryV1 extends Record<string, unknown> {
   defaultProjectId?: string
   defaultProviderId?: string
   defaultModelTier?: "default" | "haiku" | "sonnet" | "opus"
+  defaultNodeTimeoutMins?: number
   params: Array<{ name: string; type: "text" | "number"; default: string | number | null; description?: string }>
   nodes: Array<{ id: string; name: string; type: string; position: { x: number; y: number }; config: Record<string, unknown> }>
   edges: Array<{ id: string; from: string; to: string; branch?: string }>
@@ -918,6 +919,8 @@ export const workflowsSchema: NamespaceSchema<WorkflowEntryV1> = {
     && isOptionalString((v as WorkflowEntryV1).defaultProviderId)
     && ((v as WorkflowEntryV1).defaultModelTier === undefined
       || ["default", "haiku", "sonnet", "opus"].includes((v as WorkflowEntryV1).defaultModelTier as string))
+    && ((v as WorkflowEntryV1).defaultNodeTimeoutMins === undefined
+      || (Number.isInteger((v as WorkflowEntryV1).defaultNodeTimeoutMins) && (v as WorkflowEntryV1).defaultNodeTimeoutMins! > 0))
     && Array.isArray((v as WorkflowEntryV1).params)
     && (v as WorkflowEntryV1).params.every(isWorkflowParam)
     && Array.isArray((v as WorkflowEntryV1).nodes)

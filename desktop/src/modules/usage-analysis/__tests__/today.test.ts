@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   buildTodayMetricRows,
+  buildTodayTimeRows,
   buildTodayModelStructureRows,
   buildTodayTokenStructureRows,
   calculateNewTokens,
@@ -129,6 +130,54 @@ describe("today usage helpers", () => {
 
   it("returns the last active hourly bucket as recent hour", () => {
     expect(getRecentHourBucket(timeRows)?.bucket).toBe("2026-05-20 09")
+  })
+
+  it("fills today time rows from 00:00 to 23:00", () => {
+    const rows = buildTodayTimeRows([
+      {
+        ...emptyHour("2026-05-20 09"),
+        tokens: 400,
+        requests: 4,
+      },
+      {
+        ...emptyHour("2026-05-20 12"),
+        tokens: 800,
+        requests: 8,
+      },
+    ], "2026-05-20T12:30:00.000Z")
+
+    expect(rows).toHaveLength(24)
+    expect(rows[0]?.bucket).toBe("2026-05-20 00")
+    expect(rows.at(-1)?.bucket).toBe("2026-05-20 23")
+    expect(rows.map((row) => row.bucket.slice(11))).toEqual([
+      "00",
+      "01",
+      "02",
+      "03",
+      "04",
+      "05",
+      "06",
+      "07",
+      "08",
+      "09",
+      "10",
+      "11",
+      "12",
+      "13",
+      "14",
+      "15",
+      "16",
+      "17",
+      "18",
+      "19",
+      "20",
+      "21",
+      "22",
+      "23",
+    ])
+    expect(rows[9]?.tokens).toBe(400)
+    expect(rows[12]?.requests).toBe(8)
+    expect(rows[10]).toMatchObject({ tokens: 0, requests: 0, modelBreakdown: [] })
   })
 
   it("limits model structure and groups the remainder", () => {

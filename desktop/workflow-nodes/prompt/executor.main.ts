@@ -3,6 +3,7 @@ import type { PromptNodeConfig } from "./schema"
 import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
 import { agentErrorDiagnostic, sanitizeAgentError, agentFailureMessage, agentProviderFailureFromResponse } from "../../electron/services/workflow/workflow-utils"
 import { createMainLogger } from "../../electron/services/log-store"
+import { resolveAgentTimeoutMins } from "../agent-timeout"
 
 const logger = createMainLogger("workflow.node.prompt-executor")
 
@@ -24,7 +25,7 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
     })
 
     input.onProgress?.("awaiting_response", "等待响应…")
-    const result = await input.agentDeps.sendToAgent({ providerId: input.config.providerId ?? "", modelTier: input.config.modelTier ?? "default", prompt, projectId: input.context.projectId ?? "", abortSignal: input.context.abortSignal })
+    const result = await input.agentDeps.sendToAgent({ providerId: input.config.providerId ?? "", modelTier: input.config.modelTier ?? "default", prompt, projectId: input.context.projectId ?? "", abortSignal: input.context.abortSignal, timeoutMins: resolveAgentTimeoutMins(input.config.timeoutMins) })
     const durationMs = Date.now() - start
 
     if (result.status === "failed") {

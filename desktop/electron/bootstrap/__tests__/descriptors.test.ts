@@ -267,6 +267,65 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(containers.open).not.toHaveBeenCalled()
   })
 
+  it("workflow Agent dependency converts node timeout minutes to milliseconds", async () => {
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: "repo-1",
+          repositories: [{ uuid: "repo-1", name: "Repo", localPath: "/repo" }],
+          global: { projects: [] },
+        })),
+      },
+    }))
+    vi.doMock("../../services/log-store", () => ({
+      logStore: {},
+      createMainLogger: () => ({ error: vi.fn(), info: vi.fn(), warn: vi.fn() }),
+    }))
+    const sendScheduled = vi.fn().mockResolvedValue({
+      status: "success",
+      summary: "ok",
+      durationMs: 5,
+    })
+    const containers = {
+      open: vi.fn(async () => ({
+        get: vi.fn(() => ({ sendScheduled })),
+      })),
+    }
+    const ctx = {
+      ...makeFakeContext(),
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "core.project-containers") return containers
+          if (id === "core.permission-guard") return { check: vi.fn() }
+          if (id === "core.audit-sink") return { record: vi.fn() }
+          throw new Error(`unexpected service ${id}`)
+        }),
+      },
+    }
+    const { coreWorkflowEngineDescriptor } = await importBootstrap()
+    const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
+      agentDeps: {
+        sendToAgent(input: { providerId?: string; modelTier?: string; prompt: string; projectId?: string; abortSignal: AbortSignal; timeoutMins?: number }): Promise<{
+          status: "success" | "failed"
+          response: string
+          error?: string
+          durationMs: number
+        }>
+      }
+    }
+
+    await engine.agentDeps.sendToAgent({
+      providerId: "test-provider",
+      modelTier: "sonnet",
+      prompt: "test",
+      projectId: "repo-1",
+      abortSignal: new AbortController().signal,
+      timeoutMins: 45,
+    })
+
+    expect(sendScheduled).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 45 * 60_000 }))
+  })
+
   it("workflow HTTP dependency records denied audits with a sanitized resource", async () => {
     const auditSink = { record: vi.fn() }
     const permissionGuard = {

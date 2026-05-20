@@ -69,6 +69,21 @@ describe("switchNodeExecutor", () => {
     const sent = (sendToAgent.mock.calls[0][0] as { prompt: string }).prompt
     expect(sent).toContain("- yes"); expect(sent).toContain("- no")
   })
+  it("uses a 30 minute Agent timeout by default", async () => {
+    const sendToAgent = vi.fn().mockResolvedValue({ status: "success" as const, response: "yes", durationMs: 5 })
+    await switchNodeExecutor.execute({ config, resolvedVariables: {}, context: ctx, agentDeps: { sendToAgent } })
+    expect(sendToAgent).toHaveBeenCalledWith(expect.objectContaining({ timeoutMins: 30 }))
+  })
+  it("passes a custom Agent timeout in minutes", async () => {
+    const sendToAgent = vi.fn().mockResolvedValue({ status: "success" as const, response: "yes", durationMs: 5 })
+    await switchNodeExecutor.execute({
+      config: { ...config, timeoutMins: 45 },
+      resolvedVariables: {},
+      context: ctx,
+      agentDeps: { sendToAgent },
+    })
+    expect(sendToAgent).toHaveBeenCalledWith(expect.objectContaining({ timeoutMins: 45 }))
+  })
 
   it("logs switch branch label shape without raw labels", async () => {
     const sensitiveLabel = "Customer sk-secret at /Users/liyang/private"

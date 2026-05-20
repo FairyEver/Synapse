@@ -172,7 +172,7 @@ Add a directed edge between two nodes.
 
 **Params:** `workflowId` (string, required), `from` (string, required), `to` (string, required), `branch?` (string)
 **Returns:** `{ edgeId, versionHash, validation? }`
-**Notes:** Include `branch` for edges from switch nodes.
+**Notes:** Include `branch` for edges from switch nodes. Switch branches are mutually exclusive; connect each branch only to its own downstream nodes. If multiple branches connect to the same multi-node target set, validation returns a `duplicate_switch_branch_targets` warning.
 
 ### workflow_edge_delete
 

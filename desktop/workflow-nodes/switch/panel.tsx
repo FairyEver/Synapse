@@ -16,6 +16,7 @@ import { PromptEditor } from "../prompt-editor"
 import { CollapsibleSection } from "../collapsible-section"
 import { useProviderLookup } from "../provider-lookup-context"
 import { ProjectSelect } from "../project-select"
+import { DEFAULT_AGENT_TIMEOUT_MINS } from "../agent-timeout"
 
 const TIER_LABELS: Record<ModelTier, string> = { default: "主模型", haiku: "Haiku", sonnet: "Sonnet", opus: "Opus" }
 
@@ -30,15 +31,17 @@ export interface SwitchNodePanelProps {
   defaultProjectName?: string
   defaultProviderId?: string
   defaultModelTier?: string
+  defaultNodeTimeoutMins?: number
   validationItems?: readonly WorkflowValidationDisplayItem[]
 }
 
-export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParams, projects, defaultProjectName, defaultProviderId, defaultModelTier, validationItems = [] }: SwitchNodePanelProps) {
+export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParams, projects, defaultProjectName, defaultProviderId, defaultModelTier, defaultNodeTimeoutMins, validationItems = [] }: SwitchNodePanelProps) {
   const [prompt, setPrompt] = useState(config.prompt)
   const [branches, setBranches] = useState<SwitchBranch[]>(config.branches)
   const [defaultBranch, setDefaultBranch] = useState<string>(config.defaultBranch ?? NO_DEFAULT)
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
   const [customProviderEnabled, setCustomProviderEnabled] = useState(Boolean(config.providerId))
+  const [customTimeoutEnabled, setCustomTimeoutEnabled] = useState(config.timeoutMins !== undefined)
   const lastCommittedRef = useRef<SwitchNodeConfig>(config)
   const { getProviderName, getModelName, isProviderAvailable } = useProviderLookup()
   const providerUnavailable = Boolean(config.providerId && !isProviderAvailable(config.providerId))
@@ -84,6 +87,7 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
   const inheritedProviderLabel = defaultProviderId
     ? `${getProviderName(defaultProviderId) ?? defaultProviderId} · ${getModelName(defaultProviderId, (defaultModelTier as ModelTier) ?? "default") ?? TIER_LABELS[(defaultModelTier as ModelTier) ?? "default"]}`
     : undefined
+  const inheritedTimeoutMins = defaultNodeTimeoutMins ?? DEFAULT_AGENT_TIMEOUT_MINS
   const nodeProviderLabel = config.providerId
     ? `${getProviderName(config.providerId) ?? config.providerId} · ${getModelName(config.providerId, config.modelTier ?? "default") ?? TIER_LABELS[config.modelTier ?? "default"]}`
     : "选择供应商 + 模型"
@@ -117,6 +121,32 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
               {inheritedProviderLabel ? `使用工作流默认：${inheritedProviderLabel}` : "未设置工作流默认供应商"}
             </p>
           )}
+          <div className="grid gap-1">
+            <div className="flex items-center gap-2">
+              <Checkbox
+                id="switch-node-custom-timeout"
+                checked={customTimeoutEnabled}
+                onCheckedChange={(checked) => {
+                  const enabled = checked === true
+                  setCustomTimeoutEnabled(enabled)
+                  commit({ timeoutMins: enabled ? (config.timeoutMins ?? inheritedTimeoutMins) : undefined })
+                }}
+              />
+              <Label htmlFor="switch-node-custom-timeout" className="text-xs font-normal">单独设置超时</Label>
+            </div>
+            {customTimeoutEnabled ? (
+              <Input
+                id="switch-node-timeout"
+                className="h-7 text-xs"
+                type="number"
+                min={1}
+                value={config.timeoutMins ?? inheritedTimeoutMins}
+                onChange={(e) => commit({ timeoutMins: e.target.value === "" ? undefined : Number(e.target.value) })}
+              />
+            ) : (
+              <p className="text-xs text-muted-foreground">使用工作流默认：{inheritedTimeoutMins} 分钟</p>
+            )}
+          </div>
         </div>
         {customProviderEnabled && providerUnavailable && <p className="text-[11px] text-destructive">供应商不可用，请重新选择</p>}
         <ProviderModelSelectDialog

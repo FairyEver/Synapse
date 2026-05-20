@@ -20,6 +20,7 @@ interface TokenBreakdownLike {
 }
 
 const MAX_MODEL_STRUCTURE_ROWS = 5
+const TODAY_HOUR_COUNT = 24
 
 const TOKEN_COMPONENTS: { readonly key: keyof TokenBreakdownLike; readonly label: string }[] = [
   { key: "input", label: "输入" },
@@ -67,6 +68,16 @@ export function buildTodayMetricRows(
 
 export function getRecentHourBucket(rows: readonly UsageTimeBucket[]): UsageTimeBucket | null {
   return rows.filter((row) => row.tokens > 0 || row.requests > 0 || row.toolCalls > 0).at(-1) ?? null
+}
+
+export function buildTodayTimeRows(rows: readonly UsageTimeBucket[], generatedAt: string): UsageTimeBucket[] {
+  const dateKey = rows.find((row) => row.bucket.length >= 10)?.bucket.slice(0, 10) || generatedAt.slice(0, 10)
+  const byBucket = new Map(rows.map((row) => [row.bucket, row]))
+
+  return Array.from({ length: TODAY_HOUR_COUNT }, (_, hour) => {
+    const bucket = `${dateKey} ${pad2(hour)}`
+    return byBucket.get(bucket) ?? emptyHourBucket(bucket)
+  })
 }
 
 export function buildTodayTokenStructureRows(breakdown: TokenBreakdownLike): TodayBreakdownRow[] {
@@ -134,6 +145,23 @@ function formatCurrency(value: number): string {
 
 function formatPercent(value: number): string {
   return new Intl.NumberFormat("zh-CN", { style: "percent", maximumFractionDigits: 0 }).format(value)
+}
+
+function pad2(value: number): string {
+  return String(value).padStart(2, "0")
+}
+
+function emptyHourBucket(bucket: string): UsageTimeBucket {
+  return {
+    bucket,
+    tokens: 0,
+    estimatedCost: 0,
+    requests: 0,
+    conversations: 0,
+    toolCalls: 0,
+    dominantModel: "",
+    modelBreakdown: [],
+  }
 }
 
 function bucketTokenBreakdown(row: UsageTimeBucket): TokenBreakdownLike {

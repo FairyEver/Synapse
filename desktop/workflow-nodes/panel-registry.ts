@@ -17,6 +17,7 @@ export interface NodePanelProps {
   defaultProjectName?: string
   defaultProviderId?: string
   defaultModelTier?: string
+  defaultNodeTimeoutMins?: number
   validationItems?: readonly WorkflowValidationDisplayItem[]
 }
 
