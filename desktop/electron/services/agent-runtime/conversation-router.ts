@@ -858,7 +858,7 @@ export class ConversationRouter {
       },
       scope: { sessionId: conversationId },
       timestamp: this.isoNow(),
-    })
+    }, { backpressure: "block" })
     if (shouldSuppressReply(message)) return
     // Record outbox entry as pending before dispatch. After dispatch completes
     // (or fails), update the status to "sent" or "failed" so outbox accurately

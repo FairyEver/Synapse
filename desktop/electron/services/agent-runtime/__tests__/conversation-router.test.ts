@@ -7,6 +7,7 @@ import type {
   DataChangeListener,
   DataNamespace,
 } from "../../../runtime/data-repo"
+import type { EventBusEmitOptions } from "../../../runtime/event-bus/types"
 import type { ProviderService } from "../../provider"
 import { AgentCommandRouter } from "../command-router"
 import { ConversationRouter } from "../conversation-router"
@@ -26,6 +27,11 @@ type RecordedAgentEvent = {
   readonly type: string
   readonly payload?: Record<string, unknown>
   readonly scope?: { readonly sessionId?: string }
+}
+
+type RecordedAgentEmit = {
+  readonly event: RecordedAgentEvent
+  readonly options?: EventBusEmitOptions
 }
 
 describe("ConversationRouter", () => {
@@ -143,6 +149,31 @@ describe("ConversationRouter", () => {
     expect(await agentEvents.list()).toEqual([
       expect.objectContaining({ eventType: "text" }),
       expect.objectContaining({ eventType: "result" }),
+    ])
+  })
+
+  it("emits stream events without coalescing so token deltas are not dropped", async () => {
+    const { eventBus, emits } = createEventBusRecorder()
+    const { router } = createRouter({
+      eventBus,
+      session: new ScriptedSession([
+        { type: "stream", text: "hel", deltaType: "text_delta", sdkSessionId: "sdk-1", event: {} },
+        { type: "stream", text: "lo", deltaType: "text_delta", sdkSessionId: "sdk-1", event: {} },
+        { type: "result", content: "hello", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    await router.send(baseMessage("hello"))
+
+    const streamEmits = emits.filter(({ event }) => event.type === "stream")
+    expect(streamEmits).toHaveLength(2)
+    expect(streamEmits.map(({ event }) => event.payload?.event)).toEqual([
+      expect.objectContaining({ text: "hel" }),
+      expect.objectContaining({ text: "lo" }),
+    ])
+    expect(streamEmits.map(({ options }) => options)).toEqual([
+      { backpressure: "block" },
+      { backpressure: "block" },
     ])
   })
 
@@ -781,14 +812,19 @@ function createRouter(input: {
 function createEventBusRecorder(): {
   readonly eventBus: ConversationRouterDeps["eventBus"]
   readonly events: RecordedAgentEvent[]
+  readonly emits: RecordedAgentEmit[]
 } {
   const events: RecordedAgentEvent[] = []
+  const emits: RecordedAgentEmit[] = []
   return {
     events,
+    emits,
     eventBus: {
       projectId: "project-1",
-      emit(event) {
-        events.push(event as RecordedAgentEvent)
+      emit(event, options) {
+        const recorded = event as RecordedAgentEvent
+        events.push(recorded)
+        emits.push({ event: recorded, options })
       },
       on() {
         return () => {}

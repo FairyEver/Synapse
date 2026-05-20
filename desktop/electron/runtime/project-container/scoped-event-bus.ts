@@ -8,6 +8,7 @@
 import type {
   DomainEvent,
   EventBus,
+  EventBusEmitOptions,
   EventDomain,
   EventScope,
   Unsubscribe,
@@ -25,6 +26,7 @@ export class ScopedEventBusImpl implements ScopedEventBus {
 
   emit<D extends EventDomain>(
     event: Omit<DomainEvent<D>, "scope"> & { scope?: Omit<EventScope, "projectId"> },
+    options?: EventBusEmitOptions,
   ): void {
     const merged: DomainEvent<D> = {
       ...event,
@@ -33,7 +35,7 @@ export class ScopedEventBusImpl implements ScopedEventBus {
         projectId: this.projectId,
       },
     }
-    this.underlying.emit(merged)
+    this.underlying.emit(merged, options)
   }
 
   on<D extends EventDomain>(

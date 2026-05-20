@@ -16,6 +16,7 @@ import type {
 import type {
   DomainEvent,
   EventBus,
+  EventBusEmitOptions,
   EventScope,
   EventDomain,
   Unsubscribe,
@@ -82,7 +83,10 @@ export interface ProjectContainerRegistry {
  */
 export interface ScopedEventBus {
   readonly projectId: string
-  emit<D extends EventDomain>(event: Omit<DomainEvent<D>, "scope"> & { scope?: Omit<EventScope, "projectId"> }): void
+  emit<D extends EventDomain>(
+    event: Omit<DomainEvent<D>, "scope"> & { scope?: Omit<EventScope, "projectId"> },
+    options?: EventBusEmitOptions,
+  ): void
   on<D extends EventDomain>(domain: D, listener: (event: DomainEvent<D>) => void): Unsubscribe
   /** Underlying global bus for cases where the consumer needs cross-project visibility. */
   readonly underlying: EventBus

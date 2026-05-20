@@ -89,7 +89,7 @@ describe("AgentMessageEvent", () => {
     })
 
     const links = Array.from(container.querySelectorAll<HTMLAnchorElement>("a"))
-      .map((link) => link.getAttribute("href"))
+      .map((link) => link.getAttribute("data-reference"))
 
     expect(links).toContain("https://example.com/docs")
     expect(links).toContain("./local/file.ts")
@@ -120,7 +120,7 @@ describe("AgentMessageEvent", () => {
 
     const codeText = container.querySelector("code")?.textContent
     const links = Array.from(container.querySelectorAll<HTMLAnchorElement>("a"))
-      .map((link) => link.getAttribute("href"))
+      .map((link) => link.getAttribute("data-reference"))
 
     expect(codeText?.trim()).toBe('const path = "./src/private/file.ts"')
     expect(links).toContain("./docs/readme.md")
@@ -151,7 +151,7 @@ describe("AgentMessageEvent", () => {
 
     const codeText = container.querySelector("code")?.textContent
     const links = Array.from(container.querySelectorAll<HTMLAnchorElement>("a"))
-      .map((link) => link.getAttribute("href"))
+      .map((link) => link.getAttribute("data-reference"))
 
     expect(codeText).toBe("./src/private/file.ts")
     expect(links).toContain("./docs/readme.md")
@@ -164,7 +164,7 @@ describe("AgentMessageEvent", () => {
     expect(wrapped).toBe("Reading `./src/private/file.ts while open ./docs/readme.md")
   })
 
-  it("renders streaming assistant drafts as literal text until final markdown arrives", async () => {
+  it("renders streaming assistant drafts as markdown while content is incomplete", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -176,7 +176,7 @@ describe("AgentMessageEvent", () => {
             id: "message-streaming",
             kind: "message",
             role: "assistant",
-            content: "1. **skill",
+            content: "1. **skill**",
             timestamp: "2026-04-27T03:15:00.000Z",
             streaming: true,
           }}
@@ -186,9 +186,8 @@ describe("AgentMessageEvent", () => {
       )
     })
 
-    expect(container.querySelector("ol")).toBeNull()
-    expect(container.querySelector("strong")).toBeNull()
-    expect(container.textContent).toContain("1. **skill")
+    expect(container.querySelector("ol")).not.toBeNull()
+    expect(container.querySelector("[data-streamdown='strong']")?.textContent).toBe("skill")
   })
 
   it("keeps sentence punctuation outside auto-wrapped local reference links", () => {
@@ -220,7 +219,7 @@ describe("AgentMessageEvent", () => {
       )
     })
 
-    const copyButton = container.querySelector<HTMLButtonElement>(".code-copy-btn")
+    const copyButton = container.querySelector<HTMLButtonElement>("[data-streamdown='code-block-copy-button']")
     expect(copyButton).not.toBeNull()
 
     await act(async () => {
@@ -237,13 +236,13 @@ describe("AgentMessageEvent", () => {
         messageId: "message-123",
         role: "assistant",
         contentLength: 37,
-        codeLength: 28,
+        codeLength: 27,
       },
     })
     expect(JSON.stringify(track.mock.calls)).not.toContain("do-not-log")
   })
 
-  it("styles injected code copy controls with classes instead of inline styles", async () => {
+  it("renders streamdown code copy controls without leaking inline styles on controls", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
     const root = createRoot(container)
@@ -266,14 +265,12 @@ describe("AgentMessageEvent", () => {
     })
 
     const pre = container.querySelector("pre")
-    const copyButton = container.querySelector<HTMLButtonElement>(".code-copy-btn")
+    const copyButton = container.querySelector<HTMLButtonElement>("[data-streamdown='code-block-copy-button']")
 
     expect(pre).not.toBeNull()
     expect(copyButton).not.toBeNull()
-    expect(pre?.getAttribute("style")).toBeNull()
-    expect(pre?.classList.contains("relative")).toBe(true)
     expect(copyButton?.getAttribute("style")).toBeNull()
-    expect(copyButton?.classList.contains("absolute")).toBe(true)
+    expect(copyButton?.classList.contains("cursor-pointer")).toBe(true)
   })
 
   it("tracks local reference open clicks without logging the raw reference", async () => {
@@ -299,7 +296,7 @@ describe("AgentMessageEvent", () => {
       )
     })
 
-    const link = container.querySelector<HTMLAnchorElement>("a[href='./private/secret-file.ts']")
+    const link = container.querySelector<HTMLAnchorElement>("a[data-reference='./private/secret-file.ts']")
     expect(link).not.toBeNull()
 
     await act(async () => {
@@ -322,7 +319,7 @@ describe("AgentMessageEvent", () => {
     expect(JSON.stringify(track.mock.calls)).not.toContain("./private/secret-file.ts")
   })
 
-  it("logs assistant code block copy failures with message context", async () => {
+  it("does not log code content when streamdown code copy fails", async () => {
     const clipboardError = new DOMException("Permission denied for clipboard", "NotAllowedError")
     vi.mocked(window.navigator.clipboard.writeText).mockRejectedValue(clipboardError)
     const container = document.createElement("div")
@@ -346,7 +343,7 @@ describe("AgentMessageEvent", () => {
       )
     })
 
-    const copyButton = container.querySelector<HTMLButtonElement>(".code-copy-btn")
+    const copyButton = container.querySelector<HTMLButtonElement>("[data-streamdown='code-block-copy-button']")
     expect(copyButton).not.toBeNull()
 
     await act(async () => {
@@ -355,15 +352,7 @@ describe("AgentMessageEvent", () => {
     })
 
     expect(window.navigator.clipboard.writeText).toHaveBeenCalled()
-    expect(rendererLogger.warn).toHaveBeenCalledWith("agent.code.copy.failed", {
-      boundary: "renderer.agent.code-copy",
-      messageId: "message-123",
-      role: "assistant",
-      contentLength: 37,
-      codeLength: 28,
-      errorName: "NotAllowedError",
-      errorLength: "Permission denied for clipboard".length,
-    })
+    expect(rendererLogger.warn).not.toHaveBeenCalled()
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("do-not-log")
   })
 })

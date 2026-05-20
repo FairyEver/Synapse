@@ -1,9 +1,9 @@
-import { useEffect, useRef } from "react"
+import type { MouseEvent, ReactNode } from "react"
 import { toast } from "sonner"
+import { Streamdown, type Components } from "streamdown"
 import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
-import { renderMarkdown } from "@/lib/markdown"
 import { MARKDOWN_BODY_CLASSNAME } from "@/components/markdown-viewer"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import type {
@@ -15,11 +15,38 @@ import { AgentMessageBubble } from "./agent-message-bubble"
 import { AgentMessageToolbar } from "./agent-message-toolbar"
 import { errorLogMeta } from "../utils"
 
-const COPY_BUTTON_HTML = `<button type="button" class="code-copy-btn absolute right-2 top-2 inline-flex h-7 w-7 cursor-pointer items-center justify-center rounded-md border border-border bg-background text-muted-foreground opacity-0 transition-opacity" aria-label="复制代码"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="14" height="14" x="8" y="8" rx="2" ry="2"/><path d="M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"/></svg></button>`
+import "streamdown/styles.css"
 
 const LOCAL_REFERENCE_PATTERN = /(?:\[[^\]]+\]\((?:file:\/\/|\.{1,2}\/|\/|[\w.-]+\/)[^)]+\)|(?:file:\/\/|\.{1,2}\/|\/|[\w.-]+\/)[^\s`),]+(?::\d+(?::\d+)?)?)/g
 const SHORT_UPPERCASE_PATH_PATTERN = /^[A-Z0-9]{2,6}(?:\/[A-Z0-9]{2,6})+$/
 const TRAILING_REFERENCE_PUNCTUATION_PATTERN = /[.,;:!?，。；：！？]+$/
+const STREAMDOWN_CONTROLS = {
+  code: {
+    copy: true,
+    download: false,
+  },
+  mermaid: false,
+  table: false,
+} as const
+const STREAMDOWN_TRANSLATIONS = {
+  copied: "已复制",
+  copyCode: "复制代码",
+} as const
+const STREAMDOWN_COMPONENTS = {
+  a: ({ node: _node, href, children, ...props }) => {
+    const reference = streamdownLinkReference(href, children)
+
+    return (
+      <a
+        {...props}
+        data-reference={reference}
+        href={href}
+      >
+        {children}
+      </a>
+    )
+  },
+} satisfies Components
 const logger = createRendererLogger("agent")
 
 interface AgentMessageEventProps {
@@ -79,65 +106,37 @@ function AssistantMessageBody({
   readonly item: SynapseAgentMessageTimelineItem
   readonly onOpenReference: (reference: string) => void
 }) {
-  const containerRef = useRef<HTMLDivElement>(null)
   const streaming = item.streaming === true
   const preprocessed = wrapLocalReferences(item.content)
-  const renderedHtml = streaming ? "" : renderMarkdown(preprocessed)
 
-  useEffect(() => {
-    if (streaming) return
-    const container = containerRef.current
-    if (!container) return
-    const preElements = container.querySelectorAll("pre")
-    for (const pre of preElements) {
-      if (pre.querySelector(".code-copy-btn")) continue
-      pre.classList.add("relative")
-      pre.insertAdjacentHTML("beforeend", COPY_BUTTON_HTML)
-    }
-  }, [renderedHtml, streaming])
-
-  const handleClick = async (event: React.MouseEvent<HTMLDivElement>) => {
+  const handleClick = async (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target
     if (!(target instanceof HTMLElement)) return
 
-    const copyBtn = target.closest(".code-copy-btn")
+    const copyBtn = target.closest("[data-streamdown='code-block-copy-button']")
     if (copyBtn) {
-      event.preventDefault()
-      const pre = copyBtn.closest("pre")
-      if (pre) {
-        const code = pre.querySelector("code")
-        const codeText = code?.textContent ?? pre.textContent ?? ""
-        track({
-          component: "agent",
-          name: "agent-code-copy",
-          action: "click",
-          metadata: {
-            boundary: "renderer.agent.code-copy",
-            messageId: item.id,
-            role: item.role,
-            contentLength: item.content.length,
-            codeLength: codeText.length,
-          },
-        })
-        void navigator.clipboard.writeText(codeText).catch((error: unknown) => {
-          logger.warn("agent.code.copy.failed", {
-            boundary: "renderer.agent.code-copy",
-            messageId: item.id,
-            role: item.role,
-            contentLength: item.content.length,
-            codeLength: codeText.length,
-            ...errorLogMeta(error),
-          })
-          toast("复制失败")
-        })
-      }
+      const block = copyBtn.closest("[data-streamdown='code-block']")
+      const codeText = block?.querySelector("code")?.textContent ?? ""
+      track({
+        component: "agent",
+        name: "agent-code-copy",
+        action: "click",
+        metadata: {
+          boundary: "renderer.agent.code-copy",
+          messageId: item.id,
+          role: item.role,
+          contentLength: item.content.length,
+          codeLength: codeText.length,
+        },
+      })
       return
     }
 
     const link = target.closest("a")
     if (link) {
       const href = link.getAttribute("href") ?? ""
-      if (isLocalReferenceHref(href)) {
+      const reference = link.getAttribute("data-reference") ?? href
+      if (isLocalReferenceHref(reference)) {
         event.preventDefault()
         track({
           component: "agent",
@@ -148,10 +147,10 @@ function AssistantMessageBody({
             messageId: item.id,
             role: item.role,
             contentLength: item.content.length,
-            referenceLength: href.length,
+            referenceLength: reference.length,
           },
         })
-        onOpenReference(href)
+        onOpenReference(reference)
       } else {
         // External link — open in system browser via shell.openExternal
         event.preventDefault()
@@ -173,22 +172,23 @@ function AssistantMessageBody({
 
   return (
     <div className="group/message max-w-[76ch] px-1 py-2">
-      {streaming ? (
-        <div
-          data-allow-select="true"
-          className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground"
+      <div
+        data-allow-select="true"
+        onClick={handleClick}
+      >
+        <Streamdown
+          className={cn(MARKDOWN_BODY_CLASSNAME, "break-words")}
+          components={STREAMDOWN_COMPONENTS}
+          controls={STREAMDOWN_CONTROLS}
+          isAnimating={streaming}
+          linkSafety={{ enabled: false }}
+          mode={streaming ? "streaming" : "static"}
+          parseIncompleteMarkdown={streaming}
+          translations={STREAMDOWN_TRANSLATIONS}
         >
-          {item.content}
-        </div>
-      ) : (
-        <div
-          ref={containerRef}
-          data-allow-select="true"
-          className={cn(MARKDOWN_BODY_CLASSNAME, "[&_pre:hover_.code-copy-btn]:opacity-100")}
-          onClick={handleClick}
-          dangerouslySetInnerHTML={{ __html: renderedHtml }}
-        />
-      )}
+          {preprocessed}
+        </Streamdown>
+      </div>
       <AgentMessageToolbar
         timestamp={item.timestamp}
         content={item.content}
@@ -316,6 +316,21 @@ function isLocalReferenceHref(href: string): boolean {
     || href.startsWith("../")
     || href.startsWith("/")
     || /^[\w.-]+\//.test(href)
+}
+
+function streamdownLinkReference(href: string | undefined, children: ReactNode): string | undefined {
+  if (!href) return href
+  const childText = reactNodeText(children)
+  if (isLocalReferenceHref(href) && isLocalReferenceHref(childText)) {
+    return childText
+  }
+  return href
+}
+
+function reactNodeText(node: ReactNode): string {
+  if (typeof node === "string" || typeof node === "number") return String(node)
+  if (Array.isArray(node)) return node.map(reactNodeText).join("")
+  return ""
 }
 
 export { AgentMessageEvent, wrapLocalReferences }
