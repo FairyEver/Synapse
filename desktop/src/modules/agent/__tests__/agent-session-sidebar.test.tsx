@@ -30,7 +30,6 @@ vi.mock("@/app-shell/config", () => ({
 }))
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-Element.prototype.scrollIntoView = vi.fn()
 
 let roots: Root[] = []
 
@@ -111,15 +110,10 @@ describe("AgentSessionSidebar", () => {
     expect(document.body.textContent).not.toContain("Workflow Run")
 
     await act(async () => {
-      document.querySelector<HTMLButtonElement>("[role='combobox']")?.click()
-    })
-
-    const workflowOption = [...document.querySelectorAll<HTMLElement>("[role='option']")]
-      .find((item) => item.textContent === "工作流")
-    expect(workflowOption).toBeDefined()
-
-    await act(async () => {
-      workflowOption?.click()
+      const sourceSelect = document.querySelector<HTMLSelectElement>("select[aria-label='会话来源']")
+      expect(sourceSelect).toBeDefined()
+      sourceSelect!.value = "workflow"
+      sourceSelect!.dispatchEvent(new Event("change", { bubbles: true }))
     })
 
     expect(document.body.textContent).not.toContain("User Chat")
