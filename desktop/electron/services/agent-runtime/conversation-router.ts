@@ -64,6 +64,7 @@ export class ConversationRouter {
   private readonly commandRouter: AgentCommandRouter | undefined
   private readonly pendingPermissions: Map<string, PendingPermissionState>
   private readonly permissionTimeoutMs: number
+  private readonly liveMessages = new WeakMap<object, AgentMessage>()
 
   constructor(input: {
     readonly deps: ConversationRouterDeps
@@ -226,9 +227,10 @@ export class ConversationRouter {
       return this.finishWithError(message, conversation.id, governance.reason ?? "Message blocked")
     }
 
+    let liveMessage = message
     const commandResult = await this.commandRouter?.handle(message, conversation)
     if (commandResult && isPromptCommandRoute(commandResult)) {
-      message = { ...message, content: commandResult.content }
+      liveMessage = { ...message, content: commandResult.content }
     } else if (commandResult) {
       const turnId = randomUUID()
       for (const [index, event] of commandResult.events.entries()) {
@@ -252,6 +254,7 @@ export class ConversationRouter {
         liveEventTimeoutMs: options.liveEventTimeoutMs,
         resolve,
       }
+      this.liveMessages.set(turn, liveMessage)
       state.queue.push(turn)
       if (!state.busy) {
         state.busy = true
@@ -295,6 +298,7 @@ export class ConversationRouter {
           const result = await this.processTurn(
             state,
             turn.message,
+            this.liveMessages.get(turn) ?? turn.message,
             turn.conversationId,
             ac.signal,
             turn.liveEventTimeoutMs,
@@ -334,6 +338,7 @@ export class ConversationRouter {
   private async processTurn(
     state: RuntimeSessionState,
     message: AgentMessage,
+    liveMessage: AgentMessage,
     conversationId: string,
     abortSignal?: AbortSignal,
     liveEventTimeoutMs?: number,
@@ -363,12 +368,12 @@ export class ConversationRouter {
           message,
           abortSignal,
         })
-        const liveMessage = await Promise.resolve(this.deps.prepareMessage?.(message, {
+        const preparedMessage = await Promise.resolve(this.deps.prepareMessage?.(liveMessage, {
           isNewLiveSession: sessionHandle.created,
-        }) ?? message)
+        }) ?? liveMessage)
         const result = await this.processLiveTurn(
           state,
-          liveMessage,
+          preparedMessage,
           conversation,
           sessionHandle.liveSession,
           turnId,
@@ -521,13 +526,17 @@ export class ConversationRouter {
     let error: string | undefined
     try {
       const savedConversation = await this.repository.appendHistory(conversation.id, "user", message.content)
-      const { liveSession } = await this.sessionManager.getOrCreateSession({
+      const sessionHandle = await this.sessionManager.getOrCreateSession({
         state,
         conversation: savedConversation,
         message,
         abortSignal,
       })
-      const accepted = await liveSession.send(message)
+      const liveSession = sessionHandle.liveSession
+      const liveMessage = await Promise.resolve(this.deps.prepareMessage?.(message, {
+        isNewLiveSession: sessionHandle.created,
+      }) ?? message)
+      const accepted = await liveSession.send(liveMessage)
       if (!accepted) {
         await this.sessionManager.closeCurrentTurn(conversation.id)
         error = "Agent session ended before message could be sent."

@@ -349,6 +349,27 @@ describe("ConversationRouter", () => {
     ])
   })
 
+  it("stores original prompt command content while sending the expanded prompt", async () => {
+    const commandRouter = {
+      handle: vi.fn(async () => ({
+        kind: "prompt",
+        content: "expanded knowledge base status prompt",
+      })),
+    } as unknown as AgentCommandRouter
+    const session = new ScriptedSession([
+      { type: "result", content: "status", done: true, sdkSessionId: "sdk-1" },
+    ], "sdk-1")
+    const { conversations, router } = createRouter({ commandRouter, session })
+
+    const result = await router.send(baseMessage("/kb status"))
+    const savedConversation = await conversations.get(result.conversationId)
+
+    expect(session.sent).toEqual(["expanded knowledge base status prompt"])
+    expect(savedConversation?.history.filter((entry) => entry.role === "user")).toEqual([
+      expect.objectContaining({ content: "/kb status" }),
+    ])
+  })
+
   it("returns streamed SDK text as side session partial text when the relay times out", async () => {
     const session = new ControlledSession("sdk-1")
     const { router } = createRouter({ session })
@@ -363,6 +384,29 @@ describe("ConversationRouter", () => {
       partialText: "partial",
       resultText: "partial",
     })
+  })
+
+  it("prepares new side live session messages while preserving relay history", async () => {
+    const session = new ControlledSession("sdk-side")
+    const prepareMessage = vi.fn((message: AgentMessage, context: { readonly isNewLiveSession: boolean }) => ({
+      ...message,
+      content: `${context.isNewLiveSession ? "new" : "reused"}:${message.content}`,
+    }))
+    const { conversations, router } = createRouter({ session, prepareMessage })
+
+    const pending = router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 100)
+    await waitFor(() => session.sent.length > 0)
+    session.emitResult("done")
+    const result = await pending
+    const savedConversation = await conversations.get(result.conversationId)
+
+    expect(prepareMessage).toHaveBeenCalledWith(expect.objectContaining({ content: "relay" }), {
+      isNewLiveSession: true,
+    })
+    expect(session.sent).toEqual(["new:relay"])
+    expect(savedConversation?.history.filter((entry) => entry.role === "user")).toEqual([
+      expect.objectContaining({ content: "relay" }),
+    ])
   })
 
   it("persists a terminal error when a side session relay times out", async () => {
