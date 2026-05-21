@@ -1,8 +1,15 @@
-import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { access, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { KnowledgeBaseService, KNOWLEDGE_BASE_TEMPLATE_VERSION } from "../knowledge-base-service"
+
+vi.mock("electron", () => ({
+  app: {
+    isPackaged: false,
+    getAppPath: () => process.cwd(),
+  },
+}))
 
 const roots: string[] = []
 
@@ -35,11 +42,32 @@ describe("KnowledgeBaseService", () => {
     const service = new KnowledgeBaseService()
     await service.initialize({ projectPath: targetPath, mode: "create" })
     await writeFile(path.join(targetPath, "wiki", "hot.md"), "# Custom Hot\n")
+    await unlink(path.join(targetPath, "wiki", "log.md"))
 
     const result = await service.initialize({ projectPath: targetPath, mode: "repair" })
 
+    expect(result.createdFiles).toContain("wiki/log.md")
     expect(result.createdFiles).not.toContain("wiki/hot.md")
+    await expect(readFile(path.join(targetPath, "wiki", "log.md"), "utf8")).resolves.toContain("# Knowledge Log")
     await expect(readFile(path.join(targetPath, "wiki", "hot.md"), "utf8")).resolves.toBe("# Custom Hot\n")
+  })
+
+  it("rejects create mode when the target is already a knowledge base", async () => {
+    const targetPath = await tempDir()
+    const service = new KnowledgeBaseService()
+    await service.initialize({ projectPath: targetPath, mode: "create" })
+
+    await expect(service.initialize({ projectPath: targetPath, mode: "create" })).rejects.toThrow("知识库已存在")
+  })
+
+  it("rejects required writes through symlinked project directories", async () => {
+    const targetPath = await tempDir()
+    const outsidePath = await tempDir()
+    const service = new KnowledgeBaseService()
+    await symlink(outsidePath, path.join(targetPath, "wiki"), "dir")
+
+    await expect(service.initialize({ projectPath: targetPath, mode: "repair" })).rejects.toThrow("符号链接")
+    await expect(readFile(path.join(outsidePath, "log.md"), "utf8")).rejects.toThrow()
   })
 
   it("detects existing knowledge base folders by metadata or folder shape", async () => {

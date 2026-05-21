@@ -1,5 +1,6 @@
+import { app } from "electron"
 import { constants } from "node:fs"
-import { access, copyFile, mkdir, readFile, writeFile } from "node:fs/promises"
+import { access, copyFile, lstat, mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type {
   SynapseKnowledgeBaseInitializePayload,
@@ -59,12 +60,16 @@ export class KnowledgeBaseService {
   async initialize(payload: SynapseKnowledgeBaseInitializePayload): Promise<SynapseKnowledgeBaseInitializeResult> {
     const projectPath = path.resolve(payload.projectPath)
     await mkdir(projectPath, { recursive: true })
+    if (payload.mode === "create" && (await this.inspect(projectPath)).isKnowledgeBase) {
+      throw new Error("知识库已存在。")
+    }
 
     const createdFiles: string[] = []
     const existingFiles: string[] = []
     for (const relativePath of REQUIRED_PATHS) {
       const targetPath = assertInside(projectPath, path.join(projectPath, relativePath))
       const templatePath = path.join(this.templateRoot, relativePath)
+      await assertNoSymlinkAncestors(projectPath, relativePath)
       await mkdir(path.dirname(targetPath), { recursive: true })
       if (await pathExists(targetPath)) {
         existingFiles.push(relativePath)
@@ -100,13 +105,13 @@ function resolveTemplateRoot(): string {
   if (process.env.SYNAPSE_KB_TEMPLATE_ROOT) {
     return process.env.SYNAPSE_KB_TEMPLATE_ROOT
   }
-  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
-  if (resourcesPath) {
+
+  if (app.isPackaged) {
+    const resourcesPath = (process as NodeJS.Process & { resourcesPath: string }).resourcesPath
     return path.join(resourcesPath, "knowledge-base", "templates")
   }
-  const cwd = path.resolve(process.cwd())
-  const desktopRoot = path.basename(cwd) === "desktop" ? cwd : path.join(cwd, "desktop")
-  return path.join(desktopRoot, "resources", "knowledge-base", "templates")
+
+  return path.join(app.getAppPath(), "resources", "knowledge-base", "templates")
 }
 
 function assertInside(rootPath: string, targetPath: string): string {
@@ -125,6 +130,29 @@ async function pathExists(targetPath: string): Promise<boolean> {
     return true
   } catch {
     return false
+  }
+}
+
+async function assertNoSymlinkAncestors(projectPath: string, relativePath: string): Promise<void> {
+  const directory = path.dirname(relativePath)
+  if (directory === ".") {
+    return
+  }
+
+  let currentPath = projectPath
+  for (const segment of directory.split(/[\\/]/)) {
+    currentPath = path.join(currentPath, segment)
+    try {
+      const stat = await lstat(currentPath)
+      if (stat.isSymbolicLink()) {
+        throw new Error(`知识库路径不能包含符号链接目录：${path.relative(projectPath, currentPath)}`)
+      }
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+        return
+      }
+      throw error
+    }
   }
 }
 
