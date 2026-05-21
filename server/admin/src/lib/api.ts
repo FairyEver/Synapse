@@ -6,6 +6,9 @@ export interface SystemOverview {
   readonly serverTime: string
   readonly counts: {
     readonly auditLogs: number
+    readonly users: number
+    readonly teams: number
+    readonly invitations: number
   }
 }
 
@@ -24,6 +27,38 @@ export interface AuditLog {
   readonly targetId: string
   readonly detail: unknown
   readonly ipAddress: string
+  readonly createdAt: string
+}
+
+export interface AdminUserRow {
+  readonly id: string
+  readonly email: string
+  readonly status: "active" | "disabled"
+  readonly memberships: Array<{
+    readonly role: "owner" | "member"
+    readonly team: { readonly id: string; readonly name: string }
+  }>
+  readonly createdAt: string
+}
+
+export interface AdminTeamRow {
+  readonly id: string
+  readonly name: string
+  readonly createdByUser: { readonly email: string }
+  readonly memberships: Array<{
+    readonly role: "owner" | "member"
+    readonly user: { readonly email: string }
+    readonly createdAt: string
+  }>
+  readonly createdAt: string
+}
+
+export interface AdminInvitationRow {
+  readonly id: string
+  readonly type: "user_signup" | "team_join"
+  readonly expiresAt: string
+  readonly usedAt: string | null
+  readonly acceptedByUser: { readonly email: string } | null
   readonly createdAt: string
 }
 
@@ -76,6 +111,14 @@ function readErrorMessage(body: unknown): string {
   return "请求失败"
 }
 
+function paginationSuffix(options: { readonly page?: number; readonly pageSize?: number }): string {
+  const query = new URLSearchParams()
+  if (options.page) query.set("page", String(options.page))
+  if (options.pageSize) query.set("pageSize", String(options.pageSize))
+  const value = query.toString()
+  return value ? `?${value}` : ""
+}
+
 export const adminApi = {
   getSession: () => request<AdminSession>("/admin/session"),
   login: (input: { email: string; password: string }) =>
@@ -88,6 +131,19 @@ export const adminApi = {
       method: "POST",
     }),
   getSystemOverview: () => request<SystemOverview>("/admin/api/system"),
+  createSignupInvitation: () =>
+    request<{ id: string; token: string; expiresAt: string }>("/admin/api/invitations", { method: "POST" }),
+  listInvitations: (options: { readonly page?: number; readonly pageSize?: number } = {}) =>
+    request<PaginatedResponse<AdminInvitationRow>>(`/admin/api/invitations${paginationSuffix(options)}`),
+  listUsers: (options: { readonly page?: number; readonly pageSize?: number } = {}) =>
+    request<PaginatedResponse<AdminUserRow>>(`/admin/api/users${paginationSuffix(options)}`),
+  updateUserStatus: (id: string, status: "active" | "disabled") =>
+    request<AdminUserRow>(`/admin/api/users/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status }),
+    }),
+  listTeams: (options: { readonly page?: number; readonly pageSize?: number } = {}) =>
+    request<PaginatedResponse<AdminTeamRow>>(`/admin/api/teams${paginationSuffix(options)}`),
   listAuditLogs: (options: {
     readonly action?: string
     readonly from?: string

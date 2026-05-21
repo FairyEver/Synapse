@@ -24,6 +24,18 @@ export function SystemPage() {
             <TableCell>审计日志</TableCell>
             <TableCell className="text-right">{formatCount(data.counts.auditLogs)}</TableCell>
           </TableRow>
+          <TableRow>
+            <TableCell>用户</TableCell>
+            <TableCell className="text-right">{formatCount(data.counts.users)}</TableCell>
+          </TableRow>
+          <TableRow>
+            <TableCell>团队</TableCell>
+            <TableCell className="text-right">{formatCount(data.counts.teams)}</TableCell>
+          </TableRow>
+          <TableRow>
+            <TableCell>邀请</TableCell>
+            <TableCell className="text-right">{formatCount(data.counts.invitations)}</TableCell>
+          </TableRow>
         </TableBody>
       </Table>
       <div className="text-sm text-muted-foreground">服务器时间：{formatDate(data.serverTime)}</div>
