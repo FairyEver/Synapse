@@ -146,4 +146,18 @@ describe("content capability validator", () => {
       baseHistoryDirname: "20260521000000Z__user__abc123",
     })
   })
+
+  it("rejects force updates and deletes", () => {
+    expect(() => normalizeUpdateContentParams("rule", {
+      ...validRuleParams,
+      id: "rule-1",
+      baseHistoryDirname: "20260521000000Z__user__abc123",
+      force: true,
+    })).toThrow(ContentCapabilityError)
+    expect(() => normalizeDeleteContentParams("rule", {
+      id: "rule-1",
+      baseHistoryDirname: "20260521000000Z__user__abc123",
+      force: true,
+    })).toThrow(ContentCapabilityError)
+  })
 })

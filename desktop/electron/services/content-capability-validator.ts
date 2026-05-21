@@ -109,6 +109,7 @@ function normalizeUpdateContentParams<T extends SynapseContentType>(
   contentType: T,
   params: ContentToolParams,
 ): SynapseUpdateContentPayload<T> {
+  assertNoForce(params)
   const payload = normalizeContentPayload(contentType, params, true)
   return payload as SynapseUpdateContentPayload<T>
 }
@@ -118,11 +119,18 @@ function normalizeDeleteContentParams(
   params: ContentToolParams,
 ): NormalizedDeleteContentParams {
   assertContentType(contentType)
+  assertNoForce(params)
 
   return {
     type: contentType,
     id: requireTrimmedString(params.id, "id"),
     baseHistoryDirname: requireTrimmedString(params.baseHistoryDirname, "baseHistoryDirname"),
+  }
+}
+
+function assertNoForce(params: ContentToolParams): void {
+  if ("force" in params) {
+    throwInvalid("force", "MCP 内容发布不支持 force。")
   }
 }
 
