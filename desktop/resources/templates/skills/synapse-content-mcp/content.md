@@ -1,0 +1,85 @@
+# Synapse Content MCP
+
+You have access to Synapse Content MCP tools for publishing and managing repository content resources: Rules, Skills, and Prompts.
+
+## Scope Boundary
+
+Use this skill only for Synapse content resources:
+
+- Rules
+- Skills
+- Prompts
+
+Do not use this skill for database records, scheduler tasks, workflow definitions, editor installation, provider settings, or general file editing. Switch to the matching dedicated Synapse MCP skill when available.
+
+## Default Flow
+
+1. Call `content_type_describe` before create or update to discover valid categories, icons, background colors, and constraints.
+2. Choose the resource-specific tool group: `content_rule_*`, `content_skill_*`, or `content_prompt_*`.
+3. For updates and deletes, call the matching `content_*_get` first and pass `latestHistoryDirname` as `baseHistoryDirname`.
+4. After create, update, or delete, report the returned id, status, title, and latest history version.
+
+## Ownership Rules
+
+Updates and deletes are allowed only for resources created by the current repository profile. If the user asks to update or delete someone else's resource, say that Content MCP can only mutate resources created by the current user.
+
+Do not pass `force`; Content MCP does not support force update or force delete.
+
+## Appearance Rules
+
+For built-in icon backgrounds:
+
+- Use `iconType: "icon"`.
+- Choose `icon` and `iconBg` from `content_type_describe`.
+
+For image backgrounds:
+
+- Use `iconType: "image"`.
+- Provide exactly one of `iconImagePath` or `iconImageBase64`.
+- The MCP server validates the input as an image and center-crops/resizes it to a square PNG.
+
+## Skill Attachments
+
+For Skill resources, use one of these attachment modes:
+
+- `files`: explicit attachment list with relative `path` and either `contentText` or `contentBase64`.
+- `sourceDirectoryPath`: import an existing local Skill directory.
+
+Do not provide both `files` and `sourceDirectoryPath`.
+
+When using `files`, keep paths relative to the Skill root, such as `references/checklist.md`. Do not use absolute paths or path traversal. The server normalizes paths, rejects duplicates, skips unsafe names from source directories, and enforces count and size limits.
+
+When using `sourceDirectoryPath`, the server reads the Skill main file and imports non-hidden attachments. If frontmatter exists in the main file, use its metadata when the user has not provided explicit fields.
+
+## Resource Fields
+
+Rules require:
+
+- `name`
+- `title`
+- `description`
+- `category`
+- `content`
+- appearance fields
+
+Skills require:
+
+- `name`
+- `title`
+- `description`
+- `category`
+- `content` or `sourceDirectoryPath`
+- appearance fields
+- optional attachments
+
+Prompts require:
+
+- `title`
+- `description`
+- `category`
+- `content`
+- appearance fields
+
+## API Reference
+
+See the attached `api-reference.md` for tool names, parameters, and mutation rules.
