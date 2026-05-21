@@ -1,13 +1,16 @@
 import { Module } from "@nestjs/common"
-import { JwtModule, JwtService } from "@nestjs/jwt"
-import bcrypt from "bcryptjs"
+import { JwtModule } from "@nestjs/jwt"
 import { loadEnv } from "../config/env"
+import { AuditLogService } from "../common/audit-log.service"
+import { PrismaModule } from "../prisma/prisma.module"
 import { AdminAuthController } from "./admin-auth.controller"
 import { AdminAuthGuard } from "./admin-auth.guard"
 import { AdminAuthService } from "./admin-auth.service"
+import { AdminBootstrapService, adminBootstrapEnvToken } from "./admin-bootstrap.service"
 
 @Module({
   imports: [
+    PrismaModule,
     JwtModule.registerAsync({
       useFactory: () => {
         const env = loadEnv(process.env)
@@ -20,16 +23,17 @@ import { AdminAuthService } from "./admin-auth.service"
   ],
   controllers: [AdminAuthController],
   providers: [
+    AdminAuthService,
     {
-      provide: AdminAuthService,
-      useFactory: async (jwt: JwtService) => {
+      provide: adminBootstrapEnvToken,
+      useFactory: () => {
         const env = loadEnv(process.env)
-        const passwordHash = await bcrypt.hash(env.adminPassword, 10)
-        return new AdminAuthService(jwt, env.adminEmail.toLowerCase(), passwordHash)
+        return { adminEmail: env.adminEmail, adminPassword: env.adminPassword }
       },
-      inject: [JwtService],
     },
+    AdminBootstrapService,
     AdminAuthGuard,
+    AuditLogService,
   ],
   exports: [AdminAuthService, AdminAuthGuard],
 })

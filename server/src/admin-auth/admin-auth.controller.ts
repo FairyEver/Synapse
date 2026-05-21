@@ -39,7 +39,7 @@ export class AdminAuthController {
 
   @UseGuards(AdminAuthGuard)
   @Get("/session")
-  getSession() {
-    return { email: this.auth.getEmail() }
+  async getSession() {
+    return { email: await this.auth.getEmail() }
   }
 }

@@ -7,9 +7,12 @@ import { LoggerModule } from "nestjs-pino"
 import { join } from "node:path"
 import { AdminModule } from "./admin/admin.module"
 import { AdminAuthModule } from "./admin-auth/admin-auth.module"
+import { UserAuthModule } from "./auth/user-auth.module"
 import { BackupModule } from "./backup/backup.module"
 import { HealthModule } from "./health/health.module"
+import { InvitationsModule } from "./invitations/invitations.module"
 import { PrismaModule } from "./prisma/prisma.module"
+import { TeamsModule } from "./teams/teams.module"
 
 @Module({
   imports: [
@@ -46,6 +49,9 @@ import { PrismaModule } from "./prisma/prisma.module"
       exclude: ["/admin/api/(.*)", "/admin/login", "/admin/logout"],
     }),
     PrismaModule,
+    InvitationsModule,
+    UserAuthModule,
+    TeamsModule,
     AdminAuthModule,
     AdminModule,
     BackupModule,

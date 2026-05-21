@@ -5,6 +5,9 @@ const envSchema = z.object({
   ADMIN_EMAIL: z.string().email(),
   ADMIN_PASSWORD: z.string().min(12),
   ADMIN_JWT_SECRET: z.string().min(32),
+  USER_ACCESS_JWT_SECRET: z.string().min(32).optional(),
+  USER_ACCESS_TOKEN_MINUTES: z.coerce.number().int().positive().default(15),
+  USER_REFRESH_TOKEN_DAYS: z.coerce.number().int().positive().default(30),
   DATABASE_POOL_SIZE: z.coerce.number().int().min(1).max(100).default(10),
   PORT: z.coerce.number().int().positive().default(3000),
   COS_SECRET_ID: z.string().optional(),
@@ -18,6 +21,9 @@ export interface ServerEnv {
   readonly adminEmail: string
   readonly adminPassword: string
   readonly adminJwtSecret: string
+  readonly userAccessJwtSecret: string
+  readonly userAccessTokenMinutes: number
+  readonly userRefreshTokenDays: number
   readonly databasePoolSize: number
   readonly port: number
   readonly cosSecretId?: string
@@ -38,6 +44,9 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     adminEmail: result.data.ADMIN_EMAIL,
     adminPassword: result.data.ADMIN_PASSWORD,
     adminJwtSecret: result.data.ADMIN_JWT_SECRET,
+    userAccessJwtSecret: result.data.USER_ACCESS_JWT_SECRET ?? result.data.ADMIN_JWT_SECRET,
+    userAccessTokenMinutes: result.data.USER_ACCESS_TOKEN_MINUTES,
+    userRefreshTokenDays: result.data.USER_REFRESH_TOKEN_DAYS,
     databasePoolSize: result.data.DATABASE_POOL_SIZE,
     port: result.data.PORT,
     cosSecretId: result.data.COS_SECRET_ID,

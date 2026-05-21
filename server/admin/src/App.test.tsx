@@ -9,6 +9,7 @@ vi.mock("@/lib/api", () => ({
     getSession: vi.fn(),
     logout: vi.fn(),
     getSystemOverview: vi.fn(),
+    listUsers: vi.fn(),
   },
 }))
 
@@ -38,7 +39,7 @@ describe("App", () => {
     vi.mocked(adminApi.getSession).mockResolvedValue({ email: "admin@d2.com" })
     vi.mocked(adminApi.getSystemOverview).mockResolvedValue({
       serverTime: "2026-05-21T00:00:00.000Z",
-      counts: { auditLogs: 0 },
+      counts: { auditLogs: 0, users: 0, teams: 0, invitations: 0 },
     })
 
     const result = await render(<App />)
@@ -53,5 +54,23 @@ describe("App", () => {
     )
 
     expect(separator?.className).toContain("data-vertical:self-center")
+  })
+
+  it("renders the users route", async () => {
+    window.location.hash = "#/users"
+    vi.mocked(adminApi.getSession).mockResolvedValue({ email: "admin@d2.com" })
+    vi.mocked(adminApi.listUsers).mockResolvedValue({
+      data: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+    })
+
+    const result = await render(<App />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.querySelector("h1")?.textContent).toBe("用户")
+    })
   })
 })

@@ -10,9 +10,12 @@ import {
 import { TooltipProvider } from "@/components/ui/tooltip"
 import { AuditLogsPage } from "@/pages/audit-logs-page"
 import { BackupPage } from "@/pages/backup-page"
+import { InvitationsPage } from "@/pages/invitations-page"
 import { LoginPage } from "@/pages/login-page"
 import { SystemPage } from "@/pages/system-page"
 import { LogsPage } from "@/pages/logs-page"
+import { TeamsPage } from "@/pages/teams-page"
+import { UsersPage } from "@/pages/users-page"
 import { adminApi, type AdminSession } from "@/lib/api"
 import { useIdleTimeout } from "@/hooks/use-idle-timeout"
 
@@ -21,12 +24,18 @@ type Route =
   | { name: "system" }
   | { name: "backup" }
   | { name: "logs" }
+  | { name: "users" }
+  | { name: "teams" }
+  | { name: "invitations" }
 
 function routeFromHash(): Route {
   const route = window.location.hash.replace(/^#\/?/, "") || "system"
   if (route === "audit-logs") return { name: "audit-logs" }
   if (route === "backup") return { name: "backup" }
   if (route === "logs") return { name: "logs" }
+  if (route === "users") return { name: "users" }
+  if (route === "teams") return { name: "teams" }
+  if (route === "invitations") return { name: "invitations" }
   return { name: "system" }
 }
 
@@ -48,6 +57,12 @@ function titleForRoute(route: Route): string {
       return "备份管理"
     case "logs":
       return "系统日志"
+    case "users":
+      return "用户"
+    case "teams":
+      return "团队"
+    case "invitations":
+      return "邀请"
     case "system":
     default:
       return "系统"
@@ -123,6 +138,9 @@ export default function App() {
             {route.name === "system" ? <SystemPage /> : null}
             {route.name === "backup" ? <BackupPage /> : null}
             {route.name === "logs" ? <LogsPage /> : null}
+            {route.name === "users" ? <UsersPage /> : null}
+            {route.name === "teams" ? <TeamsPage /> : null}
+            {route.name === "invitations" ? <InvitationsPage /> : null}
           </main>
         </SidebarInset>
       </SidebarProvider>

@@ -17,7 +17,9 @@ import {
   ActivityIcon,
   FileTextIcon,
   HardDriveIcon,
+  LinkIcon,
   ScrollTextIcon,
+  UsersIcon,
 } from "lucide-react"
 
 const data = {
@@ -29,6 +31,30 @@ const data = {
     },
   ],
   navMain: [
+    {
+      title: "用户",
+      url: "#/users",
+      icon: (
+        <UsersIcon
+        />
+      ),
+    },
+    {
+      title: "团队",
+      url: "#/teams",
+      icon: (
+        <UsersIcon
+        />
+      ),
+    },
+    {
+      title: "邀请",
+      url: "#/invitations",
+      icon: (
+        <LinkIcon
+        />
+      ),
+    },
     {
       title: "审计日志",
       url: "#/audit-logs",

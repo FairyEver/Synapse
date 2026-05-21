@@ -2,6 +2,14 @@
 
 Synapse 后端服务，包含 API 和 Admin 管理后台。
 
+## 账号与团队
+
+- 首次启动时，服务会用 `ADMIN_EMAIL` 和 `ADMIN_PASSWORD` 创建唯一平台管理员；已有管理员时不会覆盖。
+- 管理员通过 Admin 后台创建一次性注册邀请。
+- 普通账号通过 `/api/auth/register` 注册，通过 `/api/auth/login` 登录。
+- 普通账号会获得 access token 和 refresh token。
+- 普通账号可以创建一个团队，或通过一次性团队邀请加入一个团队。
+
 ## 技术栈
 
 - NestJS 11 + TypeScript
@@ -120,11 +128,15 @@ ADMIN_PASSWORD=设一个至少12位的密码
 
 # JWT 密钥（至少 32 位，粘贴第四步生成的 hex 字符）
 ADMIN_JWT_SECRET=粘贴第四步生成的那串hex字符
+USER_ACCESS_JWT_SECRET=可复用上面的hex字符，也可以单独生成
+USER_ACCESS_TOKEN_MINUTES=15
+USER_REFRESH_TOKEN_DAYS=30
 ```
 
 常见配置错误（启动时会报 "服务端环境变量无效"）：
 - `ADMIN_PASSWORD` 少于 12 位
 - `ADMIN_JWT_SECRET` 少于 32 位（必须用 `openssl rand -hex 32` 生成的 64 字符）
+- `USER_ACCESS_JWT_SECRET` 少于 32 位
 - `ADMIN_EMAIL` 不是合法邮箱格式
 
 ---
@@ -227,7 +239,7 @@ curl http://127.0.0.1:3000/healthz
 - API：`https://api.yourdomain.com/healthz`
 - 管理后台：`https://api.yourdomain.com/admin`
 
-用第四步设置的 ADMIN_EMAIL 和 ADMIN_PASSWORD 登录。
+用 `.env` 中的 `ADMIN_EMAIL` 和 `ADMIN_PASSWORD` 登录。登录后可创建普通账号注册邀请。
 
 ---
 
