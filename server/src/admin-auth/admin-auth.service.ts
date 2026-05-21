@@ -1,6 +1,7 @@
-import { Injectable, UnauthorizedException } from "@nestjs/common"
+import { Injectable, Optional, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { verifyPassword } from "../auth/password"
+import { AuditLogService } from "../common/audit-log.service"
 import { PrismaService } from "../prisma/prisma.service"
 
 interface AdminJwtPayload {
@@ -13,6 +14,7 @@ export class AdminAuthService {
   constructor(
     private readonly jwt: JwtService,
     private readonly prisma: PrismaService,
+    @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
   async getEmail(): Promise<string> {
@@ -25,10 +27,24 @@ export class AdminAuthService {
     const admin = await this.prisma.adminUser.findFirst({ orderBy: { createdAt: "asc" } })
     const passwordMatches = admin ? await verifyPassword(password, admin.passwordHash) : false
     if (!admin || admin.status !== "active" || normalizedEmail !== admin.email || !passwordMatches) {
+      await this.auditLog?.record({
+        adminEmail: normalizedEmail,
+        action: "admin.login.failure",
+        targetType: "admin",
+        targetId: admin?.id ?? "unknown",
+        ipAddress: "system",
+      })
       throw new UnauthorizedException("管理员账号或密码错误。")
     }
 
     const token = this.jwt.sign({ sub: admin.id, email: admin.email } satisfies AdminJwtPayload)
+    await this.auditLog?.record({
+      adminEmail: admin.email,
+      action: "admin.login.success",
+      targetType: "admin",
+      targetId: admin.id,
+      ipAddress: "system",
+    })
     return { email: admin.email, token }
   }
 

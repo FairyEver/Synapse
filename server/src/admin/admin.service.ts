@@ -1,5 +1,6 @@
-import { Injectable } from "@nestjs/common"
+import { Injectable, Optional } from "@nestjs/common"
 import type { UserStatus } from "@prisma/client"
+import { AuditLogService } from "../common/audit-log.service"
 import { InvitationsService } from "../invitations/invitations.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
 import { PrismaService } from "../prisma/prisma.service"
@@ -9,6 +10,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly invitations: InvitationsService,
+    @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
   async getSystemOverview() {
@@ -30,8 +32,16 @@ export class AdminService {
     }
   }
 
-  createSignupInvitation(adminId: string) {
-    return this.invitations.createSignupInvitation({ adminId })
+  async createSignupInvitation(admin: { readonly id: string; readonly email: string }) {
+    const invitation = await this.invitations.createSignupInvitation({ adminId: admin.id })
+    await this.auditLog?.record({
+      adminEmail: admin.email,
+      action: "admin.invitation.create",
+      targetType: "invitation",
+      targetId: invitation.id,
+      ipAddress: "system",
+    })
+    return invitation
   }
 
   async listUsers(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {
@@ -50,11 +60,20 @@ export class AdminService {
     return { data, total, page: page.page, pageSize: page.pageSize }
   }
 
-  updateUserStatus(id: string, input: { status: UserStatus }) {
-    return this.prisma.user.update({
+  async updateUserStatus(id: string, input: { status: UserStatus }, actorEmail = "system") {
+    const user = await this.prisma.user.update({
       where: { id },
       data: { status: input.status },
     })
+    await this.auditLog?.record({
+      adminEmail: actorEmail,
+      action: "admin.user.status_update",
+      targetType: "user",
+      targetId: id,
+      detail: { status: input.status },
+      ipAddress: "system",
+    })
+    return user
   }
 
   async listTeams(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {

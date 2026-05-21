@@ -1,6 +1,7 @@
-import { BadRequestException, Inject, Injectable, UnauthorizedException } from "@nestjs/common"
+import { BadRequestException, Inject, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { Prisma, type User } from "@prisma/client"
+import { AuditLogService } from "../common/audit-log.service"
 import { hashPassword, verifyPassword } from "./password"
 import { createOpaqueToken, hashToken } from "./token"
 import { InvitationsService } from "../invitations/invitations.service"
@@ -36,11 +37,12 @@ export class UserAuthService {
     private readonly invitations: InvitationsService,
     private readonly jwt: JwtService,
     @Inject(userAuthOptionsToken) private readonly options: UserAuthOptions,
+    @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
   async register(input: { invitationToken: string; email: string; password: string }): Promise<UserTokenPair> {
     try {
-      return await this.prisma.$transaction(async (tx) => {
+      const result = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: {
             email: input.email.trim().toLowerCase(),
@@ -52,8 +54,17 @@ export class UserAuthService {
           type: "user_signup",
           acceptedByUserId: user.id,
         }, tx)
-        return this.issueTokenPair(user, tx)
+        const tokens = await this.issueTokenPair(user, tx)
+        return { tokens, user }
       })
+      await this.auditLog?.record({
+        adminEmail: result.user.email,
+        action: "user.register.success",
+        targetType: "user",
+        targetId: result.user.id,
+        ipAddress: "system",
+      })
+      return result.tokens
     } catch (error) {
       if (isUniqueConstraintError(error)) {
         throw new BadRequestException("邮箱已注册。")
@@ -67,12 +78,27 @@ export class UserAuthService {
     const user = await this.prisma.user.findUnique({ where: { email } })
     const passwordMatches = user ? await verifyPassword(input.password, user.passwordHash) : false
     if (!user || !passwordMatches) {
+      await this.auditLog?.record({
+        adminEmail: email,
+        action: "user.login.failure",
+        targetType: "user",
+        targetId: user?.id ?? "unknown",
+        ipAddress: "system",
+      })
       throw new UnauthorizedException("邮箱或密码错误。")
     }
     if (user.status !== "active") {
       throw new UnauthorizedException("账号已停用。")
     }
-    return this.issueTokenPair(user)
+    const tokens = await this.issueTokenPair(user)
+    await this.auditLog?.record({
+      adminEmail: user.email,
+      action: "user.login.success",
+      targetType: "user",
+      targetId: user.id,
+      ipAddress: "system",
+    })
+    return tokens
   }
 
   async refresh(input: { refreshToken: string }): Promise<UserTokenPair> {

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common"
 import { JwtModule } from "@nestjs/jwt"
+import { AuditLogService } from "../common/audit-log.service"
 import { loadEnv } from "../config/env"
 import { InvitationsModule } from "../invitations/invitations.module"
 import { PrismaModule } from "../prisma/prisma.module"
@@ -32,6 +33,7 @@ import { UserAuthService, userAuthOptionsToken } from "./user-auth.service"
     },
     UserAuthService,
     UserAuthGuard,
+    AuditLogService,
   ],
   exports: [UserAuthService, UserAuthGuard],
 })

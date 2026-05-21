@@ -36,7 +36,7 @@ export class AdminController {
 
   @Post("/invitations")
   createSignupInvitation(@Req() request: AdminRequest) {
-    return this.admin.createSignupInvitation(request.admin!.id)
+    return this.admin.createSignupInvitation(request.admin!)
   }
 
   @Get("/invitations")
@@ -50,10 +50,10 @@ export class AdminController {
   }
 
   @Patch("/users/:id/status")
-  async updateUserStatus(@Param("id") id: string, @Body() body: unknown) {
+  async updateUserStatus(@Param("id") id: string, @Body() body: unknown, @Req() request?: AdminRequest) {
     const result = userStatusSchema.safeParse(body)
     if (!result.success) throw new BadRequestException("用户状态无效。")
-    return this.admin.updateUserStatus(id, result.data)
+    return this.admin.updateUserStatus(id, result.data, request?.admin?.email)
   }
 
   @Get("/teams")

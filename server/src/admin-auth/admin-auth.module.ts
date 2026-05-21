@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common"
 import { JwtModule } from "@nestjs/jwt"
 import { loadEnv } from "../config/env"
+import { AuditLogService } from "../common/audit-log.service"
 import { PrismaModule } from "../prisma/prisma.module"
 import { AdminAuthController } from "./admin-auth.controller"
 import { AdminAuthGuard } from "./admin-auth.guard"
@@ -32,6 +33,7 @@ import { AdminBootstrapService, adminBootstrapEnvToken } from "./admin-bootstrap
     },
     AdminBootstrapService,
     AdminAuthGuard,
+    AuditLogService,
   ],
   exports: [AdminAuthService, AdminAuthGuard],
 })

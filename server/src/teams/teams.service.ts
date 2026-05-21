@@ -1,4 +1,5 @@
-import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common"
+import { BadRequestException, ForbiddenException, Injectable, Optional } from "@nestjs/common"
+import { AuditLogService } from "../common/audit-log.service"
 import { InvitationsService } from "../invitations/invitations.service"
 import { PrismaService } from "../prisma/prisma.service"
 
@@ -7,13 +8,14 @@ export class TeamsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly invitations: InvitationsService,
+    @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
   async createTeam(userId: string, input: { name: string }) {
     const existing = await this.getMembership(userId)
     if (existing) throw new BadRequestException("账号已属于一个团队。")
 
-    return this.prisma.$transaction(async (tx) => {
+    const team = await this.prisma.$transaction(async (tx) => {
       const team = await tx.team.create({
         data: { name: input.name.trim(), createdByUserId: userId },
       })
@@ -22,6 +24,14 @@ export class TeamsService {
       })
       return team
     })
+    await this.auditLog?.record({
+      adminEmail: userId,
+      action: "team.create",
+      targetType: "team",
+      targetId: team.id,
+      ipAddress: "system",
+    })
+    return team
   }
 
   getMyTeam(userId: string) {
@@ -45,24 +55,41 @@ export class TeamsService {
     if (!membership || membership.role !== "owner") {
       throw new ForbiddenException()
     }
-    return this.invitations.createTeamInvitation({ userId, teamId: membership.teamId })
+    const invitation = await this.invitations.createTeamInvitation({ userId, teamId: membership.teamId })
+    await this.auditLog?.record({
+      adminEmail: userId,
+      action: "team.invitation.create",
+      targetType: "invitation",
+      targetId: invitation.id,
+      ipAddress: "system",
+    })
+    return invitation
   }
 
   async joinTeam(userId: string, input: { invitationToken: string }) {
     const existing = await this.getMembership(userId)
     if (existing) throw new BadRequestException("账号已属于一个团队。")
 
-    return this.prisma.$transaction(async (tx) => {
+    const result = await this.prisma.$transaction(async (tx) => {
       const invitation = await this.invitations.consumeInvitation({
         token: input.invitationToken,
         type: "team_join",
         acceptedByUserId: userId,
       }, tx)
       if (!invitation.teamId) throw new BadRequestException("邀请无效或已过期。")
-      return tx.teamMembership.create({
+      const membership = await tx.teamMembership.create({
         data: { teamId: invitation.teamId, userId, role: "member" },
       })
+      return { membership, teamId: invitation.teamId }
     })
+    await this.auditLog?.record({
+      adminEmail: userId,
+      action: "team.join",
+      targetType: "team",
+      targetId: result.teamId,
+      ipAddress: "system",
+    })
+    return result.membership
   }
 
   async listMembers(userId: string) {
@@ -90,6 +117,14 @@ export class TeamsService {
     }
 
     await this.prisma.teamMembership.delete({ where: { userId: targetUserId } })
+    await this.auditLog?.record({
+      adminEmail: ownerUserId,
+      action: "team.member.remove",
+      targetType: "user",
+      targetId: targetUserId,
+      detail: { teamId: ownerMembership.teamId },
+      ipAddress: "system",
+    })
     return { ok: true }
   }
 
