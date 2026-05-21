@@ -33,7 +33,7 @@ function AgentSlashMenu({
 
   return (
     <div
-      className="absolute bottom-full left-2 z-20 mb-2 w-80 rounded-lg border border-border bg-popover p-1 text-popover-foreground"
+      className="absolute bottom-full left-0 right-0 z-20 mb-2 w-full rounded-lg border border-border bg-popover p-1 text-popover-foreground"
       role="listbox"
       aria-label="Agent slash menu"
       data-track="agent-slash-menu"

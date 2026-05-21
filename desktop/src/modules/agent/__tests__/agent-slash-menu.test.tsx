@@ -73,6 +73,23 @@ describe("AgentSlashMenu", () => {
     expect(html).toContain("max-h-72")
   })
 
+  it("matches the composer width and aligns with both sides", () => {
+    const html = renderToStaticMarkup(
+      <AgentSlashMenu
+        candidates={candidates}
+        highlightedIndex={0}
+        onHighlight={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("left-0")
+    expect(html).toContain("right-0")
+    expect(html).toContain("w-full")
+    expect(html).not.toContain("w-80")
+    expect(html).not.toContain("left-2")
+  })
+
   it("scrolls the highlighted item into view", async () => {
     const scrollIntoView = vi.fn()
     const originalScrollIntoView = Element.prototype.scrollIntoView
