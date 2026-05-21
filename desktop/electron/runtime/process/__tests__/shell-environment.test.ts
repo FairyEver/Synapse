@@ -18,6 +18,7 @@ describe("shell environment helpers", () => {
       },
       shellPath: "/opt/homebrew/bin:/usr/local/bin:/usr/bin",
       appendPathEntries: ["/Users/ada/Library/Application Support/Synapse/runtime-bin"],
+      platform: "darwin",
     })
 
     expect(env.PATH).toBe(

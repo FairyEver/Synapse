@@ -71,24 +71,25 @@ function collectProjectsDirs(root: string, maxDepth = 5): string[] {
 }
 
 function claudeDesktopDataRoots(home: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string[] {
+  const targetPath = pathForPlatform(platform)
   if (platform === "darwin") {
-    const appData = path.join(home, "Library", "Application Support", "Claude")
+    const appData = targetPath.join(home, "Library", "Application Support", "Claude")
     return [
-      path.join(appData, "local-agent-mode-sessions"),
-      path.join(appData, "claude-code-sessions"),
+      targetPath.join(appData, "local-agent-mode-sessions"),
+      targetPath.join(appData, "claude-code-sessions"),
     ]
   }
   if (platform === "win32") {
-    const appData = env.APPDATA || path.join(home, "AppData", "Roaming")
+    const appData = env.APPDATA || targetPath.join(home, "AppData", "Roaming")
     return [
-      path.join(appData, "Claude", "local-agent-mode-sessions"),
-      path.join(appData, "Claude", "claude-code-sessions"),
+      targetPath.join(appData, "Claude", "local-agent-mode-sessions"),
+      targetPath.join(appData, "Claude", "claude-code-sessions"),
     ]
   }
-  const configHome = env.XDG_CONFIG_HOME || path.join(home, ".config")
+  const configHome = env.XDG_CONFIG_HOME || targetPath.join(home, ".config")
   return [
-    path.join(configHome, "Claude", "local-agent-mode-sessions"),
-    path.join(configHome, "Claude", "claude-code-sessions"),
+    targetPath.join(configHome, "Claude", "local-agent-mode-sessions"),
+    targetPath.join(configHome, "Claude", "claude-code-sessions"),
   ]
 }
 
@@ -101,10 +102,15 @@ export function resolveClaudeUsageRoots({
   readonly env?: NodeJS.ProcessEnv
   readonly platform?: NodeJS.Platform
 }): string[] {
-  const configRoots = splitPathList(env.CLAUDE_CONFIG_DIR).map((root) => path.join(root, "projects"))
-  const cliRoots = [path.join(home, ".claude", "projects"), ...configRoots]
+  const targetPath = pathForPlatform(platform)
+  const configRoots = splitPathList(env.CLAUDE_CONFIG_DIR).map((root) => targetPath.join(root, "projects"))
+  const cliRoots = [targetPath.join(home, ".claude", "projects"), ...configRoots]
   const desktopRoots = claudeDesktopDataRoots(home, env, platform).flatMap((root) => collectProjectsDirs(root))
   return uniquePaths([...cliRoots, ...desktopRoots])
+}
+
+function pathForPlatform(platform: NodeJS.Platform): typeof path.posix {
+  return platform === "win32" ? path.win32 : path.posix
 }
 
 export function registerUsageAnalysisHandlers(): void {

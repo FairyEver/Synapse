@@ -189,13 +189,14 @@ export function resolveExecutableInPath(
   if (!pathValue) return null
   const platform = options.platform ?? process.platform
   const fileExists = options.fileExists ?? syncFileExists
-  const extensions = platform === "win32" && !path.extname(command)
+  const targetPath = pathForPlatform(platform)
+  const extensions = platform === "win32" && !targetPath.extname(command)
     ? [".exe", ".cmd", ".bat", ""]
     : [""]
 
   for (const directoryPath of splitPath(pathValue, platform === "win32" ? ";" : ":")) {
     for (const extension of extensions) {
-      const candidate = path.join(directoryPath, `${command}${extension}`)
+      const candidate = targetPath.join(directoryPath, `${command}${extension}`)
       if (fileExists(candidate)) return candidate
     }
   }
@@ -289,4 +290,8 @@ const execLoginShellPathCommand: LoginShellPathExec = (file, args, options) => e
 
 function syncFileExists(candidate: string): boolean {
   return existsSync(candidate)
+}
+
+function pathForPlatform(platform: NodeJS.Platform | string): typeof path.posix {
+  return platform === "win32" ? path.win32 : path.posix
 }

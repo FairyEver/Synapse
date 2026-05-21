@@ -84,21 +84,23 @@ describe("ClaudeSDKSession", () => {
   })
 
   it("merges login shell PATH and Synapse node fallback into SDK env", () => {
-    const { factory, getOptions } = createQueryFactory()
-    createSession(factory, {
-      env: { FOO: "bar" },
-      hostEnv: {
-        PATH: "/usr/bin:/bin",
-        HOME: "/Users/ada",
-      },
-      resolveShellPath: () => "/opt/homebrew/bin:/usr/local/bin:/usr/bin",
-      nodeRuntimeBinPath: "/Users/ada/Library/Application Support/Synapse/runtime-bin",
-    })
+    withProcessPlatform("darwin", () => {
+      const { factory, getOptions } = createQueryFactory()
+      createSession(factory, {
+        env: { FOO: "bar" },
+        hostEnv: {
+          PATH: "/usr/bin:/bin",
+          HOME: "/Users/ada",
+        },
+        resolveShellPath: () => "/opt/homebrew/bin:/usr/local/bin:/usr/bin",
+        nodeRuntimeBinPath: "/Users/ada/Library/Application Support/Synapse/runtime-bin",
+      })
 
-    expect(getOptions().env).toEqual(expect.objectContaining({
-      PATH: "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin:/Users/ada/Library/Application Support/Synapse/runtime-bin",
-      FOO: "bar",
-    }))
+      expect(getOptions().env).toEqual(expect.objectContaining({
+        PATH: "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin:/Users/ada/Library/Application Support/Synapse/runtime-bin",
+        FOO: "bar",
+      }))
+    })
   })
 
   it.each(packagedRuntimeCases)(
@@ -660,6 +662,21 @@ const packagedRuntimeCases: readonly PackagedRuntimeCase[] = [
     binaryName: "claude",
   },
 ]
+
+function withProcessPlatform(platform: NodeJS.Platform, run: () => void): void {
+  const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform")
+
+  try {
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      value: platform,
+    })
+
+    run()
+  } finally {
+    if (platformDescriptor) Object.defineProperty(process, "platform", platformDescriptor)
+  }
+}
 
 function withPackagedRuntime(
   options: {
