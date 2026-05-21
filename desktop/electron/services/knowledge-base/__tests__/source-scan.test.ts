@@ -1,0 +1,99 @@
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { afterEach, describe, expect, it } from "vitest"
+
+import { readKnowledgeBaseManifest } from "../manifest"
+import { scanKnowledgeBaseSources } from "../source-scan"
+
+const roots: string[] = []
+
+async function tempDir(): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-kb-scan-"))
+  roots.push(dir)
+  return dir
+}
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+})
+
+describe("knowledge base source scan", () => {
+  it("classifies new, changed, unchanged, and skipped raw sources", async () => {
+    const root = await tempDir()
+    await mkdir(path.join(root, ".raw", "notes"), { recursive: true })
+    await writeFile(path.join(root, ".raw", "a.md"), "alpha\n")
+    await writeFile(path.join(root, ".raw", "notes", "b.txt"), "bravo\n")
+    await writeFile(path.join(root, ".raw", "skip.png"), "not text")
+
+    const initial = await scanKnowledgeBaseSources(root)
+    const unchanged = initial.sources.find((source) => source.relativePath === ".raw/a.md")
+    if (!unchanged) throw new Error("expected a.md")
+
+    await writeFile(path.join(root, ".raw", ".manifest.json"), `${JSON.stringify({
+      version: 1,
+      sources: {
+        ".raw/a.md": {
+          hash: unchanged.hash,
+          ingested_at: "2026-05-21T00:00:00.000Z",
+          pages_created: ["wiki/sources/a.md"],
+          pages_updated: ["wiki/index.md"],
+        },
+        ".raw/notes/b.txt": {
+          hash: "old-hash",
+          ingested_at: "2026-05-21T00:00:00.000Z",
+          pages_created: [],
+          pages_updated: [],
+        },
+      },
+    }, null, 2)}\n`)
+
+    const result = await scanKnowledgeBaseSources(root)
+
+    expect(result.manifest.status).toBe("valid")
+    expect(result.sources.map((source) => [source.relativePath, source.state])).toEqual([
+      [".raw/a.md", "unchanged"],
+      [".raw/notes/b.txt", "changed"],
+    ])
+    expect(result.skippedSources).toEqual([
+      expect.objectContaining({ relativePath: ".raw/skip.png", reason: "unsupported-extension" }),
+    ])
+  })
+
+  it("marks matching sources as changed when force is true", async () => {
+    const root = await tempDir()
+    await mkdir(path.join(root, ".raw"), { recursive: true })
+    await writeFile(path.join(root, ".raw", "a.md"), "alpha\n")
+    const initial = await scanKnowledgeBaseSources(root)
+    const source = initial.sources[0]
+    await writeFile(path.join(root, ".raw", ".manifest.json"), `${JSON.stringify({
+      version: 1,
+      sources: {
+        [source.relativePath]: {
+          hash: source.hash,
+          ingested_at: "2026-05-21T00:00:00.000Z",
+          pages_created: [],
+          pages_updated: [],
+        },
+      },
+    })}\n`)
+
+    const result = await scanKnowledgeBaseSources(root, { force: true })
+
+    expect(result.sources).toEqual([
+      expect.objectContaining({ relativePath: ".raw/a.md", state: "changed" }),
+    ])
+  })
+
+  it("reports invalid manifests without throwing", async () => {
+    const root = await tempDir()
+    await mkdir(path.join(root, ".raw"), { recursive: true })
+    await writeFile(path.join(root, ".raw", ".manifest.json"), "{ bad json")
+
+    const result = await readKnowledgeBaseManifest(root)
+
+    expect(result.status).toBe("invalid")
+    if (result.status !== "invalid") throw new Error("expected invalid manifest")
+    expect(result.error).toContain("JSON")
+  })
+})
