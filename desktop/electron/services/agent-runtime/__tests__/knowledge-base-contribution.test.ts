@@ -64,6 +64,78 @@ describe("knowledge base Agent contribution", () => {
     expect(unchanged?.content).toBe("What changed?")
   })
 
+  it("reads wiki hot cache fresh for each new live session", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, "wiki"), { recursive: true })
+    const hotCachePath = path.join(projectPath, "wiki", "hot.md")
+    await writeFile(hotCachePath, "# Hot Cache\n\nOld fact.\n")
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: {
+        id: "project-1",
+        name: "KB",
+        path: projectPath,
+        capabilities: {
+          knowledgeBase: {
+            enabled: true,
+            schemaVersion: 1,
+            templateVersion: "2026-05-21",
+          },
+        },
+      },
+    })
+
+    const first = await Promise.resolve(contribution?.prepareMessage?.({
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local-renderer",
+      content: "What changed?",
+    }, { isNewLiveSession: true }))
+    await writeFile(hotCachePath, "# Hot Cache\n\nNew fact.\n")
+    const second = await Promise.resolve(contribution?.prepareMessage?.({
+      projectId: "project-1",
+      sessionKey: "s2",
+      platform: "local-renderer",
+      content: "What changed?",
+    }, { isNewLiveSession: true }))
+    const reused = await Promise.resolve(contribution?.prepareMessage?.({
+      projectId: "project-1",
+      sessionKey: "s2",
+      platform: "local-renderer",
+      content: "What changed?",
+    }, { isNewLiveSession: false }))
+
+    expect(first?.content).toContain("Old fact.")
+    expect(second?.content).toContain("New fact.")
+    expect(second?.content).not.toContain("Old fact.")
+    expect(reused?.content).toBe("What changed?")
+  })
+
+  it("does not swallow non-missing hot cache read errors", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, "wiki", "hot.md"), { recursive: true })
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: {
+        id: "project-1",
+        name: "KB",
+        path: projectPath,
+        capabilities: {
+          knowledgeBase: {
+            enabled: true,
+            schemaVersion: 1,
+            templateVersion: "2026-05-21",
+          },
+        },
+      },
+    })
+
+    await expect(Promise.resolve(contribution?.prepareMessage?.({
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local-renderer",
+      content: "What changed?",
+    }, { isNewLiveSession: true }))).rejects.toMatchObject({ code: "EISDIR" })
+  })
+
   it("expands /kb ingest into the internal ingest prompt", async () => {
     const projectPath = await tempDir()
     const contribution = await createKnowledgeBaseAgentContribution({

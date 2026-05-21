@@ -17,17 +17,18 @@ export async function createKnowledgeBaseAgentContribution(
   }
 
   const bootstrap = await readPrompt("bootstrap.md")
-  const hotCache = await readOptional(path.join(input.project.path, "wiki", "hot.md"))
+  const hotCachePath = path.join(input.project.path, "wiki", "hot.md")
 
   return {
     commands: [{
       name: "kb",
       buildPrompt: (args) => buildKnowledgeBaseCommandPrompt(args),
     }],
-    prepareMessage(message, context) {
+    async prepareMessage(message, context) {
       if (!context.isNewLiveSession) {
         return message
       }
+      const hotCache = await readOptional(hotCachePath)
       return prependBootstrap(message, bootstrap, hotCache)
     },
   }
@@ -76,7 +77,10 @@ async function readPrompt(fileName: string): Promise<string> {
 async function readOptional(filePath: string): Promise<string> {
   try {
     return await readFile(filePath, "utf8")
-  } catch (_error) {
+  } catch (error) {
+    if (!isMissingPathError(error)) {
+      throw error
+    }
     return ""
   }
 }
@@ -99,5 +103,6 @@ function isMissingPathError(error: unknown): boolean {
   return typeof error === "object"
     && error !== null
     && "code" in error
-    && (error as { readonly code?: unknown }).code === "ENOENT"
+    && ((error as { readonly code?: unknown }).code === "ENOENT"
+      || (error as { readonly code?: unknown }).code === "ENOTDIR")
 }
