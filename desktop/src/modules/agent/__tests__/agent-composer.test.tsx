@@ -468,6 +468,199 @@ describe("AgentComposer", () => {
     })
     expect(JSON.stringify(track.mock.calls)).not.toContain("secret prompt text")
   })
+
+  it("opens the slash menu and inserts the highlighted item with Enter", async () => {
+    const onDraftChange = vi.fn()
+    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault())
+    const onInputKeyDown = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft="Please /rev now"
+          disabled={false}
+          canSend={true}
+          sending={false}
+          cancelPhase="idle"
+          slashCandidates={[
+            {
+              name: "review-code",
+              description: "Review code changes",
+              kind: "skill",
+              source: "skill",
+            },
+          ]}
+          onDraftChange={onDraftChange}
+          onInputKeyDown={onInputKeyDown}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+    textarea!.setSelectionRange(11, 11)
+
+    await act(async () => {
+      textarea!.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+      }))
+    })
+
+    expect(onDraftChange).toHaveBeenCalledWith("Please /review-code now")
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onInputKeyDown).not.toHaveBeenCalled()
+  })
+
+  it("closes the slash menu with Escape without changing the draft", async () => {
+    const onDraftChange = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft="Run /status"
+          disabled={false}
+          canSend={true}
+          sending={false}
+          cancelPhase="idle"
+          slashCandidates={[
+            {
+              name: "status",
+              description: "Show agent status",
+              kind: "command",
+              source: "builtin",
+            },
+          ]}
+          onDraftChange={onDraftChange}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+    textarea!.setSelectionRange(11, 11)
+    textarea!.dispatchEvent(new Event("select", { bubbles: true }))
+    expect(container.textContent).toContain("/status")
+
+    await act(async () => {
+      textarea!.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Escape",
+        bubbles: true,
+      }))
+    })
+
+    expect(onDraftChange).not.toHaveBeenCalled()
+  })
+
+  it("keeps normal Enter submission when no slash menu is active", async () => {
+    const onInputKeyDown = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft="Send this message"
+          disabled={false}
+          canSend={true}
+          sending={false}
+          cancelPhase="idle"
+          slashCandidates={[
+            {
+              name: "status",
+              description: "Show agent status",
+              kind: "command",
+              source: "builtin",
+            },
+          ]}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={onInputKeyDown}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+
+    await act(async () => {
+      textarea!.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+      }))
+    })
+
+    expect(onInputKeyDown).toHaveBeenCalled()
+  })
+
+  it("closes the slash menu when clicking outside the composer", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const outside = document.createElement("button")
+    outside.type = "button"
+    outside.textContent = "outside"
+    document.body.appendChild(outside)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft="Run /status"
+          disabled={false}
+          canSend={true}
+          sending={false}
+          cancelPhase="idle"
+          slashCandidates={[
+            {
+              name: "status",
+              description: "Show agent status",
+              kind: "command",
+              source: "builtin",
+            },
+          ]}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+    textarea!.setSelectionRange(11, 11)
+    await act(async () => {
+      textarea!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    expect(container.textContent).toContain("Show agent status")
+
+    await act(async () => {
+      outside.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true }))
+    })
+
+    expect(container.textContent).not.toContain("Show agent status")
+  })
 })
 
 function clickButton(container: HTMLElement, label: string) {

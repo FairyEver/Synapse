@@ -1,4 +1,4 @@
-import { type FormEvent, type KeyboardEvent, useRef, useEffect, useState } from "react"
+import { type FormEvent, type KeyboardEvent, useMemo, useRef, useEffect, useState } from "react"
 import { ArrowUp, CornerDownRight, RotateCcw, ShieldCheck, Square, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,6 +17,13 @@ import { getPermissionModeCapability } from "../permission-mode-capability"
 import { permissionModeConfirmationText } from "../permission-mode-options"
 import type { PendingMessage } from "../pending-message-queue"
 import { AgentPermissionModeMenu } from "./permission-mode-menu"
+import { AgentSlashMenu } from "./agent-slash-menu"
+import {
+  filterAgentSlashCandidates,
+  findAgentSlashFragment,
+  replaceAgentSlashFragment,
+  type AgentSlashCandidate,
+} from "../slash-menu"
 
 const SINGLE_LINE_HEIGHT = 28
 
@@ -37,6 +44,7 @@ function AgentComposer({
   pendingMessages = [],
   onRemovePendingMessage,
   onRetryPendingMessage,
+  slashCandidates = [],
 }: {
   readonly draft: string
   readonly disabled: boolean
@@ -45,6 +53,7 @@ function AgentComposer({
   readonly cancelPhase: "idle" | "cancel_pending" | "cancelled"
   readonly permissionMode?: SynapseAgentPermissionMode
   readonly pendingMessages?: readonly PendingMessage[]
+  readonly slashCandidates?: readonly AgentSlashCandidate[]
   readonly onDraftChange: (value: string) => void
   readonly onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
   readonly onSubmit: (event: FormEvent) => void
@@ -55,10 +64,25 @@ function AgentComposer({
   readonly onRemovePendingMessage?: (id: string) => void
   readonly onRetryPendingMessage?: (id: string) => void
 }) {
+  const formRef = useRef<HTMLFormElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const [multiline, setMultiline] = useState(false)
   const [pendingMode, setPendingMode] = useState<SynapseAgentPermissionMode | null>(null)
   const [pendingModeAction, setPendingModeAction] = useState<"switch" | "new-session">("switch")
+  const [slashMenuDismissed, setSlashMenuDismissed] = useState(false)
+  const [highlightedSlashIndex, setHighlightedSlashIndex] = useState(0)
+  const [selectionStart, setSelectionStart] = useState(0)
+  const activeSlashFragment = useMemo(
+    () => findAgentSlashFragment(draft, selectionStart),
+    [draft, selectionStart],
+  )
+  const visibleSlashCandidates = useMemo(
+    () => activeSlashFragment
+      ? filterAgentSlashCandidates(slashCandidates, activeSlashFragment.query)
+      : [],
+    [activeSlashFragment, slashCandidates],
+  )
+  const slashMenuOpen = Boolean(activeSlashFragment && !slashMenuDismissed && slashCandidates.length > 0)
   const visiblePendingMessages = pendingMessages.filter((message) => message.status !== "sending")
   const isNewSessionMode = pendingModeAction === "new-session"
 
@@ -92,6 +116,23 @@ function AgentComposer({
     setMultiline(scrollHeight > SINGLE_LINE_HEIGHT)
   }, [draft])
 
+  useEffect(() => {
+    setHighlightedSlashIndex(0)
+  }, [activeSlashFragment?.query, visibleSlashCandidates.length])
+
+  useEffect(() => {
+    if (!slashMenuOpen) return undefined
+    const handlePointerDown = (event: PointerEvent) => {
+      const target = event.target
+      if (target instanceof Node && formRef.current?.contains(target)) return
+      setSlashMenuDismissed(true)
+    }
+    document.addEventListener("pointerdown", handlePointerDown)
+    return () => {
+      document.removeEventListener("pointerdown", handlePointerDown)
+    }
+  }, [slashMenuOpen])
+
   const handleSubmit = (event: FormEvent) => {
     track({
       component: "agent",
@@ -109,9 +150,83 @@ function AgentComposer({
     onSubmit(event)
   }
 
+  const updateSelectionStart = () => {
+    const el = textareaRef.current
+    if (!el) return
+    setSelectionStart(el.selectionStart)
+    setSlashMenuDismissed(false)
+  }
+
+  const selectSlashCandidate = (candidate: AgentSlashCandidate) => {
+    if (!activeSlashFragment) return
+    insertSlashCandidate(candidate, activeSlashFragment)
+  }
+
+  const insertSlashCandidate = (
+    candidate: AgentSlashCandidate,
+    fragment: NonNullable<typeof activeSlashFragment>,
+  ) => {
+    const next = replaceAgentSlashFragment(draft, fragment, candidate.name)
+    onDraftChange(next.value)
+    setSlashMenuDismissed(true)
+    requestAnimationFrame(() => {
+      const el = textareaRef.current
+      if (!el) return
+      el.focus()
+      el.setSelectionRange(next.cursor, next.cursor)
+      setSelectionStart(next.cursor)
+    })
+  }
+
+  const handleTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.nativeEvent.isComposing || event.keyCode === 229) {
+      onInputKeyDown(event)
+      return
+    }
+
+    const currentFragment = findAgentSlashFragment(draft, event.currentTarget.selectionStart)
+    const currentCandidates = currentFragment
+      ? filterAgentSlashCandidates(slashCandidates, currentFragment.query)
+      : []
+    const currentMenuOpen = Boolean(currentFragment && !slashMenuDismissed && slashCandidates.length > 0)
+
+    if (currentMenuOpen) {
+      if (event.key === "ArrowDown") {
+        event.preventDefault()
+        setHighlightedSlashIndex((current) =>
+          currentCandidates.length === 0 ? 0 : (current + 1) % currentCandidates.length)
+        return
+      }
+      if (event.key === "ArrowUp") {
+        event.preventDefault()
+        setHighlightedSlashIndex((current) =>
+          currentCandidates.length === 0
+            ? 0
+            : (current - 1 + currentCandidates.length) % currentCandidates.length)
+        return
+      }
+      if (event.key === "Escape") {
+        event.preventDefault()
+        setSlashMenuDismissed(true)
+        return
+      }
+      if (event.key === "Enter" || event.key === "Tab") {
+        const candidate = currentCandidates[highlightedSlashIndex]
+        if (candidate) {
+          event.preventDefault()
+          insertSlashCandidate(candidate, currentFragment)
+          return
+        }
+      }
+    }
+
+    onInputKeyDown(event)
+  }
+
   return (
     <>
       <form
+        ref={formRef}
         className="agent-composer absolute inset-x-4 bottom-5 z-10 mx-auto max-w-2xl md:inset-x-20"
         data-track="agent-composer"
         onSubmit={handleSubmit}
@@ -120,6 +235,14 @@ function AgentComposer({
           className="agent-composer__container rounded-lg border border-border bg-background p-2"
           data-multiline={multiline || undefined}
         >
+          {slashMenuOpen ? (
+            <AgentSlashMenu
+              candidates={visibleSlashCandidates}
+              highlightedIndex={highlightedSlashIndex}
+              onHighlight={setHighlightedSlashIndex}
+              onSelect={selectSlashCandidate}
+            />
+          ) : null}
           {visiblePendingMessages.length > 0 ? (
             <ScrollArea className="mb-2 max-h-40">
               <div className="flex flex-col">
@@ -167,8 +290,14 @@ function AgentComposer({
               ref={textareaRef}
               className="agent-composer__input max-h-30 min-h-7 resize-none border-0 bg-transparent px-0 py-1 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0"
               value={draft}
-              onChange={(e) => onDraftChange(e.target.value)}
-              onKeyDown={onInputKeyDown}
+              onChange={(e) => {
+                onDraftChange(e.target.value)
+                setSelectionStart(e.target.selectionStart)
+                setSlashMenuDismissed(false)
+              }}
+              onClick={updateSelectionStart}
+              onKeyDown={handleTextareaKeyDown}
+              onSelect={updateSelectionStart}
               placeholder="输入消息"
               disabled={disabled}
               rows={1}
