@@ -52,7 +52,7 @@ describe("usage analysis ipc handlers", () => {
       fs.mkdirSync(projectsDir, { recursive: true })
 
       expect(resolveClaudeUsageRoots({ home, env: {}, platform: "darwin" })).toEqual([
-        path.join(home, ".claude", "projects"),
+        path.posix.join(home, ".claude", "projects"),
         projectsDir,
       ])
     } finally {
