@@ -131,6 +131,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(coreActionRuntimeDescriptor.id).toBe("core.action-runtime")
     expect(coreActionRuntimeDescriptor.criticality).toBe("fatal")
     expect(coreActionRuntimeDescriptor.dependsOn).toEqual([
+      "core.process-environment",
       "core.permission-guard",
       "core.audit-sink",
     ])

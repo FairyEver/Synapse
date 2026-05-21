@@ -87,6 +87,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.logging",
         "core.network-registry",
         "core.permission-guard",
+        "core.process-environment",
         "core.process-runtime",
         "core.project-containers",
         "core.relay",
@@ -132,10 +133,12 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.window-manager")?.dependsOn).toEqual([])
     expect(byId.get("core.event-bus")?.dependsOn).toEqual(["core.window-manager"])
     expect(byId.get("core.action-runtime")?.dependsOn).toEqual([
+      "core.process-environment",
       "core.permission-guard",
       "core.audit-sink",
     ])
     expect(byId.get("core.project-containers")?.dependsOn).toEqual([
+      "core.process-environment",
       "core.event-bus",
       "core.data-repository",
       "core.permission-guard",
@@ -197,6 +200,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "provider",
     ])
     expect(byId.get("core.diagnostics")?.dependsOn).toEqual([
+      "core.process-environment",
       "core.config",
       "core.logging",
       "core.data-repository",

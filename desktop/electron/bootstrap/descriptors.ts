@@ -81,7 +81,14 @@ import { createFileBackedDataRepository } from "../runtime/data-repo"
 import type { PermissionGuard, AuditSink } from "../runtime/security"
 import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, systemAutomationPolicy } from "../runtime/security"
 import type { ProcessRuntime } from "../runtime/process"
-import { createControlledProcessRunner, createMainProcessRuntime } from "../runtime/process"
+import {
+  buildHostEnvironment,
+  collectShellEnvironmentSnapshot,
+  createControlledProcessRunner,
+  createMainProcessRuntime,
+  ensureNodeRuntimeShims,
+  type ShellEnvironmentSnapshot,
+} from "../runtime/process"
 import type { NetworkServiceRegistry } from "../runtime/network"
 import { createNetworkServiceRegistry, sendOutboundHttpRequest } from "../runtime/network"
 import type { ProjectContainerRegistry } from "../runtime/project-container"
@@ -104,6 +111,13 @@ import { agentTimeoutMinsToMs, DEFAULT_AGENT_TIMEOUT_MINS } from "../../workflow
 import { nodeTypeRegistry } from "../../workflow-nodes/registry"
 import "../../workflow-nodes/register.main"
 
+type ProcessEnvironmentService = {
+  readonly nodeRuntimeBinPath?: string
+  readonly nodePath?: string
+  readonly shell: ShellEnvironmentSnapshot
+  readonly shimError?: string
+}
+
 /**
  * core.logging — wraps the existing `logStore` singleton.
  *
@@ -119,6 +133,43 @@ export const coreLoggingDescriptor: ServiceDescriptor<typeof logStore> = {
   id: "core.logging",
   criticality: "fatal",
   create: () => logStore,
+}
+
+export const coreProcessEnvironmentDescriptor: ServiceDescriptor<ProcessEnvironmentService> = {
+  id: "core.process-environment",
+  criticality: "degraded",
+  async create() {
+    const runtimeBinPath = path.join(app.getPath("userData"), "runtime-bin")
+    let nodePath: string | undefined
+    let shimError: string | undefined
+    try {
+      const shims = await ensureNodeRuntimeShims({
+        directoryPath: runtimeBinPath,
+        runtimePath: app.getPath("exe"),
+      })
+      nodePath = shims.nodePath
+      process.env.SYNAPSE_NODE_RUNTIME_BIN = shims.directoryPath
+      process.env.SYNAPSE_NODE_BIN = shims.nodePath
+    } catch (error) {
+      shimError = error instanceof Error ? error.message : String(error)
+    }
+
+    const nextEnv = buildHostEnvironment({
+      baseEnv: process.env,
+      appendPathEntries: shimError ? [] : [runtimeBinPath],
+    })
+    Object.assign(process.env, nextEnv)
+
+    return {
+      nodeRuntimeBinPath: shimError ? undefined : runtimeBinPath,
+      nodePath,
+      shell: collectShellEnvironmentSnapshot({
+        baseEnv: process.env,
+        nodeRuntimeBinPath: shimError ? null : runtimeBinPath,
+      }),
+      shimError,
+    }
+  },
 }
 
 /**
@@ -164,6 +215,7 @@ export const coreActionRuntimeDescriptor: ServiceDescriptor<MainActionRegistry> 
   id: "core.action-runtime",
   criticality: "fatal",
   dependsOn: [
+    "core.process-environment",
     "core.permission-guard",
     "core.audit-sink",
   ],
@@ -686,6 +738,7 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
   id: "core.diagnostics",
   criticality: "degraded",
   dependsOn: [
+    "core.process-environment",
     "core.config",
     "core.logging",
     "core.data-repository",
@@ -827,6 +880,7 @@ export const coreProjectContainerRegistryDescriptor: ServiceDescriptor<ProjectCo
   id: "core.project-containers",
   criticality: "fatal",
   dependsOn: [
+    "core.process-environment",
     "core.event-bus",
     "core.data-repository",
     "core.permission-guard",

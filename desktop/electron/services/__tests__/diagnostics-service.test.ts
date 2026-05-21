@@ -215,6 +215,36 @@ describe("DiagnosticsService.collect", () => {
     ]))
   })
 
+  it("reports App PATH, login shell PATH, and node visibility", async () => {
+    const service = createService({
+      collectShellEnvironment: vi.fn(() => ({
+        processPath: "/usr/bin:/bin",
+        shellPath: "/opt/homebrew/bin:/usr/bin",
+        effectivePath: "/usr/bin:/bin:/opt/homebrew/bin:/synapse/runtime-bin",
+        processNodePath: null,
+        shellNodePath: "/opt/homebrew/bin/node",
+        effectiveNodePath: "/opt/homebrew/bin/node",
+        nodeRuntimeBinPath: "/synapse/runtime-bin",
+      })),
+    })
+
+    const report = await service.collect()
+    const check = report.checks.find((item) => item.id === "system.node-visibility")
+
+    expect(check).toMatchObject({
+      status: "ok",
+      group: "系统",
+      name: "Node 可见性",
+      details: {
+        "App PATH": "/usr/bin:/bin",
+        "Login Shell PATH": "/opt/homebrew/bin:/usr/bin",
+        "App PATH 中的 node": null,
+        "Login Shell 中的 node": "/opt/homebrew/bin/node",
+        "最终可用 node": "/opt/homebrew/bin/node",
+      },
+    })
+  })
+
   it("surfaces Agent runtime log signals without raw prompt or auth details", async () => {
     const service = createService({
       logStore: {

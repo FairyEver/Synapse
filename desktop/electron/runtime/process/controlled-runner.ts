@@ -1,5 +1,4 @@
 import {
-  execFileSync,
   spawn,
   type ChildProcessWithoutNullStreams,
   type SpawnOptionsWithoutStdio,
@@ -12,6 +11,20 @@ import type {
   PermissionGuard,
   PermissionResult,
 } from "../security"
+import {
+  computePath,
+  dedupePath,
+  resolveCachedLoginShellPath,
+  splitPath,
+  type PathStrategy,
+} from "./shell-environment"
+
+export {
+  computePath,
+  dedupePath,
+  splitPath,
+} from "./shell-environment"
+export type { PathStrategy } from "./shell-environment"
 
 const DEFAULT_ENV_ALLOWLIST = [
   "PATH",
@@ -711,78 +724,6 @@ class LineEmitter {
   }
 }
 
-let cachedShellPath: string | null = null
-let lastShellPathFailedAt = 0
-const SHELL_PATH_RETRY_MS = 30_000
-
-function resolveShellPath(): string | null {
-  if (cachedShellPath) return cachedShellPath
-  if (lastShellPathFailedAt > 0 && Date.now() - lastShellPathFailedAt < SHELL_PATH_RETRY_MS) return null
-
-  if (process.platform === "win32") {
-    cachedShellPath = process.env.PATH ?? ""
-    return cachedShellPath
-  }
-
-  try {
-    const shell = process.env.SHELL || "/bin/zsh"
-    const shellEnv: Record<string, string> = { SHELL: shell, PATH: process.env.PATH ?? "" }
-    if (process.env.HOME) shellEnv.HOME = process.env.HOME
-    const stdout = execFileSync(shell, ["-i", "-l", "-c", "echo $PATH"], {
-      timeout: 5000,
-      encoding: "utf-8",
-      env: shellEnv,
-    })
-    const resolved = stdout.trim()
-    if (resolved) {
-      cachedShellPath = resolved
-      return resolved
-    }
-  } catch {
-    // Shell PATH resolution failed; fall back to process.env.PATH.
-  }
-
-  lastShellPathFailedAt = Date.now()
-  return null
-}
-
-export type PathStrategy = "merge" | "replace"
-
-export function splitPath(pathValue: string, delim: string): string[] {
-  return pathValue.split(delim).filter(Boolean)
-}
-
-export function dedupePath(parts: string[], caseInsensitive: boolean): string[] {
-  const seen = new Set<string>()
-  return parts.filter((p) => {
-    const key = caseInsensitive ? p.toLowerCase() : p
-    if (seen.has(key)) return false
-    seen.add(key)
-    return true
-  })
-}
-
-export function computePath(
-  strategy: PathStrategy,
-  userPath: string | undefined,
-  shellPath: string | null,
-  fallbackPath: string,
-  delim: string,
-  caseInsensitive: boolean,
-): string {
-  if (strategy === "replace" && userPath !== undefined) {
-    return userPath
-  }
-
-  const base = shellPath ?? fallbackPath
-  if (userPath === undefined) {
-    return base
-  }
-
-  const parts = [...splitPath(userPath, delim), ...splitPath(base, delim)]
-  return dedupePath(parts, caseInsensitive).join(delim)
-}
-
 function buildAllowedEnv(
   env: Record<string, string | undefined> | undefined,
   envAllowlist: readonly string[] | undefined,
@@ -795,7 +736,7 @@ function buildAllowedEnv(
     if (!key) continue
     if (key === "PATH") {
       const userEntry = findEnvEntry(env, "PATH")
-      const shellPath = resolveShellPath()
+      const shellPath = resolveCachedLoginShellPath()
       const fallbackPath = process.env.PATH ?? ""
       const delim = process.platform === "win32" ? ";" : ":"
       const caseInsensitive = process.platform === "win32"

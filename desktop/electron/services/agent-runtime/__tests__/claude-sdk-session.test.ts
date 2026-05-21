@@ -73,13 +73,32 @@ describe("ClaudeSDKSession", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, { env: { FOO: "bar" } })
 
-    expect(getOptions().env).toEqual(expect.objectContaining({
-      PATH: process.env.PATH,
+    const sdkEnv = getOptions().env as NodeJS.ProcessEnv
+    expect(sdkEnv).toEqual(expect.objectContaining({
       FOO: "bar",
     }))
+    expect(sdkEnv.PATH).toContain((process.env.PATH ?? "").split(":").filter(Boolean)[0] ?? "")
     expect(getOptions().settings).toMatchObject({
       env: { FOO: "bar" },
     })
+  })
+
+  it("merges login shell PATH and Synapse node fallback into SDK env", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, {
+      env: { FOO: "bar" },
+      hostEnv: {
+        PATH: "/usr/bin:/bin",
+        HOME: "/Users/ada",
+      },
+      resolveShellPath: () => "/opt/homebrew/bin:/usr/local/bin:/usr/bin",
+      nodeRuntimeBinPath: "/Users/ada/Library/Application Support/Synapse/runtime-bin",
+    })
+
+    expect(getOptions().env).toEqual(expect.objectContaining({
+      PATH: "/usr/bin:/bin:/opt/homebrew/bin:/usr/local/bin:/Users/ada/Library/Application Support/Synapse/runtime-bin",
+      FOO: "bar",
+    }))
   })
 
   it.each(packagedRuntimeCases)(

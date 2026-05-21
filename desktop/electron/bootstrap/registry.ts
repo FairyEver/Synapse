@@ -30,6 +30,7 @@ import {
   coreEventBusDescriptor,
   coreExecutionIsolationDescriptor,
   coreLoggingDescriptor,
+  coreProcessEnvironmentDescriptor,
   coreNetworkRegistryDescriptor,
   corePermissionGuardDescriptor,
   coreProcessRuntimeDescriptor,
@@ -72,6 +73,7 @@ export function buildServiceRegistry(
 
   // Order doesn't matter for register(); topo at startAll resolves it.
   registry.register(coreLoggingDescriptor)
+  registry.register(coreProcessEnvironmentDescriptor)
   registry.register(coreConfigDescriptor)
   registry.register(coreDataRepositoryDescriptor)
   registry.register(corePermissionGuardDescriptor)

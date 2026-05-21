@@ -20,6 +20,10 @@ import type {
 import type { SynapseOpsDiagnostics } from "../../src/types/bridge"
 import type { DataRepository } from "../runtime/data-repo"
 import type { StructuredLogger } from "../runtime/logging"
+import {
+  collectShellEnvironmentSnapshot,
+  type ShellEnvironmentSnapshot,
+} from "../runtime/process"
 import type { ServiceRegistry } from "../runtime/service-registry"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
 import type { ServiceResolver } from "../modules/ops/status"
@@ -130,6 +134,7 @@ type DiagnosticsServiceDeps = {
   createZipArchive?: (sourceDirectoryPath: string, outputFilePath: string) => Promise<void>
   removePath?: (targetPath: string) => Promise<void>
   createConfigBackupPayload?: () => Promise<unknown>
+  collectShellEnvironment?: () => ShellEnvironmentSnapshot
 }
 
 const RECENT_LOG_FILE_LIMIT = 3
@@ -189,6 +194,7 @@ class DiagnosticsService {
       isPackaged: this.deps.appInfo.isPackaged,
       singleInstanceLocked: this.deps.appInfo.hasSingleInstanceLock(),
     }))
+    this.addNodeVisibilityCheck(checks)
 
     await this.addPathChecks(checks, config)
     await this.addWindowsCompatibilityChecks(checks, config, windowsCompatibility)
@@ -233,6 +239,42 @@ class DiagnosticsService {
         lastExportPath: this.lastExportPath,
       },
     }
+  }
+
+  private addNodeVisibilityCheck(checks: SynapseDiagnosticsCheck[]): void {
+    const snapshot = this.deps.collectShellEnvironment
+      ? this.deps.collectShellEnvironment()
+      : collectShellEnvironmentSnapshot()
+    const details = {
+      "App PATH": snapshot.processPath,
+      "Login Shell PATH": snapshot.shellPath,
+      "最终 PATH": snapshot.effectivePath,
+      "App PATH 中的 node": snapshot.processNodePath,
+      "Login Shell 中的 node": snapshot.shellNodePath,
+      "最终可用 node": snapshot.effectiveNodePath,
+      "Synapse Node fallback 目录": snapshot.nodeRuntimeBinPath,
+    }
+
+    if (snapshot.effectiveNodePath) {
+      checks.push(this.ok(
+        "system.node-visibility",
+        "系统",
+        "Node 可见性",
+        snapshot.processNodePath
+          ? "Node 在 App PATH 中可用"
+          : "Node 可通过登录 Shell PATH 或 Synapse runtime 使用",
+        details,
+      ))
+      return
+    }
+
+    checks.push(this.degraded(
+      "system.node-visibility",
+      "系统",
+      "Node 可见性",
+      "未找到可用 Node",
+      details,
+    ))
   }
 
   async exportBundle(payload: { report: SynapseDiagnosticsReport }): Promise<SynapseDiagnosticsBundleExportResult> {

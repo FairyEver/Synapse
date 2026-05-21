@@ -8,6 +8,20 @@ export {
   ControlledProcessRunner,
   createControlledProcessRunner,
 } from "./controlled-runner"
+export {
+  appendPathEntries,
+  buildHostEnvironment,
+  collectShellEnvironmentSnapshot,
+  computePath,
+  createNodeRuntimeShimScript,
+  dedupePath,
+  ensureNodeRuntimeShims,
+  mergeEnvironmentWithPath,
+  resolveCachedLoginShellPath,
+  resolveExecutableInPath,
+  resolveLoginShellPath,
+  splitPath,
+} from "./shell-environment"
 export type {
   ProcessDescriptor,
   ProcessHandle,
@@ -27,5 +41,8 @@ export type {
   ControlledProcessRunnerDeps,
   ControlledProcessRunRequest,
   ControlledProcessSession,
-  PathStrategy,
 } from "./controlled-runner"
+export type {
+  PathStrategy,
+  ShellEnvironmentSnapshot,
+} from "./shell-environment"

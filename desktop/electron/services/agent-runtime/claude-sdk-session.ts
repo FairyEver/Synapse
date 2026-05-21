@@ -9,6 +9,11 @@ import type {
 import { existsSync } from "node:fs"
 import path from "node:path"
 
+import {
+  buildHostEnvironment,
+  mergeEnvironmentWithPath,
+  resolveCachedLoginShellPath,
+} from "../../runtime/process"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import { bridgeSdkMessage, type AgentEventEnvelope } from "./sdk-event-bridge"
 import type {
@@ -39,6 +44,9 @@ export interface ClaudeSDKSessionOptions {
   readonly cwd: string
   readonly sdkSessionId?: string
   readonly env: Record<string, string>
+  readonly hostEnv?: NodeJS.ProcessEnv
+  readonly resolveShellPath?: () => string | null
+  readonly nodeRuntimeBinPath?: string
   readonly mode?: string
   readonly model?: string
   readonly maxTurns?: number
@@ -207,6 +215,16 @@ export class ClaudeSDKSession implements AgentLiveSession {
   }
 
   private buildQueryOptions(options: ClaudeSDKSessionOptions): Record<string, unknown> {
+    const hostEnv = buildHostEnvironment({
+      baseEnv: options.hostEnv ?? process.env,
+      shellPath: options.resolveShellPath
+        ? options.resolveShellPath()
+        : resolveCachedLoginShellPath(options.hostEnv ?? process.env),
+      appendPathEntries: [
+        options.nodeRuntimeBinPath ?? process.env.SYNAPSE_NODE_RUNTIME_BIN ?? "",
+      ],
+    })
+    const sdkEnv = mergeEnvironmentWithPath(hostEnv, options.env)
     const queryOptions: Partial<Options> = {
       cwd: options.cwd,
       settingSources: ["user", "project", "local"],
@@ -216,10 +234,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
         disableAllHooks: true,
         env: options.env,
       },
-      env: {
-        ...process.env,
-        ...options.env,
-      },
+      env: sdkEnv,
       includePartialMessages: true,
       canUseTool: (toolName, input, context) => this.canUseTool(toolName, input, context),
     }

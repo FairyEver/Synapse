@@ -55,3 +55,22 @@ Synapse 里的 Claude 需要复用本机 Claude Code 的全局和项目上下文
 - `disableAllHooks: true` 继续保留，避免全局或项目 hook 在 Synapse 托管会话中执行。
 
 审查时不要把 `settings.env: options.env` 误判为重复配置。它和顶层 `env: { ...process.env, ...options.env }` 不是同一层：顶层 `env` 传给 Claude Code 子进程，`settings.env` 用于覆盖从 `~/.claude/settings.json` / 项目 settings 读取到的同名 provider 鉴权配置。
+
+## Agent 子进程 PATH 与 Node fallback
+
+`desktop/electron/runtime/process/shell-environment.ts`、`desktop/electron/services/agent-runtime/claude-sdk-session.ts`、`desktop/electron/bootstrap/descriptors.ts` 和 `desktop/electron/services/diagnostics-service.ts` 中的 PATH 合并、login shell PATH 解析、Node fallback 与诊断展示是有意设计，用于修复 macOS GUI App 启动后 agent 子进程找不到 `node` 的问题。
+
+典型场景是：用户终端里 `node -v` 正常，Node 位于 `/opt/homebrew/bin/node`，但 Synapse 从 Dock、访达或登录项启动时 App 进程只拿到 `/usr/bin:/bin:/usr/sbin:/sbin`，导致 agent 执行 `node ...` 报 `command not found: node`。
+
+审查这条链路时应保留以下行为：
+
+- Agent SDK 顶层 `env` 必须基于 host 环境构造，并合并 App PATH、login shell PATH 和 Synapse runtime fallback PATH；不要退回到简单的 `{ ...process.env, ...options.env }`。
+- `settings.env: options.env` 继续只表达 provider 鉴权覆盖；它不能替代顶层子进程 `env`。
+- login shell PATH 解析必须使用 `__SYNAPSE_PATH_BEGIN__` / `__SYNAPSE_PATH_END__` 标记读取，避免用户 `.zshrc`、`.zprofile` 或 shell framework 打印额外内容时污染 PATH。
+- login shell 读取失败或超时时应降级，不应阻断启动；缓存和短时间失败重试控制是为了避免反复触发重型 shell 初始化。
+- `core.process-environment` 启动服务创建 `node` / `synapse-node` shim 是 fallback，不是替代用户真实 Node。真实 Node 在 PATH 中存在时应优先命中，fallback 只用于避免直接 `node: command not found`。
+- fallback shim 通过 `ELECTRON_RUN_AS_NODE=1` 调用 Electron 可执行文件，这是为了复用随 App 分发的 Node runtime。不要把它误判为误调用 App 主程序。
+- Windows 上 `Path` / `PATH` 需要按平台大小写不敏感处理，不能只读取大写 `PATH`。
+- 诊断页的 `system.node-visibility` 检查应保留，用于明确展示 `App PATH`、`Login Shell PATH`、最终 PATH、各层 node 可见性和 Synapse Node fallback 目录。
+
+这组逻辑的目标是让用户无需手动改 `.zshrc` 或重新从终端启动 Synapse，就能让 Agent 子进程继承可用命令环境。自动化审查不要把 PATH 合并、全局 `process.env.PATH` 更新、runtime-bin shim 或诊断明细误判为多余改动。

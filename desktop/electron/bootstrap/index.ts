@@ -15,6 +15,7 @@ export {
   coreConfigDescriptor,
   coreDatabaseDescriptor,
   coreLoggingDescriptor,
+  coreProcessEnvironmentDescriptor,
   coreTaskSchedulerDescriptor,
   coreHttpTestDescriptor,
   coreUpdateDescriptor,
