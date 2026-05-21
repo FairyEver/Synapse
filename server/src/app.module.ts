@@ -7,6 +7,7 @@ import { LoggerModule } from "nestjs-pino"
 import { join } from "node:path"
 import { AdminModule } from "./admin/admin.module"
 import { AdminAuthModule } from "./admin-auth/admin-auth.module"
+import { UserAuthModule } from "./auth/user-auth.module"
 import { BackupModule } from "./backup/backup.module"
 import { HealthModule } from "./health/health.module"
 import { InvitationsModule } from "./invitations/invitations.module"
@@ -48,6 +49,7 @@ import { PrismaModule } from "./prisma/prisma.module"
     }),
     PrismaModule,
     InvitationsModule,
+    UserAuthModule,
     AdminAuthModule,
     AdminModule,
     BackupModule,
