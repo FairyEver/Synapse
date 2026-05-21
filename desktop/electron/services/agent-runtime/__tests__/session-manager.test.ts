@@ -47,7 +47,9 @@ describe("SessionManager", () => {
       message: baseMessage("bypassPermissions"),
     })
 
-    expect(second).not.toBe(first)
+    expect(first.created).toBe(true)
+    expect(second.created).toBe(true)
+    expect(second.liveSession).not.toBe(first.liveSession)
     expect(createSession).toHaveBeenCalledTimes(2)
     expect(createSession.mock.calls.map(([input]) => input.mode)).toEqual([
       "default",
@@ -116,12 +118,13 @@ describe("SessionManager", () => {
       workspacePath: "/Users/liyang/private/project",
     }
 
-    await manager.getOrCreateSession({
+    const sessionHandle = await manager.getOrCreateSession({
       state,
       conversation: baseConversation(),
       message,
     })
 
+    expect(sessionHandle.created).toBe(true)
     expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
       sdkSessionId: "sdk-1",
     }))
@@ -178,9 +181,11 @@ describe("SessionManager", () => {
       message: baseMessage("bypassPermissions"),
     })
 
-    expect(second).not.toBe(first)
+    expect(first.created).toBe(true)
+    expect(second.created).toBe(true)
+    expect(second.liveSession).not.toBe(first.liveSession)
     expect(createSession).toHaveBeenCalledTimes(2)
-    expect(state.liveSession).toBe(second)
+    expect(state.liveSession).toBe(second.liveSession)
     expect(logger.warn).toHaveBeenCalledWith("Agent live session close failed.", {
       boundary: "agent-runtime.live-session.close",
       conversationId: "conversation-1",
@@ -223,6 +228,40 @@ describe("SessionManager", () => {
       mode: "default",
       sdkSessionId: "sdk-1",
     })
+  })
+
+  it("marks reused live sessions as not created", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    const first = await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+    const second = await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    expect(first.created).toBe(true)
+    expect(second.created).toBe(false)
+    expect(second.liveSession).toBe(first.liveSession)
+    expect(createSession).toHaveBeenCalledOnce()
   })
 })
 

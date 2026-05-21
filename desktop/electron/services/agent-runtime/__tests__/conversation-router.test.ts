@@ -325,6 +325,30 @@ describe("ConversationRouter", () => {
     ])
   })
 
+  it("prepares only live session messages while preserving original user history", async () => {
+    const session = new ScriptedSession([
+      { type: "result", content: "first", done: true, sdkSessionId: "sdk-1" },
+      { type: "result", content: "second", done: true, sdkSessionId: "sdk-1" },
+    ], "sdk-1")
+    const prepareMessage = vi.fn((message: AgentMessage, context: { readonly isNewLiveSession: boolean }) => ({
+      ...message,
+      content: `${context.isNewLiveSession ? "new" : "reused"}:${message.content}`,
+    }))
+    const { conversations, router } = createRouter({ session, prepareMessage })
+
+    const first = await router.send(baseMessage("hello"))
+    const second = await router.send(baseMessage("again"))
+    const savedConversation = await conversations.get(second.conversationId)
+
+    expect(first.resultText).toBe("first")
+    expect(second.resultText).toBe("second")
+    expect(session.sent).toEqual(["new:hello", "reused:again"])
+    expect(savedConversation?.history.filter((entry) => entry.role === "user")).toEqual([
+      expect.objectContaining({ content: "hello" }),
+      expect.objectContaining({ content: "again" }),
+    ])
+  })
+
   it("returns streamed SDK text as side session partial text when the relay times out", async () => {
     const session = new ControlledSession("sdk-1")
     const { router } = createRouter({ session })
@@ -753,6 +777,7 @@ function createRouter(input: {
   readonly commandRouter?: AgentCommandRouter
   readonly eventBus?: ConversationRouterDeps["eventBus"]
   readonly logger?: ConversationRouterDeps["logger"]
+  readonly prepareMessage?: ConversationRouterDeps["prepareMessage"]
 } = {}) {
   const conversations = input.conversations ?? new MemoryNamespace<ConversationEntryV1>("conversations")
   const providerService = new FakeProviderService(input.activeProviderId ?? "anthropic", input.env ?? {})
@@ -799,6 +824,7 @@ function createRouter(input: {
       eventBus: input.eventBus,
       logger: input.logger,
       now: fixedNow,
+      prepareMessage: input.prepareMessage,
     },
     repository,
     sessionManager,

@@ -40,6 +40,10 @@ export interface ConversationRouterDeps {
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
   readonly now?: () => Date
   readonly permissionTimeoutMs?: number
+  readonly prepareMessage?: (
+    message: AgentMessage,
+    context: { readonly isNewLiveSession: boolean },
+  ) => AgentMessage | Promise<AgentMessage>
 }
 
 const DEFAULT_PENDING_QUEUE_LIMIT = 5
@@ -353,17 +357,20 @@ export class ConversationRouter {
       }
 
       try {
-        const liveSession = await this.sessionManager.getOrCreateSession({
+        const sessionHandle = await this.sessionManager.getOrCreateSession({
           state,
           conversation,
           message,
           abortSignal,
         })
+        const liveMessage = await Promise.resolve(this.deps.prepareMessage?.(message, {
+          isNewLiveSession: sessionHandle.created,
+        }) ?? message)
         const result = await this.processLiveTurn(
           state,
-          message,
+          liveMessage,
           conversation,
-          liveSession,
+          sessionHandle.liveSession,
           turnId,
           abortSignal,
           liveEventTimeoutMs,
@@ -514,7 +521,7 @@ export class ConversationRouter {
     let error: string | undefined
     try {
       const savedConversation = await this.repository.appendHistory(conversation.id, "user", message.content)
-      const liveSession = await this.sessionManager.getOrCreateSession({
+      const { liveSession } = await this.sessionManager.getOrCreateSession({
         state,
         conversation: savedConversation,
         message,

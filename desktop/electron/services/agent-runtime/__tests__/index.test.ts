@@ -64,18 +64,19 @@ function createProjectContext(failingServiceId: string): ProjectContext {
 }
 
 describe("createAgentRuntimeProjectService", () => {
-  it("does not swallow registry errors for registered optional Agent dependencies", () => {
+  it("does not swallow registry errors for registered optional Agent dependencies", async () => {
     const serviceFactory = createAgentRuntimeProjectService()
     const ctx = createProjectContext("core.side-channel")
     let created: AgentRuntimeService | Promise<AgentRuntimeService> | undefined
 
     try {
-      expect(() => {
-        created = serviceFactory.create(ctx)
-      }).toThrow(ServiceNotRunningError)
+      created = serviceFactory.create(ctx)
+      await expect(created).rejects.toThrow(ServiceNotRunningError)
     } finally {
       if (created instanceof AgentRuntimeService) {
         created.stopIdleReclaim()
+      } else if (created) {
+        await created.then((service) => service.stopIdleReclaim(), () => undefined)
       }
     }
   })

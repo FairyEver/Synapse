@@ -13,12 +13,15 @@ import {
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { ServiceNotFoundError } from "../../runtime/service-registry"
 import type { ProcessIsolationResolver } from "../execution-isolation"
+import { configStore } from "../config-store"
+import { createKnowledgeBaseAgentContribution } from "../knowledge-base/agent-contribution"
 import {
   createProviderServiceFromDataRepository,
 } from "../provider"
 import { ReplyOutboxService } from "../reply-target"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
 import { CustomCommandRegistry } from "./command-registry"
+import { mergeAgentProjectContributions } from "./project-contributions"
 import { SkillRegistry } from "./skill-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
 
@@ -67,6 +70,7 @@ export {
 } from "./session-repository"
 export {
   SessionManager,
+  type AgentLiveSessionHandle,
   type AgentLiveSessionFactory,
   type CreateAgentLiveSessionInput,
 } from "./session-manager"
@@ -79,6 +83,11 @@ export {
   buildSkillInvocationPrompt,
   type AgentSkill,
 } from "./skill-registry"
+export {
+  mergeAgentProjectContributions,
+  type AgentProjectContribution,
+  type AgentProjectMessageContext,
+} from "./project-contributions"
 export {
   AGENT_RUNTIME_SERVICE_ID,
   type AgentAttachment,
@@ -101,7 +110,7 @@ export {
 export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRuntimeService> {
   return {
     id: AGENT_RUNTIME_SERVICE_ID,
-    create(ctx) {
+    async create(ctx) {
       const permissionGuard = ctx.globalRegistry.get<PermissionGuard>("core.permission-guard")
       const auditSink = ctx.globalRegistry.get<AuditSink>("core.audit-sink")
       const dataRepository = ctx.globalRegistry.get<DataRepository>("core.data-repository")
@@ -135,6 +144,12 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         workspacePath: ctx.projectMeta.workspacePath,
         logger: ctx.logger,
       })
+      const appConfig = await configStore.load()
+      const project = appConfig.global.projects.find((item) => item.id === ctx.projectId)
+      const contributions = [
+        project ? await createKnowledgeBaseAgentContribution({ project }) : null,
+      ].filter((item): item is NonNullable<typeof item> => item !== null)
+      const contribution = mergeAgentProjectContributions(contributions)
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
@@ -153,6 +168,8 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         customCommands,
         skills,
         commandRunner: runner,
+        registeredPromptCommands: contribution.commands,
+        prepareMessage: contribution.prepareMessage,
       })
       service.startIdleReclaim()
       return service

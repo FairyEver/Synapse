@@ -89,6 +89,10 @@ export interface AgentRuntimeServiceDeps {
   readonly skills?: SkillRegistry
   readonly commandRunner?: CommandExecutionRunner
   readonly executionIsolation?: ProcessIsolationResolver
+  readonly prepareMessage?: (
+    message: AgentMessage,
+    context: { readonly isNewLiveSession: boolean },
+  ) => AgentMessage | Promise<AgentMessage>
   readonly replyTargets?: {
     rememberReplyTarget(target: ReplyTarget): void
     dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): Promise<void>
@@ -180,6 +184,7 @@ export class AgentRuntimeService {
         replyTargets: deps.replyTargets,
         agentEvents: deps.agentEvents,
         now: deps.now,
+        prepareMessage: deps.prepareMessage,
       },
       repository: this.repository,
       sessionManager: this.sessionManager,

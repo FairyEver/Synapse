@@ -30,6 +30,11 @@ export type AgentLiveSessionFactory = (
   input: CreateAgentLiveSessionInput,
 ) => AgentLiveSession | Promise<AgentLiveSession>
 
+export type AgentLiveSessionHandle = {
+  readonly liveSession: AgentLiveSession
+  readonly created: boolean
+}
+
 export interface SessionManagerDeps {
   readonly projectId: string
   readonly workDir?: string
@@ -106,7 +111,7 @@ export class SessionManager {
     readonly conversation: ConversationEntryV1
     readonly message: AgentMessage
     readonly abortSignal?: AbortSignal
-  }): Promise<AgentLiveSession> {
+  }): Promise<AgentLiveSessionHandle> {
     const providerId = input.conversation.providerId ?? input.message.providerId
     if (!providerId) {
       throw new Error("Provider is required")
@@ -121,7 +126,7 @@ export class SessionManager {
       && providerMatches
       && modeMatches
     ) {
-      return input.state.liveSession
+      return { liveSession: input.state.liveSession, created: false }
     }
 
     const cwd = input.message.workspacePath ?? this.deps.workDir
@@ -185,7 +190,7 @@ export class SessionManager {
       resumePolicy: input.conversation.resumePolicy,
       sdkSessionId,
     })
-    return liveSession
+    return { liveSession, created: true }
   }
 
   async getActiveProviderId(): Promise<string | undefined> {
