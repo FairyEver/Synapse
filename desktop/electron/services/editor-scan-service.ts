@@ -363,11 +363,20 @@ async function readPreview(filePath: string): Promise<string> {
 
 async function readSynapseSkillMeta(
   skillDir: string,
-): Promise<{ id: string } | null> {
+): Promise<{ id: string; repositoryVersion: string | null } | null> {
   try {
     const raw = await readFile(path.join(skillDir, SYNAPSE_SKILL_ID_FILE), "utf8")
-    const meta = JSON.parse(raw) as { id?: string }
-    return meta.id ? { id: meta.id } : null
+    const meta = JSON.parse(raw) as { id?: unknown; repositoryVersion?: unknown }
+    if (typeof meta.id !== "string" || meta.id.trim().length === 0) {
+      return null
+    }
+
+    return {
+      id: meta.id,
+      repositoryVersion: typeof meta.repositoryVersion === "string" && meta.repositoryVersion.trim().length > 0
+        ? meta.repositoryVersion
+        : null,
+    }
   } catch {
     return null
   }
@@ -418,6 +427,7 @@ async function scanSkillsDirectory(dirPath: string): Promise<EditorScanSkillItem
         path: skillDir,
         source,
         synapseContentId: meta?.id ?? null,
+        repositoryVersion: meta?.repositoryVersion ?? null,
         preview,
         fileCount: children.length,
         trash: { mode: "path" },

@@ -190,6 +190,25 @@ describe("editor scan quick publish", () => {
     expect(result.duplicateSkillNames).toEqual(["reviewer"])
   })
 
+  it("reads installed skill repository version from .synapse.json", async () => {
+    const root = await createTempDir()
+    const skillDir = path.join(root, "reviewer")
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(path.join(skillDir, "SKILL.md"), "# Reviewer\n")
+    await writeFile(path.join(skillDir, ".synapse.json"), JSON.stringify({
+      id: "skill-1",
+      repositoryVersion: "20260521010101",
+    }))
+
+    const result = await scanSkillDirectories([root])
+
+    expect(result.skills).toContainEqual(expect.objectContaining({
+      name: "reviewer",
+      synapseContentId: "skill-1",
+      repositoryVersion: "20260521010101",
+    }))
+  })
+
   it("creates a skill draft with nested binary attachments from the scan scope", async () => {
     const root = await createTempDir()
     const skillDir = path.join(root, "release-helper")
