@@ -78,7 +78,7 @@ describe("knowledge base Agent contribution", () => {
     }, { isNewLiveSession: false }))
 
     expect(prepared?.content).toContain("Recent fact.")
-    expect(prepared?.content).toContain("Do not guess a file path from a wikilink title.")
+    expect(prepared?.content).toContain("不要根据 wikilink 标题猜测文件路径。")
     expect(unchanged?.content).toBe("What changed?")
   })
 
@@ -165,7 +165,7 @@ describe("knowledge base Agent contribution", () => {
     const command = contribution?.commands[0]
     const output = await command?.buildPrompt(["ingest"], baseMessage("/wiki ingest"))
 
-    expect(expectObjectOutput(output, "prompt")).toContain("Run Knowledge Base ingest")
+    expect(expectObjectOutput(output, "prompt")).toContain("执行知识库导入")
   })
 
   it("returns a direct /wiki status result", async () => {
@@ -179,7 +179,7 @@ describe("knowledge base Agent contribution", () => {
 
     const output = await contribution?.commands[0]?.buildPrompt(["status"], baseMessage("/wiki status"))
 
-    expect(expectObjectOutput(output, "result")).toContain("Sources: 1")
+    expect(expectObjectOutput(output, "result")).toContain("- 来源：1")
   })
 
   it("expands /wiki query into query prompt with mode", async () => {
@@ -194,8 +194,8 @@ describe("knowledge base Agent contribution", () => {
     )
     const content = expectObjectOutput(output, "prompt")
 
-    expect(content).toContain("Mode: quick")
-    expect(content).toContain("Question: 部门职责")
+    expect(content).toContain("- 模式：`quick`")
+    expect(content).toContain("- 问题：部门职责")
   })
 
   it("expands /wiki hot into hot cache prompt", async () => {
@@ -208,7 +208,7 @@ describe("knowledge base Agent contribution", () => {
 
     const output = await contribution?.commands[0]?.buildPrompt(["hot"], baseMessage("/wiki hot"))
 
-    expect(expectObjectOutput(output, "prompt")).toContain("Refresh `wiki/hot.md`")
+    expect(expectObjectOutput(output, "prompt")).toContain("刷新 `wiki/hot.md`")
   })
 })
 

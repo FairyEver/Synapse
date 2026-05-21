@@ -1,9 +1,9 @@
-Run Knowledge Base ingest for this Synapse project.
+执行知识库导入。
 
-Process source files under `.raw/` that are missing from `.raw/.manifest.json` or whose hash changed. Do not edit source files. For each changed source, create or update a source page in `wiki/sources/`, relevant concept pages in `wiki/concepts/`, relevant entity pages in `wiki/entities/`, then update `wiki/index.md`, `wiki/hot.md`, and `wiki/log.md`.
+处理 `.raw/` 下缺少 `.raw/.manifest.json` 记录或 hash 已变化的来源文件。不要编辑来源文件。对每个变更来源，创建或更新 `wiki/sources/` 中的来源页、`wiki/concepts/` 中的相关概念页、`wiki/entities/` 中的相关实体页，然后更新 `wiki/index.md`、`wiki/hot.md` 和 `wiki/log.md`。
 
-Only process the sources listed in the preflight source list. Do not scan all of `.raw/` unless the prompt explicitly says this is a force ingest.
+只处理预检来源列表中的来源。除非提示明确说明这是强制导入，不要扫描整个 `.raw/`。
 
-After writing wiki pages, update `.raw/.manifest.json` for every processed source with its provided sha256 hash, an ISO `ingested_at`, `pages_created`, and `pages_updated`.
+写入 wiki 页面后，为每个已处理来源更新 `.raw/.manifest.json`，写入提供的 sha256 hash、ISO 格式的 `ingested_at`、`pages_created` 和 `pages_updated`。
 
-Use Markdown frontmatter with `type`, `title`, `status`, and `tags`. Use wikilinks for cross references. Report created pages, updated pages, skipped unchanged sources, and any conflicts.
+使用包含 `type`、`title`、`status` 和 `tags` 的 Markdown frontmatter。交叉引用使用 wikilink。最后汇报新增页面、更新页面、跳过的未变更来源和冲突。

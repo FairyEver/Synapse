@@ -1,7 +1,7 @@
-Answer from this Synapse Knowledge Base.
+从这个 Synapse 知识库回答。
 
-Read `wiki/hot.md` first. If it is not enough, read `wiki/index.md`, then the most relevant pages under `wiki/`. Answer only from the vault when the question is about this knowledge base. Cite pages with wikilinks. If coverage is missing, say what is missing and suggest adding a source.
+先读取 `wiki/hot.md`。如果信息不足，再读取 `wiki/index.md`，然后读取 `wiki/` 下最相关的页面。当问题属于这个知识库时，只基于库内内容回答。用 wikilink 引用页面。若覆盖不足，说明缺少什么，并建议补充来源。
 
-Use the Mode and Question supplied below this template. Do not infer a different mode.
+使用下方提供的模式和问题，不要推断成其他模式。
 
-Do not guess a file path from a wikilink title. Resolve the real file first with `wiki/index.md`, `Glob`, or `Grep`, then read the matching path.
+不要根据 wikilink 标题猜测文件路径。先通过 `wiki/index.md`、`Glob` 或 `Grep` 解析真实文件，再读取匹配路径。

@@ -20,7 +20,7 @@ afterEach(async () => {
 })
 
 describe("wiki command prompts", () => {
-  it("returns a direct status result with source counts and commands", async () => {
+  it("returns a Chinese markdown status result with source counts and commands", async () => {
     const projectPath = await tempDir()
     await mkdir(path.join(projectPath, ".raw"), { recursive: true })
     await writeFile(path.join(projectPath, ".raw", "note.md"), "部门职责\n")
@@ -32,9 +32,10 @@ describe("wiki command prompts", () => {
     })
 
     const content = expectObjectOutput(output, "result")
-    expect(content).toContain("Sources: 1")
-    expect(content).toContain("Changed: 1")
-    expect(content).toContain("/wiki ingest")
+    expect(content).toContain("## Wiki 状态")
+    expect(content).toContain("- 来源：1")
+    expect(content).toContain("- 有变更：1")
+    expect(content).toContain("`/wiki ingest`")
   })
 
   it("returns a direct ingest result when sources are unchanged", async () => {
@@ -61,10 +62,12 @@ describe("wiki command prompts", () => {
       readPrompt: promptReader(),
     })
 
-    expect(expectObjectOutput(output, "result")).toContain("No wiki source changes")
+    const content = expectObjectOutput(output, "result")
+    expect(content).toContain("## 没有需要导入的来源")
+    expect(content).toContain("- 来源：1")
   })
 
-  it("builds an ingest prompt with preflight sources and manifest requirements", async () => {
+  it("builds a Chinese markdown ingest prompt with preflight sources and manifest requirements", async () => {
     const projectPath = await tempDir()
     await mkdir(path.join(projectPath, ".raw"), { recursive: true })
     await writeFile(path.join(projectPath, ".raw", "note.md"), "部门职责\n")
@@ -72,28 +75,29 @@ describe("wiki command prompts", () => {
     const output = await buildKnowledgeBaseCommandOutput({
       projectPath,
       args: ["ingest"],
-      readPrompt: promptReader({ "ingest.md": "Run Knowledge Base ingest template." }),
+      readPrompt: promptReader({ "ingest.md": "执行知识库导入模板。" }),
     })
 
     const content = expectObjectOutput(output, "prompt")
-    expect(content).toContain("Run Knowledge Base ingest template.")
+    expect(content).toContain("执行知识库导入模板。")
     expect(content).toContain(".raw/note.md")
-    expect(content).toContain("Manifest update requirements")
+    expect(content).toContain("## 清单更新要求")
   })
 
-  it("builds a quick query prompt with mode and question", async () => {
+  it("builds a Chinese markdown quick query prompt with mode and question", async () => {
     const projectPath = await tempDir()
 
     const output = await buildKnowledgeBaseCommandOutput({
       projectPath,
       args: ["query", "quick", "部门职责"],
-      readPrompt: promptReader({ "query.md": "Answer from this Synapse Knowledge Base." }),
+      readPrompt: promptReader({ "query.md": "从这个 Synapse 知识库回答。" }),
     })
 
     const content = expectObjectOutput(output, "prompt")
-    expect(content).toContain("Answer from this Synapse Knowledge Base.")
-    expect(content).toContain("Mode: quick")
-    expect(content).toContain("Question: 部门职责")
+    expect(content).toContain("从这个 Synapse 知识库回答。")
+    expect(content).toContain("## 查询参数")
+    expect(content).toContain("- 模式：`quick`")
+    expect(content).toContain("- 问题：部门职责")
   })
 
   it("builds a hot-cache prompt with recent log context", async () => {
@@ -104,18 +108,18 @@ describe("wiki command prompts", () => {
     const output = await buildKnowledgeBaseCommandOutput({
       projectPath,
       args: ["hot"],
-      readPrompt: promptReader({ "hot-cache.md": "Refresh `wiki/hot.md`." }),
+      readPrompt: promptReader({ "hot-cache.md": "刷新 `wiki/hot.md`。" }),
     })
 
     const content = expectObjectOutput(output, "prompt")
-    expect(content).toContain("Refresh `wiki/hot.md`.")
-    expect(content).toContain("Recent log context")
+    expect(content).toContain("刷新 `wiki/hot.md`。")
+    expect(content).toContain("## 最近日志上下文")
     expect(content).toContain("Recent source update.")
   })
 })
 
 function promptReader(overrides: Record<string, string> = {}): (fileName: string) => Promise<string> {
-  return async (fileName) => overrides[fileName] ?? `Prompt: ${fileName}`
+  return async (fileName) => overrides[fileName] ?? `提示：${fileName}`
 }
 
 function expectObjectOutput(output: RegisteredPromptCommandOutput, kind: "prompt" | "result"): string {

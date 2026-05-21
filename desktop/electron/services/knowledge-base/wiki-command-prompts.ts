@@ -3,9 +3,17 @@ import path from "node:path"
 
 import type { RegisteredPromptCommandOutput } from "../agent-runtime/command-router"
 import { scanKnowledgeBaseSources } from "./source-scan"
+import {
+  wikiIngestAppendixCopy,
+  wikiInvalidManifestCopy,
+  wikiNoIngestChangesCopy,
+  wikiQueryParametersCopy,
+  wikiRecentLogContextCopy,
+  wikiStatusCopy,
+  wikiUnknownCommandCopy,
+} from "./wiki-command-copy"
 
 const QUERY_MODES = new Set(["quick", "deep", "standard"])
-const AVAILABLE_COMMANDS = ["/wiki ingest", "/wiki query", "/wiki hot", "/wiki save", "/wiki lint"]
 
 export interface BuildKnowledgeBaseCommandOutputInput {
   readonly projectPath: string
@@ -36,10 +44,7 @@ export async function buildKnowledgeBaseCommandOutput(
       return {
         kind: "result",
         error: true,
-        content: [
-          `Unknown /wiki command: ${command}`,
-          `Available commands: ${AVAILABLE_COMMANDS.join(", ")}`,
-        ].join("\n"),
+        content: wikiUnknownCommandCopy(command),
       }
   }
 }
@@ -49,14 +54,12 @@ async function buildStatusOutput(projectPath: string): Promise<RegisteredPromptC
   const changedCount = scan.sources.filter((source) => source.state !== "unchanged").length
   return {
     kind: "result",
-    content: [
-      "Wiki status",
-      `Manifest: ${formatManifestStatus(scan.manifest)}`,
-      `Sources: ${scan.sources.length}`,
-      `Changed: ${changedCount}`,
-      `Skipped: ${scan.skippedSources.length}`,
-      `Available commands: ${AVAILABLE_COMMANDS.join(", ")}`,
-    ].join("\n"),
+    content: wikiStatusCopy({
+      manifest: scan.manifest,
+      sources: scan.sources.length,
+      changed: changedCount,
+      skipped: scan.skippedSources.length,
+    }),
   }
 }
 
@@ -70,7 +73,7 @@ async function buildIngestOutput(
     return {
       kind: "result",
       error: true,
-      content: `Invalid wiki source manifest: ${scan.manifest.error}`,
+      content: wikiInvalidManifestCopy(scan.manifest.error),
     }
   }
 
@@ -78,11 +81,10 @@ async function buildIngestOutput(
   if (changedSources.length === 0) {
     return {
       kind: "result",
-      content: [
-        "No wiki source changes to ingest.",
-        `Sources: ${scan.sources.length}`,
-        `Skipped: ${scan.skippedSources.length}`,
-      ].join("\n"),
+      content: wikiNoIngestChangesCopy({
+        sources: scan.sources.length,
+        skipped: scan.skippedSources.length,
+      }),
     }
   }
 
@@ -91,17 +93,10 @@ async function buildIngestOutput(
     content: [
       await readPrompt("ingest.md"),
       "",
-      "Preflight source list:",
-      ...changedSources.map((source) => `- ${source.relativePath} (${source.state}, sha256: ${source.hash})`),
-      ...(scan.skippedSources.length > 0
-        ? ["", "Skipped sources:", ...scan.skippedSources.map((source) => `- ${source.relativePath} (${source.reason})`)]
-        : []),
-      "",
-      "Manifest update requirements:",
-      "- Update `.raw/.manifest.json` after processing.",
-      "- Keep `version: 1`.",
-      "- For each processed source, write the current `hash`, `ingested_at`, `pages_created`, and `pages_updated`.",
-      "- Do not change entries for unchanged sources unless they were actually updated.",
+      wikiIngestAppendixCopy({
+        changedSources,
+        skippedSources: scan.skippedSources,
+      }),
     ].join("\n"),
   }
 }
@@ -120,8 +115,7 @@ async function buildQueryOutput(
     content: [
       await readPrompt("query.md"),
       "",
-      `Mode: ${mode}`,
-      `Question: ${question || "(not provided)"}`,
+      wikiQueryParametersCopy({ mode, question }),
     ].join("\n"),
   }
 }
@@ -136,17 +130,9 @@ async function buildHotOutput(
     content: [
       await readPrompt("hot-cache.md"),
       "",
-      "Recent log context:",
-      recentLog.trim() || "(none)",
+      wikiRecentLogContextCopy(recentLog),
     ].join("\n"),
   }
-}
-
-function formatManifestStatus(scan: Awaited<ReturnType<typeof scanKnowledgeBaseSources>>["manifest"]): string {
-  if (scan.status === "invalid") {
-    return `invalid (${scan.error})`
-  }
-  return scan.status
 }
 
 async function readOptional(filePath: string): Promise<string> {

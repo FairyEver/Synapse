@@ -1,5 +1,5 @@
-Refresh `wiki/hot.md`.
+刷新 `wiki/hot.md`。
 
-Keep it under 500 words. Include Last Updated, Key Recent Facts, Recent Changes, and Active Threads. It is a cache, not a journal.
+控制在 500 字以内。包含最近更新时间、关键近期事实、最近变化和活跃线索。它是缓存，不是日志。
 
-Overwrite `wiki/hot.md`; do not append to it. Use recent log context when provided.
+覆盖 `wiki/hot.md`，不要追加。若下方提供了最近日志上下文，优先参考它。
