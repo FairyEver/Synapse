@@ -8,6 +8,7 @@ const trashItem = vi.hoisted(() => vi.fn())
 
 vi.mock("electron", () => ({
   app: {
+    getAppPath: () => "/tmp/synapse-editor-scan-test-app",
     getPath: (which: string) => `/tmp/synapse-editor-scan-test-${which}`,
     getName: () => "synapse-test",
     getVersion: () => "0.0.0-test",

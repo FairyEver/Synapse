@@ -27,24 +27,13 @@ import {
   formatEditorWriteFailure,
   replaceFileAtomically,
 } from "./editor-file-write-utils"
+import {
+  readSkillDraftFromDirectory,
+  resolveSkillMainFile,
+  SYNAPSE_SKILL_ID_FILE,
+} from "./content-skill-source-service"
 
 const logger = createMainLogger("service.editor-scan")
-const SYNAPSE_SKILL_ID_FILE = ".synapse.json"
-const QUICK_PUBLISH_SKILL_ATTACHMENT_MAX_SIZE = 10 * 1024 * 1024
-const QUICK_PUBLISH_SKILL_ATTACHMENT_TOTAL_MAX_SIZE = 50 * 1024 * 1024
-const QUICK_PUBLISH_SKILL_ATTACHMENT_MAX_COUNT = 200
-const QUICK_PUBLISH_SENSITIVE_ATTACHMENT_NAMES = new Set([
-  "id_dsa",
-  "id_ecdsa",
-  "id_ed25519",
-  "id_rsa",
-])
-const QUICK_PUBLISH_SENSITIVE_ATTACHMENT_EXTENSIONS = new Set([
-  ".key",
-  ".p12",
-  ".pem",
-  ".pfx",
-])
 const RULE_TRASH_UNSUPPORTED_REASON = "当前 Rule 没有明确边界，请在 Finder 中处理。"
 const SAFE_RULE_ID_PATTERN = /^[A-Za-z0-9_.-]+$/
 const EDITOR_SCAN_SCOPE_ERROR = "目标不在当前编辑器扫描范围内。"
@@ -345,14 +334,6 @@ function previewLines(text: string): string {
   return (metadata.description?.trim() || body).split("\n").slice(0, 3).join("\n").trim()
 }
 
-function isSensitiveQuickPublishAttachment(relativeName: string): boolean {
-  const baseName = path.basename(relativeName).toLowerCase()
-  return (
-    QUICK_PUBLISH_SENSITIVE_ATTACHMENT_NAMES.has(baseName)
-    || QUICK_PUBLISH_SENSITIVE_ATTACHMENT_EXTENSIONS.has(path.extname(baseName))
-  )
-}
-
 async function readPreview(filePath: string): Promise<string> {
   try {
     return previewLines(await readFile(filePath, "utf8"))
@@ -405,20 +386,8 @@ async function scanSkillsDirectory(dirPath: string): Promise<EditorScanSkillItem
       const source: EditorScanItemSource = meta ? "synapse" : "external"
 
       const children = await readdir(skillDir)
-      const mdFiles = children.filter((f) => f.endsWith(".md"))
-      if (mdFiles.length === 0 && !meta) continue
-
-      let previewFile: string | null = null
-      for (const candidate of SKILL_MAIN_FILE_PRIORITY) {
-        if (mdFiles.includes(candidate)) {
-          previewFile = path.join(skillDir, candidate)
-          break
-        }
-      }
-      if (!previewFile && mdFiles.length > 0) {
-        mdFiles.sort()
-        previewFile = path.join(skillDir, mdFiles[0])
-      }
+      const previewFile = await resolveSkillMainFile(skillDir)
+      if (!previewFile && !meta) continue
 
       const preview = previewFile ? await readPreview(previewFile) : ""
 
@@ -607,35 +576,6 @@ async function scanAll(): Promise<EditorScanResult> {
   return { global, projects: projectResults }
 }
 
-// Skill 主文件发现优先级
-// Claude Code / Cursor / Codex / Windsurf 均以 SKILL.md（大写）为唯一标准入口
-// 后续为 Synapse 兼容性 fallback，编辑器本身不识别这些文件名
-const SKILL_MAIN_FILE_PRIORITY = [
-  "SKILL.md",
-  "skill.md",
-  "README.md",
-  "readme.md",
-  "index.md",
-]
-
-async function resolveSkillMainFile(dirPath: string): Promise<string | null> {
-  let children: string[]
-  try {
-    children = await readdir(dirPath)
-  } catch {
-    return null
-  }
-
-  for (const candidate of SKILL_MAIN_FILE_PRIORITY) {
-    if (children.includes(candidate)) {
-      return path.join(dirPath, candidate)
-    }
-  }
-
-  const mdFiles = children.filter((f) => f.endsWith(".md")).sort()
-  return mdFiles.length > 0 ? path.join(dirPath, mdFiles[0]) : null
-}
-
 async function readItemContent(
   filePath: string,
   security?: EditorScanReadSecurityDeps,
@@ -736,72 +676,6 @@ async function listSkillFiles(
   }
 }
 
-async function collectSkillFileSnapshots(
-  baseDir: string,
-  currentDir: string,
-  skip: Set<string>,
-  entries: EditorScanQuickPublishSkillFile[],
-  state: { fileCount: number; totalSize: number },
-): Promise<void> {
-  let children: string[]
-  try {
-    children = await readdir(currentDir)
-  } catch {
-    return
-  }
-
-  for (const name of children) {
-    if (name.startsWith(".")) continue
-    if (skip.has(name) && currentDir === baseDir) continue
-
-    const fullPath = path.join(currentDir, name)
-    const relativeName = toPortableRelativePath(path.relative(baseDir, fullPath))
-    let fileStat: Awaited<ReturnType<typeof lstat>>
-    try {
-      fileStat = await lstat(fullPath)
-    } catch {
-      continue
-    }
-    if (fileStat.isSymbolicLink()) continue
-
-    if (fileStat.isDirectory()) {
-      await collectSkillFileSnapshots(baseDir, fullPath, skip, entries, state)
-      continue
-    }
-
-    if (!fileStat.isFile()) continue
-    if (isSensitiveQuickPublishAttachment(relativeName)) {
-      throw new Error(`附件包含敏感文件：${relativeName}`)
-    }
-
-    if (fileStat.size > QUICK_PUBLISH_SKILL_ATTACHMENT_MAX_SIZE) {
-      throw new Error(`附件超过 10MB：${relativeName}`)
-    }
-
-    state.fileCount += 1
-    if (state.fileCount > QUICK_PUBLISH_SKILL_ATTACHMENT_MAX_COUNT) {
-      throw new Error(`附件数量超过 ${QUICK_PUBLISH_SKILL_ATTACHMENT_MAX_COUNT} 个。`)
-    }
-
-    state.totalSize += fileStat.size
-    if (state.totalSize > QUICK_PUBLISH_SKILL_ATTACHMENT_TOTAL_MAX_SIZE) {
-      throw new Error("附件总大小超过 50MB。")
-    }
-
-    let bytes: Buffer
-    try {
-      bytes = await readFile(fullPath)
-    } catch {
-      continue
-    }
-    entries.push({
-      originalName: relativeName,
-      size: fileStat.size,
-      bytes: new Uint8Array(bytes),
-    })
-  }
-}
-
 async function prepareQuickPublishDraft(
   request: EditorScanQuickPublishRequest,
   security?: EditorScanReadSecurityDeps,
@@ -831,36 +705,15 @@ async function prepareQuickPublishDraft(
       return draft
     }
 
-    const info = await stat(request.itemPath)
-    if (!info.isDirectory()) {
-      throw new Error("Skill 路径不是文件夹。")
-    }
-
-    const mainFile = await resolveSkillMainFile(request.itemPath)
-    if (!mainFile) {
-      throw new Error("未找到 Skill 主文件。")
-    }
-
-    const content = await readFile(mainFile, "utf8")
-    if (!content.trim()) {
-      throw new Error("Skill 主说明为空。")
-    }
-
-    const skip = new Set<string>([path.basename(mainFile), SYNAPSE_SKILL_ID_FILE])
-    const files: EditorScanQuickPublishSkillFile[] = []
-    await collectSkillFileSnapshots(request.itemPath, request.itemPath, skip, files, {
-      fileCount: 0,
-      totalSize: 0,
-    })
-    files.sort((a, b) => a.originalName.localeCompare(b.originalName))
+    const sourceDraft = await readSkillDraftFromDirectory(request.itemPath)
 
     const draft = {
       itemType: "skill" as const,
       itemPath: request.itemPath,
       itemName: request.itemName,
-      content,
-      files,
-      metadata: request.metadata ?? {},
+      content: sourceDraft.content,
+      files: sourceDraft.files as EditorScanQuickPublishSkillFile[],
+      metadata: { ...sourceDraft.metadata, ...(request.metadata ?? {}) },
     }
     recordEditorReadAudit(security, request.itemPath, "allowed", auditMetadata)
     return draft

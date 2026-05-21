@@ -1,0 +1,318 @@
+import { lstat, readFile, readdir, stat } from "node:fs/promises"
+import path from "node:path"
+import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
+import {
+  assertUniqueContentAttachmentPaths,
+  normalizeContentAttachmentPath,
+} from "../../src/lib/content-attachments"
+import type { SynapseCreateSkillFilePayload } from "../../src/types/content"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
+import { ContentCapabilityError } from "./content-capability-errors"
+import {
+  CONTENT_SKILL_ATTACHMENT_MAX_COUNT,
+  CONTENT_SKILL_ATTACHMENT_MAX_SIZE,
+  CONTENT_SKILL_ATTACHMENT_TOTAL_MAX_SIZE,
+} from "./content-skill-attachment-constraints"
+import { createMainLogger } from "./log-store"
+
+const logger = createMainLogger("service.content-skill-source")
+const SYNAPSE_SKILL_ID_FILE = ".synapse.json"
+const SKILL_MAIN_FILE_PRIORITY = [
+  "SKILL.md",
+  "skill.md",
+  "README.md",
+  "readme.md",
+  "index.md",
+]
+const SENSITIVE_ATTACHMENT_NAMES = new Set([
+  "id_dsa",
+  "id_ecdsa",
+  "id_ed25519",
+  "id_rsa",
+])
+const SENSITIVE_ATTACHMENT_EXTENSIONS = new Set([
+  ".key",
+  ".p12",
+  ".pem",
+  ".pfx",
+])
+
+type ContentSkillSourceSecurityDeps = {
+  actor: ActorIdentity
+  auditSink: AuditSink
+  permissionGuard: PermissionGuard
+}
+
+type ContentSkillSourceDraft = {
+  content: string
+  files: SynapseCreateSkillFilePayload[]
+  mainFilePath: string
+  metadata: Record<string, string>
+  sourceDirectoryPath: string
+}
+
+type SkillFileCollectionState = {
+  fileCount: number
+  files: SynapseCreateSkillFilePayload[]
+  totalSize: number
+}
+
+async function resolveSkillMainFile(dirPath: string): Promise<string | null> {
+  let children: string[]
+  try {
+    children = await readdir(dirPath)
+  } catch (error) {
+    logger.warn("Failed to read skill source directory.", {
+      dirPath,
+      error: getErrorMessage(error),
+    })
+    return null
+  }
+
+  for (const candidate of SKILL_MAIN_FILE_PRIORITY) {
+    if (children.includes(candidate)) {
+      return path.join(dirPath, candidate)
+    }
+  }
+
+  const mdFiles = children.filter((fileName) => fileName.endsWith(".md")).sort()
+  return mdFiles.length > 0 ? path.join(dirPath, mdFiles[0] ?? "") : null
+}
+
+async function readSkillDraftFromDirectory(
+  sourceDirectoryPath: string,
+  security?: ContentSkillSourceSecurityDeps,
+): Promise<ContentSkillSourceDraft> {
+  const dirPath = sourceDirectoryPath.trim()
+  if (!dirPath) {
+    throwInvalid("sourceDirectoryPath", "sourceDirectoryPath 不能为空。")
+  }
+
+  const auditMetadata = { operation: "read-skill-source-directory" }
+  await checkSkillSourceReadPermission(security, dirPath, auditMetadata)
+
+  try {
+    const directoryInfo = await lstat(dirPath)
+    if (directoryInfo.isSymbolicLink() || !directoryInfo.isDirectory()) {
+      throwInvalid("sourceDirectoryPath", "Skill 源路径必须是文件夹。")
+    }
+
+    const mainFilePath = await resolveSkillMainFile(dirPath)
+    if (!mainFilePath) {
+      throwInvalid("sourceDirectoryPath", "未找到 Skill 主文件。")
+    }
+
+    const content = await readFile(mainFilePath, "utf8")
+    if (!content.trim()) {
+      throwInvalid("content", "Skill 主说明为空。")
+    }
+
+    const skip = new Set<string>([path.basename(mainFilePath), SYNAPSE_SKILL_ID_FILE])
+    const state: SkillFileCollectionState = { fileCount: 0, totalSize: 0, files: [] }
+    await collectSkillFiles(dirPath, dirPath, skip, state)
+    state.files.sort((a, b) => a.originalName.localeCompare(b.originalName))
+    assertUniqueSkillAttachmentPaths(state.files)
+    recordSkillSourceAudit(security, dirPath, "allowed", auditMetadata)
+
+    return {
+      sourceDirectoryPath: dirPath,
+      mainFilePath,
+      content,
+      files: state.files,
+      metadata: parseFrontmatter(content).metadata,
+    }
+  } catch (error) {
+    recordSkillSourceAudit(security, dirPath, "failed", auditMetadata)
+    throw error
+  }
+}
+
+async function collectSkillFiles(
+  baseDir: string,
+  currentDir: string,
+  skip: Set<string>,
+  state: SkillFileCollectionState,
+): Promise<void> {
+  let children: string[]
+  try {
+    children = await readdir(currentDir)
+  } catch (error) {
+    logger.warn("Failed to list skill source files.", {
+      dirPath: currentDir,
+      error: getErrorMessage(error),
+    })
+    return
+  }
+
+  for (const name of children) {
+    if (name.startsWith(".")) continue
+    if (skip.has(name) && currentDir === baseDir) continue
+
+    const fullPath = path.join(currentDir, name)
+    let fileStat: Awaited<ReturnType<typeof lstat>>
+    try {
+      fileStat = await lstat(fullPath)
+    } catch (error) {
+      logger.warn("Failed to inspect skill source file.", {
+        filePath: fullPath,
+        error: getErrorMessage(error),
+      })
+      continue
+    }
+
+    if (fileStat.isSymbolicLink()) continue
+
+    if (fileStat.isDirectory()) {
+      await collectSkillFiles(baseDir, fullPath, skip, state)
+      continue
+    }
+
+    if (!fileStat.isFile()) continue
+    await collectSkillFile(baseDir, fullPath, fileStat.size, state)
+  }
+}
+
+async function collectSkillFile(
+  baseDir: string,
+  fullPath: string,
+  size: number,
+  state: SkillFileCollectionState,
+): Promise<void> {
+  const relativeName = normalizeContentAttachmentPath(toPortableRelativePath(path.relative(baseDir, fullPath)))
+  if (!relativeName) return
+
+  if (isSensitiveAttachment(relativeName)) {
+    throwInvalid("files", `附件包含敏感文件：${relativeName}`)
+  }
+
+  if (size > CONTENT_SKILL_ATTACHMENT_MAX_SIZE) {
+    throwInvalid("files", `附件超过 10MB：${relativeName}`)
+  }
+
+  state.fileCount += 1
+  if (state.fileCount > CONTENT_SKILL_ATTACHMENT_MAX_COUNT) {
+    throwInvalid("files", `附件数量超过 ${CONTENT_SKILL_ATTACHMENT_MAX_COUNT} 个。`)
+  }
+
+  state.totalSize += size
+  if (state.totalSize > CONTENT_SKILL_ATTACHMENT_TOTAL_MAX_SIZE) {
+    throwInvalid("files", "附件总大小超过 50MB。")
+  }
+
+  try {
+    const bytes = await readFile(fullPath)
+    state.files.push({
+      originalName: relativeName,
+      size,
+      bytes: new Uint8Array(bytes),
+    })
+  } catch (error) {
+    logger.warn("Failed to read skill source attachment.", {
+      filePath: fullPath,
+      error: getErrorMessage(error),
+    })
+  }
+}
+
+function parseFrontmatter(text: string): { metadata: Record<string, string>; body: string } {
+  if (!text.startsWith("---")) return { metadata: {}, body: text }
+
+  const endIndex = text.indexOf("\n---", 3)
+  if (endIndex === -1) return { metadata: {}, body: text }
+
+  const block = text.slice(4, endIndex)
+  const { metadata } = parseFrontmatterBlock(block)
+  return { metadata, body: text.slice(endIndex + 4).trim() }
+}
+
+function isSensitiveAttachment(relativeName: string): boolean {
+  const baseName = path.basename(relativeName).toLowerCase()
+  return (
+    SENSITIVE_ATTACHMENT_NAMES.has(baseName)
+    || SENSITIVE_ATTACHMENT_EXTENSIONS.has(path.extname(baseName))
+  )
+}
+
+function assertUniqueSkillAttachmentPaths(files: SynapseCreateSkillFilePayload[]): void {
+  try {
+    assertUniqueContentAttachmentPaths(files.map((file) => file.originalName))
+  } catch (error) {
+    throw new ContentCapabilityError("CONTENT_INVALID_INPUT", getErrorMessage(error), {
+      fields: { files: getErrorMessage(error) },
+      cause: error,
+    })
+  }
+}
+
+async function checkSkillSourceReadPermission(
+  deps: ContentSkillSourceSecurityDeps | undefined,
+  resource: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  if (!deps) return
+  const permission = await deps.permissionGuard.check({
+    action: "fs.read.outside-userdata",
+    actor: deps.actor,
+    context: metadata,
+    resource,
+  })
+  if (!permission.allowed) {
+    deps.auditSink.record({
+      action: "fs.read.outside-userdata",
+      actor: deps.actor,
+      metadata: {
+        ...metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+      outcome: "denied",
+      resource,
+    })
+    throw new ContentCapabilityError("CONTENT_FORBIDDEN", permission.reason)
+  }
+}
+
+function recordSkillSourceAudit(
+  deps: ContentSkillSourceSecurityDeps | undefined,
+  resource: string,
+  outcome: "allowed" | "failed",
+  metadata: Record<string, unknown>,
+): void {
+  deps?.auditSink.record({
+    action: "fs.read.outside-userdata",
+    actor: deps.actor,
+    metadata,
+    outcome,
+    resource,
+  })
+}
+
+async function assertDirectoryExists(dirPath: string): Promise<void> {
+  const info = await stat(dirPath)
+  if (!info.isDirectory()) {
+    throwInvalid("sourceDirectoryPath", "Skill 源路径必须是文件夹。")
+  }
+}
+
+function toPortableRelativePath(relativeName: string): string {
+  return relativeName.split(path.sep).join("/")
+}
+
+function throwInvalid(field: string, message: string): never {
+  throw new ContentCapabilityError("CONTENT_INVALID_INPUT", message, {
+    fields: { [field]: message },
+  })
+}
+
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
+}
+
+export {
+  assertDirectoryExists,
+  readSkillDraftFromDirectory,
+  resolveSkillMainFile,
+  SYNAPSE_SKILL_ID_FILE,
+  type ContentSkillSourceDraft,
+  type ContentSkillSourceSecurityDeps,
+}
