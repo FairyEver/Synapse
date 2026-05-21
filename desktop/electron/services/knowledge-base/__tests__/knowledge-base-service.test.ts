@@ -104,4 +104,14 @@ describe("KnowledgeBaseService", () => {
     expect(result.rawPath).toBe(path.join(targetPath, ".raw"))
     await expect(access(path.join(targetPath, ".raw"))).resolves.toBeUndefined()
   })
+
+  it("rejects opening a raw directory through a symlink", async () => {
+    const targetPath = await tempDir()
+    const outsidePath = await tempDir()
+    const service = new KnowledgeBaseService()
+    await symlink(outsidePath, path.join(targetPath, ".raw"), "dir")
+
+    await expect(service.openRawDirectory(targetPath)).rejects.toThrow("符号链接")
+    await expect(readFile(path.join(outsidePath, ".manifest.json"), "utf8")).rejects.toThrow()
+  })
 })

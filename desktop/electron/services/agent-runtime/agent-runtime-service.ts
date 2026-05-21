@@ -24,8 +24,9 @@ import { resolveShellCommand } from "../shell-exec"
 import type { ProviderService } from "../provider"
 import { AgentCommandRouter } from "./command-router"
 import type {
-  RegisteredPromptCommand,
+  RegisteredPromptCommandSource,
 } from "./command-router"
+import { resolveRegisteredPromptCommands } from "./command-router"
 import type { CustomCommandRegistry, PublishedAgentCommand } from "./command-registry"
 import { BUILTIN_COMMANDS } from "./command-registry"
 import type { AgentGovernanceDecision, AgentGovernanceService } from "./governance"
@@ -82,7 +83,7 @@ export interface AgentRuntimeServiceDeps {
   readonly outbox?: ReplyOutboxService
   readonly governance?: AgentGovernanceService
   readonly compressState?: DataNamespace<AgentCompressStateEntryV1>
-  readonly registeredPromptCommands?: readonly RegisteredPromptCommand[]
+  readonly registeredPromptCommands?: RegisteredPromptCommandSource
   readonly agentNativeSlashAllowlist?: readonly string[]
   readonly unknownSlashBehavior?: "reject" | "passthrough"
   readonly customCommands?: CustomCommandRegistry
@@ -543,6 +544,14 @@ export class AgentRuntimeService {
       .filter((command) => !command.allowedPlatforms
         || command.allowedPlatforms.some((allowed) => allowed.toLowerCase() === platform.toLowerCase()))
     const skills = await this.deps.skills?.listPublished() ?? []
+    const registeredPromptCommands = await resolveRegisteredPromptCommands(this.deps.registeredPromptCommands)
+    const registered = registeredPromptCommands.map((command) => ({
+      name: command.name,
+      description: command.description,
+      source: "custom" as const,
+      kind: "prompt" as const,
+      adminOnly: false,
+    }))
     const native = (this.deps.agentNativeSlashAllowlist ?? []).map((name) => ({
       name,
       source: "agent-native" as const,
@@ -550,7 +559,7 @@ export class AgentRuntimeService {
       adminOnly: false,
       allowedPlatforms: ["local-renderer"],
     }))
-    return [...BUILTIN_COMMANDS, ...custom, ...skills, ...native]
+    return [...BUILTIN_COMMANDS, ...registered, ...custom, ...skills, ...native]
   }
 
   async getCompressionState(agentType = this.agentType()): Promise<AgentCompressStateEntryV1> {

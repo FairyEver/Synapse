@@ -96,6 +96,7 @@ export class KnowledgeBaseService {
 
   async openRawDirectory(projectPath: string): Promise<SynapseKnowledgeBaseOpenRawResult> {
     const rawPath = assertInside(projectPath, path.join(projectPath, ".raw"))
+    await assertNoSymlinkInRequiredPath(projectPath, ".raw")
     await mkdir(rawPath, { recursive: true })
     return { rawPath }
   }

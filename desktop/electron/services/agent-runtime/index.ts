@@ -41,6 +41,7 @@ export {
   type AgentCommandRouterDeps,
   type AgentPromptCommandRoute,
   type RegisteredPromptCommand,
+  type RegisteredPromptCommandSource,
 } from "./command-router"
 export {
   BUILTIN_COMMANDS,
@@ -144,12 +145,6 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         workspacePath: ctx.projectMeta.workspacePath,
         logger: ctx.logger,
       })
-      const appConfig = await configStore.load()
-      const project = appConfig.global.projects.find((item) => item.id === ctx.projectId)
-      const contributions = [
-        project ? await createKnowledgeBaseAgentContribution({ project }) : null,
-      ].filter((item): item is NonNullable<typeof item> => item !== null)
-      const contribution = mergeAgentProjectContributions(contributions)
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
@@ -168,8 +163,12 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         customCommands,
         skills,
         commandRunner: runner,
-        registeredPromptCommands: contribution.commands,
-        prepareMessage: contribution.prepareMessage,
+        registeredPromptCommands: async () =>
+          (await resolveAgentProjectContribution(ctx.projectId)).commands,
+        prepareMessage: async (message, context) => {
+          const contribution = await resolveAgentProjectContribution(ctx.projectId)
+          return contribution.prepareMessage?.(message, context) ?? message
+        },
       })
       service.startIdleReclaim()
       return service
@@ -178,6 +177,15 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
       instance.stopIdleReclaim()
     },
   }
+}
+
+async function resolveAgentProjectContribution(projectId: string) {
+  const appConfig = await configStore.load()
+  const project = appConfig.global.projects.find((item) => item.id === projectId)
+  const contributions = [
+    project ? await createKnowledgeBaseAgentContribution({ project }) : null,
+  ].filter((item): item is NonNullable<typeof item> => item !== null)
+  return mergeAgentProjectContributions(contributions)
 }
 
 function optionalService<T>(registry: { get<U>(id: string): U }, id: string): T | undefined {

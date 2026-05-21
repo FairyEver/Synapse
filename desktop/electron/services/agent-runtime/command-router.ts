@@ -27,7 +27,7 @@ export interface AgentCommandRouterDeps {
   readonly agentType: string
   resolveAgentType?(): Promise<string> | string
   readonly providerService: ProviderService
-  readonly registeredPromptCommands?: readonly RegisteredPromptCommand[]
+  readonly registeredPromptCommands?: RegisteredPromptCommandSource
   readonly agentNativeSlashAllowlist?: readonly string[]
   readonly unknownSlashBehavior?: "reject" | "passthrough"
   readonly customCommands?: CustomCommandRegistry
@@ -56,8 +56,13 @@ interface ParsedCommand {
 
 export interface RegisteredPromptCommand {
   readonly name: string
+  readonly description?: string
   buildPrompt(args: readonly string[], message: AgentMessage): Promise<string> | string
 }
+
+export type RegisteredPromptCommandSource =
+  | readonly RegisteredPromptCommand[]
+  | (() => readonly RegisteredPromptCommand[] | Promise<readonly RegisteredPromptCommand[]>)
 
 export interface AgentPromptCommandRoute {
   readonly kind: "prompt"
@@ -118,7 +123,8 @@ export class AgentCommandRouter {
     parsed: ParsedCommand,
   ): Promise<AgentCommandRouterResult | null> {
     const name = commandName(parsed.name)
-    const promptCommand = this.deps.registeredPromptCommands?.find((command) =>
+    const registeredPromptCommands = await resolveRegisteredPromptCommands(this.deps.registeredPromptCommands)
+    const promptCommand = registeredPromptCommands.find((command) =>
       command.name.toLowerCase() === name)
     if (promptCommand) {
       return {
@@ -413,6 +419,13 @@ export class AgentCommandRouter {
     const skills = await this.deps.skills?.listPublished() ?? []
     return [...BUILTIN_COMMANDS, ...custom, ...skills]
   }
+}
+
+export async function resolveRegisteredPromptCommands(
+  source: RegisteredPromptCommandSource | undefined,
+): Promise<readonly RegisteredPromptCommand[]> {
+  if (!source) return []
+  return typeof source === "function" ? await source() : source
 }
 
 function errorMessage(error: unknown): string {

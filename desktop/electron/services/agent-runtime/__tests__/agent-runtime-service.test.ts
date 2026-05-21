@@ -70,6 +70,42 @@ describe("AgentRuntimeService", () => {
     })
   })
 
+  it("resolves registered prompt commands dynamically for listing and routing", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new ScriptedSession([
+      { type: "result", content: "kb done", done: true, sdkSessionId: "sdk-1" },
+    ], "sdk-1")
+    let kbEnabled = false
+    const registeredPromptCommands = vi.fn(async () =>
+      kbEnabled
+        ? [{
+          name: "kb",
+          buildPrompt: () => "expanded kb prompt",
+        }]
+        : [])
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      registeredPromptCommands,
+      now: fixedNow,
+    })
+
+    await expect(service.listPublishedCommands()).resolves.not.toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "kb" })]),
+    )
+    kbEnabled = true
+    await expect(service.listPublishedCommands()).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ name: "kb", source: "custom", kind: "prompt" })]),
+    )
+    const result = await service.send(baseMessage("/kb status"))
+
+    expect(result.resultText).toBe("kb done")
+    expect(session.sent).toEqual(["expanded kb prompt"])
+  })
+
   it("cancelTurn interrupts before forceKillTurn hard closes the session", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const session = new HangingSession()
@@ -785,6 +821,7 @@ class FakeProviderService {
 
 class ScriptedSession implements AgentLiveSession {
   readonly agentType = "claude-sdk"
+  readonly sent: string[] = []
   private readonly events: AgentEvent[]
   private closed = false
 
@@ -792,7 +829,8 @@ class ScriptedSession implements AgentLiveSession {
     this.events = [...events]
   }
 
-  async send(): Promise<boolean> {
+  async send(message: AgentMessage): Promise<boolean> {
+    this.sent.push(message.content)
     return true
   }
   async respondPermission(): Promise<void> {}
