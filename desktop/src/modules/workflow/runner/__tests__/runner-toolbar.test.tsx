@@ -28,6 +28,7 @@ describe("RunnerToolbar", () => {
     document.body.appendChild(container)
     const root = createRoot(container)
     const onCancel = vi.fn(async () => {})
+    const onCopyRunReport = vi.fn(async () => {})
     const onViewModeChange = vi.fn()
 
     await act(async () => {
@@ -40,6 +41,7 @@ describe("RunnerToolbar", () => {
           onCancel={onCancel}
           onRerun={vi.fn(async () => {})}
           onOpenEditor={vi.fn()}
+          onCopyRunReport={onCopyRunReport}
         />,
       )
     })
@@ -48,16 +50,22 @@ describe("RunnerToolbar", () => {
       .find((button) => button.textContent?.includes("时间线"))
     const stopButton = Array.from(container.querySelectorAll("button"))
       .find((button) => button.textContent?.includes("停止"))
+    const copyButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("复制"))
     expect(timelineButton).toBeInstanceOf(HTMLButtonElement)
     expect(stopButton).toBeInstanceOf(HTMLButtonElement)
+    expect(copyButton).toBeInstanceOf(HTMLButtonElement)
 
     await act(async () => {
       timelineButton?.click()
       stopButton?.click()
+      copyButton?.click()
+      await Promise.resolve()
     })
 
     expect(onViewModeChange).toHaveBeenCalledWith("timeline")
     expect(onCancel).toHaveBeenCalledTimes(1)
+    expect(onCopyRunReport).toHaveBeenCalledTimes(1)
     expect(track).toHaveBeenCalledWith({
       component: "button",
       name: "workflow-runner-view-timeline",
@@ -66,6 +74,11 @@ describe("RunnerToolbar", () => {
     expect(track).toHaveBeenCalledWith({
       component: "button",
       name: "workflow-runner-stop",
+      action: "click",
+    })
+    expect(track).toHaveBeenCalledWith({
+      component: "button",
+      name: "workflow-runner-copy-run-report",
       action: "click",
     })
 

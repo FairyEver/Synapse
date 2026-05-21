@@ -5,7 +5,7 @@ import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/component
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { ChevronDown, X } from "lucide-react"
+import { ChevronDown, Copy, X } from "lucide-react"
 import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
 import { track } from "@/lib/ui-tracking"
 import { createRendererLogger } from "@/app-shell/logging"
@@ -21,9 +21,10 @@ interface NodeResultPanelProps {
   nodeName: string
   definition?: WorkflowDefinition
   onClose: () => void
+  onCopyNodeReport?: () => Promise<void>
 }
 
-export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeResultPanelProps) {
+export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyNodeReport }: NodeResultPanelProps) {
   // Resolve activeBranch ID to user-configured label when definition is available
   const activeBranchLabel = (() => {
     if (!result.activeBranch || !definition) return result.activeBranch
@@ -63,6 +64,17 @@ export function NodeResultPanel({ result, nodeName, definition, onClose }: NodeR
         </Badge>
         {result.status === "running" && result.progressLabel && (
           <span className="text-xs text-muted-foreground animate-pulse">{result.progressLabel}</span>
+        )}
+        {onCopyNodeReport && (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7"
+            data-track="workflow-runner-copy-node-report"
+            onClick={() => void onCopyNodeReport()}
+          >
+            <Copy className="h-3.5 w-3.5 mr-1" />复制
+          </Button>
         )}
         <Button
           size="icon"

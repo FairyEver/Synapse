@@ -1,6 +1,6 @@
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { Square, RotateCcw, PenLine, LayoutDashboard, List, Loader2 } from "lucide-react"
+import { Square, RotateCcw, PenLine, LayoutDashboard, List, Loader2, Copy } from "lucide-react"
 import type { WorkflowDefinition, WorkflowRunStatus } from "@/types/workflow"
 import { RUN_STATE_BADGE } from "../lib/status-display"
 
@@ -17,9 +17,10 @@ interface RunnerToolbarProps {
   onCancel: () => Promise<void>
   onRerun: () => Promise<void>
   onOpenEditor: () => void
+  onCopyRunReport: () => Promise<void>
 }
 
-export function RunnerToolbar({ definition, runState, runError, viewMode, rerunning, cancelling, onViewModeChange, onCancel, onRerun, onOpenEditor }: RunnerToolbarProps) {
+export function RunnerToolbar({ definition, runState, runError, viewMode, rerunning, cancelling, onViewModeChange, onCancel, onRerun, onOpenEditor, onCopyRunReport }: RunnerToolbarProps) {
   const badge = RUN_STATE_BADGE[runState]
   const isRunning = runState === "running"
   const isTerminal = runState === "completed" || runState === "failed" || runState === "cancelled"
@@ -53,6 +54,9 @@ export function RunnerToolbar({ definition, runState, runError, viewMode, rerunn
             <List className="h-3.5 w-3.5 mr-1" />时间线
           </Button>
         </div>
+        <Button size="sm" variant="outline" data-track="workflow-runner-copy-run-report" onClick={() => void onCopyRunReport()}>
+          <Copy className="h-3.5 w-3.5 mr-1" />复制
+        </Button>
         {isRunning && (
           <Button size="sm" variant="destructive" disabled={cancelling} data-track="workflow-runner-stop" onClick={() => void onCancel()}>
             {cancelling ? <Loader2 className="h-3.5 w-3.5 mr-1 animate-spin" /> : <Square className="h-3.5 w-3.5 mr-1" />}停止

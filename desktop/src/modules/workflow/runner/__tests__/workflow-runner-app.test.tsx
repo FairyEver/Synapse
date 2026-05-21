@@ -13,8 +13,14 @@ const rendererLogger = vi.hoisted(() => ({
   warn: vi.fn(),
 }))
 
+const toast = vi.hoisted(() => vi.fn())
+
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => rendererLogger,
+}))
+
+vi.mock("sonner", () => ({
+  toast,
 }))
 
 vi.mock("../../../../workflow-nodes/register.renderer", () => ({}))
@@ -65,7 +71,11 @@ vi.mock("../timeline-view", () => ({
 }))
 
 vi.mock("../node-result-panel", () => ({
-  NodeResultPanel: () => <div data-testid="node-result-panel" />,
+  NodeResultPanel: ({ onCopyNodeReport }: { readonly onCopyNodeReport: () => Promise<void> }) => (
+    <button type="button" data-testid="node-result-panel-copy" onClick={() => void onCopyNodeReport()}>
+      copy node
+    </button>
+  ),
 }))
 
 import { WorkflowRunnerApp } from "../runner-app"
@@ -79,6 +89,11 @@ beforeEach(() => {
   rendererLogger.error.mockClear()
   rendererLogger.info.mockClear()
   rendererLogger.warn.mockClear()
+  toast.mockClear()
+  Object.defineProperty(navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: vi.fn(async () => {}) },
+  })
   window.history.pushState({}, "", "/runner?workflowId=workflow-1&runId=run-1")
 })
 
@@ -236,6 +251,108 @@ describe("WorkflowRunnerApp", () => {
     expect(resultPanel?.getAttribute("data-default-size")).toBe("460")
     expect(resultPanel?.getAttribute("data-max-size")).toBe("900")
     expect(resultPanel?.getAttribute("data-min-size")).toBe("320")
+  })
+
+  it("copies the whole workflow run report from the toolbar", async () => {
+    installWorkflowBridge({
+      runStatus: vi.fn(async () => ({
+        definition: workflowDefinition(),
+        params: { topic: "token=secret-value" },
+      })),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowRunnerApp />)
+      await Promise.resolve()
+    })
+
+    const copyButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("复制"))
+    expect(copyButton).toBeInstanceOf(HTMLButtonElement)
+
+    await act(async () => {
+      copyButton?.click()
+      await Promise.resolve()
+    })
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1)
+    const copied = vi.mocked(navigator.clipboard.writeText).mock.calls[0]?.[0] ?? ""
+    expect(copied).toContain("# 工作流运行报告：Workflow")
+    expect(copied).toContain('"topic": "token=secret-value"')
+    expect(toast).toHaveBeenCalledWith("运行报告已复制。")
+  })
+
+  it("copies the selected node report from the node panel", async () => {
+    installWorkflowBridge({
+      runStatus: vi.fn(async () => ({
+        definition: workflowDefinition(),
+        params: {},
+      })),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowRunnerApp />)
+      await Promise.resolve()
+    })
+
+    const dagButton = container.querySelector("[data-testid='dag-view']")
+    await act(async () => {
+      dagButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    const copyButton = container.querySelector("[data-testid='node-result-panel-copy']")
+    expect(copyButton).toBeInstanceOf(HTMLButtonElement)
+
+    await act(async () => {
+      copyButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1)
+    const copied = vi.mocked(navigator.clipboard.writeText).mock.calls[0]?.[0] ?? ""
+    expect(copied).toContain("# 节点运行报告：Prompt node")
+    expect(toast).toHaveBeenCalledWith("节点报告已复制。")
+  })
+
+  it("shows a concise error when report copy fails", async () => {
+    vi.mocked(navigator.clipboard.writeText).mockRejectedValueOnce(new Error("clipboard denied token=secret-value"))
+    installWorkflowBridge({
+      runStatus: vi.fn(async () => ({
+        definition: workflowDefinition(),
+        params: {},
+      })),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowRunnerApp />)
+      await Promise.resolve()
+    })
+
+    const copyButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("复制"))
+
+    await act(async () => {
+      copyButton?.click()
+      await Promise.resolve()
+    })
+
+    expect(toast).toHaveBeenCalledWith("复制失败。")
+    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("token=secret-value")
   })
 })
 

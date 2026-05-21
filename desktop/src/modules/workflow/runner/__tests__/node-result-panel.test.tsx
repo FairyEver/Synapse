@@ -217,6 +217,39 @@ describe("NodeResultPanel", () => {
       root.unmount()
     })
   })
+
+  it("copies the selected node report from the panel header", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const onCopyNodeReport = vi.fn(async () => {})
+
+    await act(async () => {
+      root.render(
+        <NodeResultPanel
+          result={nodeResult()}
+          nodeName="Prompt node"
+          onClose={vi.fn()}
+          onCopyNodeReport={onCopyNodeReport}
+        />,
+      )
+    })
+
+    const copyButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("复制"))
+    expect(copyButton).toBeInstanceOf(HTMLButtonElement)
+
+    await act(async () => {
+      copyButton?.click()
+      await Promise.resolve()
+    })
+
+    expect(onCopyNodeReport).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
 })
 
 function nodeResult(): NodeRunResult {

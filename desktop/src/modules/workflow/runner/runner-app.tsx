@@ -24,6 +24,8 @@ import { AlertCircle, Loader2, RefreshCw } from "lucide-react"
 import { ProviderLookupProvider } from "../../../../workflow-nodes/provider-lookup-context"
 import { sanitizeError } from "@/lib/error-sanitize"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { toast } from "sonner"
+import { formatNodeRunReport, formatWorkflowRunReport } from "./run-report"
 
 const logger = createRendererLogger("workflow.runner")
 
@@ -305,6 +307,53 @@ export function WorkflowRunnerApp() {
     ? nodeResults[selectedNodeId] ?? { nodeId: selectedNodeId, status: "pending" as const, input: { variables: {} } }
     : null
 
+  const handleCopyRunReport = useCallback(async () => {
+    if (!definition) return
+    try {
+      await navigator.clipboard.writeText(formatWorkflowRunReport({
+        definition,
+        runId,
+        runState,
+        runParams,
+        nodeResults,
+        runError,
+      }))
+      toast("运行报告已复制。")
+    } catch (err) {
+      logger.warn("copy workflow run report failed", {
+        runId,
+        workflowId,
+        boundary: "renderer.workflow.runner.copy-run-report",
+        ...clipboardErrorDiagnostic(err),
+      })
+      toast("复制失败。")
+    }
+  }, [definition, nodeResults, runError, runId, runParams, runState, workflowId])
+
+  const handleCopyNodeReport = useCallback(async () => {
+    if (!definition || !selectedNodeId || !selectedResult) return
+    const node = definition.nodes.find((candidate) => candidate.id === selectedNodeId)
+    if (!node) return
+    try {
+      await navigator.clipboard.writeText(formatNodeRunReport({
+        definition,
+        node,
+        result: selectedResult,
+        orderIndex: definition.nodes.findIndex((candidate) => candidate.id === selectedNodeId) + 1,
+      }))
+      toast("节点报告已复制。")
+    } catch (err) {
+      logger.warn("copy workflow node report failed", {
+        runId,
+        workflowId,
+        nodeId: selectedNodeId,
+        boundary: "renderer.workflow.runner.copy-node-report",
+        ...clipboardErrorDiagnostic(err),
+      })
+      toast("复制失败。")
+    }
+  }, [definition, runId, selectedNodeId, selectedResult, workflowId])
+
   if (!workflowId && !runId) {
     return (
       <div className="flex h-screen items-center justify-center p-4">
@@ -352,6 +401,7 @@ export function WorkflowRunnerApp() {
         onCancel={handleCancel}
         onRerun={handleRerun}
         onOpenEditor={handleOpenEditor}
+        onCopyRunReport={handleCopyRunReport}
       />
       {loadError && (
         <div className="border-b bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground">
@@ -391,6 +441,7 @@ export function WorkflowRunnerApp() {
                 nodeName={definition.nodes.find((n) => n.id === selectedNodeId)?.name ?? selectedNodeId ?? ""}
                 definition={definition}
                 onClose={() => setSelectedNodeId(null)}
+                onCopyNodeReport={handleCopyNodeReport}
               />
             </ResizablePanel>
           </>
@@ -441,4 +492,10 @@ function validationErrorRecord(value: unknown): {
   return typeof value === "object" && value !== null
     ? value as { readonly type?: unknown; readonly message?: unknown }
     : undefined
+}
+
+function clipboardErrorDiagnostic(err: unknown): { readonly errorName?: string; readonly errorLength: number } {
+  if (err instanceof Error) return { errorName: err.name, errorLength: err.message.length }
+  const message = String(err)
+  return { errorLength: message.length }
 }
