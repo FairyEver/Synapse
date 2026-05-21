@@ -28,7 +28,6 @@ services:
       COS_SECRET_KEY: ${COS_SECRET_KEY:-}
       COS_BUCKET: ${COS_BUCKET:-}
       COS_REGION: ${COS_REGION:-}
-      BACKUP_ENCRYPT_KEY: ${BACKUP_ENCRYPT_KEY:-}
       PORT: "3000"
     ports:
       - "127.0.0.1:3000:3000"

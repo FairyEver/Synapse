@@ -11,7 +11,6 @@ const envSchema = z.object({
   COS_SECRET_KEY: z.string().optional(),
   COS_BUCKET: z.string().optional(),
   COS_REGION: z.string().optional(),
-  BACKUP_ENCRYPT_KEY: z.string().length(64).regex(/^[0-9a-fA-F]+$/).optional(),
 })
 
 export interface ServerEnv {
@@ -25,7 +24,6 @@ export interface ServerEnv {
   readonly cosSecretKey?: string
   readonly cosBucket?: string
   readonly cosRegion?: string
-  readonly backupEncryptKey?: string
 }
 
 export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
@@ -46,7 +44,6 @@ export function loadEnv(source: NodeJS.ProcessEnv): ServerEnv {
     cosSecretKey: result.data.COS_SECRET_KEY,
     cosBucket: result.data.COS_BUCKET,
     cosRegion: result.data.COS_REGION,
-    backupEncryptKey: result.data.BACKUP_ENCRYPT_KEY,
   }
 }
 
