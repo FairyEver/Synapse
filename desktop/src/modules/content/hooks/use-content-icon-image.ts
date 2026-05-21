@@ -105,6 +105,16 @@ function useContentIconImage({
     prevOpenRef.current = !!open
   }, [open])
 
+  useEffect(() => {
+    return () => {
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current)
+        blobUrlRef.current = null
+      }
+      iconImageBytesRef.current = null
+    }
+  }, [])
+
   const handleIconImageChange = useCallback((blob: Blob) => {
     void blob.arrayBuffer()
       .then((arrayBuffer) => {
