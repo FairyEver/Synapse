@@ -31,7 +31,7 @@ export class AuditLogInterceptor implements NestInterceptor {
     const method = request.method
 
     return next.handle().pipe(
-      tap((responseBody) => {
+      tap(async (responseBody) => {
         const { action, targetType, targetId } = resolveAuditTarget(
           method,
           path,
@@ -41,7 +41,7 @@ export class AuditLogInterceptor implements NestInterceptor {
         if (!action) return
 
         void this.auditLog.record({
-          adminEmail: this.auth.getEmail(),
+          adminEmail: await this.auth.getEmail(),
           action,
           targetType,
           targetId,
