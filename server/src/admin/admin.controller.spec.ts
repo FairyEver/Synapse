@@ -44,4 +44,21 @@ describe("AdminController", () => {
       },
     })
   })
+
+  it("creates signup invitations through the service", async () => {
+    const createSignupInvitation = vi.fn().mockResolvedValue({ token: "plain-token" })
+    const controller = createController({ createSignupInvitation } as never)
+
+    await expect(controller.createSignupInvitation({ admin: { id: "admin-1", email: "admin@example.com" } } as never))
+      .resolves
+      .toEqual({ token: "plain-token" })
+  })
+
+  it("rejects invalid user status", async () => {
+    const controller = createController({ updateUserStatus: vi.fn() } as never)
+
+    await expect(controller.updateUserStatus("user-1", { status: "bad" }))
+      .rejects
+      .toThrow("用户状态无效。")
+  })
 })
