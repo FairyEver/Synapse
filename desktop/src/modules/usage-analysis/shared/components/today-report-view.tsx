@@ -1,4 +1,10 @@
 import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
+import {
   Table,
   TableBody,
   TableCell,
@@ -67,28 +73,32 @@ export function TodayReportView({ overviewState, timeState, modelsState }: Today
 
 function TodayRhythmTable({ rows }: { readonly rows: readonly UsageTimeBucket[] }) {
   return (
-    <div className="flex flex-col gap-2">
-      <h3 className="text-sm font-medium">今日节奏</h3>
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>时段</TableHead>
-            <TableHead className="text-right">Token</TableHead>
-            <TableHead className="text-right">新增</TableHead>
-            <TableHead className="text-right">缓存读</TableHead>
-            <TableHead className="text-right">费用</TableHead>
-            <TableHead className="text-right">请求</TableHead>
-            <TableHead>主要模型</TableHead>
-            <TableHead>结构</TableHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {rows.map((row) => (
-            <TodayRhythmRow key={row.bucket} row={row} />
-          ))}
-        </TableBody>
-      </Table>
-    </div>
+    <Card>
+      <CardHeader>
+        <CardTitle>今日节奏</CardTitle>
+      </CardHeader>
+      <CardContent className="overflow-x-auto">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>时段</TableHead>
+              <TableHead className="text-right">Token</TableHead>
+              <TableHead className="text-right">新增</TableHead>
+              <TableHead className="text-right">缓存读</TableHead>
+              <TableHead className="text-right">费用</TableHead>
+              <TableHead className="text-right">请求</TableHead>
+              <TableHead>主要模型</TableHead>
+              <TableHead>结构</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {rows.map((row) => (
+              <TodayRhythmRow key={row.bucket} row={row} />
+            ))}
+          </TableBody>
+        </Table>
+      </CardContent>
+    </Card>
   )
 }
 

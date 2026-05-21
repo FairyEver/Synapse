@@ -18,6 +18,7 @@ describe("list page layout surfaces", () => {
 
     expect(source).toContain("rounded-lg bg-card")
     expect(source).not.toContain("rounded-lg bg-background")
+    expect(source).not.toContain("hover:bg-muted/50")
   })
 
   it("keeps usage analysis pages on the shared list-page rhythm", async () => {

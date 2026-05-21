@@ -43,7 +43,7 @@ function ScanItemCard({
 
   return (
     <div
-      className="group cursor-pointer rounded-lg bg-card px-3.5 py-3 transition-colors hover:bg-muted/50"
+      className="group cursor-pointer rounded-lg bg-card px-3.5 py-3"
       onClick={onClick}
     >
       <div className="flex items-center gap-2">
