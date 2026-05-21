@@ -10,6 +10,12 @@ import { RendererHealthService } from "./renderer-health"
 const logger = createMainLogger("content-window")
 const contentWindows = new Set<BrowserWindow>()
 const contentWindowHealthServices = new WeakMap<BrowserWindow, ContentWindowHealth>()
+const CONTENT_DETAIL_WINDOW_BOUNDS = {
+  width: 1280,
+  height: 760,
+  minWidth: 1120,
+  minHeight: DEFAULT_WINDOW_BOUNDS.minHeight,
+}
 
 type ContentWindowLogger = {
   info: (message: string, meta?: unknown) => void
@@ -55,10 +61,31 @@ async function loadContentWindow(
   })
 }
 
+function createContentWindowKey(payload: SynapseOpenContentWindowPayload): string {
+  return `${payload.contentType}:${payload.id}`
+}
+
 function createContentWindowService(deps: ContentWindowServiceDeps) {
+  const windowsByContent = new Map<string, BrowserWindow>()
+
   return {
     async openDetailWindow(payload: SynapseOpenContentWindowPayload): Promise<void> {
-      const { width, height, minWidth, minHeight } = DEFAULT_WINDOW_BOUNDS
+      const windowKey = createContentWindowKey(payload)
+      const existingWindow = windowsByContent.get(windowKey)
+
+      if (existingWindow && !existingWindow.isDestroyed()) {
+        if (existingWindow.isMinimized()) {
+          existingWindow.restore()
+        }
+        existingWindow.focus()
+        deps.logger.info("Focused existing content detail window.", {
+          contentId: payload.id,
+          contentType: payload.contentType,
+        })
+        return
+      }
+
+      const { width, height, minWidth, minHeight } = CONTENT_DETAIL_WINDOW_BOUNDS
       const icon = deps.getIconPath()
       const window = deps.createWindow({
         width,
@@ -77,6 +104,7 @@ function createContentWindowService(deps: ContentWindowServiceDeps) {
       })
 
       contentWindows.add(window)
+      windowsByContent.set(windowKey, window)
       const health = deps.createHealthService(payload)
       health.attach(window.webContents)
       contentWindowHealthServices.set(window, health)
@@ -93,6 +121,7 @@ function createContentWindowService(deps: ContentWindowServiceDeps) {
         health.detach()
         contentWindowHealthServices.delete(window)
         contentWindows.delete(window)
+        windowsByContent.delete(windowKey)
       })
 
       await (deps.loadWindow ?? loadContentWindow)(window, payload)

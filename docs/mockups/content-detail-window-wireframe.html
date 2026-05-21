@@ -1,0 +1,124 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>资源详情独立窗口草图</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+  </head>
+  <body class="min-h-screen bg-neutral-100 text-neutral-950">
+    <main class="flex h-screen min-h-0 flex-col">
+      <header class="flex h-12 shrink-0 items-center justify-between border-b border-neutral-200 bg-white px-4">
+        <div class="flex min-w-0 items-center gap-3">
+          <div class="size-3 rounded-full bg-neutral-300"></div>
+          <div class="size-3 rounded-full bg-neutral-300"></div>
+          <div class="size-3 rounded-full bg-neutral-300"></div>
+          <p class="ml-3 truncate text-sm font-medium">Skill 详情</p>
+        </div>
+        <div class="flex items-center gap-2 text-xs text-neutral-500">
+          <span>新窗口</span>
+          <span>1280 × 760</span>
+        </div>
+      </header>
+
+      <section class="grid min-h-0 flex-1 grid-cols-[19rem_10px_minmax(0,1fr)] bg-white">
+        <aside class="flex min-h-0 flex-col">
+          <div class="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto p-4">
+            <div class="flex items-start gap-3">
+              <div class="flex size-12 shrink-0 items-center justify-center rounded-lg border border-neutral-200 bg-neutral-50 text-sm font-medium">
+                SK
+              </div>
+              <div class="min-w-0">
+                <h1 class="truncate text-lg font-semibold">synapse-ui-log-completion</h1>
+                <p class="mt-1 truncate font-mono text-xs text-neutral-500">synapse-ui-log-completion</p>
+                <p class="mt-2 truncate text-xs text-neutral-500">liyang · 开发工具</p>
+              </div>
+            </div>
+
+            <div class="flex flex-wrap items-center gap-2">
+              <button class="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm font-medium">安装</button>
+              <button class="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm">编辑</button>
+              <button class="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm">收藏</button>
+              <button class="rounded-md border border-neutral-300 bg-white px-3 py-1.5 text-sm">更多</button>
+            </div>
+
+            <section class="flex flex-col gap-3">
+              <h2 class="text-sm font-medium">介绍</h2>
+              <article class="prose prose-neutral max-w-none text-sm leading-6">
+                <p>
+                  用于审计并补全 Synapse 渲染端交互日志。适用于点击、输入、Tab 切换、表格操作、列表滚动等 UI 行为记录。
+                </p>
+                <ul>
+                  <li>定位缺失的交互记录。</li>
+                  <li>按现有日志结构补齐事件。</li>
+                  <li>保持业务改动尽量小。</li>
+                </ul>
+              </article>
+            </section>
+          </div>
+        </aside>
+
+        <div class="flex cursor-col-resize items-center justify-center border-x border-neutral-200 bg-neutral-50">
+          <div class="h-6 w-1 rounded-full bg-neutral-300"></div>
+        </div>
+
+        <section class="flex min-h-0 flex-col">
+          <div class="flex shrink-0 items-center gap-3 border-b border-neutral-200 px-5 py-3">
+            <button class="min-w-64 rounded-md border border-neutral-300 bg-white px-3 py-2 text-left text-sm">
+              当前版本 · 2026-05-21 14:32
+            </button>
+            <div class="ml-auto flex items-center rounded-md border border-neutral-300 bg-neutral-50 p-1">
+              <button class="rounded bg-white px-3 py-1.5 text-sm font-medium shadow-sm">预览</button>
+              <button class="px-3 py-1.5 text-sm text-neutral-600">源码</button>
+            </div>
+          </div>
+
+          <div class="grid min-h-0 flex-1 grid-cols-[14rem_10px_minmax(0,1fr)]">
+            <nav class="min-h-0 overflow-y-auto bg-neutral-50 p-2">
+              <div class="flex flex-col gap-0.5">
+                <button class="h-7 truncate rounded-md bg-white px-2 text-left text-xs font-medium shadow-sm">SKILL.md</button>
+                <div class="flex h-6 items-center truncate px-2 text-xs font-medium text-neutral-500">assets</div>
+                <button class="h-7 truncate rounded-md pl-5 pr-2 text-left text-xs text-neutral-400">icon.png</button>
+                <div class="flex h-6 items-center truncate px-2 text-xs font-medium text-neutral-500">fixtures</div>
+                <button class="h-7 truncate rounded-md pl-5 pr-2 text-left text-xs text-neutral-700">sample.json</button>
+                <div class="flex h-6 items-center truncate px-2 text-xs font-medium text-neutral-500">references</div>
+                <button class="h-7 truncate rounded-md pl-5 pr-2 text-left text-xs text-neutral-700">checklist.md</button>
+                <div class="flex h-6 items-center truncate px-2 text-xs font-medium text-neutral-500">scripts</div>
+                <button class="h-7 truncate rounded-md pl-5 pr-2 text-left text-xs text-neutral-700">audit.ts</button>
+              </div>
+            </nav>
+
+            <div class="flex cursor-col-resize items-center justify-center border-x border-neutral-200 bg-neutral-50">
+              <div class="h-6 w-1 rounded-full bg-neutral-300"></div>
+            </div>
+
+            <article class="min-h-0 overflow-y-auto p-6">
+              <div class="mx-auto max-w-4xl">
+                <div class="mb-4 rounded-lg border border-neutral-200 bg-neutral-50 px-4 py-3 text-sm text-neutral-600">
+                  Rule 和 Prompt 没有文件列表时，这一区域直接占满右侧正文空间。
+                </div>
+                <div class="prose prose-neutral max-w-none">
+                  <h1>UI 日志补全 Skill</h1>
+                  <p>
+                    当任务涉及 UI 操作日志、交互日志、点击、输入、Tab、表格、列表或滚动记录时使用。
+                  </p>
+                  <h2>工作流程</h2>
+                  <ol>
+                    <li>读取现有日志工具和调用点。</li>
+                    <li>找出缺失的交互事件。</li>
+                    <li>按当前日志结构补齐记录。</li>
+                    <li>运行相关测试和硬约束检查。</li>
+                  </ol>
+                  <h2>注意事项</h2>
+                  <p>
+                    新增日志不应改变业务行为，也不应引入额外视觉样式。错误处理继续使用结构化 logger。
+                  </p>
+                </div>
+              </div>
+            </article>
+          </div>
+        </section>
+      </section>
+    </main>
+  </body>
+</html>

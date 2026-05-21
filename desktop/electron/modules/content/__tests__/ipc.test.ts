@@ -27,6 +27,9 @@ const mocks = vi.hoisted(() => ({
   contentInstallService: {
     installToEditor: vi.fn(),
   },
+  contentService: {
+    getAttachmentFile: vi.fn(),
+  },
   installStatusCacheService: {
     refresh: vi.fn(),
   },
@@ -78,6 +81,7 @@ vi.mock("../../../services/content-service", () => ({
     getDetail: vi.fn(),
     getHistory: vi.fn(),
     getHistoryVersion: vi.fn(),
+    getAttachmentFile: mocks.contentService.getAttachmentFile,
     listContent: vi.fn(),
     listDeletedContent: vi.fn(),
     readIconImage: vi.fn(),
@@ -162,6 +166,13 @@ describe("contentIpcModule sync ownership", () => {
       pendingPushCount: 1,
     })
     mocks.contentInstallService.installToEditor.mockResolvedValue({ installed: true })
+    mocks.contentService.getAttachmentFile.mockResolvedValue({
+      content: "export default {}",
+      kind: "text",
+      name: "scripts/audit.ts",
+      relativePath: "scripts/audit.ts",
+      size: 17,
+    })
     mocks.installStatusCacheService.refresh.mockResolvedValue([{
       editorId: "codex",
       projectName: "Project",
@@ -169,6 +180,29 @@ describe("contentIpcModule sync ownership", () => {
       scope: "project",
       status: "installed",
     }])
+  })
+
+  it("delegates attachment file preview requests to the content service", async () => {
+    const { contentIpcModule } = await import("../ipc")
+
+    const result = await contentIpcModule.methods.getAttachmentFile.handler(createContext() as never, {
+      contentType: "skill",
+      historyDirname: "20260522000000Z__user__abc123",
+      id: "skill-1",
+      originalName: "scripts/audit.ts",
+    } as never)
+
+    expect(mocks.contentService.getAttachmentFile).toHaveBeenCalledWith(
+      "skill",
+      "skill-1",
+      "20260522000000Z__user__abc123",
+      "scripts/audit.ts",
+    )
+    expect(result).toMatchObject({
+      content: "export default {}",
+      kind: "text",
+      relativePath: "scripts/audit.ts",
+    })
   })
 
   it.each([

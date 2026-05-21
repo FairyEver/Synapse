@@ -6,9 +6,11 @@ import {
   iconPromptTemplateForSkill,
   iconPromptTemplateForPrompt,
 } from "../../src/config/content-types/icon-prompt-templates"
+import { normalizeContentAttachmentPath } from "../../src/lib/content-attachments"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
+  SynapseContentFile,
   SynapseContentDetail,
   SynapseContentHistoryEntry,
   SynapseContentHistoryVersion,
@@ -16,6 +18,7 @@ import type {
   SynapseContentType,
   SynapseTextContentFile,
 } from "../../src/types/content"
+import { attachmentsPoolService } from "./attachments-pool-service"
 import { builtinContentService } from "./builtin-content-service"
 import { contentHistoryService, resolveContentDirectoryPath } from "./content-history-service"
 import { contentIndexService } from "./content-index-service"
@@ -167,6 +170,45 @@ class ContentService {
     }
 
     return version
+  }
+
+  async getAttachmentFile(
+    contentType: SynapseContentType,
+    contentId: string,
+    historyDirname: string,
+    originalName: string,
+  ): Promise<SynapseContentFile | null> {
+    if (builtinContentService.isBuiltinContentId(contentId)) {
+      return builtinContentService.getAttachmentFile(contentType, contentId, originalName)
+    }
+
+    const context = await getActiveRepositoryContext()
+
+    if (!context) {
+      throw new Error("当前还没有选中的本地目录。")
+    }
+
+    const version = await contentHistoryService.readHistoryVersion(
+      context.repository,
+      contentType,
+      contentId,
+      historyDirname,
+    )
+
+    if (!version) {
+      throw new Error("这条历史记录已不可用。")
+    }
+
+    const normalizedName = normalizeContentAttachmentPath(originalName)
+    const attachment = version.attachments.find((candidate) => (
+      normalizeContentAttachmentPath(candidate.originalName) === normalizedName
+    ))
+
+    if (!attachment) {
+      return null
+    }
+
+    return attachmentsPoolService.readAttachmentFile(context.repository.localPath, attachment)
   }
 
   async getRules(): Promise<SynapseContentMeta<"rule">[]> {

@@ -1,7 +1,7 @@
 import { type ReactNode, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import Fuse from "fuse.js"
 import { toast } from "sonner"
-import { purgeContent, restoreContent } from "@/app-shell/content"
+import { openContentDetailWindow, purgeContent, restoreContent } from "@/app-shell/content"
 import type {
   ContentOpenRequest,
   EditOverwriteRulePrefill,
@@ -278,6 +278,31 @@ function ContentBrowserPage({
 
   // --- PLACEHOLDER_HANDLERS ---
 
+  const handleOpenItemInWindow = useCallback(async (item: SynapseContentMeta) => {
+    logger.info("Content detail window opened from browser page.", {
+      contentId: item.id,
+      contentType: item.type,
+    })
+    void addRecentlyViewed(contentType, item.id)
+
+    try {
+      await openContentDetailWindow({
+        contentType: item.type,
+        id: item.id,
+        title: item.title,
+        viewMode: "rendered",
+        historyDirname: item.latestHistoryDirname,
+      })
+    } catch (openWindowError) {
+      logger.error("Failed to open content detail window from browser page.", {
+        contentId: item.id,
+        contentType: item.type,
+        error: openWindowError,
+      })
+      toast.error(openWindowError instanceof Error ? openWindowError.message : "打开新窗口失败。")
+    }
+  }, [addRecentlyViewed, contentType, logger])
+
   if (activeRepository === null) {
     return (
       <div className="flex h-full items-center justify-center p-6">
@@ -464,9 +489,7 @@ function ContentBrowserPage({
                 busyItemId={busyItemId}
                 onInstallDialogOpenChange={onInstallDialogOpenChange}
                 onOpenItem={(item) => {
-                  logger.info("Content detail opened from browser page.", { contentId: item.id, contentType: item.type })
-                  void addRecentlyViewed(contentType, item.id)
-                  setSelectedItem(item)
+                  void handleOpenItemInWindow(item)
                 }}
                 onRestoreItem={handleRestoreItem}
                 onPurgeItem={(item) => {

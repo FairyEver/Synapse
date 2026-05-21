@@ -7,6 +7,7 @@
 import { contextBridge, ipcRenderer } from "electron"
 import type { SynapseBridge } from "../src/types/bridge"
 import type { SynapseAgentDomainEvent } from "../src/types/agent"
+import type { SynapseContentChangedEvent } from "../src/types/content"
 import type { DatabaseChangeEvent } from "../src/types/database"
 import type { InstallStatusChangedEvent } from "../src/types/install-status"
 import type {
@@ -27,6 +28,7 @@ const IPC_CHANNELS = {
     "getDetail": "synapse:content:get-detail",
     "getHistory": "synapse:content:get-history",
     "getHistoryVersion": "synapse:content:get-history-version",
+    "getAttachmentFile": "synapse:content:get-attachment-file",
     "getEditorAdapters": "synapse:content:get-editor-adapters",
     "create": "synapse:content:create",
     "update": "synapse:content:update",
@@ -437,9 +439,15 @@ const synapseBridge: SynapseBridge = {
     getDetail: invoke(IPC_CHANNELS.content.getDetail),
     getHistory: invoke(IPC_CHANNELS.content.getHistory),
     getHistoryVersion: invoke(IPC_CHANNELS.content.getHistoryVersion),
+    getAttachmentFile: invoke(IPC_CHANNELS.content.getAttachmentFile),
     create: invoke(IPC_CHANNELS.content.create),
     update: invoke(IPC_CHANNELS.content.update),
     deleteContent: invoke(IPC_CHANNELS.content.deleteContent),
+    onChanged: createDomainEventPayloadSubscription<SynapseContentChangedEvent>(
+      subscribe,
+      "content",
+      "content.changed",
+    ),
     listDeleted: invoke(IPC_CHANNELS.content.listDeleted),
     restore: invoke(IPC_CHANNELS.content.restore),
     purge: invoke(IPC_CHANNELS.content.purge),

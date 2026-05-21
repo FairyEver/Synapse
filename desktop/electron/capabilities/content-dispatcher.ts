@@ -2,7 +2,9 @@ import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import type {
   SynapseContentDetail,
+  SynapseContentChangedEvent,
   SynapseContentMeta,
+  SynapseContentMutationOperation,
   SynapseContentMutationResult,
   SynapseContentType,
   SynapseCreateContentRequest,
@@ -12,6 +14,7 @@ import type {
   SynapseUpdateContentRequest,
   SynapseUpdateContentPayload,
 } from "../../src/types/content"
+import type { EventBus } from "../runtime/event-bus"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import { ContentCapabilityError } from "../services/content-capability-errors"
 import {
@@ -43,6 +46,7 @@ type ContentIdentity = {
 type ContentCapabilityDispatcherDeps = {
   contentReader: ContentReaderPort
   contentWriter: ContentWriterPort
+  eventBus?: Pick<EventBus, "emit">
   prepareIconImageBytes: (
     input: ContentToolParams,
     security?: ContentIconImageSecurityDeps,
@@ -133,6 +137,7 @@ async function createContent(
     contentType,
     payload,
   } as SynapseCreateContentRequest)
+  emitContentChanged(deps, "create", result)
 
   return { ok: true, data: result }
 }
@@ -158,6 +163,7 @@ async function updateContent(
     contentType,
     payload,
   } as SynapseUpdateContentRequest)
+  emitContentChanged(deps, "update", result)
 
   return { ok: true, data: result }
 }
@@ -170,10 +176,38 @@ async function deleteContent(
   const payload = normalizeDeleteContentParams(contentType, params)
   await assertOwnedByCurrentUser(deps, contentType, payload.id)
 
+  const result = await deps.contentWriter.deleteContent(payload)
+  emitContentChanged(deps, "delete", result)
+
   return {
     ok: true,
-    data: await deps.contentWriter.deleteContent(payload),
+    data: result,
   }
+}
+
+function emitContentChanged(
+  deps: ContentCapabilityDispatcherDeps,
+  operation: SynapseContentMutationOperation,
+  result: SynapseContentMutationResult,
+): void {
+  if (result.status !== "saved") {
+    return
+  }
+
+  const payload: SynapseContentChangedEvent = {
+    contentType: result.type,
+    contentId: result.id,
+    operation,
+    latestHistoryDirname: result.latestHistoryDirname,
+    modifiedAt: result.modifiedAt,
+  }
+
+  deps.eventBus?.emit({
+    domain: "content",
+    type: "content.changed",
+    payload,
+    timestamp: new Date().toISOString(),
+  }, { backpressure: "block" })
 }
 
 async function mergeSkillSourceParams(

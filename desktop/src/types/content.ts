@@ -1,4 +1,5 @@
 export type SynapseContentType = "rule" | "skill" | "prompt"
+export type SynapseContentMutationOperation = "create" | "update" | "delete"
 export type SynapseContentViewMode = "rendered" | "source"
 export type SynapseContentSource = "repository" | "builtin"
 
@@ -244,6 +245,14 @@ export type SynapseContentMutationConflictResult = SynapseContentMutationResultB
 export type SynapseContentMutationResult =
   | SynapseContentMutationSuccessResult
   | SynapseContentMutationConflictResult
+
+export type SynapseContentChangedEvent = {
+  contentType: SynapseContentType
+  contentId: string
+  operation: SynapseContentMutationOperation
+  latestHistoryDirname?: string
+  modifiedAt?: string
+}
 
 export type SynapseContentDownloadResult = {
   canceled: boolean

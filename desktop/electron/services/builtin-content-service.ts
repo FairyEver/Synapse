@@ -1,3 +1,4 @@
+import { isUtf8 } from "node:buffer"
 import { createHash } from "node:crypto"
 import { mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
@@ -9,6 +10,7 @@ import type {
   SynapseContentHistoryVersion,
   SynapseContentMeta,
   SynapseContentType,
+  SynapseContentFile,
   SynapseTextContentFile,
 } from "../../src/types/content"
 import {
@@ -73,6 +75,18 @@ function createTextFile(relativePath: string, content: string): SynapseTextConte
     kind: "text",
     content,
   }
+}
+
+function looksBinaryFile(fileBuffer: Buffer): boolean {
+  if (fileBuffer.length === 0) {
+    return false
+  }
+
+  if (fileBuffer.includes(0)) {
+    return true
+  }
+
+  return !isUtf8(fileBuffer)
 }
 
 function toMeta(seed: BuiltinContentRecord): SynapseContentMeta {
@@ -167,6 +181,42 @@ class BuiltinContentService {
       historyDirname,
       isCurrent: true,
     } as SynapseContentHistoryVersion
+  }
+
+  async getAttachmentFile(
+    contentType: SynapseContentType,
+    contentId: string,
+    originalName: string,
+  ): Promise<SynapseContentFile | null> {
+    const record = await this.getRecord(contentType, contentId)
+    const normalizedName = normalizeContentAttachmentPath(originalName)
+    const sourceAttachment = record.attachments?.find((candidate) => (
+      normalizeContentAttachmentPath(candidate.originalName) === normalizedName
+    ))
+
+    if (!sourceAttachment) {
+      return null
+    }
+
+    const fileBuffer = Buffer.from(sourceAttachment.bytes)
+    const baseFile = {
+      relativePath: normalizedName,
+      name: normalizedName,
+      size: fileBuffer.byteLength,
+    }
+
+    if (looksBinaryFile(fileBuffer)) {
+      return {
+        ...baseFile,
+        kind: "binary",
+      }
+    }
+
+    return {
+      ...baseFile,
+      kind: "text",
+      content: fileBuffer.toString("utf8"),
+    }
   }
 
   async copyAttachmentToPath(

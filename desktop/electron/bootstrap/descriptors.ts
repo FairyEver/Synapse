@@ -442,6 +442,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const contentDispatcher = createContentCapabilityDispatcher({
       contentReader: contentService,
       contentWriter: contentSubmissionService,
+      eventBus,
       prepareIconImageBytes: prepareContentIconImageBytes,
       readSkillDraftFromDirectory,
       resolveCurrentIdentity: async () => {

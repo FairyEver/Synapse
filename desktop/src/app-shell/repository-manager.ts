@@ -5,6 +5,7 @@ import type {
 } from "@/types/config"
 import type {
   SynapseContentMeta,
+  SynapseContentChangedEvent,
   SynapseContentMutationResult,
   SynapseContentType,
   SynapseCreateContentPayload,
@@ -79,6 +80,7 @@ class RepositoryManager {
   private unsubscribeUpdated: (() => void) | null = null
   private unsubscribePendingPushes: (() => void) | null = null
   private unsubscribeSyncSnapshot: (() => void) | null = null
+  private unsubscribeContentChanged: (() => void) | null = null
 
   // ===== 初始化 =====
   async initialize(): Promise<void> {
@@ -101,6 +103,7 @@ class RepositoryManager {
     this.unsubscribeUpdated?.()
     this.unsubscribePendingPushes?.()
     this.unsubscribeSyncSnapshot?.()
+    this.unsubscribeContentChanged?.()
   }
 
   // ===== 配置管理 =====
@@ -734,10 +737,17 @@ class RepositoryManager {
   }
 
   private setupBridgeListeners(): void {
-    const bridge = getSynapseBridge()?.repository
-    if (!bridge) {
-      return
-    }
+    const synapseBridge = getSynapseBridge()
+    const bridge = synapseBridge?.repository
+    const contentBridge = synapseBridge?.content
+
+    this.unsubscribeContentChanged = contentBridge?.onChanged?.(
+      (event: SynapseContentChangedEvent) => {
+        void this.refreshContentList(event.contentType)
+      },
+    ) ?? null
+
+    if (!bridge) return
 
     this.unsubscribeProgress = bridge.onProgress((event: SynapseRepositoryProgressEvent) => {
       this.setOperationState(event.repositoryUuid, {

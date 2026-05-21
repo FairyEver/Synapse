@@ -278,6 +278,30 @@ export const contentIpcModule: IpcModule = {
         return contentService.getHistoryVersion(request.contentType, request.id, request.historyDirname)
       },
     },
+    getAttachmentFile: {
+      kind: "invoke",
+      channel: "synapse:content:get-attachment-file",
+      request: z.object({
+        contentType: contentTypeSchema,
+        id: z.string(),
+        historyDirname: z.string(),
+        originalName: z.string(),
+      }),
+      response: nullableContentRecordSchema,
+      handler: async (_ctx, request: {
+        contentType: SynapseContentType
+        historyDirname: string
+        id: string
+        originalName: string
+      }) => {
+        return contentService.getAttachmentFile(
+          request.contentType,
+          request.id,
+          request.historyDirname,
+          request.originalName,
+        )
+      },
+    },
     getEditorAdapters: {
       kind: "invoke",
       channel: "synapse:content:get-editor-adapters",

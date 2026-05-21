@@ -99,6 +99,7 @@ function installBridge(bridge: SynapseBridge): void {
 
 function createBridge(): SynapseBridge {
   let synced = false
+  const contentChangedListeners: Array<(event: { contentType: SynapseContentType }) => void> = []
 
   const bridge = {
     platform: "darwin",
@@ -121,6 +122,10 @@ function createBridge(): SynapseBridge {
           : ["skill-1", "skill-2", "skill-3"]
         return ids.map(createSkill)
       }),
+      onChanged: vi.fn((listener: (event: { contentType: SynapseContentType }) => void) => {
+        contentChangedListeners.push(listener)
+        return () => {}
+      }),
     },
     repository: {
       getStates: vi.fn(async () => [repositoryState]),
@@ -138,6 +143,12 @@ function createBridge(): SynapseBridge {
           completedAt: "2026-04-27T00:01:00.000Z",
         }
       }),
+    },
+    emitContentChanged(contentType: SynapseContentType) {
+      synced = true
+      for (const listener of contentChangedListeners) {
+        listener({ contentType, contentId: "skill-4", operation: "create" } as never)
+      }
     },
   } as unknown as SynapseBridge
 
@@ -157,6 +168,24 @@ describe("RepositoryManager", () => {
     await manager.syncRepository(repository.uuid)
 
     expect(manager.getContentList("skill")).toHaveLength(4)
+  })
+
+  it("refreshes the matching content list after a content changed event", async () => {
+    const bridge = createBridge() as SynapseBridge & {
+      emitContentChanged(contentType: SynapseContentType): void
+    }
+    installBridge(bridge)
+    const manager = new RepositoryManager()
+
+    await manager.initialize()
+    await manager.refreshContentList("skill")
+    expect(manager.getContentList("skill")).toHaveLength(3)
+
+    bridge.emitContentChanged("skill")
+
+    await vi.waitFor(() => {
+      expect(manager.getContentList("skill")).toHaveLength(4)
+    })
   })
 
   it("stores sync snapshot updates and mirrors pending pushes", async () => {

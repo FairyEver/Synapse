@@ -91,6 +91,9 @@ function createDeps(options: {
       })),
     },
     prepareIconImageBytes: vi.fn(async () => new Uint8Array([1, 2, 3])),
+    eventBus: {
+      emit: vi.fn(),
+    },
     readSkillDraftFromDirectory: vi.fn(async () => ({
       sourceDirectoryPath: "/tmp/demo-skill",
       mainFilePath: "/tmp/demo-skill/SKILL.md",
@@ -170,6 +173,50 @@ describe("content capability dispatcher", () => {
         files: [expect.objectContaining({ originalName: "references/guide.md" })],
       }),
     }))
+  })
+
+  it.each([
+    ["rule", "create"],
+    ["rule", "update"],
+    ["rule", "delete"],
+    ["skill", "create"],
+    ["skill", "update"],
+    ["skill", "delete"],
+    ["prompt", "create"],
+    ["prompt", "update"],
+    ["prompt", "delete"],
+  ] as const)("emits a content changed event after %s %s saves", async (contentType, operation) => {
+    const deps = createDeps()
+    const dispatcher = createContentCapabilityDispatcher(deps)
+
+    const params = operation === "delete"
+      ? {
+          id: `${contentType}-1`,
+          baseHistoryDirname: "20260521000000Z__user__abc123",
+        }
+      : {
+          id: `${contentType}-1`,
+          baseHistoryDirname: "20260521000000Z__user__abc123",
+          name: `${contentType}-name`,
+          title: "Title",
+          description: "Description",
+          category: contentType === "skill" ? "development" : "coding",
+          iconType: "icon",
+          icon: "wrench",
+          iconBg: "graphite",
+          content: "# Content",
+        }
+
+    await dispatcher.dispatch(`content.${contentType}.${operation}`, params, { source: "mcp-stdio" })
+
+    expect(deps.eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "content",
+      type: "content.changed",
+      payload: expect.objectContaining({
+        contentType,
+        operation,
+      }),
+    }), { backpressure: "block" })
   })
 
   it("allows update and delete for resources created by current user", async () => {

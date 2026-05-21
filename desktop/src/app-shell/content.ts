@@ -2,6 +2,7 @@ import { createMissingBridgeError, getSynapseBridge } from "@/lib/electron-bridg
 import type {
   SynapseContentDetail,
   SynapseContentDownloadResult,
+  SynapseContentFile,
   SynapseContentHistoryEntry,
   SynapseContentHistoryVersion,
   SynapseContentMeta,
@@ -87,6 +88,15 @@ async function readHistoryVersion(
   historyDirname: string,
 ): Promise<SynapseContentHistoryVersion> {
   return requireContentBridge().getHistoryVersion({ contentType, id, historyDirname })
+}
+
+async function readAttachmentFile(args: {
+  contentType: SynapseContentType
+  historyDirname: string
+  id: string
+  originalName: string
+}): Promise<SynapseContentFile | null> {
+  return requireContentBridge().getAttachmentFile(args)
 }
 
 async function createContent<T extends SynapseContentType>(
@@ -205,6 +215,7 @@ export {
   readEditorInstallFormValues,
   purgeContent,
   readContent,
+  readAttachmentFile,
   readDetail,
   readHistory,
   readHistoryVersion,

@@ -41,7 +41,9 @@ import type {
 } from "./workflow-package"
 import type {
   SynapseContentDownloadResult,
+  SynapseContentChangedEvent,
   SynapseContentDetail,
+  SynapseContentFile,
   SynapseContentHistoryEntry,
   SynapseContentHistoryVersion,
   SynapseContentMeta,
@@ -480,9 +482,18 @@ export type SynapseBridge = {
     getHistoryVersion: (
       args: { contentType: SynapseContentType; id: string; historyDirname: string },
     ) => Promise<SynapseContentHistoryVersion>
+    getAttachmentFile: (
+      args: {
+        contentType: SynapseContentType
+        historyDirname: string
+        id: string
+        originalName: string
+      },
+    ) => Promise<SynapseContentFile | null>
     create: (request: SynapseCreateContentRequest) => Promise<SynapseContentMutationResult>
     update: (request: SynapseUpdateContentRequest) => Promise<SynapseContentMutationResult>
     deleteContent: (payload: SynapseDeleteContentPayload) => Promise<SynapseContentMutationResult>
+    onChanged: (listener: (payload: SynapseContentChangedEvent) => void) => () => void
     listDeleted: <T extends SynapseContentType>(
       args: { contentType: T },
     ) => Promise<SynapseContentMeta<T>[]>

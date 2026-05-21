@@ -69,7 +69,7 @@ function ContentDetailMenubar({
   onToggleFavorite,
 }: ContentDetailMenubarProps) {
   const {
-    canCopy,
+    canCopy: canCopyContent,
     canDownload,
     canInstall,
     handleCopy,
@@ -85,6 +85,7 @@ function ContentDetailMenubar({
 
   const definition = getContentTypeDefinition(item.type)
   const primaryAction = definition.listPrimaryAction ?? "download"
+  const canCopyInDetailToolbar = item.type !== "skill" && canCopyContent
   const [isCopyDialogOpen, setIsCopyDialogOpen] = useState(false)
 
   const onCopyClick = useCallback(() => {
@@ -135,7 +136,7 @@ function ContentDetailMenubar({
 
         {primaryAction === "copy" ? (
           <>
-            {canCopy ? (
+            {canCopyInDetailToolbar ? (
               <Button
                 type="button"
                 variant="ghost"
@@ -210,7 +211,7 @@ function ContentDetailMenubar({
               </MenubarMenu>
             ) : null}
 
-            {canCopy ? (
+            {canCopyInDetailToolbar ? (
               <Button
                 type="button"
                 variant="ghost"
@@ -242,16 +243,17 @@ function ContentDetailMenubar({
           </Button>
         ) : null}
 
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          className="rounded-sm px-1.5"
-          disabled={!canOpenInNewWindow}
-          onClick={onOpenInNewWindow}
-        >
-          新窗口打开
-        </Button>
+        {canOpenInNewWindow ? (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="rounded-sm px-1.5"
+            onClick={onOpenInNewWindow}
+          >
+            新窗口打开
+          </Button>
+        ) : null}
 
         <Button
           type="button"

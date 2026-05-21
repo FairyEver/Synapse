@@ -41,4 +41,12 @@ describe("content detail install status hook source", () => {
     expect(detailMenubarSource).toContain("未找到可用的安装目标。")
     expect(detailWindowPageSource).not.toContain("EditorInstallStatusPanel")
   })
+
+  it("does not expose copy actions in Skill detail toolbars", () => {
+    const detailMenubarSource = readFileSync(detailMenubarSourcePath, "utf8")
+
+    expect(detailMenubarSource).toContain("canCopyInDetailToolbar")
+    expect(detailMenubarSource).toContain("item.type !== \"skill\"")
+    expect(detailMenubarSource).toContain("canCopyInDetailToolbar ?")
+  })
 })
