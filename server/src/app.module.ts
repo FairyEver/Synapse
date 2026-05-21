@@ -9,6 +9,7 @@ import { AdminModule } from "./admin/admin.module"
 import { AdminAuthModule } from "./admin-auth/admin-auth.module"
 import { BackupModule } from "./backup/backup.module"
 import { HealthModule } from "./health/health.module"
+import { InvitationsModule } from "./invitations/invitations.module"
 import { PrismaModule } from "./prisma/prisma.module"
 
 @Module({
@@ -46,6 +47,7 @@ import { PrismaModule } from "./prisma/prisma.module"
       exclude: ["/admin/api/(.*)", "/admin/login", "/admin/logout"],
     }),
     PrismaModule,
+    InvitationsModule,
     AdminAuthModule,
     AdminModule,
     BackupModule,
