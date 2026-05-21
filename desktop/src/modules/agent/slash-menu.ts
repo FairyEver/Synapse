@@ -83,10 +83,14 @@ export function groupAgentSlashCandidates(
 ): AgentSlashGroup[] {
   const skills = candidates.filter((candidate) => candidate.kind === "skill")
   const commands = candidates.filter((candidate) => candidate.kind === "command")
-  return [
-    skills.length > 0 ? { kind: "skill", label: "Skills" as const, items: skills } : null,
-    commands.length > 0 ? { kind: "command", label: "Commands" as const, items: commands } : null,
-  ].filter((group): group is AgentSlashGroup => group !== null)
+  const groups: AgentSlashGroup[] = []
+  if (skills.length > 0) {
+    groups.push({ kind: "skill", label: "Skills", items: skills })
+  }
+  if (commands.length > 0) {
+    groups.push({ kind: "command", label: "Commands", items: commands })
+  }
+  return groups
 }
 
 function findTokenStart(value: string, cursor: number): number {

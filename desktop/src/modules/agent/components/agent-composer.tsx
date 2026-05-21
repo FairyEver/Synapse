@@ -23,6 +23,7 @@ import {
   findAgentSlashFragment,
   replaceAgentSlashFragment,
   type AgentSlashCandidate,
+  type AgentSlashFragment,
 } from "../slash-menu"
 
 const SINGLE_LINE_HEIGHT = 28
@@ -164,7 +165,7 @@ function AgentComposer({
 
   const insertSlashCandidate = (
     candidate: AgentSlashCandidate,
-    fragment: NonNullable<typeof activeSlashFragment>,
+    fragment: AgentSlashFragment,
   ) => {
     const next = replaceAgentSlashFragment(draft, fragment, candidate.name)
     onDraftChange(next.value)
@@ -188,9 +189,9 @@ function AgentComposer({
     const currentCandidates = currentFragment
       ? filterAgentSlashCandidates(slashCandidates, currentFragment.query)
       : []
-    const currentMenuOpen = Boolean(currentFragment && !slashMenuDismissed && slashCandidates.length > 0)
+    const currentMenuOpen = !slashMenuDismissed && slashCandidates.length > 0
 
-    if (currentMenuOpen) {
+    if (currentFragment && currentMenuOpen) {
       if (event.key === "ArrowDown") {
         event.preventDefault()
         setHighlightedSlashIndex((current) =>
