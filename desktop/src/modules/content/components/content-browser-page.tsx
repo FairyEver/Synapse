@@ -198,7 +198,7 @@ function ContentBrowserPage({
         kind: request.kind,
       })
       setActiveCategoryId(SYNAPSE_ALL_CATEGORY_ID)
-      addRecentlyViewed(contentType, item.id)
+      void addRecentlyViewed(contentType, item.id)
       setSelectedItem(item)
       if (request.kind === "edit-overwrite") {
         setOverwritePrefill({ requestId: request.requestId, prefill: request.prefill })
@@ -465,7 +465,7 @@ function ContentBrowserPage({
                 onInstallDialogOpenChange={onInstallDialogOpenChange}
                 onOpenItem={(item) => {
                   logger.info("Content detail opened from browser page.", { contentId: item.id, contentType: item.type })
-                  addRecentlyViewed(contentType, item.id)
+                  void addRecentlyViewed(contentType, item.id)
                   setSelectedItem(item)
                 }}
                 onRestoreItem={handleRestoreItem}

@@ -41,4 +41,13 @@ describe("content browser page edit-overwrite plumbing", () => {
     expect(source).toContain("overwritePrefill")
     expect(source).toContain("config.DetailDialog")
   })
+
+  it("marks recently viewed writes as intentional fire-and-forget calls", async () => {
+    const source = await readFile(
+      new URL("../components/content-browser-page.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("void addRecentlyViewed(contentType, item.id)")
+  })
 })
