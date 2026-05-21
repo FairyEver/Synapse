@@ -138,6 +138,10 @@
         "to": "templates"
       },
       {
+        "from": "resources/knowledge-base",
+        "to": "knowledge-base"
+      },
+      {
         "from": "dist-database",
         "to": "database"
       }
