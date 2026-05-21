@@ -192,9 +192,10 @@ describe("AgentToolEvent", () => {
     container.innerHTML = html
 
     const body = container.querySelector("pre")
-    const copyButton = body?.parentElement?.querySelector("button")
+    const outputGroup = body?.closest(".group")
+    const copyButton = outputGroup?.querySelector("button")
 
-    expect(body?.parentElement?.className.split(" ")).toContain("group")
+    expect(outputGroup?.className.split(" ")).toContain("group")
     expect(copyButton?.className).toContain("group-hover:opacity-100")
     expect(copyButton?.getAttribute("aria-label")).toBe("复制工具输出")
   })

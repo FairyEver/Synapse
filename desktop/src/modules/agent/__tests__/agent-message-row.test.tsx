@@ -100,7 +100,8 @@ describe("AgentMessageEvent", () => {
     )
 
     expect(html).toContain("items-start")
-    expect(html).toContain("<strong>bold text</strong>")
+    expect(html).toContain('data-streamdown="strong"')
+    expect(html).toContain("bold text")
   })
 
   it("assistant messages show agent icon when provided", () => {
@@ -186,7 +187,7 @@ describe("AgentMessageEvent", () => {
     })
 
     const link = container.querySelector("a")
-    expect(link?.getAttribute("href")).toBe("desktop/src/modules/agent/index.tsx:12")
+    expect(link?.getAttribute("data-reference")).toBe("desktop/src/modules/agent/index.tsx:12")
 
     act(() => {
       link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))

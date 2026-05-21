@@ -271,8 +271,18 @@ function wrapLocalReferencesInPlainText(content: string): string {
     if (match.startsWith("[")) return match
     if (!shouldWrapLocalReference(match, offset, content)) return match
     const { reference, suffix } = splitTrailingReferencePunctuation(match)
-    return `[${reference}](${reference})${suffix}`
+    return `[${reference}](${markdownLinkHref(reference)})${suffix}`
   })
+}
+
+function markdownLinkHref(reference: string): string {
+  if (reference.startsWith("file://")
+    || reference.startsWith("./")
+    || reference.startsWith("../")
+    || reference.startsWith("/")) {
+    return reference
+  }
+  return `./${reference}`
 }
 
 function splitTrailingReferencePunctuation(match: string): {

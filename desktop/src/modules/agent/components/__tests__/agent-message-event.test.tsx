@@ -193,7 +193,7 @@ describe("AgentMessageEvent", () => {
   it("keeps sentence punctuation outside auto-wrapped local reference links", () => {
     const wrapped = wrapLocalReferences("Open ./README.md. Then inspect desktop/src/App.tsx:12;")
 
-    expect(wrapped).toBe("Open [./README.md](./README.md). Then inspect [desktop/src/App.tsx:12](desktop/src/App.tsx:12);")
+    expect(wrapped).toBe("Open [./README.md](./README.md). Then inspect [desktop/src/App.tsx:12](./desktop/src/App.tsx:12);")
   })
 
   it("tracks assistant code block copy clicks without logging code content", async () => {
