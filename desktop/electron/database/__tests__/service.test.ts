@@ -1,5 +1,5 @@
 import { readdirSync } from "node:fs"
-import { mkdtemp, rm } from "node:fs/promises"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { DatabaseSync } from "node:sqlite"
 import os from "node:os"
 import path from "node:path"
@@ -252,6 +252,16 @@ describe("DatabaseService table descriptions", () => {
     )).toThrow("database.rows.delete requires a non-empty where clause")
 
     expect(service.databaseRowList({ table: "tasks" }).total).toBe(2)
+  })
+
+  it("normalizes row list count totals from sqlite number-like values", async () => {
+    const source = await readFile(
+      new URL("../service.ts", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).toContain("as { total: number | bigint }")
+    expect(source).toContain("total: toNumber(countRow.total)")
   })
 })
 

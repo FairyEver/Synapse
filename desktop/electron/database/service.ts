@@ -874,13 +874,13 @@ class DatabaseService {
     const rows = db.prepare(dataSQL).all(...whereParams, limit, offset) as Record<string, unknown>[]
 
     const countSQL = `SELECT COUNT(*) as total FROM ${q(params.table)}${whereSQL}`
-    const countRow = db.prepare(countSQL).get(...whereParams) as { total: number }
+    const countRow = db.prepare(countSQL).get(...whereParams) as { total: number | bigint }
 
     for (const row of rows) {
       parseReadRow(row, jsonCols, boolCols, multiChoiceCols)
     }
 
-    return { rows, total: countRow.total }
+    return { rows, total: toNumber(countRow.total) }
   }
 
   databaseRowUpdate(table: string, id: number, data: Record<string, unknown>): { affected: number } {
