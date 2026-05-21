@@ -1,3 +1,4 @@
+import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
 import { USAGE_ANALYSIS_CHANNELS } from "./channels"
@@ -35,13 +36,84 @@ function normalizeDetailsRange(range: UsageDetailInput | undefined): UsageDetail
   }
 }
 
+function uniquePaths(paths: readonly string[]): string[] {
+  return [...new Set(paths)]
+}
+
+function splitPathList(value: string | undefined): string[] {
+  if (!value) return []
+  return value
+    .split(",")
+    .map((item) => item.trim())
+    .filter(Boolean)
+}
+
+function collectProjectsDirs(root: string, maxDepth = 5): string[] {
+  if (maxDepth < 0) return []
+  let entries: fs.Dirent[]
+  try {
+    entries = fs.readdirSync(root, { withFileTypes: true })
+  } catch {
+    return []
+  }
+
+  const roots: string[] = []
+  for (const entry of entries) {
+    if (!entry.isDirectory()) continue
+    const fullPath = path.join(root, entry.name)
+    if (entry.name === "projects") {
+      roots.push(fullPath)
+      continue
+    }
+    roots.push(...collectProjectsDirs(fullPath, maxDepth - 1))
+  }
+  return roots
+}
+
+function claudeDesktopDataRoots(home: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string[] {
+  if (platform === "darwin") {
+    const appData = path.join(home, "Library", "Application Support", "Claude")
+    return [
+      path.join(appData, "local-agent-mode-sessions"),
+      path.join(appData, "claude-code-sessions"),
+    ]
+  }
+  if (platform === "win32") {
+    const appData = env.APPDATA || path.join(home, "AppData", "Roaming")
+    return [
+      path.join(appData, "Claude", "local-agent-mode-sessions"),
+      path.join(appData, "Claude", "claude-code-sessions"),
+    ]
+  }
+  const configHome = env.XDG_CONFIG_HOME || path.join(home, ".config")
+  return [
+    path.join(configHome, "Claude", "local-agent-mode-sessions"),
+    path.join(configHome, "Claude", "claude-code-sessions"),
+  ]
+}
+
+export function resolveClaudeUsageRoots({
+  home,
+  env = process.env,
+  platform = process.platform,
+}: {
+  readonly home: string
+  readonly env?: NodeJS.ProcessEnv
+  readonly platform?: NodeJS.Platform
+}): string[] {
+  const configRoots = splitPathList(env.CLAUDE_CONFIG_DIR).map((root) => path.join(root, "projects"))
+  const cliRoots = [path.join(home, ".claude", "projects"), ...configRoots]
+  const desktopRoots = claudeDesktopDataRoots(home, env, platform).flatMap((root) => collectProjectsDirs(root))
+  return uniquePaths([...cliRoots, ...desktopRoots])
+}
+
 export function registerUsageAnalysisHandlers(): void {
   if (registered) return
   const db = getUsageAnalysisDb()
   const home = os.homedir()
   const cc = new CcUsageAnalysisService({
     db,
-    roots: [path.join(home, ".claude", "projects")],
+    roots: resolveClaudeUsageRoots({ home }),
   })
   const codexHome = process.env.CODEX_HOME || path.join(home, ".codex")
   const codex = new CodexUsageAnalysisService({
@@ -49,7 +121,12 @@ export function registerUsageAnalysisHandlers(): void {
     roots: [path.join(codexHome, "sessions"), path.join(codexHome, "archived_sessions")],
   })
 
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRefresh, async () => cc.refresh())
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRefresh, async () => {
+    return new CcUsageAnalysisService({
+      db,
+      roots: resolveClaudeUsageRoots({ home }),
+    }).refresh()
+  })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccOverview, async (_event, range?: UsageRangeInput) => cc.getOverview(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccTime, async (_event, range?: UsageRangeInput) => cc.getTime(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccModels, async (_event, range?: UsageRangeInput) => cc.getModels(normalizeUsageRangeForIpc(range)))
