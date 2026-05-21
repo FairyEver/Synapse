@@ -31,6 +31,7 @@ import { randomUUID } from "node:crypto"
 import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter } from "../capabilities/action-router"
+import { createContentCapabilityDispatcher } from "../capabilities/content-dispatcher"
 import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
 import { logStore, createMainLogger } from "../services/log-store"
@@ -39,6 +40,7 @@ import { updateService } from "../services/update-service"
 import { KnowledgeBaseService } from "../services/knowledge-base"
 import { initDatabase, shutdownDatabase } from "../database"
 import { dispatchDatabaseAction } from "../database/dispatcher"
+import { getActiveRepositoryConfig } from "../../src/lib/config"
 import { repositoryStore } from "../services/repository-store"
 import { repositoryMaintenanceService } from "../services/repository-maintenance-service"
 import { repositoryLockManager } from "../services/repository-lock-manager"
@@ -61,6 +63,11 @@ import { AgentRelayService } from "../services/relay"
 import { AutomationIngressService } from "../services/automation-ingress"
 import { DiagnosticsService } from "../services/diagnostics-service"
 import { createConfigBackupPayload } from "../services/config-backup-service"
+import { contentService } from "../services/content-service"
+import { contentSubmissionService } from "../services/content-submission-service"
+import { prepareContentIconImageBytes } from "../services/content-icon-image-service"
+import { readSkillDraftFromDirectory } from "../services/content-skill-source-service"
+import { userIdentityService } from "../services/user-identity-service"
 import { clearDeprecatedStores } from "./deprecated-store-cleanup"
 import {
   ScheduledTaskRepository,
@@ -432,8 +439,28 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       getRunStatus: async (runId: string) => runStatuses.get(runId) ?? null,
       listProviders: () => providerService.listProviders(),
     })
+    const contentDispatcher = createContentCapabilityDispatcher({
+      contentReader: contentService,
+      contentWriter: contentSubmissionService,
+      prepareIconImageBytes: prepareContentIconImageBytes,
+      readSkillDraftFromDirectory,
+      resolveCurrentIdentity: async () => {
+        const config = await configStore.load()
+        const repository = getActiveRepositoryConfig(config)
+        if (!repository) {
+          throw new Error("当前还没有选中的本地目录。")
+        }
+        return userIdentityService.requireReadyRepoProfile(repository.uuid)
+      },
+      security: {
+        actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
+        auditSink,
+        permissionGuard,
+      },
+    })
 
     const actionRouter = createSynapseActionRouter({
+      contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
       databaseDispatch: dispatchDatabaseAction,
       schedulerDispatch: (action, params) => dispatchSchedulerAction(taskScheduler, actionRuntime, action, params),
       workflowDispatch: (action, params, context) => workflowDispatcher.dispatch(action, params, context),

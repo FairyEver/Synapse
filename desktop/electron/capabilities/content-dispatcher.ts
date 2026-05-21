@@ -25,9 +25,9 @@ import type { ContentIconImageSecurityDeps } from "../services/content-icon-imag
 import type { ContentSkillSourceDraft } from "../services/content-skill-source-service"
 
 type ContentReaderPort = {
-  getDetail<T extends SynapseContentType>(contentType: T, contentId: string): Promise<SynapseContentDetail<T>>
-  listContent<T extends SynapseContentType>(contentType: T): Promise<SynapseContentMeta<T>[]>
-  listDeletedContent<T extends SynapseContentType>(contentType: T): Promise<SynapseContentMeta<T>[]>
+  getDetail(contentType: SynapseContentType, contentId: string): Promise<SynapseContentDetail>
+  listContent(contentType: SynapseContentType): Promise<SynapseContentMeta[]>
+  listDeletedContent(contentType: SynapseContentType): Promise<SynapseContentMeta[]>
 }
 
 type ContentWriterPort = {

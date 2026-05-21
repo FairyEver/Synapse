@@ -128,3 +128,15 @@ describe("Database MCP RPC", () => {
     expect(payload).toEqual({ id: 7 })
   })
 })
+
+describe("Content MCP RPC", () => {
+  it("returns content dispatcher data without the internal envelope", async () => {
+    const payload = await callTool("content_skill_list", {
+      ok: true,
+      data: [{ id: "skill-1", title: "Skill" }],
+      total: 1,
+    })
+
+    expect(payload).toEqual([{ id: "skill-1", title: "Skill" }])
+  })
+})
