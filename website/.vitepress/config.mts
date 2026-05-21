@@ -56,6 +56,7 @@ export default defineConfig({
         { text: '总览', link: '/advanced/' },
         { text: 'Agent', link: '/advanced/agent' },
         { text: 'Prompts', link: '/advanced/prompts' },
+        { text: 'Content MCP', link: '/advanced/content-mcp' },
         { text: 'Database', link: '/advanced/database' },
         { text: 'Task Scheduler', link: '/advanced/task-scheduler' },
         { text: 'Token Usage', link: '/advanced/token-usage' },

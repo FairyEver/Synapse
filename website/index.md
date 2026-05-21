@@ -29,6 +29,8 @@ features:
     details: 配置和管理 AI Agent 工作流，定义执行步骤和触发条件。
   - title: 内置数据库与 MCP
     details: 使用内置 Database 管理本地数据表，并将数据服务注册为 MCP Server。
+  - title: 内容发布 MCP
+    details: 通过 MCP 创建、更新和删除 Rule、Skill、Prompt，支持 Skill 附件与目录导入。
   - title: 定时任务调度
     details: 通过 cron 或 interval 表达式调度任务，支持启停控制和运行记录查看。
   - title: Token Usage（用量统计）

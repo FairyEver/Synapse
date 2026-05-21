@@ -44,6 +44,7 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到不同
 | --- | --- | --- | --- |
 | `database.table.list` | `database_table_list` | `synapse database table list` | `databaseTableList` |
 | `scheduler.runtime.inspect` | `scheduler_runtime_inspect` | `synapse scheduler runtime inspect` | `schedulerRuntimeInspect` |
+| `content.skill.create` | `content_skill_create` | `synapse content skill create` | `contentSkillCreate` |
 
 公开 JSON 字段使用 camelCase。CLI flag 使用 kebab-case。
 
@@ -85,6 +86,7 @@ MCP 工具名称由规范能力 ID 派生：把点号替换为下划线。
 ```text
 database.table.list -> database_table_list
 scheduler.run.list -> scheduler_run_list
+content.skill.create -> content_skill_create
 ```
 
 工具参数使用与 HTTP action 参数一致的公开 JSON 字段名。
@@ -114,6 +116,12 @@ scheduler.action_type.list -> schedulerActionTypeList
 完整当前列表见 [能力矩阵](/developer/capability-naming-matrix)。
 
 矩阵只记录当前规范公开名称，不能成为代码能力清单之外的第二套事实来源。
+
+## Content MCP
+
+Content MCP 暴露 Rule、Skill 和 Prompt 的发布与维护能力。创建或更新前应先调用 `content_type_describe` 获取当前分类、图标、背景色和限制。
+
+Content MCP 的更新和删除只允许修改当前仓库身份创建的资源。它不负责安装内容到编辑器。
 
 ## 新增或修改能力
 

@@ -1,4 +1,4 @@
-<!-- Sources: desktop/electron/services/content-write-service.ts; desktop/electron/services/content-history-service.ts; desktop/electron/services/attachments-pool-service.ts; desktop/src/types/content.ts; desktop/src/config/content-types/{types,rule,skill}.ts; desktop/src/lib/content-attachments.ts -->
+<!-- Sources: desktop/electron/services/content-write-service.ts; desktop/electron/services/content-history-service.ts; desktop/electron/services/attachments-pool-service.ts; desktop/electron/services/content-capability-validator.ts; desktop/electron/services/content-skill-source-service.ts; desktop/electron/services/content-icon-image-service.ts; desktop/src/types/content.ts; desktop/src/config/content-types/{types,rule,skill,prompt}.ts; desktop/src/lib/content-attachments.ts -->
 
 # 内容编写
 
@@ -15,6 +15,12 @@ Rule 正文写入 `main.md`。写入时移除正文首尾空白，并保证文�
 创建 Skill 时，需要填写与 Rule 相同的基础信息，并提供 `files` 附件列表。Skill 的主说明同样写入 `main.md`。
 
 Skill 的附件来自 `files`。每个附件记录包含 `originalName`、`size`，以及可选的 `sha256` 和 `bytes`。添加新附件时，Synapse 检查文件名、大小和重复路径；已有附件可通过 `sha256` 继续引用。
+
+通过 Content MCP 创建 Skill 时，也可以使用 `sourceDirectoryPath` 导入本地 Skill 目录。此时 Synapse 会读取 Skill 主文件，并把目录内非隐藏文件作为附件导入；`files` 和 `sourceDirectoryPath` 不能同时提供。
+
+## Prompt 编写
+
+创建 Prompt 时，需要提供 `title`、`description`、`category`、`icon`、`iconBg`、`iconType`、`iconImage` 和 `content`。Prompt 不需要 `name`，也不支持附件。
 
 ## 标题、简介与分类
 
@@ -52,3 +58,9 @@ Skill 的附件来自 `files`。每个附件记录包含 `originalName`、`size`
 ```
 
 同一版本中附件文件名不能为空，也不能重复。
+
+## 图片图标
+
+当 `iconType` 为 `image` 时，Content MCP 接收 `iconImagePath` 或 `iconImageBase64`，二者只能提供一个。Synapse 会校验输入是否为图片，并将图片居中裁剪、缩放为 256 x 256 PNG 后保存为 `icon.png`。
+
+图片输入最大 5 MB。若输入不是图片、为空或超过限制，写入会被拒绝。
