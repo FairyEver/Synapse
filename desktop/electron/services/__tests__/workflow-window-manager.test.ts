@@ -157,7 +157,7 @@ describe("WorkflowWindowManager", () => {
   it("opens editor windows wider and taller than before with main window minimum bounds", () => {
     const manager = new WorkflowWindowManager()
 
-    const editor = manager.open("workflow-1", "app://-")
+    const editor = manager.open("workflow-1", "app://-") as unknown as FakeBrowserWindow
 
     expect(editor.options).toMatchObject({
       width: 1350,

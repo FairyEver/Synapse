@@ -63,6 +63,9 @@ import { NodeConfigPanel } from "../node-config-panel"
 const definition: WorkflowDefinition = {
   id: "workflow-1",
   name: "Workflow",
+  version: "v1",
+  createdAt: 0,
+  updatedAt: 0,
   nodes: [
     {
       id: "prompt-1",
