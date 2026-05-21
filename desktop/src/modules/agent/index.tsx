@@ -46,6 +46,7 @@ import {
   formatAgentTranscript,
   sessionLabel,
 } from "./utils"
+import { toAgentSlashCandidates } from "./slash-menu"
 
 const logger = createRendererLogger("agent")
 
@@ -314,6 +315,10 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     }
     return result
   }, [selectedAgentDefinition?.commands, chat.commands])
+  const slashCandidates = useMemo(
+    () => toAgentSlashCandidates(mergedCommands),
+    [mergedCommands],
+  )
   const selectedDisplayProfile = selectedAgentDefinition?.displayProfile
     ?? DEFAULT_AGENT_DISPLAY_PROFILE
   const selectedCliLabel = agentCliLabel(selectedSession?.agentType)
@@ -521,6 +526,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                 void chat.createSession(projectId, selectedSession?.providerId, mode)
               }}
               onDraftChange={setDraft}
+              slashCandidates={slashCandidates}
               onInputKeyDown={handleInputKeyDown}
               onSubmit={handleSubmit}
               onCancelTurn={() => void chat.cancelTurn()}
