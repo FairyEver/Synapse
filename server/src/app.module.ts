@@ -12,6 +12,7 @@ import { BackupModule } from "./backup/backup.module"
 import { HealthModule } from "./health/health.module"
 import { InvitationsModule } from "./invitations/invitations.module"
 import { PrismaModule } from "./prisma/prisma.module"
+import { TeamsModule } from "./teams/teams.module"
 
 @Module({
   imports: [
@@ -50,6 +51,7 @@ import { PrismaModule } from "./prisma/prisma.module"
     PrismaModule,
     InvitationsModule,
     UserAuthModule,
+    TeamsModule,
     AdminAuthModule,
     AdminModule,
     BackupModule,
