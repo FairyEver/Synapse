@@ -69,7 +69,7 @@ export class KnowledgeBaseService {
     for (const relativePath of REQUIRED_PATHS) {
       const targetPath = assertInside(projectPath, path.join(projectPath, relativePath))
       const templatePath = path.join(this.templateRoot, relativePath)
-      await assertNoSymlinkAncestors(projectPath, relativePath)
+      await assertNoSymlinkInRequiredPath(projectPath, relativePath)
       await mkdir(path.dirname(targetPath), { recursive: true })
       if (await pathExists(targetPath)) {
         existingFiles.push(relativePath)
@@ -133,19 +133,14 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
-async function assertNoSymlinkAncestors(projectPath: string, relativePath: string): Promise<void> {
-  const directory = path.dirname(relativePath)
-  if (directory === ".") {
-    return
-  }
-
+async function assertNoSymlinkInRequiredPath(projectPath: string, relativePath: string): Promise<void> {
   let currentPath = projectPath
-  for (const segment of directory.split(/[\\/]/)) {
+  for (const segment of relativePath.split(/[\\/]/)) {
     currentPath = path.join(currentPath, segment)
     try {
       const stat = await lstat(currentPath)
       if (stat.isSymbolicLink()) {
-        throw new Error(`知识库路径不能包含符号链接目录：${path.relative(projectPath, currentPath)}`)
+        throw new Error(`知识库路径不能包含符号链接：${path.relative(projectPath, currentPath)}`)
       }
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code === "ENOENT") {

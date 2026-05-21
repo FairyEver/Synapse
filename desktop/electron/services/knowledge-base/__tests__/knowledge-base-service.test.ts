@@ -70,6 +70,19 @@ describe("KnowledgeBaseService", () => {
     await expect(readFile(path.join(outsidePath, "log.md"), "utf8")).rejects.toThrow()
   })
 
+  it("rejects required writes through dangling symlinked file paths", async () => {
+    const targetPath = await tempDir()
+    const outsidePath = await tempDir()
+    const outsideLogPath = path.join(outsidePath, "log.md")
+    const service = new KnowledgeBaseService()
+    await service.initialize({ projectPath: targetPath, mode: "create" })
+    await unlink(path.join(targetPath, "wiki", "log.md"))
+    await symlink(outsideLogPath, path.join(targetPath, "wiki", "log.md"))
+
+    await expect(service.initialize({ projectPath: targetPath, mode: "repair" })).rejects.toThrow("符号链接")
+    await expect(readFile(outsideLogPath, "utf8")).rejects.toThrow()
+  })
+
   it("detects existing knowledge base folders by metadata or folder shape", async () => {
     const targetPath = await tempDir()
     const service = new KnowledgeBaseService()
