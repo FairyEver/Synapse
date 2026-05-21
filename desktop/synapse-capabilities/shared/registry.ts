@@ -10,18 +10,25 @@ import {
   WORKFLOW_MCP_TOOL_ACTIONS,
   buildWorkflowTools,
 } from "./workflow-domain"
+import {
+  CONTENT_DOMAIN,
+  CONTENT_MCP_TOOL_ACTIONS,
+  buildContentTools,
+} from "./content-domain"
 import type { CapabilityDomainDefinition, McpToolDefinition } from "./types"
 
 export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
   DATABASE_DOMAIN,
   SCHEDULER_DOMAIN,
   WORKFLOW_DOMAIN,
+  CONTENT_DOMAIN,
 ]
 
 export const MCP_TOOL_ACTIONS: Record<string, string> = {
   ...buildDatabaseMcpToolActions(),
   ...SCHEDULER_MCP_TOOL_ACTIONS,
   ...WORKFLOW_MCP_TOOL_ACTIONS,
+  ...CONTENT_MCP_TOOL_ACTIONS,
 }
 
 export function buildAllMcpTools(): McpToolDefinition[] {
@@ -29,6 +36,7 @@ export function buildAllMcpTools(): McpToolDefinition[] {
     ...buildDatabaseTools(),
     ...buildSchedulerTools(),
     ...buildWorkflowTools(),
+    ...buildContentTools(),
   ]
 }
 

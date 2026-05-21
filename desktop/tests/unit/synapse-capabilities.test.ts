@@ -7,6 +7,11 @@ import {
   buildSchedulerTools,
 } from "../../synapse-capabilities/shared/scheduler-domain"
 import {
+  CONTENT_DOMAIN,
+  CONTENT_MCP_TOOL_ACTIONS,
+  buildContentTools,
+} from "../../synapse-capabilities/shared/content-domain"
+import {
   MCP_TOOL_ACTIONS,
   buildAllMcpTools,
   getActionDomainId,
@@ -117,5 +122,57 @@ describe("Workflow MCP tool schemas", () => {
     expect(tool("workflow_run_get").description).toContain("durationMs")
     expect(tool("workflow_run_get").description).toContain("timeoutMs")
     expect(tool("workflow_run_get").description).toContain("retryable")
+  })
+})
+
+describe("Content capability domain", () => {
+  it("registers content actions separately from other domains", () => {
+    expect(CONTENT_DOMAIN.id).toBe("content")
+    expect(CONTENT_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
+      "content.type.describe",
+      "content.rule.list",
+      "content.rule.get",
+      "content.rule.create",
+      "content.rule.update",
+      "content.rule.delete",
+      "content.skill.list",
+      "content.skill.get",
+      "content.skill.create",
+      "content.skill.update",
+      "content.skill.delete",
+      "content.prompt.list",
+      "content.prompt.get",
+      "content.prompt.create",
+      "content.prompt.update",
+      "content.prompt.delete",
+    ])
+  })
+
+  it("maps content MCP tool names to canonical actions", () => {
+    expect(CONTENT_MCP_TOOL_ACTIONS.content_type_describe).toBe("content.type.describe")
+    expect(CONTENT_MCP_TOOL_ACTIONS.content_rule_create).toBe("content.rule.create")
+    expect(CONTENT_MCP_TOOL_ACTIONS.content_skill_update).toBe("content.skill.update")
+    expect(CONTENT_MCP_TOOL_ACTIONS.content_prompt_delete).toBe("content.prompt.delete")
+  })
+
+  it("combines content tools with all MCP tools", () => {
+    const toolNames = buildAllMcpTools().map((tool) => tool.name)
+    expect(toolNames).toContain("content_type_describe")
+    expect(toolNames).toContain("content_rule_create")
+    expect(toolNames).toContain("content_skill_create")
+    expect(toolNames).toContain("content_prompt_create")
+    expect(MCP_TOOL_ACTIONS.content_skill_delete).toBe("content.skill.delete")
+    expect(getActionDomainId("content.prompt.update")).toBe("content")
+  })
+
+  it("documents list/get/create/update/delete tool schemas for each content type", () => {
+    const tools = buildContentTools()
+    for (const type of ["rule", "skill", "prompt"] as const) {
+      expect(tools.find((tool) => tool.name === `content_${type}_list`)).toBeDefined()
+      expect(tools.find((tool) => tool.name === `content_${type}_get`)?.inputSchema.required).toEqual(["id"])
+      expect(tools.find((tool) => tool.name === `content_${type}_create`)).toBeDefined()
+      expect(tools.find((tool) => tool.name === `content_${type}_update`)?.inputSchema.required).toContain("baseHistoryDirname")
+      expect(tools.find((tool) => tool.name === `content_${type}_delete`)?.inputSchema.required).toEqual(["id", "baseHistoryDirname"])
+    }
   })
 })
