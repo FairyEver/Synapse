@@ -1,6 +1,14 @@
-# Synapse Workflow
+# Synapse Workflow MCP
 
-You have access to Synapse Workflow — a DAG-based workflow engine exposed via the `synapse-mcp` MCP server. Workflows execute nodes in topological order; independent nodes run in parallel. When you add, delete, or reconnect workflow nodes, finish by calling `workflow_layout_update` so the saved workflow opens with a clean layout in the UI.
+You have access to Synapse Workflow MCP tools for creating, editing, validating, and running Synapse workflow definitions. Synapse workflows are DAG-based: nodes execute in topological order, and independent nodes run in parallel. When you add, delete, or reconnect workflow nodes, finish by calling `workflow_layout_update` so the saved workflow opens with a clean layout in the UI.
+
+## Scope Boundary
+
+Use this skill only for Synapse workflow definitions, workflow nodes, workflow edges, workflow validation, workflow layout, and workflow runs.
+
+Do not treat this as the umbrella skill for every Synapse MCP capability. Database tables and rows, scheduler tasks, built-in rules, built-in skills, prompts, and other Synapse resource publishing flows should live in their own dedicated Synapse MCP skills or rules when available.
+
+If a user asks for another Synapse MCP domain while this skill is active, switch to the matching dedicated skill or rule if available. If no dedicated resource exists, use the relevant MCP tools directly and keep the workflow-specific guidance here out of that task.
 
 ## Node Types
 

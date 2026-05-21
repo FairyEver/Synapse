@@ -21,12 +21,14 @@ const toastFns = vi.hoisted(() => ({
   warning: vi.fn(() => "toast-warning"),
 }))
 
+const toaster = vi.hoisted(() => vi.fn(() => null))
+
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => rendererLogger,
 }))
 
 vi.mock("@/components/ui/sonner", () => ({
-  Toaster: () => null,
+  Toaster: toaster,
 }))
 
 vi.mock("sonner", () => ({
@@ -47,6 +49,7 @@ import { AppNotificationsProvider, useAppNotifications } from "../notifications"
 let roots: Root[] = []
 
 beforeEach(() => {
+  toaster.mockClear()
   for (const fn of Object.values(rendererLogger)) fn.mockClear()
   for (const fn of Object.values(toastFns)) fn.mockClear()
 })
@@ -62,6 +65,16 @@ afterEach(() => {
 })
 
 describe("AppNotificationsProvider", () => {
+  it("renders global toasts at the top center with a shorter duration", () => {
+    renderNotificationsHarness()
+
+    expect(toaster).toHaveBeenCalled()
+    expect(toaster.mock.calls.at(-1)?.[0]).toEqual(expect.objectContaining({
+      duration: 1000,
+      position: "top-center",
+    }))
+  })
+
   it("uses sanitized fallback copy for async failures without a custom error resolver", async () => {
     renderNotificationsHarness()
 

@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, Clock, Command as CommandIcon, Copy, ShieldAlert } from "lucide-react"
+import { AlertTriangle, Clock, Copy, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
@@ -9,15 +9,6 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
-import {
-  Command,
-  CommandEmpty,
-  CommandGroup,
-  CommandInput,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command"
-import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover"
 import { AgentComposer } from "./components/agent-composer"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
@@ -79,7 +70,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   [activeRepository, config.global.projects, platform])
   const [draft, setDraft] = useState("")
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
-  const [paletteOpen, setPaletteOpen] = useState(false)
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([])
   const pendingSessionRefreshKeyRef = useRef<string | null>(null)
   const pendingMessageIdRef = useRef(0)
@@ -246,12 +236,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     submitDraft()
   }
 
-  const handleCommandSelect = (name: string) => {
-    setDraft("")
-    setPaletteOpen(false)
-    submitContent(`/${name}`)
-  }
-
   const handleRemovePendingMessage = (id: string) => {
     setPendingMessages((current) => removePendingMessage(current, id))
   }
@@ -400,7 +384,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               </h2>
             </div>
 
-            {/* 右区：模型信息 · 权限 · 复制 · 命令 */}
+            {/* 右区：模型信息 · 权限 · 复制 */}
             <div className="flex shrink-0 items-center gap-2">
               {providerMissing ? (
                 <Tooltip>
@@ -452,37 +436,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                 <TooltipContent>复制对话</TooltipContent>
               </Tooltip>
 
-              <Popover open={paletteOpen} onOpenChange={setPaletteOpen}>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <PopoverTrigger asChild>
-                      <Button type="button" variant="ghost" size="icon" aria-label="命令">
-                        <CommandIcon />
-                      </Button>
-                    </PopoverTrigger>
-                  </TooltipTrigger>
-                  <TooltipContent>命令</TooltipContent>
-                </Tooltip>
-                <PopoverContent align="end" className="w-40 p-0">
-                  <Command>
-                    <CommandInput placeholder="搜索命令" />
-                    <CommandList>
-                      <CommandEmpty>无命令</CommandEmpty>
-                      <CommandGroup>
-                        {(mergedCommands).map((command) => (
-                          <CommandItem
-                            key={command.name}
-                            value={`/${command.name}`}
-                            onSelect={() => handleCommandSelect(command.name)}
-                          >
-                            <span className="truncate">/{command.name}</span>
-                          </CommandItem>
-                        ))}
-                      </CommandGroup>
-                    </CommandList>
-                  </Command>
-                </PopoverContent>
-              </Popover>
             </div>
           </div>
         </TooltipProvider>

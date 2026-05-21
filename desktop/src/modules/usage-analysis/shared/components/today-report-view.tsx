@@ -57,10 +57,10 @@ export function TodayReportView({ overviewState, timeState, modelsState }: Today
   return (
     <ReportState loading={loading} error={error} empty={empty}>
       {report ? (
-        <div className="flex flex-col gap-2">
+        <div className="flex min-w-0 flex-col gap-2">
           <MetricGrid metrics={buildTodayMetricRows(report, timeRows)} columns="four" />
           <UsageTodayHourlyChart title="今日时段" rows={timeRows} />
-          <div className="grid gap-2 md:grid-cols-2">
+          <div className="grid min-w-0 gap-2 md:grid-cols-2">
             <UsageBreakdownChart title="Token 结构" rows={buildTodayTokenStructureRows(report.tokenBreakdown)} valueFormatter={formatInteger} compact />
             <UsageBreakdownChart title="模型结构" rows={buildTodayModelStructureRows(modelRows)} valueFormatter={formatInteger} compact />
           </div>
@@ -73,11 +73,11 @@ export function TodayReportView({ overviewState, timeState, modelsState }: Today
 
 function TodayRhythmTable({ rows }: { readonly rows: readonly UsageTimeBucket[] }) {
   return (
-    <Card>
+    <Card className="min-w-0">
       <CardHeader>
         <CardTitle>今日节奏</CardTitle>
       </CardHeader>
-      <CardContent className="overflow-x-auto">
+      <CardContent className="min-w-0 overflow-x-auto">
         <Table>
           <TableHeader>
             <TableRow>

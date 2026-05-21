@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react"
+import { MarkdownViewer } from "@/components/markdown-viewer"
 import { Badge } from "@/components/ui/badge"
 import {
   Dialog,
@@ -15,12 +16,14 @@ type ContentItemMetaProps = {
   category: string
   className?: string
   description: string
+  descriptionTextClassName?: string
   descriptionWrap?: boolean
   title: string
 }
 
 type ContentItemTextProps = {
   description: string
+  descriptionTextClassName?: string
   descriptionWrap?: boolean
   title: string
 }
@@ -33,6 +36,7 @@ type ContentItemBadgesProps = {
 
 function ContentItemText({
   description,
+  descriptionTextClassName,
   descriptionWrap,
   title,
 }: ContentItemTextProps) {
@@ -62,7 +66,8 @@ function ContentItemText({
         <p
           ref={descRef}
           className={cn(
-            "max-w-full text-sm leading-4 text-muted-foreground",
+            "max-w-full leading-4 text-muted-foreground",
+            descriptionTextClassName ?? "text-sm",
             descriptionWrap ? "line-clamp-3 break-words whitespace-pre-wrap" : "truncate",
           )}
         >
@@ -80,15 +85,21 @@ function ContentItemText({
       </div>
       {descriptionWrap && (
         <Dialog open={showFull} onOpenChange={setShowFull}>
-          <DialogContent className="max-h-[70vh] overflow-hidden sm:max-w-[500px]">
-            <DialogHeader>
+          <DialogContent className="flex max-h-[70vh] flex-col overflow-hidden sm:max-w-[500px]">
+            <DialogHeader className="shrink-0">
               <DialogTitle>{title}</DialogTitle>
               <DialogDescription className="sr-only">完整介绍</DialogDescription>
             </DialogHeader>
-            <ScrollArea className="min-h-0">
-              <p className="whitespace-pre-wrap break-words text-sm leading-5 text-muted-foreground">
-                {description}
-              </p>
+            <ScrollArea
+              className="min-h-0 max-h-[calc(70vh-4rem)] max-w-full"
+              viewportClassName="max-h-[calc(70vh-4rem)]"
+            >
+              <div
+                data-content-full-description="true"
+                className="min-w-0 max-w-full"
+              >
+                <MarkdownViewer content={description} showTabs={false} surface="plain" />
+              </div>
             </ScrollArea>
           </DialogContent>
         </Dialog>
@@ -115,6 +126,7 @@ function ContentItemMeta({
   category,
   className,
   description,
+  descriptionTextClassName,
   descriptionWrap,
   title,
 }: ContentItemMetaProps) {
@@ -122,6 +134,7 @@ function ContentItemMeta({
     <div className={cn("min-w-0", className)}>
       <ContentItemText
         description={description}
+        descriptionTextClassName={descriptionTextClassName}
         descriptionWrap={descriptionWrap}
         title={title}
       />

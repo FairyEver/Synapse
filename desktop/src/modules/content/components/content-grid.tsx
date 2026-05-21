@@ -156,6 +156,7 @@ function ContentListCard({
             category={categoryLabel}
             className="flex-1"
             description={item.usage?.trim() || item.description}
+            descriptionTextClassName="text-xs"
             title={item.title}
           />
         </button>
@@ -274,6 +275,7 @@ function SkillContentListCard({
           >
             <ContentItemText
               description={item.usage?.trim() || item.description}
+              descriptionTextClassName="text-xs"
               title={item.title}
             />
           </button>

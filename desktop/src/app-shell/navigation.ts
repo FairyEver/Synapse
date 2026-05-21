@@ -15,7 +15,7 @@ type OpenAgentSessionPayload = {
 type WatchNextAgentSessionPayload = {
   projectId: string
 }
-let currentAppTab = "rule"
+let currentAppTab = "skill"
 
 function requestOpenSettingsTab(): void {
   window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_TAB_EVENT))

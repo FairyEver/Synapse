@@ -1,0 +1,10 @@
+{
+  "id": "synapse-scheduler-mcp",
+  "name": "synapse-scheduler-mcp",
+  "title": "Synapse 定时任务 MCP",
+  "usage": "让 AI 管理 Synapse 定时任务：创建 cron/interval 任务、查看运行记录，并启用、禁用或调整调度。\n\n- **适合**：定时执行命令、脚本、HTTP 请求或 Agent 任务；检查任务是否在运行；追踪最近运行结果。\n- **会做**：创建前先读取 action 类型；按本地时间生成 cron；更新时只改安全字段。\n- **限制**：不支持删除任务、手动触发任务、停止正在运行的任务，或在更新时替换 action/scope。",
+  "description": "Use when working with Synapse scheduled tasks, cron or interval schedules, task enablement, run history, or Scheduler runtime state through MCP tools.",
+  "category": "automation",
+  "icon": "terminal",
+  "iconBg": "teal"
+}

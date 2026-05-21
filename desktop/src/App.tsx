@@ -29,7 +29,7 @@ import {
   useRepositoryManager,
   useRepositoryState,
 } from "@/app-shell/use-repository-manager"
-import { CONTENT_TYPE_DEFINITIONS, getAllContentTypeIds } from "@/config/content-types"
+import { getAllContentTypeIds } from "@/config/content-types"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { parseContentWindowRequest } from "@/lib/content-window"
@@ -59,6 +59,13 @@ const CONTENT_TAB_LABELS: Record<SynapseContentType, string> = {
   skill: "技能",
   prompt: "提示词",
 }
+
+const TOP_LEVEL_CONTENT_TAB_ORDER = [
+  "skill",
+  "rule",
+  "prompt",
+] as const satisfies readonly SynapseContentType[]
+const DEFAULT_APP_TAB: AppTabId = TOP_LEVEL_CONTENT_TAB_ORDER[0]
 
 function createEmptyDialogStateMap(): ContentDialogStateMap {
   return Object.fromEntries(
@@ -96,7 +103,7 @@ function MainApp() {
   const { promise } = useAppNotifications()
   const manager = useRepositoryManager()
   const { syncRepository } = useRepositoryActions()
-  const [activeTab, setActiveTabRaw] = useState<AppTabId>("rule")
+  const [activeTab, setActiveTabRaw] = useState<AppTabId>(DEFAULT_APP_TAB)
   const [contentDialogStates, setContentDialogStates] = useState<ContentDialogStateMap>(
     createEmptyDialogStateMap,
   )
@@ -140,9 +147,9 @@ function MainApp() {
 
   const tabs = useMemo(
     () => [
-      ...CONTENT_TYPE_DEFINITIONS.map((definition) => ({
-        id: definition.id,
-        label: CONTENT_TAB_LABELS[definition.id],
+      ...TOP_LEVEL_CONTENT_TAB_ORDER.map((contentType) => ({
+        id: contentType,
+        label: CONTENT_TAB_LABELS[contentType],
       })),
       { id: "agent" as const, label: "对话" },
       { id: "database" as const, label: "数据" },
@@ -347,18 +354,18 @@ function MainApp() {
         }
       >
         <div className="flex h-full min-h-0 flex-col">
-          {CONTENT_TYPE_DEFINITIONS.map((definition) => {
-            if (activeTab !== definition.id) {
+          {TOP_LEVEL_CONTENT_TAB_ORDER.map((contentType) => {
+            if (activeTab !== contentType) {
               return null
             }
 
-            const ModuleComponent = CONTENT_MODULE_COMPONENTS[definition.id]
-            const dialogHandlers = contentDialogHandlers[definition.id]
+            const ModuleComponent = CONTENT_MODULE_COMPONENTS[contentType]
+            const dialogHandlers = contentDialogHandlers[contentType]
 
             return (
-              <ErrorBoundary key={definition.id} fallbackTitle={`${definition.tabLabel}模块出现问题`}>
+              <ErrorBoundary key={contentType} fallbackTitle={`${CONTENT_TAB_LABELS[contentType]}模块出现问题`}>
                 <ModuleComponent
-                  key={definition.id}
+                  key={contentType}
                   onCreateDialogOpenChange={dialogHandlers.create}
                   onDetailDialogOpenChange={dialogHandlers.detail}
                   onInstallDialogOpenChange={dialogHandlers.install}

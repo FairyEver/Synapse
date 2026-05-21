@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useMemo, useRef, useEffect, useState } from "react"
-import { ArrowUp, CornerDownRight, RotateCcw, ShieldCheck, Square, Trash2 } from "lucide-react"
+import { ArrowUp, ChevronDown, CornerDownRight, RotateCcw, Square, Trash2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -14,8 +14,9 @@ import { Textarea } from "@/components/ui/textarea"
 import { track } from "@/lib/ui-tracking"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
 import { getPermissionModeCapability } from "../permission-mode-capability"
-import { permissionModeConfirmationText } from "../permission-mode-options"
+import { permissionModeConfirmationText, permissionModeLabels } from "../permission-mode-options"
 import type { PendingMessage } from "../pending-message-queue"
+import { AgentComposerInputBox } from "./agent-composer-input-box"
 import { AgentPermissionModeMenu } from "./permission-mode-menu"
 import { AgentSlashMenu } from "./agent-slash-menu"
 import {
@@ -26,7 +27,8 @@ import {
   type AgentSlashFragment,
 } from "../slash-menu"
 
-const SINGLE_LINE_HEIGHT = 28
+const SINGLE_LINE_HEIGHT = 48
+const MAX_TEXTAREA_HEIGHT = 160
 
 function AgentComposer({
   draft,
@@ -112,7 +114,7 @@ function AgentComposer({
     const el = textareaRef.current
     if (!el) return
     el.style.height = "auto"
-    const scrollHeight = Math.min(el.scrollHeight, 120)
+    const scrollHeight = Math.min(el.scrollHeight, MAX_TEXTAREA_HEIGHT)
     el.style.height = `${scrollHeight}px`
     setMultiline(scrollHeight > SINGLE_LINE_HEIGHT)
   }, [draft])
@@ -232,11 +234,9 @@ function AgentComposer({
         data-track="agent-composer"
         onSubmit={handleSubmit}
       >
-        <div
-          className="agent-composer__container rounded-lg border border-border bg-background p-2"
-          data-multiline={multiline || undefined}
-        >
-          {slashMenuOpen ? (
+        <AgentComposerInputBox
+          multiline={multiline}
+          slashMenu={slashMenuOpen ? (
             <AgentSlashMenu
               candidates={visibleSlashCandidates}
               highlightedIndex={highlightedSlashIndex}
@@ -244,52 +244,52 @@ function AgentComposer({
               onSelect={selectSlashCandidate}
             />
           ) : null}
-          {visiblePendingMessages.length > 0 ? (
-            <ScrollArea className="mb-2 max-h-40">
+          pendingMessages={visiblePendingMessages.length > 0 ? (
+            <ScrollArea className="max-h-40">
               <div className="flex flex-col">
-              {visiblePendingMessages.map((message) => (
-                <div
-                  key={message.id}
-                  className="flex min-w-0 items-center gap-2 border-b border-border py-1.5 last:border-b-0"
-                >
-                  <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm text-muted-foreground">{message.content}</p>
+                {visiblePendingMessages.map((message) => (
+                  <div
+                    key={message.id}
+                    className="flex min-w-0 items-center gap-2 border-b border-border py-1.5 last:border-b-0"
+                  >
+                    <CornerDownRight className="size-3.5 shrink-0 text-muted-foreground" />
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm text-muted-foreground">{message.content}</p>
+                      {message.status === "failed" ? (
+                        <p className="truncate text-xs text-destructive">{message.error ?? "发送失败"}</p>
+                      ) : null}
+                    </div>
                     {message.status === "failed" ? (
-                      <p className="truncate text-xs text-destructive">{message.error ?? "发送失败"}</p>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-xs"
+                        aria-label="重试发送"
+                        data-track="agent-pending-message-retry"
+                        onClick={() => onRetryPendingMessage?.(message.id)}
+                      >
+                        <RotateCcw />
+                      </Button>
                     ) : null}
-                  </div>
-                  {message.status === "failed" ? (
                     <Button
                       type="button"
                       variant="ghost"
                       size="icon-xs"
-                      aria-label="重试发送"
-                      data-track="agent-pending-message-retry"
-                      onClick={() => onRetryPendingMessage?.(message.id)}
+                      aria-label="删除待发送消息"
+                      data-track="agent-pending-message-remove"
+                      onClick={() => onRemovePendingMessage?.(message.id)}
                     >
-                      <RotateCcw />
+                      <Trash2 />
                     </Button>
-                  ) : null}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="icon-xs"
-                    aria-label="删除待发送消息"
-                    data-track="agent-pending-message-remove"
-                    onClick={() => onRemovePendingMessage?.(message.id)}
-                  >
-                    <Trash2 />
-                  </Button>
-                </div>
-              ))}
+                  </div>
+                ))}
               </div>
             </ScrollArea>
           ) : null}
-          <div className="flex items-center gap-2">
+          editor={(
             <Textarea
               ref={textareaRef}
-              className="agent-composer__input max-h-30 min-h-7 resize-none border-0 bg-transparent px-0 py-1 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0"
+              className="agent-composer__input max-h-40 min-h-12 resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:border-transparent focus-visible:ring-0 disabled:bg-transparent dark:bg-transparent dark:disabled:bg-transparent"
               value={draft}
               onChange={(e) => {
                 onDraftChange(e.target.value)
@@ -303,47 +303,53 @@ function AgentComposer({
               disabled={disabled}
               rows={1}
             />
-            <AgentPermissionModeMenu
-              selectedMode={permissionMode}
-              onSelect={selectPermissionMode}
-              trigger={(
+          )}
+          leadingActions={null}
+          trailingActions={(
+            <>
+              <AgentPermissionModeMenu
+                selectedMode={permissionMode}
+                onSelect={selectPermissionMode}
+                trigger={(
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="agent-composer__permission-trigger rounded-lg px-2.5 text-muted-foreground"
+                    aria-label={`权限模式：${permissionModeLabels[permissionMode]}`}
+                    data-track="agent-permission-mode-select"
+                    disabled={disabled}
+                  >
+                    {permissionModeLabels[permissionMode]}
+                    <ChevronDown data-icon="inline-end" />
+                  </Button>
+                )}
+              />
+              {sending || cancelPhase === "cancel_pending" ? (
                 <Button
                   type="button"
-                  variant="ghost"
+                  className="agent-composer__stop rounded-full"
                   size="icon-sm"
-                  aria-label="权限模式"
-                  data-track="agent-permission-mode-select"
-                  disabled={disabled}
+                  onClick={cancelPhase === "cancel_pending" ? onForceKillTurn : onCancelTurn}
+                  aria-label={cancelPhase === "cancel_pending" ? "强制停止" : "停止"}
+                  data-track={cancelPhase === "cancel_pending" ? "agent-turn-force-stop" : "agent-turn-stop"}
                 >
-                  <ShieldCheck size={14} />
+                  <Square fill="currentColor" strokeWidth={0} />
+                </Button>
+              ) : (
+                <Button
+                  type="submit"
+                  className="agent-composer__send rounded-full"
+                  size="icon-sm"
+                  disabled={!canSend}
+                  aria-label="发送"
+                  data-track="agent-message-send"
+                >
+                  <ArrowUp strokeWidth={2.5} />
                 </Button>
               )}
-            />
-            {sending || cancelPhase === "cancel_pending" ? (
-              <Button
-                type="button"
-                className="agent-composer__stop rounded-full"
-                size="icon-sm"
-                onClick={cancelPhase === "cancel_pending" ? onForceKillTurn : onCancelTurn}
-                aria-label={cancelPhase === "cancel_pending" ? "强制停止" : "停止"}
-                data-track={cancelPhase === "cancel_pending" ? "agent-turn-force-stop" : "agent-turn-stop"}
-              >
-                <Square size={12} strokeWidth={0} fill="currentColor" />
-              </Button>
-            ) : (
-              <Button
-                type="submit"
-                className="agent-composer__send rounded-full"
-                size="icon-sm"
-                disabled={!canSend}
-                aria-label="发送"
-                data-track="agent-message-send"
-              >
-                <ArrowUp size={14} strokeWidth={2.5} />
-              </Button>
-            )}
-          </div>
-        </div>
+            </>
+          )}
+        />
       </form>
       <Dialog open={pendingMode !== null} onOpenChange={(open) => {
         if (!open) {

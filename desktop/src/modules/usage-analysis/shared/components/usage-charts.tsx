@@ -1,8 +1,8 @@
 import { useMemo, useState, type ReactNode } from "react"
-import ReactECharts from "echarts-for-react"
 import type { EChartsOption } from "echarts"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
+import { ResponsiveEChart } from "./responsive-echart"
 import { useUsageEChartsTheme } from "../echarts-theme"
 import type { UsageTrendBucketGranularity } from "../types"
 
@@ -212,7 +212,7 @@ export function UsageTrendChart({ title, rows, bucket = "day", onBucketChange }:
         </div>
       )}
     >
-      <ReactECharts className="h-80 w-full" option={option} opts={{ renderer: "canvas" }} notMerge lazyUpdate />
+      <ResponsiveEChart className="h-80" option={option} />
     </ChartCard>
   )
 }
@@ -291,7 +291,7 @@ export function UsageTodayHourlyChart({ title, rows }: UsageTodayHourlyChartProp
 
   return (
     <ChartCard title={title} empty={data.length === 0}>
-      <ReactECharts className="h-80 w-full" option={option} opts={{ renderer: "canvas" }} notMerge lazyUpdate />
+      <ResponsiveEChart className="h-80" option={option} />
     </ChartCard>
   )
 }
@@ -334,7 +334,7 @@ export function UsageBreakdownChart({ title, rows, valueFormatter, compact = fal
 
   return (
     <ChartCard title={title} empty={data.length === 0} heightClassName={compact ? "h-64" : "h-80"}>
-      <ReactECharts className={`${compact ? "h-64" : "h-80"} w-full`} option={option} opts={{ renderer: "canvas" }} notMerge lazyUpdate />
+      <ResponsiveEChart className={compact ? "h-64" : "h-80"} option={option} />
     </ChartCard>
   )
 }
@@ -392,7 +392,7 @@ export function UsageRankChart({ title, rows, valueFormatter, extraFormatter }: 
 
   return (
     <ChartCard title={title} empty={data.length === 0} height={chartHeight}>
-      <ReactECharts className="w-full" style={{ height: chartHeight }} option={option} opts={{ renderer: "canvas" }} notMerge lazyUpdate />
+      <ResponsiveEChart option={option} style={{ height: chartHeight }} />
     </ChartCard>
   )
 }
@@ -413,14 +413,14 @@ function ChartCard({
   readonly children: ReactNode
 }) {
   return (
-    <Card size="sm" className="ring-0">
-      <CardHeader>
-        <div className="flex flex-wrap items-center justify-between gap-2">
+    <Card size="sm" className="min-w-0 ring-0">
+      <CardHeader className="min-w-0">
+        <div className="flex min-w-0 flex-wrap items-center justify-between gap-2">
           <CardTitle>{title}</CardTitle>
           {action}
         </div>
       </CardHeader>
-      <CardContent>
+      <CardContent className="min-w-0 overflow-hidden">
         {empty ? (
           <div className={`flex ${height ? "" : heightClassName} items-center justify-center text-sm text-muted-foreground`} style={height ? { height } : undefined}>暂无图表数据</div>
         ) : children}

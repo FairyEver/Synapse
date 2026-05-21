@@ -64,7 +64,7 @@ describe("AgentComposer", () => {
     })).toBe("confirmable")
   })
 
-  it("renders a ChatGPT-style input with an icon-only send button", () => {
+  it("renders a Claude-style input box with an icon-only send button", () => {
     const html = renderToStaticMarkup(
       <AgentComposer
         draft="你好"
@@ -81,13 +81,70 @@ describe("AgentComposer", () => {
     )
 
     expect(html).toContain("agent-composer")
-    expect(html).toContain("agent-composer__container")
+    expect(html).toContain("agent-composer-input-box")
+    expect(html).toContain("agent-composer-input-box__editor")
+    expect(html).toContain("agent-composer-input-box__toolbar")
     expect(html).toContain("agent-composer__input")
     expect(html).toContain("agent-composer__send")
+    expect(html).toContain("agent-composer__permission-trigger")
+    expect(html).toContain("默认")
+    expect(html).toContain("lucide-chevron-down")
     expect(html).toContain('aria-label="发送"')
     expect(html).toContain('placeholder="输入消息"')
     expect(html).toContain("你好")
     expect(html).not.toContain(">发送</button>")
+    expect(html).not.toContain("lucide-shield-check")
+  })
+
+  it("places the permission mode selector next to the send button with the selected label", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft="run"
+        disabled={false}
+        canSend={true}
+        sending={false}
+        cancelPhase="idle"
+        permissionMode="bypassPermissions"
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    const permissionIndex = html.indexOf("agent-composer__permission-trigger")
+    const sendIndex = html.indexOf("agent-composer__send")
+
+    expect(permissionIndex).toBeGreaterThan(-1)
+    expect(sendIndex).toBeGreaterThan(permissionIndex)
+    expect(html).toContain('aria-label="权限模式：跳过权限"')
+    expect(html).toContain(">跳过权限")
+    expect(html).toContain("lucide-chevron-down")
+  })
+
+  it("keeps the composer visual treatment isolated in the input box component", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("agent-composer-input-box rounded-2xl border border-border bg-card")
+    expect(html).toContain("focus-within:border-ring")
+    expect(html).toContain("agent-composer-input-box__toolbar flex items-center justify-between")
+    expect(html).toContain("agent-composer__input max-h-40 min-h-12")
+    expect(html).toContain("px-2")
+    expect(html).toContain("py-2")
   })
 
   it("disables send button when canSend is false", () => {
@@ -676,7 +733,7 @@ function wait(ms: number) {
 }
 
 function openPermissionMenu(container: HTMLElement) {
-  const trigger = container.querySelector('button[aria-label="权限模式"]')
+  const trigger = container.querySelector('button[aria-label^="权限模式"]')
   expect(trigger).toBeTruthy()
   act(() => {
     trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))

@@ -134,7 +134,7 @@ export function OverviewReportView({ state, trendBucket, onTrendBucketChange }: 
   return (
     <ReportState loading={state.loading && !report} error={state.error} empty={!report || report.totals.tokens === 0}>
       {report ? (
-        <div className="flex flex-col gap-2">
+        <div className="flex min-w-0 flex-col gap-2">
           <MetricGrid
             metrics={[
               { label: "Token", value: formatInteger(report.totals.tokens) },
@@ -146,11 +146,11 @@ export function OverviewReportView({ state, trendBucket, onTrendBucketChange }: 
             ]}
           />
           <UsageTrendChart title="Token 趋势" rows={report.trend} bucket={trendBucket} onBucketChange={onTrendBucketChange} />
-          <div className="grid gap-2 md:grid-cols-2">
+          <div className="grid min-w-0 gap-2 md:grid-cols-2">
             <UsageBreakdownChart title="Token 类型占比" rows={tokenChartRows(report.tokenBreakdown)} valueFormatter={formatInteger} compact />
             <UsageBreakdownChart title="费用类型占比" rows={costChartRows(report.costBreakdown)} valueFormatter={formatCurrency} compact />
           </div>
-          <div className="grid gap-2 xl:grid-cols-3">
+          <div className="grid min-w-0 gap-2 xl:grid-cols-3">
             <UsageRankChart title="模型 Token 排行" rows={report.topModels.map((row) => ({ label: row.model, value: row.tokens, extra: row.estimatedCost }))} valueFormatter={formatInteger} extraFormatter={(value) => `费用 ${formatCurrency(value)}`} />
             <UsageRankChart title="项目 Token 排行" rows={report.topProjects.map((row) => ({ label: projectLabels.get(projectKey(row)) ?? row.workspaceLabel, value: row.tokens, extra: row.requests }))} valueFormatter={formatInteger} extraFormatter={(value) => `请求 ${formatInteger(value)}`} />
             <UsageRankChart title="工具调用排行" rows={report.topTools.map((row) => ({ label: row.toolName, value: row.calls, extra: row.failureRate }))} valueFormatter={formatInteger} extraFormatter={(value) => `失败率 ${formatPercent(value)}`} />
@@ -167,9 +167,10 @@ export function TimeReportView({ state, trendBucket, onTrendBucketChange }: {
   const rows = state.data ?? []
   return (
     <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
-      <div className="flex flex-col gap-2">
+      <div className="flex min-w-0 flex-col gap-2">
         <UsageTrendChart title="Token / 请求 / 工具" rows={rows} bucket={trendBucket} onBucketChange={onTrendBucketChange} />
-        <Table>
+        <div className="min-w-0 overflow-x-auto">
+          <Table>
           <TableHeader>
             <TableRow>
               <TableHead>时间</TableHead>
@@ -192,7 +193,8 @@ export function TimeReportView({ state, trendBucket, onTrendBucketChange }: {
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
       </div>
     </ReportState>
   )
@@ -202,7 +204,7 @@ export function ModelsReportView({ state }: { readonly state: LoaderState<UsageM
   const rows = state.data ?? []
   return (
     <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
-      <div className="flex flex-col gap-2">
+      <div className="flex min-w-0 flex-col gap-2">
         <UsageRankChart title="Token 排行" rows={rows.map((row) => ({ label: row.model, value: row.tokens, extra: row.estimatedCost }))} valueFormatter={formatInteger} extraFormatter={(value) => `费用 ${formatCurrency(value)}`} />
         <UsageBreakdownChart title="模型费用占比" rows={rows.map((row) => ({ label: row.model, value: row.estimatedCost }))} valueFormatter={formatCurrency} />
         <ModelTable rows={rows} />
@@ -216,7 +218,7 @@ export function ProjectsReportView({ state }: { readonly state: LoaderState<Usag
   const projectLabels = createProjectLabelMap(rows)
   return (
     <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
-      <div className="flex flex-col gap-2">
+      <div className="flex min-w-0 flex-col gap-2">
         <UsageRankChart title="Token 排行" rows={rows.map((row) => ({ label: projectLabels.get(projectKey(row)) ?? row.workspaceLabel, value: row.tokens, extra: row.requests }))} valueFormatter={formatInteger} extraFormatter={(value) => `请求 ${formatInteger(value)}`} />
         <UsageRankChart title="工具调用排行" rows={rows.map((row) => ({ label: projectLabels.get(projectKey(row)) ?? row.workspaceLabel, value: row.toolCalls, extra: row.sessions }))} valueFormatter={formatInteger} extraFormatter={(value) => `会话 ${formatInteger(value)}`} />
         <ProjectTable rows={rows} labels={projectLabels} />
@@ -229,7 +231,7 @@ export function ToolsReportView({ state }: { readonly state: LoaderState<UsageTo
   const rows = state.data ?? []
   return (
     <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
-      <div className="flex flex-col gap-2">
+      <div className="flex min-w-0 flex-col gap-2">
         <UsageRankChart title="调用排行" rows={rows.map((row) => ({ label: row.toolName, value: row.calls, extra: row.failureRate }))} valueFormatter={formatInteger} extraFormatter={(value) => `失败率 ${formatPercent(value)}`} />
         <UsageBreakdownChart title="失败占比" rows={rows.map((row) => ({ label: row.toolName, value: row.failures }))} valueFormatter={formatInteger} />
         <ToolTable rows={rows} />
@@ -242,9 +244,10 @@ export function DetailsReportView({ state }: { readonly state: LoaderState<Usage
   const rows = state.data ?? []
   return (
     <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
-      <div className="flex flex-col gap-2">
+      <div className="flex min-w-0 flex-col gap-2">
         <div className="text-sm text-muted-foreground">最近 200 条</div>
-        <Table>
+        <div className="min-w-0 overflow-x-auto">
+          <Table>
           <TableHeader>
             <TableRow>
               <TableHead>时间</TableHead>
@@ -269,7 +272,8 @@ export function DetailsReportView({ state }: { readonly state: LoaderState<Usage
               </TableRow>
             ))}
           </TableBody>
-        </Table>
+          </Table>
+        </div>
       </div>
     </ReportState>
   )
@@ -277,9 +281,10 @@ export function DetailsReportView({ state }: { readonly state: LoaderState<Usage
 
 function ModelTable({ title, rows, compact = false }: { readonly title?: string; readonly rows: readonly UsageModelRow[]; readonly compact?: boolean }) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-2">
       {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
-      <Table>
+      <div className="min-w-0 overflow-x-auto">
+        <Table>
         <TableHeader>
           <TableRow>
             <TableHead>模型</TableHead>
@@ -300,7 +305,8 @@ function ModelTable({ title, rows, compact = false }: { readonly title?: string;
             </TableRow>
           ))}
         </TableBody>
-      </Table>
+        </Table>
+      </div>
     </div>
   )
 }
@@ -317,9 +323,10 @@ function ProjectTable({
   readonly compact?: boolean
 }) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-2">
       {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
-      <Table>
+      <div className="min-w-0 overflow-x-auto">
+        <Table>
         <TableHeader>
           <TableRow>
             <TableHead>项目</TableHead>
@@ -340,16 +347,18 @@ function ProjectTable({
             </TableRow>
           ))}
         </TableBody>
-      </Table>
+        </Table>
+      </div>
     </div>
   )
 }
 
 function ToolTable({ title, rows, compact = false }: { readonly title?: string; readonly rows: readonly UsageToolRow[]; readonly compact?: boolean }) {
   return (
-    <div className="flex flex-col gap-2">
+    <div className="flex min-w-0 flex-col gap-2">
       {title ? <h3 className="text-sm font-medium">{title}</h3> : null}
-      <Table>
+      <div className="min-w-0 overflow-x-auto">
+        <Table>
         <TableHeader>
           <TableRow>
             <TableHead>工具</TableHead>
@@ -374,7 +383,8 @@ function ToolTable({ title, rows, compact = false }: { readonly title?: string; 
             </TableRow>
           ))}
         </TableBody>
-      </Table>
+        </Table>
+      </div>
     </div>
   )
 }

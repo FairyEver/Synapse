@@ -62,7 +62,7 @@ type AppNotificationsContextValue = {
   warning: (message: ReactNode, options?: AppNotificationOptions) => AppNotificationId
 }
 
-const DEFAULT_NOTIFICATION_DURATION_MS = 4500
+const DEFAULT_NOTIFICATION_DURATION_MS = 1000
 const AppNotificationsContext = createContext<AppNotificationsContextValue | null>(null)
 
 function isNotificationResultObject(
@@ -275,7 +275,7 @@ function AppNotificationsProvider({ children }: { children: ReactNode }) {
         closeButton
         containerAriaLabel="消息提示"
         duration={DEFAULT_NOTIFICATION_DURATION_MS}
-        position="bottom-center"
+        position="top-center"
         visibleToasts={4}
       />
     </AppNotificationsContext.Provider>
