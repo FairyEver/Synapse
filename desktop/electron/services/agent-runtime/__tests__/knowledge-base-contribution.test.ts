@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 
+import type { RegisteredPromptCommandOutput } from "../../agent-runtime/command-router"
 import { createKnowledgeBaseAgentContribution } from "../../knowledge-base/agent-contribution"
 
 const roots: string[] = []
@@ -139,29 +140,94 @@ describe("knowledge base Agent contribution", () => {
 
   it("expands /wiki ingest into the internal ingest prompt", async () => {
     const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
     const contribution = await createKnowledgeBaseAgentContribution({
-      project: {
-        id: "project-1",
-        name: "KB",
-        path: projectPath,
-        capabilities: {
-          knowledgeBase: {
-            enabled: true,
-            schemaVersion: 1,
-            templateVersion: "2026-05-21",
-          },
-        },
-      },
+      project: knowledgeBaseProject(projectPath),
     })
 
     const command = contribution?.commands[0]
-    const prompt = await command?.buildPrompt(["ingest"], {
-      projectId: "project-1",
-      sessionKey: "s1",
-      platform: "local-renderer",
-      content: "/wiki ingest",
+    const output = await command?.buildPrompt(["ingest"], baseMessage("/wiki ingest"))
+
+    expect(expectObjectOutput(output, "prompt")).toContain("Run Knowledge Base ingest")
+  })
+
+  it("returns a direct /wiki status result", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{}}\n")
+    await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
     })
 
-    expect(prompt).toContain("Run Knowledge Base ingest")
+    const output = await contribution?.commands[0]?.buildPrompt(["status"], baseMessage("/wiki status"))
+
+    expect(expectObjectOutput(output, "result")).toContain("Sources: 1")
+  })
+
+  it("expands /wiki query into query prompt with mode", async () => {
+    const projectPath = await tempDir()
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+
+    const output = await contribution?.commands[0]?.buildPrompt(
+      ["query", "quick", "部门职责"],
+      baseMessage("/wiki query quick 部门职责"),
+    )
+    const content = expectObjectOutput(output, "prompt")
+
+    expect(content).toContain("Mode: quick")
+    expect(content).toContain("Question: 部门职责")
+  })
+
+  it("expands /wiki hot into hot cache prompt", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, "wiki"), { recursive: true })
+    await writeFile(path.join(projectPath, "wiki", "log.md"), "# Log\n")
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+
+    const output = await contribution?.commands[0]?.buildPrompt(["hot"], baseMessage("/wiki hot"))
+
+    expect(expectObjectOutput(output, "prompt")).toContain("Refresh `wiki/hot.md`")
   })
 })
+
+function knowledgeBaseProject(projectPath: string) {
+  return {
+    id: "project-1",
+    name: "KB",
+    path: projectPath,
+    capabilities: {
+      knowledgeBase: {
+        enabled: true,
+        schemaVersion: 1,
+        templateVersion: "2026-05-21",
+      },
+    },
+  } as const
+}
+
+function baseMessage(content: string) {
+  return {
+    projectId: "project-1",
+    sessionKey: "s1",
+    platform: "local-renderer",
+    content,
+  } as const
+}
+
+function expectObjectOutput(
+  output: RegisteredPromptCommandOutput | undefined,
+  kind: "prompt" | "result",
+): string {
+  expect(typeof output).toBe("object")
+  if (!output || typeof output === "string") {
+    throw new Error("expected object command output")
+  }
+  expect(output.kind).toBe(kind)
+  return output.content
+}

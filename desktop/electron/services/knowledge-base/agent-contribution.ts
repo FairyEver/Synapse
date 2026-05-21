@@ -2,8 +2,10 @@ import { readFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { SynapseProjectConfig } from "../../../src/types/config"
+import type { RegisteredPromptCommandOutput } from "../agent-runtime/command-router"
 import type { AgentProjectContribution } from "../agent-runtime/project-contributions"
 import type { AgentMessage } from "../agent-runtime/types"
+import { buildKnowledgeBaseCommandOutput } from "./wiki-command-prompts"
 
 type CreateKnowledgeBaseAgentContributionInput = {
   readonly project: SynapseProjectConfig
@@ -22,7 +24,7 @@ export async function createKnowledgeBaseAgentContribution(
   return {
     commands: [{
       name: "wiki",
-      buildPrompt: (args) => buildKnowledgeBaseCommandPrompt(args),
+      buildPrompt: (args) => buildKnowledgeBaseCommandPrompt(input.project.path, args),
     }],
     async prepareMessage(message, context) {
       if (!context.isNewLiveSession) {
@@ -46,16 +48,15 @@ function prependBootstrap(message: AgentMessage, bootstrap: string, hotCache: st
   }
 }
 
-async function buildKnowledgeBaseCommandPrompt(args: readonly string[]): Promise<string> {
-  const action = (args[0] ?? "status").toLowerCase()
-  if (action === "ingest") return readPrompt("ingest.md")
-  if (action === "save") return readPrompt("save.md")
-  if (action === "lint") return readPrompt("lint.md")
-  return [
-    await readPrompt("bootstrap.md"),
-    "",
-    "Report the current knowledge base status. Mention available commands: `/wiki ingest`, `/wiki save`, `/wiki lint`.",
-  ].join("\n")
+async function buildKnowledgeBaseCommandPrompt(
+  projectPath: string,
+  args: readonly string[],
+): Promise<RegisteredPromptCommandOutput> {
+  return buildKnowledgeBaseCommandOutput({
+    projectPath,
+    args,
+    readPrompt,
+  })
 }
 
 async function readPrompt(fileName: string): Promise<string> {
