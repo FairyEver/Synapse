@@ -14,7 +14,7 @@ type CreateKnowledgeBaseAgentContributionInput = {
 export async function createKnowledgeBaseAgentContribution(
   input: CreateKnowledgeBaseAgentContributionInput,
 ): Promise<AgentProjectContribution | null> {
-  if (input.project.capabilities?.knowledgeBase?.enabled !== true) {
+  if (!await isKnowledgeBaseProject(input.project)) {
     return null
   }
 
@@ -34,6 +34,35 @@ export async function createKnowledgeBaseAgentContribution(
       return prependBootstrap(message, bootstrap, hotCache)
     },
   }
+}
+
+async function isKnowledgeBaseProject(project: SynapseProjectConfig): Promise<boolean> {
+  if (project.capabilities?.knowledgeBase?.enabled === true) {
+    return true
+  }
+
+  return hasKnowledgeBaseMarker(project.path)
+}
+
+async function hasKnowledgeBaseMarker(projectPath: string): Promise<boolean> {
+  try {
+    const content = await readFile(path.join(projectPath, ".synapse-kb.json"), "utf8")
+    const parsed = JSON.parse(content) as unknown
+    return isKnowledgeBaseMarker(parsed)
+  } catch (error) {
+    if (isMissingPathError(error) || error instanceof SyntaxError) {
+      return false
+    }
+    throw error
+  }
+}
+
+function isKnowledgeBaseMarker(value: unknown): boolean {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return false
+  }
+  const record = value as Record<string, unknown>
+  return record.type === "synapse.knowledgeBase" && record.schemaVersion === 1
 }
 
 function prependBootstrap(message: AgentMessage, bootstrap: string, hotCache: string): AgentMessage {

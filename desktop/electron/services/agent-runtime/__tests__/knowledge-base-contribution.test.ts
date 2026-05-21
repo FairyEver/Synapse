@@ -20,11 +20,27 @@ afterEach(async () => {
 
 describe("knowledge base Agent contribution", () => {
   it("returns no contribution for ordinary projects", async () => {
+    const projectPath = await tempDir()
     const contribution = await createKnowledgeBaseAgentContribution({
-      project: { id: "project-1", name: "Plain", path: "/tmp/plain" },
+      project: { id: "project-1", name: "Plain", path: projectPath },
     })
 
     expect(contribution).toBeNull()
+  })
+
+  it("adds wiki commands for projects with a knowledge base marker", async () => {
+    const projectPath = await tempDir()
+    await writeFile(path.join(projectPath, ".synapse-kb.json"), `${JSON.stringify({
+      type: "synapse.knowledgeBase",
+      schemaVersion: 1,
+      templateVersion: "2026-05-21",
+    })}\n`)
+
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: { id: "project-1", name: "KB", path: projectPath },
+    })
+
+    expect(contribution?.commands.map((command) => command.name)).toEqual(["wiki"])
   })
 
   it("adds wiki commands and hot cache bootstrap for knowledge base projects", async () => {
