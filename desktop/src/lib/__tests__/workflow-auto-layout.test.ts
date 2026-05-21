@@ -38,4 +38,25 @@ describe("layoutWorkflowNodes", () => {
     expect(result.find((node) => node.id === "switch")!.position.y)
       .toBeLessThan(result.find((node) => node.id === "end")!.position.y)
   })
+
+  it("reserves extra right-side room after switch nodes for branch labels", () => {
+    const nodeWidth = 220
+    const promptNodes = [makeNode("prompt", "prompt"), makeNode("prompt-end", "end")]
+    const switchNodes = [
+      makeNode("switch", "switch", 0, 0, { branches: [{ id: "yes", label: "Yes" }] }),
+      makeNode("switch-end", "end"),
+    ]
+
+    const promptResult = layoutWorkflowNodes(promptNodes, [makeEdge("prompt", "prompt-end")], { direction: "LR", nodeWidth })
+    const switchResult = layoutWorkflowNodes(switchNodes, [makeEdge("switch", "switch-end")], { direction: "LR", nodeWidth })
+
+    const prompt = promptResult.find((node) => node.id === "prompt")!
+    const promptEnd = promptResult.find((node) => node.id === "prompt-end")!
+    const switchNode = switchResult.find((node) => node.id === "switch")!
+    const switchEnd = switchResult.find((node) => node.id === "switch-end")!
+    const promptRightGap = promptEnd.position.x - (prompt.position.x + nodeWidth)
+    const switchRightGap = switchEnd.position.x - (switchNode.position.x + nodeWidth)
+
+    expect(switchRightGap).toBeGreaterThan(promptRightGap)
+  })
 })

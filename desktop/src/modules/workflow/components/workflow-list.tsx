@@ -201,13 +201,13 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
     </div>
   )
   if (error) return (
-    <div className="p-4 space-y-3">
+    <div className="flex flex-col gap-3 p-4">
       <Alert variant="destructive">
-        <AlertCircle className="h-4 w-4" />
+        <AlertCircle className="size-4" />
         <AlertDescription className="text-xs">{error}</AlertDescription>
       </Alert>
       <Button size="sm" variant="outline" onClick={refresh}>
-        <RefreshCw className="h-3.5 w-3.5 mr-1" />重试
+        <RefreshCw data-icon="inline-start" />重试
       </Button>
     </div>
   )
@@ -217,9 +217,8 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
         <div className="flex flex-col items-center gap-2 text-center">
           <FileJson className="size-10 text-muted-foreground/50" />
           <p className="text-sm text-muted-foreground">还没有工作流</p>
-          <p className="text-xs text-muted-foreground">创建工作流来自动化你的任务</p>
           <Button size="sm" variant="outline" onClick={onCreate}>
-            <Plus className="h-3.5 w-3.5 mr-1" />创建第一个工作流
+            <Plus data-icon="inline-start" />创建第一个工作流
           </Button>
         </div>
       </div>
@@ -228,7 +227,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
 
   return (
     <>
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-2">
+      <div className="flex flex-col gap-1.5 p-2">
         {items.map((meta) => (
           <WorkflowCard key={meta.id} meta={meta}
             runState={runStates[meta.id]}

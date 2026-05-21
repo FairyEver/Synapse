@@ -91,7 +91,7 @@ function TaskCard({
 
   return (
     <div
-      className={`flex h-full flex-col rounded-lg bg-card p-4 text-card-foreground ring-1 ring-foreground/10 ${disabled ? "opacity-70" : ""}`}
+      className={`flex h-full flex-col rounded-lg bg-card p-4 text-card-foreground ${disabled ? "opacity-70" : ""}`}
     >
       <div className="flex items-center justify-between gap-2">
         <Badge variant={badge.variant}>{badge.label}</Badge>

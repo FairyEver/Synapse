@@ -361,7 +361,7 @@ const [isExporting, setIsExporting] = useState(false)
         </div>
 
         <ScrollArea className="min-h-0 flex-1 overscroll-contain">
-          <div className="min-h-full px-2 pb-2.5 pt-2.5">
+          <div className="min-h-full px-2 pb-2 pt-0">
             {error && !loading ? (
               <div className="flex items-center gap-2 p-4">
                 <p className="text-sm text-destructive">{error}</p>

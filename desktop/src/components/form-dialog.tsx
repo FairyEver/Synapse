@@ -45,8 +45,10 @@ function FormDialog({
           {description ? <DialogDescription>{description}</DialogDescription> : null}
         </DialogHeader>
 
-        <ScrollArea className={cn("min-h-0 flex-1 px-5 py-4", bodyClassName)}>
-          {children}
+        <ScrollArea className="min-h-0 flex-1">
+          <div className={cn("px-5 py-4", bodyClassName)}>
+            {children}
+          </div>
         </ScrollArea>
 
         <DialogFooter className="mx-0 mb-0 shrink-0 flex-col gap-2 rounded-none rounded-b-xl px-5 py-4 sm:flex-row sm:items-center sm:justify-end">

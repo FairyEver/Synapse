@@ -9,6 +9,7 @@ export interface WorkflowAutoLayoutOptions {
 
 const DEFAULT_NODE_WIDTH = 220
 const DEFAULT_NODE_HEIGHT = 80
+const SWITCH_BRANCH_LABEL_RIGHT_GAP = 80
 
 function resolveNodeHeight(node: Pick<WorkflowNode, "type" | "config">): number {
   if (node.type !== "switch") return DEFAULT_NODE_HEIGHT
@@ -16,6 +17,11 @@ function resolveNodeHeight(node: Pick<WorkflowNode, "type" | "config">): number 
   const branches = node.config.branches
   const count = Array.isArray(branches) ? branches.length : 0
   return SWITCH_HEADER_H + count * SWITCH_BRANCH_H
+}
+
+function resolveNodeLayoutWidth(node: Pick<WorkflowNode, "type">, nodeWidth: number): number {
+  if (node.type !== "switch") return nodeWidth
+  return nodeWidth + SWITCH_BRANCH_LABEL_RIGHT_GAP
 }
 
 export function layoutWorkflowNodes(
@@ -33,7 +39,7 @@ export function layoutWorkflowNodes(
   graph.setGraph({ rankdir: direction, nodesep: 40, ranksep: 80 })
 
   for (const node of nodes) {
-    graph.setNode(node.id, { width: nodeWidth, height: resolveNodeHeight(node) })
+    graph.setNode(node.id, { width: resolveNodeLayoutWidth(node, nodeWidth), height: resolveNodeHeight(node) })
   }
 
   for (const edge of edges) {
@@ -49,10 +55,11 @@ export function layoutWorkflowNodes(
     if (!position) return node
 
     const nodeHeight = resolveNodeHeight(node)
+    const layoutWidth = resolveNodeLayoutWidth(node, nodeWidth)
     return {
       ...node,
       position: {
-        x: position.x - nodeWidth / 2,
+        x: position.x - layoutWidth / 2,
         y: position.y - nodeHeight / 2,
       },
     }
