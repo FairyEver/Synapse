@@ -8,16 +8,7 @@ vi.mock("@/lib/api", () => ({
   adminApi: {
     getSession: vi.fn(),
     logout: vi.fn(),
-    listActivationCodes: vi.fn(),
-    createActivationCode: vi.fn(),
-    updateActivationCode: vi.fn(),
-    archiveActivationCode: vi.fn(),
-    listAccounts: vi.fn(),
-    getAccount: vi.fn(),
-    listDevices: vi.fn(),
     getSystemOverview: vi.fn(),
-    updateLicense: vi.fn(),
-    updateDevice: vi.fn(),
   },
 }))
 
@@ -25,7 +16,7 @@ describe("App", () => {
   let cleanup: (() => void) | null = null
 
   beforeEach(() => {
-    window.location.hash = "#/activation-codes"
+    window.location.hash = "#/system"
     Object.defineProperty(window, "matchMedia", {
       writable: true,
       value: vi.fn().mockImplementation((query: string) => ({
@@ -45,13 +36,16 @@ describe("App", () => {
 
   it("centers the header separator with the trigger and title", async () => {
     vi.mocked(adminApi.getSession).mockResolvedValue({ email: "admin@d2.com" })
-    vi.mocked(adminApi.listActivationCodes).mockResolvedValue([])
+    vi.mocked(adminApi.getSystemOverview).mockResolvedValue({
+      serverTime: "2026-05-21T00:00:00.000Z",
+      counts: { auditLogs: 0 },
+    })
 
     const result = await render(<App />)
     cleanup = result.unmount
 
     await waitFor(() => {
-      expect(result.container.querySelector("h1")?.textContent).toBe("激活码")
+      expect(result.container.querySelector("h1")?.textContent).toBe("系统")
     })
 
     const separator = result.container.querySelector<HTMLElement>(

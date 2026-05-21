@@ -1,6 +1,6 @@
 # Synapse Server
 
-License 管理后端服务，包含 API 和 Admin 管理后台。
+Synapse 后端服务，包含 API 和 Admin 管理后台。
 
 ## 技术栈
 
@@ -81,25 +81,14 @@ git clone https://YOUR_TOKEN@github.com/你的用户名/Synapse.git synapse
 
 ---
 
-### 第四步：生成密钥
+### 第四步：生成 JWT Secret
 
 在服务器上执行以下命令，把输出结果记下来，后面要用。
 
 ```bash
 cd /www/wwwroot/synapse/server
 
-# 1. 生成 JWT Secret（复制输出的那串字符）
 openssl rand -hex 32
-
-# 2. 生成 License 密钥对
-openssl genpkey -algorithm Ed25519 -out private.pem
-openssl pkey -in private.pem -pubout -out public.pem
-
-# 3. 查看私钥内容（复制全部输出，包括 BEGIN/END 行）
-cat private.pem
-
-# 4. 查看公钥内容（复制全部输出，包括 BEGIN/END 行）
-cat public.pem
 ```
 
 ---
@@ -129,37 +118,14 @@ POSTGRES_PASSWORD=Abc123456789
 ADMIN_EMAIL=你的邮箱@example.com
 ADMIN_PASSWORD=设一个至少12位的密码
 
-# JWT 密钥（至少 32 位，粘贴第三步生成的 hex 字符）
-ADMIN_JWT_SECRET=粘贴第三步生成的那串hex字符
-
-# License 密钥对
-LICENSE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\n第三步私钥内容，把换行替换成\n\n-----END PRIVATE KEY-----"
-LICENSE_PUBLIC_KEY="-----BEGIN PUBLIC KEY-----\n第三步公钥内容，把换行替换成\n\n-----END PUBLIC KEY-----"
-LICENSE_KEY_ID=prod-key-001
-LICENSE_LEASE_DAYS=7
+# JWT 密钥（至少 32 位，粘贴第四步生成的 hex 字符）
+ADMIN_JWT_SECRET=粘贴第四步生成的那串hex字符
 ```
-
-关于 LICENSE_PRIVATE_KEY 的格式说明：假设 `cat private.pem` 输出是：
-
-```
------BEGIN PRIVATE KEY-----
-MC4CAQAwBQYDK2VwBCIEIHxxxxxxxxxxxxxxxxxxxxxx
------END PRIVATE KEY-----
-```
-
-那么 .env 里写成一行：
-
-```
-LICENSE_PRIVATE_KEY="-----BEGIN PRIVATE KEY-----\nMC4CAQAwBQYDK2VwBCIEIHxxxxxxxxxxxxxxxxxxxxxx\n-----END PRIVATE KEY-----"
-```
-
-公钥同理。
 
 常见配置错误（启动时会报 "服务端环境变量无效"）：
 - `ADMIN_PASSWORD` 少于 12 位
 - `ADMIN_JWT_SECRET` 少于 32 位（必须用 `openssl rand -hex 32` 生成的 64 字符）
 - `ADMIN_EMAIL` 不是合法邮箱格式
-- `LICENSE_PRIVATE_KEY` 或 `LICENSE_PUBLIC_KEY` 格式不对（缺少引号或 `\n`）
 
 ---
 
@@ -345,7 +311,7 @@ docker image prune -f
 
 ### 本地与服务器数据库同步
 
-本地开发环境和生产服务器使用相同的数据库 schema，数据可以双向同步。典型场景：本地创建的激活码同步到生产环境使用，或者从生产环境拉取数据到本地调试。
+本地开发环境和生产服务器使用相同的数据库 schema，数据可以双向同步。
 
 #### 本地 → 服务器（把本地数据推到生产）
 
@@ -363,21 +329,6 @@ cd /www/wwwroot/synapse/server
 docker compose exec -T postgres psql -U synapse synapse < local_data.sql
 ```
 
-如果只想同步某张表（比如只同步激活码）：
-
-```bash
-# 1. 本地只导出指定表（注意表名是 PascalCase 带双引号）
-docker compose exec postgres pg_dump -U synapse --data-only -t '"ActivationCode"' synapse > local_codes.sql
-
-# 2. 传到服务器
-scp local_codes.sql root@你的服务器IP:/www/wwwroot/synapse/server/
-
-# 3. 服务器上导入
-ssh root@你的服务器IP
-cd /www/wwwroot/synapse/server
-docker compose exec -T postgres psql -U synapse synapse < local_codes.sql
-```
-
 #### 服务器 → 本地（把生产数据拉到本地）
 
 ```bash
@@ -392,7 +343,7 @@ scp root@你的服务器IP:/www/wwwroot/synapse/server/server_data.sql ./
 
 # 3. 在本地导入（先清空本地数据再导入，避免主键冲突）
 cd /Users/liyang/Documents/code/github/Synapse/server
-docker compose exec -T postgres psql -U synapse synapse -c 'TRUNCATE "ActivationCode", "Account", "License", "Device", "Lease", "ActivationAttempt", "AuditLog" CASCADE;'
+docker compose exec -T postgres psql -U synapse synapse -c 'TRUNCATE "AuditLog", "AdminUser" CASCADE;'
 docker compose exec -T postgres psql -U synapse synapse < server_data.sql
 ```
 
@@ -402,7 +353,6 @@ docker compose exec -T postgres psql -U synapse synapse < server_data.sql
 - 导入前确保两边的数据库 schema 版本一致（都跑过最新的 migration）
 - 如果遇到主键冲突，加 `TRUNCATE ... CASCADE` 先清空目标表
 - 密码类字段（如 admin 密码）是 bcrypt 哈希，同步过去可以直接用
-- 密钥对不同不影响数据同步，客户端激活时会从当前服务器重新获取公钥
 
 ---
 

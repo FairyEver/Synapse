@@ -1,0 +1,11 @@
+DROP TABLE IF EXISTS "Lease";
+DROP TABLE IF EXISTS "Device";
+DROP TABLE IF EXISTS "License";
+DROP TABLE IF EXISTS "ActivationAttempt";
+DROP TABLE IF EXISTS "ActivationCode";
+DROP TABLE IF EXISTS "Account";
+
+DROP TYPE IF EXISTS "ActivationAttemptOutcome";
+DROP TYPE IF EXISTS "DeviceStatus";
+DROP TYPE IF EXISTS "ManagedStatus";
+DROP TYPE IF EXISTS "AccountStatus";

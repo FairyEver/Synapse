@@ -24,8 +24,8 @@ describe("server dev scripts", () => {
   it("keeps the workspace server dev entrypoint on the combined dev script", () => {
     const workspacePackage = readPackageJson(join(process.cwd(), "../package.json"))
 
-    expect(workspacePackage.scripts?.["server:dev:watch"]).toContain(
-      "pnpm --filter @synapse/server run dev",
+    expect(workspacePackage.scripts?.["dev:server"]).toContain(
+      "--filter @synapse/server run dev",
     )
   })
 })

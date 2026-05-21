@@ -17,10 +17,7 @@ import {
   ActivityIcon,
   FileTextIcon,
   HardDriveIcon,
-  KeyRoundIcon,
-  MonitorIcon,
   ScrollTextIcon,
-  UsersIcon,
 } from "lucide-react"
 
 const data = {
@@ -32,30 +29,6 @@ const data = {
     },
   ],
   navMain: [
-    {
-      title: "激活码",
-      url: "#/activation-codes",
-      icon: (
-        <KeyRoundIcon
-        />
-      ),
-    },
-    {
-      title: "账号",
-      url: "#/accounts",
-      icon: (
-        <UsersIcon
-        />
-      ),
-    },
-    {
-      title: "设备",
-      url: "#/devices",
-      icon: (
-        <MonitorIcon
-        />
-      ),
-    },
     {
       title: "审计日志",
       url: "#/audit-logs",

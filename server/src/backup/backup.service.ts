@@ -2,7 +2,6 @@ import { Injectable } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import { PinoLogger } from "nestjs-pino"
 import { execFile } from "node:child_process"
-import * as crypto from "node:crypto"
 import * as fs from "node:fs"
 import * as os from "node:os"
 import * as path from "node:path"
@@ -69,9 +68,7 @@ export class BackupService {
       const dbPath = await this.dumpDatabase()
       tempFiles.push(dbPath)
 
-      const keysBuffer = this.encryptKeys()
-
-      const archivePath = await this.packFiles(dbPath, keysBuffer)
+      const archivePath = await this.packFiles(dbPath)
       tempFiles.push(archivePath)
 
       await this.uploadToCos(archivePath, filename)
@@ -162,24 +159,7 @@ export class BackupService {
     return gzFile
   }
 
-  private encryptKeys(): Buffer {
-    const payload = JSON.stringify({
-      privateKey: this.env.licensePrivateKey,
-      publicKey: this.env.licensePublicKey,
-      keyId: this.env.licenseKeyId,
-    })
-
-    const key = Buffer.from(this.env.backupEncryptKey!, "hex")
-    const iv = crypto.randomBytes(12)
-    const cipher = crypto.createCipheriv("aes-256-gcm", key, iv)
-
-    const encrypted = Buffer.concat([cipher.update(payload, "utf8"), cipher.final()])
-    const authTag = cipher.getAuthTag()
-
-    return Buffer.concat([iv, authTag, encrypted])
-  }
-
-  private async packFiles(dbPath: string, keysBuffer: Buffer): Promise<string> {
+  private async packFiles(dbPath: string): Promise<string> {
     const tmpDir = os.tmpdir()
     const workDir = path.join(tmpDir, `synapse-backup-${Date.now()}`)
     const archivePath = path.join(tmpDir, `synapse-backup-${Date.now()}.tar.gz`)
@@ -187,11 +167,10 @@ export class BackupService {
     fs.mkdirSync(workDir, { recursive: true })
 
     fs.copyFileSync(dbPath, path.join(workDir, "database.sql.gz"))
-    fs.writeFileSync(path.join(workDir, "keys.enc"), keysBuffer)
 
     await tar.create(
       { gzip: true, file: archivePath, cwd: workDir },
-      ["database.sql.gz", "keys.enc"],
+      ["database.sql.gz"],
     )
 
     fs.rmSync(workDir, { recursive: true, force: true })

@@ -3,14 +3,13 @@ import { APP_INTERCEPTOR } from "@nestjs/core"
 import { AdminAuthModule } from "../admin-auth/admin-auth.module"
 import { AuditLogInterceptor } from "../common/audit-log.interceptor"
 import { AuditLogService } from "../common/audit-log.service"
-import { LicensesModule } from "../licenses/licenses.module"
 import { AdminController } from "./admin.controller"
 import { AdminService } from "./admin.service"
 import { LogFileController } from "./log-file.controller"
 import { LogFileService } from "./log-file.service"
 
 @Module({
-  imports: [AdminAuthModule, LicensesModule],
+  imports: [AdminAuthModule],
   controllers: [AdminController, LogFileController],
   providers: [
     AdminService,

@@ -8,9 +8,7 @@ import { join } from "node:path"
 import { AdminModule } from "./admin/admin.module"
 import { AdminAuthModule } from "./admin-auth/admin-auth.module"
 import { BackupModule } from "./backup/backup.module"
-import { CleanupService } from "./common/cleanup.service"
 import { HealthModule } from "./health/health.module"
-import { LicensesModule } from "./licenses/licenses.module"
 import { PrismaModule } from "./prisma/prisma.module"
 
 @Module({
@@ -51,12 +49,10 @@ import { PrismaModule } from "./prisma/prisma.module"
     AdminAuthModule,
     AdminModule,
     BackupModule,
-    LicensesModule,
     HealthModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
-    CleanupService,
   ],
 })
 export class AppModule {}

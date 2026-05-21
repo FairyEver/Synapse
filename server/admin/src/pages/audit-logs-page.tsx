@@ -46,10 +46,6 @@ export function AuditLogsPage() {
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">全部操作</SelectItem>
-            <SelectItem value="activation-codes.post">创建激活码</SelectItem>
-            <SelectItem value="activation-codes.archive">归档</SelectItem>
-            <SelectItem value="devices.status">设备状态</SelectItem>
-            <SelectItem value="licenses.status">授权状态</SelectItem>
           </SelectContent>
         </Select>
         <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" />

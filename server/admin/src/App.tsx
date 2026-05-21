@@ -8,12 +8,8 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar"
 import { TooltipProvider } from "@/components/ui/tooltip"
-import { AccountDetailPage } from "@/pages/account-detail-page"
-import { AccountsPage } from "@/pages/accounts-page"
-import { ActivationCodesPage } from "@/pages/activation-codes-page"
 import { AuditLogsPage } from "@/pages/audit-logs-page"
 import { BackupPage } from "@/pages/backup-page"
-import { DevicesPage } from "@/pages/devices-page"
 import { LoginPage } from "@/pages/login-page"
 import { SystemPage } from "@/pages/system-page"
 import { LogsPage } from "@/pages/logs-page"
@@ -21,26 +17,17 @@ import { adminApi, type AdminSession } from "@/lib/api"
 import { useIdleTimeout } from "@/hooks/use-idle-timeout"
 
 type Route =
-  | { name: "activation-codes" }
-  | { name: "accounts" }
-  | { name: "account-detail"; accountId: string }
-  | { name: "devices" }
   | { name: "audit-logs" }
   | { name: "system" }
   | { name: "backup" }
   | { name: "logs" }
 
 function routeFromHash(): Route {
-  const route = window.location.hash.replace(/^#\/?/, "") || "activation-codes"
-  const [section, id] = route.split("/")
-  if (section === "accounts" && id) return { name: "account-detail", accountId: id }
-  if (section === "accounts") return { name: "accounts" }
-  if (section === "devices") return { name: "devices" }
-  if (section === "audit-logs") return { name: "audit-logs" }
-  if (section === "system") return { name: "system" }
-  if (section === "backup") return { name: "backup" }
-  if (section === "logs") return { name: "logs" }
-  return { name: "activation-codes" }
+  const route = window.location.hash.replace(/^#\/?/, "") || "system"
+  if (route === "audit-logs") return { name: "audit-logs" }
+  if (route === "backup") return { name: "backup" }
+  if (route === "logs") return { name: "logs" }
+  return { name: "system" }
 }
 
 function useHashRoute(): Route {
@@ -55,23 +42,15 @@ function useHashRoute(): Route {
 
 function titleForRoute(route: Route): string {
   switch (route.name) {
-    case "account-detail":
-      return "账号详情"
-    case "accounts":
-      return "账号"
-    case "devices":
-      return "设备"
     case "audit-logs":
       return "审计日志"
-    case "system":
-      return "系统"
     case "backup":
       return "备份管理"
     case "logs":
       return "系统日志"
-    case "activation-codes":
+    case "system":
     default:
-      return "激活码"
+      return "系统"
   }
 }
 
@@ -123,7 +102,7 @@ export default function App() {
     <TooltipProvider>
       <SidebarProvider>
         <AppSidebar
-          activeRoute={route.name === "account-detail" ? "accounts" : route.name}
+          activeRoute={route.name}
           user={{
             name: "Admin",
             email: session.email,
@@ -140,12 +119,6 @@ export default function App() {
             </div>
           </header>
           <main className="flex flex-1 flex-col gap-2 p-4 pt-0">
-            {route.name === "activation-codes" ? <ActivationCodesPage /> : null}
-            {route.name === "accounts" ? <AccountsPage /> : null}
-            {route.name === "account-detail" ? (
-              <AccountDetailPage accountId={route.accountId} />
-            ) : null}
-            {route.name === "devices" ? <DevicesPage /> : null}
             {route.name === "audit-logs" ? <AuditLogsPage /> : null}
             {route.name === "system" ? <SystemPage /> : null}
             {route.name === "backup" ? <BackupPage /> : null}
