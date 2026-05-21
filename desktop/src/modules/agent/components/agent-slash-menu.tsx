@@ -1,3 +1,4 @@
+import { useEffect, useRef } from "react"
 import { Command } from "lucide-react"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -21,7 +22,14 @@ function AgentSlashMenu({
   onSelect,
 }: AgentSlashMenuProps) {
   const groups = groupAgentSlashCandidates(candidates)
+  const itemRefs = useRef<Array<HTMLButtonElement | null>>([])
   let visibleIndex = 0
+
+  useEffect(() => {
+    const item = itemRefs.current[highlightedIndex]
+    if (typeof item?.scrollIntoView !== "function") return
+    item.scrollIntoView({ block: "nearest" })
+  }, [highlightedIndex])
 
   return (
     <div
@@ -33,7 +41,7 @@ function AgentSlashMenu({
       {candidates.length === 0 ? (
         <div className="px-2 py-3 text-sm text-muted-foreground">No matches</div>
       ) : (
-        <ScrollArea className="max-h-72">
+        <ScrollArea className="h-auto max-h-72" viewportClassName="max-h-72">
           <div className="flex flex-col gap-1">
             {groups.map((group) => (
               <div key={group.kind} className="flex flex-col gap-1">
@@ -46,10 +54,13 @@ function AgentSlashMenu({
                   const selected = index === highlightedIndex
                   return (
                     <button
+                      ref={(node) => {
+                        itemRefs.current[index] = node
+                      }}
                       key={`${candidate.kind}:${candidate.name}`}
                       type="button"
                       className={cn(
-                        "flex min-w-0 items-start gap-2 rounded-sm px-2 py-1.5 text-left text-sm",
+                        "flex w-full min-w-0 items-start gap-2 overflow-hidden rounded-sm px-2 py-1.5 text-left text-sm",
                         selected ? "bg-muted text-foreground" : "text-popover-foreground",
                       )}
                       role="option"
@@ -61,9 +72,9 @@ function AgentSlashMenu({
                     >
                       <Command className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate font-medium">/{candidate.name}</span>
+                        <span className="block whitespace-normal break-words font-medium">/{candidate.name}</span>
                         {candidate.description ? (
-                          <span className="block truncate text-xs text-muted-foreground">
+                          <span className="block whitespace-normal break-words text-xs text-muted-foreground">
                             {candidate.description}
                           </span>
                         ) : null}

@@ -40,6 +40,74 @@ afterEach(() => {
 })
 
 describe("AgentSlashMenu", () => {
+  it("wraps long names and descriptions instead of truncating them", () => {
+    const html = renderToStaticMarkup(
+      <AgentSlashMenu
+        candidates={[{
+          name: "electron-windows-compat-audit",
+          description: "Use when auditing or fixing an Electron app for Windows compatibility",
+          kind: "skill",
+          source: "skill",
+        }]}
+        highlightedIndex={0}
+        onHighlight={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("whitespace-normal")
+    expect(html).toContain("break-words")
+    expect(html).not.toContain("truncate")
+  })
+
+  it("sets the scroll viewport height so the menu can scroll", () => {
+    const html = renderToStaticMarkup(
+      <AgentSlashMenu
+        candidates={candidates}
+        highlightedIndex={0}
+        onHighlight={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("max-h-72")
+  })
+
+  it("scrolls the highlighted item into view", async () => {
+    const scrollIntoView = vi.fn()
+    const originalScrollIntoView = Element.prototype.scrollIntoView
+    Element.prototype.scrollIntoView = scrollIntoView
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentSlashMenu
+          candidates={candidates}
+          highlightedIndex={0}
+          onHighlight={vi.fn()}
+          onSelect={vi.fn()}
+        />,
+      )
+    })
+
+    await act(async () => {
+      root.render(
+        <AgentSlashMenu
+          candidates={candidates}
+          highlightedIndex={1}
+          onHighlight={vi.fn()}
+          onSelect={vi.fn()}
+        />,
+      )
+    })
+
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" })
+    Element.prototype.scrollIntoView = originalScrollIntoView
+  })
+
   it("renders skills and commands in separate groups", () => {
     const html = renderToStaticMarkup(
       <AgentSlashMenu
