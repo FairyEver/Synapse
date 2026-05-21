@@ -104,7 +104,7 @@ function EditorScanModule() {
   const renderContent = () => {
     if (!data && loading) {
       return (
-        <div className="flex flex-col gap-6">
+        <div className="flex flex-col gap-2">
           <div className="flex flex-col gap-2">
             <Skeleton className="h-4 w-32" />
             <Skeleton className="h-20 w-full" />
@@ -147,7 +147,7 @@ function EditorScanModule() {
     }
 
     return (
-      <div className="flex h-full flex-col gap-2">
+      <div className="flex h-full flex-col">
         {error && (
           <Alert variant="destructive">
             <TriangleAlert />
@@ -160,7 +160,7 @@ function EditorScanModule() {
           </Alert>
         )}
         <ScrollArea className="min-h-0 flex-1">
-          <div className="flex flex-col gap-6">
+          <div className="flex flex-col gap-2">
             {scopeTab === "global" ? (
               <GlobalOverview result={globalResult} contentTab={contentTab} onItemClick={handleItemClick} />
             ) : (
@@ -180,8 +180,8 @@ function EditorScanModule() {
 
   return (
     <SidebarContentLayout sidebar={sidebar} contentScrollable={false} contentClassName="bg-surface">
-      <div className="flex h-full flex-col gap-2.5 px-2 py-2.5">
-        <div className="flex items-center justify-between">
+      <div className="flex h-full flex-col">
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
           <div className="flex items-center gap-2">
             <h2 className="text-lg font-semibold">
               {globalResult?.editorLabel ?? "IDE"}
@@ -220,7 +220,7 @@ function EditorScanModule() {
             )}
           </Button>
         </div>
-        <div className="min-h-0 flex-1">
+        <div className="min-h-0 flex-1 px-2 pb-2 pt-0">
           {renderContent()}
         </div>
       </div>

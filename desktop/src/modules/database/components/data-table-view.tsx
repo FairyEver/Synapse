@@ -436,8 +436,8 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
   )
 
   return (
-    <div className="flex h-full flex-col gap-2.5">
-      <div className="flex items-center justify-between">
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
         <div className="flex items-center gap-2">
           <h2 className="text-lg font-semibold">{tableName}</h2>
           <Button
@@ -590,30 +590,32 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
         </Menubar>
       </div>
 
-      <ScrollArea
-        className="min-h-0 flex-1 rounded-lg border bg-background"
-        data-track="database-table-scroll"
-        scrollbars="both"
-        trackScroll={false}
-        onViewportScroll={(event) => {
-          const target = event.currentTarget
-          const scrollTop = target.scrollTop
-          const scrollable = Math.max(1, target.scrollHeight - target.clientHeight)
-          const direction = scrollTop >= lastTableScrollTopRef.current ? "down" : "up"
-          lastTableScrollTopRef.current = scrollTop
-          logTableScroll({
-            clientHeight: target.clientHeight,
-            direction,
-            percent: Math.round((scrollTop / scrollable) * 100),
-            scrollHeight: target.scrollHeight,
-            scrollTop,
-          })
-        }}
-      >
-        <Table
-          className="table-fixed text-xs [&_td]:px-3 [&_td]:py-1 [&_th]:h-7 [&_th]:px-3"
-          style={{ width: tableWidth }}
-        >
+      <div className="min-h-0 flex-1 px-2 pb-2 pt-0">
+        <div className="flex h-full min-h-0 flex-col gap-2">
+          <ScrollArea
+            className="min-h-0 flex-1 rounded-lg bg-card"
+            data-track="database-table-scroll"
+            scrollbars="both"
+            trackScroll={false}
+            onViewportScroll={(event) => {
+              const target = event.currentTarget
+              const scrollTop = target.scrollTop
+              const scrollable = Math.max(1, target.scrollHeight - target.clientHeight)
+              const direction = scrollTop >= lastTableScrollTopRef.current ? "down" : "up"
+              lastTableScrollTopRef.current = scrollTop
+              logTableScroll({
+                clientHeight: target.clientHeight,
+                direction,
+                percent: Math.round((scrollTop / scrollable) * 100),
+                scrollHeight: target.scrollHeight,
+                scrollTop,
+              })
+            }}
+          >
+            <Table
+              className="table-fixed text-xs [&_td]:px-3 [&_td]:py-1 [&_th]:h-7 [&_th]:px-3"
+              style={{ width: tableWidth }}
+            >
           <colgroup>
             <col style={getColumnWidthStyle(DATA_TABLE_ID_COLUMN_WIDTH)} />
             {visibleColumns.map((col) => (
@@ -765,38 +767,40 @@ const DataTableView = forwardRef<DataTableViewHandle, DataTableViewProps>(functi
               </TableRow>
             ) : null}
           </TableBody>
-        </Table>
-      </ScrollArea>
+            </Table>
+          </ScrollArea>
 
-      <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={page <= 1}
-          data-track="database-page-prev"
-          onClick={() => {
-            void handlePageChange(page - 1).catch((error) => {
-              logger.warn("Page change failed.", { error })
-            })
-          }}
-        >
-          ◂
-        </Button>
-        <span>{page} / {totalPages}</span>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={page >= totalPages}
-          data-track="database-page-next"
-          onClick={() => {
-            void handlePageChange(page + 1).catch((error) => {
-              logger.warn("Page change failed.", { error })
-            })
-          }}
-        >
-          ▸
-        </Button>
-        <span className="ml-2">共 {total} 条</span>
+          <div className="flex items-center justify-end gap-2 text-sm text-muted-foreground">
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page <= 1}
+              data-track="database-page-prev"
+              onClick={() => {
+                void handlePageChange(page - 1).catch((error) => {
+                  logger.warn("Page change failed.", { error })
+                })
+              }}
+            >
+              ◂
+            </Button>
+            <span>{page} / {totalPages}</span>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={page >= totalPages}
+              data-track="database-page-next"
+              onClick={() => {
+                void handlePageChange(page + 1).catch((error) => {
+                  logger.warn("Page change failed.", { error })
+                })
+              }}
+            >
+              ▸
+            </Button>
+            <span className="ml-2">共 {total} 条</span>
+          </div>
+        </div>
       </div>
 
       <AlertDialog open={deleteId != null} onOpenChange={(open) => { if (!open) setDeleteId(null) }} data-track="database-row-delete-dialog">

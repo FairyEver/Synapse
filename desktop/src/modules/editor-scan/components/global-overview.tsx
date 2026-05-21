@@ -38,7 +38,7 @@ function GlobalOverview({ result, contentTab, onItemClick }: GlobalOverviewProps
             兼容目录存在重复 Skill，已优先显示主目录版本：{result.duplicateSkillNames.join(", ")}
           </p>
         )}
-        <div className="grid grid-cols-2 gap-2 p-[3px]">
+        <div className="grid grid-cols-2 gap-2">
           {result.skills.map((skill) => (
             <ScanItemCard
               key={skill.path}
@@ -79,7 +79,7 @@ function GlobalOverview({ result, contentTab, onItemClick }: GlobalOverviewProps
 
   return (
     <section>
-      <div className="grid grid-cols-2 gap-2 p-[3px]">
+      <div className="grid grid-cols-2 gap-2">
         {result.rules.map((rule) => (
           <ScanItemCard
             key={`${rule.path}-${rule.name}`}

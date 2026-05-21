@@ -95,8 +95,8 @@ export function WorkflowModule() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex items-center justify-between border-b px-4 py-3">
+    <div className="flex h-full min-h-0 flex-col bg-surface">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
         <h2 className="text-sm font-semibold">工作流</h2>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" disabled={importing} onClick={handleImportStart}>
@@ -107,7 +107,11 @@ export function WorkflowModule() {
           </Button>
         </div>
       </div>
-      <ScrollArea className="flex-1"><WorkflowList key={listKey} onCreate={handleCreate} /></ScrollArea>
+      <ScrollArea className="min-h-0 flex-1">
+        <div className="min-h-full px-2 pb-2 pt-0">
+          <WorkflowList key={listKey} onCreate={handleCreate} />
+        </div>
+      </ScrollArea>
       <WorkflowImportDialog
         open={!!importPreview}
         preview={importPreview}

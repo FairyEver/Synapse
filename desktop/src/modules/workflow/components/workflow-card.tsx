@@ -21,9 +21,8 @@ export function WorkflowCard({ meta, running, runState, onOpen, onRun, onHistory
 
   return (
     <Item
-      variant="outline"
       size="sm"
-      className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_7rem_4.5rem_auto] items-center gap-3 hover:bg-muted/50"
+      className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_7rem_4.5rem_auto] items-center gap-3 bg-card"
       tabIndex={0}
       role="button"
       onClick={() => { if (!suppressClickRef.current) onOpen() }}

@@ -227,7 +227,7 @@ export function WorkflowList({ onCreate }: { onCreate: () => void }) {
 
   return (
     <>
-      <div className="flex flex-col gap-1.5 p-2">
+      <div className="grid gap-2">
         {items.map((meta) => (
           <WorkflowCard key={meta.id} meta={meta}
             runState={runStates[meta.id]}

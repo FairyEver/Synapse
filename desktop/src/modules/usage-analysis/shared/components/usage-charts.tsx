@@ -413,7 +413,7 @@ function ChartCard({
   readonly children: ReactNode
 }) {
   return (
-    <Card size="sm">
+    <Card size="sm" className="ring-0">
       <CardHeader>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <CardTitle>{title}</CardTitle>

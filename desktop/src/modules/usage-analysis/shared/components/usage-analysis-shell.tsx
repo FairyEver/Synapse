@@ -28,39 +28,37 @@ const VIEWS: { readonly id: UsageViewId; readonly label: string }[] = [
 
 export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
   return (
-    <div className="flex h-full flex-col overflow-hidden">
-      <div className="border-b px-4 py-2">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex min-w-0 items-center gap-2">
-            <h2 className="shrink-0 text-sm font-medium">{props.title}</h2>
-            <Tabs value={props.view} onValueChange={(next) => props.onViewChange(next as UsageViewId)}>
-              <TabsList>
-                {VIEWS.map((view) => (
-                  <TabsTrigger key={view.id} value={view.id}>{view.label}</TabsTrigger>
-                ))}
-              </TabsList>
-            </Tabs>
-          </div>
-          <div className="flex items-center gap-2">
-            {props.view === "today" ? null : (
-              <RangePicker value={props.range} onChange={props.onRangeChange} />
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={props.refreshing}
-              aria-busy={props.refreshing}
-              onClick={props.onRefresh}
-            >
-              <RefreshCw data-icon="inline-start" className={props.refreshing ? "animate-spin" : undefined} />
-              {props.refreshing ? "刷新中" : "刷新"}
-            </Button>
-          </div>
+    <div className="flex h-full min-h-0 flex-col overflow-hidden bg-surface">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
+        <div className="flex min-w-0 items-center gap-2">
+          <h2 className="shrink-0 text-sm font-medium">{props.title}</h2>
+          <Tabs value={props.view} onValueChange={(next) => props.onViewChange(next as UsageViewId)}>
+            <TabsList>
+              {VIEWS.map((view) => (
+                <TabsTrigger key={view.id} value={view.id}>{view.label}</TabsTrigger>
+              ))}
+            </TabsList>
+          </Tabs>
+        </div>
+        <div className="flex items-center gap-2">
+          {props.view === "today" ? null : (
+            <RangePicker value={props.range} onChange={props.onRangeChange} />
+          )}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={props.refreshing}
+            aria-busy={props.refreshing}
+            onClick={props.onRefresh}
+          >
+            <RefreshCw data-icon="inline-start" className={props.refreshing ? "animate-spin" : undefined} />
+            {props.refreshing ? "刷新中" : "刷新"}
+          </Button>
         </div>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-        <div className="min-h-full p-2">
+        <div className="min-h-full px-2 pb-2 pt-0">
           {props.children}
         </div>
       </ScrollArea>

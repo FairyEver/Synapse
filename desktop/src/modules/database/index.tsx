@@ -438,7 +438,7 @@ function DatabaseModule() {
 
   return (
     <SidebarContentLayout sidebar={sidebar} contentScrollable={false} contentClassName="bg-surface" sidebarResizable>
-      <div className="h-full min-h-0 px-2 py-2.5">
+      <div className="h-full min-h-0">
         {loadError ? (
           <div className="flex h-full flex-col">
             <div className="flex flex-1 items-center justify-center">

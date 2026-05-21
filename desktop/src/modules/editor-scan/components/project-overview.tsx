@@ -61,7 +61,7 @@ function ProjectOverview({
   }
 
   return (
-    <div className="flex flex-col gap-5">
+    <div className="flex flex-col gap-2">
       {filteredProjects.map(({ project, editorEntry }) => {
         const items = contentTab === "skill"
           ? editorEntry?.skills ?? []
@@ -71,7 +71,7 @@ function ProjectOverview({
 
         return (
           <section key={project.projectPath}>
-            <div className="mb-3 flex items-center gap-2">
+            <div className="mb-2 flex items-center gap-2">
               <FolderKanban className="h-4 w-4 shrink-0 text-muted-foreground" />
               <h4 className="text-sm font-medium text-muted-foreground">
                 {project.projectName}
@@ -84,7 +84,7 @@ function ProjectOverview({
             </div>
             {project.pathExists && items.length > 0 ? (
               <>
-                <div className="grid grid-cols-2 gap-2 p-[3px]">
+                <div className="grid grid-cols-2 gap-2">
                   {items.map((item) => (
                     <ScanItemCard
                       key={`${item.path}-${item.name}`}
