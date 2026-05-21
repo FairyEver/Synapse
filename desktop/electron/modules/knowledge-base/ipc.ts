@@ -132,7 +132,12 @@ export const knowledgeBaseIpcModule: IpcModule = {
           ctx,
           resource: result.rawPath,
           source: "knowledgeBase.openRawDirectory",
-          run: () => shell.showItemInFolder(result.rawPath),
+          run: async () => {
+            const error = await shell.openPath(result.rawPath)
+            if (error) {
+              throw new Error(error)
+            }
+          },
         })
         return result
       },
