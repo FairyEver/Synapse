@@ -24,6 +24,7 @@ import { agentIpcModule } from "../modules/agent/ipc"
 import { opsIpcModule } from "../modules/ops/ipc"
 import { taskSchedulerIpcModule } from "../modules/task-scheduler/ipc"
 import { workflowIpcModule } from "../modules/workflow/ipc"
+import { knowledgeBaseIpcModule } from "../modules/knowledge-base/ipc"
 
 /**
  * Creates and configures the IpcRegistry with all migrated modules.
@@ -50,6 +51,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(agentIpcModule, ctx)
   registry.register(taskSchedulerIpcModule, ctx)
   registry.register(workflowIpcModule, ctx)
+  registry.register(knowledgeBaseIpcModule, ctx)
   registry.register(opsIpcModule, ctx)
 
   return registry
@@ -75,5 +77,6 @@ export const registeredIpcModules: readonly IpcModule[] = [
   agentIpcModule,
   taskSchedulerIpcModule,
   workflowIpcModule,
+  knowledgeBaseIpcModule,
   opsIpcModule,
 ]

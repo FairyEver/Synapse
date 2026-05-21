@@ -71,6 +71,11 @@ export const IPC_CHANNELS = {
     "getAll": "synapse:install-status:get-all",
     "uninstall": "synapse:install-status:uninstall",
   },
+  "knowledge-base": {
+    "inspect": "synapse:knowledge-base:inspect",
+    "initialize": "synapse:knowledge-base:initialize",
+    "openRawDirectory": "synapse:knowledge-base:open-raw-directory",
+  },
   "editor": {
     "getGlobalDirectories": "synapse:editor:get-global-directories",
     "createDirectory": "synapse:editor:create-directory",

@@ -99,6 +99,12 @@ import type {
   SynapseDiagnosticsReport,
 } from "./diagnostics"
 import type {
+  SynapseKnowledgeBaseInitializePayload,
+  SynapseKnowledgeBaseInitializeResult,
+  SynapseKnowledgeBaseInspection,
+  SynapseKnowledgeBaseOpenRawResult,
+} from "./knowledge-base"
+import type {
   SynapseCreateLocalRepositoryPayload,
   SynapseCreateLocalRepositoryResult,
   SynapseRepositoryInitializationPreview,
@@ -556,6 +562,13 @@ export type SynapseBridge = {
     getAll: () => Promise<InstallStatusMap>
     uninstall: (payload: { contentId: string; editorId: string }) => Promise<void>
     onChanged: (listener: (payload: InstallStatusChangedEvent) => void) => () => void
+  }
+  knowledgeBase: {
+    inspect: (projectPath: string) => Promise<SynapseKnowledgeBaseInspection>
+    initialize: (
+      payload: SynapseKnowledgeBaseInitializePayload,
+    ) => Promise<SynapseKnowledgeBaseInitializeResult>
+    openRawDirectory: (projectPath: string) => Promise<SynapseKnowledgeBaseOpenRawResult>
   }
   shell: {
     openExternal: (url: string) => Promise<void>

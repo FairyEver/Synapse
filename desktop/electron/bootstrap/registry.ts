@@ -40,6 +40,7 @@ import {
   coreTaskSchedulerDescriptor,
   coreUsageAnalysisDescriptor,
   coreHttpTestDescriptor,
+  coreKnowledgeBaseDescriptor,
   coreUpdateDescriptor,
   coreWindowManagerDescriptor,
   coreWorkflowServiceDescriptor,
@@ -93,6 +94,7 @@ export function buildServiceRegistry(
   registry.register(coreDatabaseDescriptor)
   registry.register(coreUsageAnalysisDescriptor)
   registry.register(coreHttpTestDescriptor)
+  registry.register(coreKnowledgeBaseDescriptor)
   registry.register(coreWorkflowServiceDescriptor)
   registry.register(coreWorkflowPackageDescriptor)
   registry.register(coreWorkflowSnapshotsDescriptor)

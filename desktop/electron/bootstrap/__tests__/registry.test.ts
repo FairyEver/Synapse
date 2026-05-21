@@ -102,6 +102,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.workflow.run-statuses",
         "core.workflow.snapshots",
         "core.workflow.window-manager",
+        "knowledge-base.service",
         "provider",
         "repo.maintenance",
         "repo.pending-pushes",
@@ -127,6 +128,7 @@ describe("buildServiceRegistry (T1.8)", () => {
     expect(byId.get("core.permission-guard")?.dependsOn).toEqual([])
     expect(byId.get("core.process-runtime")?.dependsOn).toEqual([])
     expect(byId.get("core.app-icon")?.dependsOn).toEqual([])
+    expect(byId.get("knowledge-base.service")?.dependsOn).toEqual([])
     expect(byId.get("core.window-manager")?.dependsOn).toEqual([])
     expect(byId.get("core.event-bus")?.dependsOn).toEqual(["core.window-manager"])
     expect(byId.get("core.action-runtime")?.dependsOn).toEqual([

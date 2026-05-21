@@ -36,6 +36,7 @@ import { configStore } from "../services/config-store"
 import { logStore, createMainLogger } from "../services/log-store"
 import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
+import { KnowledgeBaseService } from "../services/knowledge-base"
 import { initDatabase, shutdownDatabase } from "../database"
 import { dispatchDatabaseAction } from "../database/dispatcher"
 import { repositoryStore } from "../services/repository-store"
@@ -148,6 +149,14 @@ export const coreAppIconDescriptor: ServiceDescriptor<{ initialized: true }> = {
   create() {
     initializeAppIcon()
     return { initialized: true }
+  },
+}
+
+export const coreKnowledgeBaseDescriptor: ServiceDescriptor<KnowledgeBaseService> = {
+  id: "knowledge-base.service",
+  criticality: "degraded",
+  create() {
+    return new KnowledgeBaseService()
   },
 }
 

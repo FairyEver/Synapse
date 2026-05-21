@@ -85,6 +85,11 @@ const IPC_CHANNELS = {
     "getAll": "synapse:install-status:get-all",
     "uninstall": "synapse:install-status:uninstall",
   },
+  "knowledge-base": {
+    "inspect": "synapse:knowledge-base:inspect",
+    "initialize": "synapse:knowledge-base:initialize",
+    "openRawDirectory": "synapse:knowledge-base:open-raw-directory",
+  },
   "editor": {
     "getGlobalDirectories": "synapse:editor:get-global-directories",
     "createDirectory": "synapse:editor:create-directory",
@@ -505,6 +510,14 @@ const synapseBridge: SynapseBridge = {
       "install-status",
       "install-status.changed",
     ),
+  },
+  knowledgeBase: {
+    inspect: (projectPath: string) =>
+      invoke(IPC_CHANNELS["knowledge-base"].inspect)({ projectPath }),
+    initialize: (payload) =>
+      invoke(IPC_CHANNELS["knowledge-base"].initialize)(payload),
+    openRawDirectory: (projectPath: string) =>
+      invoke(IPC_CHANNELS["knowledge-base"].openRawDirectory)({ projectPath }),
   },
   shell: {
     openExternal: (url: string) => {
