@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto"
 import type { Dirent } from "node:fs"
-import { readdir, readFile } from "node:fs/promises"
+import { lstat, readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 
 import { readKnowledgeBaseManifest, type KnowledgeBaseManifestReadResult } from "./manifest"
@@ -42,6 +42,14 @@ export async function scanKnowledgeBaseSources(
 ): Promise<KnowledgeBaseSourceScanResult> {
   const manifest = await readKnowledgeBaseManifest(projectPath)
   const rawPath = path.join(projectPath, ".raw")
+  const rawDirectory = await inspectRawDirectory(rawPath)
+  if (rawDirectory !== "directory") {
+    return {
+      manifest,
+      sources: [],
+      skippedSources: rawDirectory === "missing" ? [] : [{ relativePath: ".raw", reason: rawDirectory }],
+    }
+  }
   const discovered = await walkRawSources(projectPath, rawPath)
   const sources: KnowledgeBaseSourceScanItem[] = []
   const skippedSources: KnowledgeBaseSkippedSource[] = [...discovered.skippedSources]
@@ -80,7 +88,13 @@ async function walkRawSources(
   try {
     entries = await readdir(directoryPath, { withFileTypes: true })
   } catch {
-    return { relativePaths: [], skippedSources: [] }
+    return {
+      relativePaths: [],
+      skippedSources: [{
+        relativePath: normalizeRelativePath(path.relative(projectPath, directoryPath)),
+        reason: "read-error",
+      }],
+    }
   }
 
   const relativePaths: string[] = []
@@ -114,4 +128,27 @@ function normalizeRelativePath(value: string): string {
 
 function sha256(content: Buffer): string {
   return createHash("sha256").update(content).digest("hex")
+}
+
+async function inspectRawDirectory(rawPath: string): Promise<"directory" | "missing" | KnowledgeBaseSkippedSource["reason"]> {
+  try {
+    const stat = await lstat(rawPath)
+    if (stat.isSymbolicLink()) {
+      return "symlink"
+    }
+    return stat.isDirectory() ? "directory" : "read-error"
+  } catch (error) {
+    if (isMissingPathError(error)) {
+      return "missing"
+    }
+    return "read-error"
+  }
+}
+
+function isMissingPathError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && ((error as { readonly code?: unknown }).code === "ENOENT"
+      || (error as { readonly code?: unknown }).code === "ENOTDIR")
 }

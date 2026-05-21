@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
@@ -95,5 +95,31 @@ describe("knowledge base source scan", () => {
     expect(result.status).toBe("invalid")
     if (result.status !== "invalid") throw new Error("expected invalid manifest")
     expect(result.error).toContain("JSON")
+  })
+
+  it("does not traverse a symlinked raw directory", async () => {
+    const root = await tempDir()
+    const outsideRoot = await tempDir()
+    await writeFile(path.join(outsideRoot, "outside.md"), "outside\n")
+    await symlink(outsideRoot, path.join(root, ".raw"), "dir")
+
+    const result = await scanKnowledgeBaseSources(root)
+
+    expect(result.sources).toEqual([])
+    expect(result.skippedSources).toEqual([
+      { relativePath: ".raw", reason: "symlink" },
+    ])
+  })
+
+  it("reports raw directory read errors instead of hiding them", async () => {
+    const root = await tempDir()
+    await writeFile(path.join(root, ".raw"), "not a directory")
+
+    const result = await scanKnowledgeBaseSources(root)
+
+    expect(result.sources).toEqual([])
+    expect(result.skippedSources).toEqual([
+      { relativePath: ".raw", reason: "read-error" },
+    ])
   })
 })
