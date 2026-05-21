@@ -247,4 +247,100 @@ describe("ProjectListEditor knowledge base actions", () => {
       ])
     })
   })
+
+  it("shows a visible error when the selected folder is not a knowledge base", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    window.synapse?.knowledgeBase.inspect.mockResolvedValue({
+      projectPath: "/Users/example/new-kb",
+      isKnowledgeBase: false,
+      hasMetadata: false,
+      hasRequiredShape: false,
+      missingRequiredPaths: [".raw"],
+      templateVersion: null,
+    })
+    renderEditor([], onSave)
+
+    await act(async () => {
+      buttonByText("打开知识库").click()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("未识别为知识库目录。")
+      expect(window.synapse?.knowledgeBase.initialize).not.toHaveBeenCalled()
+      expect(onSave).not.toHaveBeenCalled()
+    })
+  })
+
+  it("shows a visible error and re-enables the action when marking a project fails", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    window.synapse?.knowledgeBase.initialize.mockRejectedValue(new Error("secret failure detail"))
+    renderEditor([{ id: "project-1", name: "Plain", path: "/Users/example/plain" }], onSave)
+
+    await act(async () => {
+      buttonByText("设为知识库").click()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("设置知识库失败。")
+      expect(buttonByText("设为知识库").disabled).toBe(false)
+      expect(onSave).not.toHaveBeenCalled()
+      expect(rendererLogger.error).toHaveBeenCalledWith("Failed to mark project as knowledge base.", {
+        error: expect.any(Error),
+        projectId: "project-1",
+      })
+    })
+  })
+
+  it("clears stale knowledge base dialog fields and errors after closing", async () => {
+    renderEditor([])
+
+    await act(async () => {
+      buttonByText("新建知识库").click()
+    })
+    await act(async () => {
+      buttonByText("浏览").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => expect(inputByLabel("项目路径").value).toBe("/Users/example/new-kb"))
+    await act(async () => {
+      changeInput(inputByLabel("项目名称"), "")
+    })
+    await act(async () => {
+      buttonByText("创建").click()
+    })
+    expect(document.body.textContent).toContain("项目名称和项目路径都不能为空。")
+
+    await act(async () => {
+      buttonByText("取消").click()
+    })
+    await act(async () => {
+      buttonByText("新建知识库").click()
+    })
+
+    expect(inputByLabel("项目名称").value).toBe("")
+    expect(inputByLabel("项目路径").value).toBe("")
+    expect(document.body.textContent).not.toContain("项目名称和项目路径都不能为空。")
+  })
+
+  it("shows a dialog error when choosing a knowledge base path fails", async () => {
+    window.synapse?.repository.chooseDirectory.mockRejectedValue(new Error("picker failed"))
+    renderEditor([])
+
+    await act(async () => {
+      buttonByText("新建知识库").click()
+    })
+    await act(async () => {
+      buttonByText("浏览").click()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("选择目录失败。")
+      expect(rendererLogger.error).toHaveBeenCalledWith("Failed to select knowledge base directory.", {
+        error: expect.any(Error),
+      })
+    })
+  })
 })
