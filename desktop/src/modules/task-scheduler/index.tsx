@@ -173,6 +173,7 @@ const [isExporting, setIsExporting] = useState(false)
       const result = await exportTasksToFile(json)
       if (result.success) {
         setIsExportOpen(false)
+        notify({ message: "任务已导出。", tone: "success" })
       }
     } catch (exportError) {
       const selectedTasks = tasks.filter((t) => selectedIds.includes(t.id))
