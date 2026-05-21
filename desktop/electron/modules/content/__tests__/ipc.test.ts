@@ -167,6 +167,7 @@ describe("contentIpcModule sync ownership", () => {
       projectName: "Project",
       projectPath: "/project",
       scope: "project",
+      status: "installed",
     }])
   })
 
@@ -406,6 +407,7 @@ describe("contentIpcModule sync ownership", () => {
           projectName: "Project",
           projectPath: "/project",
           scope: "project",
+          status: "installed",
         }],
       },
     }))
