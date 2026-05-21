@@ -22,6 +22,7 @@ export type SynapseResolveEditorInstallStatusPayload = {
   contentName?: string
   title?: string
   content?: string
+  repositoryVersion?: string
   projects: SynapseEditorInstallStatusProject[]
 }
 

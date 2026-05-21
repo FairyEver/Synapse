@@ -78,6 +78,7 @@ function useEditorInstallStatus({
         contentName: detail.name,
         contentType: detail.type,
         projects: toStatusProjects(projects),
+        repositoryVersion: detail.latestHistoryDirname,
         title: detail.title,
       })
 

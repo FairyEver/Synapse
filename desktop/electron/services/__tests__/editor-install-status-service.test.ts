@@ -170,6 +170,73 @@ describe("EditorInstallStatusService", () => {
     }))
   })
 
+  it("marks a Codex project skill with an older repository version as needing update", async () => {
+    mocks.scanAll.mockResolvedValue(createScan({
+      editorId: "codex",
+      editorLabel: "Codex",
+      rules: [],
+      skills: [{
+        name: "review",
+        path: "/project/.codex/skills/review",
+        source: "synapse",
+        synapseContentId: "skill-1",
+        repositoryVersion: "old-version",
+        preview: "Review carefully.",
+        fileCount: 2,
+        trash: { mode: "path" },
+      }],
+    }))
+
+    const result = await new EditorInstallStatusService().resolveForContent({
+      contentType: "skill",
+      contentId: "skill-1",
+      contentName: "review",
+      repositoryVersion: "current-version",
+      title: "Review",
+      projects: [{ id: "project-1", name: "Project", path: "/project" }],
+    })
+
+    expect(result.entries).toContainEqual(expect.objectContaining({
+      scope: "project",
+      projectId: "project-1",
+      status: "needs_update",
+      targetPath: "/project/skills/review",
+    }))
+  })
+
+  it("keeps legacy installed skills without repository version as installed", async () => {
+    mocks.scanAll.mockResolvedValue(createScan({
+      editorId: "codex",
+      editorLabel: "Codex",
+      rules: [],
+      skills: [{
+        name: "review",
+        path: "/project/.codex/skills/review",
+        source: "synapse",
+        synapseContentId: "skill-1",
+        repositoryVersion: null,
+        preview: "Review carefully.",
+        fileCount: 2,
+        trash: { mode: "path" },
+      }],
+    }))
+
+    const result = await new EditorInstallStatusService().resolveForContent({
+      contentType: "skill",
+      contentId: "skill-1",
+      contentName: "review",
+      repositoryVersion: "current-version",
+      title: "Review",
+      projects: [{ id: "project-1", name: "Project", path: "/project" }],
+    })
+
+    expect(result.entries).toContainEqual(expect.objectContaining({
+      scope: "project",
+      projectId: "project-1",
+      status: "installed",
+    }))
+  })
+
   it("marks a Codex project skill with the same name and no synapse content id as an external same-name item", async () => {
     mocks.scanAll.mockResolvedValue(createScan({
       editorId: "codex",

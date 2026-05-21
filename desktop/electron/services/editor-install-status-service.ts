@@ -58,7 +58,17 @@ function statusFromSkill(
   payload: SynapseResolveEditorInstallStatusPayload,
 ): SynapseEditorInstallStatusValue | null {
   if (!item) return null
-  return item.synapseContentId === payload.contentId ? "installed" : "external_same_name"
+  if (item.synapseContentId !== payload.contentId) return "external_same_name"
+
+  if (
+    payload.repositoryVersion
+    && item.repositoryVersion
+    && item.repositoryVersion !== payload.repositoryVersion
+  ) {
+    return "needs_update"
+  }
+
+  return "installed"
 }
 
 function statusFromTarget(target: SynapseEditorResolvedTarget): SynapseEditorInstallStatusValue | null {
