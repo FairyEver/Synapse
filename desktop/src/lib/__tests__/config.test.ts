@@ -116,3 +116,81 @@ describe("Synapse config Agent defaults", () => {
     expect(cleared.agent.defaultProviderModel).toBeNull()
   })
 })
+
+describe("Synapse project capabilities", () => {
+  it("preserves valid knowledge base capability config", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [{
+          id: "project-1",
+          name: "KB",
+          path: "/Users/example/kb",
+          capabilities: {
+            knowledgeBase: {
+              enabled: true,
+              schemaVersion: 1,
+              templateVersion: "2026-05-21",
+            },
+          },
+        }],
+      },
+    })
+
+    expect(config.global.projects[0]?.capabilities?.knowledgeBase).toEqual({
+      enabled: true,
+      schemaVersion: 1,
+      templateVersion: "2026-05-21",
+    })
+  })
+
+  it("drops malformed knowledge base capability config", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [{
+          id: "project-1",
+          name: "Project",
+          path: "/Users/example/project",
+          capabilities: {
+            knowledgeBase: {
+              enabled: false,
+              schemaVersion: 2,
+              templateVersion: "",
+            },
+          },
+        }],
+      },
+    })
+
+    expect(config.global.projects[0]?.capabilities).toBeUndefined()
+  })
+
+  it("applies project capability patches without dropping existing project fields", () => {
+    const current = createDefaultConfig()
+    const next = applySynapseConfigPatch(current, {
+      global: {
+        projects: [{
+          id: "project-1",
+          name: "KB",
+          path: "/Users/example/kb",
+          capabilities: {
+            knowledgeBase: {
+              enabled: true,
+              schemaVersion: 1,
+              templateVersion: "2026-05-21",
+            },
+          },
+        }],
+      },
+    })
+
+    expect(next.global.projects).toHaveLength(1)
+    expect(next.global.projects[0]?.name).toBe("KB")
+    expect(next.global.projects[0]?.capabilities?.knowledgeBase?.enabled).toBe(true)
+  })
+})

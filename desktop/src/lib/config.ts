@@ -126,6 +126,34 @@ function hasProjectConfigFormatError(value: unknown): boolean {
   return false
 }
 
+function normalizeKnowledgeBaseCapability(value: unknown): SynapseProjectConfig["capabilities"] {
+  if (!isRecord(value)) {
+    return undefined
+  }
+
+  const rawKnowledgeBase = value.knowledgeBase
+  if (!isRecord(rawKnowledgeBase)) {
+    return undefined
+  }
+
+  const templateVersion = asTrimmedString(rawKnowledgeBase.templateVersion)
+  if (
+    rawKnowledgeBase.enabled !== true
+    || rawKnowledgeBase.schemaVersion !== 1
+    || !templateVersion
+  ) {
+    return undefined
+  }
+
+  return {
+    knowledgeBase: {
+      enabled: true,
+      schemaVersion: 1,
+      templateVersion,
+    },
+  }
+}
+
 function hasRepositoryConfigFormatError(value: unknown): boolean {
   if (!isRecord(value)) {
     return true
@@ -245,10 +273,13 @@ function normalizeProjectConfig(value: unknown): SynapseProjectConfig | null {
     return null
   }
 
+  const capabilities = normalizeKnowledgeBaseCapability(value.capabilities)
+
   return {
     id,
     name,
     path: projectPath,
+    ...(capabilities ? { capabilities } : undefined),
   }
 }
 

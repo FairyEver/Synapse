@@ -15,10 +15,21 @@ export const SYNAPSE_THEME_MODE_OPTIONS = ["light", "dark", "system"] as const
 
 export type SynapseThemeMode = (typeof SYNAPSE_THEME_MODE_OPTIONS)[number]
 
+export type SynapseKnowledgeBaseProjectCapability = {
+  enabled: true
+  schemaVersion: 1
+  templateVersion: string
+}
+
+export type SynapseProjectCapabilities = {
+  knowledgeBase?: SynapseKnowledgeBaseProjectCapability
+}
+
 export type SynapseProjectConfig = {
   id: string
   name: string
   path: string
+  capabilities?: SynapseProjectCapabilities
 }
 
 export type SynapseFavorites = {
