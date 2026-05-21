@@ -1202,7 +1202,19 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
   create(ctx) {
     const registry = ctx.registry
     const engineLogger = createMainLogger("service.workflow.engine.agent-deps")
-    const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({ providerId, modelTier, prompt, projectId, abortSignal, timeoutMins }) => {
+    const sendToAgent: import("../../workflow-nodes/types").AgentSendDeps["sendToAgent"] = async ({
+      providerId,
+      modelTier,
+      prompt,
+      projectId,
+      abortSignal,
+      timeoutMins,
+      workflowId,
+      workflowName,
+      workflowRunId,
+      workflowNodeId,
+      workflowNodeName,
+    }) => {
       try {
         if (!projectId) {
           throw new Error("Workflow prompt project is required")
@@ -1222,6 +1234,15 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
           projectId: effectiveProjectId, agentType: "claude-code", mode: "bypassPermissions", prompt,
           providerId, modelTier,
           sessionPolicy: "fresh", timeoutMs: agentTimeoutMinsToMs(timeoutMins ?? DEFAULT_AGENT_TIMEOUT_MINS), abortSignal,
+          sourcePlatform: "workflow",
+          userMeta: {
+            source: "workflow",
+            workflowId,
+            workflowName,
+            workflowRunId,
+            workflowNodeId,
+            workflowNodeName,
+          },
         })
         return { status: result.status === "success" ? "success" : "failed", response: result.summary ?? "", error: result.error, durationMs: result.durationMs }
       } catch (err) {

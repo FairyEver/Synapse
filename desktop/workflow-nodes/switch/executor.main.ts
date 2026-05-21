@@ -88,7 +88,19 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
     })
 
     input.onProgress?.("awaiting_response", "等待响应…")
-    const agentResult = await agentDeps.sendToAgent({ providerId: config.providerId ?? "", modelTier: config.modelTier ?? "default", prompt, projectId: context.projectId ?? "", abortSignal: context.abortSignal, timeoutMins: resolveAgentTimeoutMins(config.timeoutMins) })
+    const agentResult = await agentDeps.sendToAgent({
+      providerId: config.providerId ?? "",
+      modelTier: config.modelTier ?? "default",
+      prompt,
+      projectId: context.projectId ?? "",
+      abortSignal: context.abortSignal,
+      timeoutMins: resolveAgentTimeoutMins(config.timeoutMins),
+      workflowId: context.workflowId,
+      workflowName: context.workflowName,
+      workflowRunId: context.runId,
+      workflowNodeId: context.nodeId,
+      workflowNodeName: context.nodeName,
+    })
     const durationMs = Date.now() - start
 
     if (agentResult.status === "failed") {

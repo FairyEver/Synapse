@@ -196,7 +196,16 @@ export class WorkflowEngine {
 
           const execResult = await executor.execute({
             config: cfg, resolvedVariables: resolved,
-            context: { projectId: effectiveProjectId, runId, abortSignal: effectiveAbortSignal, actor },
+            context: {
+              projectId: effectiveProjectId,
+              workflowId: def.id,
+              workflowName: def.name,
+              runId,
+              nodeId,
+              nodeName: node.name,
+              abortSignal: effectiveAbortSignal,
+              actor,
+            },
             agentDeps: this.agentDeps,
             runtimeDeps: this.runtimeDeps,
             onProgress: (phase, label) => {

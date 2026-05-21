@@ -13,6 +13,12 @@ import {
   ModuleSidebar,
   ModuleSidebarList,
 } from "@/components/module-sidebar"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+} from "@/components/ui/select"
 import { useAppConfig } from "@/app-shell/config"
 import { requestOpenSettingsTab } from "@/app-shell/navigation"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
@@ -20,6 +26,11 @@ import { ArchivedGroup } from "./archived-group"
 import { ProviderModelSelectDialog } from "@/components/provider-model-select-dialog"
 import type { ProviderModelSelection } from "@/types/provider-model"
 import { ProjectGroup } from "./project-group"
+import {
+  CONVERSATION_SOURCE_OPTIONS,
+  filterSessionsBySource,
+  type ConversationSourceFilter,
+} from "../conversation-source"
 
 type ProjectOption = {
   id: string
@@ -55,13 +66,35 @@ function AgentSessionSidebar({
   onRename,
 }: AgentSessionSidebarProps) {
   const { config } = useAppConfig()
-  const sessionsByProject = groupSessionsByProject(sessions)
   const [createProject, setCreateProject] = useState<ProjectOption | null>(null)
+  const [sourceFilter, setSourceFilter] = useState<ConversationSourceFilter>("user")
+  const visibleSessions = filterSessionsBySource(sessions, sourceFilter)
+  const visibleArchivedSessions = filterSessionsBySource(archivedSessions, sourceFilter)
+  const sessionsByProject = groupSessionsByProject(visibleSessions)
+  const selectedSourceLabel =
+    CONVERSATION_SOURCE_OPTIONS.find((option) => option.value === sourceFilter)?.label ?? "用户对话"
 
   return (
     <ModuleSidebar variant="bare">
       <ModuleSidebarList data-track="agent-session-list">
-        {projects.length === 0 && archivedSessions.length === 0 ? (
+        <div className="px-2 pb-2">
+          <Select
+            value={sourceFilter}
+            onValueChange={(value) => setSourceFilter(value as ConversationSourceFilter)}
+          >
+            <SelectTrigger size="sm" className="w-full" aria-label="会话来源">
+              <span className="truncate">{selectedSourceLabel}</span>
+            </SelectTrigger>
+            <SelectContent>
+              {CONVERSATION_SOURCE_OPTIONS.map((option) => (
+                <SelectItem key={option.value} value={option.value}>
+                  {option.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        {projects.length === 0 && visibleArchivedSessions.length === 0 ? (
           <Empty className="border-0 px-4 py-8">
             <EmptyHeader>
               <EmptyMedia variant="icon">
@@ -93,9 +126,9 @@ function AgentSessionSidebar({
                 onRename={onRename}
               />
             ))}
-            {archivedSessions.length > 0 ? (
+            {visibleArchivedSessions.length > 0 ? (
               <ArchivedGroup
-                sessions={archivedSessions}
+                sessions={visibleArchivedSessions}
                 selectedProjectId={selectedProjectId}
                 selectedConversationId={selectedConversationId}
                 unreadByConversationId={unreadByConversationId}

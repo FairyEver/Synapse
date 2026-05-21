@@ -957,6 +957,7 @@ export class ConversationRouter {
 
 function userMetaFromMessage(message: AgentMessage): ConversationEntryV1["userMeta"] {
   return {
+    ...message.userMeta,
     userId: message.userId,
     userName: message.userName,
     chatName: message.chatName,

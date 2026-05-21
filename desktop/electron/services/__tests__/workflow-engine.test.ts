@@ -390,7 +390,14 @@ describe("WorkflowEngine", () => {
     await engine.run(def, {}, "run-project", () => {})
 
     expect(execute).toHaveBeenCalledWith(expect.objectContaining({
-      context: expect.objectContaining({ projectId: undefined }),
+      context: expect.objectContaining({
+        projectId: undefined,
+        workflowId: "wf-not-project",
+        workflowName: "WF",
+        runId: "run-project",
+        nodeId: "capture",
+        nodeName: "Capture",
+      }),
     }))
   })
 

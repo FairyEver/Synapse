@@ -625,6 +625,64 @@ describe("AgentRuntimeService", () => {
     expect(session?.agentConfig?.mode).toBe("bypassPermissions")
   })
 
+  it("persists workflow scheduled sends with workflow source metadata", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const logger = { warn: vi.fn(), info: vi.fn(), debug: vi.fn() }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+      logger: logger as never,
+      now: fixedNow,
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "bypassPermissions",
+      prompt: "workflow prompt",
+      sessionPolicy: "fresh",
+      timeoutMs: 120_000,
+      sourcePlatform: "workflow",
+      userMeta: {
+        source: "workflow",
+        workflowId: "wf-1",
+        workflowName: "Workflow One",
+        workflowRunId: "run-1",
+        workflowNodeId: "node-1",
+        workflowNodeName: "Prompt",
+      },
+    })
+
+    const session = await conversations.get(result.conversationId)
+    expect(result.status).toBe("success")
+    expect(session).toMatchObject({
+      platform: "workflow",
+      sessionKey: expect.stringMatching(/^workflow:project-1:/),
+      userMeta: expect.objectContaining({
+        platform: "workflow",
+        source: "workflow",
+        workflowId: "wf-1",
+        workflowName: "Workflow One",
+        workflowRunId: "run-1",
+        workflowNodeId: "node-1",
+        workflowNodeName: "Prompt",
+      }),
+    })
+    expect(logger.info).toHaveBeenCalledWith(
+      "Scheduled agent send completed.",
+      expect.objectContaining({
+        source: "workflow",
+        sourcePlatform: "workflow",
+        sessionKey: expect.stringMatching(/^workflow:project-1:/),
+      }),
+    )
+  })
+
   it("persists scheduled resumed permission mode for renderer summaries", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const service = new AgentRuntimeService({

@@ -306,7 +306,19 @@ describe("bootstrap descriptors (T1.5)", () => {
     const { coreWorkflowEngineDescriptor } = await importBootstrap()
     const engine = coreWorkflowEngineDescriptor.create(ctx as never) as unknown as {
       agentDeps: {
-        sendToAgent(input: { providerId?: string; modelTier?: string; prompt: string; projectId?: string; abortSignal: AbortSignal; timeoutMins?: number }): Promise<{
+        sendToAgent(input: {
+          providerId?: string
+          modelTier?: string
+          prompt: string
+          projectId?: string
+          abortSignal: AbortSignal
+          timeoutMins?: number
+          workflowId?: string
+          workflowName?: string
+          workflowRunId?: string
+          workflowNodeId?: string
+          workflowNodeName?: string
+        }): Promise<{
           status: "success" | "failed"
           response: string
           error?: string
@@ -322,9 +334,25 @@ describe("bootstrap descriptors (T1.5)", () => {
       projectId: "repo-1",
       abortSignal: new AbortController().signal,
       timeoutMins: 45,
+      workflowId: "wf-1",
+      workflowName: "Workflow One",
+      workflowRunId: "run-1",
+      workflowNodeId: "node-1",
+      workflowNodeName: "Prompt",
     })
 
-    expect(sendScheduled).toHaveBeenCalledWith(expect.objectContaining({ timeoutMs: 45 * 60_000 }))
+    expect(sendScheduled).toHaveBeenCalledWith(expect.objectContaining({
+      timeoutMs: 45 * 60_000,
+      sourcePlatform: "workflow",
+      userMeta: {
+        source: "workflow",
+        workflowId: "wf-1",
+        workflowName: "Workflow One",
+        workflowRunId: "run-1",
+        workflowNodeId: "node-1",
+        workflowNodeName: "Prompt",
+      },
+    }))
   })
 
   it("workflow HTTP dependency records denied audits with a sanitized resource", async () => {

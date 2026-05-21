@@ -31,6 +31,7 @@ export interface AgentMessage {
   readonly agentType?: string
   readonly providerId?: string
   readonly modelTier?: string
+  readonly userMeta?: Record<string, unknown>
 }
 
 interface AgentEventBase {
@@ -247,6 +248,8 @@ export interface AgentRuntimeRelayResult extends AgentRuntimeTurnResult {
   readonly partialText?: string
 }
 
+export type ScheduledAgentSourcePlatform = "scheduled" | "workflow"
+
 export type ScheduledAgentSendInput = {
   readonly projectId: string
   readonly agentType: string
@@ -258,6 +261,8 @@ export type ScheduledAgentSendInput = {
   readonly abortSignal?: AbortSignal
   readonly providerId?: string
   readonly modelTier?: string
+  readonly sourcePlatform?: ScheduledAgentSourcePlatform
+  readonly userMeta?: Record<string, unknown>
 }
 
 export type CancelTurnResult = {

@@ -25,13 +25,29 @@ export interface NodeManifest<TConfig = unknown> {
 
 export interface WorkflowRuntimeContext {
   projectId?: string
+  workflowId?: string
+  workflowName?: string
   runId: string
+  nodeId?: string
+  nodeName?: string
   abortSignal: AbortSignal
   actor?: ActorIdentity
 }
 
 export interface AgentSendDeps {
-  sendToAgent: (input: { providerId: string; modelTier: string; prompt: string; projectId: string; abortSignal: AbortSignal; timeoutMins?: number }) => Promise<{
+  sendToAgent: (input: {
+    providerId: string
+    modelTier: string
+    prompt: string
+    projectId: string
+    abortSignal: AbortSignal
+    timeoutMins?: number
+    workflowId?: string
+    workflowName?: string
+    workflowRunId?: string
+    workflowNodeId?: string
+    workflowNodeName?: string
+  }) => Promise<{
     status: "success" | "failed"
     response: string
     error?: string

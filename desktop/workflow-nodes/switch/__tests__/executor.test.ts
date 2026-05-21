@@ -11,7 +11,15 @@ vi.mock("../../../electron/services/log-store", () => ({
 
 import { switchNodeExecutor } from "../executor.main"
 
-const ctx = { projectId: "p1", runId: "r1", abortSignal: new AbortController().signal }
+const ctx = {
+  projectId: "p1",
+  workflowId: "wf1",
+  workflowName: "WF",
+  runId: "r1",
+  nodeId: "switch1",
+  nodeName: "Switch",
+  abortSignal: new AbortController().signal,
+}
 const config = {
   providerId: "test-provider", modelTier: "sonnet" as const, variables: [], prompt: "Which?",
   branches: [{ id: "yes", label: "Yes" }, { id: "no", label: "No" }],
@@ -83,6 +91,18 @@ describe("switchNodeExecutor", () => {
       agentDeps: { sendToAgent },
     })
     expect(sendToAgent).toHaveBeenCalledWith(expect.objectContaining({ timeoutMins: 45 }))
+  })
+
+  it("passes workflow metadata to Agent calls", async () => {
+    const sendToAgent = vi.fn().mockResolvedValue({ status: "success" as const, response: "yes", durationMs: 5 })
+    await switchNodeExecutor.execute({ config, resolvedVariables: {}, context: ctx, agentDeps: { sendToAgent } })
+    expect(sendToAgent).toHaveBeenCalledWith(expect.objectContaining({
+      workflowId: "wf1",
+      workflowName: "WF",
+      workflowRunId: "r1",
+      workflowNodeId: "switch1",
+      workflowNodeName: "Switch",
+    }))
   })
 
   it("logs switch branch label shape without raw labels", async () => {

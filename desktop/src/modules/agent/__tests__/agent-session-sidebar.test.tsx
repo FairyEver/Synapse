@@ -30,6 +30,7 @@ vi.mock("@/app-shell/config", () => ({
 }))
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
+Element.prototype.scrollIntoView = vi.fn()
 
 let roots: Root[] = []
 
@@ -46,6 +47,86 @@ afterEach(() => {
 })
 
 describe("AgentSessionSidebar", () => {
+  it("defaults to user conversations and filters by source", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentSessionSidebar
+          sessions={[
+            {
+              projectId: "project-1",
+              id: "user-conv",
+              sessionKey: "local:renderer",
+              platform: "local-renderer",
+              name: "User Chat",
+              active: true,
+              historyCount: 1,
+              createdAt: "2026-05-21T00:00:00.000Z",
+              updatedAt: "2026-05-21T00:01:00.000Z",
+            },
+            {
+              projectId: "project-1",
+              id: "task-conv",
+              sessionKey: "scheduled:project-1:1",
+              platform: "scheduled",
+              name: "Scheduled Run",
+              active: false,
+              historyCount: 1,
+              createdAt: "2026-05-21T00:00:00.000Z",
+              updatedAt: "2026-05-21T00:02:00.000Z",
+            },
+            {
+              projectId: "project-1",
+              id: "workflow-conv",
+              sessionKey: "workflow:run-1",
+              platform: "workflow",
+              name: "Workflow Run",
+              active: false,
+              historyCount: 1,
+              createdAt: "2026-05-21T00:00:00.000Z",
+              updatedAt: "2026-05-21T00:03:00.000Z",
+            },
+          ]}
+          archivedSessions={[]}
+          projects={[{ id: "project-1", name: "Project One", path: "/tmp/project-one" }]}
+          selectedProjectId="project-1"
+          selectedConversationId="workflow-conv"
+          unreadByConversationId={{}}
+          onCreateSession={vi.fn()}
+          onSelect={vi.fn()}
+          onDelete={vi.fn()}
+          onDeleteOthers={vi.fn()}
+          onRename={vi.fn()}
+        />,
+      )
+    })
+
+    expect(document.body.textContent).toContain("用户对话")
+    expect(document.body.textContent).toContain("User Chat")
+    expect(document.body.textContent).not.toContain("Scheduled Run")
+    expect(document.body.textContent).not.toContain("Workflow Run")
+
+    await act(async () => {
+      document.querySelector<HTMLButtonElement>("[role='combobox']")?.click()
+    })
+
+    const workflowOption = [...document.querySelectorAll<HTMLElement>("[role='option']")]
+      .find((item) => item.textContent === "工作流")
+    expect(workflowOption).toBeDefined()
+
+    await act(async () => {
+      workflowOption?.click()
+    })
+
+    expect(document.body.textContent).not.toContain("User Chat")
+    expect(document.body.textContent).not.toContain("Scheduled Run")
+    expect(document.body.textContent).toContain("Workflow Run")
+  })
+
   it("renders an unread marker for an inactive session", () => {
     const html = renderToStaticMarkup(
       <AgentSessionSidebar
@@ -53,7 +134,7 @@ describe("AgentSessionSidebar", () => {
           projectId: "project-1",
           id: "external-conv",
           sessionKey: "external:group:user",
-          platform: "external",
+          platform: "local-renderer",
           sourceLabel: "Dev Group / User One",
           active: false,
           historyCount: 2,

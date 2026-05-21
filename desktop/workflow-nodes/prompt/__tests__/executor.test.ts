@@ -11,7 +11,15 @@ vi.mock("../../../electron/services/log-store", () => ({
 
 import { promptNodeExecutor } from "../executor.main"
 
-const ctx = { projectId: "p1", runId: "r1", abortSignal: new AbortController().signal }
+const ctx = {
+  projectId: "p1",
+  workflowId: "wf1",
+  workflowName: "WF",
+  runId: "r1",
+  nodeId: "node1",
+  nodeName: "Prompt",
+  abortSignal: new AbortController().signal,
+}
 const deps = (response: string) => ({
   sendToAgent: vi.fn(async (_input: { providerId: string; modelTier: string; prompt: string; projectId: string; abortSignal: AbortSignal }) => ({
     status: "success" as const, response, durationMs: 5,
@@ -50,6 +58,21 @@ describe("promptNodeExecutor", () => {
       context: ctx, agentDeps: { sendToAgent },
     })
     expect(sendToAgent).toHaveBeenCalledWith(expect.objectContaining({ timeoutMins: 45 }))
+  })
+  it("passes workflow metadata to Agent calls", async () => {
+    const sendToAgent = vi.fn().mockResolvedValue({ status: "success" as const, response: "ok", durationMs: 5 })
+    await promptNodeExecutor.execute({
+      config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "test" },
+      resolvedVariables: {},
+      context: ctx, agentDeps: { sendToAgent },
+    })
+    expect(sendToAgent).toHaveBeenCalledWith(expect.objectContaining({
+      workflowId: "wf1",
+      workflowName: "WF",
+      workflowRunId: "r1",
+      workflowNodeId: "node1",
+      workflowNodeName: "Prompt",
+    }))
   })
   it("returns success with agent response as output", async () => {
     const r = await promptNodeExecutor.execute({

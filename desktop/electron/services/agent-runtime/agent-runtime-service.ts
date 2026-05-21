@@ -222,16 +222,18 @@ export class AgentRuntimeService {
 
   async sendScheduled(input: ScheduledAgentSendInput): Promise<ScheduledAgentSendResult> {
     const startMs = Date.now()
-    const sessionKey = `scheduled:${input.projectId}:${Date.now()}`
+    const sourcePlatform = input.sourcePlatform ?? "scheduled"
+    const sessionKey = `${sourcePlatform}:${input.projectId}:${Date.now()}`
     const message: AgentMessage = {
       projectId: input.projectId,
       sessionKey,
-      platform: "scheduled",
+      platform: sourcePlatform,
       content: input.prompt,
       modeOverride: input.mode,
       agentType: input.agentType,
       providerId: input.providerId,
       modelTier: input.modelTier,
+      userMeta: input.userMeta,
     }
 
     const ac = new AbortController()
@@ -261,23 +263,25 @@ export class AgentRuntimeService {
         const spawnPermission = await this.deps.permissionGuard.check({
           action: "agent.spawn",
           actor: { kind: "system" },
-          resource: `scheduled:${input.projectId}:${input.agentType}`,
+          resource: `${sourcePlatform}:${input.projectId}:${input.agentType}`,
           context: {
             projectId: input.projectId,
             agentType: input.agentType,
             providerId: input.providerId,
             sessionPolicy: input.sessionPolicy,
+            sourcePlatform,
           },
         })
         if (!spawnPermission.allowed) {
           this.deps.auditSink?.record({
             action: "agent.spawn",
             actor: { kind: "system" },
-            resource: `scheduled:${input.projectId}:${input.agentType}`,
+            resource: `${sourcePlatform}:${input.projectId}:${input.agentType}`,
             outcome: "denied",
             metadata: {
               projectId: input.projectId,
               agentType: input.agentType,
+              sourcePlatform,
               reason: spawnPermission.reason,
               policyId: spawnPermission.policyId,
             },
@@ -292,12 +296,13 @@ export class AgentRuntimeService {
         this.deps.auditSink?.record({
           action: "agent.spawn",
           actor: { kind: "system" },
-          resource: `scheduled:${input.projectId}:${input.agentType}`,
+          resource: `${sourcePlatform}:${input.projectId}:${input.agentType}`,
           outcome: "allowed",
           metadata: {
             projectId: input.projectId,
             agentType: input.agentType,
             sessionPolicy: input.sessionPolicy,
+            sourcePlatform,
           },
         })
       }
@@ -995,7 +1000,8 @@ export class AgentRuntimeService {
   ): void {
     this.deps.logger?.warn("Scheduled agent send failed.", {
       boundary: "agent-runtime.scheduled-send",
-      source: "scheduled",
+      source: input.sourcePlatform ?? "scheduled",
+      sourcePlatform: input.sourcePlatform ?? "scheduled",
       projectId: input.projectId,
       sessionKey: message.sessionKey,
       conversationId: result.conversationId || undefined,
@@ -1020,7 +1026,8 @@ export class AgentRuntimeService {
   ): void {
     this.deps.logger?.info("Scheduled agent send completed.", {
       boundary: "agent-runtime.scheduled-send",
-      source: "scheduled",
+      source: input.sourcePlatform ?? "scheduled",
+      sourcePlatform: input.sourcePlatform ?? "scheduled",
       projectId: input.projectId,
       sessionKey: message.sessionKey,
       conversationId: result.conversationId || undefined,
@@ -1044,7 +1051,8 @@ export class AgentRuntimeService {
   ): void {
     this.deps.logger?.warn("Scheduled agent resume fallback.", {
       boundary: "agent-runtime.scheduled-resume",
-      source: "scheduled",
+      source: input.sourcePlatform ?? "scheduled",
+      sourcePlatform: input.sourcePlatform ?? "scheduled",
       projectId: input.projectId,
       sessionKey: message.sessionKey,
       resumeConversationId: input.lastConversationId,

@@ -1,0 +1,54 @@
+import type { SynapseAgentSessionSummary } from "@/types/agent"
+
+type ConversationSourceFilter =
+  | "user"
+  | "scheduled"
+  | "workflow"
+  | "webhook"
+  | "relay"
+  | "bridge"
+  | "all"
+
+const CONVERSATION_SOURCE_OPTIONS: Array<{ value: ConversationSourceFilter; label: string }> = [
+  { value: "user", label: "用户对话" },
+  { value: "scheduled", label: "定时任务" },
+  { value: "workflow", label: "工作流" },
+  { value: "webhook", label: "Webhook" },
+  { value: "relay", label: "Relay" },
+  { value: "bridge", label: "外部桥接" },
+  { value: "all", label: "全部" },
+]
+
+function conversationSourceForPlatform(
+  platform: string | undefined,
+): Exclude<ConversationSourceFilter, "all"> {
+  const normalized = platform?.trim()
+  if (!normalized || normalized === "local" || normalized === "local-renderer") return "user"
+  if (normalized === "scheduled") return "scheduled"
+  if (normalized === "workflow") return "workflow"
+  if (normalized === "webhook") return "webhook"
+  if (normalized === "relay") return "relay"
+  return "bridge"
+}
+
+function conversationSourceForSession(
+  session: Pick<SynapseAgentSessionSummary, "platform">,
+): Exclude<ConversationSourceFilter, "all"> {
+  return conversationSourceForPlatform(session.platform)
+}
+
+function filterSessionsBySource<T extends Pick<SynapseAgentSessionSummary, "platform">>(
+  sessions: readonly T[],
+  source: ConversationSourceFilter,
+): T[] {
+  if (source === "all") return [...sessions]
+  return sessions.filter((session) => conversationSourceForSession(session) === source)
+}
+
+export {
+  CONVERSATION_SOURCE_OPTIONS,
+  conversationSourceForPlatform,
+  conversationSourceForSession,
+  filterSessionsBySource,
+  type ConversationSourceFilter,
+}

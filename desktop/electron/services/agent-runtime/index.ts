@@ -101,6 +101,7 @@ export {
   type AgentPermissionResponseRequest,
   type AgentRuntimeTurnResult,
   type AgentRuntimeRelayResult,
+  type ScheduledAgentSourcePlatform,
   type AgentUserQuestion,
   type AgentUserQuestionOption,
   type AgentResultMetadata,
