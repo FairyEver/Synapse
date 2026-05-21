@@ -105,14 +105,14 @@ function isContentPayloadDirty<T extends ContentPayload>(
   extraChecks: (payload: T) => boolean = () => false,
 ): boolean {
   return (
-    payload.title !== ""
-    || (payload.usage ?? "") !== ""
-    || payload.description !== ""
-    || payload.category !== ""
-    || payload.icon !== ""
+    payload.title.trim() !== ""
+    || (payload.usage?.trim() ?? "") !== ""
+    || payload.description.trim() !== ""
+    || payload.category.trim() !== ""
+    || payload.icon.trim() !== ""
     || payload.iconBg !== DEFAULT_SYNAPSE_CONTENT_COLOR_VALUE
-    || payload.iconImage !== ""
-    || payload.content !== ""
+    || payload.iconImage.trim() !== ""
+    || payload.content.trim() !== ""
     || extraChecks(payload)
   )
 }
