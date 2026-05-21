@@ -15,6 +15,7 @@ export type EditorScanSkillItem = {
   path: string
   source: EditorScanItemSource
   synapseContentId: string | null
+  repositoryVersion: string | null
   preview: string
   fileCount: number
   trash: EditorScanTrashInfo

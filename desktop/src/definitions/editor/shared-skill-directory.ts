@@ -29,7 +29,10 @@ async function writeSynapseSkillDirectory({
 
   await writeTextFile(
     path.join(stagingDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME),
-    JSON.stringify({ id: detail.id }, null, 2),
+    JSON.stringify({
+      id: detail.id,
+      repositoryVersion: detail.latestHistoryDirname,
+    }, null, 2),
   )
 
   for (const attachment of detail.attachments) {

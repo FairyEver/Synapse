@@ -1,0 +1,64 @@
+import { describe, expect, it, vi } from "vitest"
+import type { PrepareSkillDirectoryContext } from "../../main-types"
+import { writeSynapseSkillDirectory } from "../shared-skill-directory"
+
+function createContext(): {
+  context: PrepareSkillDirectoryContext
+  writeTextFile: ReturnType<typeof vi.fn>
+} {
+  const writeTextFile = vi.fn(async () => undefined)
+
+  return {
+    context: {
+      copyAttachment: vi.fn(),
+      detail: {
+        attachmentCount: 0,
+        attachments: [],
+        category: "general",
+        content: "# Review\n",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        createdBy: "user-1",
+        createdByDisplayName: "User",
+        deleted: false,
+        description: "Review carefully.",
+        icon: "file",
+        iconBg: "muted",
+        id: "skill-1",
+        latestHistoryDirname: "20260521010101",
+        modifiedAt: "2026-05-21T01:01:01.000Z",
+        modifiedBy: "user-1",
+        modifiedByDisplayName: "User",
+        name: "review",
+        title: "Review",
+        type: "skill",
+      },
+      payload: {
+        contentId: "skill-1",
+        contentType: "skill",
+        editorId: "codex",
+        scope: "global",
+      },
+      repositoryRootPath: "/repo",
+      stagingDirectoryPath: "/tmp/staging",
+      targetPath: "/tmp/skills/review",
+      writeTextFile,
+    },
+    writeTextFile,
+  }
+}
+
+describe("writeSynapseSkillDirectory", () => {
+  it("writes the installed repository version into .synapse.json", async () => {
+    const { context, writeTextFile } = createContext()
+
+    await writeSynapseSkillDirectory(context)
+
+    expect(writeTextFile).toHaveBeenCalledWith(
+      "/tmp/staging/.synapse.json",
+      JSON.stringify({
+        id: "skill-1",
+        repositoryVersion: "20260521010101",
+      }, null, 2),
+    )
+  })
+})
