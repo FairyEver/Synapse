@@ -103,7 +103,7 @@ describe("agent bridge preview progress", () => {
     expect(`${rendered}\n${payloadJson}`).not.toContain("client-json-secret")
   })
 
-  it("redacts local absolute paths from progress previews", () => {
+  it("preserves local absolute paths in progress previews", () => {
     const entry = progressEntryFromEvent({
       type: "toolResult",
       toolName: "Read",
@@ -115,8 +115,8 @@ describe("agent bridge preview progress", () => {
     const rendered = renderCompactProgress([entry])
     const payloadJson = JSON.stringify(compactProgressPayload([entry]))
 
-    expect(rendered).toContain("[path redacted]")
-    expect(`${rendered}\n${payloadJson}`).not.toContain("/Users/example/project/src/secret.ts")
-    expect(`${rendered}\n${payloadJson}`).not.toContain("C:\\Users\\example\\project\\token.txt")
+    expect(rendered).toContain("/Users/example/project/src/secret.ts")
+    expect(`${rendered}\n${payloadJson}`).toContain("/Users/example/project/src/secret.ts")
+    expect(`${rendered}\n${payloadJson}`).toContain("C:\\\\Users\\\\example\\\\project\\\\token.txt")
   })
 })

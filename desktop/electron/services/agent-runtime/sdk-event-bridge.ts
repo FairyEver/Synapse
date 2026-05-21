@@ -3,7 +3,6 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk" with { "resolut
 import type { AgentEvent } from "./types"
 
 const REDACTED = "[redacted]"
-const PATH_REDACTED = "[path redacted]"
 const MAX_DIAGNOSTIC_TEXT_LENGTH = 240
 
 export interface AgentEventEnvelope {
@@ -300,7 +299,6 @@ function sanitizeJsonValue(value: unknown, seen: WeakSet<object>, parentKey?: st
   if (typeof value === "function" || typeof value === "symbol") return undefined
   if (typeof value === "bigint") return value.toString()
   if (typeof value === "string") {
-    if (parentKey && isPathPayloadKey(parentKey)) return PATH_REDACTED
     if (parentKey && isUrlPayloadKey(parentKey)) return sanitizeUrlDiagnostic(value)
     return parentKey && isDiagnosticPayloadKey(parentKey) ? sanitizeDiagnosticText(value) : value
   }
@@ -328,10 +326,6 @@ function sanitizeJsonValue(value: unknown, seen: WeakSet<object>, parentKey?: st
     }
     if (isSensitivePayloadKey(key)) {
       record[key] = REDACTED
-      continue
-    }
-    if (isPathPayloadKey(key) && typeof item === "string") {
-      record[key] = PATH_REDACTED
       continue
     }
     if (key === "partial_json" && typeof item === "string") {
@@ -364,15 +358,6 @@ function isSensitivePayloadKey(key: string): boolean {
   return normalized.includes("token") && !normalized.endsWith("tokens")
 }
 
-function isPathPayloadKey(key: string): boolean {
-  const normalized = key.toLowerCase().replace(/[-_]/g, "")
-  return normalized === "path"
-    || normalized === "filepath"
-    || normalized === "workdir"
-    || normalized === "cwd"
-    || normalized.endsWith("path")
-}
-
 function isUrlPayloadKey(key: string): boolean {
   const normalized = key.toLowerCase().replace(/[-_]/g, "")
   return normalized === "url"
@@ -402,7 +387,6 @@ function sanitizeDiagnosticText(value: string): string {
 function sanitizeUrlDiagnostic(value: string): string {
   try {
     const url = new URL(value)
-    if (url.protocol === "file:") return `file://${PATH_REDACTED}`
     if (!url.host) return value
     return `${url.protocol}//${url.host}${url.pathname}`
   } catch {
@@ -414,9 +398,6 @@ function redactDiagnosticText(value: string): string {
   return value
     .replace(secretLikeTextPattern(), secretLikeTextReplacement)
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTED}`)
-    .replace(windowsEscapedAbsolutePathPattern(), PATH_REDACTED)
-    .replace(windowsAbsolutePathPattern(), PATH_REDACTED)
-    .replace(posixAbsolutePathPattern(), `$1${PATH_REDACTED}`)
 }
 
 function redactSensitiveText(value: string): string {
@@ -426,25 +407,10 @@ function redactSensitiveText(value: string): string {
       secretLikeTextReplacement,
     )
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTED}`)
-    .replace(windowsEscapedAbsolutePathPattern(), PATH_REDACTED)
-    .replace(windowsAbsolutePathPattern(), PATH_REDACTED)
-    .replace(posixAbsolutePathPattern(), `$1${PATH_REDACTED}`)
 }
 
 function secretLikeTextPattern(): RegExp {
   return /\b(api[-_]?key|authorization|cookie|password|credential|secret|token)\b(\s*[:=]\s*)(?:(Bearer)\s+)?[^\s,;]+/gi
-}
-
-function windowsAbsolutePathPattern(): RegExp {
-  return /\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g
-}
-
-function windowsEscapedAbsolutePathPattern(): RegExp {
-  return /\b[A-Za-z]:(?:\\\\)(?:[^\\\s"')]+(?:\\\\))+[^\\\s"'),;]+/g
-}
-
-function posixAbsolutePathPattern(): RegExp {
-  return /(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g
 }
 
 function secretLikeTextReplacement(

@@ -355,7 +355,7 @@ describe("ClaudeSDKSession", () => {
     expect(JSON.stringify(event)).not.toContain("sid=command")
   })
 
-  it("redacts local paths from permission request summaries and raw event input", async () => {
+  it("preserves local paths in permission request summaries and raw event input", async () => {
     const { factory, getOptions } = createQueryFactory()
     const session = createSession(factory)
 
@@ -375,16 +375,17 @@ describe("ClaudeSDKSession", () => {
     if (event?.type !== "permissionRequest") {
       throw new Error("expected permission request")
     }
-    expect(event.toolInput).toContain("[path redacted]")
+    expect(event.toolInput).toContain("/Users/liyang/private/project/secret.ts")
+    expect(event.toolInput).toContain("C:\\\\Users\\\\liyang\\\\private\\\\secret.txt")
     expect(event.toolInputRaw).toMatchObject({
-      file_path: "[path redacted]",
-      windowsPath: "[path redacted]",
+      file_path: "/Users/liyang/private/project/secret.ts",
+      windowsPath: "C:\\Users\\liyang\\private\\secret.txt",
       nested: {
-        cwd: "[path redacted]",
+        cwd: "/Users/liyang/private/project",
       },
     })
-    expect(JSON.stringify(event)).not.toContain("/Users/liyang/private")
-    expect(JSON.stringify(event)).not.toContain("C:\\Users\\liyang")
+    expect(JSON.stringify(event)).toContain("/Users/liyang/private")
+    expect(JSON.stringify(event)).toContain("C:\\\\Users\\\\liyang")
   })
 
   it("generates permission request ids that are unique across conversations", async () => {
@@ -459,7 +460,7 @@ describe("ClaudeSDKSession", () => {
     })
     const resolved = await event
     expect(JSON.stringify(resolved)).not.toContain("sk-secret")
-    expect(JSON.stringify(resolved)).not.toContain("/Users/liyang/private")
+    expect(JSON.stringify(resolved)).toContain("/Users/liyang/private")
   })
 
   it("logs SDK query rejection failures with session context", async () => {

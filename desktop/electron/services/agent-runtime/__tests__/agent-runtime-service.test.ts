@@ -73,14 +73,14 @@ describe("AgentRuntimeService", () => {
   it("resolves registered prompt commands dynamically for listing and routing", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const session = new ScriptedSession([
-      { type: "result", content: "kb done", done: true, sdkSessionId: "sdk-1" },
+      { type: "result", content: "wiki done", done: true, sdkSessionId: "sdk-1" },
     ], "sdk-1")
-    let kbEnabled = false
+    let wikiEnabled = false
     const registeredPromptCommands = vi.fn(async () =>
-      kbEnabled
+      wikiEnabled
         ? [{
-          name: "kb",
-          buildPrompt: () => "expanded kb prompt",
+          name: "wiki",
+          buildPrompt: () => "expanded wiki prompt",
         }]
         : [])
     const service = new AgentRuntimeService({
@@ -94,16 +94,16 @@ describe("AgentRuntimeService", () => {
     })
 
     await expect(service.listPublishedCommands()).resolves.not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: "kb" })]),
+      expect.arrayContaining([expect.objectContaining({ name: "wiki" })]),
     )
-    kbEnabled = true
+    wikiEnabled = true
     await expect(service.listPublishedCommands()).resolves.toEqual(
-      expect.arrayContaining([expect.objectContaining({ name: "kb", source: "custom", kind: "prompt" })]),
+      expect.arrayContaining([expect.objectContaining({ name: "wiki", source: "custom", kind: "prompt" })]),
     )
-    const result = await service.send(baseMessage("/kb status"))
+    const result = await service.send(baseMessage("/wiki status"))
 
-    expect(result.resultText).toBe("kb done")
-    expect(session.sent).toEqual(["expanded kb prompt"])
+    expect(result.resultText).toBe("wiki done")
+    expect(session.sent).toEqual(["expanded wiki prompt"])
   })
 
   it("cancelTurn interrupts before forceKillTurn hard closes the session", async () => {
@@ -308,10 +308,10 @@ describe("AgentRuntimeService", () => {
     const pending = service.listPendingPermissions()[0]
 
     expect(pending?.toolInputRaw).toEqual({
-      command: "curl -H 'Authorization: Bearer [redacted]' [path redacted]",
+      command: "curl -H 'Authorization: Bearer [redacted]' /Users/liyang/private/file.ts",
     })
     expect(JSON.stringify(pending)).not.toContain("sk-tool")
-    expect(JSON.stringify(pending)).not.toContain("/Users/liyang/private")
+    expect(JSON.stringify(pending)).toContain("/Users/liyang/private")
 
     await service.forceKillTurn(conversationId("local", "s1", "active"))
     await expect(resolveSoon(turn)).resolves.not.toBe("timeout")

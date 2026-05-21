@@ -9,9 +9,7 @@ export function sanitizePermissionText(value: string | undefined): string | unde
         (_match, key: string, separator: string, bearer: string | undefined) =>
           `${key}${separator}${bearer ? `${bearer} ` : ""}[redacted]`,
       )
-      .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]")
-      .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, "[path redacted]")
-      .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]"),
+      .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]"),
     MAX_PERMISSION_TEXT_RUNES,
   )
 }

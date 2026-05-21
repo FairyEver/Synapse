@@ -160,7 +160,7 @@ function errorLogMeta(error: unknown): {
 
 function sanitizeAgentRawInput(value: unknown, key = ""): unknown {
   if (SENSITIVE_RAW_INPUT_KEY_PATTERN.test(key)) return REDACTED
-  if (typeof value === "string") return truncateRawInputString(redactAgentPathLikeValue(value))
+  if (typeof value === "string") return truncateRawInputString(formatAgentInputText(value))
   if (Array.isArray(value)) return value.map((item) => sanitizeAgentRawInput(item))
   if (!value || typeof value !== "object") return value
 
@@ -171,10 +171,8 @@ function sanitizeAgentRawInput(value: unknown, key = ""): unknown {
   return sanitized
 }
 
-function redactAgentPathLikeValue(value: string): string {
+function formatAgentInputText(value: string): string {
   return value
-    .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, "[path redacted]")
-    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, "$1[path redacted]")
 }
 
 function truncateRawInputString(value: string): string {
@@ -189,8 +187,8 @@ export {
   defaultSessionKey,
   errorLogMeta,
   formatAgentTranscript,
+  formatAgentInputText,
   formatEntryTime,
-  redactAgentPathLikeValue,
   sanitizeAgentRawInput,
   sessionLabel,
   thinkingIndicatorText,

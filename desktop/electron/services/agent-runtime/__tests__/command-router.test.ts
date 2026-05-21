@@ -144,7 +144,7 @@ describe("AgentCommandRouter", () => {
     }])
   })
 
-  it("redacts Windows paths in provider lookup diagnostics", async () => {
+  it("preserves Windows paths in provider lookup diagnostics", async () => {
     const records: Array<{ readonly message: string, readonly meta?: Record<string, unknown> }> = []
     const providerService = {
       getProvider: async () => {
@@ -181,9 +181,9 @@ describe("AgentCommandRouter", () => {
       command: "/model",
       errorName: "Error",
       errorCode: "EACCES",
-      error: "EACCES: permission denied, open [path redacted]",
+      error: "EACCES: permission denied, open C:\\Users\\liyang\\secret\\providers.json",
     }))
-    expect(JSON.stringify(records)).not.toContain("C:\\Users\\liyang")
+    expect(JSON.stringify(records)).toContain("C:\\\\Users\\\\liyang")
   })
 
   it("redacts secret-shaped values in provider lookup diagnostics", async () => {
@@ -253,8 +253,8 @@ describe("AgentCommandRouter", () => {
       await router.handle(baseMessage("/show token.txt"), baseConversation()),
     )
 
-    expect(result.error).toBe("open [path redacted] token=[redacted] authorization=[redacted]")
-    expect(result.error).not.toContain("/Users/liyang")
+    expect(result.error).toBe("open /Users/liyang/secret/token.txt token=[redacted] authorization=[redacted]")
+    expect(result.error).toContain("/Users/liyang")
     expect(result.error).not.toContain("sk-secret")
     expect(result.error).not.toContain("BearerSecret")
     expect(records).toEqual([{
@@ -268,10 +268,10 @@ describe("AgentCommandRouter", () => {
         argsCount: 1,
         errorName: "Error",
         errorCode: "EACCES",
-        error: "open [path redacted] token=[redacted] authorization=[redacted]",
+        error: "open /Users/liyang/secret/token.txt token=[redacted] authorization=[redacted]",
       }),
     }])
-    expect(JSON.stringify(records)).not.toContain("/Users/liyang")
+    expect(JSON.stringify(records)).toContain("/Users/liyang")
     expect(JSON.stringify(records)).not.toContain("sk-secret")
     expect(JSON.stringify(records)).not.toContain("BearerSecret")
   })
@@ -452,8 +452,8 @@ describe("AgentCommandRouter", () => {
 
     const result = expectRuntimeResult(await router.handle(baseMessage("/show secret.ts"), baseConversation()))
 
-    expect(result.error).toBe("read failed [path redacted] token=[redacted]")
-    expect(result.error).not.toContain("/Users/liyang/secret")
+    expect(result.error).toBe("read failed /Users/liyang/secret/repo token=[redacted]")
+    expect(result.error).toContain("/Users/liyang/secret")
     expect(result.error).not.toContain("sk-secret")
   })
 })

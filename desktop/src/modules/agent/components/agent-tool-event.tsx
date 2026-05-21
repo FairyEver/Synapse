@@ -18,7 +18,7 @@ import type {
   SynapseAgentToolResultTimelineItem,
 } from "@/types/agent"
 import { AgentAnnotation } from "./agent-annotation"
-import { errorLogMeta, redactAgentPathLikeValue, sanitizeAgentRawInput } from "../utils"
+import { errorLogMeta, formatAgentInputText, sanitizeAgentRawInput } from "../utils"
 
 const logger = createRendererLogger("agent")
 
@@ -157,7 +157,7 @@ function AgentToolEvent({
 
 function toolBody(item: AgentToolEventItem): string {
   if (item.kind === "toolResult") return item.content ?? ""
-  return item.toolInput ? redactAgentPathLikeValue(item.toolInput) : formatRawInput(item.toolInputRaw)
+  return item.toolInput ? formatAgentInputText(item.toolInput) : formatRawInput(item.toolInputRaw)
 }
 
 function formatRawInput(value: Record<string, unknown> | undefined): string {

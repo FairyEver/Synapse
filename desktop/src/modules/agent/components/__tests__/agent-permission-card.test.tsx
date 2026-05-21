@@ -152,7 +152,7 @@ describe("AgentPermissionCard", () => {
     expect(container.textContent).not.toContain("pass-1")
   })
 
-  it("redacts path-like raw SDK tool input fallback before rendering", () => {
+  it("preserves path-like raw SDK tool input fallback before rendering", () => {
     const onRespond = vi.fn()
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -178,9 +178,8 @@ describe("AgentPermissionCard", () => {
       )
     })
 
-    expect(container.textContent).toContain("[path redacted]")
-    expect(container.textContent).not.toContain("/Users/liyang")
-    expect(container.textContent).not.toContain("C:\\Users\\liyang")
+    expect(container.textContent).toContain("/Users/liyang/Documents/code/github/Synapse")
+    expect(container.textContent).toContain("C:\\\\Users\\\\liyang\\\\Synapse\\\\secret.txt")
   })
 })
 

@@ -26,7 +26,7 @@ describe("knowledge base Agent contribution", () => {
     expect(contribution).toBeNull()
   })
 
-  it("adds kb commands and hot cache bootstrap for knowledge base projects", async () => {
+  it("adds wiki commands and hot cache bootstrap for knowledge base projects", async () => {
     const projectPath = await tempDir()
     await mkdir(path.join(projectPath, "wiki"), { recursive: true })
     await writeFile(path.join(projectPath, "wiki", "hot.md"), "# Hot Cache\n\nRecent fact.\n")
@@ -46,7 +46,7 @@ describe("knowledge base Agent contribution", () => {
       },
     })
 
-    expect(contribution?.commands.map((command) => command.name)).toEqual(["kb"])
+    expect(contribution?.commands.map((command) => command.name)).toEqual(["wiki"])
     const prepared = await Promise.resolve(contribution?.prepareMessage?.({
       projectId: "project-1",
       sessionKey: "s1",
@@ -61,6 +61,7 @@ describe("knowledge base Agent contribution", () => {
     }, { isNewLiveSession: false }))
 
     expect(prepared?.content).toContain("Recent fact.")
+    expect(prepared?.content).toContain("Do not guess a file path from a wikilink title.")
     expect(unchanged?.content).toBe("What changed?")
   })
 
@@ -136,7 +137,7 @@ describe("knowledge base Agent contribution", () => {
     }, { isNewLiveSession: true }))).rejects.toMatchObject({ code: "EISDIR" })
   })
 
-  it("expands /kb ingest into the internal ingest prompt", async () => {
+  it("expands /wiki ingest into the internal ingest prompt", async () => {
     const projectPath = await tempDir()
     const contribution = await createKnowledgeBaseAgentContribution({
       project: {
@@ -158,7 +159,7 @@ describe("knowledge base Agent contribution", () => {
       projectId: "project-1",
       sessionKey: "s1",
       platform: "local-renderer",
-      content: "/kb ingest",
+      content: "/wiki ingest",
     })
 
     expect(prompt).toContain("Run Knowledge Base ingest")

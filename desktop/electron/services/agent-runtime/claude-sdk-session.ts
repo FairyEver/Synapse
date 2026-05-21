@@ -387,7 +387,6 @@ const MAX_TOOL_INPUT_SUMMARY_LENGTH = 240
 const MAX_TOOL_INPUT_STRING_LENGTH = 120
 const MAX_DIAGNOSTIC_TEXT_LENGTH = 240
 const REDACTED = "[redacted]"
-const PATH_REDACTED = "[path redacted]"
 const sensitiveToolInputKeyPattern = /token|secret|api[-_]?key|authorization|cookie|password|credential/i
 
 function defaultQueryFactory(input: {
@@ -554,8 +553,6 @@ function sanitizeDiagnosticText(value: string): string {
         `${key}${separator}${bearer ? `${bearer} ` : ""}${REDACTED}`,
     )
     .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTED}`)
-    .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, PATH_REDACTED)
-    .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, `$1${PATH_REDACTED}`)
 
   return truncateText(redacted, MAX_DIAGNOSTIC_TEXT_LENGTH)
 }
@@ -602,9 +599,7 @@ function redactSensitiveText(value: string): string {
       .replace(
         /(--cookie(?:-jar)?\s+)(?:"[^"]*"|'[^']*'|[^\s]+)/gi,
         `$1${REDACTED}`,
-      )
-      .replace(/\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g, PATH_REDACTED)
-      .replace(/(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g, `$1${PATH_REDACTED}`),
+      ),
     MAX_TOOL_INPUT_SUMMARY_LENGTH,
   )
 }

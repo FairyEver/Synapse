@@ -432,8 +432,6 @@ function errorMessage(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error)
   return truncateRunes(
     message
-      .replace(/[A-Za-z]:\\[^\s'"`]+/g, "[path redacted]")
-      .replace(/(?:[A-Za-z]:)?\/[^\s'"`]+/g, "[path redacted]")
       .replace(
         /\b(token|secret|api[_-]?key|apikey|authorization|cookie|password|credential)\b(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|`[^`]*`|[^\s'",`;]+)/gi,
         "$1$2[redacted]",

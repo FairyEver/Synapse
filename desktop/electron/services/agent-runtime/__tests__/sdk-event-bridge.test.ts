@@ -175,7 +175,7 @@ describe("SDK event bridge", () => {
     expect(JSON.stringify(event)).not.toContain("sk-live")
   })
 
-  it("redacts local paths from SDK tool input JSON deltas", () => {
+  it("preserves local paths in SDK tool input JSON deltas", () => {
     const event = bridgeSdkMessage({
       type: "stream_event",
       session_id: "sdk-path",
@@ -195,18 +195,18 @@ describe("SDK event bridge", () => {
     expect(event).toMatchObject({
       type: "stream",
       sdkSessionId: "sdk-path",
-      partialJson: expect.stringContaining("[path redacted]"),
+      partialJson: expect.stringContaining("/Users/liyang/private/project/file.ts"),
       payload: {
         event: {
           delta: {
-            partial_json: expect.stringContaining("[path redacted]"),
+            partial_json: expect.stringContaining("C:\\\\Users\\\\liyang\\\\secret\\\\file.ts"),
           },
         },
       },
       ...baseEnvelope,
     })
-    expect(JSON.stringify(event)).not.toContain("/Users/liyang/private")
-    expect(JSON.stringify(event)).not.toContain("C:\\Users\\liyang")
+    expect(JSON.stringify(event)).toContain("/Users/liyang/private")
+    expect(JSON.stringify(event)).toContain("C:\\\\\\\\Users\\\\\\\\liyang")
   })
 
   it("truncates sanitized SDK tool input JSON deltas", () => {
@@ -332,15 +332,15 @@ describe("SDK event bridge", () => {
         type: "toolUse",
         sdkSessionId: "sdk-tools",
         toolName: "Read",
-        toolInput: "{\"file_path\":\"[path redacted]\",\"authorization\":\"[redacted]\"}",
+        toolInput: "{\"file_path\":\"/Users/liyang/project/README.md\",\"authorization\":\"[redacted]\"}",
         toolInputRaw: {
-          file_path: "[path redacted]",
+          file_path: "/Users/liyang/project/README.md",
           authorization: "[redacted]",
         },
         ...baseEnvelope,
       }),
     ])
-    expect(JSON.stringify(events)).not.toContain("/Users/liyang/project")
+    expect(JSON.stringify(events)).toContain("/Users/liyang/project")
     expect(JSON.stringify(events)).not.toContain("sk-tool")
   })
 
@@ -387,8 +387,8 @@ describe("SDK event bridge", () => {
     })
     expect(JSON.stringify(toolEvent)).not.toContain("sk-tool-secret")
     expect(JSON.stringify(toolEvent)).not.toContain("env-token-secret")
-    expect(JSON.stringify(toolEvent)).not.toContain("/Users/liyang")
-    expect(JSON.stringify(toolEvent)).not.toContain("C:\\Users\\liyang")
+    expect(JSON.stringify(toolEvent)).toContain("/Users/liyang")
+    expect(JSON.stringify(toolEvent)).toContain("C:\\\\Users\\\\liyang")
     expect(assistantEvent).toMatchObject({
       type: "assistant",
       contentBlocks: [
@@ -405,8 +405,8 @@ describe("SDK event bridge", () => {
     })
     expect(JSON.stringify(events)).not.toContain("sk-tool-secret")
     expect(JSON.stringify(events)).not.toContain("env-token-secret")
-    expect(JSON.stringify(events)).not.toContain("/Users/liyang")
-    expect(JSON.stringify(events)).not.toContain("C:\\Users\\liyang")
+    expect(JSON.stringify(events)).toContain("/Users/liyang")
+    expect(JSON.stringify(events)).toContain("C:\\\\Users\\\\liyang")
   })
 
   it("bridges SDK user tool_result blocks to Agent tool result events", () => {
@@ -478,7 +478,7 @@ describe("SDK event bridge", () => {
     ])
     expect(JSON.stringify(events)).not.toContain("sk-tool-result")
     expect(JSON.stringify(events)).not.toContain("sid-secret")
-    expect(JSON.stringify(events)).not.toContain("/Users/liyang/private")
+    expect(JSON.stringify(events)).toContain("/Users/liyang/private")
   })
 
   it("bridges SDK result error messages to error events", () => {
@@ -522,19 +522,19 @@ describe("SDK event bridge", () => {
     expect(event).toMatchObject({
       type: "error",
       message: expect.stringContaining("[redacted]"),
-      payload: expect.objectContaining({
-        errors: [
-          expect.stringContaining("[path redacted]"),
+        payload: expect.objectContaining({
+          errors: [
+          expect.stringContaining("/Users/liyang/private/project/file.ts"),
           expect.stringContaining("[redacted]"),
         ],
-        stop_reason: expect.stringContaining("[path redacted]"),
+        stop_reason: expect.stringContaining("C:\\Users\\liyang\\secret\\file.ts"),
       }),
       ...baseEnvelope,
     })
     expect(serialized).not.toContain("sk-secret")
     expect(serialized).not.toContain("sid-secret")
-    expect(serialized).not.toContain("/Users/liyang/private")
-    expect(serialized).not.toContain("C:\\Users\\liyang")
+    expect(serialized).toContain("/Users/liyang/private")
+    expect(serialized).toContain("C:\\\\Users\\\\liyang")
   })
 
   it("bridges unknown SDK messages to generic SDK events with plain JSON payloads", () => {
@@ -647,8 +647,8 @@ describe("SDK event bridge", () => {
     expect(serialized).not.toContain("sk-message")
     expect(serialized).not.toContain("sk-stderr")
     expect(serialized).not.toContain("sid-secret")
-    expect(serialized).not.toContain("/Users/liyang/private")
-    expect(serialized).not.toContain("C:\\Users\\liyang")
+    expect(serialized).toContain("/Users/liyang/private")
+    expect(serialized).toContain("C:\\\\Users\\\\liyang")
   })
 
   it("sanitizes circular SDK payloads without dropping enumerable data", () => {

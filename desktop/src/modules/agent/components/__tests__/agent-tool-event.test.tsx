@@ -241,20 +241,19 @@ describe("AgentToolEvent", () => {
     />)
 
     expect(html).toContain("[redacted]")
-    expect(html).toContain("[path redacted]")
+    expect(html).toContain("/Users/liyang/private/project/file.ts")
     expect(html).not.toContain("sk-secret")
     expect(html).not.toContain("sk-auth")
-    expect(html).not.toContain("/Users/liyang/private")
   })
 
-  it("redacts path-like tool input strings before rendering", () => {
+  it("preserves path-like tool input strings before rendering", () => {
     const html = renderToStaticMarkup(<AgentToolEvent
       item={{
         id: "tool-string",
         kind: "toolCall",
         timestamp: "2026-04-28T00:00:00.000Z",
         toolName: "Bash",
-        toolInput: "cat /Users/liyang/private/project/file.ts && type C:\\Users\\liyang\\secret\\file.ts",
+        toolInput: "cat /tmp/file.ts && type C:\\tmp\\file.ts",
       }}
       profile={{
         ...profile,
@@ -263,9 +262,8 @@ describe("AgentToolEvent", () => {
       }}
     />)
 
-    expect(html).toContain("[path redacted]")
-    expect(html).not.toContain("/Users/liyang/private")
-    expect(html).not.toContain("C:\\Users\\liyang")
+    expect(html).toContain("/tmp/file.ts")
+    expect(html).not.toContain("[path redacted]")
   })
 
   it("logs tool body copy failures without recording tool content", async () => {

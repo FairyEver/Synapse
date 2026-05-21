@@ -361,12 +361,12 @@ describe("ConversationRouter", () => {
     ], "sdk-1")
     const { conversations, router } = createRouter({ commandRouter, session })
 
-    const result = await router.send(baseMessage("/kb status"))
+    const result = await router.send(baseMessage("/wiki status"))
     const savedConversation = await conversations.get(result.conversationId)
 
     expect(session.sent).toEqual(["expanded knowledge base status prompt"])
     expect(savedConversation?.history.filter((entry) => entry.role === "user")).toEqual([
-      expect.objectContaining({ content: "/kb status" }),
+      expect.objectContaining({ content: "/wiki status" }),
     ])
   })
 
@@ -587,9 +587,8 @@ describe("ConversationRouter", () => {
     const saved = await conversations.get(result.conversationId)
 
     expect(result.error).toContain("token=[redacted]")
-    expect(result.error).toContain("[path redacted]")
+    expect(result.error).toContain("/Users/liyang/private/repo")
     expect(result.error).not.toContain("sk-secret")
-    expect(result.error).not.toContain("/Users/liyang/private/repo")
     expect(errorEvents).toEqual([
       expect.objectContaining({
         payload: expect.objectContaining({
@@ -630,7 +629,7 @@ describe("ConversationRouter", () => {
     )
     expect(JSON.stringify(warn.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(persisted)).not.toContain("sk-secret")
-    expect(JSON.stringify(saved?.history)).not.toContain("/Users/liyang/private/repo")
+    expect(JSON.stringify(saved?.history)).toContain("/Users/liyang/private/repo")
   })
 
   it("persists side session failures without raw SDK error text", async () => {
@@ -653,9 +652,8 @@ describe("ConversationRouter", () => {
     const saved = await conversations.get(result.conversationId)
 
     expect(result.error).toContain("token=[redacted]")
-    expect(result.error).toContain("[path redacted]")
+    expect(result.error).toContain("/Users/liyang/private/repo")
     expect(result.error).not.toContain("sk-secret")
-    expect(result.error).not.toContain("/Users/liyang/private/repo")
     expect(errorEvents).toEqual([
       expect.objectContaining({
         payload: expect.objectContaining({
@@ -698,7 +696,7 @@ describe("ConversationRouter", () => {
       }),
     )
     expect(JSON.stringify(persisted)).not.toContain("sk-secret")
-    expect(JSON.stringify(saved?.history)).not.toContain("/Users/liyang/private/repo")
+    expect(JSON.stringify(saved?.history)).toContain("/Users/liyang/private/repo")
     expect(JSON.stringify(warn.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(warn.mock.calls)).not.toContain("/Users/liyang/private/repo")
   })
@@ -802,9 +800,8 @@ describe("ConversationRouter", () => {
     expect(persistedPayload).not.toContain("Bearer sk-auth")
     expect(persistedPayload).not.toContain("sid=secret-cookie")
     expect(persistedPayload).not.toContain("private-credential")
-    expect(persistedPayload).toContain("[path redacted]")
-    expect(persistedPayload).not.toContain("/Users/liyang/private/repo")
-    expect(persistedPayload).not.toContain("C:\\Users\\liyang\\secret\\out.txt")
+    expect(persistedPayload).toContain("/Users/liyang/private/repo")
+    expect(persistedPayload).toContain("C:\\\\Users\\\\liyang\\\\secret\\\\out.txt")
     expect(JSON.stringify(persisted[0]?.payload).length).toBeLessThan(12_000)
   })
 })

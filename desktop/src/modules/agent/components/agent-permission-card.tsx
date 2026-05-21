@@ -6,7 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import type { SynapseAgentPermissionRequestTimelineItem } from "@/types/agent"
-import { redactAgentPathLikeValue, sanitizeAgentRawInput } from "../utils"
+import { formatAgentInputText, sanitizeAgentRawInput } from "../utils"
 
 type AgentPermissionCardProps = {
   readonly item: SynapseAgentPermissionRequestTimelineItem
@@ -26,7 +26,7 @@ function AgentPermissionCard({ item, pending, isLatestPending, onRespond }: Agen
     }
   }, [submitting, pending])
 
-  const body = item.toolInput ? redactAgentPathLikeValue(item.toolInput) : formatRawInput(item.toolInputRaw)
+  const body = item.toolInput ? formatAgentInputText(item.toolInput) : formatRawInput(item.toolInputRaw)
   const showActions = pending
 
   async function handleRespond(behavior: "allow" | "deny") {

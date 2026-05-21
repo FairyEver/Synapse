@@ -54,8 +54,6 @@ const MAX_SUMMARY_LENGTH = 1000
 const MAX_HISTORY_CONTENT_LENGTH = 10_000
 const SENSITIVE_ERROR_ASSIGNMENT_PATTERN = /\b(secret|token|api[-_]?key|authorization|cookie|password|credential)\b\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)/gi
 const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
-const WINDOWS_PATH_PATTERN = /\b[A-Za-z]:\\(?:[^\\\s"')]+\\)+[^\\\s"'),;]+/g
-const POSIX_PATH_PATTERN = /(^|[\s("'])\/(?:[^/\s"')]+\/)+[^/\s"'),;]+/g
 
 export class ConversationRouter {
   private readonly deps: ConversationRouterDeps
@@ -1169,9 +1167,7 @@ function sanitizeErrorText(value: string): string {
   return truncateString(
     value
       .replace(SENSITIVE_ERROR_ASSIGNMENT_PATTERN, (_match, key: string) => `${key}=[redacted]`)
-      .replace(BEARER_TOKEN_PATTERN, "Bearer [redacted]")
-      .replace(WINDOWS_PATH_PATTERN, "[path redacted]")
-      .replace(POSIX_PATH_PATTERN, "$1[path redacted]"),
+      .replace(BEARER_TOKEN_PATTERN, "Bearer [redacted]"),
     MAX_SUMMARY_LENGTH,
   ) ?? ""
 }

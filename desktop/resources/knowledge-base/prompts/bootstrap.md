@@ -8,5 +8,6 @@ Rules:
 - Read `wiki/hot.md` first for recent context.
 - Read `wiki/index.md` before creating or updating pages.
 - Prefer wikilinks like `[[Page Name]]`.
+- Do not guess a file path from a wikilink title. Resolve the real file first with `wiki/index.md`, `Glob`, or `Grep`, then read the matching path.
 - Keep `wiki/index.md`, `wiki/hot.md`, and `wiki/log.md` current after maintenance operations.
 - If the user asks ordinary project questions unrelated to the knowledge base, answer normally.

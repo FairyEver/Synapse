@@ -21,7 +21,7 @@ export async function createKnowledgeBaseAgentContribution(
 
   return {
     commands: [{
-      name: "kb",
+      name: "wiki",
       buildPrompt: (args) => buildKnowledgeBaseCommandPrompt(args),
     }],
     async prepareMessage(message, context) {
@@ -54,7 +54,7 @@ async function buildKnowledgeBaseCommandPrompt(args: readonly string[]): Promise
   return [
     await readPrompt("bootstrap.md"),
     "",
-    "Report the current knowledge base status. Mention available commands: `/kb ingest`, `/kb save`, `/kb lint`.",
+    "Report the current knowledge base status. Mention available commands: `/wiki ingest`, `/wiki save`, `/wiki lint`.",
   ].join("\n")
 }
 
