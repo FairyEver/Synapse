@@ -94,6 +94,29 @@ describe("agent slash menu utilities", () => {
       .toEqual(["openai-docs"])
   })
 
+  it("prefers name prefix matches over description matches", () => {
+    expect(filterAgentSlashCandidates([
+      {
+        name: "bark-notification",
+        description: "Send a Bark phone push notification with a clear title",
+        kind: "skill",
+        source: "skill",
+      },
+      {
+        name: "better-3in1",
+        description: "Review the repository from three expert perspectives",
+        kind: "skill",
+        source: "skill",
+      },
+      {
+        name: "wiki",
+        description: "Create wiki docs",
+        kind: "command",
+        source: "custom",
+      },
+    ], "w").map((item) => item.name)).toEqual(["wiki"])
+  })
+
   it("shows all candidates for an empty query", () => {
     expect(filterAgentSlashCandidates(candidates, "").map((item) => item.name))
       .toEqual(["review-code", "openai-docs", "status", "model"])

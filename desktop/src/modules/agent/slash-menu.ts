@@ -71,11 +71,16 @@ export function filterAgentSlashCandidates(
 ): AgentSlashCandidate[] {
   const normalized = query.trim().replace(/^\/+/, "").toLowerCase()
   if (!normalized) return [...candidates]
-  return candidates.filter((candidate) => {
-    const name = candidate.name.toLowerCase()
-    const description = candidate.description?.toLowerCase() ?? ""
-    return name.includes(normalized) || description.includes(normalized)
-  })
+  const namePrefixMatches = candidates.filter((candidate) =>
+    candidate.name.toLowerCase().startsWith(normalized))
+  if (namePrefixMatches.length > 0) return namePrefixMatches
+
+  const nameContainsMatches = candidates.filter((candidate) =>
+    candidate.name.toLowerCase().includes(normalized))
+  if (nameContainsMatches.length > 0) return nameContainsMatches
+
+  return candidates.filter((candidate) =>
+    candidate.description?.toLowerCase().includes(normalized) ?? false)
 }
 
 export function groupAgentSlashCandidates(
