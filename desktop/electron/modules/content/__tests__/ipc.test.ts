@@ -412,4 +412,32 @@ describe("contentIpcModule sync ownership", () => {
       },
     }))
   })
+
+  it("refreshes and broadcasts install status after a skill update succeeds", async () => {
+    const { contentIpcModule } = await import("../ipc")
+
+    await contentIpcModule.methods.update.handler(createContext() as never, {
+      contentType: "skill",
+      payload: {
+        id: "skill-1",
+        title: "Updated Skill",
+      },
+    } as never)
+
+    expect(mocks.installStatusCacheService.refresh).toHaveBeenCalledWith("skill-1")
+    expect(mocks.eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "install-status",
+      type: "install-status.changed",
+      payload: {
+        contentId: "skill-1",
+        entries: [{
+          editorId: "codex",
+          projectName: "Project",
+          projectPath: "/project",
+          scope: "project",
+          status: "installed",
+        }],
+      },
+    }))
+  })
 })

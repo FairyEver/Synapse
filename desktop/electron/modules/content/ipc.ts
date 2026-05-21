@@ -89,6 +89,19 @@ async function notifyPendingPushesUpdated(
   })
 }
 
+async function notifyInstallStatusChanged(
+  eventBus: EventBus,
+  contentId: string,
+): Promise<void> {
+  const entries = await installStatusCacheService.refresh(contentId)
+  eventBus.emit({
+    domain: "install-status",
+    type: "install-status.changed",
+    payload: { contentId, entries },
+    timestamp: new Date().toISOString(),
+  })
+}
+
 async function notifyPendingPushesUpdatedIfPossible(
   eventBus: EventBus,
   repository: SynapseRepositoryConfig,
@@ -313,6 +326,10 @@ export const contentIpcModule: IpcModule = {
           requestContentSavedPush(ctx, eventBus, repository)
         }
 
+        if (result.status === "saved" && request.contentType === "skill") {
+          await notifyInstallStatusChanged(eventBus, request.payload.id)
+        }
+
         return result
       },
     },
@@ -502,14 +519,8 @@ export const contentIpcModule: IpcModule = {
           permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
         })
 
-        const entries = await installStatusCacheService.refresh(payload.contentId)
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
-        eventBus.emit({
-          domain: "install-status",
-          type: "install-status.changed",
-          payload: { contentId: payload.contentId, entries },
-          timestamp: new Date().toISOString(),
-        })
+        await notifyInstallStatusChanged(eventBus, payload.contentId)
 
         return result
       },
