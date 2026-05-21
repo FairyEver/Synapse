@@ -37,5 +37,21 @@ Canonical capability ids use `<domain>.<resource>.<action>`.
 | `scheduler.run.list` | `scheduler_run_list` | `synapse scheduler run list` | `schedulerRunList` |
 | `scheduler.runtime.inspect` | `scheduler_runtime_inspect` | `synapse scheduler runtime inspect` | `schedulerRuntimeInspect` |
 | `scheduler.action_type.list` | `scheduler_action_type_list` | `synapse scheduler action-type list` | `schedulerActionTypeList` |
+| `content.type.describe` | `content_type_describe` | `synapse content type describe` | `contentTypeDescribe` |
+| `content.rule.list` | `content_rule_list` | `synapse content rule list` | `contentRuleList` |
+| `content.rule.get` | `content_rule_get` | `synapse content rule get` | `contentRuleGet` |
+| `content.rule.create` | `content_rule_create` | `synapse content rule create` | `contentRuleCreate` |
+| `content.rule.update` | `content_rule_update` | `synapse content rule update` | `contentRuleUpdate` |
+| `content.rule.delete` | `content_rule_delete` | `synapse content rule delete` | `contentRuleDelete` |
+| `content.skill.list` | `content_skill_list` | `synapse content skill list` | `contentSkillList` |
+| `content.skill.get` | `content_skill_get` | `synapse content skill get` | `contentSkillGet` |
+| `content.skill.create` | `content_skill_create` | `synapse content skill create` | `contentSkillCreate` |
+| `content.skill.update` | `content_skill_update` | `synapse content skill update` | `contentSkillUpdate` |
+| `content.skill.delete` | `content_skill_delete` | `synapse content skill delete` | `contentSkillDelete` |
+| `content.prompt.list` | `content_prompt_list` | `synapse content prompt list` | `contentPromptList` |
+| `content.prompt.get` | `content_prompt_get` | `synapse content prompt get` | `contentPromptGet` |
+| `content.prompt.create` | `content_prompt_create` | `synapse content prompt create` | `contentPromptCreate` |
+| `content.prompt.update` | `content_prompt_update` | `synapse content prompt update` | `contentPromptUpdate` |
+| `content.prompt.delete` | `content_prompt_delete` | `synapse content prompt delete` | `contentPromptDelete` |
 
 Legacy public names are intentionally not aliases; only the canonical names in this matrix are supported.

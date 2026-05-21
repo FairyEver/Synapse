@@ -1,6 +1,6 @@
 # Synapse MCP 能力
 
-<!-- Sources: docs/developer/capability-naming-matrix.md; desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/database/shared/capability-registry.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/electron/capabilities/action-router.ts -->
+<!-- Sources: docs/developer/capability-naming-matrix.md; desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/database/shared/capability-registry.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/synapse-capabilities/shared/content-domain.ts; desktop/electron/capabilities/action-router.ts -->
 
 这里的“能力”指一项可被 MCP、CLI 或本地 HTTP API 调用的操作，例如列出数据库表、创建数据行、启用定时任务。
 
@@ -54,8 +54,9 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到不同
 | `database` | 本地表、字段、行、选项、日志和 SQL 操作 | `desktop/database/shared/capability-registry.ts` |
 | `scheduler` | 定时任务、运行记录、运行时状态检查和 action type 查询 | `desktop/synapse-capabilities/shared/scheduler-domain.ts` |
 | `workflow` | DAG 工作流定义、节点/边原子操作、执行、布局 | `desktop/synapse-capabilities/shared/workflow-domain.ts` |
+| `content` | Rule、Skill、Prompt 的发布、查询、更新和删除 | `desktop/synapse-capabilities/shared/content-domain.ts` |
 
-领域边界必须清晰。Database 行为留在 Database 领域；Scheduler 行为留在 Scheduler 领域。跨领域暴露通过 shared registry 和 action router 完成。
+领域边界必须清晰。Database 行为留在 Database 领域；Scheduler 行为留在 Scheduler 领域；Content 行为留在 Content 领域。跨领域暴露通过 shared registry 和 action router 完成。
 
 ## 公开入口
 
