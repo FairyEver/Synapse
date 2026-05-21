@@ -360,6 +360,28 @@ describe("AgentCommandRouter", () => {
     expect(passthrough).toBeNull()
   })
 
+  it("routes registered prompt commands that return direct command results", async () => {
+    const { providerService } = makeProviderService()
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      registeredPromptCommands: [{
+        name: "wiki",
+        buildPrompt: () => ({
+          kind: "result",
+          content: "All sources are unchanged.",
+        }),
+      }],
+      resetSession: async () => baseConversation(),
+    })
+
+    const result = expectRuntimeResult(await router.handle(baseMessage("/wiki ingest"), baseConversation()))
+
+    expect(result.resultText).toBe("All sources are unchanged.")
+    expect(result.error).toBeUndefined()
+  })
+
   it("routes custom prompt and exec commands", async () => {
     const { providerService } = makeProviderService()
     const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")

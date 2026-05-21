@@ -57,8 +57,20 @@ interface ParsedCommand {
 export interface RegisteredPromptCommand {
   readonly name: string
   readonly description?: string
-  buildPrompt(args: readonly string[], message: AgentMessage): Promise<string> | string
+  buildPrompt(
+    args: readonly string[],
+    message: AgentMessage,
+  ): Promise<RegisteredPromptCommandOutput> | RegisteredPromptCommandOutput
 }
+
+export type RegisteredPromptCommandOutput =
+  | string
+  | AgentPromptCommandRoute
+  | {
+    readonly kind: "result"
+    readonly content: string
+    readonly error?: boolean
+  }
 
 export type RegisteredPromptCommandSource =
   | readonly RegisteredPromptCommand[]
@@ -127,10 +139,8 @@ export class AgentCommandRouter {
     const promptCommand = registeredPromptCommands.find((command) =>
       command.name.toLowerCase() === name)
     if (promptCommand) {
-      return {
-        kind: "prompt",
-        content: await Promise.resolve(promptCommand.buildPrompt(parsed.args, message)),
-      }
+      const output = await Promise.resolve(promptCommand.buildPrompt(parsed.args, message))
+      return registeredPromptCommandResult(conversation, output)
     }
 
     const customCommand = await this.deps.customCommands?.resolve(name)
@@ -426,6 +436,19 @@ export async function resolveRegisteredPromptCommands(
 ): Promise<readonly RegisteredPromptCommand[]> {
   if (!source) return []
   return typeof source === "function" ? await source() : source
+}
+
+function registeredPromptCommandResult(
+  conversation: ConversationEntryV1,
+  output: RegisteredPromptCommandOutput,
+): AgentCommandRouterResult {
+  if (typeof output === "string") {
+    return { kind: "prompt", content: output }
+  }
+  if (output.kind === "prompt") {
+    return output
+  }
+  return commandResult(conversation.id, output.content, output.error)
 }
 
 function errorMessage(error: unknown): string {
