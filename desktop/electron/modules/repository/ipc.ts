@@ -14,10 +14,12 @@ import type { SynapseCreateLocalRepositoryPayload, SynapseRepositoryValidationRe
 import { configStore } from "../../services/config-store"
 import { contentIndexService } from "../../services/content-index-service"
 import { contentSubmissionService } from "../../services/content-submission-service"
+import { installStatusCacheService } from "../../services/install-status-cache-service"
 import { createMainLogger } from "../../services/log-store"
 import { repositoryStore } from "../../services/repository-store"
 import { repositoryStructureService } from "../../services/repository-structure-service"
 import { RepositorySyncCoordinator } from "../../services/repository-sync-coordinator"
+import type { InstallStatusEntry, InstallStatusMap } from "../../../src/types/install-status"
 
 const logger = createMainLogger("ipc.repository")
 
@@ -32,6 +34,59 @@ async function resolveRepositoryConfig(repositoryUuid: string): Promise<SynapseR
   }
 
   return repository
+}
+
+function getInstallStatusEntryKey(entry: InstallStatusEntry): string {
+  return [
+    entry.editorId,
+    entry.scope,
+    entry.projectPath ?? "",
+    entry.projectName ?? "",
+    entry.status,
+  ].join("\u0000")
+}
+
+function normalizeInstallStatusEntries(entries: InstallStatusEntry[] | undefined): string[] {
+  return (entries ?? []).map(getInstallStatusEntryKey).sort()
+}
+
+function installStatusEntriesEqual(
+  before: InstallStatusEntry[] | undefined,
+  after: InstallStatusEntry[] | undefined,
+): boolean {
+  const left = normalizeInstallStatusEntries(before)
+  const right = normalizeInstallStatusEntries(after)
+
+  if (left.length !== right.length) {
+    return false
+  }
+
+  return left.every((entry, index) => entry === right[index])
+}
+
+function getChangedInstallStatusContentIds(
+  before: InstallStatusMap,
+  after: InstallStatusMap,
+): string[] {
+  const contentIds = new Set([...Object.keys(before), ...Object.keys(after)])
+  return [...contentIds].filter((contentId) => (
+    !installStatusEntriesEqual(before[contentId], after[contentId])
+  ))
+}
+
+async function notifyInstallStatusChanges(eventBus: EventBus): Promise<void> {
+  const before = installStatusCacheService.getAll()
+  await installStatusCacheService.buildCache()
+  const after = installStatusCacheService.getAll()
+
+  for (const contentId of getChangedInstallStatusContentIds(before, after)) {
+    eventBus.emit({
+      domain: "install-status",
+      type: "install-status.changed",
+      payload: { contentId, entries: after[contentId] ?? [] },
+      timestamp: new Date().toISOString(),
+    })
+  }
 }
 
 // Schemas
@@ -319,6 +374,14 @@ export const repositoryIpcModule: IpcModule = {
           const result = await coordinator.requestSync(repository, "manual")
           if (result.operation === "sync") {
             await contentIndexService.syncIndex(repository)
+            try {
+              await notifyInstallStatusChanges(eventBus)
+            } catch (error) {
+              logger.warn("Failed to refresh install status after repository sync.", {
+                error,
+                repositoryUuid: request.repositoryUuid,
+              })
+            }
           }
           const pendingPushes = await contentSubmissionService.readPendingPushState(repository)
 
