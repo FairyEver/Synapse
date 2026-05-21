@@ -12,13 +12,103 @@ enum AdminStatus {
   disabled
 }
 
+enum UserStatus {
+  active
+  disabled
+}
+
+enum TeamRole {
+  owner
+  member
+}
+
+enum InvitationType {
+  user_signup
+  team_join
+}
+
 model AdminUser {
   id           String      @id @default(cuid())
   email        String      @unique
   passwordHash String
   status       AdminStatus @default(active)
+  invitations  Invitation[]
   createdAt    DateTime    @default(now())
   updatedAt    DateTime    @updatedAt
+}
+
+model User {
+  id                  String       @id @default(cuid())
+  email               String       @unique
+  passwordHash        String
+  status              UserStatus   @default(active)
+  memberships         TeamMembership[]
+  createdTeams        Team[]       @relation("TeamCreator")
+  sessions            UserSession[]
+  acceptedInvitations Invitation[] @relation("AcceptedInvitations")
+  createdInvitations  Invitation[] @relation("UserCreatedInvitations")
+  createdAt           DateTime     @default(now())
+  updatedAt           DateTime     @updatedAt
+}
+
+model Team {
+  id              String           @id @default(cuid())
+  name            String
+  createdByUserId String           @unique
+  createdByUser   User             @relation("TeamCreator", fields: [createdByUserId], references: [id])
+  memberships     TeamMembership[]
+  invitations     Invitation[]
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+}
+
+model TeamMembership {
+  id        String   @id @default(cuid())
+  teamId    String
+  team      Team     @relation(fields: [teamId], references: [id])
+  userId    String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  role      TeamRole
+  createdAt DateTime @default(now())
+
+  @@unique([teamId, userId])
+  @@index([teamId])
+}
+
+model Invitation {
+  id               String         @id @default(cuid())
+  type             InvitationType
+  tokenHash        String         @unique
+  expiresAt        DateTime
+  usedAt           DateTime?
+  createdByAdminId String?
+  createdByAdmin   AdminUser?     @relation(fields: [createdByAdminId], references: [id])
+  createdByUserId  String?
+  createdByUser    User?          @relation("UserCreatedInvitations", fields: [createdByUserId], references: [id])
+  teamId           String?
+  team             Team?          @relation(fields: [teamId], references: [id])
+  acceptedByUserId String?
+  acceptedByUser   User?          @relation("AcceptedInvitations", fields: [acceptedByUserId], references: [id])
+  createdAt        DateTime       @default(now())
+
+  @@index([type, createdAt])
+  @@index([expiresAt])
+  @@index([teamId])
+}
+
+model UserSession {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id])
+  refreshTokenHash String    @unique
+  expiresAt        DateTime
+  revokedAt        DateTime?
+  lastUsedAt       DateTime?
+  createdAt        DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([revokedAt])
 }
 
 model AuditLog {
