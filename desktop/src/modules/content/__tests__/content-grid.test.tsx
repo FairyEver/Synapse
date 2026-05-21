@@ -24,6 +24,29 @@ vi.mock("@/modules/content/components/content-action-split-button", () => ({
   ContentActionSplitButton: () => <button type="button">操作</button>,
 }))
 
+vi.mock("@/modules/content/contexts/install-status-context", () => ({
+  useInstallStatus: (contentId: string) => {
+    if (contentId === "stale-skill") {
+      return [{
+        editorId: "codex",
+        scope: "global",
+        status: "needs_update",
+      }]
+    }
+
+    if (contentId === "current-skill") {
+      return [{
+        editorId: "codex",
+        scope: "global",
+        status: "installed",
+      }]
+    }
+
+    return []
+  },
+  useUninstallFromEditor: () => vi.fn(async () => undefined),
+}))
+
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let roots: Root[] = []
@@ -115,5 +138,30 @@ describe("ContentGrid", () => {
 
     expect(container.querySelector('[aria-label="复制 Skill 名称"]')).toBeNull()
     expect(container.textContent).not.toContain("prompt-name")
+  })
+
+  it("shows update badge in the install status footer when an installed skill is stale", async () => {
+    const { container } = await renderGrid([
+      createContentItem("skill", {
+        id: "stale-skill",
+        name: "review",
+      }),
+    ])
+
+    const badge = Array.from(container.querySelectorAll("[title='已安装版本落后']"))
+      .find((element) => element.textContent === "可更新")
+
+    expect(badge).toBeTruthy()
+  })
+
+  it("does not show update badge for current installed skills", async () => {
+    const { container } = await renderGrid([
+      createContentItem("skill", {
+        id: "current-skill",
+        name: "review",
+      }),
+    ])
+
+    expect(container.textContent).not.toContain("可更新")
   })
 })

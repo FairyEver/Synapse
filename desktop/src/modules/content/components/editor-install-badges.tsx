@@ -11,6 +11,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
+import { Badge } from "@/components/ui/badge"
 import { EditorIcon } from "@/components/editor-icon"
 import type { SynapseEditorId } from "@/types/editor"
 import { editorDefinitions } from "@/definitions/generated/renderer-registry"
@@ -92,6 +93,7 @@ function EditorBadge({
 
 function EditorInstallBadges({ contentId }: { contentId: string }) {
   const entries = useInstallStatus(contentId)
+  const hasUpdate = entries.some((entry) => entry.status === "needs_update")
 
   if (entries.length === 0) return null
 
@@ -111,6 +113,11 @@ function EditorInstallBadges({ contentId }: { contentId: string }) {
           />
         )
       ))}
+      {hasUpdate ? (
+        <Badge variant="secondary" title="已安装版本落后">
+          可更新
+        </Badge>
+      ) : null}
     </div>
   )
 }
