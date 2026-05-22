@@ -53,7 +53,7 @@ import type {
 } from "@/types/content"
 
 type ContentDetailWindowPageProps = {
-  request: SynapseContentWindowRequest
+  request: Extract<SynapseContentWindowRequest, { kind: "detail" }>
 }
 
 type SkillAttachmentPreviewState = {
@@ -417,7 +417,7 @@ function SkillAttachmentPreview({
 function RuleDetailWindowPage({
   request,
 }: {
-  request: SynapseContentWindowRequest
+  request: Extract<SynapseContentWindowRequest, { kind: "detail" }>
 }) {
   const logger = useMemo(() => createRendererLogger("rules.detail.window"), [])
   const editState = useContentWindowEditState<SynapseCreateRulePayload>("rule", request.id, logger)
@@ -520,7 +520,7 @@ function RuleDetailWindowPage({
 function PromptDetailWindowPage({
   request,
 }: {
-  request: SynapseContentWindowRequest
+  request: Extract<SynapseContentWindowRequest, { kind: "detail" }>
 }) {
   const logger = useMemo(() => createRendererLogger("prompts.detail.window"), [])
   const editState = useContentWindowEditState<SynapseCreatePromptPayload>("prompt", request.id, logger)
@@ -620,7 +620,7 @@ function PromptDetailWindowPage({
 function SkillDetailWindowPage({
   request,
 }: {
-  request: SynapseContentWindowRequest
+  request: Extract<SynapseContentWindowRequest, { kind: "detail" }>
 }) {
   const logger = useMemo(() => createRendererLogger("skills.detail.window"), [])
   const editState = useContentWindowEditState<CreateSkillPayload>("skill", request.id, logger)

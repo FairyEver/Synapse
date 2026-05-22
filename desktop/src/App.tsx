@@ -33,7 +33,7 @@ import { getAllContentTypeIds } from "@/config/content-types"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { parseContentWindowRequest } from "@/lib/content-window"
-import { ContentDetailWindowPage } from "@/modules/content/components/content-detail-window-page"
+import { ContentWindowPage } from "@/modules/content/components/content-window-page"
 import { RulesModule } from "@/modules/rules"
 import { SkillsModule } from "@/modules/skills"
 import { PromptsModule } from "@/modules/prompts"
@@ -435,8 +435,8 @@ function App() {
   if (standaloneContentWindowRequest) {
     return (
       <IdentityGate>
-        <ErrorBoundary fallbackTitle="内容详情出现问题">
-          <ContentDetailWindowPage request={standaloneContentWindowRequest} />
+        <ErrorBoundary fallbackTitle="内容窗口出现问题">
+          <ContentWindowPage request={standaloneContentWindowRequest} />
         </ErrorBoundary>
       </IdentityGate>
     )
