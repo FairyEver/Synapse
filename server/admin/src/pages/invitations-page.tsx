@@ -33,6 +33,7 @@ export function InvitationsPage() {
     () => adminApi.listInvitations(),
   )
   const [selectedIds, setSelectedIds] = React.useState<ReadonlySet<string>>(() => new Set())
+  const [actionError, setActionError] = React.useState<string | null>(null)
   const [copyError, setCopyError] = React.useState<string | null>(null)
   const invitations = result?.data ?? []
   const selectedCount = selectedIds.size
@@ -68,16 +69,26 @@ export function InvitationsPage() {
   }
 
   async function deleteInvitation(invitation: AdminInvitationRow) {
-    await adminApi.deleteInvitation(invitation.id)
-    reload()
+    setActionError(null)
+    try {
+      await adminApi.deleteInvitation(invitation.id)
+      reload()
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "删除失败")
+    }
   }
 
   async function deleteSelectedInvitations() {
     const ids = invitations.map((invitation) => invitation.id).filter((id) => selectedIds.has(id))
     if (ids.length === 0) return
-    await adminApi.deleteInvitations(ids)
-    setSelectedIds(new Set())
-    reload()
+    setActionError(null)
+    try {
+      await adminApi.deleteInvitations(ids)
+      setSelectedIds(new Set())
+      reload()
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "删除失败")
+    }
   }
 
   async function copyInvitationLink(inviteUrl: string) {
@@ -106,6 +117,7 @@ export function InvitationsPage() {
           删除所选
         </Button>
       </div>
+      {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
       {copyError ? <p className="text-sm text-destructive">{copyError}</p> : null}
       {!result || invitations.length === 0 ? (
         <PageState>暂无邀请</PageState>

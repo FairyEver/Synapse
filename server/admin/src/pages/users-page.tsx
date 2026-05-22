@@ -1,3 +1,4 @@
+import * as React from "react"
 import { PageState } from "@/components/page-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -20,10 +21,16 @@ export function UsersPage() {
   const { data: result, error, loading, reload } = useApiResource<PaginatedResponse<AdminUserRow>>(
     () => adminApi.listUsers(),
   )
+  const [actionError, setActionError] = React.useState<string | null>(null)
 
   async function toggleStatus(user: AdminUserRow) {
-    await adminApi.updateUserStatus(user.id, user.status === "active" ? "disabled" : "active")
-    reload()
+    setActionError(null)
+    try {
+      await adminApi.updateUserStatus(user.id, user.status === "active" ? "disabled" : "active")
+      reload()
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "操作失败")
+    }
   }
 
   if (loading) return <PageState>加载中</PageState>
@@ -33,6 +40,7 @@ export function UsersPage() {
   return (
     <div className="space-y-4">
       <SignupInvitationAction onCreated={reload} />
+      {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
       {result.data.length === 0 ? (
         <PageState>暂无用户</PageState>
       ) : (
