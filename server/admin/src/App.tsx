@@ -12,6 +12,7 @@ import { AuditLogsPage } from "@/pages/audit-logs-page"
 import { BackupPage } from "@/pages/backup-page"
 import { InvitationsPage } from "@/pages/invitations-page"
 import { LoginPage } from "@/pages/login-page"
+import { SignupPage } from "@/pages/signup-page"
 import { SystemPage } from "@/pages/system-page"
 import { LogsPage } from "@/pages/logs-page"
 import { TeamsPage } from "@/pages/teams-page"
@@ -37,6 +38,14 @@ function routeFromHash(): Route {
   if (route === "teams") return { name: "teams" }
   if (route === "invitations") return { name: "invitations" }
   return { name: "system" }
+}
+
+function isSignupRoute(): boolean {
+  return window.location.pathname.replace(/\/+$/, "") === "/dashboard/signup"
+}
+
+function inviteTokenFromSearch(): string {
+  return new URLSearchParams(window.location.search).get("invite")?.trim() ?? ""
 }
 
 function useHashRoute(): Route {
@@ -71,9 +80,11 @@ function titleForRoute(route: Route): string {
 
 export default function App() {
   const route = useHashRoute()
+  const signupRoute = isSignupRoute()
   const [session, setSession] = React.useState<AdminSession | null | undefined>(undefined)
 
   React.useEffect(() => {
+    if (signupRoute) return
     let alive = true
     adminApi
       .getSession()
@@ -86,7 +97,7 @@ export default function App() {
     return () => {
       alive = false
     }
-  }, [])
+  }, [signupRoute])
 
   function handleLogout() {
     adminApi
@@ -100,6 +111,10 @@ export default function App() {
   }, [])
 
   useIdleTimeout(handleIdleTimeout)
+
+  if (signupRoute) {
+    return <SignupPage inviteToken={inviteTokenFromSearch()} />
+  }
 
   if (session === undefined) {
     return (

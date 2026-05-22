@@ -11,6 +11,9 @@ vi.mock("@/lib/api", () => ({
     getSystemOverview: vi.fn(),
     listUsers: vi.fn(),
   },
+  userAuthApi: {
+    register: vi.fn(),
+  },
 }))
 
 describe("App", () => {
@@ -33,6 +36,7 @@ describe("App", () => {
     cleanup?.()
     cleanup = null
     vi.clearAllMocks()
+    window.history.pushState({}, "", "/")
   })
 
   it("centers the header separator with the trigger and title", async () => {
@@ -72,5 +76,18 @@ describe("App", () => {
     await waitFor(() => {
       expect(result.container.querySelector("h1")?.textContent).toBe("用户")
     })
+  })
+
+  it("renders signup without loading an admin session", async () => {
+    window.history.pushState({}, "", "/dashboard/signup?invite=plain-token")
+
+    const result = await render(<App />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("注册账号")
+    })
+    expect(result.container.querySelector<HTMLInputElement>("#signup-email")).not.toBeNull()
+    expect(adminApi.getSession).not.toHaveBeenCalled()
   })
 })
