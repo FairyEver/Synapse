@@ -1,14 +1,14 @@
-import { type ComponentType, useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { type ComponentType, useCallback, useEffect, useMemo, useRef } from "react"
+import { openContentCreateWindow } from "@/app-shell/content"
 import type {
   ContentOpenRequest,
   EditOverwriteRulePrefill,
   EditOverwriteSkillPrefill,
 } from "@/app-shell/content-navigation"
-import { useCurrentRepoProfile } from "@/app-shell/identity-context"
 import { ensureBodyInteractable } from "@/app-shell/dialog-navigate"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useActiveRepository, useContentList } from "@/app-shell/use-repository-manager"
+import { useActiveRepository } from "@/app-shell/use-repository-manager"
 import { getContentTypeDefinition } from "@/config/content-types"
 import { ContentBrowserPage } from "@/modules/content/components/content-browser-page"
 import { InstallStatusProvider } from "@/modules/content/contexts/install-status-context"
@@ -64,29 +64,33 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
   }: ContentModuleProps) {
     const logger = useMemo(() => createRendererLogger(config.contentType), [config.contentType])
     const activeRepository = useActiveRepository()
-    const { currentRepoProfileState } = useCurrentRepoProfile()
-    const { promise } = useAppNotifications()
-    const { createContent, items } = useContentList<T>(config.contentType)
-    const existingNames = useMemo(
-      () => items.filter((item) => item.source !== "builtin" && item.name).map((item) => item.name!),
-      [items],
-    )
-    const [isCreateDialogOpen, setIsCreateDialogOpen] = useState(false)
-    const [createInitialValue, setCreateInitialValue] =
-      useState<SynapseCreateContentPayload<T> | null>(null)
-    const [createNotices, setCreateNotices] = useState<ContentCreateNotice[]>([])
-    const [createSourceLabel, setCreateSourceLabel] = useState<string | null>(null)
+    const { error: notifyError } = useAppNotifications()
     const consumedRequestIdRef = useRef<string | null>(null)
 
-    const handleCreateDialogOpenChange = useCallback((nextOpen: boolean) => {
-      if (!nextOpen) {
-        setCreateInitialValue(null)
-        setCreateNotices([])
-        setCreateSourceLabel(null)
+    const openCreateEditorWindow = useCallback(async (input: {
+      initialValue?: SynapseCreateContentPayload<T> | null
+      notices?: ContentCreateNotice[]
+      requestId?: string
+      sourceLabel?: string | null
+    } = {}) => {
+      try {
+        await openContentCreateWindow({
+          contentType: config.contentType,
+          initialValue: input.initialValue,
+          notices: input.notices,
+          requestId: input.requestId,
+          sourceLabel: input.sourceLabel,
+          title: `新建 ${definition.singularLabel}`,
+        })
+      } catch (error) {
+        logger.error("Failed to open content create window.", {
+          contentType: config.contentType,
+          error,
+          repositoryUuid: activeRepository?.uuid ?? null,
+        })
+        notifyError(error instanceof Error ? error.message : "打开新建窗口失败。")
       }
-      setIsCreateDialogOpen(nextOpen)
-      onCreateDialogOpenChange?.(nextOpen)
-    }, [onCreateDialogOpenChange])
+    }, [activeRepository?.uuid, config.contentType, definition.singularLabel, logger, notifyError])
 
     useEffect(() => {
       const request = pendingContentOpenRequest
@@ -100,49 +104,21 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
       }
 
       consumedRequestIdRef.current = request.requestId
-      setCreateInitialValue(request.initialValue as SynapseCreateContentPayload<T>)
-      setCreateNotices(request.notices ?? [])
-      setCreateSourceLabel(request.sourceLabel)
       // Guard against Radix DismissableLayer originalBodyPointerEvents pollution.
       // See desktop/src/app-shell/dialog-navigate.ts for context.
       ensureBodyInteractable()
-      setIsCreateDialogOpen(true)
-      onCreateDialogOpenChange?.(true)
+      void openCreateEditorWindow({
+        initialValue: request.initialValue as SynapseCreateContentPayload<T>,
+        notices: request.notices,
+        requestId: request.requestId,
+        sourceLabel: request.sourceLabel,
+      })
       onPendingContentOpenRequestConsumed?.(request.requestId)
     }, [
-      onCreateDialogOpenChange,
       onPendingContentOpenRequestConsumed,
+      openCreateEditorWindow,
       pendingContentOpenRequest,
     ])
-
-    const handleSubmit = async (payload: SynapseCreateContentPayload<T>): Promise<void> => {
-      logger.info("Content create submitted.", { contentType: config.contentType, repositoryUuid: activeRepository?.uuid ?? null })
-      const finalPayload = config.transformCreatePayload
-        ? await config.transformCreatePayload(payload)
-        : payload
-      const result = await promise(
-        () => createContent(finalPayload),
-        {
-          loading: "正在保存...",
-          success: (result) => {
-            if (result.status === "saved") {
-              return result.pendingPushCount > 0 ? "已保存，等待同步。" : "保存成功。"
-            }
-
-            return null
-          },
-          error: (error) => error instanceof Error ? error.message : "保存失败。",
-        },
-      ).catch(() => undefined)
-      if (result?.status !== "saved") {
-        throw new Error("")
-      }
-    }
-
-    const submitDisabledReason =
-      currentRepoProfileState?.status === "needs-onboarding"
-        ? "请先完成当前目录的身份设置"
-        : null
 
     return (
       <InstallStatusProvider>
@@ -151,10 +127,11 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
           pendingContentOpenRequest={pendingContentOpenRequest}
           onPendingContentOpenRequestConsumed={onPendingContentOpenRequestConsumed}
           onCreateClick={() => {
-            setCreateInitialValue(null)
-            setCreateNotices([])
-            setCreateSourceLabel(null)
-            handleCreateDialogOpenChange(true)
+            logger.info("Content create window requested from module.", {
+              contentType: config.contentType,
+              repositoryUuid: activeRepository?.uuid ?? null,
+            })
+            void openCreateEditorWindow()
           }}
           onCreateDialogOpenChange={onCreateDialogOpenChange}
           onDetailDialogOpenChange={onDetailDialogOpenChange}
@@ -167,18 +144,6 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
               overwritePrefill={overwritePrefill}
             />
           )}
-        />
-
-        <config.CreateDialog
-          open={isCreateDialogOpen}
-          onOpenChange={handleCreateDialogOpenChange}
-          onSubmit={handleSubmit}
-          submitDisabled={submitDisabledReason !== null}
-          submitDisabledReason={submitDisabledReason}
-          existingNames={existingNames}
-          initialValue={createInitialValue}
-          notices={createNotices}
-          sourceLabel={createSourceLabel}
         />
       </InstallStatusProvider>
     )

@@ -40,14 +40,16 @@ describe("content detail window architecture", () => {
     expect(source).toContain("activeFilePath === MAIN_SKILL_FILE_PATH")
   })
 
-  it("keeps the edit dialog available from dedicated detail windows", () => {
+  it("opens edit actions in a dedicated editor window", () => {
     const source = readFileSync(detailWindowPageSourcePath, "utf8")
     const layoutSource = readFileSync(join(__dirname, "../components/content-detail-window-layout.tsx"), "utf8")
 
-    expect(source).toContain("useContentWindowEditState")
-    expect(source).toContain("RuleCreateDialog")
-    expect(source).toContain("PromptCreateDialog")
-    expect(source).toContain("SkillCreateDialog")
+    expect(source).toContain("openContentEditWindow")
+    expect(source).toContain("handleEdit")
+    expect(source).toContain("window.close()")
+    expect(source).not.toContain("RuleCreateDialog")
+    expect(source).not.toContain("PromptCreateDialog")
+    expect(source).not.toContain("SkillCreateDialog")
     expect(layoutSource).toContain("canEdit={canEdit}")
     expect(layoutSource).toContain("onEdit={onEdit}")
   })

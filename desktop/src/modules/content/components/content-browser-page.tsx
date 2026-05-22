@@ -1,7 +1,7 @@
 import { type ReactNode, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import Fuse from "fuse.js"
 import { toast } from "sonner"
-import { openContentDetailWindow, purgeContent, restoreContent } from "@/app-shell/content"
+import { openContentDetailWindow, openContentEditWindow, purgeContent, restoreContent } from "@/app-shell/content"
 import type {
   ContentOpenRequest,
   EditOverwriteRulePrefill,
@@ -100,9 +100,6 @@ function ContentBrowserPage({
     setActiveCategoryIdRaw(nextId)
   }, [contentType, logger])
   const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)
-  const [overwritePrefill, setOverwritePrefill] = useState<
-    { requestId: string; prefill: EditOverwriteRulePrefill | EditOverwriteSkillPrefill } | null
-  >(null)
   const consumedOpenRequestIdRef = useRef<string | null>(null)
   const refreshedOpenRequestIdRef = useRef<string | null>(null)
   const [purgeTarget, setPurgeTarget] = useState<SynapseContentMeta | null>(null)
@@ -199,11 +196,25 @@ function ContentBrowserPage({
       })
       setActiveCategoryId(SYNAPSE_ALL_CATEGORY_ID)
       void addRecentlyViewed(contentType, item.id)
-      setSelectedItem(item)
       if (request.kind === "edit-overwrite") {
-        setOverwritePrefill({ requestId: request.requestId, prefill: request.prefill })
+        void openContentEditWindow({
+          contentType,
+          id: item.id,
+          origin: "external",
+          prefill: request.prefill,
+          requestId: request.requestId,
+          sourceLabel: request.sourceLabel,
+          title: `编辑 ${item.title}`,
+        }).catch((error) => {
+          logger.error("Failed to open content edit window from external request.", {
+            contentId: item.id,
+            contentType,
+            error,
+          })
+          toast.error(error instanceof Error ? error.message : "打开编辑窗口失败。")
+        })
       } else {
-        setOverwritePrefill(null)
+        setSelectedItem(item)
       }
     } else {
       logger.warn("Content detail external request target not found.", { contentId: request.contentId, contentType })
@@ -507,10 +518,9 @@ function ContentBrowserPage({
         onOpenChange: (open) => {
           if (!open) {
             setSelectedItem(null)
-            setOverwritePrefill(null)
           }
         },
-        overwritePrefill,
+        overwritePrefill: null,
       })}
     </>
   )
