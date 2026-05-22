@@ -1,12 +1,8 @@
-import { type ReactNode, useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import Fuse from "fuse.js"
 import { toast } from "sonner"
-import { openContentDetailWindow, purgeContent, restoreContent } from "@/app-shell/content"
-import type {
-  ContentOpenRequest,
-  EditOverwriteRulePrefill,
-  EditOverwriteSkillPrefill,
-} from "@/app-shell/content-navigation"
+import { openContentDetailWindow, openContentEditWindow, purgeContent, restoreContent } from "@/app-shell/content"
+import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { useCurrentRepoProfile, useIdentity } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useActiveRepository, useRepositoryState } from "@/app-shell/use-repository-manager"
@@ -50,33 +46,20 @@ import {
 import type { SynapseContentSortOrder } from "@/types/config"
 import type { SynapseContentMeta, SynapseContentMutationResult, SynapseContentType } from "@/types/content"
 
-type ContentBrowserDetailDialogProps = {
-  item: SynapseContentMeta | null
-  onOpenChange: (open: boolean) => void
-  open: boolean
-  overwritePrefill: { requestId: string; prefill: EditOverwriteRulePrefill | EditOverwriteSkillPrefill } | null
-}
-
 type ContentBrowserPageProps = {
   contentType: SynapseContentType
   onCreateClick?: () => void
-  onCreateDialogOpenChange?: (open: boolean) => void
-  onDetailDialogOpenChange?: (open: boolean) => void
   onInstallDialogOpenChange?: (open: boolean) => void
   pendingContentOpenRequest?: ContentOpenRequest | null
   onPendingContentOpenRequestConsumed?: (requestId: string) => void
-  renderDetailDialog: (props: ContentBrowserDetailDialogProps) => ReactNode
 }
 
 function ContentBrowserPage({
   contentType,
   onCreateClick,
-  onCreateDialogOpenChange,
-  onDetailDialogOpenChange,
   onInstallDialogOpenChange,
   pendingContentOpenRequest,
   onPendingContentOpenRequestConsumed,
-  renderDetailDialog,
 }: ContentBrowserPageProps) {
   const definition = getContentTypeDefinition(contentType)
   const logger = useMemo(() => createRendererLogger(`content.browser.${contentType}`), [contentType])
@@ -99,10 +82,6 @@ function ContentBrowserPage({
     }
     setActiveCategoryIdRaw(nextId)
   }, [contentType, logger])
-  const [selectedItem, setSelectedItem] = useState<SynapseContentMeta | null>(null)
-  const [overwritePrefill, setOverwritePrefill] = useState<
-    { requestId: string; prefill: EditOverwriteRulePrefill | EditOverwriteSkillPrefill } | null
-  >(null)
   const consumedOpenRequestIdRef = useRef<string | null>(null)
   const refreshedOpenRequestIdRef = useRef<string | null>(null)
   const [purgeTarget, setPurgeTarget] = useState<SynapseContentMeta | null>(null)
@@ -145,8 +124,6 @@ function ContentBrowserPage({
     lastLoggedSearchQueryRef.current = deferredSearchQuery
   }, [deferredSearchQuery, contentType, logger])
 
-  useEffect(() => { onCreateDialogOpenChange?.(false) }, [onCreateDialogOpenChange])
-
   useEffect(() => {
     if (!isDeletedView) setDeletedFilter("mine")
   }, [isDeletedView])
@@ -163,15 +140,6 @@ function ContentBrowserPage({
       setActiveCategoryId(SYNAPSE_ALL_CATEGORY_ID)
     }
   }, [activeCategoryId, categories, favoriteIds, recentlyViewedIds, items])
-
-  useEffect(() => {
-    if (!selectedItem) { onDetailDialogOpenChange?.(false); return }
-    const itemExists = items.some((item) => item.id === selectedItem.id)
-    if (!itemExists) { setSelectedItem(null); return }
-    const nextSelectedItem = items.find((item) => item.id === selectedItem.id) ?? null
-    if (nextSelectedItem && nextSelectedItem !== selectedItem) setSelectedItem(nextSelectedItem)
-    onDetailDialogOpenChange?.(true)
-  }, [items, onDetailDialogOpenChange, selectedItem])
 
   useEffect(() => {
     const request = pendingContentOpenRequest
@@ -199,11 +167,37 @@ function ContentBrowserPage({
       })
       setActiveCategoryId(SYNAPSE_ALL_CATEGORY_ID)
       void addRecentlyViewed(contentType, item.id)
-      setSelectedItem(item)
       if (request.kind === "edit-overwrite") {
-        setOverwritePrefill({ requestId: request.requestId, prefill: request.prefill })
+        void openContentEditWindow({
+          contentType,
+          id: item.id,
+          origin: "external",
+          prefill: request.prefill,
+          requestId: request.requestId,
+          sourceLabel: request.sourceLabel,
+          title: `编辑 ${item.title}`,
+        }).catch((error) => {
+          logger.error("Failed to open content edit window from external request.", {
+            contentId: item.id,
+            contentType,
+            error,
+          })
+          toast.error(error instanceof Error ? error.message : "打开编辑窗口失败。")
+        })
       } else {
-        setOverwritePrefill(null)
+        void openContentDetailWindow({
+          contentType,
+          id: item.id,
+          title: item.title,
+          viewMode: "rendered",
+        }).catch((error) => {
+          logger.error("Failed to open content detail window from external request.", {
+            contentId: item.id,
+            contentType,
+            error,
+          })
+          toast.error(error instanceof Error ? error.message : "打开详情窗口失败。")
+        })
       }
     } else {
       logger.warn("Content detail external request target not found.", { contentId: request.contentId, contentType })
@@ -501,17 +495,6 @@ function ContentBrowserPage({
         </section>
       </SidebarContentLayout>
 
-      {renderDetailDialog({
-        item: selectedItem,
-        open: selectedItem !== null,
-        onOpenChange: (open) => {
-          if (!open) {
-            setSelectedItem(null)
-            setOverwritePrefill(null)
-          }
-        },
-        overwritePrefill,
-      })}
     </>
   )
 }

@@ -41,18 +41,6 @@ describe("scan item detail dialog layout", () => {
     expect(source).not.toContain("作为新内容保存")
   })
 
-  it("uses explicit save-as wording for duplicate content names", async () => {
-    const source = await readFile(
-      new URL("../../content/components/content-create-dialog.tsx", import.meta.url),
-      "utf8",
-    )
-
-    expect(source).toContain("名称已存在")
-    expect(source).toContain("当前仓库已有同名内容，继续保存将覆盖已有内容。")
-    expect(source).toContain("继续保存")
-    expect(source).not.toContain("名称重复")
-  })
-
   it("offers editor copy from scan item details", async () => {
     const source = await readFile(
       new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),

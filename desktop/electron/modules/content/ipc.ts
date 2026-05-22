@@ -17,11 +17,15 @@ import { getActiveRepositoryConfig } from "../../../src/lib/config"
 import type { SynapseContentType } from "../../../src/types/content"
 import type { SynapseRepositoryConfig } from "../../../src/types/config"
 import type {
+  SynapseContentMutationOperation,
+  SynapseContentMutationResult,
   SynapseCreateContentRequest,
   SynapseUpdateContentRequest,
   SynapseDeleteContentPayload,
   SynapseRestoreContentPayload,
   SynapsePurgeContentPayload,
+  SynapseOpenContentCreateWindowPayload,
+  SynapseOpenContentEditWindowPayload,
   SynapseOpenContentWindowPayload,
 } from "../../../src/types/content"
 import type {
@@ -98,6 +102,29 @@ async function notifyInstallStatusChanged(
     domain: "install-status",
     type: "install-status.changed",
     payload: { contentId, entries },
+    timestamp: new Date().toISOString(),
+  })
+}
+
+function emitContentChanged(
+  eventBus: EventBus,
+  operation: SynapseContentMutationOperation,
+  result: SynapseContentMutationResult,
+): void {
+  if (result.status !== "saved") {
+    return
+  }
+
+  eventBus.emit({
+    domain: "content",
+    type: "content.changed",
+    payload: {
+      contentType: result.type,
+      contentId: result.id,
+      operation,
+      latestHistoryDirname: result.latestHistoryDirname,
+      modifiedAt: result.modifiedAt,
+    },
     timestamp: new Date().toISOString(),
   })
 }
@@ -306,6 +333,7 @@ export const contentIpcModule: IpcModule = {
         const repository = await resolveActiveRepository()
 
         await notifyPendingPushesUpdated(eventBus, repository)
+        emitContentChanged(eventBus, "create", result)
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
           requestContentSavedPush(ctx, eventBus, repository)
@@ -327,6 +355,7 @@ export const contentIpcModule: IpcModule = {
         const repository = await resolveActiveRepository()
 
         await notifyPendingPushesUpdated(eventBus, repository)
+        emitContentChanged(eventBus, "update", result)
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
           requestContentSavedPush(ctx, eventBus, repository)
@@ -501,6 +530,33 @@ export const contentIpcModule: IpcModule = {
       response: z.void(),
       handler: async (_ctx, payload: SynapseOpenContentWindowPayload) => {
         await contentWindowService.openDetailWindow(payload)
+      },
+    },
+    openCreateWindow: {
+      kind: "invoke",
+      channel: "synapse:content:open-create-window",
+      request: unknownRequestSchema,
+      response: z.void(),
+      handler: async (_ctx, payload: SynapseOpenContentCreateWindowPayload) => {
+        await contentWindowService.openCreateWindow(payload)
+      },
+    },
+    openEditWindow: {
+      kind: "invoke",
+      channel: "synapse:content:open-edit-window",
+      request: unknownRequestSchema,
+      response: z.void(),
+      handler: async (_ctx, payload: SynapseOpenContentEditWindowPayload) => {
+        await contentWindowService.openEditWindow(payload)
+      },
+    },
+    readEditorInitPayload: {
+      kind: "invoke",
+      channel: "synapse:content:read-editor-init-payload",
+      request: z.object({ requestId: z.string() }),
+      response: z.unknown(),
+      handler: async (_ctx, payload: { requestId: string }) => {
+        return contentWindowService.readPendingEditorPayload(payload.requestId)
       },
     },
     resolveEditorInstallTarget: {

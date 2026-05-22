@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { AlertTriangle, FileCode2, LoaderCircle } from "lucide-react"
-import { readAttachmentFile } from "@/app-shell/content"
+import { openContentEditWindow, readAttachmentFile } from "@/app-shell/content"
 import { useAppNotifications } from "@/app-shell/notifications"
-import { useContentList, useRepositoryManager } from "@/app-shell/use-repository-manager"
+import { useRepositoryManager } from "@/app-shell/use-repository-manager"
 import { createRendererLogger } from "@/app-shell/logging"
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import {
@@ -23,7 +23,6 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty"
 import { ContentDetailPanel } from "@/modules/content/components/content-detail-panel"
-import { invalidateIconImageCache } from "@/modules/content/components/content-item-icon"
 import {
   ContentDetailWindowMain,
   ContentDetailWindowShell,
@@ -33,27 +32,18 @@ import {
   SkillFileSidebar,
 } from "@/modules/content/components/content-detail-window-layout"
 import { useContentDetailState } from "@/modules/content/hooks/use-content-detail-state"
-import { buildBaseContentInitialValue } from "@/modules/content/lib/content-payload"
-import { PromptCreateDialog } from "@/modules/prompts/components/prompt-create-dialog"
 import { PromptVersionView } from "@/modules/prompts/components/prompt-version-view"
-import { RuleCreateDialog } from "@/modules/rules/components/rule-create-dialog"
 import { RuleVersionView } from "@/modules/rules/components/rule-version-view"
-import { SkillCreateDialog } from "@/modules/skills/components/skill-create-dialog"
 import { SkillVersionView } from "@/modules/skills/components/skill-version-view"
-import type { CreateSkillPayload } from "@/modules/skills/types"
-import { serializeCreateSkillFiles } from "@/modules/skills/utils"
 import type {
   SynapseContentDetail,
   SynapseContentFile,
   SynapseContentViewMode,
   SynapseContentWindowRequest,
-  SynapseCreatePromptPayload,
-  SynapseCreateRulePayload,
-  SynapseUpdateContentPayload,
 } from "@/types/content"
 
 type ContentDetailWindowPageProps = {
-  request: SynapseContentWindowRequest
+  request: Extract<SynapseContentWindowRequest, { kind: "detail" }>
 }
 
 type SkillAttachmentPreviewState = {
@@ -61,19 +51,6 @@ type SkillAttachmentPreviewState = {
   file: SynapseContentFile | null
   path: string
   status: "idle" | "loading" | "ready" | "error"
-}
-
-type ContentWindowEditState<TPayload> = {
-  existingNames: string[]
-  isEditOpen: boolean
-  isSaving: boolean
-  refreshSignal: number
-  setIsEditOpen: (open: boolean) => void
-  save: (
-    detail: SynapseContentDetail,
-    payload: TPayload,
-    serializePayload?: (payload: TPayload) => Promise<TPayload> | TPayload,
-  ) => Promise<void>
 }
 
 type ContentWindowDeleteState = {
@@ -102,93 +79,6 @@ const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
   yaml: "yaml",
   yml: "yaml",
   zsh: "shell",
-}
-
-function useContentWindowEditState<TPayload>(
-  contentType: SynapseContentWindowRequest["contentType"],
-  contentId: string,
-  logger: ReturnType<typeof createRendererLogger>,
-): ContentWindowEditState<TPayload> {
-  const manager = useRepositoryManager()
-  const { items } = useContentList(contentType)
-  const { promise } = useAppNotifications()
-  const [isEditOpen, setIsEditOpen] = useState(false)
-  const [isSaving, setIsSaving] = useState(false)
-  const [refreshSignal, setRefreshSignal] = useState(0)
-  const existingNames = useMemo(
-    () => items
-      .filter((item) => item.source !== "builtin" && item.name && item.id !== contentId)
-      .map((item) => item.name!),
-    [contentId, items],
-  )
-
-  const save = useCallback(async (
-    detail: SynapseContentDetail,
-    payload: TPayload,
-    serializePayload?: (payload: TPayload) => Promise<TPayload> | TPayload,
-  ) => {
-    setIsSaving(true)
-
-    let serializedPayload: TPayload
-    try {
-      serializedPayload = serializePayload ? await serializePayload(payload) : payload
-    } catch (error) {
-      setIsSaving(false)
-      logger.error("Content detail window edit payload serialization failed.", {
-        contentId: detail.id,
-        contentType,
-        error,
-      })
-      return
-    }
-
-    await promise(
-      async () => {
-        const updatePayload = {
-          ...serializedPayload as SynapseUpdateContentPayload<typeof contentType>,
-          id: detail.id,
-          baseHistoryDirname: detail.latestHistoryDirname,
-        }
-        const result = await manager.updateContent(contentType, updatePayload)
-
-        if (result.status === "saved") {
-          invalidateIconImageCache(contentType, detail.id)
-          setRefreshSignal((current) => current + 1)
-        }
-
-        return result
-      },
-      {
-        loading: "正在保存...",
-        success: (result) => {
-          if (result.status === "conflict") {
-            return "内容已更新，请刷新后再编辑。"
-          }
-
-          setIsEditOpen(false)
-          return result.pendingPushCount > 0 ? "已保存，等待同步。" : "保存成功。"
-        },
-        error: (error) => error instanceof Error ? error.message : "保存失败。",
-      },
-    ).catch((error) => {
-      logger.error("Content detail window edit save failed.", {
-        contentId: detail.id,
-        contentType,
-        error,
-      })
-    }).finally(() => {
-      setIsSaving(false)
-    })
-  }, [contentType, logger, manager, promise])
-
-  return {
-    existingNames,
-    isEditOpen,
-    isSaving,
-    refreshSignal,
-    save,
-    setIsEditOpen,
-  }
 }
 
 function useContentWindowDeleteState(
@@ -252,6 +142,29 @@ function useContentWindowDeleteState(
 
 function canEditContentDetail(detail: SynapseContentDetail | null): boolean {
   return Boolean(detail && !detail.isReadonly && detail.source !== "builtin")
+}
+
+async function openEditFromDetailWindow(
+  detail: SynapseContentDetail,
+  logger: ReturnType<typeof createRendererLogger>,
+  notifyWarning: (message: string) => void,
+): Promise<void> {
+  try {
+    await openContentEditWindow({
+      contentType: detail.type,
+      id: detail.id,
+      origin: "detail",
+      title: `编辑 ${detail.title}`,
+    })
+    window.close()
+  } catch (error) {
+    logger.error("Failed to open content edit window.", {
+      contentId: detail.id,
+      contentType: detail.type,
+      error,
+    })
+    notifyWarning(error instanceof Error ? error.message : "打开编辑窗口失败。")
+  }
 }
 
 function ContentWindowDeleteDialog({
@@ -417,10 +330,10 @@ function SkillAttachmentPreview({
 function RuleDetailWindowPage({
   request,
 }: {
-  request: SynapseContentWindowRequest
+  request: Extract<SynapseContentWindowRequest, { kind: "detail" }>
 }) {
   const logger = useMemo(() => createRendererLogger("rules.detail.window"), [])
-  const editState = useContentWindowEditState<SynapseCreateRulePayload>("rule", request.id, logger)
+  const { warning: notifyWarning } = useAppNotifications()
   const deleteState = useContentWindowDeleteState("rule", logger)
   const detailState = useContentDetailState<"rule">({
     initialViewMode: request.viewMode,
@@ -432,7 +345,6 @@ function RuleDetailWindowPage({
     loadDetailErrorMessage: "读取规则详情失败。",
     logCategory: "rules.detail.window",
     open: true,
-    refreshSignal: editState.refreshSignal,
   })
 
   const handleViewModeChange = useCallback((nextViewMode: "rendered" | "source") => {
@@ -456,6 +368,12 @@ function RuleDetailWindowPage({
     }
   }, [detailState.detail])
 
+  const handleEdit = useCallback(() => {
+    if (detailState.detail && canEditContentDetail(detailState.detail)) {
+      void openEditFromDetailWindow(detailState.detail, logger, notifyWarning)
+    }
+  }, [detailState.detail, logger, notifyWarning])
+
   return (
     <>
       <ContentDetailWindowShell
@@ -465,7 +383,7 @@ function RuleDetailWindowPage({
             canEdit={canEditContentDetail(detailState.detail)}
             detail={detailState.detail}
             onDelete={() => deleteState.setIsDeleteConfirmOpen(true)}
-            onEdit={() => editState.setIsEditOpen(true)}
+            onEdit={handleEdit}
           />
         )}
       >
@@ -497,22 +415,6 @@ function RuleDetailWindowPage({
         title="删除规则"
       />
 
-      {detailState.detail && canEditContentDetail(detailState.detail) ? (
-        <RuleCreateDialog
-          editingId={request.id}
-          existingNames={editState.existingNames}
-          initialValue={{
-            ...buildBaseContentInitialValue(detailState.detail),
-            name: detailState.detail.name ?? "",
-          } as SynapseCreateRulePayload}
-          mode="edit"
-          open={editState.isEditOpen}
-          onOpenChange={editState.setIsEditOpen}
-          onSubmit={(payload) => editState.save(detailState.detail!, payload)}
-          submitDisabled={editState.isSaving}
-          submitDisabledReason={editState.isSaving ? "正在保存..." : null}
-        />
-      ) : null}
     </>
   )
 }
@@ -520,10 +422,10 @@ function RuleDetailWindowPage({
 function PromptDetailWindowPage({
   request,
 }: {
-  request: SynapseContentWindowRequest
+  request: Extract<SynapseContentWindowRequest, { kind: "detail" }>
 }) {
   const logger = useMemo(() => createRendererLogger("prompts.detail.window"), [])
-  const editState = useContentWindowEditState<SynapseCreatePromptPayload>("prompt", request.id, logger)
+  const { warning: notifyWarning } = useAppNotifications()
   const deleteState = useContentWindowDeleteState("prompt", logger)
   const detailState = useContentDetailState<"prompt">({
     initialViewMode: request.viewMode,
@@ -535,7 +437,6 @@ function PromptDetailWindowPage({
     loadDetailErrorMessage: "读取提示词详情失败。",
     logCategory: "prompts.detail.window",
     open: true,
-    refreshSignal: editState.refreshSignal,
   })
 
   const handleViewModeChange = useCallback((nextViewMode: "rendered" | "source") => {
@@ -559,6 +460,12 @@ function PromptDetailWindowPage({
     }
   }, [detailState.detail])
 
+  const handleEdit = useCallback(() => {
+    if (detailState.detail && canEditContentDetail(detailState.detail)) {
+      void openEditFromDetailWindow(detailState.detail, logger, notifyWarning)
+    }
+  }, [detailState.detail, logger, notifyWarning])
+
   return (
     <>
       <ContentDetailWindowShell
@@ -568,7 +475,7 @@ function PromptDetailWindowPage({
             canEdit={canEditContentDetail(detailState.detail)}
             detail={detailState.detail}
             onDelete={() => deleteState.setIsDeleteConfirmOpen(true)}
-            onEdit={() => editState.setIsEditOpen(true)}
+            onEdit={handleEdit}
           />
         )}
       >
@@ -600,19 +507,6 @@ function PromptDetailWindowPage({
         title="删除提示词"
       />
 
-      {detailState.detail && canEditContentDetail(detailState.detail) ? (
-        <PromptCreateDialog
-          editingId={request.id}
-          existingNames={editState.existingNames}
-          initialValue={buildBaseContentInitialValue(detailState.detail) as SynapseCreatePromptPayload}
-          mode="edit"
-          open={editState.isEditOpen}
-          onOpenChange={editState.setIsEditOpen}
-          onSubmit={(payload) => editState.save(detailState.detail!, payload)}
-          submitDisabled={editState.isSaving}
-          submitDisabledReason={editState.isSaving ? "正在保存..." : null}
-        />
-      ) : null}
     </>
   )
 }
@@ -620,10 +514,10 @@ function PromptDetailWindowPage({
 function SkillDetailWindowPage({
   request,
 }: {
-  request: SynapseContentWindowRequest
+  request: Extract<SynapseContentWindowRequest, { kind: "detail" }>
 }) {
   const logger = useMemo(() => createRendererLogger("skills.detail.window"), [])
-  const editState = useContentWindowEditState<CreateSkillPayload>("skill", request.id, logger)
+  const { warning: notifyWarning } = useAppNotifications()
   const deleteState = useContentWindowDeleteState("skill", logger)
   const [activeFilePath, setActiveFilePath] = useState(MAIN_SKILL_FILE_PATH)
   const [attachmentPreviewState, setAttachmentPreviewState] = useState<SkillAttachmentPreviewState>({
@@ -641,7 +535,6 @@ function SkillDetailWindowPage({
     loadDetailErrorMessage: "读取 Skill 详情失败。",
     logCategory: "skills.detail.window",
     open: true,
-    refreshSignal: editState.refreshSignal,
   })
 
   const handleViewModeChange = useCallback((nextViewMode: "rendered" | "source") => {
@@ -664,6 +557,12 @@ function SkillDetailWindowPage({
       document.title = detailState.detail.title
     }
   }, [detailState.detail])
+
+  const handleEdit = useCallback(() => {
+    if (detailState.detail && canEditContentDetail(detailState.detail)) {
+      void openEditFromDetailWindow(detailState.detail, logger, notifyWarning)
+    }
+  }, [detailState.detail, logger, notifyWarning])
 
   const skillAttachments = detailState.displayedVersion?.attachments ?? detailState.detail?.attachments ?? []
   const selectedAttachment = useMemo(() => {
@@ -768,7 +667,7 @@ function SkillDetailWindowPage({
             canEdit={canEditContentDetail(detailState.detail)}
             detail={detailState.detail}
             onDelete={() => deleteState.setIsDeleteConfirmOpen(true)}
-            onEdit={() => editState.setIsEditOpen(true)}
+            onEdit={handleEdit}
           />
         )}
       >
@@ -823,40 +722,6 @@ function SkillDetailWindowPage({
         title="删除 Skill"
       />
 
-      {detailState.detail && canEditContentDetail(detailState.detail) ? (
-        <SkillCreateDialog
-          editingId={request.id}
-          existingNames={editState.existingNames}
-          initialValue={{
-            title: detailState.detail.title,
-            name: detailState.detail.name ?? "",
-            usage: detailState.detail.usage ?? "",
-            description: detailState.detail.description,
-            category: detailState.detail.category,
-            icon: detailState.detail.icon,
-            iconBg: detailState.detail.iconBg,
-            iconType: detailState.detail.iconType || "icon",
-            iconImage: detailState.detail.iconImage || "",
-            content: detailState.detail.content,
-            files: detailState.detail.attachments.map((attachment) => ({
-              originalName: attachment.originalName,
-              sha256: attachment.sha256,
-              size: attachment.size,
-            })),
-          }}
-          mode="edit"
-          open={editState.isEditOpen}
-          onOpenChange={editState.setIsEditOpen}
-          onSubmit={(payload) => {
-            void editState.save(detailState.detail!, payload, async (nextPayload) => ({
-              ...nextPayload,
-              files: await serializeCreateSkillFiles(nextPayload.files),
-            }) as CreateSkillPayload)
-          }}
-          submitDisabled={editState.isSaving}
-          submitDisabledReason={editState.isSaving ? "正在保存..." : null}
-        />
-      ) : null}
     </>
   )
 }

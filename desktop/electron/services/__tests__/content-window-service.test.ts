@@ -90,4 +90,80 @@ describe("createContentWindowService", () => {
     expect(loadWindow).toHaveBeenCalledTimes(1)
     expect(window.focus).toHaveBeenCalledTimes(1)
   })
+
+  it("uses one create window per content type", async () => {
+    const webContents = {
+      on: vi.fn(),
+      loadURL: vi.fn(),
+    }
+    const window = {
+      webContents,
+      focus: vi.fn(),
+      isDestroyed: vi.fn(() => false),
+      isMinimized: vi.fn(() => false),
+      once: vi.fn(),
+      on: vi.fn(),
+      show: vi.fn(),
+    }
+    const createWindow = vi.fn(() => window as never)
+    const loadWindow = vi.fn(async () => undefined)
+    const service = createContentWindowService({
+      createWindow,
+      createHealthService: vi.fn(() => ({ attach: vi.fn(), detach: vi.fn() })),
+      getAppPath: () => "/app",
+      getIconPath: () => null,
+      getPreloadPath: () => "/preload.js",
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      loadWindow,
+    })
+
+    await service.openCreateWindow({ contentType: "rule", title: "新建 Rule" })
+    await service.openCreateWindow({ contentType: "rule", title: "新建 Rule" })
+
+    expect(createWindow).toHaveBeenCalledTimes(1)
+    expect(window.focus).toHaveBeenCalledTimes(1)
+  })
+
+  it("uses one edit window per content item", async () => {
+    const webContents = {
+      on: vi.fn(),
+      loadURL: vi.fn(),
+    }
+    const window = {
+      webContents,
+      focus: vi.fn(),
+      isDestroyed: vi.fn(() => false),
+      isMinimized: vi.fn(() => false),
+      once: vi.fn(),
+      on: vi.fn(),
+      show: vi.fn(),
+    }
+    const createWindow = vi.fn(() => window as never)
+    const loadWindow = vi.fn(async () => undefined)
+    const service = createContentWindowService({
+      createWindow,
+      createHealthService: vi.fn(() => ({ attach: vi.fn(), detach: vi.fn() })),
+      getAppPath: () => "/app",
+      getIconPath: () => null,
+      getPreloadPath: () => "/preload.js",
+      logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+      loadWindow,
+    })
+
+    await service.openEditWindow({
+      contentType: "skill",
+      id: "skill-1",
+      origin: "detail",
+      title: "编辑 Skill",
+    })
+    await service.openEditWindow({
+      contentType: "skill",
+      id: "skill-1",
+      origin: "detail",
+      title: "编辑 Skill",
+    })
+
+    expect(createWindow).toHaveBeenCalledTimes(1)
+    expect(window.focus).toHaveBeenCalledTimes(1)
+  })
 })

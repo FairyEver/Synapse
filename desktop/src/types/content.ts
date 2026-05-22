@@ -259,12 +259,70 @@ export type SynapseContentDownloadResult = {
   filePath: string | null
 }
 
-export type SynapseContentWindowRequest = {
+export type SynapseContentWindowNotice = {
+  id: string
+  message: string
+}
+
+export type SynapseContentEditRulePrefill = {
+  contentType: "rule"
+  content: string
+}
+
+export type SynapseContentEditSkillPrefill = {
+  contentType: "skill"
+  content: string
+  files: SynapseCreateSkillFilePayload[]
+}
+
+export type SynapseContentEditPrefill =
+  | SynapseContentEditRulePrefill
+  | SynapseContentEditSkillPrefill
+
+export type SynapseOpenContentDetailWindowPayload = {
   contentType: SynapseContentType
   id: string
+  title: string
   viewMode: SynapseContentViewMode
 }
 
-export type SynapseOpenContentWindowPayload = SynapseContentWindowRequest & {
+export type SynapseOpenContentCreateWindowPayload = {
+  contentType: SynapseContentType
+  initialValue?: SynapseCreateContentPayload | null
+  notices?: SynapseContentWindowNotice[]
+  requestId?: string
+  sourceLabel?: string | null
   title: string
 }
+
+export type SynapseOpenContentEditWindowPayload = {
+  contentType: SynapseContentType
+  id: string
+  origin: "detail" | "external"
+  prefill?: SynapseContentEditPrefill | null
+  requestId?: string
+  sourceLabel?: string | null
+  title: string
+}
+
+export type SynapseOpenContentWindowPayload = SynapseOpenContentDetailWindowPayload
+
+export type SynapseContentWindowRequest =
+  | {
+      kind: "detail"
+      contentType: SynapseContentType
+      id: string
+      viewMode: SynapseContentViewMode
+    }
+  | {
+      kind: "create"
+      contentType: SynapseContentType
+      requestId?: string
+    }
+  | {
+      kind: "edit"
+      contentType: SynapseContentType
+      id: string
+      origin: "detail" | "external"
+      requestId?: string
+    }
