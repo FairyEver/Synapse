@@ -14,8 +14,10 @@ import { InvitationsPage } from "@/pages/invitations-page"
 import { LoginPage } from "@/pages/login-page"
 import { SignupPage } from "@/pages/signup-page"
 import { SystemPage } from "@/pages/system-page"
+import { TeamInvitePage } from "@/pages/team-invite-page"
 import { LogsPage } from "@/pages/logs-page"
 import { TeamsPage } from "@/pages/teams-page"
+import { UserTeamPage } from "@/pages/user-team-page"
 import { UsersPage } from "@/pages/users-page"
 import { adminApi, type AdminSession } from "@/lib/api"
 import { useIdleTimeout } from "@/hooks/use-idle-timeout"
@@ -44,12 +46,27 @@ function isSignupRoute(): boolean {
   return window.location.pathname.replace(/\/+$/, "") === "/dashboard/signup"
 }
 
+function isTeamInviteRoute(): boolean {
+  return window.location.pathname.replace(/\/+$/, "") === "/dashboard/team-invite"
+}
+
 function isLoginRoute(): boolean {
   return window.location.pathname.replace(/\/+$/, "") === "/dashboard/login"
 }
 
+function dashboardUrlFromCurrentHash(): string {
+  return `/dashboard/${window.location.hash}`
+}
+
+function normalizeStaleLoginHashRoute(): void {
+  if (isLoginRoute() && window.location.hash) {
+    window.history.replaceState({}, "", dashboardUrlFromCurrentHash())
+  }
+}
+
 function inviteTokenFromSearch(): string {
-  return new URLSearchParams(window.location.search).get("invite")?.trim() ?? ""
+  const query = new URLSearchParams(window.location.search)
+  return (query.get("invite") ?? query.get("token"))?.trim() ?? ""
 }
 
 function useHashRoute(): Route {
@@ -82,9 +99,16 @@ function titleForRoute(route: Route): string {
   }
 }
 
+function accountNameFromEmail(email: string): string {
+  const [name] = email.split("@")
+  return name?.trim() || email
+}
+
 export default function App() {
+  normalizeStaleLoginHashRoute()
   const route = useHashRoute()
   const signupRoute = isSignupRoute()
+  const teamInviteRoute = isTeamInviteRoute()
   const loginRoute = isLoginRoute()
   const [session, setSession] = React.useState<AdminSession | null | undefined>(undefined)
 
@@ -111,6 +135,13 @@ export default function App() {
       .finally(() => setSession(null))
   }
 
+  function handleLoggedIn(nextSession: AdminSession) {
+    if (isLoginRoute()) {
+      window.history.replaceState({}, "", dashboardUrlFromCurrentHash())
+    }
+    setSession(nextSession)
+  }
+
   const handleIdleTimeout = React.useCallback(() => {
     adminApi.logout().catch(() => undefined).finally(() => setSession(null))
   }, [])
@@ -122,7 +153,7 @@ export default function App() {
   }
 
   if (loginRoute && session === undefined) {
-    return <LoginPage onLoggedIn={setSession} />
+    return <LoginPage onLoggedIn={handleLoggedIn} />
   }
 
   if (session === undefined) {
@@ -134,16 +165,26 @@ export default function App() {
   }
 
   if (session === null) {
-    return <LoginPage onLoggedIn={setSession} />
+    return <LoginPage onLoggedIn={handleLoggedIn} />
   }
+
+  if (teamInviteRoute) {
+    if (session.role !== "user") {
+      return <LoginPage onLoggedIn={handleLoggedIn} />
+    }
+    return <TeamInvitePage token={inviteTokenFromSearch()} />
+  }
+
+  const activeRoute = session.role === "user" ? { name: "teams" as const } : route
 
   return (
     <TooltipProvider>
       <SidebarProvider>
         <AppSidebar
-          activeRoute={route.name}
+          activeRoute={activeRoute.name}
+          role={session.role}
           user={{
-            name: "Admin",
+            name: accountNameFromEmail(session.email),
             email: session.email,
             avatar: "",
           }}
@@ -154,17 +195,18 @@ export default function App() {
             <div className="flex items-center gap-2 px-4">
               <SidebarTrigger className="-ml-1" />
               <Separator orientation="vertical" className="mr-2 data-vertical:h-4 data-vertical:self-center" />
-              <h1 className="text-sm font-medium">{titleForRoute(route)}</h1>
+              <h1 className="text-sm font-medium">{titleForRoute(activeRoute)}</h1>
             </div>
           </header>
           <main className="flex flex-1 flex-col gap-2 p-4 pt-0">
-            {route.name === "audit-logs" ? <AuditLogsPage /> : null}
-            {route.name === "system" ? <SystemPage /> : null}
-            {route.name === "backup" ? <BackupPage /> : null}
-            {route.name === "logs" ? <LogsPage /> : null}
-            {route.name === "users" ? <UsersPage /> : null}
-            {route.name === "teams" ? <TeamsPage /> : null}
-            {route.name === "invitations" ? <InvitationsPage /> : null}
+            {session.role === "admin" && activeRoute.name === "audit-logs" ? <AuditLogsPage /> : null}
+            {session.role === "admin" && activeRoute.name === "system" ? <SystemPage /> : null}
+            {session.role === "admin" && activeRoute.name === "backup" ? <BackupPage /> : null}
+            {session.role === "admin" && activeRoute.name === "logs" ? <LogsPage /> : null}
+            {session.role === "admin" && activeRoute.name === "users" ? <UsersPage /> : null}
+            {session.role === "admin" && activeRoute.name === "teams" ? <TeamsPage /> : null}
+            {session.role === "user" && activeRoute.name === "teams" ? <UserTeamPage /> : null}
+            {session.role === "admin" && activeRoute.name === "invitations" ? <InvitationsPage /> : null}
           </main>
         </SidebarInset>
       </SidebarProvider>

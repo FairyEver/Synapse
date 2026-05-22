@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react"
-import { FilePlus2, FolderOpen, Paperclip, Trash2, X } from "lucide-react"
+import { FilePlus2, FileText, FolderOpen, Paperclip, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Field, FieldContent, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -79,10 +79,13 @@ type BodyFieldProps = {
 }
 
 type SkillAttachmentManagerProps = {
+  activePath: string | null
   error?: string
   files: SkillCreateFilePayloadDraft[]
   isSubmitting: boolean
   onFilesChange: (files: SkillCreateFilePayloadDraft[]) => void
+  onSelectFile: (path: string) => void
+  onSelectMain: () => void
 }
 
 function toCreateSkillFiles(files: Iterable<File>): SkillCreateFilePayloadDraft[] {
@@ -359,10 +362,13 @@ function ContentEditorBodyField({
 }
 
 function SkillAttachmentManager({
+  activePath,
   error,
   files,
   isSubmitting,
   onFilesChange,
+  onSelectFile,
+  onSelectMain,
 }: SkillAttachmentManagerProps) {
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   const folderInputRef = useRef<HTMLInputElement | null>(null)
@@ -475,6 +481,17 @@ function SkillAttachmentManager({
           </span>
         </div>
         <ScrollArea className="max-h-[calc(100vh-23rem)]">
+          <div className="border-b px-2 py-2">
+            <Button
+              type="button"
+              variant={activePath === null ? "secondary" : "ghost"}
+              className="w-full justify-start"
+              onClick={onSelectMain}
+            >
+              <FileText />
+              主说明
+            </Button>
+          </div>
           {files.length === 0 ? (
             <p className="px-3 py-4 text-sm text-muted-foreground">还没有附件。</p>
           ) : files.map((file) => (
@@ -482,12 +499,19 @@ function SkillAttachmentManager({
               key={file.originalName}
               className="flex items-start justify-between gap-2 border-b px-3 py-3 last:border-b-0"
             >
-              <div className="min-w-0">
-                <p className="break-all text-sm font-medium">{file.originalName}</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  {formatSkillAttachmentSize(file.size)}
-                </p>
-              </div>
+              <Button
+                type="button"
+                variant={activePath === file.originalName ? "secondary" : "ghost"}
+                className="h-auto min-w-0 flex-1 justify-start whitespace-normal px-2 py-1.5 text-left"
+                onClick={() => onSelectFile(file.originalName)}
+              >
+                <span className="min-w-0">
+                  <span className="block break-all text-sm font-medium">{file.originalName}</span>
+                  <span className="mt-1 block text-xs text-muted-foreground">
+                    {formatSkillAttachmentSize(file.size)}
+                  </span>
+                </span>
+              </Button>
               <Button
                 type="button"
                 variant="ghost"
@@ -508,16 +532,20 @@ function SkillAttachmentManager({
 
 function ContentPreviewPanel({
   content,
+  framed = true,
   title = "预览",
 }: {
   content: string
+  framed?: boolean
   title?: string
 }) {
+  const previewClassName = framed ? "min-h-0 flex-1 overflow-hidden rounded-lg border" : "min-h-0 flex-1 overflow-hidden"
+
   return (
-    <div className="flex min-h-0 flex-col gap-3">
+    <div className="flex h-full min-h-0 flex-col gap-3">
       <Label>{title}</Label>
-      <div className="min-h-0 rounded-lg border">
-        <ScrollArea className="max-h-[calc(100vh-10rem)]">
+      <div className={previewClassName}>
+        <ScrollArea className="h-full min-h-0">
           <div className="p-3">
             <MarkdownViewer content={content} mode="rendered" showTabs={false} surface="plain" />
           </div>

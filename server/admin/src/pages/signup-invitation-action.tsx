@@ -21,6 +21,7 @@ function SignupInvitationAction({ onCreated }: SignupInvitationActionProps) {
   const [copyError, setCopyError] = React.useState<string | null>(null)
   const [dialogOpen, setDialogOpen] = React.useState(false)
   const [isCreating, setIsCreating] = React.useState(false)
+  const shouldReloadOnClose = React.useRef(false)
 
   async function copyInviteUrl(value: string) {
     if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable")
@@ -44,8 +45,8 @@ function SignupInvitationAction({ onCreated }: SignupInvitationActionProps) {
     try {
       const invitation = await adminApi.createSignupInvitation()
       setInviteUrl(invitation.inviteUrl)
+      shouldReloadOnClose.current = true
       setDialogOpen(true)
-      onCreated()
       try {
         await copyInviteUrl(invitation.inviteUrl)
       } catch {
@@ -58,13 +59,21 @@ function SignupInvitationAction({ onCreated }: SignupInvitationActionProps) {
     }
   }
 
+  function handleDialogOpenChange(open: boolean) {
+    setDialogOpen(open)
+    if (!open && shouldReloadOnClose.current) {
+      shouldReloadOnClose.current = false
+      onCreated()
+    }
+  }
+
   return (
     <>
       <Button disabled={isCreating} onClick={() => void createInvitation()}>
         {isCreating ? "创建中" : "创建用户邀请"}
       </Button>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={handleDialogOpenChange}>
         <DialogContent aria-describedby={undefined}>
           <DialogHeader>
             <DialogTitle>用户邀请链接</DialogTitle>

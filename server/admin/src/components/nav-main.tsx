@@ -7,8 +7,10 @@ import {
 } from "@/components/ui/sidebar"
 
 export function NavMain({
+  label,
   items,
 }: {
+  label: string
   items: {
     title: string
     url: string
@@ -18,7 +20,7 @@ export function NavMain({
 }) {
   return (
     <SidebarGroup>
-      <SidebarGroupLabel>管理</SidebarGroupLabel>
+      <SidebarGroupLabel>{label}</SidebarGroupLabel>
       <SidebarMenu>
         {items.map((item) => (
           <SidebarMenuItem key={item.title}>

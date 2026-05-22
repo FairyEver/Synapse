@@ -9,7 +9,11 @@ vi.mock("@/lib/api", () => ({
     getSession: vi.fn(),
     logout: vi.fn(),
     getSystemOverview: vi.fn(),
+    listInvitations: vi.fn(),
     listUsers: vi.fn(),
+  },
+  userDashboardApi: {
+    getMyTeam: vi.fn(),
   },
   userAuthApi: {
     register: vi.fn(),
@@ -40,7 +44,7 @@ describe("App", () => {
   })
 
   it("centers the header separator with the trigger and title", async () => {
-    vi.mocked(adminApi.getSession).mockResolvedValue({ email: "admin@d2.com" })
+    vi.mocked(adminApi.getSession).mockResolvedValue({ email: "admin@d2.com", role: "admin" })
     vi.mocked(adminApi.getSystemOverview).mockResolvedValue({
       serverTime: "2026-05-21T00:00:00.000Z",
       counts: { auditLogs: 0, users: 0, teams: 0, invitations: 0 },
@@ -62,7 +66,7 @@ describe("App", () => {
 
   it("renders the users route", async () => {
     window.location.hash = "#/users"
-    vi.mocked(adminApi.getSession).mockResolvedValue({ email: "admin@d2.com" })
+    vi.mocked(adminApi.getSession).mockResolvedValue({ email: "admin@d2.com", role: "admin" })
     vi.mocked(adminApi.listUsers).mockResolvedValue({
       data: [],
       total: 0,
@@ -76,6 +80,40 @@ describe("App", () => {
     await waitFor(() => {
       expect(result.container.querySelector("h1")?.textContent).toBe("用户")
     })
+  })
+
+  it("uses the current account email for the sidebar user display", async () => {
+    vi.mocked(adminApi.getSession).mockResolvedValue({ email: "17114674882@qq.com", role: "admin" })
+    vi.mocked(adminApi.getSystemOverview).mockResolvedValue({
+      serverTime: "2026-05-21T00:00:00.000Z",
+      counts: { auditLogs: 0, users: 0, teams: 0, invitations: 0 },
+    })
+
+    const result = await render(<App />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("17114674882")
+    })
+    expect(result.container.textContent).not.toContain("Admin")
+  })
+
+  it("shows only the team menu for normal users", async () => {
+    vi.mocked(adminApi.getSession).mockResolvedValue({ email: "user@example.com", role: "user" })
+    const { userDashboardApi } = await import("@/lib/api")
+    vi.mocked(userDashboardApi.getMyTeam).mockResolvedValue(null)
+
+    const result = await render(<App />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.querySelector("h1")?.textContent).toBe("团队")
+    })
+    expect(result.container.textContent).toContain("团队")
+    expect(result.container.textContent).not.toContain("用户")
+    expect(result.container.textContent).not.toContain("邀请")
+    expect(result.container.textContent).not.toContain("审计日志")
+    expect(result.container.textContent).not.toContain("系统日志")
   })
 
   it("renders signup without loading an admin session", async () => {
@@ -102,5 +140,25 @@ describe("App", () => {
     })
     expect(result.container.querySelector<HTMLInputElement>("#admin-email")).not.toBeNull()
     expect(adminApi.getSession).not.toHaveBeenCalled()
+  })
+
+  it("normalizes stale login URLs with app hashes before restoring the session", async () => {
+    window.history.pushState({}, "", "/dashboard/login#/invitations")
+    vi.mocked(adminApi.getSession).mockResolvedValue({ email: "admin@d2.com", role: "admin" })
+    vi.mocked(adminApi.listInvitations).mockResolvedValue({
+      data: [],
+      total: 0,
+      page: 1,
+      pageSize: 20,
+    })
+
+    const result = await render(<App />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.querySelector("h1")?.textContent).toBe("邀请")
+    })
+    expect(window.location.pathname).toBe("/dashboard/")
+    expect(window.location.hash).toBe("#/invitations")
   })
 })

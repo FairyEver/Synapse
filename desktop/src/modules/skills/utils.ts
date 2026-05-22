@@ -221,6 +221,16 @@ async function serializeCreateSkillFiles(
 ): Promise<SynapseCreateSkillFilePayload[]> {
   const results: SynapseCreateSkillFilePayload[] = []
   for (const file of files) {
+    if (file.textDirty && file.textContent !== undefined) {
+      const bytes = new TextEncoder().encode(file.textContent)
+      results.push({
+        originalName: file.originalName,
+        size: bytes.byteLength,
+        bytes,
+      })
+      continue
+    }
+
     results.push({
       originalName: file.originalName,
       sha256: file.sha256,

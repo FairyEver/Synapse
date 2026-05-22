@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { LoaderCircle } from "lucide-react"
+import { AlertTriangle, LoaderCircle } from "lucide-react"
 import {
   createContent,
   openContentDetailWindow,
+  readAttachmentFile,
   readContentEditorInitPayload,
   readDetail,
   updateContent,
@@ -52,6 +53,7 @@ import {
 } from "@/modules/skills/utils"
 import type {
   SynapseContentDetail,
+  SynapseContentFile,
   SynapseContentType,
   SynapseContentWindowRequest,
   SynapseCreatePromptPayload,
@@ -68,6 +70,16 @@ type EditorInitPayload =
   | SynapseOpenContentCreateWindowPayload
   | SynapseOpenContentEditWindowPayload
   | null
+
+type SkillEditorDocument =
+  | { kind: "main" }
+  | { kind: "attachment"; originalName: string }
+
+type SkillAttachmentLoadState = {
+  errorMessage?: string
+  path: string
+  status: "idle" | "loading" | "ready" | "binary" | "error"
+}
 
 const CONTENT_LABELS: Record<SynapseContentType, string> = {
   prompt: "提示词",
@@ -100,6 +112,65 @@ const SKILL_FORM_CONFIG: ContentCreateFormConfig<CreateSkillPayload> = {
   normalize: normalizeCreateSkillPayload,
   validate: validateCreateSkillPayload,
   errorFallbackMessage: "保存 Skill 失败。",
+}
+
+const TEXT_ATTACHMENT_EXTENSIONS = new Set([
+  "bash",
+  "cjs",
+  "conf",
+  "css",
+  "csv",
+  "env",
+  "htm",
+  "html",
+  "js",
+  "json",
+  "jsx",
+  "log",
+  "md",
+  "mdx",
+  "mjs",
+  "py",
+  "sh",
+  "toml",
+  "ts",
+  "tsx",
+  "txt",
+  "xml",
+  "yaml",
+  "yml",
+  "zsh",
+])
+
+function getAttachmentExtension(path: string): string {
+  const fileName = path.split("/").at(-1) ?? path
+  const dotIndex = fileName.lastIndexOf(".")
+
+  return dotIndex === -1 ? "" : fileName.slice(dotIndex + 1).toLowerCase()
+}
+
+function isLikelyTextAttachment(path: string): boolean {
+  return TEXT_ATTACHMENT_EXTENSIONS.has(getAttachmentExtension(path))
+}
+
+function updateSkillAttachmentText(
+  files: CreateSkillPayload["files"],
+  originalName: string,
+  textContent: string,
+  textDirty: boolean,
+): CreateSkillPayload["files"] {
+  const size = new TextEncoder().encode(textContent).byteLength
+
+  return files.map((file) => (
+    file.originalName === originalName
+      ? {
+          ...file,
+          size,
+          textContent,
+          textDirty,
+        }
+      : file
+  ))
 }
 
 function useEditorInitPayload(requestId?: string): EditorInitPayload {
@@ -199,12 +270,40 @@ function EditorLoadingState({ title }: { title: string }) {
         </Empty>
       )}
       auxiliary={null}
-      footer={null}
+      actions={null}
     />
   )
 }
 
-function EditorFooter({
+function SkillAttachmentUnavailableState({
+  message,
+  title,
+}: {
+  message?: string
+  title: string
+}) {
+  return (
+    <Empty className="h-full rounded-none border-0 bg-transparent">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <AlertTriangle />
+        </EmptyMedia>
+        <EmptyTitle>{title}</EmptyTitle>
+        {message ? <p className="text-sm text-muted-foreground">{message}</p> : null}
+      </EmptyHeader>
+    </Empty>
+  )
+}
+
+function getLoadedAttachmentContent(file: SynapseContentFile | null): string | null {
+  if (!file || file.kind !== "text") {
+    return null
+  }
+
+  return file.content
+}
+
+function EditorActions({
   isSubmitting,
   onCancel,
   submitError,
@@ -215,7 +314,7 @@ function EditorFooter({
 }) {
   return (
     <div className="flex items-center gap-3">
-      <FieldError className="mr-auto">{submitError}</FieldError>
+      <FieldError className="max-w-sm truncate">{submitError}</FieldError>
       <Button type="button" variant="outline" disabled={isSubmitting} onClick={onCancel}>
         取消
       </Button>
@@ -357,9 +456,9 @@ function RuleEditorWindow({ request }: ContentEditorWindowPageProps) {
               onChange={(value) => formState.updateField("content", value)}
             />
           )}
-          auxiliary={<ContentPreviewPanel content={formState.form.content} />}
-          footer={(
-            <EditorFooter
+          auxiliary={<ContentPreviewPanel content={formState.form.content} framed={false} />}
+          actions={(
+            <EditorActions
               isSubmitting={formState.isSubmitting}
               submitError={formState.submitError}
               onCancel={() => formState.handleDialogOpenChange(false)}
@@ -481,9 +580,9 @@ function PromptEditorWindow({ request }: ContentEditorWindowPageProps) {
               onChange={(value) => formState.updateField("content", value)}
             />
           )}
-          auxiliary={<ContentPreviewPanel content={formState.form.content} />}
-          footer={(
-            <EditorFooter
+          auxiliary={<ContentPreviewPanel content={formState.form.content} framed={false} />}
+          actions={(
+            <EditorActions
               isSubmitting={formState.isSubmitting}
               submitError={formState.submitError}
               onCancel={() => formState.handleDialogOpenChange(false)}
@@ -505,6 +604,12 @@ function SkillEditorWindow({ request }: ContentEditorWindowPageProps) {
   const initPayload = useEditorInitPayload(request.requestId)
   const [detail, setDetail] = useState<SynapseContentDetail<"skill"> | null>(null)
   const [initialValue, setInitialValue] = useState<CreateSkillPayload | null>(null)
+  const [activeSkillDocument, setActiveSkillDocument] =
+    useState<SkillEditorDocument>({ kind: "main" })
+  const [attachmentLoadState, setAttachmentLoadState] = useState<SkillAttachmentLoadState>({
+    path: "",
+    status: "idle",
+  })
   const mode = request.kind
 
   useEffect(() => {
@@ -576,16 +681,186 @@ function SkillEditorWindow({ request }: ContentEditorWindowPageProps) {
     updateField: formState.updateField,
   })
   const preparedForm = iconImage.prepareFormForSubmit(formState.form) as CreateSkillPayload
+  const activeAttachment = useMemo(() => {
+    if (activeSkillDocument.kind !== "attachment") {
+      return null
+    }
+
+    return formState.form.files.find(
+      (file) => file.originalName === activeSkillDocument.originalName,
+    ) ?? null
+  }, [activeSkillDocument, formState.form.files])
+  const activeDocumentTitle = activeSkillDocument.kind === "attachment"
+    ? activeSkillDocument.originalName
+    : "主说明"
+
+  useEffect(() => {
+    if (activeSkillDocument.kind === "attachment" && !activeAttachment) {
+      setActiveSkillDocument({ kind: "main" })
+    }
+  }, [activeAttachment, activeSkillDocument])
+
+  useEffect(() => {
+    if (activeSkillDocument.kind !== "attachment" || !activeAttachment) {
+      setAttachmentLoadState({ path: "", status: "idle" })
+      return
+    }
+
+    const originalName = activeAttachment.originalName
+
+    if (activeAttachment.textContent !== undefined) {
+      setAttachmentLoadState({ path: originalName, status: "ready" })
+      return
+    }
+
+    let canceled = false
+    setAttachmentLoadState({ path: originalName, status: "loading" })
+
+    const applyTextContent = (content: string) => {
+      if (canceled) return
+      formState.setForm((current) => ({
+        ...current,
+        files: updateSkillAttachmentText(current.files, originalName, content, false),
+      }))
+      setAttachmentLoadState({ path: originalName, status: "ready" })
+    }
+
+    const applyNonEditableState = () => {
+      if (!canceled) {
+        setAttachmentLoadState({ path: originalName, status: "binary" })
+      }
+    }
+
+    if (activeAttachment.file) {
+      if (!isLikelyTextAttachment(originalName)) {
+        applyNonEditableState()
+        return () => {
+          canceled = true
+        }
+      }
+
+      void activeAttachment.file.text()
+        .then(applyTextContent)
+        .catch((error) => {
+          logger.warn("Failed to read selected Skill attachment file.", {
+            error,
+            originalName,
+          })
+          if (!canceled) {
+            setAttachmentLoadState({
+              errorMessage: error instanceof Error ? error.message : undefined,
+              path: originalName,
+              status: "error",
+            })
+          }
+        })
+
+      return () => {
+        canceled = true
+      }
+    }
+
+    if (activeAttachment.bytes) {
+      if (!isLikelyTextAttachment(originalName)) {
+        applyNonEditableState()
+        return () => {
+          canceled = true
+        }
+      }
+
+      applyTextContent(new TextDecoder().decode(activeAttachment.bytes))
+      return () => {
+        canceled = true
+      }
+    }
+
+    if (request.kind === "edit" && detail && activeAttachment.sha256) {
+      void readAttachmentFile({
+        contentType: "skill",
+        historyDirname: detail.latestHistoryDirname,
+        id: detail.id,
+        originalName,
+      })
+        .then((file) => {
+          const content = getLoadedAttachmentContent(file)
+          if (content === null) {
+            applyNonEditableState()
+            return
+          }
+
+          applyTextContent(content)
+        })
+        .catch((error) => {
+          logger.warn("Failed to read selected Skill attachment.", {
+            contentId: detail.id,
+            error,
+            originalName,
+          })
+          if (!canceled) {
+            setAttachmentLoadState({
+              errorMessage: error instanceof Error ? error.message : undefined,
+              path: originalName,
+              status: "error",
+            })
+          }
+        })
+
+      return () => {
+        canceled = true
+      }
+    }
+
+    applyNonEditableState()
+    return () => {
+      canceled = true
+    }
+  }, [activeAttachment, activeSkillDocument, detail, formState.setForm, logger, request.kind])
 
   if (request.kind === "edit" && !initialValue) {
     return <EditorLoadingState title={buildWindowTitle("skill", "edit")} />
   }
 
+  const skillEditorBody = activeSkillDocument.kind === "main" ? (
+    <ContentEditorBodyField
+      label="主说明"
+      value={formState.form.content}
+      error={formState.errors.content}
+      onChange={(value) => formState.updateField("content", value)}
+    />
+  ) : activeAttachment?.textContent !== undefined ? (
+    <ContentEditorBodyField
+      label={activeAttachment.originalName}
+      value={activeAttachment.textContent}
+      onChange={(value) => {
+        formState.updateField(
+          "files",
+          updateSkillAttachmentText(formState.form.files, activeAttachment.originalName, value, true),
+        )
+      }}
+    />
+  ) : attachmentLoadState.status === "loading" ? (
+    <Empty className="h-full rounded-none border-0 bg-transparent">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <LoaderCircle className="animate-spin" />
+        </EmptyMedia>
+        <EmptyTitle>正在读取附件</EmptyTitle>
+      </EmptyHeader>
+    </Empty>
+  ) : attachmentLoadState.status === "error" ? (
+    <SkillAttachmentUnavailableState
+      title="无法读取附件"
+      message={attachmentLoadState.errorMessage}
+    />
+  ) : (
+    <SkillAttachmentUnavailableState title="不能编辑此文件" />
+  )
+
   return (
     <>
       <form className="contents" onSubmit={(event) => formState.handleSubmit(event, preparedForm)}>
         <ContentEditorWindowLayout
-          title={buildWindowTitle("skill", mode)}
+          title={`${buildWindowTitle("skill", mode)} · ${activeDocumentTitle}`}
           meta={(
             <SkillEditorMetaFields
               errors={formState.errors}
@@ -602,24 +877,20 @@ function SkillEditorWindow({ request }: ContentEditorWindowPageProps) {
               onIconImageRemove={iconImage.handleIconImageRemove}
             />
           )}
-          body={(
-            <ContentEditorBodyField
-              label="主说明"
-              value={formState.form.content}
-              error={formState.errors.content}
-              onChange={(value) => formState.updateField("content", value)}
-            />
-          )}
+          body={skillEditorBody}
           auxiliary={(
             <SkillAttachmentManager
+              activePath={activeSkillDocument.kind === "attachment" ? activeSkillDocument.originalName : null}
               files={formState.form.files}
               error={formState.errors.files}
               isSubmitting={formState.isSubmitting}
               onFilesChange={(files) => formState.updateField("files", files)}
+              onSelectFile={(originalName) => setActiveSkillDocument({ kind: "attachment", originalName })}
+              onSelectMain={() => setActiveSkillDocument({ kind: "main" })}
             />
           )}
-          footer={(
-            <EditorFooter
+          actions={(
+            <EditorActions
               isSubmitting={formState.isSubmitting}
               submitError={formState.submitError}
               onCancel={() => formState.handleDialogOpenChange(false)}

@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   mergeCreateSkillFiles,
+  serializeCreateSkillFiles,
   validateCreateSkillPayload,
 } from "@/modules/skills/utils"
 import type { SkillCreateFilePayloadDraft } from "@/modules/skills/types"
@@ -59,5 +60,25 @@ describe("mergeCreateSkillFiles", () => {
     } satisfies SynapseCreateSkillPayload)
 
     expect(errors.files).toContain("附件文件名重复：assets/Readme.md。")
+  })
+})
+
+describe("serializeCreateSkillFiles", () => {
+  it("serializes edited text attachments as fresh bytes", async () => {
+    const [file] = await serializeCreateSkillFiles([
+      {
+        originalName: "scripts/run.js",
+        sha256: "old-sha",
+        size: 0,
+        textContent: "console.log('ok')\n",
+        textDirty: true,
+      },
+    ])
+
+    expect(file).toEqual({
+      originalName: "scripts/run.js",
+      size: 18,
+      bytes: new TextEncoder().encode("console.log('ok')\n"),
+    })
   })
 })

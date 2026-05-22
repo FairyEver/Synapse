@@ -58,11 +58,11 @@ describe("InvitationsService", () => {
       publicAppUrl: "https://app.example.com",
     })
 
-    expect(result.inviteUrl).toBe(`https://app.example.com/team-invite?token=${result.token}`)
+    expect(result.inviteUrl).toBe(`https://app.example.com/dashboard/team-invite?token=${result.token}`)
     expect(prisma.invitation.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         type: "team_join",
-        inviteUrl: `https://app.example.com/team-invite?token=${result.token}`,
+        inviteUrl: `https://app.example.com/dashboard/team-invite?token=${result.token}`,
       }),
     })
   })

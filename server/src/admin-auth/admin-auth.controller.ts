@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Post, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Post, Req, Res, UseGuards } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Response } from "express"
 import { z } from "zod"
@@ -28,7 +28,7 @@ export class AdminAuthController {
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
     })
-    return { email: session.email }
+    return { email: session.email, role: session.role }
   }
 
   @Post("/logout")
@@ -37,9 +37,13 @@ export class AdminAuthController {
     return { ok: true }
   }
 
-  @UseGuards(AdminAuthGuard)
   @Get("/session")
   async getSession(@Req() request: AdminRequest) {
-    return { email: request.admin!.email }
+    const token = request.cookies?.synapse_admin
+    const session = typeof token === "string" ? await this.auth.verifyDashboardSession(token) : null
+    if (!session) {
+      throw new ForbiddenException("未登录或登录已过期。")
+    }
+    return { email: session.email, role: session.role }
   }
 }

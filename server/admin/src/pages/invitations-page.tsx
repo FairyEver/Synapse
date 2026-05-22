@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import {
   Table,
+  TableActionCell,
+  TableActionHead,
   TableBody,
   TableCell,
   TableHead,
@@ -128,7 +130,7 @@ export function InvitationsPage() {
               <TableHead>使用时间</TableHead>
               <TableHead>过期时间</TableHead>
               <TableHead>创建时间</TableHead>
-              <TableHead className="text-right">操作</TableHead>
+              <TableActionHead>操作</TableActionHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -171,7 +173,7 @@ export function InvitationsPage() {
                   <TableCell>{formatDate(invitation.usedAt)}</TableCell>
                   <TableCell>{formatDate(invitation.expiresAt)}</TableCell>
                   <TableCell>{formatDate(invitation.createdAt)}</TableCell>
-                  <TableCell className="text-right">
+                  <TableActionCell>
                     <Button
                       aria-label={`删除邀请 ${invitation.id}`}
                       size="icon-sm"
@@ -180,7 +182,7 @@ export function InvitationsPage() {
                     >
                       <Trash2 />
                     </Button>
-                  </TableCell>
+                  </TableActionCell>
                 </TableRow>
               )
             })}

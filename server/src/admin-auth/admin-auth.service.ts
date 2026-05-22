@@ -10,6 +10,14 @@ interface AdminJwtPayload {
   readonly type?: "admin" | "user"
 }
 
+export type DashboardRole = "admin" | "user"
+
+export interface DashboardSession {
+  readonly id: string
+  readonly email: string
+  readonly role: DashboardRole
+}
+
 @Injectable()
 export class AdminAuthService {
   constructor(
@@ -23,7 +31,7 @@ export class AdminAuthService {
     return admin?.email ?? ""
   }
 
-  async login(email: string, password: string): Promise<{ email: string; token: string }> {
+  async login(email: string, password: string): Promise<{ email: string; token: string; role: DashboardRole }> {
     const normalizedEmail = email.trim().toLowerCase()
     const admin = await this.prisma.adminUser.findFirst({ orderBy: { createdAt: "asc" } })
     const passwordMatches = admin ? await verifyPassword(password, admin.passwordHash) : false
@@ -36,7 +44,7 @@ export class AdminAuthService {
         targetId: admin.id,
         ipAddress: "system",
       })
-      return { email: admin.email, token }
+      return { email: admin.email, token, role: "admin" }
     }
 
     const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
@@ -50,7 +58,7 @@ export class AdminAuthService {
         targetId: user.id,
         ipAddress: "system",
       })
-      return { email: user.email, token }
+      return { email: user.email, token, role: "user" }
     }
 
     await this.auditLog?.record({
@@ -64,16 +72,22 @@ export class AdminAuthService {
   }
 
   async verify(token: string): Promise<{ id: string; email: string } | null> {
+    const session = await this.verifyDashboardSession(token)
+    if (session?.role !== "admin") return null
+    return { id: session.id, email: session.email }
+  }
+
+  async verifyDashboardSession(token: string): Promise<DashboardSession | null> {
     try {
       const payload = this.jwt.verify<AdminJwtPayload>(token)
       if (payload.type === "user") {
         const user = await this.prisma.user.findUnique({ where: { id: payload.sub } })
         if (!user || user.status !== "active" || user.email !== payload.email) return null
-        return { id: user.id, email: user.email }
+        return { id: user.id, email: user.email, role: "user" }
       }
       const admin = await this.prisma.adminUser.findUnique({ where: { id: payload.sub } })
       if (!admin || admin.status !== "active" || admin.email !== payload.email) return null
-      return { id: admin.id, email: admin.email }
+      return { id: admin.id, email: admin.email, role: "admin" }
     } catch {
       return null
     }

@@ -21,6 +21,7 @@ import {
   ScrollTextIcon,
   UsersIcon,
 } from "lucide-react"
+import type { AdminSession } from "@/lib/api"
 
 const data = {
   teams: [
@@ -92,11 +93,13 @@ const data = {
 
 export function AppSidebar({
   activeRoute,
+  role,
   user,
   onLogout,
   ...props
 }: React.ComponentProps<typeof Sidebar> & {
   readonly activeRoute: string
+  readonly role: AdminSession["role"]
   readonly user: {
     name: string
     email: string
@@ -104,7 +107,10 @@ export function AppSidebar({
   }
   readonly onLogout: () => void
 }) {
-  const items = data.navMain.map((item) => ({
+  const navItems = role === "user"
+    ? data.navMain.filter((item) => item.url === "#/teams")
+    : data.navMain
+  const items = navItems.map((item) => ({
     ...item,
     isActive: item.url === `#/${activeRoute}`,
   }))
@@ -115,7 +121,7 @@ export function AppSidebar({
         <TeamSwitcher teams={data.teams} />
       </SidebarHeader>
       <SidebarContent>
-        <NavMain items={items} />
+        <NavMain label={role === "user" ? "团队" : "管理"} items={items} />
       </SidebarContent>
       <SidebarFooter>
         <NavUser user={user} onLogout={onLogout} />

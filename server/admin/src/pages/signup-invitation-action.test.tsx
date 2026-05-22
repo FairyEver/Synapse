@@ -49,6 +49,14 @@ describe("SignupInvitationAction", () => {
         .toBe("https://app.example.com/dashboard/signup?invite=plain-token")
     })
     expect(writeText).toHaveBeenCalledWith("https://app.example.com/dashboard/signup?invite=plain-token")
+    expect(onCreated).not.toHaveBeenCalled()
+
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>("[data-slot='dialog-close']")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      )
+    })
+
     expect(onCreated).toHaveBeenCalled()
   })
 
@@ -97,7 +105,7 @@ describe("SignupInvitationAction", () => {
       expect((document.body.querySelector("input") as HTMLInputElement).value)
         .toBe("https://app.example.com/dashboard/signup?invite=plain-token")
     })
-    expect(onCreated).toHaveBeenCalled()
+    expect(onCreated).not.toHaveBeenCalled()
     expect(document.body.textContent).toContain("复制失败")
   })
 })

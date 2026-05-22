@@ -1,39 +1,66 @@
 import type { ReactNode } from "react"
+import {
+  ResizableHandle,
+  ResizablePanel,
+  ResizablePanelGroup,
+} from "@/components/ui/resizable"
 
 type ContentEditorWindowLayoutProps = {
+  actions: ReactNode
   auxiliary: ReactNode
   body: ReactNode
-  footer: ReactNode
   meta: ReactNode
   title: string
 }
 
 function ContentEditorWindowLayout({
+  actions,
   auxiliary,
   body,
-  footer,
   meta,
   title,
 }: ContentEditorWindowLayoutProps) {
   return (
     <div className="flex h-screen min-h-0 flex-col bg-background text-foreground">
-      <header className="border-b px-4 py-3">
-        <h1 className="text-base font-medium">{title}</h1>
+      <header className="flex items-center gap-3 border-b px-4 py-3">
+        <h1 className="min-w-0 flex-1 truncate text-base font-medium">{title}</h1>
+        {actions ? (
+          <div className="flex shrink-0 items-center gap-3">
+            {actions}
+          </div>
+        ) : null}
       </header>
-      <main className="grid min-h-0 flex-1 grid-cols-[18rem_minmax(0,1fr)_22rem] overflow-hidden">
-        <aside className="min-h-0 overflow-auto border-r p-4">
-          {meta}
-        </aside>
-        <section className="min-h-0 overflow-hidden p-4">
-          {body}
-        </section>
-        <aside className="min-h-0 overflow-auto border-l p-4">
-          {auxiliary}
-        </aside>
+      <main className="min-h-0 flex-1 overflow-hidden">
+        <ResizablePanelGroup orientation="horizontal" className="h-full min-h-0">
+          <ResizablePanel
+            defaultSize={288}
+            minSize={240}
+            maxSize={420}
+            groupResizeBehavior="preserve-pixel-size"
+          >
+            <aside className="h-full min-h-0 overflow-auto p-4">
+              {meta}
+            </aside>
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel minSize={420}>
+            <section className="h-full min-h-0 overflow-hidden p-4">
+              {body}
+            </section>
+          </ResizablePanel>
+          <ResizableHandle withHandle />
+          <ResizablePanel
+            defaultSize={352}
+            minSize={280}
+            maxSize={560}
+            groupResizeBehavior="preserve-pixel-size"
+          >
+            <aside className="h-full min-h-0 overflow-auto p-4">
+              {auxiliary}
+            </aside>
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </main>
-      <footer className="border-t px-4 py-3">
-        {footer}
-      </footer>
     </div>
   )
 }

@@ -3,6 +3,8 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   Table,
+  TableActionCell,
+  TableActionHead,
   TableBody,
   TableCell,
   TableHead,
@@ -41,7 +43,7 @@ export function UsersPage() {
               <TableHead>状态</TableHead>
               <TableHead>团队</TableHead>
               <TableHead>创建时间</TableHead>
-              <TableHead className="text-right">操作</TableHead>
+              <TableActionHead>操作</TableActionHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -57,11 +59,11 @@ export function UsersPage() {
                   </TableCell>
                   <TableCell>{membership ? `${membership.team.name} / ${membership.role}` : "-"}</TableCell>
                   <TableCell>{formatDate(user.createdAt)}</TableCell>
-                  <TableCell className="text-right">
+                  <TableActionCell>
                     <Button variant="outline" size="sm" onClick={() => void toggleStatus(user)}>
                       {user.status === "active" ? "停用" : "启用"}
                     </Button>
-                  </TableCell>
+                  </TableActionCell>
                 </TableRow>
               )
             })}

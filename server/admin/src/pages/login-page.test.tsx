@@ -20,7 +20,7 @@ describe("LoginPage", () => {
   })
 
   it("submits account credentials", async () => {
-    vi.mocked(adminApi.login).mockResolvedValue({ email: "user@example.com" })
+    vi.mocked(adminApi.login).mockResolvedValue({ email: "user@example.com", role: "user" })
     const onLoggedIn = vi.fn()
     const result = await render(<LoginPage onLoggedIn={onLoggedIn} />)
     cleanup = result.unmount
@@ -42,7 +42,7 @@ describe("LoginPage", () => {
       email: "user@example.com",
       password: "secret",
     })
-    expect(onLoggedIn).toHaveBeenCalledWith({ email: "user@example.com" })
+    expect(onLoggedIn).toHaveBeenCalledWith({ email: "user@example.com", role: "user" })
   })
 
   it("uses generic account login copy", async () => {

@@ -1,7 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Req, UseGuards } from "@nestjs/common"
 import { z } from "zod"
-import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
 import { resolvePublicAppUrl } from "../invitations/invitation-url"
+import { AuthenticatedTeamRequest, TeamsAuthGuard } from "./teams-auth.guard"
 import { TeamsService } from "./teams.service"
 
 const createTeamSchema = z.object({
@@ -12,23 +12,23 @@ const joinTeamSchema = z.object({
   invitationToken: z.string().min(1),
 }).strict()
 
-@UseGuards(UserAuthGuard)
+@UseGuards(TeamsAuthGuard)
 @Controller("/api/teams")
 export class TeamsController {
   constructor(private readonly teams: TeamsService) {}
 
   @Post()
-  createTeam(@Req() request: AuthenticatedUserRequest, @Body() body: unknown) {
+  createTeam(@Req() request: AuthenticatedTeamRequest, @Body() body: unknown) {
     return this.teams.createTeam(request.user!.id, parseBody(createTeamSchema, body, "团队创建请求无效。"))
   }
 
   @Get("/me")
-  getMyTeam(@Req() request: AuthenticatedUserRequest) {
+  getMyTeam(@Req() request: AuthenticatedTeamRequest) {
     return this.teams.getMyTeam(request.user!.id)
   }
 
   @Post("/invitations")
-  createInvitation(@Req() request: AuthenticatedUserRequest) {
+  createInvitation(@Req() request: AuthenticatedTeamRequest) {
     return this.teams.createInvitation(
       request.user!.id,
       resolvePublicAppUrl({
@@ -39,18 +39,23 @@ export class TeamsController {
   }
 
   @Post("/join")
-  joinTeam(@Req() request: AuthenticatedUserRequest, @Body() body: unknown) {
+  joinTeam(@Req() request: AuthenticatedTeamRequest, @Body() body: unknown) {
     return this.teams.joinTeam(request.user!.id, parseBody(joinTeamSchema, body, "加入团队请求无效。"))
   }
 
   @Get("/members")
-  listMembers(@Req() request: AuthenticatedUserRequest) {
+  listMembers(@Req() request: AuthenticatedTeamRequest) {
     return this.teams.listMembers(request.user!.id)
   }
 
   @Delete("/members/:userId")
-  removeMember(@Req() request: AuthenticatedUserRequest, @Param("userId") userId: string) {
+  removeMember(@Req() request: AuthenticatedTeamRequest, @Param("userId") userId: string) {
     return this.teams.removeMember(request.user!.id, userId)
+  }
+
+  @Delete("/me")
+  leaveTeam(@Req() request: AuthenticatedTeamRequest) {
+    return this.teams.leaveTeam(request.user!.id)
   }
 }
 

@@ -47,7 +47,7 @@ function buildTeamInviteUrl(input: {
   readonly publicAppUrl: string
   readonly token: string
 }): string {
-  const url = new URL("/team-invite", `${normalizePublicAppUrl(input.publicAppUrl)}/`)
+  const url = new URL("/dashboard/team-invite", `${normalizePublicAppUrl(input.publicAppUrl)}/`)
   url.searchParams.set("token", input.token)
   return url.toString()
 }

@@ -1,5 +1,6 @@
 export interface AdminSession {
   readonly email: string
+  readonly role: "admin" | "user"
 }
 
 export interface SystemOverview {
@@ -88,6 +89,49 @@ export interface UserRegisterInput {
 export interface UserTokenPair {
   readonly accessToken: string
   readonly refreshToken: string
+}
+
+export interface TeamUser {
+  readonly id: string
+  readonly email: string
+  readonly status: "active" | "disabled"
+}
+
+export interface TeamMember {
+  readonly id: string
+  readonly userId: string
+  readonly teamId: string
+  readonly role: "owner" | "member"
+  readonly createdAt: string
+  readonly user: TeamUser
+}
+
+export interface MyTeam {
+  readonly id: string
+  readonly teamId: string
+  readonly userId: string
+  readonly role: "owner" | "member"
+  readonly team: {
+    readonly id: string
+    readonly name: string
+    readonly createdByUserId: string
+    readonly memberships: TeamMember[]
+  }
+}
+
+export interface TeamSummary {
+  readonly id: string
+  readonly name: string
+  readonly createdByUserId: string
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
+export interface TeamInvitationResponse {
+  readonly id: string
+  readonly token: string
+  readonly inviteUrl: string
+  readonly expiresAt: string
 }
 
 export interface LogFileInfo {
@@ -238,5 +282,32 @@ export const userAuthApi = {
     request<UserTokenPair>("/api/auth/register", {
       method: "POST",
       body: JSON.stringify(input),
+    }),
+}
+
+export const userDashboardApi = {
+  getMyTeam: () => request<MyTeam | null>("/api/teams/me"),
+  createTeam: (input: { readonly name: string }) =>
+    request<TeamSummary>("/api/teams", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
+  createInvitation: () =>
+    request<TeamInvitationResponse>("/api/teams/invitations", {
+      method: "POST",
+    }),
+  joinTeam: (invitationToken: string) =>
+    request<TeamMember>("/api/teams/join", {
+      method: "POST",
+      body: JSON.stringify({ invitationToken }),
+    }),
+  listMembers: () => request<TeamMember[]>("/api/teams/members"),
+  removeMember: (userId: string) =>
+    request<{ ok: true }>(`/api/teams/members/${encodeURIComponent(userId)}`, {
+      method: "DELETE",
+    }),
+  leaveTeam: () =>
+    request<{ ok: true }>("/api/teams/me", {
+      method: "DELETE",
     }),
 }

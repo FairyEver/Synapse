@@ -6,6 +6,8 @@ export type SkillCreateFilePayloadDraft = {
   size: number
   file?: File
   bytes?: Uint8Array
+  textContent?: string
+  textDirty?: boolean
 }
 
 export type CreateSkillPayload = Omit<SynapseCreateSkillPayload, "files"> & {

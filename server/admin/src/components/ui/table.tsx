@@ -76,6 +76,15 @@ function TableHead({ className, ...props }: React.ComponentProps<"th">) {
   )
 }
 
+function TableActionHead({ className, ...props }: React.ComponentProps<"th">) {
+  return (
+    <TableHead
+      className={cn("sticky right-0 z-20 border-l bg-background text-right", className)}
+      {...props}
+    />
+  )
+}
+
 function TableCell({ className, ...props }: React.ComponentProps<"td">) {
   return (
     <td
@@ -84,6 +93,15 @@ function TableCell({ className, ...props }: React.ComponentProps<"td">) {
         "p-2 align-middle whitespace-nowrap [&:has([role=checkbox])]:pr-0",
         className
       )}
+      {...props}
+    />
+  )
+}
+
+function TableActionCell({ className, ...props }: React.ComponentProps<"td">) {
+  return (
+    <TableCell
+      className={cn("sticky right-0 z-10 border-l bg-background text-right", className)}
       {...props}
     />
   )
@@ -108,7 +126,9 @@ export {
   TableBody,
   TableFooter,
   TableHead,
+  TableActionHead,
   TableRow,
   TableCell,
+  TableActionCell,
   TableCaption,
 }
