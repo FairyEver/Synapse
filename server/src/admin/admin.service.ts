@@ -35,7 +35,7 @@ export class AdminService {
       this.prisma.auditLog.count(),
       this.prisma.user.count(),
       this.prisma.team.count(),
-      this.prisma.invitation.count({ where: { type: "user_signup" } }),
+      this.prisma.invitation.count(),
     ])
 
     return {

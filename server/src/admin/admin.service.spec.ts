@@ -36,14 +36,16 @@ function createPrismaMock(counts: {
 
 describe("AdminService", () => {
   it("returns retained system overview counts", async () => {
+    const prisma = createPrismaMock({ auditLogs: 2, users: 3, teams: 1, invitations: 4 })
     const service = new AdminService(
-      createPrismaMock({ auditLogs: 2, users: 3, teams: 1, invitations: 4 }) as unknown as PrismaService,
+      prisma as unknown as PrismaService,
       {} as never,
     )
 
     const result = await service.getSystemOverview()
 
     expect(result.counts).toEqual({ auditLogs: 2, users: 3, teams: 1, invitations: 4 })
+    expect(prisma.invitation.count).toHaveBeenCalledWith()
   })
 
   it("loads users without exposing password hashes", async () => {
