@@ -48,4 +48,27 @@ describe("AdminService", () => {
       data: { status: "disabled" },
     })
   })
+
+  it("loads all invitation types with creator and team details", async () => {
+    const prisma = {
+      $transaction: vi.fn().mockResolvedValue([[], 0]),
+      invitation: {
+        count: vi.fn(),
+        findMany: vi.fn(),
+      },
+    }
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never)
+
+    await service.listInvitations()
+
+    expect(prisma.invitation.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      include: {
+        acceptedByUser: { select: { email: true } },
+        createdByAdmin: { select: { email: true } },
+        createdByUser: { select: { email: true } },
+        team: { select: { name: true } },
+      },
+    }))
+    expect(prisma.invitation.count).toHaveBeenCalledWith()
+  })
 })

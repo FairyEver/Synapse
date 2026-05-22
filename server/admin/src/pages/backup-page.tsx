@@ -22,13 +22,13 @@ function formatSize(bytes: number): string {
 }
 
 async function fetchBackupList(): Promise<BackupFile[]> {
-  const response = await fetch("/admin/api/backup/list", { credentials: "include" })
+  const response = await fetch("/dashboard/api/backup/list", { credentials: "include" })
   if (!response.ok) throw new Error("请求失败")
   return response.json()
 }
 
 async function triggerBackup(): Promise<void> {
-  const response = await fetch("/admin/api/backup", {
+  const response = await fetch("/dashboard/api/backup", {
     method: "POST",
     credentials: "include",
   })

@@ -2,6 +2,7 @@ import { BadRequestException, Injectable } from "@nestjs/common"
 import { Prisma, type InvitationType } from "@prisma/client"
 import { createOpaqueToken, hashToken } from "../auth/token"
 import { PrismaService } from "../prisma/prisma.service"
+import { buildInviteUrl, parseInviteTokenInput } from "./invitation-url"
 
 const invitationDays = 7
 
@@ -15,7 +16,7 @@ function addDays(date: Date, days: number): Date {
 export class InvitationsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async createSignupInvitation(input: { readonly adminId: string }) {
+  async createSignupInvitation(input: { readonly adminId: string; readonly publicAppUrl: string }) {
     const token = createOpaqueToken()
     const invitation = await this.prisma.invitation.create({
       data: {
@@ -25,10 +26,15 @@ export class InvitationsService {
         createdByAdminId: input.adminId,
       },
     })
-    return { id: invitation.id, token, expiresAt: invitation.expiresAt }
+    return {
+      id: invitation.id,
+      token,
+      inviteUrl: buildInviteUrl({ publicAppUrl: input.publicAppUrl, token }),
+      expiresAt: invitation.expiresAt,
+    }
   }
 
-  async createTeamInvitation(input: { readonly userId: string; readonly teamId: string }) {
+  async createTeamInvitation(input: { readonly userId: string; readonly teamId: string; readonly publicAppUrl: string }) {
     const token = createOpaqueToken()
     const invitation = await this.prisma.invitation.create({
       data: {
@@ -39,7 +45,12 @@ export class InvitationsService {
         teamId: input.teamId,
       },
     })
-    return { id: invitation.id, token, expiresAt: invitation.expiresAt }
+    return {
+      id: invitation.id,
+      token,
+      inviteUrl: buildInviteUrl({ publicAppUrl: input.publicAppUrl, token }),
+      expiresAt: invitation.expiresAt,
+    }
   }
 
   async consumeInvitation(
@@ -50,19 +61,31 @@ export class InvitationsService {
     },
     client: Prisma.TransactionClient | PrismaService = this.prisma,
   ) {
-    const invitation = await client.invitation.findUnique({
-      where: { tokenHash: hashToken(input.token) },
-    })
-    if (!invitation || invitation.type !== input.type || invitation.usedAt || invitation.expiresAt <= new Date()) {
-      throw new BadRequestException("邀请无效或已过期。")
-    }
-
-    return client.invitation.update({
-      where: { id: invitation.id },
+    const tokenHash = hashToken(parseInviteTokenInput(input.token))
+    const consumedAt = new Date()
+    const update = await client.invitation.updateMany({
+      where: {
+        tokenHash,
+        type: input.type,
+        usedAt: null,
+        expiresAt: { gt: consumedAt },
+      },
       data: {
-        usedAt: new Date(),
+        usedAt: consumedAt,
         acceptedByUserId: input.acceptedByUserId,
       },
     })
+
+    if (update.count !== 1) {
+      throw new BadRequestException("邀请无效或已过期。")
+    }
+
+    const invitation = await client.invitation.findUnique({
+      where: { tokenHash },
+    })
+
+    if (!invitation) throw new BadRequestException("邀请无效或已过期。")
+
+    return invitation
   }
 }

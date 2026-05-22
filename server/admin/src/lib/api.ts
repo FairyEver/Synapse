@@ -58,8 +58,18 @@ export interface AdminInvitationRow {
   readonly type: "user_signup" | "team_join"
   readonly expiresAt: string
   readonly usedAt: string | null
+  readonly createdByAdmin: { readonly email: string } | null
+  readonly createdByUser: { readonly email: string } | null
+  readonly team: { readonly name: string } | null
   readonly acceptedByUser: { readonly email: string } | null
   readonly createdAt: string
+}
+
+export interface CreateSignupInvitationResponse {
+  readonly id: string
+  readonly token: string
+  readonly inviteUrl: string
+  readonly expiresAt: string
 }
 
 export interface LogFileInfo {
@@ -84,6 +94,9 @@ export class ApiError extends Error {
     super(message)
   }
 }
+
+const dashboardBasePath = "/dashboard"
+const dashboardApiBasePath = `${dashboardBasePath}/api`
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -120,30 +133,30 @@ function paginationSuffix(options: { readonly page?: number; readonly pageSize?:
 }
 
 export const adminApi = {
-  getSession: () => request<AdminSession>("/admin/session"),
+  getSession: () => request<AdminSession>(`${dashboardBasePath}/session`),
   login: (input: { email: string; password: string }) =>
-    request<AdminSession>("/admin/login", {
+    request<AdminSession>(`${dashboardBasePath}/login`, {
       method: "POST",
       body: JSON.stringify(input),
     }),
   logout: () =>
-    request<{ ok: true }>("/admin/logout", {
+    request<{ ok: true }>(`${dashboardBasePath}/logout`, {
       method: "POST",
     }),
-  getSystemOverview: () => request<SystemOverview>("/admin/api/system"),
+  getSystemOverview: () => request<SystemOverview>(`${dashboardApiBasePath}/system`),
   createSignupInvitation: () =>
-    request<{ id: string; token: string; expiresAt: string }>("/admin/api/invitations", { method: "POST" }),
+    request<CreateSignupInvitationResponse>(`${dashboardApiBasePath}/invitations`, { method: "POST" }),
   listInvitations: (options: { readonly page?: number; readonly pageSize?: number } = {}) =>
-    request<PaginatedResponse<AdminInvitationRow>>(`/admin/api/invitations${paginationSuffix(options)}`),
+    request<PaginatedResponse<AdminInvitationRow>>(`${dashboardApiBasePath}/invitations${paginationSuffix(options)}`),
   listUsers: (options: { readonly page?: number; readonly pageSize?: number } = {}) =>
-    request<PaginatedResponse<AdminUserRow>>(`/admin/api/users${paginationSuffix(options)}`),
+    request<PaginatedResponse<AdminUserRow>>(`${dashboardApiBasePath}/users${paginationSuffix(options)}`),
   updateUserStatus: (id: string, status: "active" | "disabled") =>
-    request<AdminUserRow>(`/admin/api/users/${id}/status`, {
+    request<AdminUserRow>(`${dashboardApiBasePath}/users/${id}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
   listTeams: (options: { readonly page?: number; readonly pageSize?: number } = {}) =>
-    request<PaginatedResponse<AdminTeamRow>>(`/admin/api/teams${paginationSuffix(options)}`),
+    request<PaginatedResponse<AdminTeamRow>>(`${dashboardApiBasePath}/teams${paginationSuffix(options)}`),
   listAuditLogs: (options: {
     readonly action?: string
     readonly from?: string
@@ -158,7 +171,7 @@ export const adminApi = {
     if (options.page) query.set("page", String(options.page))
     if (options.pageSize) query.set("pageSize", String(options.pageSize))
     const suffix = query.size > 0 ? `?${query.toString()}` : ""
-    return request<PaginatedResponse<AuditLog>>(`/admin/api/audit-logs${suffix}`)
+    return request<PaginatedResponse<AuditLog>>(`${dashboardApiBasePath}/audit-logs${suffix}`)
   },
   exportAuditLogs: (options: {
     readonly action?: string
@@ -170,23 +183,23 @@ export const adminApi = {
     if (options.from) query.set("from", options.from)
     if (options.to) query.set("to", options.to)
     const suffix = query.size > 0 ? `?${query.toString()}` : ""
-    window.open(`/admin/api/audit-logs/export${suffix}`, "_blank")
+    window.open(`${dashboardApiBasePath}/audit-logs/export${suffix}`, "_blank")
   },
   async listLogFiles(): Promise<LogFileInfo[]> {
-    return request<LogFileInfo[]>("/admin/api/logs/files");
+    return request<LogFileInfo[]>(`${dashboardApiBasePath}/logs/files`);
   },
   async fetchRecentLogs(opts?: { level?: string; limit?: number }): Promise<LogEntry[]> {
     const params = new URLSearchParams();
     if (opts?.level) params.set("level", opts.level);
     if (opts?.limit) params.set("limit", String(opts.limit));
     const qs = params.toString();
-    return request<LogEntry[]>(`/admin/api/logs/recent${qs ? `?${qs}` : ""}`);
+    return request<LogEntry[]>(`${dashboardApiBasePath}/logs/recent${qs ? `?${qs}` : ""}`);
   },
   downloadLogs(opts?: { from?: string; to?: string }) {
     const params = new URLSearchParams();
     if (opts?.from) params.set("from", opts.from);
     if (opts?.to) params.set("to", opts.to);
     const qs = params.toString();
-    window.open(`/admin/api/logs/download${qs ? `?${qs}` : ""}`, "_blank");
+    window.open(`${dashboardApiBasePath}/logs/download${qs ? `?${qs}` : ""}`, "_blank");
   },
 }

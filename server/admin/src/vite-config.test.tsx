@@ -1,28 +1,28 @@
 import type { UserConfig } from "vite"
 import { describe, expect, it } from "vitest"
-import viteConfig, { createAdminBaseRedirectPlugin } from "../vite.config"
+import viteConfig, { createDashboardBaseRedirectPlugin } from "../vite.config"
 
-describe("admin vite config", () => {
-  it("serves built assets from the admin route", () => {
-    expect((viteConfig as UserConfig).base).toBe("/admin/")
+describe("dashboard vite config", () => {
+  it("serves built assets from the dashboard route", () => {
+    expect((viteConfig as UserConfig).base).toBe("/dashboard/")
   })
 
-  it("serves admin dev UI on the public server port and proxies backend routes", () => {
+  it("serves dashboard dev UI on the public server port and proxies backend routes", () => {
     const server = (viteConfig as UserConfig).server
     const proxy = server?.proxy as Record<string, { target: string }> | undefined
 
     expect(server?.port).toBe(3000)
     expect(server?.strictPort).toBe(true)
     expect(server?.open).toBeUndefined()
-    expect(proxy?.["/admin/api"]?.target).toBe("http://localhost:3001")
-    expect(proxy?.["/admin/session"]?.target).toBe("http://localhost:3001")
-    expect(proxy?.["/admin/login"]?.target).toBe("http://localhost:3001")
-    expect(proxy?.["/admin/logout"]?.target).toBe("http://localhost:3001")
+    expect(proxy?.["/dashboard/api"]?.target).toBe("http://localhost:3001")
+    expect(proxy?.["/dashboard/session"]?.target).toBe("http://localhost:3001")
+    expect(proxy?.["/dashboard/login"]?.target).toBe("http://localhost:3001")
+    expect(proxy?.["/dashboard/logout"]?.target).toBe("http://localhost:3001")
     expect(proxy?.["/v1"]?.target).toBe("http://localhost:3001")
   })
 
-  it("redirects the extensionless admin base route to the configured base path", () => {
-    const plugin = createAdminBaseRedirectPlugin()
+  it("redirects the extensionless dashboard base route to the configured base path", () => {
+    const plugin = createDashboardBaseRedirectPlugin()
     let handler:
       | ((
           request: { url?: string },
@@ -35,7 +35,7 @@ describe("admin vite config", () => {
       | undefined
 
     if (typeof plugin.configureServer !== "function") {
-      throw new Error("Expected admin base redirect plugin to register a dev server hook.")
+      throw new Error("Expected dashboard base redirect plugin to register a dev server hook.")
     }
 
     plugin.configureServer.call({} as never, {
@@ -48,7 +48,7 @@ describe("admin vite config", () => {
 
     const redirects: Array<{ status: number; url: string }> = []
     handler?.(
-      { url: "/admin" },
+      { url: "/dashboard" },
       {
         writeHead: (status, headers) => redirects.push({ status, url: headers.Location }),
         end: () => undefined,
@@ -56,6 +56,6 @@ describe("admin vite config", () => {
       () => redirects.push({ status: 0, url: "next" }),
     )
 
-    expect(redirects).toEqual([{ status: 302, url: "/admin/" }])
+    expect(redirects).toEqual([{ status: 302, url: "/dashboard/" }])
   })
 })

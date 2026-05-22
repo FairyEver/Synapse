@@ -1,8 +1,6 @@
-import * as React from "react"
 import { PageState } from "@/components/page-state"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
 import {
   Table,
   TableBody,
@@ -14,18 +12,12 @@ import {
 import { useApiResource } from "@/hooks/use-api-resource"
 import { adminApi, type AdminUserRow, type PaginatedResponse } from "@/lib/api"
 import { formatDate } from "@/lib/format"
+import { SignupInvitationAction } from "./signup-invitation-action"
 
 export function UsersPage() {
-  const [createdToken, setCreatedToken] = React.useState("")
   const { data: result, error, loading, reload } = useApiResource<PaginatedResponse<AdminUserRow>>(
     () => adminApi.listUsers(),
   )
-
-  async function createInvitation() {
-    const invitation = await adminApi.createSignupInvitation()
-    setCreatedToken(invitation.token)
-    reload()
-  }
 
   async function toggleStatus(user: AdminUserRow) {
     await adminApi.updateUserStatus(user.id, user.status === "active" ? "disabled" : "active")
@@ -38,10 +30,7 @@ export function UsersPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center gap-2">
-        <Button onClick={() => void createInvitation()}>创建邀请</Button>
-        {createdToken ? <Input readOnly value={createdToken} className="max-w-xl font-mono text-xs" /> : null}
-      </div>
+      <SignupInvitationAction onCreated={reload} />
       {result.data.length === 0 ? (
         <PageState>暂无用户</PageState>
       ) : (

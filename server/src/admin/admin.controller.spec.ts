@@ -49,9 +49,18 @@ describe("AdminController", () => {
     const createSignupInvitation = vi.fn().mockResolvedValue({ token: "plain-token" })
     const controller = createController({ createSignupInvitation } as never)
 
-    await expect(controller.createSignupInvitation({ admin: { id: "admin-1", email: "admin@example.com" } } as never))
+    await expect(controller.createSignupInvitation({
+      admin: { id: "admin-1", email: "admin@example.com" },
+      headers: { host: "app.example.com" },
+      protocol: "https",
+      get: (name: string) => name.toLowerCase() === "host" ? "app.example.com" : undefined,
+    } as never))
       .resolves
       .toEqual({ token: "plain-token" })
+    expect(createSignupInvitation).toHaveBeenCalledWith(
+      { id: "admin-1", email: "admin@example.com" },
+      "https://app.example.com",
+    )
   })
 
   it("rejects invalid user status", async () => {

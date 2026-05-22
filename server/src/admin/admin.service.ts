@@ -32,8 +32,8 @@ export class AdminService {
     }
   }
 
-  async createSignupInvitation(admin: { readonly id: string; readonly email: string }) {
-    const invitation = await this.invitations.createSignupInvitation({ adminId: admin.id })
+  async createSignupInvitation(admin: { readonly id: string; readonly email: string }, publicAppUrl: string) {
+    const invitation = await this.invitations.createSignupInvitation({ adminId: admin.id, publicAppUrl })
     await this.auditLog?.record({
       adminEmail: admin.email,
       action: "admin.invitation.create",
@@ -96,14 +96,17 @@ export class AdminService {
 
   async listInvitations(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {
     const page = pagination ?? parsePagination({})
-    const where = { type: "user_signup" as const }
     const [data, total] = await this.prisma.$transaction([
       this.prisma.invitation.findMany({
         ...toPrismaArgs(page),
-        where,
-        include: { acceptedByUser: { select: { email: true } } },
+        include: {
+          acceptedByUser: { select: { email: true } },
+          createdByAdmin: { select: { email: true } },
+          createdByUser: { select: { email: true } },
+          team: { select: { name: true } },
+        },
       }),
-      this.prisma.invitation.count({ where }),
+      this.prisma.invitation.count(),
     ])
     return { data, total, page: page.page, pageSize: page.pageSize }
   }

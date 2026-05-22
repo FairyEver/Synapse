@@ -39,6 +39,6 @@ describe("TeamsService", () => {
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "member", teamId: "team-1" })
     const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never)
 
-    await expect(service.createInvitation("user-1")).rejects.toThrow(ForbiddenException)
+    await expect(service.createInvitation("user-1", "https://app.example.com")).rejects.toThrow(ForbiddenException)
   })
 })

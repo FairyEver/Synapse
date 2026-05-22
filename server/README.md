@@ -237,7 +237,7 @@ curl http://127.0.0.1:3000/healthz
 
 然后浏览器访问：
 - API：`https://api.yourdomain.com/healthz`
-- 管理后台：`https://api.yourdomain.com/admin`
+- 管理后台：`https://api.yourdomain.com/dashboard`
 
 用 `.env` 中的 `ADMIN_EMAIL` 和 `ADMIN_PASSWORD` 登录。登录后可创建普通账号注册邀请。
 

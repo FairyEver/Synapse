@@ -5,14 +5,15 @@ import { defineConfig, type Plugin } from "vite"
 
 const apiPort = process.env.SYNAPSE_SERVER_API_PORT ?? "3001"
 const apiTarget = `http://localhost:${apiPort}`
+const dashboardBasePath = "/dashboard"
 
-export function createAdminBaseRedirectPlugin(): Plugin {
+export function createDashboardBaseRedirectPlugin(): Plugin {
   return {
-    name: "synapse-admin-base-redirect",
+    name: "synapse-dashboard-base-redirect",
     configureServer(server) {
       server.middlewares.use((request, response, next) => {
-        if (request.url === "/admin") {
-          response.writeHead(302, { Location: "/admin/" })
+        if (request.url === dashboardBasePath) {
+          response.writeHead(302, { Location: `${dashboardBasePath}/` })
           response.end()
           return
         }
@@ -25,8 +26,8 @@ export function createAdminBaseRedirectPlugin(): Plugin {
 
 export default defineConfig({
   root: __dirname,
-  base: "/admin/",
-  plugins: [createAdminBaseRedirectPlugin(), react(), tailwindcss()],
+  base: `${dashboardBasePath}/`,
+  plugins: [createDashboardBaseRedirectPlugin(), react(), tailwindcss()],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "src"),
@@ -40,10 +41,10 @@ export default defineConfig({
     port: 3000,
     strictPort: true,
     proxy: {
-      "/admin/api": { target: apiTarget, changeOrigin: true },
-      "/admin/session": { target: apiTarget, changeOrigin: true },
-      "/admin/login": { target: apiTarget, changeOrigin: true },
-      "/admin/logout": { target: apiTarget, changeOrigin: true },
+      [`${dashboardBasePath}/api`]: { target: apiTarget, changeOrigin: true },
+      [`${dashboardBasePath}/session`]: { target: apiTarget, changeOrigin: true },
+      [`${dashboardBasePath}/login`]: { target: apiTarget, changeOrigin: true },
+      [`${dashboardBasePath}/logout`]: { target: apiTarget, changeOrigin: true },
       "/v1": { target: apiTarget, changeOrigin: true },
     },
   },

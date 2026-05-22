@@ -1,6 +1,7 @@
 import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Req, UseGuards } from "@nestjs/common"
 import { z } from "zod"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
+import { resolvePublicAppUrl } from "../invitations/invitation-url"
 import { TeamsService } from "./teams.service"
 
 const createTeamSchema = z.object({
@@ -28,7 +29,13 @@ export class TeamsController {
 
   @Post("/invitations")
   createInvitation(@Req() request: AuthenticatedUserRequest) {
-    return this.teams.createInvitation(request.user!.id)
+    return this.teams.createInvitation(
+      request.user!.id,
+      resolvePublicAppUrl({
+        configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
+        request,
+      }),
+    )
   }
 
   @Post("/join")

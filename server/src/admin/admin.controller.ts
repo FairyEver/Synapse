@@ -5,6 +5,7 @@ import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guar
 import { AuditLogService } from "../common/audit-log.service"
 import { toCsv } from "../common/csv-export"
 import { parsePagination } from "../common/pagination"
+import { resolvePublicAppUrl } from "../invitations/invitation-url"
 import { AdminService } from "./admin.service"
 
 const userStatusSchema = z.object({
@@ -12,7 +13,7 @@ const userStatusSchema = z.object({
 }).strict()
 
 @UseGuards(AdminAuthGuard)
-@Controller("/admin/api")
+@Controller("/dashboard/api")
 export class AdminController {
   constructor(
     private readonly admin: AdminService,
@@ -36,7 +37,13 @@ export class AdminController {
 
   @Post("/invitations")
   createSignupInvitation(@Req() request: AdminRequest) {
-    return this.admin.createSignupInvitation(request.admin!)
+    return this.admin.createSignupInvitation(
+      request.admin!,
+      resolvePublicAppUrl({
+        configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
+        request,
+      }),
+    )
   }
 
   @Get("/invitations")

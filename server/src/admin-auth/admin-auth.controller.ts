@@ -10,7 +10,7 @@ const loginSchema = z.object({
   password: z.string().min(1),
 })
 
-@Controller("/admin")
+@Controller("/dashboard")
 export class AdminAuthController {
   constructor(private readonly auth: AdminAuthService) {}
 

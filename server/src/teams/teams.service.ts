@@ -50,12 +50,12 @@ export class TeamsService {
     })
   }
 
-  async createInvitation(userId: string) {
+  async createInvitation(userId: string, publicAppUrl: string) {
     const membership = await this.getMembership(userId)
     if (!membership || membership.role !== "owner") {
       throw new ForbiddenException()
     }
-    const invitation = await this.invitations.createTeamInvitation({ userId, teamId: membership.teamId })
+    const invitation = await this.invitations.createTeamInvitation({ userId, teamId: membership.teamId, publicAppUrl })
     await this.auditLog?.record({
       adminEmail: userId,
       action: "team.invitation.create",
