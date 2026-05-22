@@ -5,6 +5,19 @@ import { InvitationsService } from "../invitations/invitations.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
 import { PrismaService } from "../prisma/prisma.service"
 
+const adminUserSelect = {
+  id: true,
+  email: true,
+  status: true,
+  memberships: {
+    select: {
+      role: true,
+      team: { select: { id: true, name: true } },
+    },
+  },
+  createdAt: true,
+} as const
+
 @Injectable()
 export class AdminService {
   constructor(
@@ -76,11 +89,7 @@ export class AdminService {
     const [data, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         ...toPrismaArgs(page),
-        include: {
-          memberships: {
-            include: { team: { select: { id: true, name: true } } },
-          },
-        },
+        select: adminUserSelect,
       }),
       this.prisma.user.count(),
     ])
@@ -91,6 +100,7 @@ export class AdminService {
     const user = await this.prisma.user.update({
       where: { id },
       data: { status: input.status },
+      select: adminUserSelect,
     })
     await this.auditLog?.record({
       adminEmail: actorEmail,

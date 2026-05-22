@@ -18,6 +18,7 @@ function createPrismaMock(counts: {
     auditLog: { count: vi.fn() },
     user: {
       count: vi.fn(),
+      findMany: vi.fn(),
       update: vi.fn(),
     },
     team: { count: vi.fn() },
@@ -37,16 +38,52 @@ describe("AdminService", () => {
     expect(result.counts).toEqual({ auditLogs: 2, users: 3, teams: 1, invitations: 4 })
   })
 
-  it("disables a user", async () => {
+  it("loads users without exposing password hashes", async () => {
+    const prisma = createPrismaMock()
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never)
+
+    await service.listUsers()
+
+    expect(prisma.user.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({
+        id: true,
+        email: true,
+        status: true,
+        memberships: {
+          select: {
+            role: true,
+            team: { select: { id: true, name: true } },
+          },
+        },
+        createdAt: true,
+      }),
+    }))
+    expect(prisma.user.findMany.mock.calls[0]?.[0].select).not.toHaveProperty("passwordHash")
+  })
+
+  it("disables a user without returning the password hash", async () => {
     const prisma = createPrismaMock()
     const service = new AdminService(prisma as unknown as PrismaService, {} as never)
 
     await service.updateUserStatus("user-1", { status: "disabled" })
 
-    expect(prisma.user.update).toHaveBeenCalledWith({
+    expect(prisma.user.update).toHaveBeenCalledWith(expect.objectContaining({
       where: { id: "user-1" },
       data: { status: "disabled" },
-    })
+      select: expect.objectContaining({
+        id: true,
+        email: true,
+        status: true,
+        memberships: {
+          select: {
+            role: true,
+            team: { select: { id: true, name: true } },
+          },
+        },
+        createdAt: true,
+      }),
+    }))
+    expect(prisma.user.update.mock.calls[0]?.[0].select).not.toHaveProperty("passwordHash")
   })
 
   it("loads invitations without exposing token hashes", async () => {
