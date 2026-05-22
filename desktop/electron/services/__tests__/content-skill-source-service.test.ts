@@ -18,6 +18,7 @@ import { ContentCapabilityError } from "../content-capability-errors"
 import { readSkillDraftFromDirectory } from "../content-skill-source-service"
 
 const tempRoots: string[] = []
+const itCanCreateBackslashFile = path.sep === "/" ? it : it.skip
 
 async function createTempRoot(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), `synapse-skill-source-${randomUUID()}-`))
@@ -71,7 +72,7 @@ describe("content skill source service", () => {
     await expect(readSkillDraftFromDirectory(root)).rejects.toThrow(ContentCapabilityError)
   })
 
-  it("rejects duplicate paths after normalization", async () => {
+  itCanCreateBackslashFile("rejects duplicate paths after normalization", async () => {
     const root = await createTempRoot()
     await writeText(path.join(root, "SKILL.md"), "# Demo Skill")
     await writeText(path.join(root, "refs", "a.md"), "a")

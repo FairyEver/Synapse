@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import path from "node:path"
 import type { PrepareSkillDirectoryContext } from "../../main-types"
 import { writeSynapseSkillDirectory } from "../shared-skill-directory"
 
@@ -54,7 +55,7 @@ describe("writeSynapseSkillDirectory", () => {
     await writeSynapseSkillDirectory(context)
 
     expect(writeTextFile).toHaveBeenCalledWith(
-      "/tmp/staging/.synapse.json",
+      path.join("/tmp/staging", ".synapse.json"),
       JSON.stringify({
         id: "skill-1",
         repositoryVersion: "20260521010101",
