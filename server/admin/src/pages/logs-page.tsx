@@ -28,6 +28,15 @@ const LEVEL_VARIANTS: Record<string, "destructive" | "outline" | "default" | "se
   fatal: "destructive",
 };
 
+export const LOG_LEVEL_FILTER_OPTIONS = [
+  { value: "all", label: "全部" },
+  { value: "error", label: "Error" },
+  { value: "fatal", label: "Fatal" },
+  { value: "warn", label: "Warn" },
+  { value: "info", label: "Info" },
+  { value: "debug", label: "Debug" },
+] as const;
+
 function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -80,11 +89,9 @@ export function LogsPage() {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部</SelectItem>
-                <SelectItem value="error">Error</SelectItem>
-                <SelectItem value="warn">Warn</SelectItem>
-                <SelectItem value="info">Info</SelectItem>
-                <SelectItem value="debug">Debug</SelectItem>
+                {LOG_LEVEL_FILTER_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                ))}
               </SelectContent>
             </Select>
             <Button variant="outline" size="sm" onClick={fetchData}>
