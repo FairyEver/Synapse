@@ -3,6 +3,7 @@
  */
 import { act, type ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
+import type { ToasterProps } from "sonner"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const rendererLogger = vi.hoisted(() => ({
@@ -21,7 +22,7 @@ const toastFns = vi.hoisted(() => ({
   warning: vi.fn(() => "toast-warning"),
 }))
 
-const toaster = vi.hoisted(() => vi.fn(() => null))
+const toaster = vi.hoisted(() => vi.fn((_props: ToasterProps) => null))
 
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => rendererLogger,

@@ -29,7 +29,7 @@ function AgentComposerInputBox({
         </div>
       ) : null}
       <div className="mx-auto flex min-w-0 max-w-4xl flex-col">
-        <div className="min-h-0 flex-1">
+        <div className="agent-composer-input-box__editor min-h-0 flex-1">
           {editor}
         </div>
         <div className="agent-composer-input-box__toolbar flex items-center justify-between gap-2">
