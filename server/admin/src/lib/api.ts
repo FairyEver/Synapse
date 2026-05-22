@@ -72,6 +72,17 @@ export interface CreateSignupInvitationResponse {
   readonly expiresAt: string
 }
 
+export interface UserRegisterInput {
+  readonly invitationToken: string
+  readonly email: string
+  readonly password: string
+}
+
+export interface UserTokenPair {
+  readonly accessToken: string
+  readonly refreshToken: string
+}
+
 export interface LogFileInfo {
   name: string;
   size: number;
@@ -202,4 +213,12 @@ export const adminApi = {
     const qs = params.toString();
     window.open(`${dashboardApiBasePath}/logs/download${qs ? `?${qs}` : ""}`, "_blank");
   },
+}
+
+export const userAuthApi = {
+  register: (input: UserRegisterInput) =>
+    request<UserTokenPair>("/api/auth/register", {
+      method: "POST",
+      body: JSON.stringify(input),
+    }),
 }
