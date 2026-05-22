@@ -35,7 +35,7 @@ describe("InvitationsService", () => {
     })
   })
 
-  it("returns a canonical signup invite URL", async () => {
+  it("returns a dashboard signup invite URL", async () => {
     const prisma = createPrismaMock()
     const service = new InvitationsService(prisma as never)
 
@@ -44,10 +44,10 @@ describe("InvitationsService", () => {
       publicAppUrl: "https://app.example.com/",
     })
 
-    expect(result.inviteUrl).toBe(`https://app.example.com/invite#token=${result.token}`)
+    expect(result.inviteUrl).toBe(`https://app.example.com/dashboard/signup?invite=${result.token}`)
   })
 
-  it("returns a canonical team invite URL", async () => {
+  it("returns a separate team invite URL", async () => {
     const prisma = createPrismaMock()
     const service = new InvitationsService(prisma as never)
 
@@ -57,7 +57,7 @@ describe("InvitationsService", () => {
       publicAppUrl: "https://app.example.com",
     })
 
-    expect(result.inviteUrl).toBe(`https://app.example.com/invite#token=${result.token}`)
+    expect(result.inviteUrl).toBe(`https://app.example.com/team-invite?token=${result.token}`)
   })
 
   it("rejects invalid invitation tokens", async () => {
@@ -106,7 +106,7 @@ describe("InvitationsService", () => {
     })
   })
 
-  it("accepts full invite URLs when consuming invitations", async () => {
+  it("accepts dashboard signup URLs when consuming invitations", async () => {
     const prisma = createPrismaMock()
     prisma.invitation.updateMany.mockResolvedValue({ count: 1 })
     prisma.invitation.findUnique.mockResolvedValue({
@@ -121,7 +121,7 @@ describe("InvitationsService", () => {
     const service = new InvitationsService(prisma as never)
 
     await service.consumeInvitation({
-      token: "https://app.example.com/invite#token=plain-token",
+      token: "https://app.example.com/dashboard/signup?invite=plain-token",
       type: "user_signup",
       acceptedByUserId: "user-1",
     })

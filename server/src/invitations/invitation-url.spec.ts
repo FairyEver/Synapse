@@ -1,12 +1,26 @@
 import { describe, expect, it } from "vitest"
-import { buildInviteUrl, parseInviteTokenInput, resolvePublicAppUrl } from "./invitation-url"
+import { buildSignupInviteUrl, buildTeamInviteUrl, parseInviteTokenInput, resolvePublicAppUrl } from "./invitation-url"
 
 describe("invitation URL helpers", () => {
-  it("builds canonical invite URLs with fragment tokens", () => {
-    expect(buildInviteUrl({
+  it("builds signup invite URLs under the dashboard signup route", () => {
+    expect(buildSignupInviteUrl({
       publicAppUrl: "https://app.example.com/",
       token: "plain-token",
-    })).toBe("https://app.example.com/invite#token=plain-token")
+    })).toBe("https://app.example.com/dashboard/signup?invite=plain-token")
+  })
+
+  it("encodes signup invite tokens in the invite query parameter", () => {
+    expect(buildSignupInviteUrl({
+      publicAppUrl: "https://app.example.com",
+      token: "plain token+value",
+    })).toBe("https://app.example.com/dashboard/signup?invite=plain+token%2Bvalue")
+  })
+
+  it("keeps team invite URL construction separate from signup", () => {
+    expect(buildTeamInviteUrl({
+      publicAppUrl: "https://app.example.com/",
+      token: "plain-token",
+    })).toBe("https://app.example.com/team-invite?token=plain-token")
   })
 
   it("prefers the configured public app URL over request origin", () => {
@@ -35,13 +49,18 @@ describe("invitation URL helpers", () => {
     })).toBe("https://synapse.example.com")
   })
 
-  it("parses tokens from canonical invite URLs", () => {
-    expect(parseInviteTokenInput("https://app.example.com/invite#token=plain-token"))
+  it("parses tokens from signup invite URLs", () => {
+    expect(parseInviteTokenInput("https://app.example.com/dashboard/signup?invite=plain-token"))
       .toBe("plain-token")
   })
 
-  it("parses tokens from hash-router invite URLs", () => {
-    expect(parseInviteTokenInput("https://app.example.com/#/invite?token=plain-token"))
+  it("parses tokens from token query URLs", () => {
+    expect(parseInviteTokenInput("https://app.example.com/team-invite?token=plain-token"))
+      .toBe("plain-token")
+  })
+
+  it("parses tokens from invitationToken query URLs", () => {
+    expect(parseInviteTokenInput("https://app.example.com/register?invitationToken=plain-token"))
       .toBe("plain-token")
   })
 

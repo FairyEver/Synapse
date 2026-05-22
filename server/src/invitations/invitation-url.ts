@@ -34,12 +34,21 @@ function resolvePublicAppUrl(input: {
   return normalizePublicAppUrl(`${protocol}://${host}`)
 }
 
-function buildInviteUrl(input: {
+function buildSignupInviteUrl(input: {
   readonly publicAppUrl: string
   readonly token: string
 }): string {
-  const url = new URL("/invite", `${normalizePublicAppUrl(input.publicAppUrl)}/`)
-  url.hash = `token=${encodeURIComponent(input.token)}`
+  const url = new URL("/dashboard/signup", `${normalizePublicAppUrl(input.publicAppUrl)}/`)
+  url.searchParams.set("invite", input.token)
+  return url.toString()
+}
+
+function buildTeamInviteUrl(input: {
+  readonly publicAppUrl: string
+  readonly token: string
+}): string {
+  const url = new URL("/team-invite", `${normalizePublicAppUrl(input.publicAppUrl)}/`)
+  url.searchParams.set("token", input.token)
   return url.toString()
 }
 
@@ -49,14 +58,9 @@ function parseInviteTokenInput(value: string): string {
 
   try {
     const url = new URL(trimmed)
-    const hashValue = url.hash.replace(/^#/, "")
-    const hashQuery = hashValue.includes("?")
-      ? hashValue.slice(hashValue.indexOf("?") + 1)
-      : hashValue
-    const hashToken = new URLSearchParams(hashQuery).get("token")
-    if (hashToken) return hashToken.trim()
-
-    const queryToken = url.searchParams.get("token") ?? url.searchParams.get("invitationToken")
+    const queryToken = url.searchParams.get("invite")
+      ?? url.searchParams.get("token")
+      ?? url.searchParams.get("invitationToken")
     if (queryToken) return queryToken.trim()
   } catch {
     return trimmed
@@ -65,4 +69,4 @@ function parseInviteTokenInput(value: string): string {
   return trimmed
 }
 
-export { buildInviteUrl, parseInviteTokenInput, resolvePublicAppUrl }
+export { buildSignupInviteUrl, buildTeamInviteUrl, parseInviteTokenInput, resolvePublicAppUrl }
