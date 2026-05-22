@@ -5,6 +5,8 @@ import type {
   SynapseContentFile,
   SynapseContentMeta,
   SynapseContentMutationResult,
+  SynapseOpenContentCreateWindowPayload,
+  SynapseOpenContentEditWindowPayload,
   SynapseOpenContentWindowPayload,
   SynapseContentType,
   SynapseCreateContentRequest,
@@ -131,6 +133,20 @@ async function openContentDetailWindow(payload: SynapseOpenContentWindowPayload)
   return requireContentBridge().openDetailWindow(payload)
 }
 
+async function openContentCreateWindow(payload: SynapseOpenContentCreateWindowPayload): Promise<void> {
+  return requireContentBridge().openCreateWindow(payload)
+}
+
+async function openContentEditWindow(payload: SynapseOpenContentEditWindowPayload): Promise<void> {
+  return requireContentBridge().openEditWindow(payload)
+}
+
+async function readContentEditorInitPayload(
+  requestId: string,
+): Promise<SynapseOpenContentCreateWindowPayload | SynapseOpenContentEditWindowPayload | null> {
+  return requireContentBridge().readEditorInitPayload({ requestId })
+}
+
 async function getEditorAdapters(): Promise<SynapseEditorAdapterSummary[]> {
   return requireContentBridge().getEditorAdapters()
 }
@@ -188,10 +204,13 @@ export {
   installToEditor,
   listContent,
   listDeletedContent,
+  openContentCreateWindow,
   openContentDetailWindow,
+  openContentEditWindow,
   readEditorInstallFormValues,
   purgeContent,
   readContent,
+  readContentEditorInitPayload,
   readAttachmentFile,
   readDetail,
   readRuleContent,

@@ -48,6 +48,8 @@ import type {
   SynapseCreateContentRequest,
   SynapseDeleteContentPayload,
   SynapseContentMutationResult,
+  SynapseOpenContentCreateWindowPayload,
+  SynapseOpenContentEditWindowPayload,
   SynapseOpenContentWindowPayload,
   SynapseContentType,
   SynapsePurgeContentPayload,
@@ -496,6 +498,11 @@ export type SynapseBridge = {
       args: { contentType: SynapseContentType; id: string },
     ) => Promise<SynapseContentDownloadResult>
     openDetailWindow: (payload: SynapseOpenContentWindowPayload) => Promise<void>
+    openCreateWindow: (payload: SynapseOpenContentCreateWindowPayload) => Promise<void>
+    openEditWindow: (payload: SynapseOpenContentEditWindowPayload) => Promise<void>
+    readEditorInitPayload: (payload: { requestId: string }) => Promise<
+      SynapseOpenContentCreateWindowPayload | SynapseOpenContentEditWindowPayload | null
+    >
     getEditorAdapters: () => Promise<SynapseEditorAdapterSummary[]>
     installToEditor: (
       payload: SynapseInstallToEditorPayload,

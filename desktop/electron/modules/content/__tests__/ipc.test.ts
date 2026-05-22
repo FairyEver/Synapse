@@ -91,7 +91,12 @@ vi.mock("../../../services/content-submission-service", () => ({
 }))
 
 vi.mock("../../../services/content-window-service", () => ({
-  contentWindowService: { openDetailWindow: vi.fn() },
+  contentWindowService: {
+    openCreateWindow: vi.fn(),
+    openDetailWindow: vi.fn(),
+    openEditWindow: vi.fn(),
+    readPendingEditorPayload: vi.fn(),
+  },
 }))
 
 vi.mock("../../../services/editor-adapter-service", () => ({
@@ -415,6 +420,55 @@ describe("contentIpcModule sync ownership", () => {
       error: "Unexpected service id: repo.sync-coordinator",
       message: "Unexpected service id: repo.sync-coordinator",
     })
+  })
+
+  it("emits content.changed after create saves", async () => {
+    const { contentIpcModule } = await import("../ipc")
+    mocks.contentSubmissionService.createContent.mockResolvedValueOnce({
+      id: "rule-1",
+      latestHistoryDirname: "20260522000000Z__user__abc123",
+      modifiedAt: "2026-05-22T12:00:00.000Z",
+      pendingPushCount: 0,
+      status: "saved",
+      title: "Rule",
+      type: "rule",
+    })
+
+    await contentIpcModule.methods.create.handler(createContext() as never, {
+      contentType: "rule",
+      payload: { title: "Rule" },
+    } as never)
+
+    expect(mocks.eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "content",
+      type: "content.changed",
+      payload: {
+        contentId: "rule-1",
+        contentType: "rule",
+        latestHistoryDirname: "20260522000000Z__user__abc123",
+        modifiedAt: "2026-05-22T12:00:00.000Z",
+        operation: "create",
+      },
+    }))
+  })
+
+  it("does not emit content.changed after update conflicts", async () => {
+    const { contentIpcModule } = await import("../ipc")
+    mocks.contentSubmissionService.updateContent.mockResolvedValueOnce({
+      id: "rule-1",
+      latestHistoryDirname: "20260522000000Z__user__abc123",
+      latestModifiedAt: "2026-05-22T12:00:00.000Z",
+      latestModifiedByDisplayName: "User",
+      status: "conflict",
+      type: "rule",
+    })
+
+    await contentIpcModule.methods.update.handler(createContext() as never, {
+      contentType: "rule",
+      payload: { id: "rule-1", title: "Rule" },
+    } as never)
+
+    expect(getEvents("content.changed")).toHaveLength(0)
   })
 
   it("refreshes and broadcasts install status after project editor install succeeds", async () => {
