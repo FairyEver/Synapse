@@ -21,6 +21,9 @@ async function createTestService() {
         status: "active",
       }),
     },
+    user: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
   }
   return {
     service: new AdminAuthService(jwt, prisma as never),
@@ -42,7 +45,7 @@ describe("AdminAuthService", () => {
 
     await expect(service.login("admin@d2.com", "wrong-password"))
       .rejects
-      .toThrow("管理员账号或密码错误。")
+      .toThrow("邮箱或密码错误。")
   })
 
   it("rejects a disabled administrator", async () => {
@@ -56,6 +59,21 @@ describe("AdminAuthService", () => {
 
     await expect(service.login("admin@d2.com", "admin@pwd1234!"))
       .rejects
-      .toThrow("管理员账号或密码错误。")
+      .toThrow("邮箱或密码错误。")
+  })
+
+  it("accepts normal user credentials for dashboard login", async () => {
+    const { service, prisma } = await createTestService()
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: "user-1",
+      email: "user@example.com",
+      passwordHash: await hashPassword("user-password"),
+      status: "active",
+    })
+
+    const result = await service.login("user@example.com", "user-password")
+
+    expect(result.email).toBe("user@example.com")
+    expect(result.token.length).toBeGreaterThan(20)
   })
 })

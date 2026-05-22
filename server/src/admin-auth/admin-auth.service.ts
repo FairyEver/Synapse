@@ -7,6 +7,7 @@ import { PrismaService } from "../prisma/prisma.service"
 interface AdminJwtPayload {
   readonly sub: string
   readonly email: string
+  readonly type?: "admin" | "user"
 }
 
 @Injectable()
@@ -26,31 +27,50 @@ export class AdminAuthService {
     const normalizedEmail = email.trim().toLowerCase()
     const admin = await this.prisma.adminUser.findFirst({ orderBy: { createdAt: "asc" } })
     const passwordMatches = admin ? await verifyPassword(password, admin.passwordHash) : false
-    if (!admin || admin.status !== "active" || normalizedEmail !== admin.email || !passwordMatches) {
+    if (admin && admin.status === "active" && normalizedEmail === admin.email && passwordMatches) {
+      const token = this.jwt.sign({ sub: admin.id, email: admin.email, type: "admin" } satisfies AdminJwtPayload)
       await this.auditLog?.record({
-        adminEmail: normalizedEmail,
-        action: "admin.login.failure",
+        adminEmail: admin.email,
+        action: "admin.login.success",
         targetType: "admin",
-        targetId: admin?.id ?? "unknown",
+        targetId: admin.id,
         ipAddress: "system",
       })
-      throw new UnauthorizedException("管理员账号或密码错误。")
+      return { email: admin.email, token }
     }
 
-    const token = this.jwt.sign({ sub: admin.id, email: admin.email } satisfies AdminJwtPayload)
+    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
+    const userPasswordMatches = user ? await verifyPassword(password, user.passwordHash) : false
+    if (user && user.status === "active" && userPasswordMatches) {
+      const token = this.jwt.sign({ sub: user.id, email: user.email, type: "user" } satisfies AdminJwtPayload)
+      await this.auditLog?.record({
+        adminEmail: user.email,
+        action: "user.dashboard_login.success",
+        targetType: "user",
+        targetId: user.id,
+        ipAddress: "system",
+      })
+      return { email: user.email, token }
+    }
+
     await this.auditLog?.record({
-      adminEmail: admin.email,
-      action: "admin.login.success",
-      targetType: "admin",
-      targetId: admin.id,
+      adminEmail: normalizedEmail,
+      action: "dashboard.login.failure",
+      targetType: "account",
+      targetId: admin?.id ?? user?.id ?? "unknown",
       ipAddress: "system",
     })
-    return { email: admin.email, token }
+    throw new UnauthorizedException("邮箱或密码错误。")
   }
 
   async verify(token: string): Promise<{ id: string; email: string } | null> {
     try {
       const payload = this.jwt.verify<AdminJwtPayload>(token)
+      if (payload.type === "user") {
+        const user = await this.prisma.user.findUnique({ where: { id: payload.sub } })
+        if (!user || user.status !== "active" || user.email !== payload.email) return null
+        return { id: user.id, email: user.email }
+      }
       const admin = await this.prisma.adminUser.findUnique({ where: { id: payload.sub } })
       if (!admin || admin.status !== "active" || admin.email !== payload.email) return null
       return { id: admin.id, email: admin.email }

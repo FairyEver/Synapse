@@ -11,12 +11,15 @@ import {
 } from "@/components/ui/empty"
 import {
   ModuleSidebar,
-  ModuleSidebarList,
 } from "@/components/module-sidebar"
 import {
-  NativeSelect,
-  NativeSelectOption,
-} from "@/components/ui/native-select"
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { useAppConfig } from "@/app-shell/config"
 import { requestOpenSettingsTab } from "@/app-shell/navigation"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
@@ -72,22 +75,32 @@ function AgentSessionSidebar({
 
   return (
     <ModuleSidebar variant="bare">
-      <ModuleSidebarList data-track="agent-session-list">
+      <div
+        className="min-h-0 w-full min-w-0 flex-1 overflow-y-auto overflow-x-hidden px-0.5 py-0.5"
+        data-track="agent-session-list"
+      >
         <div className="px-2 pb-2">
-          <NativeSelect
-            aria-label="会话来源"
-            className="w-full"
+          <Select
             data-track="agent-session-source-filter"
-            size="sm"
             value={sourceFilter}
-            onChange={(event) => setSourceFilter(event.target.value as ConversationSourceFilter)}
+            onValueChange={(value) => setSourceFilter(value as ConversationSourceFilter)}
           >
-            {CONVERSATION_SOURCE_OPTIONS.map((option) => (
-              <NativeSelectOption key={option.value} value={option.value}>
-                {option.label}
-              </NativeSelectOption>
-            ))}
-          </NativeSelect>
+            <SelectTrigger aria-label="会话来源" className="w-full min-w-0" size="sm">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent
+              position="popper"
+              className="w-(--radix-select-trigger-width) min-w-(--radix-select-trigger-width)"
+            >
+              <SelectGroup>
+                {CONVERSATION_SOURCE_OPTIONS.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectGroup>
+            </SelectContent>
+          </Select>
         </div>
         {projects.length === 0 && visibleArchivedSessions.length === 0 ? (
           <Empty className="border-0 px-4 py-8">
@@ -135,7 +148,7 @@ function AgentSessionSidebar({
             ) : null}
           </>
         )}
-      </ModuleSidebarList>
+      </div>
       <ProviderModelSelectDialog
         open={createProject !== null}
         onOpenChange={(open) => { if (!open) setCreateProject(null) }}

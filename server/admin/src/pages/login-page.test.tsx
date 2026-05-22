@@ -19,8 +19,8 @@ describe("LoginPage", () => {
     vi.clearAllMocks()
   })
 
-  it("submits admin credentials", async () => {
-    vi.mocked(adminApi.login).mockResolvedValue({ email: "admin@d2.com" })
+  it("submits account credentials", async () => {
+    vi.mocked(adminApi.login).mockResolvedValue({ email: "user@example.com" })
     const onLoggedIn = vi.fn()
     const result = await render(<LoginPage onLoggedIn={onLoggedIn} />)
     cleanup = result.unmount
@@ -30,7 +30,7 @@ describe("LoginPage", () => {
     const form = result.container.querySelector("form") as HTMLFormElement
 
     await act(async () => {
-      changeInput(email, "admin@d2.com")
+      changeInput(email, "user@example.com")
       changeInput(password, "secret")
     })
 
@@ -39,9 +39,17 @@ describe("LoginPage", () => {
     })
 
     expect(adminApi.login).toHaveBeenCalledWith({
-      email: "admin@d2.com",
+      email: "user@example.com",
       password: "secret",
     })
-    expect(onLoggedIn).toHaveBeenCalledWith({ email: "admin@d2.com" })
+    expect(onLoggedIn).toHaveBeenCalledWith({ email: "user@example.com" })
+  })
+
+  it("uses generic account login copy", async () => {
+    const result = await render(<LoginPage onLoggedIn={vi.fn()} />)
+    cleanup = result.unmount
+
+    expect(result.container.textContent).toContain("登录")
+    expect(result.container.textContent).not.toContain("管理员登录")
   })
 })

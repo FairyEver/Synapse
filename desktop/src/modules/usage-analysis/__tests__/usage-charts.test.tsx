@@ -9,6 +9,7 @@ import { UsageTodayHourlyChart, UsageTrendChart } from "../shared/components/usa
 
 const mocks = vi.hoisted(() => ({
   chartOptions: [] as unknown[],
+  chartEvents: [] as Record<string, (params: unknown) => void>[],
   resize: vi.fn(),
 }))
 
@@ -18,10 +19,12 @@ vi.mock("echarts-for-react", async () => {
     default: React.forwardRef(({
       className,
       option,
+      onEvents,
       style,
     }: {
       readonly className?: string
       readonly option: unknown
+      readonly onEvents?: Record<string, (params: unknown) => void>
       readonly style?: React.CSSProperties
     }, ref) => {
       React.useImperativeHandle(ref, () => ({
@@ -30,6 +33,9 @@ vi.mock("echarts-for-react", async () => {
         }),
       }))
       mocks.chartOptions.push(option)
+      if (onEvents) {
+        mocks.chartEvents.push(onEvents)
+      }
       return <div className={className} data-echarts-chart="" style={style} />
     }),
   }
@@ -71,6 +77,7 @@ let roots: Root[] = []
 
 beforeEach(() => {
   mocks.chartOptions.length = 0
+  mocks.chartEvents.length = 0
   mocks.resize.mockClear()
   resizeObservers.length = 0
 })
@@ -98,6 +105,41 @@ describe("UsageTrendChart", () => {
 })
 
 describe("UsageTodayHourlyChart", () => {
+  it("preserves hidden token components when rows refresh", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<UsageTodayHourlyChart title="今日时段" rows={[todayRow("2026-05-20 09", 100)]} />)
+    })
+
+    await act(async () => {
+      mocks.chartEvents.at(-1)?.legendselectchanged?.({
+        selected: {
+          输入: true,
+          输出: false,
+          缓存读: false,
+          缓存写: true,
+          推理: true,
+          请求: true,
+        },
+      })
+    })
+
+    await act(async () => {
+      root.render(<UsageTodayHourlyChart title="今日时段" rows={[todayRow("2026-05-20 09", 150)]} />)
+    })
+
+    const option = mocks.chartOptions.at(-1) as {
+      readonly legend?: { readonly selected?: Record<string, boolean> }
+    }
+
+    expect(option.legend?.selected?.输出).toBe(false)
+    expect(option.legend?.selected?.缓存读).toBe(false)
+  })
+
   it("resizes the chart when its container changes size", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -178,3 +220,22 @@ describe("UsageTodayHourlyChart", () => {
     expect(option.xAxis?.axisLabel?.interval).toBe(0)
   })
 })
+
+function todayRow(bucket: string, tokens: number) {
+  return {
+    bucket,
+    tokens,
+    estimatedCost: 0,
+    requests: 1,
+    toolCalls: 0,
+    modelBreakdown: [{
+      model: "gpt",
+      tokens,
+      input: 60,
+      output: 20,
+      cacheRead: 10,
+      cacheWrite: 5,
+      reasoning: 5,
+    }],
+  }
+}

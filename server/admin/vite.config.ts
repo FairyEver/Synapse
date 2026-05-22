@@ -41,10 +41,7 @@ export default defineConfig({
     port: 3000,
     strictPort: true,
     proxy: {
-      [`${dashboardBasePath}/api`]: { target: apiTarget, changeOrigin: true },
-      [`${dashboardBasePath}/session`]: { target: apiTarget, changeOrigin: true },
-      [`${dashboardBasePath}/login`]: { target: apiTarget, changeOrigin: true },
-      [`${dashboardBasePath}/logout`]: { target: apiTarget, changeOrigin: true },
+      "/api": { target: apiTarget, changeOrigin: true },
       "/v1": { target: apiTarget, changeOrigin: true },
     },
   },

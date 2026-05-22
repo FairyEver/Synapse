@@ -90,4 +90,17 @@ describe("App", () => {
     expect(result.container.querySelector<HTMLInputElement>("#signup-email")).not.toBeNull()
     expect(adminApi.getSession).not.toHaveBeenCalled()
   })
+
+  it("renders login without loading an admin session", async () => {
+    window.history.pushState({}, "", "/dashboard/login")
+
+    const result = await render(<App />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("登录")
+    })
+    expect(result.container.querySelector<HTMLInputElement>("#admin-email")).not.toBeNull()
+    expect(adminApi.getSession).not.toHaveBeenCalled()
+  })
 })

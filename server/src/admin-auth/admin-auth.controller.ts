@@ -1,8 +1,8 @@
-import { BadRequestException, Body, Controller, Get, Post, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Get, Post, Req, Res, UseGuards } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Response } from "express"
 import { z } from "zod"
-import { AdminAuthGuard } from "./admin-auth.guard"
+import { AdminAuthGuard, type AdminRequest } from "./admin-auth.guard"
 import { AdminAuthService } from "./admin-auth.service"
 
 const loginSchema = z.object({
@@ -10,7 +10,7 @@ const loginSchema = z.object({
   password: z.string().min(1),
 })
 
-@Controller("/dashboard")
+@Controller("/api/admin")
 export class AdminAuthController {
   constructor(private readonly auth: AdminAuthService) {}
 
@@ -39,7 +39,7 @@ export class AdminAuthController {
 
   @UseGuards(AdminAuthGuard)
   @Get("/session")
-  async getSession() {
-    return { email: await this.auth.getEmail() }
+  async getSession(@Req() request: AdminRequest) {
+    return { email: request.admin!.email }
   }
 }

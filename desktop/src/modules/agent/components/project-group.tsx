@@ -16,9 +16,9 @@ import {
 } from "@/components/ui/dialog"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { ModuleSidebarItem } from "@/components/module-sidebar"
 import type { SynapseAgentSessionSummary } from "@/types/agent"
 import { SessionTrailing } from "./session-trailing"
+import { AgentSidebarSessionRow } from "./agent-sidebar-session-row"
 import { sessionLabel } from "../utils"
 import { conversationUnreadKey } from "../live-sync"
 
@@ -101,16 +101,17 @@ function ProjectGroup({
           </Button>
         </div>
         <CollapsibleContent>
-          <div className="flex flex-col pl-3">
+          <div className="flex w-full min-w-0 flex-col gap-0 pl-3">
             {sessions.map((session) => {
               const unread = unreadByConversationId[conversationUnreadKey(session.projectId, session.id)] ?? 0
               const active = session.projectId === selectedProjectId
                 && session.id === selectedConversationId
+              const label = sessionLabel(session)
               return (
                 <ContextMenu key={`${session.projectId}:${session.id}`}>
                   <ContextMenuTrigger asChild>
-                    <div>
-                      <ModuleSidebarItem
+                    <div className="w-full min-w-0">
+                      <AgentSidebarSessionRow
                         active={active}
                         trailing={
                           <SessionTrailing
@@ -120,14 +121,11 @@ function ProjectGroup({
                             onDelete={() => onDelete(session)}
                           />
                         }
-                        data-track="agent-session-select"
                         trackValue={`${session.projectId}:${session.id}`}
-                        onClick={() => onSelect(session)}
+                        onSelect={() => onSelect(session)}
                       >
-                        <span className="flex items-center gap-1.5 text-xs font-normal">
-                          <span className="truncate">{sessionLabel(session)}</span>
-                        </span>
-                      </ModuleSidebarItem>
+                        {label}
+                      </AgentSidebarSessionRow>
                     </div>
                   </ContextMenuTrigger>
                   <ContextMenuContent>

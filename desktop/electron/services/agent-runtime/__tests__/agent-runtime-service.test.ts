@@ -683,6 +683,68 @@ describe("AgentRuntimeService", () => {
     )
   })
 
+  it("names workflow scheduled conversations from workflow context", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+      now: fixedNow,
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "bypassPermissions",
+      prompt: "workflow prompt",
+      sessionPolicy: "fresh",
+      timeoutMs: 120_000,
+      sourcePlatform: "workflow",
+      userMeta: {
+        source: "workflow",
+        workflowName: "Workflow One",
+        workflowNodeName: "Prompt",
+      },
+    })
+
+    const session = await conversations.get(result.conversationId)
+    expect(session?.name).toBe("Workflow One / Prompt · 04-26 08:00")
+  })
+
+  it("names scheduled conversations from task context", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+      now: fixedNow,
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "bypassPermissions",
+      prompt: "scheduled prompt",
+      sessionPolicy: "fresh",
+      timeoutMs: 120_000,
+      userMeta: {
+        source: "scheduled",
+        taskName: "Daily Summary",
+      },
+    })
+
+    const session = await conversations.get(result.conversationId)
+    expect(session?.name).toBe("Daily Summary · 04-26 08:00")
+  })
+
   it("persists scheduled resumed permission mode for renderer summaries", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const service = new AgentRuntimeService({

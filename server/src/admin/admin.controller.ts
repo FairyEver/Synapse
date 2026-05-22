@@ -17,7 +17,7 @@ const bulkInvitationDeleteSchema = z.object({
 }).strict()
 
 @UseGuards(AdminAuthGuard)
-@Controller("/dashboard/api")
+@Controller("/api/admin")
 export class AdminController {
   constructor(
     private readonly admin: AdminService,

@@ -310,7 +310,7 @@ export class AgentRuntimeService {
       let result: AgentRuntimeTurnResult
 
       if (input.sessionPolicy === "fresh" || !input.lastConversationId) {
-        const name = formatScheduledSessionName()
+        const name = formatScheduledSessionName(input, this.deps.now?.() ?? new Date())
         result = await this.conversationRouter.sendNewSession(message, name, {
           abortSignal: ac.signal,
           liveEventTimeoutMs: scheduledLiveEventTimeoutMs(input.timeoutMs),
@@ -326,7 +326,7 @@ export class AgentRuntimeService {
             && resumeError.message.includes("not found")
           if (!isNotFound) throw resumeError
           this.logScheduledResumeFallback(input, message, resumeError)
-          const name = formatScheduledSessionName()
+          const name = formatScheduledSessionName(input, this.deps.now?.() ?? new Date())
           result = await this.conversationRouter.sendNewSession(message, name, {
             abortSignal: ac.signal,
             liveEventTimeoutMs: scheduledLiveEventTimeoutMs(input.timeoutMs),
@@ -1201,15 +1201,36 @@ function truncateRunes(value: string, maxRunes: number): string {
   return `${runes.slice(0, maxRunes).join("")}...`
 }
 
-function formatScheduledSessionName(): string {
-  const now = new Date()
-  const year = now.getFullYear()
+function formatScheduledSessionName(input: ScheduledAgentSendInput, now: Date): string {
+  const timestamp = formatAutomatedSessionTimestamp(now)
+  const subject = input.sourcePlatform === "workflow"
+    ? workflowSessionSubject(input.userMeta)
+    : scheduledSessionSubject(input.userMeta)
+  return subject ? `${truncateRunes(subject, 48)} · ${timestamp}` : timestamp
+}
+
+function scheduledSessionSubject(userMeta: Record<string, unknown> | undefined): string | undefined {
+  return stringMeta(userMeta, "taskName")
+}
+
+function workflowSessionSubject(userMeta: Record<string, unknown> | undefined): string | undefined {
+  const workflowName = stringMeta(userMeta, "workflowName")
+  const nodeName = stringMeta(userMeta, "workflowNodeName")
+  if (workflowName && nodeName && workflowName !== nodeName) return `${workflowName} / ${nodeName}`
+  return workflowName ?? nodeName
+}
+
+function stringMeta(userMeta: Record<string, unknown> | undefined, key: string): string | undefined {
+  const value = userMeta?.[key]
+  return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+function formatAutomatedSessionTimestamp(now: Date): string {
   const month = String(now.getMonth() + 1).padStart(2, "0")
   const day = String(now.getDate()).padStart(2, "0")
   const hours = String(now.getHours()).padStart(2, "0")
   const minutes = String(now.getMinutes()).padStart(2, "0")
-  const seconds = String(now.getSeconds()).padStart(2, "0")
-  return `⏱ ${year}-${month}-${day} ${hours}:${minutes}:${seconds}`
+  return `${month}-${day} ${hours}:${minutes}`
 }
 
 function escapeShellArg(arg: string, shell: string): string {

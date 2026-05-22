@@ -1,0 +1,68 @@
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { adminApi } from "./api"
+
+describe("adminApi", () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("uses /api/admin for admin session and dashboard data", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ "Content-Type": "application/json" }),
+      json: () => Promise.resolve({ email: "admin@synapse.com" }),
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await adminApi.getSession()
+    await adminApi.login({ email: "admin@synapse.com", password: "password" })
+    await adminApi.logout()
+    await adminApi.listBackups()
+    await adminApi.triggerBackup()
+
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/admin/session",
+      expect.objectContaining({ credentials: "include" }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/admin/login",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/admin/logout",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      4,
+      "/api/admin/backup/list",
+      expect.objectContaining({ credentials: "include" }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      5,
+      "/api/admin/backup",
+      expect.objectContaining({ method: "POST", credentials: "include" }),
+    )
+  })
+
+  it("opens admin exports under /api/admin", () => {
+    const openMock = vi.fn()
+    vi.stubGlobal("open", openMock)
+
+    adminApi.exportAuditLogs({ action: "users.post" })
+    adminApi.downloadLogs({ from: "2026-05-01" })
+
+    expect(openMock).toHaveBeenNthCalledWith(
+      1,
+      "/api/admin/audit-logs/export?action=users.post",
+      "_blank",
+    )
+    expect(openMock).toHaveBeenNthCalledWith(
+      2,
+      "/api/admin/logs/download?from=2026-05-01",
+      "_blank",
+    )
+  })
+})

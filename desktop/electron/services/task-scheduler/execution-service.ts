@@ -65,6 +65,7 @@ export class TaskSchedulerExecutionService {
       const config = action.manifest.configSchema.parse(task.action.config)
       const context = {
         taskId: task.id,
+        taskName: task.name,
         runId: run.id,
         triggeredBy,
         cwd: resolveCwd(task, this.deps.defaultCwd),

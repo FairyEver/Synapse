@@ -60,7 +60,7 @@ function resolveAuditTarget(
   responseBody: unknown,
 ): { action: string; targetType: string; targetId: string } {
   const id = params.id ?? readId(responseBody)
-  const segments = path.replace("/dashboard/api/", "").split("/")
+  const segments = path.replace("/api/admin/", "").split("/")
   const resource = segments[0] ?? "unknown"
 
   let action = `${resource}.${method.toLowerCase()}`

@@ -44,6 +44,10 @@ function isSignupRoute(): boolean {
   return window.location.pathname.replace(/\/+$/, "") === "/dashboard/signup"
 }
 
+function isLoginRoute(): boolean {
+  return window.location.pathname.replace(/\/+$/, "") === "/dashboard/login"
+}
+
 function inviteTokenFromSearch(): string {
   return new URLSearchParams(window.location.search).get("invite")?.trim() ?? ""
 }
@@ -81,10 +85,11 @@ function titleForRoute(route: Route): string {
 export default function App() {
   const route = useHashRoute()
   const signupRoute = isSignupRoute()
+  const loginRoute = isLoginRoute()
   const [session, setSession] = React.useState<AdminSession | null | undefined>(undefined)
 
   React.useEffect(() => {
-    if (signupRoute) return
+    if (signupRoute || loginRoute) return
     let alive = true
     adminApi
       .getSession()
@@ -97,7 +102,7 @@ export default function App() {
     return () => {
       alive = false
     }
-  }, [signupRoute])
+  }, [loginRoute, signupRoute])
 
   function handleLogout() {
     adminApi
@@ -114,6 +119,10 @@ export default function App() {
 
   if (signupRoute) {
     return <SignupPage inviteToken={inviteTokenFromSearch()} />
+  }
+
+  if (loginRoute && session === undefined) {
+    return <LoginPage onLoggedIn={setSession} />
   }
 
   if (session === undefined) {

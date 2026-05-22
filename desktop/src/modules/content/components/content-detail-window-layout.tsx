@@ -132,7 +132,7 @@ function ContentDetailWindowShell({
         maxSize={420}
         groupResizeBehavior="preserve-pixel-size"
       >
-        <aside className="h-full min-h-0 bg-background">
+        <aside className="h-full min-h-0 min-w-0 overflow-hidden bg-background">
           {summary}
         </aside>
       </ResizablePanel>
@@ -169,10 +169,11 @@ function ContentDetailWindowSummary({
   )
   const categoryLabel = getCategoryLabel(detail.type, detail.category)
   const isItemFavorite = isFavorite(detail.type, detail.id)
+  const usageContent = detail.usage?.trim() ?? ""
 
   return (
-    <ScrollArea className="h-full">
-      <div className="flex min-h-full flex-col gap-4 p-4">
+    <ScrollArea className="h-full min-w-0" viewportClassName="min-w-0">
+      <div className="flex min-h-full min-w-0 max-w-full flex-col gap-4 p-4">
         <div className="flex min-w-0 items-start gap-3">
           <ContentItemIcon
             contentId={detail.id}
@@ -205,17 +206,18 @@ function ContentDetailWindowSummary({
           onToggleFavorite={() => toggleFavorite(detail.type, detail.id)}
         />
 
-        <section className="flex flex-col gap-2">
-          <h2 className="text-sm font-medium text-foreground">介绍</h2>
-          {detail.description.trim() ? (
+        <section className="flex min-w-0 max-w-full flex-col gap-2 overflow-hidden">
+          <h2 className="text-sm font-medium text-foreground">使用说明</h2>
+          {usageContent ? (
             <MarkdownViewer
-              content={detail.description}
+              className="w-full"
+              content={usageContent}
               mode="rendered"
               showTabs={false}
               surface="plain"
             />
           ) : (
-            <p className="text-sm text-muted-foreground">暂无介绍</p>
+            <p className="text-sm text-muted-foreground">暂无使用说明</p>
           )}
         </section>
       </div>

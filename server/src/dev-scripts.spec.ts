@@ -17,6 +17,7 @@ describe("server dev scripts", () => {
 
     expect(scripts.dev).toContain("dev:api")
     expect(scripts.dev).toContain("dev:admin")
+    expect(scripts.dev).toContain("APP_PUBLIC_URL=${APP_PUBLIC_URL:-http://localhost:3000}")
     expect(scripts["dev:api"]).toBe("nest start --watch")
     expect(scripts["dev:admin"]).toBe("vite --config admin/vite.config.ts --host 0.0.0.0")
   })

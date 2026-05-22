@@ -11,6 +11,7 @@ import type {
 
 export type ActionRuntimeContext = {
   readonly taskId: string
+  readonly taskName?: string
   readonly runId: string
   readonly triggeredBy: "schedule" | "manual" | "missed_run"
   readonly cwd: string

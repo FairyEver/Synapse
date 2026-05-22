@@ -3,7 +3,7 @@ import type { Response } from "express";
 import { LogFileService } from "./log-file.service";
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard";
 
-@Controller("/dashboard/api/logs")
+@Controller("/api/admin/logs")
 @UseGuards(AdminAuthGuard)
 export class LogFileController {
   constructor(private readonly logFileService: LogFileService) {}

@@ -21,15 +21,16 @@ type MarkdownViewerProps = {
 }
 
 export const MARKDOWN_BODY_CLASSNAME = cn(
-  "min-w-0 max-w-full text-sm leading-6 text-foreground",
+  "min-w-0 max-w-full break-words text-sm leading-6 text-foreground",
   "[&_a]:text-foreground [&_a]:underline [&_a]:underline-offset-4",
   "[&_blockquote]:border-l [&_blockquote]:border-border [&_blockquote]:pl-4 [&_blockquote]:text-muted-foreground",
   "[&_code]:break-all [&_code]:rounded-sm [&_code]:bg-muted [&_code]:px-1.5 [&_code]:py-0.5 [&_code]:font-mono [&_code]:text-[0.8125rem]",
-  "[&_h1]:text-lg [&_h1]:font-semibold",
-  "[&_h2]:text-base [&_h2]:font-semibold",
-  "[&_h3]:font-medium",
+  "[&_h1]:break-words [&_h1]:text-lg [&_h1]:font-semibold",
+  "[&_h2]:break-words [&_h2]:text-base [&_h2]:font-semibold",
+  "[&_h3]:break-words [&_h3]:font-medium",
   "[&_hr]:my-4 [&_hr]:border-border",
   "[&_img]:max-w-full",
+  "[&_li]:break-words",
   "[&_li>p]:my-1",
   "[&_ol]:list-decimal [&_ol]:pl-5",
   "[&_p]:break-words",
@@ -133,7 +134,11 @@ function MarkdownViewer({
   const renderedContent = (
     <div
       data-allow-select="true"
-      className={cn("markdown-viewer min-w-0 max-w-full", surfaceClassName)}
+      className={cn(
+        "markdown-viewer min-w-0 max-w-full overflow-hidden",
+        surfaceClassName,
+        !showTabs && className,
+      )}
       onClickCapture={handleRenderedClickCapture}
     >
       <div
@@ -146,7 +151,11 @@ function MarkdownViewer({
   const sourceContent = (
     <div
       data-allow-select="true"
-      className={cn("min-w-0 max-w-full", surfaceClassName)}
+      className={cn(
+        "min-w-0 max-w-full overflow-hidden",
+        surfaceClassName,
+        !showTabs && className,
+      )}
     >
       <pre className="whitespace-pre-wrap break-words font-mono text-sm leading-6 text-foreground">
         {content}

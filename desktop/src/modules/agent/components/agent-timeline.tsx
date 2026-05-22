@@ -40,7 +40,7 @@ function AgentTimeline({
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
       <ScrollArea className="min-h-0 min-w-0 flex-1" viewportRef={viewportRef}>
-        <div data-allow-select="true" className="mx-auto flex min-w-0 max-w-4xl flex-col gap-2 pr-4 pb-24 pt-4">
+        <div data-allow-select="true" className="mx-auto flex min-w-0 max-w-4xl flex-col gap-2 pr-4 pb-34 pt-4">
           {items.length === 0 ? (
             sending ? (
               <AgentRunStatus label="Agent 正在启动" />

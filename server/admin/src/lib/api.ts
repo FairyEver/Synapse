@@ -73,6 +73,12 @@ export interface CreateSignupInvitationResponse {
   readonly expiresAt: string
 }
 
+export interface BackupFile {
+  readonly filename: string
+  readonly size: number
+  readonly createdAt: string
+}
+
 export interface UserRegisterInput {
   readonly invitationToken: string
   readonly email: string
@@ -107,8 +113,7 @@ export class ApiError extends Error {
   }
 }
 
-const dashboardBasePath = "/dashboard"
-const dashboardApiBasePath = `${dashboardBasePath}/api`
+const adminApiBasePath = "/api/admin"
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -145,37 +150,42 @@ function paginationSuffix(options: { readonly page?: number; readonly pageSize?:
 }
 
 export const adminApi = {
-  getSession: () => request<AdminSession>(`${dashboardBasePath}/session`),
+  getSession: () => request<AdminSession>(`${adminApiBasePath}/session`),
   login: (input: { email: string; password: string }) =>
-    request<AdminSession>(`${dashboardBasePath}/login`, {
+    request<AdminSession>(`${adminApiBasePath}/login`, {
       method: "POST",
       body: JSON.stringify(input),
     }),
   logout: () =>
-    request<{ ok: true }>(`${dashboardBasePath}/logout`, {
+    request<{ ok: true }>(`${adminApiBasePath}/logout`, {
       method: "POST",
     }),
-  getSystemOverview: () => request<SystemOverview>(`${dashboardApiBasePath}/system`),
+  getSystemOverview: () => request<SystemOverview>(`${adminApiBasePath}/system`),
   createSignupInvitation: () =>
-    request<CreateSignupInvitationResponse>(`${dashboardApiBasePath}/invitations`, { method: "POST" }),
+    request<CreateSignupInvitationResponse>(`${adminApiBasePath}/invitations`, { method: "POST" }),
   listInvitations: (options: { readonly page?: number; readonly pageSize?: number } = {}) =>
-    request<PaginatedResponse<AdminInvitationRow>>(`${dashboardApiBasePath}/invitations${paginationSuffix(options)}`),
+    request<PaginatedResponse<AdminInvitationRow>>(`${adminApiBasePath}/invitations${paginationSuffix(options)}`),
   deleteInvitation: (id: string) =>
-    request<{ ok: true }>(`${dashboardApiBasePath}/invitations/${encodeURIComponent(id)}`, { method: "DELETE" }),
+    request<{ ok: true }>(`${adminApiBasePath}/invitations/${encodeURIComponent(id)}`, { method: "DELETE" }),
   deleteInvitations: (ids: readonly string[]) =>
-    request<{ ok: true; count: number }>(`${dashboardApiBasePath}/invitations`, {
+    request<{ ok: true; count: number }>(`${adminApiBasePath}/invitations`, {
       method: "DELETE",
       body: JSON.stringify({ ids }),
     }),
   listUsers: (options: { readonly page?: number; readonly pageSize?: number } = {}) =>
-    request<PaginatedResponse<AdminUserRow>>(`${dashboardApiBasePath}/users${paginationSuffix(options)}`),
+    request<PaginatedResponse<AdminUserRow>>(`${adminApiBasePath}/users${paginationSuffix(options)}`),
   updateUserStatus: (id: string, status: "active" | "disabled") =>
-    request<AdminUserRow>(`${dashboardApiBasePath}/users/${id}/status`, {
+    request<AdminUserRow>(`${adminApiBasePath}/users/${id}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
   listTeams: (options: { readonly page?: number; readonly pageSize?: number } = {}) =>
-    request<PaginatedResponse<AdminTeamRow>>(`${dashboardApiBasePath}/teams${paginationSuffix(options)}`),
+    request<PaginatedResponse<AdminTeamRow>>(`${adminApiBasePath}/teams${paginationSuffix(options)}`),
+  listBackups: () => request<BackupFile[]>(`${adminApiBasePath}/backup/list`),
+  triggerBackup: () =>
+    request<void>(`${adminApiBasePath}/backup`, {
+      method: "POST",
+    }),
   listAuditLogs: (options: {
     readonly action?: string
     readonly from?: string
@@ -190,7 +200,7 @@ export const adminApi = {
     if (options.page) query.set("page", String(options.page))
     if (options.pageSize) query.set("pageSize", String(options.pageSize))
     const suffix = query.size > 0 ? `?${query.toString()}` : ""
-    return request<PaginatedResponse<AuditLog>>(`${dashboardApiBasePath}/audit-logs${suffix}`)
+    return request<PaginatedResponse<AuditLog>>(`${adminApiBasePath}/audit-logs${suffix}`)
   },
   exportAuditLogs: (options: {
     readonly action?: string
@@ -202,24 +212,24 @@ export const adminApi = {
     if (options.from) query.set("from", options.from)
     if (options.to) query.set("to", options.to)
     const suffix = query.size > 0 ? `?${query.toString()}` : ""
-    window.open(`${dashboardApiBasePath}/audit-logs/export${suffix}`, "_blank")
+    window.open(`${adminApiBasePath}/audit-logs/export${suffix}`, "_blank")
   },
   async listLogFiles(): Promise<LogFileInfo[]> {
-    return request<LogFileInfo[]>(`${dashboardApiBasePath}/logs/files`);
+    return request<LogFileInfo[]>(`${adminApiBasePath}/logs/files`);
   },
   async fetchRecentLogs(opts?: { level?: string; limit?: number }): Promise<LogEntry[]> {
     const params = new URLSearchParams();
     if (opts?.level) params.set("level", opts.level);
     if (opts?.limit) params.set("limit", String(opts.limit));
     const qs = params.toString();
-    return request<LogEntry[]>(`${dashboardApiBasePath}/logs/recent${qs ? `?${qs}` : ""}`);
+    return request<LogEntry[]>(`${adminApiBasePath}/logs/recent${qs ? `?${qs}` : ""}`);
   },
   downloadLogs(opts?: { from?: string; to?: string }) {
     const params = new URLSearchParams();
     if (opts?.from) params.set("from", opts.from);
     if (opts?.to) params.set("to", opts.to);
     const qs = params.toString();
-    window.open(`${dashboardApiBasePath}/logs/download${qs ? `?${qs}` : ""}`, "_blank");
+    window.open(`${adminApiBasePath}/logs/download${qs ? `?${qs}` : ""}`, "_blank");
   },
 }
 

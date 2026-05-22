@@ -46,7 +46,6 @@ import { TeamsModule } from "./teams/teams.module"
     ServeStaticModule.forRoot({
       rootPath: join(process.cwd(), "admin-dist"),
       serveRoot: "/dashboard",
-      exclude: ["/dashboard/api/(.*)", "/dashboard/login", "/dashboard/logout"],
     }),
     PrismaModule,
     InvitationsModule,

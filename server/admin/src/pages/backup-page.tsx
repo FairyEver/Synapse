@@ -9,30 +9,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { adminApi, type BackupFile } from "@/lib/api"
 import { formatDate } from "@/lib/format"
-
-interface BackupFile {
-  readonly filename: string
-  readonly size: number
-  readonly createdAt: string
-}
 
 function formatSize(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(2)} MB`
-}
-
-async function fetchBackupList(): Promise<BackupFile[]> {
-  const response = await fetch("/dashboard/api/backup/list", { credentials: "include" })
-  if (!response.ok) throw new Error("请求失败")
-  return response.json()
-}
-
-async function triggerBackup(): Promise<void> {
-  const response = await fetch("/dashboard/api/backup", {
-    method: "POST",
-    credentials: "include",
-  })
-  if (!response.ok) throw new Error("备份失败")
 }
 
 export function BackupPage() {
@@ -44,7 +25,7 @@ export function BackupPage() {
   const loadList = React.useCallback(() => {
     setLoading(true)
     setError(null)
-    fetchBackupList()
+    adminApi.listBackups()
       .then(setList)
       .catch((caught: unknown) => {
         setError(caught instanceof Error ? caught.message : "请求失败")
@@ -59,7 +40,7 @@ export function BackupPage() {
   async function handleBackup() {
     setBackingUp(true)
     try {
-      await triggerBackup()
+      await adminApi.triggerBackup()
       loadList()
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "备份失败")

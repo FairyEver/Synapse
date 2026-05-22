@@ -37,7 +37,7 @@ export function LoginPage({
     <main className="flex min-h-screen items-center justify-center p-6">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>管理员登录</CardTitle>
+          <CardTitle>登录</CardTitle>
         </CardHeader>
         <CardContent>
           <form className="grid gap-2" onSubmit={handleSubmit}>

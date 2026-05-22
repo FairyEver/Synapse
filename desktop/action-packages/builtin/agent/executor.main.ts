@@ -49,6 +49,12 @@ export function createAgentAction(deps: {
         : undefined
       const configChanged = previousConfigVersion !== undefined
         && previousConfigVersion !== currentConfigVersion
+      const userMeta: Record<string, unknown> = {
+        source: "scheduled",
+        taskId: input.context.taskId,
+        taskRunId: input.context.runId,
+      }
+      if (input.context.taskName) userMeta.taskName = input.context.taskName
 
       try {
         const result = await runtime.sendScheduled({
@@ -62,6 +68,7 @@ export function createAgentAction(deps: {
           abortSignal: input.context.abortSignal,
           providerId: input.config.providerId,
           modelTier: input.config.modelTier,
+          userMeta,
         })
         const status = result.status === "error"
           ? input.context.abortSignal.aborted ? "cancelled" : "failed"

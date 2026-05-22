@@ -46,6 +46,62 @@ afterEach(() => {
 })
 
 describe("AgentSessionSidebar", () => {
+  it("allows long session titles to truncate inside the sidebar", () => {
+    const longTitle = "能力矩阵回归测试工作流 / 8A. 通道聚合与边界校验 · 05-22 21:19"
+    const html = renderToStaticMarkup(
+      <AgentSessionSidebar
+        sessions={[{
+          projectId: "project-1",
+          id: "workflow-conv",
+          sessionKey: "local:renderer",
+          platform: "local-renderer",
+          name: longTitle,
+          active: true,
+          historyCount: 1,
+          createdAt: "2026-05-22T13:19:00.000Z",
+          updatedAt: "2026-05-22T13:19:00.000Z",
+        }]}
+        archivedSessions={[]}
+        projects={[{ id: "project-1", name: "Synapse", path: "/tmp/synapse" }]}
+        selectedProjectId="project-1"
+        selectedConversationId="workflow-conv"
+        unreadByConversationId={{ "project-1:workflow-conv": 1 }}
+        onCreateSession={vi.fn()}
+        onSelect={vi.fn()}
+        onDelete={vi.fn()}
+        onDeleteOthers={vi.fn()}
+        onRename={vi.fn()}
+      />,
+    )
+
+    const wrapper = document.createElement("div")
+    wrapper.innerHTML = html
+    const title = [...wrapper.querySelectorAll("span")]
+      .find((span) => span.textContent === longTitle && span.className.includes("truncate"))
+
+    expect(title?.className).toContain("truncate")
+    expect(title?.className).toContain("min-w-0")
+    expect(title?.parentElement?.className).toContain("min-w-0")
+
+    const list = [...wrapper.querySelectorAll("div")]
+      .find((element) => element.className.includes("flex-col") && element.textContent?.includes(longTitle))
+    const sidebarList = wrapper.querySelector('[data-track="agent-session-list"]')
+    expect(sidebarList?.className).toContain("overflow-y-auto")
+    expect(sidebarList?.className).toContain("overflow-x-hidden")
+    expect(sidebarList?.className).toContain("min-w-0")
+    expect(list?.className).toContain("w-full")
+
+    const indentedSessionList = [...wrapper.querySelectorAll("div")]
+      .find((element) => element.className.includes("pl-3") && element.textContent?.includes(longTitle))
+    expect(indentedSessionList?.className).toContain("w-full")
+    expect(indentedSessionList?.className).toContain("min-w-0")
+
+    const row = wrapper.querySelector('[data-track="agent-session-select"][aria-current="page"]')
+    expect(row?.className).toContain("w-full")
+    expect(row?.className).toContain("min-w-0")
+    expect(row?.querySelector("button")?.className).toContain("flex-1")
+  })
+
   it("defaults to user conversations and filters by source", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)
@@ -110,10 +166,28 @@ describe("AgentSessionSidebar", () => {
     expect(document.body.textContent).not.toContain("Workflow Run")
 
     await act(async () => {
-      const sourceSelect = document.querySelector<HTMLSelectElement>("select[aria-label='会话来源']")
-      expect(sourceSelect).toBeDefined()
-      sourceSelect!.value = "workflow"
-      sourceSelect!.dispatchEvent(new Event("change", { bubbles: true }))
+      Object.defineProperty(HTMLElement.prototype, "hasPointerCapture", {
+        configurable: true,
+        value: () => false,
+      })
+      Object.defineProperty(HTMLElement.prototype, "scrollIntoView", {
+        configurable: true,
+        value: vi.fn(),
+      })
+      const sourceTrigger = document.querySelector<HTMLButtonElement>("button[aria-label='会话来源']")
+      expect(sourceTrigger).toBeDefined()
+      sourceTrigger!.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+      sourceTrigger!.click()
+      sourceTrigger!.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "Enter" }))
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      const workflowOption = [...document.querySelectorAll<HTMLElement>("[role='option']")]
+        .find((option) => option.textContent?.includes("工作流"))
+      expect(workflowOption).toBeDefined()
+      workflowOption!.click()
+      await Promise.resolve()
     })
 
     expect(document.body.textContent).not.toContain("User Chat")
