@@ -12,8 +12,18 @@ import {
 const mocks = vi.hoisted(() => ({
   getSkillDetail: vi.fn(),
   prepareSkillDirectory: vi.fn(),
+  rename: vi.fn(),
   resolveTarget: vi.fn(),
 }))
+
+vi.mock("node:fs/promises", async () => {
+  const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+
+  return {
+    ...actual,
+    rename: mocks.rename,
+  }
+})
 
 vi.mock("electron", () => ({
   app: {
@@ -82,6 +92,13 @@ function createSkillDetail(contentId: string): SynapseSkillDetail {
 describe("ContentInstallService security", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mocks.rename.mockImplementation(async (
+      oldPath: Parameters<typeof import("node:fs/promises")["rename"]>[0],
+      newPath: Parameters<typeof import("node:fs/promises")["rename"]>[1],
+    ) => {
+      const actual = await vi.importActual<typeof import("node:fs/promises")>("node:fs/promises")
+      return actual.rename(oldPath, newPath)
+    })
   })
 
   afterEach(async () => {
@@ -140,6 +157,55 @@ describe("ContentInstallService security", () => {
       outcome: "allowed",
       resource: targetPath,
     }))
+  })
+
+  it("copies the old Skill to desktop backup when rename crosses devices", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    const backupPath = path.join(testDesktopPath, "test-skill-synapse备份")
+    await mkdir(targetPath, { recursive: true })
+    await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+
+    mocks.rename.mockRejectedValueOnce(Object.assign(new Error("cross-device link not permitted"), {
+      code: "EXDEV",
+    }))
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockImplementation(async (
+      { stagingDirectoryPath }: { stagingDirectoryPath: string },
+    ) => {
+      await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# New Skill\n", "utf8")
+    })
+
+    const payload: SynapseInstallToEditorPayload = {
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      replaceConfirmed: true,
+      scope: "global",
+    }
+
+    await expect(contentInstallService.installToEditor(payload, {
+      actor: { kind: "user" },
+      auditSink: new InMemoryAuditSink(),
+      permissionGuard: createPermissionGuard(),
+    })).resolves.toMatchObject({
+      contentId: "skill-1",
+      targetPath,
+    })
+
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# New Skill\n")
+    await expect(readFile(path.join(backupPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
   })
 
   it("replaces Skill when a stale desktop backup symlink already exists", async () => {

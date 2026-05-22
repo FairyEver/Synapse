@@ -1,5 +1,5 @@
 import { app } from "electron"
-import { mkdir, rename, rm, writeFile } from "node:fs/promises"
+import { cp, mkdir, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { pathExists } from "./fs-utils"
 import { getContentTypeDefinition } from "../../src/config/content-types"
@@ -49,6 +49,26 @@ type EditorReadSecurityDeps = {
 
 const UNTRUSTED_PROJECT_PATH_ERROR = "项目路径不在已配置项目中。"
 const UNTRUSTED_INSTALL_TARGET_ERROR = "安装目标不在已配置编辑器路径中。"
+
+function isCrossDeviceRenameError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && (error as { code?: unknown }).code === "EXDEV"
+}
+
+async function moveDirectoryAllowingCrossDevice(sourcePath: string, destinationPath: string): Promise<void> {
+  try {
+    await rename(sourcePath, destinationPath)
+  } catch (error) {
+    if (!isCrossDeviceRenameError(error)) {
+      throw error
+    }
+
+    await cp(sourcePath, destinationPath, { recursive: true, force: true })
+    await rm(sourcePath, { recursive: true, force: true })
+  }
+}
 
 async function checkEditorWritePermission(
   deps: EditorWriteSecurityDeps | undefined,
@@ -314,7 +334,7 @@ export class ContentInstallService {
               try {
                 await mkdir(path.dirname(backupPath), { recursive: true })
                 await rm(backupPath, { recursive: true, force: true })
-                await rename(target.targetPath, backupPath)
+                await moveDirectoryAllowingCrossDevice(target.targetPath, backupPath)
                 backupPathForRestore = backupPath
               } catch (error) {
                 logger.warn("Failed to backup existing skill directory", { targetPath: path.basename(target.targetPath), error })
@@ -372,7 +392,7 @@ export class ContentInstallService {
             if (backupPathForRestore && await pathExists(backupPathForRestore)) {
               try {
                 await rm(target.targetPath, { recursive: true, force: true })
-                await rename(backupPathForRestore, target.targetPath)
+                await moveDirectoryAllowingCrossDevice(backupPathForRestore, target.targetPath)
               } catch (restoreError) {
                 logger.warn("Failed to restore backed up skill directory", {
                   backupPath: path.basename(backupPathForRestore),
