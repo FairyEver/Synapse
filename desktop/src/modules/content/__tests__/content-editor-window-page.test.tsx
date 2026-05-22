@@ -90,6 +90,15 @@ describe("ContentEditorWindowPage", () => {
     expect(source).toContain("不能编辑此文件")
   })
 
+  it("uses the shared Skill file tree for the editor attachment panel", async () => {
+    const fieldsSource = await readFile(join(__dirname, "../components/content-editor-fields.tsx"), "utf8")
+
+    expect(fieldsSource).toContain("SkillFileTree")
+    expect(fieldsSource).toContain("onRemovePath")
+    expect(fieldsSource).not.toContain("拖入文件")
+    expect(fieldsSource).not.toContain("已选 {files.length} 个附件")
+  })
+
   it("renders Rule and Prompt editor previews without an extra frame", async () => {
     const source = await readFile(editorWindowPageSourcePath, "utf8")
 

@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from "react"
-import { FilePlus2, FileText, FolderOpen, Paperclip, Trash2, X } from "lucide-react"
+import { FolderOpen, Paperclip, Trash2, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Field, FieldContent, FieldError, FieldGroup, FieldLabel } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
@@ -17,10 +17,14 @@ import { Textarea } from "@/components/ui/textarea"
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { getCategoryDefinitions } from "@/lib/content-categories"
 import { ContentAppearanceFields } from "@/modules/content/components/content-appearance-fields"
+import {
+  MAIN_SKILL_FILE_PATH,
+  normalizeSkillTreePath,
+  SkillFileTree,
+} from "@/modules/content/components/skill-file-tree"
 import type { CreateSkillPayload, SkillCreateFilePayloadDraft } from "@/modules/skills/types"
 import {
   formatSkillAttachmentSize,
-  MAX_SKILL_ATTACHMENT_SIZE,
   mergeCreateSkillFiles,
   normalizeSkillAttachmentName,
 } from "@/modules/skills/utils"
@@ -377,6 +381,10 @@ function SkillAttachmentManager({
     () => files.reduce((total, file) => total + file.size, 0),
     [files],
   )
+  const fileSizeByPath = useMemo(
+    () => new Map(files.map((file) => [normalizeSkillTreePath(file.originalName), file.size] as const)),
+    [files],
+  )
 
   const addFiles = (incomingFiles: SkillCreateFilePayloadDraft[]) => {
     const result = mergeCreateSkillFiles(files, incomingFiles)
@@ -389,65 +397,73 @@ function SkillAttachmentManager({
     addFiles(toCreateSkillFiles(fileList))
   }
 
+  const handleSelectPath = (path: string) => {
+    if (path === MAIN_SKILL_FILE_PATH) {
+      onSelectMain()
+      return
+    }
+
+    onSelectFile(path)
+  }
+
+  const onRemovePath = (path: string) => {
+    onFilesChange(files.filter((file) => normalizeSkillTreePath(file.originalName) !== path))
+  }
+
   return (
-    <div className="flex min-h-0 flex-col gap-3">
-      <div className="flex items-center justify-between gap-2">
-        <Label>附件</Label>
+    <div
+      className="flex h-full min-h-0 flex-col"
+      onDragOver={(event) => {
+        event.preventDefault()
+        event.dataTransfer.dropEffect = "copy"
+      }}
+      onDrop={(event) => {
+        event.preventDefault()
+        handleFiles(event.dataTransfer.files)
+      }}
+    >
+      <div className="flex items-center gap-2 border-b px-2 py-2">
+        <Label className="min-w-0 flex-1">附件</Label>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {files.length} · {formatSkillAttachmentSize(totalAttachmentSize)}
+        </span>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          title="添加文件"
+          disabled={isSubmitting}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          <Paperclip />
+          <span className="sr-only">添加文件</span>
+        </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          title="添加文件夹"
+          disabled={isSubmitting}
+          onClick={() => folderInputRef.current?.click()}
+        >
+          <FolderOpen />
+          <span className="sr-only">添加文件夹</span>
+        </Button>
         {files.length > 0 ? (
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            size="icon-sm"
+            title="清空附件"
             onClick={() => {
               onFilesChange([])
               setMessage(null)
             }}
           >
             <Trash2 />
-            清空
+            <span className="sr-only">清空附件</span>
           </Button>
         ) : null}
-      </div>
-      <div
-        className="rounded-lg border border-dashed border-border bg-muted p-4"
-        onDragOver={(event) => {
-          event.preventDefault()
-          event.dataTransfer.dropEffect = "copy"
-        }}
-        onDrop={(event) => {
-          event.preventDefault()
-          handleFiles(event.dataTransfer.files)
-        }}
-      >
-        <div className="flex flex-col items-center gap-2 text-center">
-          <FilePlus2 className="size-5 text-muted-foreground" />
-          <p className="text-sm font-medium">拖入文件</p>
-          <p className="text-xs text-muted-foreground">
-            单个附件最大 {formatSkillAttachmentSize(MAX_SKILL_ATTACHMENT_SIZE)}
-          </p>
-          <div className="flex flex-wrap justify-center">
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-r-none border-r-0"
-              disabled={isSubmitting}
-              onClick={() => fileInputRef.current?.click()}
-            >
-              <Paperclip />
-              文件
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              className="rounded-l-none"
-              disabled={isSubmitting}
-              onClick={() => folderInputRef.current?.click()}
-            >
-              <FolderOpen />
-              文件夹
-            </Button>
-          </div>
-        </div>
       </div>
       <input
         ref={fileInputRef}
@@ -471,60 +487,36 @@ function SkillAttachmentManager({
           event.currentTarget.value = ""
         }}
       />
-      {message ? <p className="text-sm text-destructive">{message}</p> : null}
-      <FieldError>{error}</FieldError>
-      <div className="overflow-hidden rounded-lg border">
-        <div className="flex items-center justify-between border-b bg-muted px-3 py-2 text-sm">
-          <span className="font-medium">已选 {files.length} 个附件</span>
-          <span className="text-muted-foreground">
-            {formatSkillAttachmentSize(totalAttachmentSize)}
-          </span>
+      {message || error ? (
+        <div className="border-b px-2 py-2">
+          {message ? <p className="text-sm text-destructive">{message}</p> : null}
+          <FieldError>{error}</FieldError>
         </div>
-        <ScrollArea className="max-h-[calc(100vh-23rem)]">
-          <div className="border-b px-2 py-2">
+      ) : null}
+      <div className="min-h-0 flex-1">
+        <SkillFileTree
+          activePath={activePath ?? MAIN_SKILL_FILE_PATH}
+          attachments={files}
+          getFileMeta={(path) => {
+            if (path === MAIN_SKILL_FILE_PATH) return null
+
+            const size = fileSizeByPath.get(path)
+            return typeof size === "number" ? formatSkillAttachmentSize(size) : null
+          }}
+          onSelectPath={handleSelectPath}
+          renderFileAction={(path) => path === MAIN_SKILL_FILE_PATH ? null : (
             <Button
               type="button"
-              variant={activePath === null ? "secondary" : "ghost"}
-              className="w-full justify-start"
-              onClick={onSelectMain}
+              variant="ghost"
+              size="icon-xs"
+              title="移除附件"
+              onClick={() => onRemovePath(path)}
             >
-              <FileText />
-              主说明
+              <X />
+              <span className="sr-only">移除附件</span>
             </Button>
-          </div>
-          {files.length === 0 ? (
-            <p className="px-3 py-4 text-sm text-muted-foreground">还没有附件。</p>
-          ) : files.map((file) => (
-            <div
-              key={file.originalName}
-              className="flex items-start justify-between gap-2 border-b px-3 py-3 last:border-b-0"
-            >
-              <Button
-                type="button"
-                variant={activePath === file.originalName ? "secondary" : "ghost"}
-                className="h-auto min-w-0 flex-1 justify-start whitespace-normal px-2 py-1.5 text-left"
-                onClick={() => onSelectFile(file.originalName)}
-              >
-                <span className="min-w-0">
-                  <span className="block break-all text-sm font-medium">{file.originalName}</span>
-                  <span className="mt-1 block text-xs text-muted-foreground">
-                    {formatSkillAttachmentSize(file.size)}
-                  </span>
-                </span>
-              </Button>
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon-sm"
-                title="移除附件"
-                onClick={() => onFilesChange(files.filter((item) => item.originalName !== file.originalName))}
-              >
-                <X />
-                <span className="sr-only">移除附件</span>
-              </Button>
-            </div>
-          ))}
-        </ScrollArea>
+          )}
+        />
       </div>
     </div>
   )

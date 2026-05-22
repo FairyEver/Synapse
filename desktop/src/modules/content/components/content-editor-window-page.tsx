@@ -31,6 +31,7 @@ import {
   SkillEditorMetaFields,
 } from "@/modules/content/components/content-editor-fields"
 import { ContentEditorWindowLayout } from "@/modules/content/components/content-editor-window-layout"
+import { normalizeSkillTreePath } from "@/modules/content/components/skill-file-tree"
 import { useContentCreateForm, type ContentCreateFormConfig } from "@/modules/content/hooks/use-content-create-form"
 import { useContentIconImage } from "@/modules/content/hooks/use-content-icon-image"
 import {
@@ -687,7 +688,7 @@ function SkillEditorWindow({ request }: ContentEditorWindowPageProps) {
     }
 
     return formState.form.files.find(
-      (file) => file.originalName === activeSkillDocument.originalName,
+      (file) => normalizeSkillTreePath(file.originalName) === activeSkillDocument.originalName,
     ) ?? null
   }, [activeSkillDocument, formState.form.files])
   const activeDocumentTitle = activeSkillDocument.kind === "attachment"
