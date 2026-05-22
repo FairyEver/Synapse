@@ -14,6 +14,20 @@ describe("scan item detail dialog layout", () => {
     expect(headerContent).not.toContain("<Tabs")
   })
 
+  it("uses a fixed viewport-height frame for scrollable detail content", async () => {
+    const source = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+    const dialogStart = source.indexOf("<DialogContent")
+    const dialogEnd = source.indexOf(">", dialogStart)
+    const dialogOpeningTag = source.slice(dialogStart, dialogEnd)
+
+    expect(dialogOpeningTag).toMatch(/(?:^|\s)h-\[calc\(100vh-2rem\)\](?:\s|")/)
+    expect(dialogOpeningTag).toContain("overflow-hidden")
+    expect(source).toContain('<ScrollArea className="mt-4 min-h-0 flex-1">')
+  })
+
   it("uses import wording for external scan items", async () => {
     const source = await readFile(
       new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),

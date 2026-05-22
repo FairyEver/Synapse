@@ -21,8 +21,10 @@ type ContentDetailWindowShellProps = {
 }
 
 type ContentDetailWindowSummaryProps = {
+  canDelete?: boolean
   canEdit?: boolean
   detail: SynapseContentDetail | null
+  onDelete?: () => void
   onEdit?: () => void
 }
 
@@ -143,8 +145,10 @@ function ContentDetailWindowShell({
 }
 
 function ContentDetailWindowSummary({
+  canDelete = false,
   canEdit = false,
   detail,
+  onDelete = () => undefined,
   onEdit = () => undefined,
 }: ContentDetailWindowSummaryProps) {
   const repoProfileMap = useRepoProfileMap()
@@ -189,13 +193,13 @@ function ContentDetailWindowSummary({
         </div>
 
         <ContentDetailMenubar
-          canDelete={false}
+          canDelete={canDelete}
           canEdit={canEdit}
           canOpenInNewWindow={false}
           isFavorite={isItemFavorite}
           isRepositoryInitializing={false}
           item={detail}
-          onDelete={() => undefined}
+          onDelete={onDelete}
           onEdit={onEdit}
           onOpenInNewWindow={() => undefined}
           onToggleFavorite={() => toggleFavorite(detail.type, detail.id)}

@@ -1,4 +1,4 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -46,6 +46,7 @@ vi.mock("../definitions/generated/main-registry", () => ({
 import { contentInstallService } from "../content-install-service"
 
 const tempRoots: string[] = []
+const testDesktopPath = "/tmp/synapse-content-install-test-desktop"
 
 async function createTempRoot(): Promise<string> {
   const root = await mkdtemp(path.join(os.tmpdir(), "synapse-content-install-"))
@@ -85,16 +86,15 @@ describe("ContentInstallService security", () => {
 
   afterEach(async () => {
     await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
+    await rm(testDesktopPath, { recursive: true, force: true })
   })
 
-  it("replaces Skill when a stale backup directory already exists", async () => {
+  it("moves the old Skill to the desktop when replacing it", async () => {
     const root = await createTempRoot()
     const targetPath = path.join(root, "skills", "test-skill")
-    const conflictingBackupPath = `${targetPath}-backup`
+    const backupPath = path.join(testDesktopPath, "test-skill-synapse备份")
     await mkdir(targetPath, { recursive: true })
     await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
-    await mkdir(conflictingBackupPath, { recursive: true })
-    await writeFile(path.join(conflictingBackupPath, "locked.txt"), "backup exists", "utf8")
 
     mocks.resolveTarget.mockResolvedValue({
       contentType: "skill",
@@ -133,13 +133,63 @@ describe("ContentInstallService security", () => {
     })
 
     await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# New Skill\n")
-    await expect(readFile(path.join(conflictingBackupPath, "locked.txt"), "utf8")).rejects.toThrow()
+    await expect(readFile(path.join(backupPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
     expect(auditSink.list()).toContainEqual(expect.objectContaining({
       action: "fs.write",
       actor: { kind: "user" },
       outcome: "allowed",
       resource: targetPath,
     }))
+  })
+
+  it("replaces Skill when a stale desktop backup symlink already exists", async () => {
+    const root = await createTempRoot()
+    const targetPath = path.join(root, "skills", "test-skill")
+    const backupPath = path.join(testDesktopPath, "test-skill-synapse备份")
+    await mkdir(targetPath, { recursive: true })
+    await writeFile(path.join(targetPath, "SKILL.md"), "# Existing Skill\n", "utf8")
+    await rm(backupPath, { recursive: true, force: true })
+    await mkdir(path.dirname(backupPath), { recursive: true })
+    await symlink(path.join(root, "missing-backup-target"), backupPath)
+
+    mocks.resolveTarget.mockResolvedValue({
+      contentType: "skill",
+      editorId: "test-editor",
+      label: "Test Editor",
+      message: null,
+      scope: "global",
+      status: "ready",
+      targetExists: true,
+      targetKind: "directory",
+      targetPath,
+    })
+    mocks.getSkillDetail.mockResolvedValue(createSkillDetail("skill-1"))
+    mocks.prepareSkillDirectory.mockImplementation(async (
+      { stagingDirectoryPath }: { stagingDirectoryPath: string },
+    ) => {
+      await writeFile(path.join(stagingDirectoryPath, "SKILL.md"), "# New Skill\n", "utf8")
+    })
+
+    const auditSink = new InMemoryAuditSink()
+    const payload: SynapseInstallToEditorPayload = {
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "test-editor",
+      replaceConfirmed: true,
+      scope: "global",
+    }
+
+    await expect(contentInstallService.installToEditor(payload, {
+      actor: { kind: "user" },
+      auditSink,
+      permissionGuard: createPermissionGuard(),
+    })).resolves.toMatchObject({
+      contentId: "skill-1",
+      targetPath,
+    })
+
+    await expect(readFile(path.join(targetPath, "SKILL.md"), "utf8")).resolves.toBe("# New Skill\n")
+    await expect(readFile(path.join(backupPath, "SKILL.md"), "utf8")).resolves.toBe("# Existing Skill\n")
   })
 
   it("restores the old Skill directory when replacement fails after backup", async () => {

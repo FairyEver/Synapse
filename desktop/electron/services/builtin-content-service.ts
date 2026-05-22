@@ -6,8 +6,6 @@ import { normalizeContentAttachmentPath } from "../../src/lib/content-attachment
 import type {
   SynapseContentAttachmentRecord,
   SynapseContentDetail,
-  SynapseContentHistoryEntry,
-  SynapseContentHistoryVersion,
   SynapseContentMeta,
   SynapseContentType,
   SynapseContentFile,
@@ -152,35 +150,6 @@ class BuiltinContentService {
     const record = await this.getRecord(contentType, contentId)
 
     return toDetail(record)
-  }
-
-  async getHistory(contentType: SynapseContentType, contentId: string): Promise<SynapseContentHistoryEntry[]> {
-    const detail = await this.getDetail(contentType, contentId)
-
-    return [{
-      dirname: detail.latestHistoryDirname,
-      modifiedAt: detail.modifiedAt,
-      modifiedBy: detail.modifiedBy,
-      modifiedByDisplayName: detail.modifiedByDisplayName,
-      deleted: false,
-      isCurrent: true,
-    }]
-  }
-
-  async getHistoryVersion(
-    contentType: SynapseContentType,
-    contentId: string,
-    historyDirname: string,
-  ): Promise<SynapseContentHistoryVersion> {
-    if (historyDirname !== BUILTIN_HISTORY_DIRNAME) {
-      throw new Error("这条历史记录已不可用。")
-    }
-
-    return {
-      ...await this.getDetail(contentType, contentId),
-      historyDirname,
-      isCurrent: true,
-    } as SynapseContentHistoryVersion
   }
 
   async getAttachmentFile(

@@ -61,12 +61,17 @@ type ContentInstallDialogProps = {
   projects: SynapseProjectConfig[]
 }
 
+type InstallFlowOptions = {
+  overwriteConfirmed?: boolean
+  replaceConfirmed?: boolean
+}
+
 async function detectInstallPlaceholders(
   preloadedContent: string | null,
   readCurrentContent: () => Promise<string>,
 ): Promise<string[]> {
   const content = preloadedContent ?? await readCurrentContent()
-  return detectPlaceholders(content)
+  return detectPlaceholders(content, { includeCodeBlocks: true })
 }
 
 function ContentInstallDialog({
@@ -95,6 +100,7 @@ function ContentInstallDialog({
   const [isSavingVariables, setIsSavingVariables] = useState(false)
   const pendingSubstitutionsRef = useRef<Record<string, string> | undefined>(undefined)
   const variableConfirmPassedRef = useRef(false)
+  const pendingInstallOptionsRef = useRef<InstallFlowOptions>({})
   const skipVariableSaveLockRef = useRef(false)
   const [selection, setSelection] = useState<EditorWriteTargetSelection | null>(null)
   const [installError, setInstallError] = useState<string | null>(null)
@@ -132,6 +138,7 @@ function ContentInstallDialog({
     setIsSavingVariables(false)
     pendingSubstitutionsRef.current = undefined
     variableConfirmPassedRef.current = false
+    pendingInstallOptionsRef.current = {}
     skipVariableSaveLockRef.current = false
   }, [editor?.id, open])
 
@@ -221,7 +228,7 @@ function ContentInstallDialog({
         {
           loading: `正在安装到 ${editor.label}...`,
           success: (value: SynapseContentInstallResult) => {
-            const base = `已写入 ${value.targetPath}${replaceConfirmed ? "（旧 Skill 已备份为 -backup）" : ""}`
+            const base = `已写入 ${value.targetPath}${replaceConfirmed ? "（旧 Skill 已移到桌面备份）" : ""}`
             return value.warning ? `${base}（${value.warning}）` : base
           },
           error: (error) => error instanceof Error ? error.message : "安装失败。",
@@ -276,6 +283,7 @@ function ContentInstallDialog({
   const handleVariableConfirm = async (
     substitutions: Record<string, string>,
   ) => {
+    const installOptions = pendingInstallOptionsRef.current
     const filtered = Object.fromEntries(
       Object.entries(substitutions).filter(([, v]) => v.length > 0),
     )
@@ -294,13 +302,14 @@ function ContentInstallDialog({
     }
 
     setIsVariableConfirmOpen(false)
-    await handleInstall()
+    await handleInstall(installOptions)
   }
 
   const continueInstallAfterVariableSaveDecision = async () => {
+    const installOptions = pendingInstallOptionsRef.current
     setIsVariableSaveConfirmOpen(false)
     setPendingVariableChanges(null)
-    await handleInstall()
+    await handleInstall(installOptions)
   }
 
   const handleSkipVariableSave = async () => {
@@ -332,7 +341,17 @@ function ContentInstallDialog({
     await continueInstallAfterVariableSaveDecision()
   }
 
-  const handleInstall = async () => {
+  const resetVariableInstallAttempt = () => {
+    pendingSubstitutionsRef.current = undefined
+    variableConfirmPassedRef.current = false
+    pendingInstallOptionsRef.current = {}
+    setPendingVariableChanges(null)
+  }
+
+  const handleInstall = async (options: InstallFlowOptions = {}) => {
+    const overwriteConfirmed = Boolean(options.overwriteConfirmed)
+    const replaceConfirmed = Boolean(options.replaceConfirmed)
+
     if (!variableConfirmPassedRef.current) {
       try {
         const placeholders = await detectInstallPlaceholders(preloadedContent, async () => {
@@ -341,6 +360,7 @@ function ContentInstallDialog({
           return file.content
         })
         if (placeholders.length > 0) {
+          pendingInstallOptionsRef.current = options
           setDetectedPlaceholders(placeholders)
           setIsVariableConfirmOpen(true)
           return
@@ -360,7 +380,7 @@ function ContentInstallDialog({
       return
     }
 
-    if (activeTarget.status === "conflict" && item.type === "skill") {
+    if (activeTarget.status === "conflict" && item.type === "skill" && !replaceConfirmed) {
       logger.info("Skill conflict confirm dialog opened.", {
         contentId: item.id,
         contentType: item.type,
@@ -372,7 +392,7 @@ function ContentInstallDialog({
       return
     }
 
-    if (definition.install.kind === "directory-overwrite" && activeTarget.status === "ready" && activeTarget.targetExists) {
+    if (definition.install.kind === "directory-overwrite" && activeTarget.status === "ready" && activeTarget.targetExists && !overwriteConfirmed) {
       logger.info("Overwrite confirm dialog opened.", {
         contentId: item.id,
         contentType: item.type,
@@ -406,7 +426,7 @@ function ContentInstallDialog({
       return
     }
 
-    await runInstall()
+    await runInstall(undefined, replaceConfirmed)
   }
 
   if (!editor) {
@@ -510,12 +530,20 @@ function ContentInstallDialog({
             ) : null}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isInstalling}>取消</AlertDialogCancel>
+            <AlertDialogCancel
+              disabled={isInstalling}
+              onClick={() => {
+                resetVariableInstallAttempt()
+                setIsOverwriteConfirmOpen(false)
+              }}
+            >
+              取消
+            </AlertDialogCancel>
             <AlertDialogAction
               disabled={isInstalling}
               onClick={() => {
                 setIsOverwriteConfirmOpen(false)
-                void runInstall()
+                void handleInstall({ overwriteConfirmed: true })
               }}
             >
               继续安装
@@ -529,7 +557,7 @@ function ContentInstallDialog({
           <AlertDialogHeader>
             <AlertDialogTitle>确认替换 Skill？</AlertDialogTitle>
             <AlertDialogDescription>
-              该位置已存在同名 Skill，替换后旧 Skill 将被备份为 <code className="text-xs bg-muted px-1 rounded">-backup</code> 目录，如需删除请手动清理。
+              该位置已存在同名 Skill，替换后旧 Skill 将移到桌面，名称为 <code className="text-xs bg-muted px-1 rounded">原名称-synapse备份</code>。
             </AlertDialogDescription>
             {activeTarget?.status === "conflict" ? (
               <div className="mt-1 rounded-md bg-muted/40 px-3 py-2 font-mono text-xs break-all text-muted-foreground">
@@ -538,12 +566,21 @@ function ContentInstallDialog({
             ) : null}
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={isInstalling} autoFocus>取消</AlertDialogCancel>
+            <AlertDialogCancel
+              disabled={isInstalling}
+              autoFocus
+              onClick={() => {
+                resetVariableInstallAttempt()
+                setIsConflictConfirmOpen(false)
+              }}
+            >
+              取消
+            </AlertDialogCancel>
             <AlertDialogAction
               disabled={isInstalling}
               onClick={() => {
                 setIsConflictConfirmOpen(false)
-                void runInstall(undefined, true)
+                void handleInstall({ replaceConfirmed: true })
               }}
             >
               替换

@@ -6,6 +6,16 @@ import { useContentList, useRepositoryManager } from "@/app-shell/use-repository
 import { createRendererLogger } from "@/app-shell/logging"
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog"
+import {
   Empty,
   EmptyDescription,
   EmptyHeader,
@@ -64,6 +74,13 @@ type ContentWindowEditState<TPayload> = {
     payload: TPayload,
     serializePayload?: (payload: TPayload) => Promise<TPayload> | TPayload,
   ) => Promise<void>
+}
+
+type ContentWindowDeleteState = {
+  deleteContent: (detail: SynapseContentDetail) => Promise<void>
+  isDeleteConfirmOpen: boolean
+  isDeleting: boolean
+  setIsDeleteConfirmOpen: (open: boolean) => void
 }
 
 const CODE_LANGUAGE_BY_EXTENSION: Record<string, string> = {
@@ -174,8 +191,106 @@ function useContentWindowEditState<TPayload>(
   }
 }
 
+function useContentWindowDeleteState(
+  contentType: SynapseContentWindowRequest["contentType"],
+  logger: ReturnType<typeof createRendererLogger>,
+): ContentWindowDeleteState {
+  const manager = useRepositoryManager()
+  const { promise } = useAppNotifications()
+  const [isDeleteConfirmOpen, setIsDeleteConfirmOpen] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+
+  const deleteContent = useCallback(async (detail: SynapseContentDetail) => {
+    setIsDeleting(true)
+
+    await promise(
+      async () => manager.deleteContent({
+        id: detail.id,
+        type: detail.type,
+        baseHistoryDirname: detail.latestHistoryDirname,
+      }),
+      {
+        loading: "正在删除...",
+        success: (result) => {
+          setIsDeleteConfirmOpen(false)
+
+          if (result.status === "conflict") {
+            logger.warn("Content detail window delete conflict detected.", {
+              contentId: detail.id,
+              contentType,
+              latestHistoryDirname: result.latestHistoryDirname,
+            })
+            return {
+              message: "内容已更新，请刷新后再删除。",
+              tone: "warning",
+            }
+          }
+
+          window.close()
+          return result.pendingPushCount > 0 ? "已删除，等待同步。" : "删除成功。"
+        },
+        error: (error) => error instanceof Error ? error.message : "删除失败。",
+      },
+    ).catch((error) => {
+      logger.error("Content detail window delete failed.", {
+        contentId: detail.id,
+        contentType,
+        error,
+      })
+    }).finally(() => {
+      setIsDeleting(false)
+    })
+  }, [contentType, logger, manager, promise])
+
+  return {
+    deleteContent,
+    isDeleteConfirmOpen,
+    isDeleting,
+    setIsDeleteConfirmOpen,
+  }
+}
+
 function canEditContentDetail(detail: SynapseContentDetail | null): boolean {
   return Boolean(detail && !detail.isReadonly && detail.source !== "builtin")
+}
+
+function ContentWindowDeleteDialog({
+  description,
+  detail,
+  state,
+  title,
+}: {
+  description: string
+  detail: SynapseContentDetail | null
+  state: ContentWindowDeleteState
+  title: string
+}) {
+  return (
+    <AlertDialog
+      open={state.isDeleteConfirmOpen}
+      onOpenChange={state.setIsDeleteConfirmOpen}
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>{title}</AlertDialogTitle>
+          <AlertDialogDescription>{description}</AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>取消</AlertDialogCancel>
+          <AlertDialogAction
+            disabled={state.isDeleting || !detail}
+            onClick={() => {
+              if (detail) {
+                void state.deleteContent(detail)
+              }
+            }}
+          >
+            删除
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
+  )
 }
 
 function getFileExtension(filePath: string): string {
@@ -306,8 +421,8 @@ function RuleDetailWindowPage({
 }) {
   const logger = useMemo(() => createRendererLogger("rules.detail.window"), [])
   const editState = useContentWindowEditState<SynapseCreateRulePayload>("rule", request.id, logger)
+  const deleteState = useContentWindowDeleteState("rule", logger)
   const detailState = useContentDetailState<"rule">({
-    initialHistoryDirname: request.historyDirname ?? null,
     initialViewMode: request.viewMode,
     invalidTypeMessage: "读取到的内容不是规则。",
     item: {
@@ -315,7 +430,6 @@ function RuleDetailWindowPage({
       type: "rule",
     },
     loadDetailErrorMessage: "读取规则详情失败。",
-    loadHistoryErrorMessage: "读取规则历史失败。",
     logCategory: "rules.detail.window",
     open: true,
     refreshSignal: editState.refreshSignal,
@@ -336,21 +450,6 @@ function RuleDetailWindowPage({
     })
   }, [detailState, logger, request.id])
 
-  const handleHistorySelectionChange = useCallback((nextHistoryDirname: string) => {
-    detailState.setSelectedHistoryDirname((prevHistoryDirname) => {
-      if (prevHistoryDirname !== nextHistoryDirname) {
-        logger.info("Content history version changed in detail window.", {
-          contentId: request.id,
-          contentType: "rule",
-          from: prevHistoryDirname ?? "current",
-          to: nextHistoryDirname,
-        })
-      }
-
-      return nextHistoryDirname
-    })
-  }, [detailState, logger, request.id])
-
   useEffect(() => {
     if (detailState.detail) {
       document.title = detailState.detail.title
@@ -362,8 +461,10 @@ function RuleDetailWindowPage({
       <ContentDetailWindowShell
         summary={(
           <ContentDetailWindowSummary
+            canDelete={canEditContentDetail(detailState.detail)}
             canEdit={canEditContentDetail(detailState.detail)}
             detail={detailState.detail}
+            onDelete={() => deleteState.setIsDeleteConfirmOpen(true)}
             onEdit={() => editState.setIsEditOpen(true)}
           />
         )}
@@ -371,27 +472,30 @@ function RuleDetailWindowPage({
         <ContentDetailWindowMain>
           <div className="flex h-full min-h-0 flex-col p-4">
             <ContentDetailPanel
-              detail={detailState.detail}
               displayedVersion={detailState.displayedVersion}
               emptyDescription="它可能已经被删除。"
               emptyTitle="找不到这条规则"
               errorTitle="无法显示规则"
-              history={detailState.historyEntries}
               isLoading={detailState.isLoading}
               loadingTitle="正在读取规则"
-              onSelectedHistoryDirnameChange={handleHistorySelectionChange}
               onViewModeChange={handleViewModeChange}
               previewError={detailState.previewError}
               renderVersion={({ mode, version }) => (
                 <RuleVersionView mode={mode} surface="plain" version={version} />
               )}
-              selectedHistoryDirname={detailState.selectedHistoryDirname}
               stateContainerClassName="min-h-full rounded-none border-0 bg-transparent p-0"
               viewMode={detailState.viewMode}
             />
           </div>
         </ContentDetailWindowMain>
       </ContentDetailWindowShell>
+
+      <ContentWindowDeleteDialog
+        description="删除后可在最近删除中恢复。"
+        detail={detailState.detail}
+        state={deleteState}
+        title="删除规则"
+      />
 
       {detailState.detail && canEditContentDetail(detailState.detail) ? (
         <RuleCreateDialog
@@ -420,8 +524,8 @@ function PromptDetailWindowPage({
 }) {
   const logger = useMemo(() => createRendererLogger("prompts.detail.window"), [])
   const editState = useContentWindowEditState<SynapseCreatePromptPayload>("prompt", request.id, logger)
+  const deleteState = useContentWindowDeleteState("prompt", logger)
   const detailState = useContentDetailState<"prompt">({
-    initialHistoryDirname: request.historyDirname ?? null,
     initialViewMode: request.viewMode,
     invalidTypeMessage: "读取到的内容不是提示词。",
     item: {
@@ -429,7 +533,6 @@ function PromptDetailWindowPage({
       type: "prompt",
     },
     loadDetailErrorMessage: "读取提示词详情失败。",
-    loadHistoryErrorMessage: "读取提示词历史失败。",
     logCategory: "prompts.detail.window",
     open: true,
     refreshSignal: editState.refreshSignal,
@@ -450,21 +553,6 @@ function PromptDetailWindowPage({
     })
   }, [detailState, logger, request.id])
 
-  const handleHistorySelectionChange = useCallback((nextHistoryDirname: string) => {
-    detailState.setSelectedHistoryDirname((prevHistoryDirname) => {
-      if (prevHistoryDirname !== nextHistoryDirname) {
-        logger.info("Content history version changed in detail window.", {
-          contentId: request.id,
-          contentType: "prompt",
-          from: prevHistoryDirname ?? "current",
-          to: nextHistoryDirname,
-        })
-      }
-
-      return nextHistoryDirname
-    })
-  }, [detailState, logger, request.id])
-
   useEffect(() => {
     if (detailState.detail) {
       document.title = detailState.detail.title
@@ -476,8 +564,10 @@ function PromptDetailWindowPage({
       <ContentDetailWindowShell
         summary={(
           <ContentDetailWindowSummary
+            canDelete={canEditContentDetail(detailState.detail)}
             canEdit={canEditContentDetail(detailState.detail)}
             detail={detailState.detail}
+            onDelete={() => deleteState.setIsDeleteConfirmOpen(true)}
             onEdit={() => editState.setIsEditOpen(true)}
           />
         )}
@@ -485,27 +575,30 @@ function PromptDetailWindowPage({
         <ContentDetailWindowMain>
           <div className="flex h-full min-h-0 flex-col p-4">
             <ContentDetailPanel
-              detail={detailState.detail}
               displayedVersion={detailState.displayedVersion}
               emptyDescription="它可能已经被删除。"
               emptyTitle="找不到这条提示词"
               errorTitle="无法显示提示词"
-              history={detailState.historyEntries}
               isLoading={detailState.isLoading}
               loadingTitle="正在读取提示词"
-              onSelectedHistoryDirnameChange={handleHistorySelectionChange}
               onViewModeChange={handleViewModeChange}
               previewError={detailState.previewError}
               renderVersion={({ mode, version }) => (
                 <PromptVersionView mode={mode} surface="plain" version={version} />
               )}
-              selectedHistoryDirname={detailState.selectedHistoryDirname}
               stateContainerClassName="min-h-full rounded-none border-0 bg-transparent p-0"
               viewMode={detailState.viewMode}
             />
           </div>
         </ContentDetailWindowMain>
       </ContentDetailWindowShell>
+
+      <ContentWindowDeleteDialog
+        description="删除后可在最近删除中恢复。"
+        detail={detailState.detail}
+        state={deleteState}
+        title="删除提示词"
+      />
 
       {detailState.detail && canEditContentDetail(detailState.detail) ? (
         <PromptCreateDialog
@@ -531,6 +624,7 @@ function SkillDetailWindowPage({
 }) {
   const logger = useMemo(() => createRendererLogger("skills.detail.window"), [])
   const editState = useContentWindowEditState<CreateSkillPayload>("skill", request.id, logger)
+  const deleteState = useContentWindowDeleteState("skill", logger)
   const [activeFilePath, setActiveFilePath] = useState(MAIN_SKILL_FILE_PATH)
   const [attachmentPreviewState, setAttachmentPreviewState] = useState<SkillAttachmentPreviewState>({
     file: null,
@@ -538,7 +632,6 @@ function SkillDetailWindowPage({
     status: "idle",
   })
   const detailState = useContentDetailState<"skill">({
-    initialHistoryDirname: request.historyDirname ?? null,
     initialViewMode: request.viewMode,
     invalidTypeMessage: "读取到的内容不是 Skill。",
     item: {
@@ -546,7 +639,6 @@ function SkillDetailWindowPage({
       type: "skill",
     },
     loadDetailErrorMessage: "读取 Skill 详情失败。",
-    loadHistoryErrorMessage: "读取 Skill 历史失败。",
     logCategory: "skills.detail.window",
     open: true,
     refreshSignal: editState.refreshSignal,
@@ -564,21 +656,6 @@ function SkillDetailWindowPage({
       }
 
       return nextViewMode
-    })
-  }, [detailState, logger, request.id])
-
-  const handleHistorySelectionChange = useCallback((nextHistoryDirname: string) => {
-    detailState.setSelectedHistoryDirname((prevHistoryDirname) => {
-      if (prevHistoryDirname !== nextHistoryDirname) {
-        logger.info("Content history version changed in detail window.", {
-          contentId: request.id,
-          contentType: "skill",
-          from: prevHistoryDirname ?? "current",
-          to: nextHistoryDirname,
-        })
-      }
-
-      return nextHistoryDirname
     })
   }, [detailState, logger, request.id])
 
@@ -687,8 +764,10 @@ function SkillDetailWindowPage({
       <ContentDetailWindowShell
         summary={(
           <ContentDetailWindowSummary
+            canDelete={canEditContentDetail(detailState.detail)}
             canEdit={canEditContentDetail(detailState.detail)}
             detail={detailState.detail}
+            onDelete={() => deleteState.setIsDeleteConfirmOpen(true)}
             onEdit={() => editState.setIsEditOpen(true)}
           />
         )}
@@ -704,15 +783,12 @@ function SkillDetailWindowPage({
         >
           <div className="flex h-full min-h-0 flex-col p-4">
             <ContentDetailPanel
-              detail={detailState.detail}
               displayedVersion={detailState.displayedVersion}
               emptyDescription="它可能已经被删除。"
               emptyTitle="找不到这条 Skill"
               errorTitle="无法显示 Skill"
-              history={detailState.historyEntries}
               isLoading={detailState.isLoading}
               loadingTitle="正在读取 Skill"
-              onSelectedHistoryDirnameChange={handleHistorySelectionChange}
               onViewModeChange={handleViewModeChange}
               previewError={detailState.previewError}
               renderVersion={({ mode, version }) => {
@@ -733,13 +809,19 @@ function SkillDetailWindowPage({
                   />
                 )
               }}
-              selectedHistoryDirname={detailState.selectedHistoryDirname}
               stateContainerClassName="min-h-full rounded-none border-0 bg-transparent p-0"
               viewMode={detailState.viewMode}
             />
           </div>
         </ContentDetailWindowMain>
       </ContentDetailWindowShell>
+
+      <ContentWindowDeleteDialog
+        description="删除后可在最近删除中恢复。"
+        detail={detailState.detail}
+        state={deleteState}
+        title="删除 Skill"
+      />
 
       {detailState.detail && canEditContentDetail(detailState.detail) ? (
         <SkillCreateDialog

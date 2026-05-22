@@ -31,6 +31,10 @@ function getRemainingDays(modifiedAt: string): number {
   return Math.max(0, Math.ceil((expiresAt - Date.now()) / (24 * 60 * 60 * 1000)))
 }
 
+function isCardActivationKey(key: string): boolean {
+  return key === "Enter" || key === " "
+}
+
 function DeletedContentCard({
   contentType,
   item,
@@ -134,14 +138,21 @@ function ContentListCard({
 
   return (
     <div
-      className="flex flex-col rounded-lg bg-background px-3 py-3 transition-shadow hover:ring-2 hover:ring-muted-foreground/25"
+      role="button"
+      tabIndex={0}
+      className="flex cursor-pointer flex-col rounded-lg bg-background px-3 py-3 outline-none transition-shadow hover:ring-2 hover:ring-muted-foreground/25 focus-visible:ring-3 focus-visible:ring-ring/50"
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (!isCardActivationKey(event.key)) {
+          return
+        }
+
+        event.preventDefault()
+        onOpen()
+      }}
     >
       <div className="flex items-start gap-2">
-        <button
-          type="button"
-          className="flex min-w-0 flex-1 cursor-pointer items-start gap-2 rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-          onClick={onOpen}
-        >
+        <div className="flex min-w-0 flex-1 items-start gap-2 text-left">
           <ContentItemIcon
             contentId={item.id}
             contentType={contentType}
@@ -159,7 +170,7 @@ function ContentListCard({
             descriptionTextClassName="text-xs"
             title={item.title}
           />
-        </button>
+        </div>
       </div>
 
       <ContentCardFooter
@@ -225,6 +236,9 @@ function SkillNameCopyButton({ skillName }: { skillName: string }) {
         event.stopPropagation()
         void copySkillName(skillName)
       }}
+      onKeyDown={(event) => {
+        event.stopPropagation()
+      }}
     >
       <span className="truncate">{skillName}</span>
     </button>
@@ -248,14 +262,21 @@ function SkillContentListCard({
 
   return (
     <div
-      className="flex flex-col rounded-lg bg-background px-3 py-3 transition-shadow hover:ring-2 hover:ring-muted-foreground/25"
+      role="button"
+      tabIndex={0}
+      className="flex cursor-pointer flex-col rounded-lg bg-background px-3 py-3 outline-none transition-shadow hover:ring-2 hover:ring-muted-foreground/25 focus-visible:ring-3 focus-visible:ring-ring/50"
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (!isCardActivationKey(event.key)) {
+          return
+        }
+
+        event.preventDefault()
+        onOpen()
+      }}
     >
       <div className="flex items-start gap-2">
-        <button
-          type="button"
-          className="shrink-0 cursor-pointer rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-          onClick={onOpen}
-        >
+        <div className="shrink-0 text-left">
           <ContentItemIcon
             contentId={item.id}
             contentType={item.type}
@@ -265,20 +286,16 @@ function SkillContentListCard({
             title={item.title}
             tone={item.iconBg}
           />
-        </button>
+        </div>
 
         <div className="min-w-0 flex-1">
-          <button
-            type="button"
-            className="block min-w-0 w-full max-w-full cursor-pointer rounded-md text-left outline-none focus-visible:ring-3 focus-visible:ring-ring/50"
-            onClick={onOpen}
-          >
+          <div className="block min-w-0 w-full max-w-full text-left">
             <ContentItemText
               description={item.usage?.trim() || item.description}
               descriptionTextClassName="text-xs"
               title={item.title}
             />
-          </button>
+          </div>
 
           {skillName ? (
             <div className="mt-0.5">

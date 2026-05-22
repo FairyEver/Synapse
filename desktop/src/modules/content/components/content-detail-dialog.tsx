@@ -164,18 +164,14 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
   const {
     detail,
     displayedVersion,
-    historyEntries,
     isLoading,
     previewError,
-    selectedHistoryDirname,
-    setSelectedHistoryDirname: setSelectedHistoryDirnameRaw,
     setViewMode: setViewModeRaw,
     viewMode,
   } = useContentDetailState<TContentType>({
     invalidTypeMessage: `读取到的内容不是 ${labels.singular}。`,
     item,
     loadDetailErrorMessage: `读取 ${labels.singular} 详情失败。`,
-    loadHistoryErrorMessage: `读取 ${labels.singular} 历史失败。`,
     logCategory,
     open,
     refreshSignal,
@@ -190,8 +186,6 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
   })
   const viewModeRef = useRef(viewMode)
   viewModeRef.current = viewMode
-  const selectedHistoryDirnameRef = useRef(selectedHistoryDirname)
-  selectedHistoryDirnameRef.current = selectedHistoryDirname
   const { isFavorite, toggleFavorite } = useContentFavorites()
   const isItemFavorite = item ? isFavorite(contentType, item.id) : false
   const activeRepositoryOperation = useRepositoryOperation(activeRepository?.uuid ?? "")
@@ -217,19 +211,6 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
     }
     setViewModeRaw(nextViewMode)
   }, [contentType, item?.id, logger, setViewModeRaw])
-
-  const handleHistorySelectionChange = useCallback((nextHistoryDirname: string | null) => {
-    const prevHistoryDirname = selectedHistoryDirnameRef.current
-    if (prevHistoryDirname !== nextHistoryDirname) {
-      logger.info("Content history version changed.", {
-        contentId: item?.id ?? null,
-        contentType,
-        from: prevHistoryDirname ?? "current",
-        to: nextHistoryDirname ?? "current",
-      })
-    }
-    setSelectedHistoryDirnameRaw(nextHistoryDirname)
-  }, [contentType, item?.id, logger, setSelectedHistoryDirnameRaw])
 
   const handleInstallStatusRefresh = useCallback(() => {
     setInstallStatusRefreshSignal((value) => value + 1)
@@ -259,13 +240,12 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
   useEffect(() => {
     if (!open) {
       setViewModeRaw("rendered")
-      setSelectedHistoryDirnameRaw(null)
       setIsEditOpen(false)
       setIsDeleteConfirmOpen(false)
       setConflictState(null)
       consumedOverwriteRequestIdRef.current = null
     }
-  }, [open, setSelectedHistoryDirnameRaw, setViewModeRaw])
+  }, [open, setViewModeRaw])
 
   useEffect(() => {
     if (!open || !detail || !overwritePrefill) return
@@ -448,14 +428,12 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
         contentId: item.id,
         contentType,
         viewMode,
-        historyDirname: selectedHistoryDirname ?? displayedVersion?.historyDirname ?? null,
       })
       await openContentDetailWindow({
         contentType: item.type,
         id: item.id,
         title: resolvedItem.title,
         viewMode,
-        historyDirname: selectedHistoryDirname ?? displayedVersion?.historyDirname,
       })
     } catch (openWindowError) {
       logger.error(`Failed to open ${labels.singular} detail window.`, {
@@ -506,15 +484,7 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel
-              onClick={() => {
-                if (conflictState) {
-                  handleHistorySelectionChange(conflictState.latestHistoryDirname)
-                }
-              }}
-            >
-              查看对方修改了什么
-            </AlertDialogCancel>
+            <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction
               disabled={isRepositoryInitializing}
               onClick={() => void handleConflictContinue()}
@@ -602,19 +572,15 @@ function ContentDetailDialog<TPayload, TContentType extends SynapseContentType>(
           )}>
             {contentReady ? (
               <ContentDetailPanel
-                detail={detail}
                 displayedVersion={displayedVersion}
                 emptyDescription={labels.emptyDescription}
                 emptyTitle={labels.emptyTitle}
                 errorTitle={labels.errorTitle}
-                history={historyEntries}
                 isLoading={isLoading}
                 loadingTitle={labels.loadingTitle}
-                onSelectedHistoryDirnameChange={handleHistorySelectionChange}
                 onViewModeChange={handleViewModeChange}
                 previewError={previewError}
                 renderVersion={renderVersionView}
-                selectedHistoryDirname={selectedHistoryDirname}
                 viewMode={viewMode}
               />
             ) : null}

@@ -9,51 +9,40 @@ import {
 } from "@/components/ui/empty"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { ContentHistorySelect } from "@/modules/content/components/content-history-select"
 import type { SynapseLoadedContentVersion } from "@/modules/content/hooks/use-content-detail-state"
 import type {
-  SynapseContentDetail,
-  SynapseContentHistoryEntry,
   SynapseContentType,
   SynapseContentViewMode,
 } from "@/types/content"
 
 type ContentDetailPanelProps<T extends SynapseContentType> = {
-  detail: SynapseContentDetail<T> | null
   displayedVersion: SynapseLoadedContentVersion<T> | null
   emptyDescription: string
   emptyTitle: string
   errorTitle: string
-  history: SynapseContentHistoryEntry[]
   isLoading: boolean
   loadingTitle: string
-  onSelectedHistoryDirnameChange: (historyDirname: string) => void
   onViewModeChange: (mode: SynapseContentViewMode) => void
   previewError: string | null
   renderVersion: (args: {
     mode: SynapseContentViewMode
     version: SynapseLoadedContentVersion<T>
   }) => ReactNode
-  selectedHistoryDirname: string | null
   stateContainerClassName?: string
   toolbarAction?: ReactNode
   viewMode: SynapseContentViewMode
 }
 
 function ContentDetailPanel<T extends SynapseContentType>({
-  detail,
   displayedVersion,
   emptyDescription,
   emptyTitle,
   errorTitle,
-  history,
   isLoading,
   loadingTitle,
-  onSelectedHistoryDirnameChange,
   onViewModeChange,
   previewError,
   renderVersion,
-  selectedHistoryDirname,
   stateContainerClassName,
   toolbarAction,
   viewMode,
@@ -74,32 +63,20 @@ function ContentDetailPanel<T extends SynapseContentType>({
   if (displayedVersion) {
     return (
       <div className="flex min-h-0 flex-1 flex-col">
-        <div className="flex flex-wrap items-center gap-2">
-          {selectedHistoryDirname ? (
-            <ContentHistorySelect
-              className="min-w-0 flex-1"
-              history={history}
-              latestHistoryDirname={detail?.latestHistoryDirname ?? displayedVersion.historyDirname}
-              selectedHistoryDirname={selectedHistoryDirname}
-              onSelectedHistoryDirnameChange={onSelectedHistoryDirnameChange}
-            />
-          ) : null}
+        <div className="flex flex-wrap items-center justify-end gap-2">
+          {toolbarAction ? <div className="shrink-0">{toolbarAction}</div> : null}
 
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            {toolbarAction ? <div className="shrink-0">{toolbarAction}</div> : null}
-
-            <Tabs
-              data-track="content-view-mode"
-              value={viewMode}
-              onValueChange={(value) => onViewModeChange(value === "source" ? "source" : "rendered")}
-              className="shrink-0 gap-0"
-            >
-              <TabsList>
-                <TabsTrigger value="rendered">预览</TabsTrigger>
-                <TabsTrigger value="source">源码</TabsTrigger>
-              </TabsList>
-            </Tabs>
-          </div>
+          <Tabs
+            data-track="content-view-mode"
+            value={viewMode}
+            onValueChange={(value) => onViewModeChange(value === "source" ? "source" : "rendered")}
+            className="shrink-0 gap-0"
+          >
+            <TabsList>
+              <TabsTrigger value="rendered">预览</TabsTrigger>
+              <TabsTrigger value="source">源码</TabsTrigger>
+            </TabsList>
+          </Tabs>
         </div>
 
         <ScrollArea className="mt-4 min-h-0 flex-1 overflow-hidden">

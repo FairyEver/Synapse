@@ -109,6 +109,30 @@ async function renderGrid(items: SynapseContentMeta[], contentType: SynapseConte
 }
 
 describe("ContentGrid", () => {
+  it("opens a skill item when the card body is clicked but keeps nested actions isolated", async () => {
+    const { container, onOpenItem } = await renderGrid([
+      createContentItem("skill", { name: "agent-tooling" }),
+    ])
+
+    const card = container.querySelector<HTMLElement>('[role="button"]')
+    expect(card?.textContent).toContain("Title")
+
+    await act(async () => {
+      card?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onOpenItem).toHaveBeenCalledTimes(1)
+
+    const actionButton = Array.from(container.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === "操作")
+
+    await act(async () => {
+      actionButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onOpenItem).toHaveBeenCalledTimes(1)
+  })
+
   it("shows the skill name on skill cards and copies it without opening the item", async () => {
     const writeText = vi.fn(async () => undefined)
     Object.defineProperty(navigator, "clipboard", {

@@ -79,8 +79,6 @@ vi.mock("../../../services/content-service", () => ({
   contentService: {
     getContent: vi.fn(),
     getDetail: vi.fn(),
-    getHistory: vi.fn(),
-    getHistoryVersion: vi.fn(),
     getAttachmentFile: mocks.contentService.getAttachmentFile,
     listContent: vi.fn(),
     listDeletedContent: vi.fn(),

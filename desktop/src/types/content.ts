@@ -263,7 +263,6 @@ export type SynapseContentWindowRequest = {
   contentType: SynapseContentType
   id: string
   viewMode: SynapseContentViewMode
-  historyDirname?: string
 }
 
 export type SynapseOpenContentWindowPayload = SynapseContentWindowRequest & {

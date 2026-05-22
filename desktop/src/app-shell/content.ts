@@ -3,8 +3,6 @@ import type {
   SynapseContentDetail,
   SynapseContentDownloadResult,
   SynapseContentFile,
-  SynapseContentHistoryEntry,
-  SynapseContentHistoryVersion,
   SynapseContentMeta,
   SynapseContentMutationResult,
   SynapseOpenContentWindowPayload,
@@ -73,21 +71,6 @@ async function readDetail(
   id: string,
 ): Promise<SynapseContentDetail> {
   return requireContentBridge().getDetail({ contentType, id })
-}
-
-async function readHistory(
-  contentType: SynapseContentType,
-  id: string,
-): Promise<SynapseContentHistoryEntry[]> {
-  return requireContentBridge().getHistory({ contentType, id })
-}
-
-async function readHistoryVersion(
-  contentType: SynapseContentType,
-  id: string,
-  historyDirname: string,
-): Promise<SynapseContentHistoryVersion> {
-  return requireContentBridge().getHistoryVersion({ contentType, id, historyDirname })
 }
 
 async function readAttachmentFile(args: {
@@ -188,12 +171,6 @@ const readRuleContent = (ruleId: string) => readContent("rule", ruleId)
 const readSkillContent = (skillId: string) => readContent("skill", skillId)
 const readRuleDetail = (ruleId: string) => readDetail("rule", ruleId)
 const readSkillDetail = (skillId: string) => readDetail("skill", skillId)
-const readRuleHistory = (ruleId: string) => readHistory("rule", ruleId)
-const readSkillHistory = (skillId: string) => readHistory("skill", skillId)
-const readRuleHistoryVersion = (ruleId: string, historyDirname: string) =>
-  readHistoryVersion("rule", ruleId, historyDirname)
-const readSkillHistoryVersion = (skillId: string, historyDirname: string) =>
-  readHistoryVersion("skill", skillId, historyDirname)
 const downloadRule = (ruleId: string) => downloadContent("rule", ruleId)
 const downloadSkill = (skillId: string) => downloadContent("skill", skillId)
 
@@ -217,17 +194,11 @@ export {
   readContent,
   readAttachmentFile,
   readDetail,
-  readHistory,
-  readHistoryVersion,
   readRuleContent,
   readRuleDetail,
-  readRuleHistory,
-  readRuleHistoryVersion,
   readRules,
   readSkillContent,
   readSkillDetail,
-  readSkillHistory,
-  readSkillHistoryVersion,
   readSkills,
   resolveEditorInstallTarget,
   restoreContent,

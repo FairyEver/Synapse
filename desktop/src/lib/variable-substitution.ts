@@ -3,20 +3,27 @@
 // Group 2: the variable name.
 const PLACEHOLDER_REGEX = /(?:(\\)\$|\$)\{\{\s*([A-Za-z0-9_]+)\s*\}\}/g
 
+type VariableSubstitutionOptions = {
+  includeCodeBlocks?: boolean
+}
+
 function isInsideCodeBlock(content: string, matchIndex: number): boolean {
   const before = content.slice(0, matchIndex)
   const fenceCount = (before.match(/^ {0,3}```/gm) ?? []).length
   return fenceCount % 2 === 1
 }
 
-export function detectPlaceholders(content: string): string[] {
+export function detectPlaceholders(
+  content: string,
+  options: VariableSubstitutionOptions = {},
+): string[] {
   const seen = new Set<string>()
   const result: string[] = []
 
   for (const match of content.matchAll(PLACEHOLDER_REGEX)) {
     const escaped = match[1] === "\\"
     if (escaped) continue
-    if (isInsideCodeBlock(content, match.index)) continue
+    if (!options.includeCodeBlocks && isInsideCodeBlock(content, match.index)) continue
 
     const name = match[2]
     const key = name.toLowerCase()
@@ -33,6 +40,7 @@ export function detectPlaceholders(content: string): string[] {
 export function applyVariableSubstitutions(
   content: string,
   substitutions: Record<string, string>,
+  options: VariableSubstitutionOptions = {},
 ): string {
   const lowerMap = new Map<string, string>()
 
@@ -47,7 +55,7 @@ export function applyVariableSubstitutions(
         return original.slice(1)
       }
 
-      if (isInsideCodeBlock(content, offset)) {
+      if (!options.includeCodeBlocks && isInsideCodeBlock(content, offset)) {
         return original
       }
 

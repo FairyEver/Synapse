@@ -44,8 +44,6 @@ import type {
   SynapseContentChangedEvent,
   SynapseContentDetail,
   SynapseContentFile,
-  SynapseContentHistoryEntry,
-  SynapseContentHistoryVersion,
   SynapseContentMeta,
   SynapseCreateContentRequest,
   SynapseDeleteContentPayload,
@@ -477,12 +475,6 @@ export type SynapseBridge = {
     getDetail: (
       args: { contentType: SynapseContentType; id: string },
     ) => Promise<SynapseContentDetail>
-    getHistory: (
-      args: { contentType: SynapseContentType; id: string },
-    ) => Promise<SynapseContentHistoryEntry[]>
-    getHistoryVersion: (
-      args: { contentType: SynapseContentType; id: string; historyDirname: string },
-    ) => Promise<SynapseContentHistoryVersion>
     getAttachmentFile: (
       args: {
         contentType: SynapseContentType

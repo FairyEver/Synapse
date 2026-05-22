@@ -19,18 +19,12 @@ function normalizeViewMode(value: string | null): SynapseContentViewMode {
 function buildContentWindowSearchParams(
   payload: SynapseOpenContentWindowPayload,
 ): URLSearchParams {
-  const params = new URLSearchParams({
+  return new URLSearchParams({
     [CONTENT_WINDOW_KIND_PARAM]: CONTENT_WINDOW_KIND,
     contentType: payload.contentType,
     id: payload.id,
     viewMode: payload.viewMode,
   })
-
-  if (payload.historyDirname) {
-    params.set("historyDirname", payload.historyDirname)
-  }
-
-  return params
 }
 
 function parseContentWindowRequest(search: string): SynapseContentWindowRequest | null {
@@ -47,13 +41,10 @@ function parseContentWindowRequest(search: string): SynapseContentWindowRequest 
     return null
   }
 
-  const historyDirname = params.get("historyDirname")?.trim() || undefined
-
   return {
     contentType,
     id,
     viewMode: normalizeViewMode(params.get("viewMode")),
-    historyDirname,
   }
 }
 

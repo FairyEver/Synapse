@@ -1,4 +1,5 @@
-import { rename, rm, writeFile } from "node:fs/promises"
+import { app } from "electron"
+import { mkdir, rename, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { pathExists } from "./fs-utils"
 import { getContentTypeDefinition } from "../../src/config/content-types"
@@ -163,6 +164,10 @@ function isSamePath(left: string, right: string): boolean {
   })
 }
 
+function getDesktopSkillBackupPath(targetPath: string): string {
+  return path.join(app.getPath("desktop"), `${path.basename(targetPath)}-synapse备份`)
+}
+
 function isPathInsideDirectory(targetPath: string, directoryPath: string): boolean {
   const relative = path.relative(path.resolve(directoryPath), path.resolve(targetPath))
   return relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative)
@@ -257,7 +262,7 @@ export class ContentInstallService {
           let ruleBody = file.content
 
           if (payload.variableSubstitutions && Object.keys(payload.variableSubstitutions).length > 0) {
-            ruleBody = applyVariableSubstitutions(ruleBody, payload.variableSubstitutions)
+            ruleBody = applyVariableSubstitutions(ruleBody, payload.variableSubstitutions, { includeCodeBlocks: true })
           }
 
           if (payload.contentType === "rule") {
@@ -305,11 +310,10 @@ export class ContentInstallService {
           if (payload.contentType === "skill" && payload.replaceConfirmed) {
             const targetExists = await pathExists(target.targetPath)
             if (targetExists && target.targetPath !== previousSkillDirectoryPath) {
-              const backupPath = `${target.targetPath}-backup`
-              if (await pathExists(backupPath)) {
-                await rm(backupPath, { recursive: true, force: true }).catch(() => {})
-              }
+              const backupPath = getDesktopSkillBackupPath(target.targetPath)
               try {
+                await mkdir(path.dirname(backupPath), { recursive: true })
+                await rm(backupPath, { recursive: true, force: true })
                 await rename(target.targetPath, backupPath)
                 backupPathForRestore = backupPath
               } catch (error) {
@@ -322,7 +326,7 @@ export class ContentInstallService {
           const detailWithSubstitutions = payload.variableSubstitutions && Object.keys(payload.variableSubstitutions).length > 0
             ? {
                 ...detail,
-                content: applyVariableSubstitutions(detail.content, payload.variableSubstitutions),
+                content: applyVariableSubstitutions(detail.content, payload.variableSubstitutions, { includeCodeBlocks: true }),
               }
             : detail
 

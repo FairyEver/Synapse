@@ -12,8 +12,6 @@ import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseContentFile,
   SynapseContentDetail,
-  SynapseContentHistoryEntry,
-  SynapseContentHistoryVersion,
   SynapseContentMeta,
   SynapseContentType,
   SynapseTextContentFile,
@@ -126,52 +124,6 @@ class ContentService {
     return readCurrentDetail(contentType, contentId)
   }
 
-  async getHistory(
-    contentType: SynapseContentType,
-    contentId: string,
-  ): Promise<SynapseContentHistoryEntry[]> {
-    if (builtinContentService.isBuiltinContentId(contentId)) {
-      return builtinContentService.getHistory(contentType, contentId)
-    }
-
-    const context = await getActiveRepositoryContext()
-
-    if (!context) {
-      return []
-    }
-
-    return contentHistoryService.listHistory(context.repository, contentType, contentId)
-  }
-
-  async getHistoryVersion(
-    contentType: SynapseContentType,
-    contentId: string,
-    historyDirname: string,
-  ): Promise<SynapseContentHistoryVersion> {
-    if (builtinContentService.isBuiltinContentId(contentId)) {
-      return builtinContentService.getHistoryVersion(contentType, contentId, historyDirname)
-    }
-
-    const context = await getActiveRepositoryContext()
-
-    if (!context) {
-      throw new Error("当前还没有选中的本地目录。")
-    }
-
-    const version = await contentHistoryService.readHistoryVersion(
-      context.repository,
-      contentType,
-      contentId,
-      historyDirname,
-    )
-
-    if (!version) {
-      throw new Error("这条历史记录已不可用。")
-    }
-
-    return version
-  }
-
   async getAttachmentFile(
     contentType: SynapseContentType,
     contentId: string,
@@ -233,28 +185,6 @@ class ContentService {
 
   async getSkillDetail(skillId: string): Promise<SynapseContentDetail<"skill">> {
     return this.getDetail("skill", skillId) as Promise<SynapseContentDetail<"skill">>
-  }
-
-  async getRuleHistory(ruleId: string): Promise<SynapseContentHistoryEntry[]> {
-    return this.getHistory("rule", ruleId)
-  }
-
-  async getSkillHistory(skillId: string): Promise<SynapseContentHistoryEntry[]> {
-    return this.getHistory("skill", skillId)
-  }
-
-  async getRuleHistoryVersion(
-    ruleId: string,
-    historyDirname: string,
-  ): Promise<SynapseContentHistoryVersion> {
-    return this.getHistoryVersion("rule", ruleId, historyDirname)
-  }
-
-  async getSkillHistoryVersion(
-    skillId: string,
-    historyDirname: string,
-  ): Promise<SynapseContentHistoryVersion> {
-    return this.getHistoryVersion("skill", skillId, historyDirname)
   }
 
   async readIconImage(

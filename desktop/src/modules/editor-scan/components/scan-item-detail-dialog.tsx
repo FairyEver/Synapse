@@ -576,7 +576,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
       </AlertDialog>
 
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="flex max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]">
+        <DialogContent className="flex h-[calc(100vh-2rem)] max-h-[calc(100vh-2rem)] flex-col gap-0 overflow-hidden p-0 sm:max-w-[600px]">
           <DialogHeader className="px-5 pt-5">
           <DialogTitle className="sr-only">{item.name}</DialogTitle>
           <DialogDescription className="sr-only">

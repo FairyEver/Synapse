@@ -291,7 +291,6 @@ function ContentBrowserPage({
         id: item.id,
         title: item.title,
         viewMode: "rendered",
-        historyDirname: item.latestHistoryDirname,
       })
     } catch (openWindowError) {
       logger.error("Failed to open content detail window from browser page.", {

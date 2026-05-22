@@ -52,6 +52,17 @@ describe("content detail window architecture", () => {
     expect(layoutSource).toContain("onEdit={onEdit}")
   })
 
+  it("keeps the delete action available from dedicated detail windows", () => {
+    const source = readFileSync(detailWindowPageSourcePath, "utf8")
+    const layoutSource = readFileSync(join(__dirname, "../components/content-detail-window-layout.tsx"), "utf8")
+
+    expect(source).toContain("useContentWindowDeleteState")
+    expect(source).toContain("manager.deleteContent")
+    expect(source).toContain("setIsDeleteConfirmOpen(true)")
+    expect(layoutSource).toContain("canDelete={canDelete}")
+    expect(layoutSource).toContain("onDelete={onDelete}")
+  })
+
   it("builds a cross-platform hierarchical Skill file tree from attachment paths", () => {
     const tree = buildSkillFileTree([
       {

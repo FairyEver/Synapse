@@ -11,8 +11,6 @@ export const IPC_CHANNELS = {
     "list": "synapse:content:list",
     "getContent": "synapse:content:get-content",
     "getDetail": "synapse:content:get-detail",
-    "getHistory": "synapse:content:get-history",
-    "getHistoryVersion": "synapse:content:get-history-version",
     "getAttachmentFile": "synapse:content:get-attachment-file",
     "getEditorAdapters": "synapse:content:get-editor-adapters",
     "create": "synapse:content:create",
