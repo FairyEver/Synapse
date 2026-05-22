@@ -10,6 +10,7 @@ import {
   useRepositoryManager,
   useRepositoryList,
 } from "@/app-shell/use-repository-manager"
+import { DelayedConfirmAlertDialog } from "@/components/delayed-confirm-alert-dialog"
 import { Button } from "@/components/ui/button"
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
@@ -18,6 +19,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import { getRepositoryNameFromPath } from "@/lib/path-utils"
 import { cn } from "@/lib/utils"
+import type { SynapseRepositoryInitializationPreview } from "@/types/repository"
 
 type EmptyRepositoryStateProps = {
   reason: "no-repositories" | "active-repository-missing"
@@ -85,6 +87,10 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
   // 初始化空目录对话框状态
   const [isInitDialogOpen, setIsInitDialogOpen] = useState(false)
   const [initTargetPath, setInitTargetPath] = useState("")
+  const [initializationTarget, setInitializationTarget] = useState<{
+    path: string
+    preview: SynapseRepositoryInitializationPreview
+  } | null>(null)
   const [isInitializing, setIsInitializing] = useState(false)
 
   const resetCreateForm = () => {
@@ -111,11 +117,20 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
       const validationResult = await validateDirectory(selectedPath)
       if (!validationResult.isValid) {
         if (validationResult.missingDirectories.length === 5) {
-          logger.info("Chosen directory is empty, offering initialization.", {
+          logger.info("Chosen directory can be initialized from empty state.", {
+            isEmpty: validationResult.initializationPreview.isEmpty,
             localPath: selectedPath,
+            previewCount: validationResult.initializationPreview.nonGitEntries.length,
           })
-          setInitTargetPath(selectedPath)
-          setIsInitDialogOpen(true)
+          if (validationResult.initializationPreview.isEmpty) {
+            setInitTargetPath(selectedPath)
+            setIsInitDialogOpen(true)
+          } else {
+            setInitializationTarget({
+              path: selectedPath,
+              preview: validationResult.initializationPreview,
+            })
+          }
           return
         }
 
@@ -228,10 +243,12 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
     }
   }
 
-  const handleInitConfirm = async () => {
+  const initializeSelectedPath = async (
+    selectedPath: string,
+    preview?: SynapseRepositoryInitializationPreview,
+  ) => {
     setIsInitializing(true)
     const startedAt = performance.now()
-    const selectedPath = initTargetPath
 
     try {
       const name = getRepositoryNameFromPath(selectedPath) || "新仓库"
@@ -246,18 +263,21 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
       await manager.updateConfig({ repositories: repos })
       await manager.refreshRepositoryStates()
 
-      await initializeRepository(newRepository.uuid)
+      await initializeRepository(newRepository.uuid, preview && !preview.isEmpty ? {
+        confirmedNonGitEntries: preview.nonGitEntries,
+      } : undefined)
       await manager.switchActiveRepository(newRepository.uuid)
 
-      logger.info("Repository initialized from empty directory.", {
+      logger.info("Repository initialized from chosen directory.", {
         elapsedMs: Math.round(performance.now() - startedAt),
         localPath: selectedPath,
         repositoryUuid: newRepository.uuid,
       })
       setIsInitDialogOpen(false)
       setInitTargetPath("")
+      setInitializationTarget(null)
     } catch (err) {
-      logger.error("Failed to initialize repository from empty directory.", {
+      logger.error("Failed to initialize repository from chosen directory.", {
         elapsedMs: Math.round(performance.now() - startedAt),
         error: err,
         localPath: selectedPath,
@@ -266,6 +286,10 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
     } finally {
       setIsInitializing(false)
     }
+  }
+
+  const handleInitConfirm = async () => {
+    await initializeSelectedPath(initTargetPath)
   }
 
   const handleSwitchToRepository = async (repositoryUuid: string) => {
@@ -277,6 +301,10 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
       showError(error instanceof Error ? error.message : "切换仓库失败", { durationMs: 4000 })
     }
   }
+
+  const previewEntries = initializationTarget?.preview.nonGitEntries ?? []
+  const previewList = previewEntries.slice(0, 5)
+  const remainingPreviewCount = Math.max(previewEntries.length - previewList.length, 0)
 
   return (
     <>
@@ -366,6 +394,43 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+      <DelayedConfirmAlertDialog
+        open={initializationTarget !== null}
+        onOpenChange={(open) => {
+          if (!open && !isInitializing) {
+            setInitializationTarget(null)
+          }
+        }}
+        title="警告"
+        description={(
+          <div className="flex flex-col gap-2 text-sm text-muted-foreground">
+            <p>
+              初始化会清空该目录下除 <code>.git/</code> 目录之外的所有内容，包括
+              <code>.gitignore</code> 等 Git 配置文件，且无法撤销。
+            </p>
+            <p className="break-all">
+              目录：{initializationTarget?.path}
+            </p>
+            <div className="flex flex-col gap-1">
+              <p>检测到目录中存在以下内容：</p>
+              {previewList.map((entryName) => (
+                <p key={entryName}>· {entryName}</p>
+              ))}
+              {remainingPreviewCount > 0 ? (
+                <p>... 等 {remainingPreviewCount} 项</p>
+              ) : null}
+            </div>
+          </div>
+        )}
+        confirmLabel="确定初始化"
+        delaySeconds={3}
+        onConfirm={async () => {
+          if (initializationTarget) {
+            await initializeSelectedPath(initializationTarget.path, initializationTarget.preview)
+          }
+        }}
+        confirmLoadingLabel="初始化中..."
+      />
       <div
         className="flex h-screen w-full items-center justify-center bg-background p-6"
       >

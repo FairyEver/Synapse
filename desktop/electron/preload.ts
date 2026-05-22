@@ -547,8 +547,8 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS.repository.getPendingPushes)({ repositoryUuid }),
     getSyncSnapshots: invoke(IPC_CHANNELS.repository.getSyncSnapshots),
     getStates: invoke(IPC_CHANNELS.repository.getStates),
-    initializeStructure: (repositoryUuid) =>
-      invoke(IPC_CHANNELS.repository.initializeStructure)({ repositoryUuid }),
+    initializeStructure: (repositoryUuid, options) =>
+      invoke(IPC_CHANNELS.repository.initializeStructure)({ options, repositoryUuid }),
     onPendingPushesUpdated: createDomainEventPayloadSubscription<SynapsePendingPushUpdatedEvent>(
       subscribe,
       "repository",

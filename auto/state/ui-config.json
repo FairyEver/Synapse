@@ -1,11 +1,11 @@
 {
   "activePromptName": "质量巡检v3",
   "workingDirectory": "/Users/liyang/Documents/code/github/Synapse",
-  "concurrency": 8,
+  "concurrency": 4,
   "intervalSeconds": 10,
   "timeoutMinutes": 60,
   "maxLogs": 200,
-  "provider": "claude-code",
+  "provider": "codex",
   "codex": {
     "command": "codex",
     "model": "gpt-5.5",

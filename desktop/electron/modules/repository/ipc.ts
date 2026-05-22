@@ -185,8 +185,13 @@ const initializeResultSchema = z.object({
   repository: repositoryStateSchema,
 })
 
+const initializationOptionsSchema = z.object({
+  confirmedNonGitEntries: z.array(z.string()).optional(),
+}).optional()
+
 const validationResultSchema = z.object({
   isValid: z.boolean(),
+  initializationPreview: initializationPreviewSchema,
   missingDirectories: z.array(z.string()),
   message: z.string(),
 })
@@ -277,9 +282,12 @@ export const repositoryIpcModule: IpcModule = {
     initializeStructure: {
       kind: "invoke",
       channel: "synapse:repository:initialize-structure",
-      request: z.object({ repositoryUuid: z.string() }),
+      request: z.object({
+        repositoryUuid: z.string(),
+        options: initializationOptionsSchema,
+      }),
       response: initializeResultSchema,
-      handler: async (ctx, request: { repositoryUuid: string }) => {
+      handler: async (ctx, request: { repositoryUuid: string; options?: z.infer<typeof initializationOptionsSchema> }) => {
         const repository = await resolveRepositoryConfig(request.repositoryUuid)
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
 
@@ -295,7 +303,7 @@ export const repositoryIpcModule: IpcModule = {
           timestamp: new Date().toISOString(),
         })
 
-        const result = await repositoryStructureService.initializeStructure(repository)
+        const result = await repositoryStructureService.initializeStructure(repository, request.options)
         const pendingPushes = await contentSubmissionService.readPendingPushState(repository)
 
         eventBus.emit({

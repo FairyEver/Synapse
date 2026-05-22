@@ -77,6 +77,10 @@ export type SynapseRepositoryInitializationPreview = {
   nonGitEntries: string[]
 }
 
+export type SynapseRepositoryInitializationOptions = {
+  confirmedNonGitEntries?: string[]
+}
+
 export type SynapseRepositoryInitializationResult = {
   initializedAt: string
   message?: string
@@ -143,6 +147,7 @@ export type SynapsePendingPushUpdatedEvent = {
 
 export type SynapseRepositoryValidationResult = {
   isValid: boolean
+  initializationPreview: SynapseRepositoryInitializationPreview
   missingDirectories: string[]
   message: string
 }

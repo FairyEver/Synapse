@@ -109,6 +109,7 @@ import type {
 import type {
   SynapseCreateLocalRepositoryPayload,
   SynapseCreateLocalRepositoryResult,
+  SynapseRepositoryInitializationOptions,
   SynapseRepositoryInitializationPreview,
   SynapseRepositoryInitializationResult,
   SynapseRepositoryLocalState,
@@ -599,6 +600,7 @@ export type SynapseBridge = {
     getStates: () => Promise<SynapseRepositoryLocalState[]>
     initializeStructure: (
       repositoryUuid: string,
+      options?: SynapseRepositoryInitializationOptions,
     ) => Promise<SynapseRepositoryInitializationResult>
     onPendingPushesUpdated: (listener: (payload: SynapsePendingPushUpdatedEvent) => void) => () => void
     onSyncSnapshotUpdated: (

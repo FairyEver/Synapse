@@ -10,6 +10,7 @@ import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseCreateLocalRepositoryPayload,
   SynapseCreateLocalRepositoryResult,
+  SynapseRepositoryInitializationOptions,
   SynapseRepositoryInitializationPreview,
   SynapseRepositoryInitializationResult,
 } from "../../src/types/repository"
@@ -40,6 +41,24 @@ async function readTopLevelEntries(repoRootPath: string): Promise<Dirent[]> {
 function getNonGitEntries(entries: Dirent[]): Dirent[] {
   return entries.filter((entry) => !isGitDirectory(entry))
 }
+
+function getFormattedNonGitEntryNames(entries: Dirent[]): string[] {
+  return getNonGitEntries(entries).map(formatTopLevelEntryName)
+}
+
+function areConfirmedEntriesCurrent(
+  currentEntries: string[],
+  confirmedEntries: string[] | undefined,
+): boolean {
+  if (!confirmedEntries) return false
+
+  const current = [...currentEntries].sort()
+  const confirmed = [...confirmedEntries].sort()
+  if (current.length !== confirmed.length) return false
+
+  return current.every((entryName, index) => entryName === confirmed[index])
+}
+
 function runStructureGitCommand(
   cwd: string,
   args: string[],
@@ -169,6 +188,7 @@ class RepositoryStructureService {
 
   async validateDirectoryStructure(localPath: string): Promise<{
     isValid: boolean
+    initializationPreview: SynapseRepositoryInitializationPreview
     missingDirectories: string[]
     message: string
   }> {
@@ -184,6 +204,8 @@ class RepositoryStructureService {
     }
 
     const isValid = missingDirectories.length === 0
+    const entries = await readTopLevelEntries(localPath)
+    const nonGitEntryNames = getFormattedNonGitEntryNames(entries)
 
     let message: string
     if (isValid) {
@@ -196,6 +218,10 @@ class RepositoryStructureService {
 
     return {
       isValid,
+      initializationPreview: {
+        isEmpty: nonGitEntryNames.length === 0,
+        nonGitEntries: nonGitEntryNames,
+      },
       missingDirectories,
       message,
     }
@@ -278,6 +304,7 @@ class RepositoryStructureService {
 
   async initializeStructure(
     repository: SynapseRepositoryConfig,
+    options: SynapseRepositoryInitializationOptions = {},
   ): Promise<SynapseRepositoryInitializationResult> {
     const repositoryState = await repositoryStore.getRepositoryState(repository)
 
@@ -289,6 +316,14 @@ class RepositoryStructureService {
 
     const entries = await readTopLevelEntries(repository.localPath)
     const nonGitEntries = getNonGitEntries(entries)
+    const nonGitEntryNames = nonGitEntries.map(formatTopLevelEntryName)
+
+    if (
+      nonGitEntryNames.length > 0 &&
+      !areConfirmedEntriesCurrent(nonGitEntryNames, options.confirmedNonGitEntries)
+    ) {
+      throw new Error("初始化会清空该目录下已有内容，请先确认删除清单后再初始化。")
+    }
 
     for (const entry of nonGitEntries) {
       await rm(path.join(repository.localPath, entry.name), {
@@ -312,7 +347,7 @@ class RepositoryStructureService {
 
       try {
         await pushRepository(repository)
-      } catch (error) {
+      } catch {
         const pendingState = await pendingPushesService.enqueue(repository, {
           action: "initialize",
           commitHash,
@@ -344,5 +379,6 @@ class RepositoryStructureService {
 const repositoryStructureService = new RepositoryStructureService()
 
 export {
+  RepositoryStructureService,
   repositoryStructureService,
 }

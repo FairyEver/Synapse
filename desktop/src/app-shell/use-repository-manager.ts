@@ -11,7 +11,6 @@ import type {
   SynapseContentMutationResult,
   SynapseContentType,
   SynapseCreateContentPayload,
-  SynapseCreateContentRequest,
   SynapseDeleteContentPayload,
   SynapseUpdateContentPayload,
 } from "@/types/content"
@@ -19,6 +18,7 @@ import type {
   SynapseCreateLocalRepositoryPayload,
   SynapseCreateLocalRepositoryResult,
   SynapsePendingPushState,
+  SynapseRepositoryInitializationOptions,
   SynapseRepositoryInitializationResult,
   SynapseRepositoryOperationResult,
   SynapseRepositorySyncSnapshot,
@@ -249,8 +249,11 @@ function useRepositoryActions() {
   )
 
   const initializeRepository = useCallback(
-    async (uuid: string): Promise<SynapseRepositoryInitializationResult> => {
-      return manager.initializeRepository(uuid)
+    async (
+      uuid: string,
+      options?: SynapseRepositoryInitializationOptions,
+    ): Promise<SynapseRepositoryInitializationResult> => {
+      return manager.initializeRepository(uuid, options)
     },
     [manager],
   )

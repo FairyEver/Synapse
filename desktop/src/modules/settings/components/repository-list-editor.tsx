@@ -26,7 +26,6 @@ import { Dialog } from "@/components/ui/dialog"
 import { FieldError } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { CONTENT_TYPE_DEFINITIONS } from "@/config/content-types"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import { arePathsEqualForCompare } from "@/lib/path-compare"
 import { getRepositoryNameFromPath } from "@/lib/path-utils"
@@ -35,7 +34,6 @@ import { RepositoryListItem } from "@/modules/settings/components/repository-lis
 import type { SynapseRepositoryConfig } from "@/types/config"
 import type {
   SynapseRepositoryInitializationPreview,
-  SynapseRepositoryLocalState,
 } from "@/types/repository"
 
 const logger = createRendererLogger("settings.repositories")
@@ -396,14 +394,19 @@ function RepositoryListEditor({
     }
   }
 
-  const runInitialization = async (repository: SynapseRepositoryConfig) => {
+  const runInitialization = async (
+    repository: SynapseRepositoryConfig,
+    preview?: SynapseRepositoryInitializationPreview,
+  ) => {
     setInitializingUuid(repository.uuid)
     logger.info("Repository initialization started.", { repositoryUuid: repository.uuid })
     const startedAt = performance.now()
 
     try {
       const result = await promise(
-        () => initializeRepository(repository.uuid),
+        () => initializeRepository(repository.uuid, preview && !preview.isEmpty ? {
+          confirmedNonGitEntries: preview.nonGitEntries,
+        } : undefined),
         {
           loading: "正在初始化目录...",
           success: (result) => result.message ?? "初始化完成。",
@@ -527,7 +530,7 @@ function RepositoryListEditor({
         onConfirm={async () => {
           if (initializationTarget) {
             try {
-              await runInitialization(initializationTarget.repository)
+              await runInitialization(initializationTarget.repository, initializationTarget.preview)
             } catch {
               // Error already logged and notified by runInitialization
             }

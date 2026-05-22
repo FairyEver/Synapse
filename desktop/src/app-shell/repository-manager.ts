@@ -20,6 +20,7 @@ import type {
   SynapsePendingPushState,
   SynapsePendingPushUpdatedEvent,
   SynapseRepositoryInitializationPreview,
+  SynapseRepositoryInitializationOptions,
   SynapseRepositoryInitializationResult,
   SynapseRepositoryLocalState,
   SynapseRepositoryOperationKind,
@@ -342,7 +343,10 @@ class RepositoryManager {
     return this.runRepositoryOperation(uuid, "push")
   }
 
-  async initializeRepository(uuid: string): Promise<SynapseRepositoryInitializationResult> {
+  async initializeRepository(
+    uuid: string,
+    options?: SynapseRepositoryInitializationOptions,
+  ): Promise<SynapseRepositoryInitializationResult> {
     const bridge = requireBridgeDomain("repository")
 
     this.setOperationState(uuid, {
@@ -354,7 +358,7 @@ class RepositoryManager {
     })
 
     try {
-      const result = await bridge.initializeStructure(uuid)
+      const result = await bridge.initializeStructure(uuid, options)
       this.repositoryStates.set(uuid, result.repository)
       this.setOperationState(uuid, {
         operation: "initialize",
