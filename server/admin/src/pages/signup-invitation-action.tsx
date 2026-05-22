@@ -1,6 +1,13 @@
 import * as React from "react"
 import { Copy } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { adminApi } from "@/lib/api"
 
@@ -11,24 +18,38 @@ type SignupInvitationActionProps = {
 function SignupInvitationAction({ onCreated }: SignupInvitationActionProps) {
   const [inviteUrl, setInviteUrl] = React.useState("")
   const [error, setError] = React.useState<string | null>(null)
+  const [copyError, setCopyError] = React.useState<string | null>(null)
+  const [dialogOpen, setDialogOpen] = React.useState(false)
   const [isCreating, setIsCreating] = React.useState(false)
 
   async function copyInviteUrl(value: string) {
-    if (!navigator.clipboard) return
+    if (!navigator.clipboard?.writeText) throw new Error("Clipboard unavailable")
     await navigator.clipboard.writeText(value)
+  }
+
+  async function copyCurrentInviteUrl() {
+    if (!inviteUrl) return
+    setCopyError(null)
+    try {
+      await copyInviteUrl(inviteUrl)
+    } catch {
+      setCopyError("复制失败")
+    }
   }
 
   async function createInvitation() {
     setIsCreating(true)
     setError(null)
+    setCopyError(null)
     try {
       const invitation = await adminApi.createSignupInvitation()
       setInviteUrl(invitation.inviteUrl)
+      setDialogOpen(true)
       onCreated()
       try {
         await copyInviteUrl(invitation.inviteUrl)
       } catch {
-        setError("复制失败")
+        setCopyError("复制失败")
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "创建失败")
@@ -38,28 +59,27 @@ function SignupInvitationAction({ onCreated }: SignupInvitationActionProps) {
   }
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-center gap-2">
-        <Button disabled={isCreating} onClick={() => void createInvitation()}>
-          {isCreating ? "创建中" : "创建用户邀请"}
-        </Button>
-        {inviteUrl ? (
-          <>
-            <Input readOnly value={inviteUrl} className="max-w-xl font-mono text-xs" />
-            <Button
-              type="button"
-              variant="outline"
-              size="icon"
-              aria-label="复制邀请链接"
-              onClick={() => void copyInviteUrl(inviteUrl)}
-            >
-              <Copy />
-            </Button>
-          </>
-        ) : null}
-      </div>
+    <>
+      <Button disabled={isCreating} onClick={() => void createInvitation()}>
+        {isCreating ? "创建中" : "创建用户邀请"}
+      </Button>
       {error ? <p className="text-sm text-destructive">{error}</p> : null}
-    </div>
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent aria-describedby={undefined}>
+          <DialogHeader>
+            <DialogTitle>用户邀请链接</DialogTitle>
+          </DialogHeader>
+          <Input aria-label="邀请链接" readOnly value={inviteUrl} className="font-mono text-xs" />
+          {copyError ? <p className="text-sm text-destructive">{copyError}</p> : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" aria-label="复制邀请链接" onClick={() => void copyCurrentInviteUrl()}>
+              <Copy data-icon="inline-start" />
+              复制
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   )
 }
 

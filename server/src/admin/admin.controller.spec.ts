@@ -63,6 +63,38 @@ describe("AdminController", () => {
     )
   })
 
+  it("deletes invitations through the service", async () => {
+    const deleteInvitation = vi.fn().mockResolvedValue({ ok: true })
+    const controller = createController({ deleteInvitation } as never)
+
+    await expect(controller.deleteInvitation("invite-1", {
+      admin: { id: "admin-1", email: "admin@example.com" },
+    } as never))
+      .resolves
+      .toEqual({ ok: true })
+    expect(deleteInvitation).toHaveBeenCalledWith("invite-1", "admin@example.com")
+  })
+
+  it("deletes invitations in bulk through the service", async () => {
+    const deleteInvitations = vi.fn().mockResolvedValue({ ok: true, count: 2 })
+    const controller = createController({ deleteInvitations } as never)
+
+    await expect(controller.deleteInvitations(
+      { ids: ["invite-1", "invite-2"] },
+      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
+    ))
+      .resolves
+      .toEqual({ ok: true, count: 2 })
+    expect(deleteInvitations).toHaveBeenCalledWith(["invite-1", "invite-2"], "admin@example.com")
+  })
+
+  it("rejects empty bulk invitation deletion", async () => {
+    const controller = createController({ deleteInvitations: vi.fn() } as never)
+
+    expect(() => controller.deleteInvitations({ ids: [] }, {} as never))
+      .toThrow("邀请 ID 无效。")
+  })
+
   it("rejects invalid user status", async () => {
     const controller = createController({ updateUserStatus: vi.fn() } as never)
 

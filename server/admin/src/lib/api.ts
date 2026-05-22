@@ -56,6 +56,7 @@ export interface AdminTeamRow {
 export interface AdminInvitationRow {
   readonly id: string
   readonly type: "user_signup" | "team_join"
+  readonly inviteUrl: string | null
   readonly expiresAt: string
   readonly usedAt: string | null
   readonly createdByAdmin: { readonly email: string } | null
@@ -159,6 +160,13 @@ export const adminApi = {
     request<CreateSignupInvitationResponse>(`${dashboardApiBasePath}/invitations`, { method: "POST" }),
   listInvitations: (options: { readonly page?: number; readonly pageSize?: number } = {}) =>
     request<PaginatedResponse<AdminInvitationRow>>(`${dashboardApiBasePath}/invitations${paginationSuffix(options)}`),
+  deleteInvitation: (id: string) =>
+    request<{ ok: true }>(`${dashboardApiBasePath}/invitations/${encodeURIComponent(id)}`, { method: "DELETE" }),
+  deleteInvitations: (ids: readonly string[]) =>
+    request<{ ok: true; count: number }>(`${dashboardApiBasePath}/invitations`, {
+      method: "DELETE",
+      body: JSON.stringify({ ids }),
+    }),
   listUsers: (options: { readonly page?: number; readonly pageSize?: number } = {}) =>
     request<PaginatedResponse<AdminUserRow>>(`${dashboardApiBasePath}/users${paginationSuffix(options)}`),
   updateUserStatus: (id: string, status: "active" | "disabled") =>

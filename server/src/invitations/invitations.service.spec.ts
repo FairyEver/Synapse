@@ -31,6 +31,7 @@ describe("InvitationsService", () => {
       data: expect.objectContaining({
         type: "user_signup",
         createdByAdminId: "admin-1",
+        inviteUrl: `https://app.example.com/dashboard/signup?invite=${result.token}`,
       }),
     })
   })
@@ -58,6 +59,12 @@ describe("InvitationsService", () => {
     })
 
     expect(result.inviteUrl).toBe(`https://app.example.com/team-invite?token=${result.token}`)
+    expect(prisma.invitation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: "team_join",
+        inviteUrl: `https://app.example.com/team-invite?token=${result.token}`,
+      }),
+    })
   })
 
   it("rejects invalid invitation tokens", async () => {

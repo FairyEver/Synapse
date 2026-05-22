@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
@@ -10,6 +10,10 @@ import { AdminService } from "./admin.service"
 
 const userStatusSchema = z.object({
   status: z.enum(["active", "disabled"]),
+}).strict()
+
+const bulkInvitationDeleteSchema = z.object({
+  ids: z.array(z.string().min(1)).min(1),
 }).strict()
 
 @UseGuards(AdminAuthGuard)
@@ -49,6 +53,18 @@ export class AdminController {
   @Get("/invitations")
   listInvitations(@Query() query: Record<string, unknown>) {
     return this.admin.listInvitations(parsePagination(query))
+  }
+
+  @Delete("/invitations")
+  deleteInvitations(@Body() body: unknown, @Req() request?: AdminRequest) {
+    const result = bulkInvitationDeleteSchema.safeParse(body)
+    if (!result.success) throw new BadRequestException("邀请 ID 无效。")
+    return this.admin.deleteInvitations(result.data.ids, request?.admin?.email)
+  }
+
+  @Delete("/invitations/:id")
+  deleteInvitation(@Param("id") id: string, @Req() request?: AdminRequest) {
+    return this.admin.deleteInvitation(id, request?.admin?.email)
   }
 
   @Get("/users")

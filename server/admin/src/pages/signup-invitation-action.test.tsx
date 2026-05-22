@@ -26,7 +26,7 @@ describe("SignupInvitationAction", () => {
     expect(result.container.textContent).toContain("创建用户邀请")
   })
 
-  it("shows and copies the full invite URL after creation", async () => {
+  it("opens a dialog with the full invite URL after creation", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.assign(navigator, { clipboard: { writeText } })
     vi.mocked(adminApi.createSignupInvitation).mockResolvedValue({
@@ -44,11 +44,37 @@ describe("SignupInvitationAction", () => {
     })
 
     await waitFor(() => {
-      expect((result.container.querySelector("input") as HTMLInputElement).value)
+      expect(document.body.textContent).toContain("用户邀请链接")
+      expect((document.body.querySelector("input") as HTMLInputElement).value)
         .toBe("https://app.example.com/dashboard/signup?invite=plain-token")
     })
     expect(writeText).toHaveBeenCalledWith("https://app.example.com/dashboard/signup?invite=plain-token")
     expect(onCreated).toHaveBeenCalled()
+  })
+
+  it("copies the dialog invite URL on demand", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.assign(navigator, { clipboard: { writeText } })
+    vi.mocked(adminApi.createSignupInvitation).mockResolvedValue({
+      id: "invite-1",
+      token: "plain-token",
+      inviteUrl: "https://app.example.com/dashboard/signup?invite=plain-token",
+      expiresAt: "2026-05-28T00:00:00.000Z",
+    })
+    const result = await render(<SignupInvitationAction onCreated={vi.fn()} />)
+    cleanup = result.unmount
+
+    await act(async () => {
+      result.container.querySelector("button")?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    vi.clearAllMocks()
+    await act(async () => {
+      document.body.querySelector<HTMLButtonElement>("[aria-label='复制邀请链接']")?.dispatchEvent(
+        new MouseEvent("click", { bubbles: true }),
+      )
+    })
+
+    expect(writeText).toHaveBeenCalledWith("https://app.example.com/dashboard/signup?invite=plain-token")
   })
 
   it("keeps the invite URL visible when clipboard copy fails", async () => {
@@ -68,10 +94,10 @@ describe("SignupInvitationAction", () => {
     })
 
     await waitFor(() => {
-      expect((result.container.querySelector("input") as HTMLInputElement).value)
+      expect((document.body.querySelector("input") as HTMLInputElement).value)
         .toBe("https://app.example.com/dashboard/signup?invite=plain-token")
     })
     expect(onCreated).toHaveBeenCalled()
-    expect(result.container.textContent).toContain("复制失败")
+    expect(document.body.textContent).toContain("复制失败")
   })
 })

@@ -44,6 +44,33 @@ export class AdminService {
     return invitation
   }
 
+  async deleteInvitation(id: string, actorEmail = "system") {
+    await this.prisma.invitation.delete({ where: { id } })
+    await this.auditLog?.record({
+      adminEmail: actorEmail,
+      action: "admin.invitation.delete",
+      targetType: "invitation",
+      targetId: id,
+      ipAddress: "system",
+    })
+    return { ok: true }
+  }
+
+  async deleteInvitations(ids: readonly string[], actorEmail = "system") {
+    const result = await this.prisma.invitation.deleteMany({
+      where: { id: { in: [...ids] } },
+    })
+    await this.auditLog?.record({
+      adminEmail: actorEmail,
+      action: "admin.invitation.delete_many",
+      targetType: "invitation",
+      targetId: ids.join(","),
+      detail: { ids: [...ids], count: result.count },
+      ipAddress: "system",
+    })
+    return { ok: true, count: result.count }
+  }
+
   async listUsers(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {
     const page = pagination ?? parsePagination({})
     const [data, total] = await this.prisma.$transaction([

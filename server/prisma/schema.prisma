@@ -79,6 +79,7 @@ model Invitation {
   id               String         @id @default(cuid())
   type             InvitationType
   tokenHash        String         @unique
+  inviteUrl        String?
   expiresAt        DateTime
   usedAt           DateTime?
   createdByAdminId String?

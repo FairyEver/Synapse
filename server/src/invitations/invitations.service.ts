@@ -18,10 +18,12 @@ export class InvitationsService {
 
   async createSignupInvitation(input: { readonly adminId: string; readonly publicAppUrl: string }) {
     const token = createOpaqueToken()
+    const inviteUrl = buildSignupInviteUrl({ publicAppUrl: input.publicAppUrl, token })
     const invitation = await this.prisma.invitation.create({
       data: {
         type: "user_signup",
         tokenHash: hashToken(token),
+        inviteUrl,
         expiresAt: addDays(new Date(), invitationDays),
         createdByAdminId: input.adminId,
       },
@@ -29,17 +31,19 @@ export class InvitationsService {
     return {
       id: invitation.id,
       token,
-      inviteUrl: buildSignupInviteUrl({ publicAppUrl: input.publicAppUrl, token }),
+      inviteUrl,
       expiresAt: invitation.expiresAt,
     }
   }
 
   async createTeamInvitation(input: { readonly userId: string; readonly teamId: string; readonly publicAppUrl: string }) {
     const token = createOpaqueToken()
+    const inviteUrl = buildTeamInviteUrl({ publicAppUrl: input.publicAppUrl, token })
     const invitation = await this.prisma.invitation.create({
       data: {
         type: "team_join",
         tokenHash: hashToken(token),
+        inviteUrl,
         expiresAt: addDays(new Date(), invitationDays),
         createdByUserId: input.userId,
         teamId: input.teamId,
@@ -48,7 +52,7 @@ export class InvitationsService {
     return {
       id: invitation.id,
       token,
-      inviteUrl: buildTeamInviteUrl({ publicAppUrl: input.publicAppUrl, token }),
+      inviteUrl,
       expiresAt: invitation.expiresAt,
     }
   }
