@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "vitest"
+import { Prisma } from "@prisma/client"
 import type { PrismaService } from "../prisma/prisma.service"
 import { AdminService } from "./admin.service"
+
+function createNotFoundError() {
+  return new Prisma.PrismaClientKnownRequestError("Record not found", {
+    code: "P2025",
+    clientVersion: "6.0.0",
+  })
+}
 
 function createPrismaMock(counts: {
   readonly auditLogs?: number
@@ -19,7 +27,7 @@ function createPrismaMock(counts: {
     user: {
       count: vi.fn(),
       findMany: vi.fn(),
-      update: vi.fn(),
+      update: vi.fn().mockResolvedValue({}),
     },
     team: { count: vi.fn() },
     invitation: { count: vi.fn(), delete: vi.fn(), deleteMany: vi.fn() },
@@ -86,6 +94,18 @@ describe("AdminService", () => {
     expect(prisma.user.update.mock.calls[0]?.[0].select).not.toHaveProperty("passwordHash")
   })
 
+  it("reports a missing user when updating status", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.update.mockRejectedValue(createNotFoundError())
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, auditLog as never)
+
+    await expect(service.updateUserStatus("missing-user", { status: "disabled" }))
+      .rejects
+      .toThrow("用户不存在。")
+    expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
   it("loads invitations without exposing token hashes", async () => {
     const prisma = {
       $transaction: vi.fn().mockResolvedValue([[], 0]),
@@ -132,6 +152,18 @@ describe("AdminService", () => {
       targetId: "invite-1",
       ipAddress: "system",
     })
+  })
+
+  it("reports a missing invitation when deleting", async () => {
+    const prisma = createPrismaMock()
+    prisma.invitation.delete.mockRejectedValue(createNotFoundError())
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, auditLog as never)
+
+    await expect(service.deleteInvitation("missing-invite", "admin@example.com"))
+      .rejects
+      .toThrow("邀请不存在。")
+    expect(auditLog.record).not.toHaveBeenCalled()
   })
 
   it("deletes invitations in bulk and records an audit log", async () => {

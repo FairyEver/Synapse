@@ -1,5 +1,5 @@
-import { Injectable, Optional } from "@nestjs/common"
-import type { UserStatus } from "@prisma/client"
+import { Injectable, NotFoundException, Optional } from "@nestjs/common"
+import { Prisma, type UserStatus } from "@prisma/client"
 import { AuditLogService } from "../common/audit-log.service"
 import { InvitationsService } from "../invitations/invitations.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
@@ -17,6 +17,10 @@ const adminUserSelect = {
   },
   createdAt: true,
 } as const
+
+function isRecordNotFoundError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025"
+}
 
 @Injectable()
 export class AdminService {
@@ -58,7 +62,10 @@ export class AdminService {
   }
 
   async deleteInvitation(id: string, actorEmail = "system") {
-    await this.prisma.invitation.delete({ where: { id } })
+    await this.prisma.invitation.delete({ where: { id } }).catch((error: unknown) => {
+      if (isRecordNotFoundError(error)) throw new NotFoundException("邀请不存在。")
+      throw error
+    })
     await this.auditLog?.record({
       adminEmail: actorEmail,
       action: "admin.invitation.delete",
@@ -101,6 +108,9 @@ export class AdminService {
       where: { id },
       data: { status: input.status },
       select: adminUserSelect,
+    }).catch((error: unknown) => {
+      if (isRecordNotFoundError(error)) throw new NotFoundException("用户不存在。")
+      throw error
     })
     await this.auditLog?.record({
       adminEmail: actorEmail,
