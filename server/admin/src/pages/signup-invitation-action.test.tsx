@@ -19,13 +19,20 @@ describe("SignupInvitationAction", () => {
     vi.clearAllMocks()
   })
 
+  it("labels the action as creating a user invitation", async () => {
+    const result = await render(<SignupInvitationAction onCreated={vi.fn()} />)
+    cleanup = result.unmount
+
+    expect(result.container.textContent).toContain("创建用户邀请")
+  })
+
   it("shows and copies the full invite URL after creation", async () => {
     const writeText = vi.fn().mockResolvedValue(undefined)
     Object.assign(navigator, { clipboard: { writeText } })
     vi.mocked(adminApi.createSignupInvitation).mockResolvedValue({
       id: "invite-1",
       token: "plain-token",
-      inviteUrl: "https://app.example.com/invite#token=plain-token",
+      inviteUrl: "https://app.example.com/dashboard/signup?invite=plain-token",
       expiresAt: "2026-05-28T00:00:00.000Z",
     })
     const onCreated = vi.fn()
@@ -38,9 +45,9 @@ describe("SignupInvitationAction", () => {
 
     await waitFor(() => {
       expect((result.container.querySelector("input") as HTMLInputElement).value)
-        .toBe("https://app.example.com/invite#token=plain-token")
+        .toBe("https://app.example.com/dashboard/signup?invite=plain-token")
     })
-    expect(writeText).toHaveBeenCalledWith("https://app.example.com/invite#token=plain-token")
+    expect(writeText).toHaveBeenCalledWith("https://app.example.com/dashboard/signup?invite=plain-token")
     expect(onCreated).toHaveBeenCalled()
   })
 
@@ -49,7 +56,7 @@ describe("SignupInvitationAction", () => {
     vi.mocked(adminApi.createSignupInvitation).mockResolvedValue({
       id: "invite-1",
       token: "plain-token",
-      inviteUrl: "https://app.example.com/invite#token=plain-token",
+      inviteUrl: "https://app.example.com/dashboard/signup?invite=plain-token",
       expiresAt: "2026-05-28T00:00:00.000Z",
     })
     const onCreated = vi.fn()
@@ -62,7 +69,7 @@ describe("SignupInvitationAction", () => {
 
     await waitFor(() => {
       expect((result.container.querySelector("input") as HTMLInputElement).value)
-        .toBe("https://app.example.com/invite#token=plain-token")
+        .toBe("https://app.example.com/dashboard/signup?invite=plain-token")
     })
     expect(onCreated).toHaveBeenCalled()
     expect(result.container.textContent).toContain("复制失败")

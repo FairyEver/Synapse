@@ -41,7 +41,7 @@ function SignupInvitationAction({ onCreated }: SignupInvitationActionProps) {
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
         <Button disabled={isCreating} onClick={() => void createInvitation()}>
-          {isCreating ? "创建中" : "创建邀请"}
+          {isCreating ? "创建中" : "创建用户邀请"}
         </Button>
         {inviteUrl ? (
           <>
