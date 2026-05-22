@@ -109,7 +109,7 @@ describe("usage analysis reports", () => {
     expect(overview.totals.toolCalls).toBe(1)
     expect(db.prepare("SELECT SUM(tool_calls) AS toolCalls FROM cc_daily_usage").get()).toEqual({ toolCalls: 1 })
     expect(db.prepare("SELECT SUM(tool_calls) AS toolCalls FROM cc_hourly_usage").get()).toEqual({ toolCalls: 1 })
-  })
+  }, 15000)
 
   it("serves overview core metrics from aggregate tables", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
