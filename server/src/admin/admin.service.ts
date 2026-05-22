@@ -126,10 +126,16 @@ export class AdminService {
     const [data, total] = await this.prisma.$transaction([
       this.prisma.invitation.findMany({
         ...toPrismaArgs(page),
-        include: {
+        select: {
+          id: true,
+          type: true,
+          inviteUrl: true,
+          expiresAt: true,
+          usedAt: true,
           acceptedByUser: { select: { email: true } },
           createdByAdmin: { select: { email: true } },
           createdByUser: { select: { email: true } },
+          createdAt: true,
           team: { select: { name: true } },
         },
       }),

@@ -49,7 +49,7 @@ describe("AdminService", () => {
     })
   })
 
-  it("loads all invitation types with creator and team details", async () => {
+  it("loads invitations without exposing token hashes", async () => {
     const prisma = {
       $transaction: vi.fn().mockResolvedValue([[], 0]),
       invitation: {
@@ -62,13 +62,20 @@ describe("AdminService", () => {
     await service.listInvitations()
 
     expect(prisma.invitation.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      include: {
+      select: {
+        id: true,
+        type: true,
+        inviteUrl: true,
+        expiresAt: true,
+        usedAt: true,
         acceptedByUser: { select: { email: true } },
         createdByAdmin: { select: { email: true } },
         createdByUser: { select: { email: true } },
+        createdAt: true,
         team: { select: { name: true } },
       },
     }))
+    expect(prisma.invitation.findMany.mock.calls[0]?.[0].select).not.toHaveProperty("tokenHash")
     expect(prisma.invitation.count).toHaveBeenCalledWith()
   })
 
