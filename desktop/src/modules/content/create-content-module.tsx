@@ -1,10 +1,6 @@
-import { type ComponentType, useCallback, useEffect, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef } from "react"
 import { openContentCreateWindow } from "@/app-shell/content"
-import type {
-  ContentOpenRequest,
-  EditOverwriteRulePrefill,
-  EditOverwriteSkillPrefill,
-} from "@/app-shell/content-navigation"
+import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { ensureBodyInteractable } from "@/app-shell/dialog-navigate"
 import { createRendererLogger } from "@/app-shell/logging"
 import { useAppNotifications } from "@/app-shell/notifications"
@@ -13,40 +9,13 @@ import { getContentTypeDefinition } from "@/config/content-types"
 import { ContentBrowserPage } from "@/modules/content/components/content-browser-page"
 import { InstallStatusProvider } from "@/modules/content/contexts/install-status-context"
 import type { ContentCreateNotice } from "@/modules/content/types/create-notice"
-import type { SynapseContentMeta, SynapseContentType, SynapseCreateContentPayload } from "@/types/content"
+import type { SynapseContentType, SynapseCreateContentPayload } from "@/types/content"
 
 type ContentModuleConfig<T extends SynapseContentType> = {
   contentType: T
-  CreateDialog: ComponentType<{
-    open: boolean
-    onOpenChange: (open: boolean) => void
-    onSubmit: (payload: SynapseCreateContentPayload<T>) => void
-    submitDisabled?: boolean
-    submitDisabledReason?: string | null
-    existingNames?: string[]
-    initialValue?: SynapseCreateContentPayload<T> | null
-    notices?: ContentCreateNotice[]
-    sourceLabel?: string | null
-  }>
-  DetailDialog: ComponentType<{
-    item: SynapseContentMeta<T> | null
-    open: boolean
-    refreshSignal?: number
-    onContentChanged?: () => void
-    onOpenChange: (open: boolean) => void
-    overwritePrefill?: {
-      requestId: string
-      prefill: EditOverwriteRulePrefill | EditOverwriteSkillPrefill
-    } | null
-  }>
-  transformCreatePayload?: (
-    payload: SynapseCreateContentPayload<T>,
-  ) => Promise<SynapseCreateContentPayload<T>>
 }
 
 type ContentModuleProps = {
-  onCreateDialogOpenChange?: (open: boolean) => void
-  onDetailDialogOpenChange?: (open: boolean) => void
   onInstallDialogOpenChange?: (open: boolean) => void
   pendingContentOpenRequest?: ContentOpenRequest | null
   onPendingContentOpenRequestConsumed?: (requestId: string) => void
@@ -56,8 +25,6 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
   const definition = getContentTypeDefinition(config.contentType)
 
   function ContentModule({
-    onCreateDialogOpenChange,
-    onDetailDialogOpenChange,
     onInstallDialogOpenChange,
     pendingContentOpenRequest,
     onPendingContentOpenRequestConsumed,
@@ -133,17 +100,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
             })
             void openCreateEditorWindow()
           }}
-          onCreateDialogOpenChange={onCreateDialogOpenChange}
-          onDetailDialogOpenChange={onDetailDialogOpenChange}
           onInstallDialogOpenChange={onInstallDialogOpenChange}
-          renderDetailDialog={({ item, onOpenChange, open, overwritePrefill }) => (
-            <config.DetailDialog
-              item={item?.type === config.contentType ? item as SynapseContentMeta<T> : null}
-              open={open}
-              onOpenChange={onOpenChange}
-              overwritePrefill={overwritePrefill}
-            />
-          )}
         />
       </InstallStatusProvider>
     )

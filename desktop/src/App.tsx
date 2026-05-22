@@ -47,7 +47,7 @@ import { WorkflowModule } from "@/modules/workflow"
 import type { SynapseContentType } from "@/types/content"
 
 type AppTabId = SynapseContentType | "agent" | "database" | "task-scheduler" | "editor-scan" | "usage-cc" | "usage-codex" | "workflow" | "settings"
-type DialogKind = "create" | "detail" | "install"
+type DialogKind = "install"
 type ContentDialogState = Record<DialogKind, boolean>
 type ContentDialogStateMap = Record<SynapseContentType, ContentDialogState>
 type ContentDialogHandlerMap = Record<SynapseContentType, Record<DialogKind, (open: boolean) => void>>
@@ -70,16 +70,12 @@ const DEFAULT_APP_TAB: AppTabId = TOP_LEVEL_CONTENT_TAB_ORDER[0]
 function createEmptyDialogStateMap(): ContentDialogStateMap {
   return Object.fromEntries(
     getAllContentTypeIds().map((contentType) => [contentType, {
-      create: false,
-      detail: false,
       install: false,
     }]),
   ) as ContentDialogStateMap
 }
 
 const CONTENT_MODULE_COMPONENTS: Record<SynapseContentType, ComponentType<{
-  onCreateDialogOpenChange?: (open: boolean) => void
-  onDetailDialogOpenChange?: (open: boolean) => void
   onInstallDialogOpenChange?: (open: boolean) => void
   pendingContentOpenRequest?: ContentOpenRequest | null
   onPendingContentOpenRequestConsumed?: (requestId: string) => void
@@ -191,8 +187,6 @@ function MainApp() {
   const contentDialogHandlers = useMemo(
     () => Object.fromEntries(
       getAllContentTypeIds().map((contentType) => [contentType, {
-        create: (open: boolean) => setContentDialogOpen(contentType, "create", open),
-        detail: (open: boolean) => setContentDialogOpen(contentType, "detail", open),
         install: (open: boolean) => setContentDialogOpen(contentType, "install", open),
       }]),
     ) as ContentDialogHandlerMap,
@@ -200,7 +194,7 @@ function MainApp() {
   )
 
   const hasContentDialogOpen = Object.values(contentDialogStates).some((state) => (
-    state.create || state.detail || state.install
+    state.install
   ))
 
   // 定期检测仓库状态（当用户在使用软件时删除文件夹的情况）
@@ -366,8 +360,6 @@ function MainApp() {
               <ErrorBoundary key={contentType} fallbackTitle={`${CONTENT_TAB_LABELS[contentType]}模块出现问题`}>
                 <ModuleComponent
                   key={contentType}
-                  onCreateDialogOpenChange={dialogHandlers.create}
-                  onDetailDialogOpenChange={dialogHandlers.detail}
                   onInstallDialogOpenChange={dialogHandlers.install}
                   pendingContentOpenRequest={pendingContentOpenRequest}
                   onPendingContentOpenRequestConsumed={handlePendingContentOpenRequestConsumed}

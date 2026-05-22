@@ -23,13 +23,13 @@ describe("content browser page edit-overwrite plumbing", () => {
     expect(source).toContain("toast.error(\"找不到内容，请刷新后重试。\")")
   })
 
-  it("keeps detail dialog rendering separate from edit-overwrite routing", async () => {
+  it("does not route edit-overwrite requests through detail dialog config", async () => {
     const source = await readFile(
       new URL("../create-content-module.tsx", import.meta.url),
       "utf8",
     )
 
-    expect(source).toContain("config.DetailDialog")
+    expect(source).not.toContain("DetailDialog")
     expect(source).not.toContain("setOverwritePrefill")
   })
 

@@ -4,7 +4,6 @@ import { describe, expect, it } from "vitest"
 
 const hookSourcePath = join(__dirname, "../hooks/use-editor-install-status.ts")
 const adaptersHookSourcePath = join(__dirname, "../hooks/use-editor-adapters-for-content-type.ts")
-const detailDialogSourcePath = join(__dirname, "../components/content-detail-dialog.tsx")
 const detailMenubarSourcePath = join(__dirname, "../components/content-detail-menubar.tsx")
 const detailWindowPageSourcePath = join(__dirname, "../components/content-detail-window-page.tsx")
 
@@ -22,23 +21,16 @@ describe("content detail install status hook source", () => {
     expect(source).toContain("export { useEditorInstallStatus }")
   })
 
-  it("wires install status into the content detail dialog only", () => {
-    const detailDialogSource = readFileSync(detailDialogSourcePath, "utf8")
+  it("keeps install status panel support out of dedicated detail window pages", () => {
     const detailMenubarSource = readFileSync(detailMenubarSourcePath, "utf8")
     const detailWindowPageSource = readFileSync(detailWindowPageSourcePath, "utf8")
     const adaptersHookSource = readFileSync(adaptersHookSourcePath, "utf8")
 
-    expect(detailDialogSource).toContain("useEditorInstallStatus")
-    expect(detailDialogSource).toContain("installStatus={detail?.type")
-    expect(detailDialogSource).not.toContain("<EditorInstallStatusPanel")
     expect(detailMenubarSource).toContain("EditorInstallStatusPanel")
-    expect(detailDialogSource).toContain("installTargetRequest")
-    expect(detailDialogSource).toContain("onInstalled={handleInstallStatusRefresh}")
-    expect(detailDialogSource).toContain("onOpenInstallTarget")
-    expect(detailDialogSource).toContain("config.global.projects")
     expect(adaptersHookSource).toContain("loadPromiseRef")
     expect(detailMenubarSource).toContain("warning(")
     expect(detailMenubarSource).toContain("未找到可用的安装目标。")
+    expect(detailWindowPageSource).toContain("ContentDetailWindowSummary")
     expect(detailWindowPageSource).not.toContain("EditorInstallStatusPanel")
   })
 

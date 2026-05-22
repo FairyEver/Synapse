@@ -25,17 +25,12 @@ describe("content detail latest-only view", () => {
       new URL("../components/content-browser-page.tsx", import.meta.url),
       "utf8",
     )
-    const dialogSource = await readFile(
-      new URL("../components/content-detail-dialog.tsx", import.meta.url),
-      "utf8",
-    )
     const windowParamSource = await readFile(
       new URL("../../../lib/content-window.ts", import.meta.url),
       "utf8",
     )
 
     expect(browserPageSource).not.toContain("historyDirname: item.latestHistoryDirname")
-    expect(dialogSource).not.toContain("historyDirname: selectedHistoryDirname")
     expect(windowParamSource).not.toContain("historyDirname")
   })
 })
