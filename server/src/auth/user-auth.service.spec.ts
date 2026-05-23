@@ -17,6 +17,7 @@ function createPrismaMock() {
     })),
     user: {
       findUnique: vi.fn(),
+      findUniqueOrThrow: vi.fn(),
     },
     userSession: {
       create: vi.fn().mockResolvedValue({ id: "session-1" }),
@@ -28,15 +29,23 @@ function createPrismaMock() {
   }
 }
 
+function createPermissionsMock() {
+  return {
+    getEffectivePermissions: vi.fn(),
+  }
+}
+
 describe("UserAuthService", () => {
   it("rejects login for unknown users", async () => {
     const prisma = createPrismaMock()
     prisma.user.findUnique.mockResolvedValue(null)
+    const permissions = createPermissionsMock()
     const service = new UserAuthService(
       prisma as never,
       { consumeInvitation: vi.fn() } as never,
       new JwtService({ secret: "user-secret-at-least-32-characters!" }),
       { accessMinutes: 15, refreshDays: 30 },
+      permissions as never,
     )
 
     await expect(service.login({ email: "missing@example.com", password: "x" }))
@@ -53,11 +62,13 @@ describe("UserAuthService", () => {
       status: "disabled",
     })
     const auditLog = { record: vi.fn() }
+    const permissions = createPermissionsMock()
     const service = new UserAuthService(
       prisma as never,
       { consumeInvitation: vi.fn() } as never,
       new JwtService({ secret: "user-secret-at-least-32-characters!" }),
       { accessMinutes: 15, refreshDays: 30 },
+      permissions as never,
       auditLog as never,
     )
 
@@ -77,11 +88,13 @@ describe("UserAuthService", () => {
     const prisma = createPrismaMock()
     prisma.user.findUnique.mockResolvedValue(null)
     const auditLog = { record: vi.fn() }
+    const permissions = createPermissionsMock()
     const service = new UserAuthService(
       prisma as never,
       { consumeInvitation: vi.fn() } as never,
       new JwtService({ secret: "user-secret-at-least-32-characters!" }),
       { accessMinutes: 15, refreshDays: 30 },
+      permissions as never,
       auditLog as never,
     )
 
@@ -107,11 +120,13 @@ describe("UserAuthService", () => {
       status: "active",
     })
     const auditLog = { record: vi.fn() }
+    const permissions = createPermissionsMock()
     const service = new UserAuthService(
       prisma as never,
       { consumeInvitation: vi.fn() } as never,
       new JwtService({ secret: "user-secret-at-least-32-characters!" }),
       { accessMinutes: 15, refreshDays: 30 },
+      permissions as never,
       auditLog as never,
     )
 
@@ -129,11 +144,13 @@ describe("UserAuthService", () => {
   it("records registration success audits with the request ip", async () => {
     const prisma = createPrismaMock()
     const auditLog = { record: vi.fn() }
+    const permissions = createPermissionsMock()
     const service = new UserAuthService(
       prisma as never,
       { consumeInvitation: vi.fn() } as never,
       new JwtService({ secret: "user-secret-at-least-32-characters!" }),
       { accessMinutes: 15, refreshDays: 30 },
+      permissions as never,
       auditLog as never,
     )
 
@@ -166,11 +183,13 @@ describe("UserAuthService", () => {
       },
     })
     prisma.userSession.updateMany.mockResolvedValue({ count: 0 })
+    const permissions = createPermissionsMock()
     const service = new UserAuthService(
       prisma as never,
       { consumeInvitation: vi.fn() } as never,
       new JwtService({ secret: "user-secret-at-least-32-characters!" }),
       { accessMinutes: 15, refreshDays: 30 },
+      permissions as never,
     )
 
     await expect(service.refresh({ refreshToken: "refresh-token" }))
@@ -188,11 +207,13 @@ describe("UserAuthService", () => {
   it("cleans expired and stale revoked sessions", async () => {
     const prisma = createPrismaMock()
     prisma.userSession.deleteMany.mockResolvedValue({ count: 3 })
+    const permissions = createPermissionsMock()
     const service = new UserAuthService(
       prisma as never,
       { consumeInvitation: vi.fn() } as never,
       new JwtService({ secret: "user-secret-at-least-32-characters!" }),
       { accessMinutes: 15, refreshDays: 30 },
+      permissions as never,
     )
     const now = new Date("2026-05-23T12:00:00.000Z")
 
@@ -206,5 +227,98 @@ describe("UserAuthService", () => {
         ],
       },
     })
+  })
+
+  it("returns team roles and effective permissions for the current user", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.findUniqueOrThrow.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      memberships: [
+        {
+          id: "membership-1",
+          teamId: "team-1",
+          role: "owner",
+          accessRoles: [
+            { role: { id: "role-1", name: "团队管理员" } },
+            { role: { id: "role-2", name: "普通成员" } },
+          ],
+          team: { id: "team-1", name: "Team One", createdByUserId: "user-1" },
+        },
+        {
+          id: "membership-2",
+          teamId: "team-2",
+          role: "member",
+          accessRoles: [
+            { role: { id: "role-3", name: "普通成员" } },
+          ],
+          team: { id: "team-2", name: "Team Two", createdByUserId: "user-2" },
+        },
+      ],
+    })
+    const permissions = createPermissionsMock()
+    permissions.getEffectivePermissions.mockImplementation(async (_userId: string, teamId: string) => {
+      if (teamId === "team-1") return ["database.use", "team.member.manage"]
+      return ["agent.chat.use"]
+    })
+    const service = new UserAuthService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
+      { accessMinutes: 15, refreshDays: 30 },
+      permissions as never,
+    )
+
+    await expect(service.getMe("user-1")).resolves.toEqual({
+      user: { id: "user-1", email: "u@example.com", status: "active" },
+      teams: [
+        {
+          id: "team-1",
+          name: "Team One",
+          membershipId: "membership-1",
+          membershipRole: "owner",
+          roles: [
+            { id: "role-1", name: "团队管理员" },
+            { id: "role-2", name: "普通成员" },
+          ],
+          effectivePermissions: ["database.use", "team.member.manage"],
+        },
+        {
+          id: "team-2",
+          name: "Team Two",
+          membershipId: "membership-2",
+          membershipRole: "member",
+          roles: [{ id: "role-3", name: "普通成员" }],
+          effectivePermissions: ["agent.chat.use"],
+        },
+      ],
+    })
+
+    expect(prisma.user.findUniqueOrThrow).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        memberships: {
+          select: {
+            id: true,
+            teamId: true,
+            role: true,
+            accessRoles: {
+              select: {
+                role: { select: { id: true, name: true } },
+              },
+              orderBy: { assignedAt: "asc" },
+            },
+            team: { select: { id: true, name: true, createdByUserId: true } },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    })
+    expect(permissions.getEffectivePermissions).toHaveBeenNthCalledWith(1, "user-1", "team-1")
+    expect(permissions.getEffectivePermissions).toHaveBeenNthCalledWith(2, "user-1", "team-2")
   })
 })

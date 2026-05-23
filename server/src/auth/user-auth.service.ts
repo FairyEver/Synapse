@@ -6,6 +6,7 @@ import { AuditLogService } from "../common/audit-log.service"
 import { hashPassword, verifyPassword } from "./password"
 import { createOpaqueToken, hashToken } from "./token"
 import { InvitationsService } from "../invitations/invitations.service"
+import { PermissionsService } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
 
 export const userAuthOptionsToken = "USER_AUTH_OPTIONS"
@@ -40,6 +41,7 @@ export class UserAuthService {
     private readonly invitations: InvitationsService,
     private readonly jwt: JwtService,
     @Inject(userAuthOptionsToken) private readonly options: UserAuthOptions,
+    private readonly permissions: PermissionsService,
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
@@ -174,7 +176,7 @@ export class UserAuthService {
   }
 
   async getMe(userId: string): Promise<unknown> {
-    return this.prisma.user.findUniqueOrThrow({
+    const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: {
         id: true,
@@ -182,12 +184,35 @@ export class UserAuthService {
         status: true,
         memberships: {
           select: {
+            id: true,
+            teamId: true,
             role: true,
+            accessRoles: {
+              select: {
+                role: { select: { id: true, name: true } },
+              },
+              orderBy: { assignedAt: "asc" },
+            },
             team: { select: { id: true, name: true, createdByUserId: true } },
           },
+          orderBy: { createdAt: "asc" },
         },
       },
     })
+
+    const teams = await Promise.all(user.memberships.map(async (membership) => ({
+      id: membership.team.id,
+      name: membership.team.name,
+      membershipId: membership.id,
+      membershipRole: membership.role,
+      roles: membership.accessRoles.map((item) => item.role),
+      effectivePermissions: await this.permissions.getEffectivePermissions(user.id, membership.teamId),
+    })))
+
+    return {
+      user: { id: user.id, email: user.email, status: user.status },
+      teams,
+    }
   }
 
   async verifyAccessToken(token: string): Promise<{ userId: string }> {
