@@ -89,6 +89,25 @@ describe("PermissionsService", () => {
     })
   })
 
+  it("lists only active team entitlements in query order", async () => {
+    const prisma = createPermissionPrismaMock()
+    prisma.teamEntitlement.findMany.mockResolvedValue([
+      { permissionKey: "database.use" },
+      { permissionKey: "workflow.use" },
+    ])
+    const service = new PermissionsService(prisma as never)
+
+    await expect(service.listTeamEntitlements("team-1")).resolves.toEqual(["database.use", "workflow.use"])
+    expect(prisma.teamEntitlement.findMany).toHaveBeenCalledWith({
+      where: {
+        teamId: "team-1",
+        OR: [{ expiresAt: null }, { expiresAt: { gt: expect.any(Date) } }],
+      },
+      select: { permissionKey: true },
+      orderBy: { permissionKey: "asc" },
+    })
+  })
+
   it("rejects role permissions outside team entitlements", async () => {
     const prisma = createPermissionPrismaMock()
     const tx = createPermissionPrismaMock()
@@ -231,10 +250,14 @@ describe("PermissionsService", () => {
       { permissionKey: "workflow.use" },
     ])
     prisma.teamMemberAccessRole.findMany.mockResolvedValue([
-      { role: { permissions: [{ permissionKey: "database.use" }, { permissionKey: "team.role.manage" }] } },
+      { role: { permissions: [{ permissionKey: "workflow.use" }, { permissionKey: "team.role.manage" }] } },
+      { role: { permissions: [{ permissionKey: "database.use" }] } },
     ])
     const service = new PermissionsService(prisma as never)
 
-    await expect(service.getEffectivePermissions("user-1", "team-1")).resolves.toEqual(["database.use"])
+    await expect(service.getEffectivePermissions("user-1", "team-1")).resolves.toEqual([
+      "database.use",
+      "workflow.use",
+    ])
   })
 })
