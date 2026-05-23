@@ -58,6 +58,20 @@ export interface AdminTeamRow {
   readonly createdAt: string
 }
 
+export interface PermissionDefinition {
+  readonly key: string
+  readonly label: string
+  readonly description?: string
+  readonly group: string
+  readonly level: "module" | "action" | "management"
+  readonly status: "active" | "deprecated"
+  readonly clientVisibility: "visible" | "hidden"
+}
+
+export interface TeamEntitlementsResponse {
+  readonly permissionKeys: string[]
+}
+
 export interface AdminInvitationRow {
   readonly id: string
   readonly type: "user_signup" | "team_join"
@@ -227,8 +241,16 @@ export const adminApi = {
       method: "PATCH",
       body: JSON.stringify({ status }),
     }),
+  listPermissions: () => request<PermissionDefinition[]>(`${adminApiBasePath}/permissions`),
   listTeams: (options: { readonly page?: number; readonly pageSize?: number } = {}) =>
     request<PaginatedResponse<AdminTeamRow>>(`${adminApiBasePath}/teams${paginationSuffix(options)}`),
+  listTeamEntitlements: (teamId: string) =>
+    request<TeamEntitlementsResponse>(`${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/entitlements`),
+  replaceTeamEntitlements: (teamId: string, permissionKeys: readonly string[]) =>
+    request<TeamEntitlementsResponse>(`${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/entitlements`, {
+      method: "PUT",
+      body: JSON.stringify({ permissionKeys }),
+    }),
   listBackups: () => request<BackupFile[]>(`${adminApiBasePath}/backup/list`),
   triggerBackup: () =>
     request<void>(`${adminApiBasePath}/backup`, {
