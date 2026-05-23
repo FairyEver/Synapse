@@ -6,6 +6,7 @@ import { AuditLogService, auditLogExportLimit } from "../common/audit-log.servic
 import { toCsv } from "../common/csv-export"
 import { parsePagination } from "../common/pagination"
 import { resolvePublicAppUrl } from "../invitations/invitation-url"
+import { isActivePermissionKey } from "../permissions/permission-registry"
 import { AdminService } from "./admin.service"
 
 const userStatusSchema = z.object({
@@ -17,7 +18,7 @@ const bulkInvitationDeleteSchema = z.object({
 }).strict()
 
 const teamEntitlementsSchema = z.object({
-  permissionKeys: z.array(z.string().min(1)),
+  permissionKeys: z.array(z.string().trim().min(1).refine(isActivePermissionKey)),
 }).strict()
 
 const userSortFields = ["createdAt", "updatedAt", "email", "status"] as const

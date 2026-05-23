@@ -246,4 +246,32 @@ describe("AdminController", () => {
       .toThrow("团队权限无效。")
     expect(replaceTeamEntitlements).not.toHaveBeenCalled()
   })
+
+  it("rejects unknown team entitlement permission keys", async () => {
+    const replaceTeamEntitlements = vi.fn()
+    const controller = createController({ replaceTeamEntitlements } as never)
+
+    await expect(controller.replaceTeamEntitlements(
+      "team-1",
+      { permissionKeys: ["page.database"] },
+      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
+    ))
+      .rejects
+      .toThrow("团队权限无效。")
+    expect(replaceTeamEntitlements).not.toHaveBeenCalled()
+  })
+
+  it("rejects whitespace-only team entitlement permission keys", async () => {
+    const replaceTeamEntitlements = vi.fn()
+    const controller = createController({ replaceTeamEntitlements } as never)
+
+    await expect(controller.replaceTeamEntitlements(
+      "team-1",
+      { permissionKeys: ["   "] },
+      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
+    ))
+      .rejects
+      .toThrow("团队权限无效。")
+    expect(replaceTeamEntitlements).not.toHaveBeenCalled()
+  })
 })
