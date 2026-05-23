@@ -1,10 +1,13 @@
 import { act } from "react"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { userAuthApi } from "@/lib/api"
+import { adminApi, userAuthApi } from "@/lib/api"
 import { changeInput, render, waitFor } from "@/test/render"
 import { SignupPage } from "./signup-page"
 
 vi.mock("@/lib/api", () => ({
+  adminApi: {
+    login: vi.fn(),
+  },
   userAuthApi: {
     register: vi.fn(),
   },
@@ -32,6 +35,7 @@ describe("SignupPage", () => {
       accessToken: "access-token",
       refreshToken: "refresh-token",
     })
+    vi.mocked(adminApi.login).mockResolvedValue({ email: "new@example.com", role: "user" })
     const result = await render(<SignupPage inviteToken="plain-token" />)
     cleanup = result.unmount
 
@@ -47,9 +51,13 @@ describe("SignupPage", () => {
     await waitFor(() => {
       expect(result.container.textContent).toContain("注册成功")
     })
-    expect(result.container.textContent).toContain("去登录")
+    expect(result.container.textContent).toContain("进入团队")
     expect(userAuthApi.register).toHaveBeenCalledWith({
       invitationToken: "plain-token",
+      email: "new@example.com",
+      password: "password123",
+    })
+    expect(adminApi.login).toHaveBeenCalledWith({
       email: "new@example.com",
       password: "password123",
     })

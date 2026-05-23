@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { userAuthApi } from "@/lib/api"
+import { adminApi, userAuthApi } from "@/lib/api"
 
 type SignupPageProps = {
   readonly inviteToken: string
@@ -27,6 +27,7 @@ export function SignupPage({ inviteToken }: SignupPageProps) {
     setError(null)
     try {
       await userAuthApi.register({ invitationToken: inviteToken, email, password })
+      await adminApi.login({ email, password })
       setRegistered(true)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "注册失败")
@@ -56,7 +57,7 @@ export function SignupPage({ inviteToken }: SignupPageProps) {
           </CardHeader>
           <CardContent>
             <Button asChild>
-              <a href="/dashboard/login">去登录</a>
+              <a href="/dashboard/#/teams">进入团队</a>
             </Button>
           </CardContent>
         </Card>
