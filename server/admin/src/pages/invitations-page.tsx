@@ -38,6 +38,8 @@ export function InvitationsPage() {
   const [selectedIds, setSelectedIds] = React.useState<ReadonlySet<string>>(() => new Set())
   const [actionError, setActionError] = React.useState<string | null>(null)
   const [copyError, setCopyError] = React.useState<string | null>(null)
+  const [deletingId, setDeletingId] = React.useState<string | null>(null)
+  const [deletingSelected, setDeletingSelected] = React.useState(false)
   const invitations = result?.data ?? []
   const selectedCount = selectedIds.size
   const allVisibleSelected = invitations.length > 0 && invitations.every((invitation) => selectedIds.has(invitation.id))
@@ -72,25 +74,33 @@ export function InvitationsPage() {
   }
 
   async function deleteInvitation(invitation: AdminInvitationRow) {
+    if (!window.confirm(`确定删除邀请 ${invitation.id}？`)) return
     setActionError(null)
+    setDeletingId(invitation.id)
     try {
       await adminApi.deleteInvitation(invitation.id)
       reload()
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : "删除失败")
+    } finally {
+      setDeletingId(null)
     }
   }
 
   async function deleteSelectedInvitations() {
     const ids = invitations.map((invitation) => invitation.id).filter((id) => selectedIds.has(id))
     if (ids.length === 0) return
+    if (!window.confirm(`确定删除所选 ${ids.length} 个邀请？`)) return
     setActionError(null)
+    setDeletingSelected(true)
     try {
       await adminApi.deleteInvitations(ids)
       setSelectedIds(new Set())
       reload()
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : "删除失败")
+    } finally {
+      setDeletingSelected(false)
     }
   }
 
@@ -112,12 +122,12 @@ export function InvitationsPage() {
       <div className="flex items-center justify-between gap-2">
         <SignupInvitationAction onCreated={reload} />
         <Button
-          disabled={selectedCount === 0}
+          disabled={selectedCount === 0 || deletingSelected}
           variant="destructive"
           onClick={() => void deleteSelectedInvitations()}
         >
           <Trash2 data-icon="inline-start" />
-          删除所选
+          {deletingSelected ? "删除中" : "删除所选"}
         </Button>
       </div>
       {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
@@ -193,6 +203,7 @@ export function InvitationsPage() {
                       aria-label={`删除邀请 ${invitation.id}`}
                       size="icon-sm"
                       variant="destructive"
+                      disabled={deletingId === invitation.id || deletingSelected}
                       onClick={() => void deleteInvitation(invitation)}
                     >
                       <Trash2 />
