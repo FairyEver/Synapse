@@ -16,6 +16,9 @@ function createPrismaMock() {
       findUnique: vi.fn(),
       delete: vi.fn(),
     },
+    user: {
+      findUnique: vi.fn(),
+    },
     $transaction: vi.fn((callback) => callback({
       team: {
         create: vi.fn().mockResolvedValue({ id: "team-1", name: "Team", createdByUserId: "user-1" }),
@@ -34,6 +37,27 @@ describe("TeamsService", () => {
     const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn(), consumeInvitation: vi.fn() } as never)
 
     await expect(service.createTeam("user-1", { name: "Team" })).rejects.toThrow(BadRequestException)
+  })
+
+  it("records team creation audits with the user email", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue(null)
+    prisma.user.findUnique.mockResolvedValue({ email: "user@example.com" })
+    const auditLog = { record: vi.fn() }
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn(), consumeInvitation: vi.fn() } as never,
+      auditLog as never,
+    )
+
+    await service.createTeam("user-1", { name: "Team" })
+
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "user@example.com",
+      action: "team.create",
+      targetType: "team",
+      targetId: "team-1",
+    }))
   })
 
   it("rejects team invitations from non-owners", async () => {
@@ -75,5 +99,25 @@ describe("TeamsService", () => {
     const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never)
 
     await expect(service.leaveTeam("user-1")).resolves.toEqual({ ok: true })
+  })
+
+  it("records member removals with the owner email", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique
+      .mockResolvedValueOnce({ role: "owner", teamId: "team-1", userId: "owner-1" })
+      .mockResolvedValueOnce({ role: "member", teamId: "team-1", userId: "user-2" })
+    prisma.user.findUnique.mockResolvedValue({ email: "owner@example.com" })
+    prisma.teamMembership.delete.mockResolvedValue({ id: "membership-2" })
+    const auditLog = { record: vi.fn() }
+    const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never, auditLog as never)
+
+    await expect(service.removeMember("owner-1", "user-2")).resolves.toEqual({ ok: true })
+
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "owner@example.com",
+      action: "team.member.remove",
+      targetType: "user",
+      targetId: "user-2",
+    }))
   })
 })

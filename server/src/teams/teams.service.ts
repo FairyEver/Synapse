@@ -24,8 +24,9 @@ export class TeamsService {
       })
       return team
     })
+    const actorEmail = await this.getAuditActorEmail(userId)
     await this.auditLog?.record({
-      adminEmail: userId,
+      adminEmail: actorEmail,
       action: "team.create",
       targetType: "team",
       targetId: team.id,
@@ -56,8 +57,9 @@ export class TeamsService {
       throw new ForbiddenException()
     }
     const invitation = await this.invitations.createTeamInvitation({ userId, teamId: membership.teamId, publicAppUrl })
+    const actorEmail = await this.getAuditActorEmail(userId)
     await this.auditLog?.record({
-      adminEmail: userId,
+      adminEmail: actorEmail,
       action: "team.invitation.create",
       targetType: "invitation",
       targetId: invitation.id,
@@ -82,8 +84,9 @@ export class TeamsService {
       })
       return { membership, teamId: invitation.teamId }
     })
+    const actorEmail = await this.getAuditActorEmail(userId)
     await this.auditLog?.record({
-      adminEmail: userId,
+      adminEmail: actorEmail,
       action: "team.join",
       targetType: "team",
       targetId: result.teamId,
@@ -117,8 +120,9 @@ export class TeamsService {
     }
 
     await this.prisma.teamMembership.delete({ where: { userId: targetUserId } })
+    const actorEmail = await this.getAuditActorEmail(ownerUserId)
     await this.auditLog?.record({
-      adminEmail: ownerUserId,
+      adminEmail: actorEmail,
       action: "team.member.remove",
       targetType: "user",
       targetId: targetUserId,
@@ -145,8 +149,9 @@ export class TeamsService {
       await this.prisma.teamMembership.delete({ where: { userId } })
     }
 
+    const actorEmail = await this.getAuditActorEmail(userId)
     await this.auditLog?.record({
-      adminEmail: userId,
+      adminEmail: actorEmail,
       action: "team.leave",
       targetType: "team",
       targetId: membership.teamId,
@@ -160,5 +165,18 @@ export class TeamsService {
       where: { userId },
       include: { team: true },
     })
+  }
+
+  private async getAuditActorEmail(userId: string): Promise<string> {
+    if (!this.auditLog) return userId
+    return this.getUserEmail(userId)
+  }
+
+  private async getUserEmail(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    })
+    return user?.email ?? userId
   }
 }
