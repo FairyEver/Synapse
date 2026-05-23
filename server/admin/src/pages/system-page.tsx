@@ -1,4 +1,5 @@
 import { PageState } from "@/components/page-state"
+import { Button } from "@/components/ui/button"
 import {
   Table,
   TableBody,
@@ -8,6 +9,7 @@ import {
 import { useApiResource } from "@/hooks/use-api-resource"
 import { adminApi } from "@/lib/api"
 import { formatCount, formatDate } from "@/lib/format"
+import { RefreshCw } from "lucide-react"
 
 const systemCountRows = [
   { label: "审计日志", key: "auditLogs" },
@@ -21,7 +23,7 @@ const systemCountRows = [
 ] as const
 
 export function SystemPage() {
-  const { data, error, loading } = useApiResource(adminApi.getSystemOverview)
+  const { data, error, loading, reload } = useApiResource(adminApi.getSystemOverview)
 
   if (loading) return <PageState>加载中</PageState>
   if (error) return <PageState>{error}</PageState>
@@ -39,7 +41,13 @@ export function SystemPage() {
           ))}
         </TableBody>
       </Table>
-      <div className="text-sm text-muted-foreground">服务器时间：{formatDate(data.serverTime)}</div>
+      <div className="flex items-center justify-between gap-2">
+        <div className="text-sm text-muted-foreground">服务器时间：{formatDate(data.serverTime)}</div>
+        <Button type="button" variant="outline" size="sm" onClick={reload}>
+          <RefreshCw data-icon="inline-start" />
+          刷新
+        </Button>
+      </div>
     </div>
   )
 }

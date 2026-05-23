@@ -46,4 +46,48 @@ describe("SystemPage", () => {
     expect(result.container.textContent).toContain("角色权限")
     expect(result.container.textContent).toContain("成员角色")
   })
+
+  it("reloads overview counts when refresh is clicked", async () => {
+    vi.mocked(adminApi.getSystemOverview)
+      .mockResolvedValueOnce({
+        serverTime: "2026-05-23T00:00:00.000Z",
+        counts: {
+          auditLogs: 2,
+          users: 3,
+          teams: 1,
+          invitations: 4,
+          teamEntitlements: 14,
+          teamAccessRoles: 2,
+          teamAccessRolePermissions: 25,
+          teamMemberAccessRoles: 3,
+        },
+      })
+      .mockResolvedValueOnce({
+        serverTime: "2026-05-23T01:00:00.000Z",
+        counts: {
+          auditLogs: 5,
+          users: 6,
+          teams: 2,
+          invitations: 7,
+          teamEntitlements: 28,
+          teamAccessRoles: 4,
+          teamAccessRolePermissions: 50,
+          teamMemberAccessRoles: 6,
+        },
+      })
+
+    const result = await render(<SystemPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("团队许可")
+    })
+
+    result.container.querySelector<HTMLButtonElement>("button")?.click()
+
+    await waitFor(() => {
+      expect(adminApi.getSystemOverview).toHaveBeenCalledTimes(2)
+      expect(result.container.textContent).toContain("28")
+    })
+  })
 })
