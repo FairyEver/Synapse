@@ -59,6 +59,7 @@ describe("TeamsPage", () => {
     await waitFor(() => {
       expect(result.container.textContent).toContain("一组")
     })
+    expect(result.container.textContent).toContain("所有者")
     Array.from(result.container.querySelectorAll("button"))
       .find((button) => button.textContent === "下一页")
       ?.click()

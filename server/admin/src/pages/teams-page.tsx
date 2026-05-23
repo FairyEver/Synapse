@@ -137,7 +137,7 @@ export function TeamsPage() {
         <TableHeader>
           <TableRow>
             <TableHead>名称</TableHead>
-            <TableHead>Owner</TableHead>
+            <TableHead>所有者</TableHead>
             <TableHead>成员</TableHead>
             <TableHead>创建时间</TableHead>
             <TableActionHead>操作</TableActionHead>
