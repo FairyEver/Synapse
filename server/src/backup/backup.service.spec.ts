@@ -115,23 +115,57 @@ describe("BackupService", () => {
       "Failed to delete expired backup",
     )
   })
+
+  it("records scheduled backup results in audit logs", async () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const service = createBackupService({}, logger, auditLog)
+    const result = {
+      filename: "synapse-backup-2026-05-23.tar.gz",
+      size: 1024,
+      uploadedAt: "2026-05-23T03:00:00.000Z",
+      status: "success" as const,
+    }
+    vi.spyOn(service, "performBackup").mockResolvedValue(result)
+
+    await service.scheduledBackup()
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "system",
+      action: "backup.scheduled",
+      targetType: "backup",
+      targetId: "synapse-backup-2026-05-23.tar.gz",
+      detail: result,
+      ipAddress: "system",
+    })
+  })
 })
 
 function createBackupService(cos: unknown, logger: {
   error: ReturnType<typeof vi.fn>
   info?: ReturnType<typeof vi.fn>
   warn?: ReturnType<typeof vi.fn>
-}): BackupService {
+}, auditLog?: { record: ReturnType<typeof vi.fn> }): BackupService {
   const service = Object.create(BackupService.prototype) as BackupService
   Object.assign(service as unknown as {
+    auditLog?: typeof auditLog
     cos: unknown
     bucket: string
+    env: unknown
     region: string
     prefix: string
     logger: typeof logger
   }, {
+    auditLog,
     cos,
     bucket: "bucket",
+    env: {
+      cosBucket: "bucket",
+      cosRegion: "ap-guangzhou",
+      cosSecretId: "secret-id",
+      cosSecretKey: "secret-key",
+      databaseUrl: "postgresql://synapse:secret@localhost:5432/synapse",
+    },
     region: "ap-guangzhou",
     prefix: "backups/",
     logger,

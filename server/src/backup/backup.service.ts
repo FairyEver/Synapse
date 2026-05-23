@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, ServiceUnavailableException } from "@nestjs/common"
+import { BadRequestException, Injectable, Optional, ServiceUnavailableException } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import { PinoLogger } from "nestjs-pino"
 import { execFile } from "node:child_process"
@@ -10,6 +10,7 @@ import { pipeline } from "node:stream/promises"
 import { createGzip } from "node:zlib"
 import * as tar from "tar"
 import type COS from "cos-nodejs-sdk-v5"
+import { AuditLogService } from "../common/audit-log.service"
 import { isBackupConfigured, loadEnv, type ServerEnv } from "../config/env"
 
 const execFileAsync = promisify(execFile)
@@ -78,7 +79,10 @@ export class BackupService {
   private readonly region: string
   private readonly prefix = "backups/"
 
-  constructor(private readonly logger: PinoLogger) {
+  constructor(
+    private readonly logger: PinoLogger,
+    @Optional() private readonly auditLog?: AuditLogService,
+  ) {
     this.env = loadEnv(process.env)
     this.bucket = this.env.cosBucket ?? ""
     this.region = this.env.cosRegion ?? ""
@@ -98,7 +102,15 @@ export class BackupService {
       this.logger.info("Backup not configured, skipping scheduled backup")
       return
     }
-    await this.performBackup()
+    const result = await this.performBackup()
+    await this.auditLog?.record({
+      adminEmail: "system",
+      action: "backup.scheduled",
+      targetType: "backup",
+      targetId: result.filename,
+      detail: result,
+      ipAddress: "system",
+    })
   }
 
   async performBackup(): Promise<BackupResult> {
