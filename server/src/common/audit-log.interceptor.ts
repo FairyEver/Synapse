@@ -129,10 +129,6 @@ function resolveAuditTarget(
   let action = `${resource}.${method.toLowerCase()}`
   if (resource === "backup" && segments.includes("list")) action = "backup.list"
   if (resource === "backup" && segments.includes("download")) action = "backup.download"
-  if (segments.includes("archive")) action = `${resource}.archive`
-  if (segments.includes("risk-lock")) action = `${resource}.risk-lock`
-  if (segments.includes("replace")) action = `${resource}.replace`
-  if (segments.includes("status")) action = `${resource}.status`
 
   return { action, targetType: resource, targetId: id }
 }
