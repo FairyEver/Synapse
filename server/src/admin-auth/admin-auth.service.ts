@@ -71,6 +71,16 @@ export class AdminAuthService {
       })
       return { email: user.email, token, role: "user" }
     }
+    if (user && user.status !== "active" && userPasswordMatches) {
+      await this.auditLog?.record({
+        adminEmail: user.email,
+        action: "user.dashboard_login.disabled",
+        targetType: "user",
+        targetId: user.id,
+        ipAddress,
+      })
+      throw new UnauthorizedException("账号已停用。")
+    }
 
     await this.auditLog?.record({
       adminEmail: normalizedEmail,

@@ -119,6 +119,30 @@ describe("AdminAuthService", () => {
     expect(result.token.length).toBeGreaterThan(20)
   })
 
+  it("records disabled dashboard user login attempts separately from wrong passwords", async () => {
+    const auditLog = { record: vi.fn() }
+    const { service, prisma } = await createTestService(auditLog)
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: "user-1",
+      email: "user@example.com",
+      passwordHash: await hashPassword("user-password"),
+      status: "disabled",
+    })
+
+    await expect(service.login("user@example.com", "user-password", "203.0.113.11"))
+      .rejects
+      .toThrow("账号已停用。")
+
+    expect(auditLog.record).toHaveBeenCalledTimes(1)
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "user@example.com",
+      action: "user.dashboard_login.disabled",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "203.0.113.11",
+    })
+  })
+
   it("does not verify a normal user token as an administrator", async () => {
     const { service, prisma } = await createTestService()
     prisma.user.findUnique.mockResolvedValue({
