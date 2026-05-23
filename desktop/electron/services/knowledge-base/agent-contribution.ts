@@ -11,6 +11,15 @@ type CreateKnowledgeBaseAgentContributionInput = {
   readonly project: SynapseProjectConfig
 }
 
+const KNOWLEDGE_BASE_PUBLISHED_COMMANDS = [
+  knowledgeBaseAction("wiki ingest", "汲取来源", "send", "/wiki ingest"),
+  knowledgeBaseAction("wiki query", "查询知识库", "insert", "/wiki query "),
+  knowledgeBaseAction("wiki hot", "刷新热点", "send", "/wiki hot"),
+  knowledgeBaseAction("wiki save", "保存记录", "send", "/wiki save"),
+  knowledgeBaseAction("wiki lint", "检查知识库", "send", "/wiki lint"),
+  knowledgeBaseAction("wiki status", "查看状态", "send", "/wiki status"),
+] as const
+
 export async function createKnowledgeBaseAgentContribution(
   input: CreateKnowledgeBaseAgentContributionInput,
 ): Promise<AgentProjectContribution | null> {
@@ -26,6 +35,7 @@ export async function createKnowledgeBaseAgentContribution(
       type: "local",
       path: resolveKnowledgeBasePluginPath(),
     }],
+    publishedCommands: KNOWLEDGE_BASE_PUBLISHED_COMMANDS,
     commands: [{
       name: "wiki",
       buildPrompt: (args) => buildKnowledgeBaseCommandPrompt(input.project.path, args),
@@ -145,6 +155,27 @@ function resolveKnowledgeBasePluginPath(): string {
     return path.join(resourcesPath, "knowledge-base", "claude-plugin")
   }
   return devRoot
+}
+
+function knowledgeBaseAction(
+  name: string,
+  label: string,
+  action: "send" | "insert",
+  insertText: string,
+) {
+  return {
+    name,
+    description: label,
+    source: "custom" as const,
+    kind: "prompt" as const,
+    adminOnly: false,
+    ui: {
+      group: "knowledge-base" as const,
+      label,
+      action,
+      insertText,
+    },
+  }
 }
 
 function isMissingPathError(error: unknown): boolean {

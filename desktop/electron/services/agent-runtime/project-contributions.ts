@@ -1,3 +1,4 @@
+import type { PublishedAgentCommand } from "./command-registry"
 import type { RegisteredPromptCommand } from "./command-router"
 import type { AgentMessage } from "./types"
 
@@ -12,6 +13,7 @@ export type AgentSdkPluginSpec = {
 
 export type AgentProjectContribution = {
   readonly commands: readonly RegisteredPromptCommand[]
+  readonly publishedCommands?: readonly PublishedAgentCommand[]
   readonly sdkPlugins?: readonly AgentSdkPluginSpec[]
   prepareMessage?(
     message: AgentMessage,
@@ -24,6 +26,7 @@ export function mergeAgentProjectContributions(
 ): AgentProjectContribution {
   return {
     commands: contributions.flatMap((contribution) => contribution.commands),
+    publishedCommands: contributions.flatMap((contribution) => contribution.publishedCommands ?? []),
     sdkPlugins: contributions.flatMap((contribution) => contribution.sdkPlugins ?? []),
     async prepareMessage(message, context) {
       let next = message

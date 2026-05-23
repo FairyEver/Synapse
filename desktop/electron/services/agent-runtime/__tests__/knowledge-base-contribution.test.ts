@@ -57,6 +57,94 @@ describe("knowledge base Agent contribution", () => {
     expect(contribution?.sdkPlugins?.[0]?.path.startsWith(projectPath)).toBe(false)
   })
 
+  it("publishes knowledge base composer actions for knowledge base projects", async () => {
+    const projectPath = await tempDir()
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+
+    expect(contribution?.publishedCommands).toEqual([
+      {
+        name: "wiki ingest",
+        description: "汲取来源",
+        source: "custom",
+        kind: "prompt",
+        adminOnly: false,
+        ui: {
+          group: "knowledge-base",
+          label: "汲取来源",
+          action: "send",
+          insertText: "/wiki ingest",
+        },
+      },
+      {
+        name: "wiki query",
+        description: "查询知识库",
+        source: "custom",
+        kind: "prompt",
+        adminOnly: false,
+        ui: {
+          group: "knowledge-base",
+          label: "查询知识库",
+          action: "insert",
+          insertText: "/wiki query ",
+        },
+      },
+      {
+        name: "wiki hot",
+        description: "刷新热点",
+        source: "custom",
+        kind: "prompt",
+        adminOnly: false,
+        ui: {
+          group: "knowledge-base",
+          label: "刷新热点",
+          action: "send",
+          insertText: "/wiki hot",
+        },
+      },
+      {
+        name: "wiki save",
+        description: "保存记录",
+        source: "custom",
+        kind: "prompt",
+        adminOnly: false,
+        ui: {
+          group: "knowledge-base",
+          label: "保存记录",
+          action: "send",
+          insertText: "/wiki save",
+        },
+      },
+      {
+        name: "wiki lint",
+        description: "检查知识库",
+        source: "custom",
+        kind: "prompt",
+        adminOnly: false,
+        ui: {
+          group: "knowledge-base",
+          label: "检查知识库",
+          action: "send",
+          insertText: "/wiki lint",
+        },
+      },
+      {
+        name: "wiki status",
+        description: "查看状态",
+        source: "custom",
+        kind: "prompt",
+        adminOnly: false,
+        ui: {
+          group: "knowledge-base",
+          label: "查看状态",
+          action: "send",
+          insertText: "/wiki status",
+        },
+      },
+    ])
+  })
+
   it("adds wiki commands and hot cache bootstrap for knowledge base projects", async () => {
     const projectPath = await tempDir()
     await mkdir(path.join(projectPath, "wiki"), { recursive: true })
