@@ -117,6 +117,7 @@ describe("AdminController", () => {
 
     await expect(controller.createSignupInvitation({
       admin: { id: "admin-1", email: "admin@example.com" },
+      ip: "203.0.113.10",
       headers: { host: "app.example.com" },
       protocol: "https",
       get: (name: string) => name.toLowerCase() === "host" ? "app.example.com" : undefined,
@@ -126,6 +127,7 @@ describe("AdminController", () => {
     expect(createSignupInvitation).toHaveBeenCalledWith(
       { id: "admin-1", email: "admin@example.com" },
       "https://app.example.com",
+      "203.0.113.10",
     )
   })
 
@@ -135,10 +137,11 @@ describe("AdminController", () => {
 
     await expect(controller.deleteInvitation("invite-1", {
       admin: { id: "admin-1", email: "admin@example.com" },
+      ip: "203.0.113.20",
     } as never))
       .resolves
       .toEqual({ ok: true })
-    expect(deleteInvitation).toHaveBeenCalledWith("invite-1", "admin@example.com")
+    expect(deleteInvitation).toHaveBeenCalledWith("invite-1", "admin@example.com", "203.0.113.20")
   })
 
   it("deletes invitations in bulk through the service", async () => {
@@ -147,11 +150,11 @@ describe("AdminController", () => {
 
     await expect(controller.deleteInvitations(
       { ids: ["invite-1", "invite-2"] },
-      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
+      { admin: { id: "admin-1", email: "admin@example.com" }, ip: "203.0.113.30" } as never,
     ))
       .resolves
       .toEqual({ ok: true, count: 2 })
-    expect(deleteInvitations).toHaveBeenCalledWith(["invite-1", "invite-2"], "admin@example.com")
+    expect(deleteInvitations).toHaveBeenCalledWith(["invite-1", "invite-2"], "admin@example.com", "203.0.113.30")
   })
 
   it("rejects empty bulk invitation deletion", async () => {

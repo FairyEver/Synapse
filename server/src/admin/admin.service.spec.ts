@@ -144,7 +144,7 @@ describe("AdminService", () => {
     const auditLog = { record: vi.fn() }
     const service = new AdminService(prisma as unknown as PrismaService, {} as never, auditLog as never)
 
-    await service.deleteInvitation("invite-1", "admin@example.com")
+    await service.deleteInvitation("invite-1", "admin@example.com", "203.0.113.20")
 
     expect(prisma.invitation.delete).toHaveBeenCalledWith({ where: { id: "invite-1" } })
     expect(auditLog.record).toHaveBeenCalledWith({
@@ -152,7 +152,7 @@ describe("AdminService", () => {
       action: "admin.invitation.delete",
       targetType: "invitation",
       targetId: "invite-1",
-      ipAddress: "system",
+      ipAddress: "203.0.113.20",
     })
   })
 
@@ -174,7 +174,7 @@ describe("AdminService", () => {
     const auditLog = { record: vi.fn() }
     const service = new AdminService(prisma as unknown as PrismaService, {} as never, auditLog as never)
 
-    await expect(service.deleteInvitations(["invite-1", "invite-2"], "admin@example.com"))
+    await expect(service.deleteInvitations(["invite-1", "invite-2"], "admin@example.com", "203.0.113.30"))
       .resolves
       .toEqual({ ok: true, count: 2 })
 
@@ -187,7 +187,24 @@ describe("AdminService", () => {
       targetType: "invitation",
       targetId: "invite-1,invite-2",
       detail: { ids: ["invite-1", "invite-2"], count: 2 },
-      ipAddress: "system",
+      ipAddress: "203.0.113.30",
+    })
+  })
+
+  it("records user status update audit logs with the request IP", async () => {
+    const prisma = createPrismaMock()
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, auditLog as never)
+
+    await service.updateUserStatus("user-1", { status: "disabled" }, "admin@example.com", "203.0.113.40")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.user.status_update",
+      targetType: "user",
+      targetId: "user-1",
+      detail: { status: "disabled" },
+      ipAddress: "203.0.113.40",
     })
   })
 })

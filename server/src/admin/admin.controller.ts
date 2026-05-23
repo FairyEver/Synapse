@@ -51,6 +51,7 @@ export class AdminController {
         configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
         request,
       }),
+      request.ip,
     )
   }
 
@@ -63,12 +64,12 @@ export class AdminController {
   deleteInvitations(@Body() body: unknown, @Req() request?: AdminRequest) {
     const result = bulkInvitationDeleteSchema.safeParse(body)
     if (!result.success) throw new BadRequestException("邀请 ID 无效。")
-    return this.admin.deleteInvitations(result.data.ids, request?.admin?.email)
+    return this.admin.deleteInvitations(result.data.ids, request?.admin?.email, request?.ip)
   }
 
   @Delete("/invitations/:id")
   deleteInvitation(@Param("id") id: string, @Req() request?: AdminRequest) {
-    return this.admin.deleteInvitation(id, request?.admin?.email)
+    return this.admin.deleteInvitation(id, request?.admin?.email, request?.ip)
   }
 
   @Get("/users")
@@ -80,7 +81,7 @@ export class AdminController {
   async updateUserStatus(@Param("id") id: string, @Body() body: unknown, @Req() request?: AdminRequest) {
     const result = userStatusSchema.safeParse(body)
     if (!result.success) throw new BadRequestException("用户状态无效。")
-    return this.admin.updateUserStatus(id, result.data, request?.admin?.email)
+    return this.admin.updateUserStatus(id, result.data, request?.admin?.email, request?.ip)
   }
 
   @Get("/teams")

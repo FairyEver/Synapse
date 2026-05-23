@@ -49,19 +49,19 @@ export class AdminService {
     }
   }
 
-  async createSignupInvitation(admin: { readonly id: string; readonly email: string }, publicAppUrl: string) {
+  async createSignupInvitation(admin: { readonly id: string; readonly email: string }, publicAppUrl: string, ipAddress = "system") {
     const invitation = await this.invitations.createSignupInvitation({ adminId: admin.id, publicAppUrl })
     await this.auditLog?.record({
       adminEmail: admin.email,
       action: "admin.invitation.create",
       targetType: "invitation",
       targetId: invitation.id,
-      ipAddress: "system",
+      ipAddress,
     })
     return invitation
   }
 
-  async deleteInvitation(id: string, actorEmail = "system") {
+  async deleteInvitation(id: string, actorEmail = "system", ipAddress = "system") {
     await this.prisma.invitation.delete({ where: { id } }).catch((error: unknown) => {
       if (isRecordNotFoundError(error)) throw new NotFoundException("邀请不存在。")
       throw error
@@ -71,12 +71,12 @@ export class AdminService {
       action: "admin.invitation.delete",
       targetType: "invitation",
       targetId: id,
-      ipAddress: "system",
+      ipAddress,
     })
     return { ok: true }
   }
 
-  async deleteInvitations(ids: readonly string[], actorEmail = "system") {
+  async deleteInvitations(ids: readonly string[], actorEmail = "system", ipAddress = "system") {
     const result = await this.prisma.invitation.deleteMany({
       where: { id: { in: [...ids] } },
     })
@@ -86,7 +86,7 @@ export class AdminService {
       targetType: "invitation",
       targetId: ids.join(","),
       detail: { ids: [...ids], count: result.count },
-      ipAddress: "system",
+      ipAddress,
     })
     return { ok: true, count: result.count }
   }
@@ -103,7 +103,7 @@ export class AdminService {
     return { data, total, page: page.page, pageSize: page.pageSize }
   }
 
-  async updateUserStatus(id: string, input: { status: UserStatus }, actorEmail = "system") {
+  async updateUserStatus(id: string, input: { status: UserStatus }, actorEmail = "system", ipAddress = "system") {
     const user = await this.prisma.user.update({
       where: { id },
       data: { status: input.status },
@@ -118,7 +118,7 @@ export class AdminService {
       targetType: "user",
       targetId: id,
       detail: { status: input.status },
-      ipAddress: "system",
+      ipAddress,
     })
     return user
   }
