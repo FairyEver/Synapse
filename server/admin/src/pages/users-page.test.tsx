@@ -93,6 +93,42 @@ describe("UsersPage", () => {
     resolveUpdate({})
   })
 
+  it("asks for confirmation before disabling a team owner", async () => {
+    vi.mocked(adminApi.listUsers).mockResolvedValue({
+      data: [
+        {
+          id: "user-1",
+          email: "owner@example.com",
+          status: "active",
+          memberships: [
+            {
+              role: "owner",
+              team: { id: "team-1", name: "研发组" },
+            },
+          ],
+          createdAt: "2026-05-20T00:00:00.000Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    })
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false)
+
+    const result = await render(<UsersPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("owner@example.com")
+    })
+    Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "停用")
+      ?.click()
+
+    expect(confirm).toHaveBeenCalledWith("停用团队所有者会使该团队无法继续邀请或管理成员。继续停用？")
+    expect(adminApi.updateUserStatus).not.toHaveBeenCalled()
+  })
+
   it("loads the next users page", async () => {
     vi.mocked(adminApi.listUsers)
       .mockResolvedValueOnce({

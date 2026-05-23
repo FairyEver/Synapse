@@ -29,10 +29,18 @@ export function UsersPage() {
 
   async function toggleStatus(user: AdminUserRow) {
     if (submittingIds.has(user.id)) return
+    const nextStatus = user.status === "active" ? "disabled" : "active"
+    if (
+      nextStatus === "disabled" &&
+      user.memberships.some((membership) => membership.role === "owner") &&
+      !window.confirm("停用团队所有者会使该团队无法继续邀请或管理成员。继续停用？")
+    ) {
+      return
+    }
     setActionError(null)
     setSubmittingIds((previous) => new Set(previous).add(user.id))
     try {
-      await adminApi.updateUserStatus(user.id, user.status === "active" ? "disabled" : "active")
+      await adminApi.updateUserStatus(user.id, nextStatus)
       reload()
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : "操作失败")
