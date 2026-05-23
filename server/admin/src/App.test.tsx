@@ -142,6 +142,29 @@ describe("App", () => {
     expect(adminApi.getSession).not.toHaveBeenCalled()
   })
 
+  it("asks admin users to switch accounts on team invite links", async () => {
+    window.history.pushState({}, "", "/dashboard/team-invite?token=team-token")
+    vi.mocked(adminApi.getSession).mockResolvedValue({ email: "admin@d2.com", role: "admin" })
+    vi.mocked(adminApi.logout).mockResolvedValue({ ok: true })
+
+    const result = await render(<App />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("团队邀请需要用户账号")
+    })
+    expect(result.container.textContent).not.toContain("加入团队")
+
+    Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "退出当前账号")
+      ?.click()
+
+    await waitFor(() => {
+      expect(adminApi.logout).toHaveBeenCalled()
+      expect(result.container.querySelector<HTMLInputElement>("#admin-email")).not.toBeNull()
+    })
+  })
+
   it("normalizes stale login URLs with app hashes before restoring the session", async () => {
     window.history.pushState({}, "", "/dashboard/login#/invitations")
     vi.mocked(adminApi.getSession).mockResolvedValue({ email: "admin@d2.com", role: "admin" })

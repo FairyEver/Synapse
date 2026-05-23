@@ -1,6 +1,7 @@
 import * as React from "react"
 import { AppSidebar } from "@/components/app-sidebar"
 import { PageState } from "@/components/page-state"
+import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
   SidebarInset,
@@ -170,7 +171,16 @@ export default function App() {
 
   if (teamInviteRoute) {
     if (session.role !== "user") {
-      return <LoginPage onLoggedIn={handleLoggedIn} />
+      return (
+        <main className="flex min-h-screen items-center justify-center p-6">
+          <div className="grid gap-3 text-center">
+            <PageState>团队邀请需要用户账号</PageState>
+            <Button type="button" onClick={handleLogout}>
+              退出当前账号
+            </Button>
+          </div>
+        </main>
+      )
     }
     return <TeamInvitePage token={inviteTokenFromSearch()} />
   }
