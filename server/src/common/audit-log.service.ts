@@ -15,10 +15,12 @@ interface AuditLogFilterOptions {
 function buildAuditLogWhere(options: AuditLogFilterOptions): Record<string, unknown> {
   const where: Record<string, unknown> = {}
   if (options.action) where.action = options.action
+  const toDate = options.to ? new Date(options.to) : null
+  if (toDate) toDate.setUTCDate(toDate.getUTCDate() + 1)
   if (options.from || options.to) {
     where.createdAt = {
       ...(options.from ? { gte: new Date(options.from) } : {}),
-      ...(options.to ? { lte: new Date(options.to) } : {}),
+      ...(toDate ? { lt: toDate } : {}),
     }
   }
   return where

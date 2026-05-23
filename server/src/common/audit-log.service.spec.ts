@@ -64,7 +64,7 @@ describe("AuditLogService", () => {
         action: "users.patch",
         createdAt: {
           gte: new Date("2026-05-01"),
-          lte: new Date("2026-05-21"),
+          lt: new Date("2026-05-22"),
         },
       },
       orderBy: { createdAt: "desc" },
