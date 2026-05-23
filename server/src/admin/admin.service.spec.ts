@@ -37,7 +37,7 @@ function createPrismaMock(counts: {
       findMany: vi.fn(),
       update: vi.fn().mockResolvedValue({}),
     },
-    team: { count: vi.fn() },
+    team: { count: vi.fn(), findUnique: vi.fn().mockResolvedValue({ id: "team-1" }) },
     invitation: { count: vi.fn(), delete: vi.fn(), deleteMany: vi.fn() },
   }
 }
@@ -233,18 +233,36 @@ describe("AdminService", () => {
 
   it("lists team entitlements", async () => {
     const permissions = createPermissionsMock()
-    const service = new AdminService(createPrismaMock() as unknown as PrismaService, {} as never, permissions as never)
+    const prisma = createPrismaMock()
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never)
 
     await expect(service.listTeamEntitlements("team-1"))
       .resolves
       .toEqual({ permissionKeys: ["database.use"] })
+    expect(prisma.team.findUnique).toHaveBeenCalledWith({
+      where: { id: "team-1" },
+      select: { id: true },
+    })
     expect(permissions.listTeamEntitlements).toHaveBeenCalledWith("team-1")
+  })
+
+  it("reports a missing team when listing team entitlements", async () => {
+    const permissions = createPermissionsMock()
+    const prisma = createPrismaMock()
+    prisma.team.findUnique.mockResolvedValue(null)
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never)
+
+    await expect(service.listTeamEntitlements("missing-team"))
+      .rejects
+      .toThrow("团队不存在。")
+    expect(permissions.listTeamEntitlements).not.toHaveBeenCalled()
   })
 
   it("replaces team entitlements and records an audit log", async () => {
     const permissions = createPermissionsMock()
+    const prisma = createPrismaMock()
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(createPrismaMock() as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
 
     await expect(service.replaceTeamEntitlements(
       "team-1",
@@ -255,6 +273,10 @@ describe("AdminService", () => {
       .resolves
       .toEqual({ permissionKeys: ["agent.chat.use", "database.use"] })
 
+    expect(prisma.team.findUnique).toHaveBeenCalledWith({
+      where: { id: "team-1" },
+      select: { id: true },
+    })
     expect(permissions.replaceTeamEntitlements).toHaveBeenCalledWith({
       teamId: "team-1",
       permissionKeys: ["database.use", "agent.chat.use"],
@@ -269,5 +291,25 @@ describe("AdminService", () => {
       detail: { permissionKeys: ["agent.chat.use", "database.use"] },
       ipAddress: "203.0.113.60",
     })
+  })
+
+  it("reports a missing team before replacing team entitlements", async () => {
+    const permissions = createPermissionsMock()
+    const prisma = createPrismaMock()
+    prisma.team.findUnique.mockResolvedValue(null)
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
+
+    await expect(service.replaceTeamEntitlements(
+      "missing-team",
+      ["database.use"],
+      { id: "admin-1", email: "admin@example.com" },
+      "203.0.113.70",
+    ))
+      .rejects
+      .toThrow("团队不存在。")
+
+    expect(permissions.replaceTeamEntitlements).not.toHaveBeenCalled()
+    expect(auditLog.record).not.toHaveBeenCalled()
   })
 })

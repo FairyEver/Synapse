@@ -159,6 +159,7 @@ export class AdminService {
   }
 
   async listTeamEntitlements(teamId: string) {
+    await this.assertTeamExists(teamId)
     return { permissionKeys: await this.permissions.listTeamEntitlements(teamId) }
   }
 
@@ -168,6 +169,7 @@ export class AdminService {
     admin: { readonly id: string; readonly email: string },
     ipAddress = "system",
   ) {
+    await this.assertTeamExists(teamId)
     const next = await this.permissions.replaceTeamEntitlements({
       teamId,
       permissionKeys,
@@ -183,6 +185,14 @@ export class AdminService {
       ipAddress,
     })
     return { permissionKeys: next }
+  }
+
+  private async assertTeamExists(teamId: string): Promise<void> {
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      select: { id: true },
+    })
+    if (!team) throw new NotFoundException("团队不存在。")
   }
 
   async listInvitations(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {

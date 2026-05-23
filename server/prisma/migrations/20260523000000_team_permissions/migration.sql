@@ -63,3 +63,99 @@ ALTER TABLE "TeamAccessRolePermission" ADD CONSTRAINT "TeamAccessRolePermission_
 ALTER TABLE "TeamMemberAccessRole" ADD CONSTRAINT "TeamMemberAccessRole_teamId_teamMembershipId_fkey" FOREIGN KEY ("teamId", "teamMembershipId") REFERENCES "TeamMembership"("teamId", "id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "TeamMemberAccessRole" ADD CONSTRAINT "TeamMemberAccessRole_teamId_roleId_fkey" FOREIGN KEY ("teamId", "roleId") REFERENCES "TeamAccessRole"("teamId", "id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "TeamMemberAccessRole" ADD CONSTRAINT "TeamMemberAccessRole_assignedByUserId_fkey" FOREIGN KEY ("assignedByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+WITH permission_keys(permission_key) AS (
+  VALUES
+    ('agent.chat.use'),
+    ('agent.permission-mode.manage'),
+    ('agent.provider.manage'),
+    ('content.prompt.use'),
+    ('content.rule.use'),
+    ('content.skill.use'),
+    ('database.use'),
+    ('local.ide-scan.view'),
+    ('scheduler.use'),
+    ('team.invitation.manage'),
+    ('team.member.manage'),
+    ('team.role.manage'),
+    ('usage.view'),
+    ('workflow.use')
+)
+INSERT INTO "TeamEntitlement" ("id", "teamId", "permissionKey", "source")
+SELECT
+  'mte_' || md5(t."id" || ':' || pk.permission_key),
+  t."id",
+  pk.permission_key,
+  'migration'::"TeamEntitlementSource"
+FROM "Team" t
+CROSS JOIN permission_keys pk
+ON CONFLICT DO NOTHING;
+
+INSERT INTO "TeamAccessRole" ("id", "teamId", "name", "kind", "locked", "sortOrder", "createdAt", "updatedAt")
+SELECT
+  'mtar_' || md5(t."id" || ':team-admin'),
+  t."id",
+  '团队管理员',
+  'system'::"TeamAccessRoleKind",
+  true,
+  0,
+  CURRENT_TIMESTAMP,
+  CURRENT_TIMESTAMP
+FROM "Team" t
+ON CONFLICT DO NOTHING;
+
+INSERT INTO "TeamAccessRole" ("id", "teamId", "name", "kind", "locked", "sortOrder", "createdAt", "updatedAt")
+SELECT
+  'mtar_' || md5(t."id" || ':ordinary-member'),
+  t."id",
+  '普通成员',
+  'system'::"TeamAccessRoleKind",
+  true,
+  1,
+  CURRENT_TIMESTAMP,
+  CURRENT_TIMESTAMP
+FROM "Team" t
+ON CONFLICT DO NOTHING;
+
+WITH permission_keys(permission_key) AS (
+  VALUES
+    ('agent.chat.use'),
+    ('agent.permission-mode.manage'),
+    ('agent.provider.manage'),
+    ('content.prompt.use'),
+    ('content.rule.use'),
+    ('content.skill.use'),
+    ('database.use'),
+    ('local.ide-scan.view'),
+    ('scheduler.use'),
+    ('team.invitation.manage'),
+    ('team.member.manage'),
+    ('team.role.manage'),
+    ('usage.view'),
+    ('workflow.use')
+)
+INSERT INTO "TeamAccessRolePermission" ("id", "roleId", "permissionKey")
+SELECT
+  'mtarp_' || md5(r."id" || ':' || pk.permission_key),
+  r."id",
+  pk.permission_key
+FROM "TeamAccessRole" r
+CROSS JOIN permission_keys pk
+WHERE r."name" = '团队管理员'
+   OR (
+    r."name" = '普通成员'
+    AND pk.permission_key NOT IN ('team.member.manage', 'team.role.manage', 'team.invitation.manage')
+  )
+ON CONFLICT DO NOTHING;
+
+INSERT INTO "TeamMemberAccessRole" ("id", "teamId", "teamMembershipId", "roleId")
+SELECT
+  'mtmar_' || md5(m."id" || ':' || r."id"),
+  m."teamId",
+  m."id",
+  r."id"
+FROM "TeamMembership" m
+JOIN "TeamAccessRole" r ON r."teamId" = m."teamId"
+WHERE (m."role" = 'owner'::"TeamRole" AND r."name" = '团队管理员')
+   OR (m."role" = 'member'::"TeamRole" AND r."name" = '普通成员')
+ON CONFLICT DO NOTHING;
