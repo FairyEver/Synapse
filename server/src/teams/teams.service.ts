@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Optional } from "@nestjs/common"
+import type { Prisma } from "@prisma/client"
 import { AuditLogService } from "../common/audit-log.service"
 import { InvitationsService } from "../invitations/invitations.service"
 import { PermissionsService } from "../permissions/permissions.service"
@@ -153,6 +154,7 @@ export class TeamsService {
 
     if (membership.role === "owner") {
       await this.prisma.$transaction(async (tx) => {
+        await this.lockTeamForMembershipChange(tx, membership.teamId)
         const memberCount = await tx.teamMembership.count({ where: { teamId: membership.teamId } })
         if (memberCount > 1) {
           throw new BadRequestException("请先移除其他成员。")
@@ -187,6 +189,10 @@ export class TeamsService {
       where: { userId },
       include: { team: true },
     })
+  }
+
+  private async lockTeamForMembershipChange(tx: Prisma.TransactionClient, teamId: string): Promise<void> {
+    await tx.$executeRaw`SELECT id FROM "Team" WHERE id = ${teamId} FOR UPDATE`
   }
 
   private async getAuditActorEmail(userId: string): Promise<string> {

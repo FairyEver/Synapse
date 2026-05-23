@@ -61,6 +61,8 @@ export class AllExceptionsFilter implements ExceptionFilter {
     switch (error.code) {
       case "P2002":
         return { statusCode: 409, error: "Conflict", message: "资源已存在。" }
+      case "P2003":
+        return { statusCode: 409, error: "Conflict", message: "操作冲突，请重试。" }
       case "P2025":
         return { statusCode: 404, error: "Not Found", message: "资源不存在。" }
       default:

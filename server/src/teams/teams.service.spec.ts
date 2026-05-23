@@ -186,6 +186,7 @@ describe("TeamsService", () => {
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "owner", teamId: "team-1", userId: "user-1" })
     const deleteMemberships = vi.fn()
     prisma.$transaction.mockImplementationOnce((callback) => callback({
+      $executeRaw: vi.fn(),
       teamMembership: {
         count: vi.fn().mockResolvedValue(2),
         deleteMany: deleteMemberships,
@@ -209,10 +210,13 @@ describe("TeamsService", () => {
     const deleteInvitations = vi.fn().mockResolvedValue({ count: 1 })
     const deleteMemberships = vi.fn().mockResolvedValue({ count: 1 })
     const deleteTeams = vi.fn().mockResolvedValue({ count: 1 })
+    const lockTeam = vi.fn().mockResolvedValue(1)
+    const countMembers = vi.fn().mockResolvedValue(1)
     prisma.$transaction.mockImplementationOnce((callback) => callback({
+      $executeRaw: lockTeam,
       invitation: { deleteMany: deleteInvitations },
       teamMembership: {
-        count: vi.fn().mockResolvedValue(1),
+        count: countMembers,
         deleteMany: deleteMemberships,
       },
       team: { deleteMany: deleteTeams },
@@ -224,6 +228,8 @@ describe("TeamsService", () => {
     )
 
     await expect(service.leaveTeam("user-1")).resolves.toEqual({ ok: true })
+    expect(lockTeam).toHaveBeenCalled()
+    expect(lockTeam.mock.invocationCallOrder[0]).toBeLessThan(countMembers.mock.invocationCallOrder[0])
     expect(deleteMemberships).toHaveBeenCalledWith({ where: { userId: "user-1", teamId: "team-1" } })
     expect(deleteInvitations).toHaveBeenCalledWith({ where: { teamId: "team-1" } })
     expect(deleteTeams).toHaveBeenCalledWith({ where: { id: "team-1" } })
@@ -234,6 +240,7 @@ describe("TeamsService", () => {
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "owner", teamId: "team-1", userId: "user-1" })
     prisma.user.findUnique.mockRejectedValue(new Error("connection lost"))
     prisma.$transaction.mockImplementationOnce((callback) => callback({
+      $executeRaw: vi.fn(),
       invitation: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) },
       teamMembership: {
         count: vi.fn().mockResolvedValue(1),
@@ -264,6 +271,7 @@ describe("TeamsService", () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "owner", teamId: "team-1", userId: "user-1" })
     prisma.$transaction.mockImplementationOnce((callback) => callback({
+      $executeRaw: vi.fn(),
       invitation: { deleteMany: vi.fn() },
       teamMembership: {
         count: vi.fn().mockResolvedValue(1),

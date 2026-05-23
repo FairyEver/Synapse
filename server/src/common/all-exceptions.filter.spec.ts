@@ -64,6 +64,24 @@ describe("AllExceptionsFilter", () => {
     expect(statusFn).toHaveBeenCalledWith(404)
   })
 
+  it("maps Prisma P2003 to 409 Conflict", () => {
+    const filter = new AllExceptionsFilter(mockLogger)
+    const statusFn = vi.fn().mockReturnThis()
+    const jsonFn = vi.fn()
+    const host = createMockHost(statusFn, jsonFn)
+
+    const error = new Prisma.PrismaClientKnownRequestError("foreign key", {
+      code: "P2003",
+      clientVersion: "6.0.0",
+    })
+    filter.catch(error, host)
+
+    expect(statusFn).toHaveBeenCalledWith(409)
+    expect(jsonFn).toHaveBeenCalledWith(expect.objectContaining({
+      message: "操作冲突，请重试。",
+    }))
+  })
+
   it("maps unknown errors to 500", () => {
     const filter = new AllExceptionsFilter(mockLogger)
     const statusFn = vi.fn().mockReturnThis()
