@@ -6,7 +6,7 @@ SERVER="root@120.53.17.64"
 REMOTE_DIR="/www/wwwroot/synapse/server"
 
 echo ">>> 重启服务容器..."
-ssh "$SERVER" "cd $REMOTE_DIR && docker compose restart server"
+ssh "$SERVER" "cd $REMOTE_DIR && docker compose --env-file .env restart server"
 
 echo ">>> 等待服务启动..."
 sleep 5

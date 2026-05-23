@@ -76,6 +76,10 @@ export const IPC_CHANNELS = {
   "knowledge-base": {
     "inspect": "synapse:knowledge-base:inspect",
     "initialize": "synapse:knowledge-base:initialize",
+    "listSources": "synapse:knowledge-base:list-sources",
+    "uploadSources": "synapse:knowledge-base:upload-sources",
+    "selectAndUploadSources": "synapse:knowledge-base:select-and-upload-sources",
+    "openSourceManager": "synapse:knowledge-base:open-source-manager",
     "openRawDirectory": "synapse:knowledge-base:open-raw-directory",
   },
   "editor": {

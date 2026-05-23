@@ -144,6 +144,41 @@ describe("SessionManager", () => {
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain("/Users/liyang")
   })
 
+  it("passes project SDK plugins into new live sessions", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      sdkPlugins: () => [{
+        type: "local",
+        path: "/Applications/Synapse/resources/knowledge-base/claude-plugin",
+      }],
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      plugins: [{
+        type: "local",
+        path: "/Applications/Synapse/resources/knowledge-base/claude-plugin",
+      }],
+    }))
+  })
+
   it("recreates the SDK session when closing the previous session fails", async () => {
     const states = new Map<string, RuntimeSessionState>()
     const logger = structuredLogger()

@@ -35,6 +35,7 @@ import {
   renderReferenceView,
   resolveLocalReference,
 } from "./references"
+import type { AgentSdkPluginSpec } from "./project-contributions"
 import {
   AgentSessionRepository,
   conversationId,
@@ -84,12 +85,14 @@ export interface AgentRuntimeServiceDeps {
   readonly governance?: AgentGovernanceService
   readonly compressState?: DataNamespace<AgentCompressStateEntryV1>
   readonly registeredPromptCommands?: RegisteredPromptCommandSource
+  readonly publishedProjectCommands?: PublishedProjectCommandSource
   readonly agentNativeSlashAllowlist?: readonly string[]
   readonly unknownSlashBehavior?: "reject" | "passthrough"
   readonly customCommands?: CustomCommandRegistry
   readonly skills?: SkillRegistry
   readonly commandRunner?: CommandExecutionRunner
   readonly executionIsolation?: ProcessIsolationResolver
+  readonly sdkPlugins?: () => readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
   readonly prepareMessage?: (
     message: AgentMessage,
     context: { readonly isNewLiveSession: boolean },
@@ -100,6 +103,10 @@ export interface AgentRuntimeServiceDeps {
     getAgentEnv(projectId: string, sessionKey: string): Record<string, string> | undefined
   }
 }
+
+type PublishedProjectCommandSource =
+  | readonly PublishedAgentCommand[]
+  | (() => readonly PublishedAgentCommand[] | Promise<readonly PublishedAgentCommand[]>)
 
 export interface AgentRuntimeStatus {
   readonly projectId: string
@@ -137,6 +144,7 @@ export class AgentRuntimeService {
       logger: deps.logger,
       now: deps.now,
       createSession: deps.createSession,
+      sdkPlugins: deps.sdkPlugins,
     })
     this.sessionLifecycle = new SessionLifecycleManager({
       projectId: deps.projectId,
@@ -557,6 +565,7 @@ export class AgentRuntimeService {
       kind: "prompt" as const,
       adminOnly: false,
     }))
+    const projectPublished = await resolvePublishedProjectCommands(this.deps.publishedProjectCommands)
     const native = (this.deps.agentNativeSlashAllowlist ?? []).map((name) => ({
       name,
       source: "agent-native" as const,
@@ -564,7 +573,7 @@ export class AgentRuntimeService {
       adminOnly: false,
       allowedPlatforms: ["local-renderer"],
     }))
-    return [...BUILTIN_COMMANDS, ...registered, ...custom, ...skills, ...native]
+    return [...BUILTIN_COMMANDS, ...registered, ...projectPublished, ...custom, ...skills, ...native]
   }
 
   async getCompressionState(agentType = this.agentType()): Promise<AgentCompressStateEntryV1> {
@@ -1193,6 +1202,13 @@ function errorMessage(error: unknown): string {
 
 function scheduledLiveEventTimeoutMs(timeoutMs: number): number | undefined {
   return timeoutMs > 0 ? undefined : 0
+}
+
+async function resolvePublishedProjectCommands(
+  source: PublishedProjectCommandSource | undefined,
+): Promise<readonly PublishedAgentCommand[]> {
+  if (!source) return []
+  return typeof source === "function" ? await source() : source
 }
 
 function truncateRunes(value: string, maxRunes: number): string {

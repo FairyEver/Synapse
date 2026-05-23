@@ -14,6 +14,13 @@ import { parseFrontmatterBlock } from "../../../src/definitions/editor/shared-ya
 export type PublishedCommandSource = "builtin" | "custom" | "skill" | "agent-native"
 export type PublishedCommandKind = "builtin" | "prompt" | "exec" | "skill" | "agent-native"
 
+export interface PublishedAgentCommandUi {
+  readonly group?: "knowledge-base"
+  readonly label?: string
+  readonly action?: "send" | "insert"
+  readonly insertText?: string
+}
+
 export interface PublishedAgentCommand {
   readonly name: string
   readonly description?: string
@@ -21,6 +28,7 @@ export interface PublishedAgentCommand {
   readonly kind: PublishedCommandKind
   readonly adminOnly: boolean
   readonly allowedPlatforms?: readonly string[]
+  readonly ui?: PublishedAgentCommandUi
 }
 
 export interface CustomCommandRegistryDeps {

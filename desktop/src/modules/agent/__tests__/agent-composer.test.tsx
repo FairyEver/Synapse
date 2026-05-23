@@ -576,6 +576,115 @@ describe("AgentComposer", () => {
     expect(onInputKeyDown).not.toHaveBeenCalled()
   })
 
+  it("does not render the knowledge base action button without actions", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    expect(html).not.toContain("知识库")
+  })
+
+  it("sends direct knowledge base actions from the composer menu", async () => {
+    const onSendCommand = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          knowledgeBaseActions={[{
+            label: "汲取来源",
+            action: "send",
+            commandText: "/wiki ingest",
+          }]}
+          onKnowledgeBaseCommand={onSendCommand}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    openKnowledgeBaseMenu(container)
+    const item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find((node) => node.textContent === "汲取来源") as HTMLElement
+    expect(item).toBeTruthy()
+
+    await act(async () => {
+      item.click()
+    })
+
+    expect(onSendCommand).toHaveBeenCalledWith("/wiki ingest")
+  })
+
+  it("inserts query command and focuses the composer textarea", async () => {
+    const onDraftChange = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft="请 "
+          disabled={false}
+          canSend={true}
+          sending={false}
+          cancelPhase="idle"
+          knowledgeBaseActions={[{
+            label: "查询知识库",
+            action: "insert",
+            commandText: "/wiki query ",
+          }]}
+          onKnowledgeBaseCommand={vi.fn()}
+          onDraftChange={onDraftChange}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+    textarea!.focus()
+    textarea!.setSelectionRange(2, 2)
+    openKnowledgeBaseMenu(container)
+    const item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find((node) => node.textContent === "查询知识库") as HTMLElement
+    expect(item).toBeTruthy()
+
+    await act(async () => {
+      item.click()
+      await wait(0)
+    })
+
+    expect(onDraftChange).toHaveBeenCalledWith("请 /wiki query ")
+    expect(document.activeElement?.tagName).toBe("TEXTAREA")
+  })
+
   it("closes the slash menu with Escape without changing the draft", async () => {
     const onDraftChange = vi.fn()
     const container = document.createElement("div")
@@ -734,6 +843,15 @@ function wait(ms: number) {
 
 function openPermissionMenu(container: HTMLElement) {
   const trigger = container.querySelector('button[aria-label^="权限模式"]')
+  expect(trigger).toBeTruthy()
+  act(() => {
+    trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+    trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  })
+}
+
+function openKnowledgeBaseMenu(container: HTMLElement) {
+  const trigger = container.querySelector('button[aria-label="知识库"]')
   expect(trigger).toBeTruthy()
   act(() => {
     trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))

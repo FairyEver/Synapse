@@ -954,6 +954,7 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
         kind: command.kind,
         admin_only: command.adminOnly,
         allowed_platforms: command.allowedPlatforms,
+        ui: command.ui,
       }))
     } catch (error) {
       this.deps.logger?.warn("Bridge capabilities command listing failed.", {

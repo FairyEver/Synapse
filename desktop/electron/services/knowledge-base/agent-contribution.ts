@@ -11,6 +11,15 @@ type CreateKnowledgeBaseAgentContributionInput = {
   readonly project: SynapseProjectConfig
 }
 
+const KNOWLEDGE_BASE_PUBLISHED_COMMANDS = [
+  knowledgeBaseAction("wiki ingest", "汲取来源", "send", "/wiki ingest"),
+  knowledgeBaseAction("wiki query", "查询知识库", "insert", "/wiki query "),
+  knowledgeBaseAction("wiki hot", "刷新热点", "send", "/wiki hot"),
+  knowledgeBaseAction("wiki save", "保存记录", "send", "/wiki save"),
+  knowledgeBaseAction("wiki lint", "检查知识库", "send", "/wiki lint"),
+  knowledgeBaseAction("wiki status", "查看状态", "send", "/wiki status"),
+] as const
+
 export async function createKnowledgeBaseAgentContribution(
   input: CreateKnowledgeBaseAgentContributionInput,
 ): Promise<AgentProjectContribution | null> {
@@ -22,6 +31,11 @@ export async function createKnowledgeBaseAgentContribution(
   const hotCachePath = path.join(input.project.path, "wiki", "hot.md")
 
   return {
+    sdkPlugins: [{
+      type: "local",
+      path: resolveKnowledgeBasePluginPath(),
+    }],
+    publishedCommands: KNOWLEDGE_BASE_PUBLISHED_COMMANDS,
     commands: [{
       name: "wiki",
       buildPrompt: (args) => buildKnowledgeBaseCommandPrompt(input.project.path, args),
@@ -127,6 +141,41 @@ function resolvePromptRoots(): readonly string[] {
     return [path.join(resourcesPath, "knowledge-base", "prompts"), devRoot]
   }
   return [devRoot]
+}
+
+function resolveKnowledgeBasePluginPath(): string {
+  if (process.env.SYNAPSE_KB_PLUGIN_ROOT) {
+    return process.env.SYNAPSE_KB_PLUGIN_ROOT
+  }
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
+  const cwd = path.resolve(process.cwd())
+  const desktopRoot = path.basename(cwd) === "desktop" ? cwd : path.join(cwd, "desktop")
+  const devRoot = path.join(desktopRoot, "resources", "knowledge-base", "claude-plugin")
+  if (resourcesPath) {
+    return path.join(resourcesPath, "knowledge-base", "claude-plugin")
+  }
+  return devRoot
+}
+
+function knowledgeBaseAction(
+  name: string,
+  label: string,
+  action: "send" | "insert",
+  insertText: string,
+) {
+  return {
+    name,
+    description: label,
+    source: "custom" as const,
+    kind: "prompt" as const,
+    adminOnly: false,
+    ui: {
+      group: "knowledge-base" as const,
+      label,
+      action,
+      insertText,
+    },
+  }
 }
 
 function isMissingPathError(error: unknown): boolean {

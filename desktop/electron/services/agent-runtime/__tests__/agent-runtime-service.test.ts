@@ -106,6 +106,55 @@ describe("AgentRuntimeService", () => {
     expect(session.sent).toEqual(["expanded wiki prompt"])
   })
 
+  it("includes registered contribution UI commands in published commands", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const registeredPromptCommands = vi.fn(async () => [
+      {
+        name: "wiki",
+        description: "Knowledge base command",
+        buildPrompt: () => "expanded wiki prompt",
+      },
+    ])
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+      registeredPromptCommands,
+      publishedProjectCommands: async () => [{
+        name: "wiki ingest",
+        description: "汲取来源",
+        source: "custom",
+        kind: "prompt",
+        adminOnly: false,
+        ui: {
+          group: "knowledge-base",
+          label: "汲取来源",
+          action: "send",
+          insertText: "/wiki ingest",
+        },
+      }],
+    })
+
+    await expect(service.listPublishedCommands()).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "wiki" }),
+        expect.objectContaining({
+          name: "wiki ingest",
+          ui: {
+            group: "knowledge-base",
+            label: "汲取来源",
+            action: "send",
+            insertText: "/wiki ingest",
+          },
+        }),
+      ]),
+    )
+  })
+
   it("cancelTurn interrupts before forceKillTurn hard closes the session", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const session = new HangingSession()

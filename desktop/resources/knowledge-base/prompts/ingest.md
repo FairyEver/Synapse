@@ -4,6 +4,10 @@
 
 只处理预检来源列表中的来源。除非提示明确说明这是强制导入，不要扫描整个 `.raw/`。
 
-写入 wiki 页面后，为每个已处理来源更新 `.raw/.manifest.json`，写入提供的 sha256 hash、ISO 格式的 `ingested_at`、`pages_created` 和 `pages_updated`。
+写入 wiki 页面后，为每个已处理来源更新 `.raw/.manifest.json`。清单使用 claude-obsidian 兼容格式：
+- 顶层保留 `version: 1`，维护 `created`、`description`、`sources`、`address_map`。
+- `sources` 的 key 使用 `.raw/...`，value 写入提供的 sha256 `hash`、ISO 格式的 `ingested_at`、`pages_created` 和 `pages_updated`。
+- `address_map` 维护 wiki 页面路径到稳定地址的映射；已有页面复用原地址，新页面按现有最大 `c-NNNNNN` 递增分配。
+- `pages_created` 和 `pages_updated` 必须覆盖本次实际写入的 wiki 页面。
 
 使用包含 `type`、`title`、`status` 和 `tags` 的 Markdown frontmatter。交叉引用使用 wikilink。最后汇报新增页面、更新页面、跳过的未变更来源和冲突。

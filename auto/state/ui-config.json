@@ -1,7 +1,7 @@
 {
-  "activePromptName": "质量巡检v4",
+  "activePromptName": "质量巡检v5",
   "workingDirectory": "/Users/liyang/Documents/code/github/Synapse",
-  "concurrency": 8,
+  "concurrency": 4,
   "intervalSeconds": 10,
   "timeoutMinutes": 60,
   "maxLogs": 200,

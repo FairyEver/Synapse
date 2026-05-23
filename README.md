@@ -34,10 +34,12 @@ pnpm install
 ### 4. 启动本地开发环境
 
 ```bash
-pnpm dev
+pnpm dev:server   # 后端 API、管理后台、PostgreSQL
+pnpm dev:desktop  # 桌面端
+pnpm dev:website  # 官网 / 文档站
 ```
 
-该命令会启动文档站、桌面端、PostgreSQL、Prisma migration 和后端服务。
+按当前调试目标选择一个命令启动。根目录不再提供 `pnpm dev` 命令。
 本地开发环境不会自动打开浏览器，需要手动访问：
 
 - 老站 / 文档站：<http://localhost:19773/>
@@ -51,7 +53,9 @@ pnpm dev
 所有脚本都在仓库根目录执行：
 
 ```bash
-pnpm dev                     # 启动本地开发环境
+pnpm dev:server              # 启动后端相关服务
+pnpm dev:desktop             # 启动桌面端
+pnpm dev:website             # 启动官网 / 文档站
 pnpm quit                    # 停止本地开发环境
 ```
 

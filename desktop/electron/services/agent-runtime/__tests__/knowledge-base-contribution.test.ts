@@ -43,6 +43,108 @@ describe("knowledge base Agent contribution", () => {
     expect(contribution?.commands.map((command) => command.name)).toEqual(["wiki"])
   })
 
+  it("contributes the Synapse knowledge-base SDK plugin outside the vault", async () => {
+    const projectPath = await tempDir()
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+
+    expect(contribution?.sdkPlugins).toHaveLength(1)
+    expect(contribution?.sdkPlugins?.[0]).toMatchObject({ type: "local" })
+    expect(contribution?.sdkPlugins?.[0]?.path).toContain(
+      path.join("resources", "knowledge-base", "claude-plugin"),
+    )
+    expect(contribution?.sdkPlugins?.[0]?.path.startsWith(projectPath)).toBe(false)
+  })
+
+  it("publishes knowledge base composer actions for knowledge base projects", async () => {
+    const projectPath = await tempDir()
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+
+    expect(contribution?.publishedCommands).toEqual([
+      {
+        name: "wiki ingest",
+        description: "汲取来源",
+        source: "custom",
+        kind: "prompt",
+        adminOnly: false,
+        ui: {
+          group: "knowledge-base",
+          label: "汲取来源",
+          action: "send",
+          insertText: "/wiki ingest",
+        },
+      },
+      {
+        name: "wiki query",
+        description: "查询知识库",
+        source: "custom",
+        kind: "prompt",
+        adminOnly: false,
+        ui: {
+          group: "knowledge-base",
+          label: "查询知识库",
+          action: "insert",
+          insertText: "/wiki query ",
+        },
+      },
+      {
+        name: "wiki hot",
+        description: "刷新热点",
+        source: "custom",
+        kind: "prompt",
+        adminOnly: false,
+        ui: {
+          group: "knowledge-base",
+          label: "刷新热点",
+          action: "send",
+          insertText: "/wiki hot",
+        },
+      },
+      {
+        name: "wiki save",
+        description: "保存记录",
+        source: "custom",
+        kind: "prompt",
+        adminOnly: false,
+        ui: {
+          group: "knowledge-base",
+          label: "保存记录",
+          action: "send",
+          insertText: "/wiki save",
+        },
+      },
+      {
+        name: "wiki lint",
+        description: "检查知识库",
+        source: "custom",
+        kind: "prompt",
+        adminOnly: false,
+        ui: {
+          group: "knowledge-base",
+          label: "检查知识库",
+          action: "send",
+          insertText: "/wiki lint",
+        },
+      },
+      {
+        name: "wiki status",
+        description: "查看状态",
+        source: "custom",
+        kind: "prompt",
+        adminOnly: false,
+        ui: {
+          group: "knowledge-base",
+          label: "查看状态",
+          action: "send",
+          insertText: "/wiki status",
+        },
+      },
+    ])
+  })
+
   it("adds wiki commands and hot cache bootstrap for knowledge base projects", async () => {
     const projectPath = await tempDir()
     await mkdir(path.join(projectPath, "wiki"), { recursive: true })
@@ -79,6 +181,7 @@ describe("knowledge base Agent contribution", () => {
 
     expect(prepared?.content).toContain("Recent fact.")
     expect(prepared?.content).toContain("不要根据 wikilink 标题猜测文件路径。")
+    expect(prepared?.content).toContain("address_map")
     expect(unchanged?.content).toBe("What changed?")
   })
 
@@ -165,7 +268,29 @@ describe("knowledge base Agent contribution", () => {
     const command = contribution?.commands[0]
     const output = await command?.buildPrompt(["ingest"], baseMessage("/wiki ingest"))
 
-    expect(expectObjectOutput(output, "prompt")).toContain("执行知识库导入")
+    const content = expectObjectOutput(output, "prompt")
+    expect(content).toContain("执行知识库导入")
+    expect(content).toContain("address_map")
+  })
+
+  it("keeps natural-language ingest requests unchanged because plugin skills handle routing", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{},\"address_map\":{}}\n")
+    await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+
+    const prepared = await Promise.resolve(contribution?.prepareMessage?.({
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local-renderer",
+      content: "汲取知识",
+    }, { isNewLiveSession: false }))
+
+    expect(prepared?.content).toBe("汲取知识")
+    expect(contribution?.sdkPlugins?.[0]?.path.startsWith(projectPath)).toBe(false)
   })
 
   it("returns a direct /wiki status result", async () => {

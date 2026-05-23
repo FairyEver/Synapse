@@ -5,19 +5,33 @@ import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import { knowledgeBaseIpcModule } from "../ipc"
 
 const electronMock = vi.hoisted(() => ({
+  dialog: {
+    showOpenDialog: vi.fn(),
+  },
   shell: {
     openPath: vi.fn(),
   },
 }))
 
+const sourceManagerWindowServiceMock = vi.hoisted(() => ({
+  open: vi.fn(),
+}))
+
 vi.mock("electron", () => ({
+  dialog: electronMock.dialog,
   shell: electronMock.shell,
+}))
+
+vi.mock("../../../services/knowledge-base/source-manager-window-service", () => ({
+  knowledgeBaseSourceManagerWindowService: sourceManagerWindowServiceMock,
 }))
 
 describe("knowledgeBaseIpcModule", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     electronMock.shell.openPath.mockResolvedValue("")
+    electronMock.dialog.showOpenDialog.mockResolvedValue({ canceled: false, filePaths: ["/tmp/source.md"] })
+    sourceManagerWindowServiceMock.open.mockResolvedValue(undefined)
   })
 
   it("inspects a knowledge base through guarded read permission", async () => {
@@ -68,6 +82,109 @@ describe("knowledgeBaseIpcModule", () => {
 
     expect(initialize).toHaveBeenCalledWith({ projectPath: "/tmp/kb", mode: "create" })
     expect(result.createdFiles).toEqual([".synapse-kb.json"])
+  })
+
+  it("lists source files through guarded read permission", async () => {
+    const listSources = vi.fn().mockResolvedValue({
+      projectPath: "/tmp/kb",
+      sources: [{
+        relativePath: "2026/05/23/source.md",
+        name: "source.md",
+        size: 12,
+        modifiedAt: "2026-05-23T00:00:00.000Z",
+        supported: true,
+        status: "pending",
+        hash: "abc",
+      }],
+    })
+    const { harness, permissionGuard } = createHarness({ service: { listSources } })
+
+    const result = await harness.invoke("synapse:knowledge-base:list-sources", {
+      projectPath: "/tmp/kb",
+    }) as { sources: unknown[] }
+
+    expect(listSources).toHaveBeenCalledWith("/tmp/kb")
+    expect(result.sources).toHaveLength(1)
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/kb",
+      context: { source: "knowledgeBase.listSources" },
+    })
+  })
+
+  it("uploads selected source files through guarded write permission", async () => {
+    const uploadSources = vi.fn().mockResolvedValue({
+      projectPath: "/tmp/kb",
+      uploaded: [{
+        originalPath: "/tmp/source.md",
+        relativePath: "2026/05/23/source.md",
+        name: "source.md",
+        size: 12,
+      }],
+      skipped: [],
+    })
+    const { harness, permissionGuard } = createHarness({ service: { uploadSources } })
+
+    const result = await harness.invoke("synapse:knowledge-base:select-and-upload-sources", {
+      projectPath: "/tmp/kb",
+    }) as { uploaded: unknown[] }
+
+    expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
+      properties: ["openFile", "multiSelections"],
+    }))
+    expect(uploadSources).toHaveBeenCalledWith({
+      projectPath: "/tmp/kb",
+      filePaths: ["/tmp/source.md"],
+    })
+    expect(result.uploaded).toHaveLength(1)
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "/tmp/kb",
+      context: { source: "knowledgeBase.selectAndUploadSources" },
+    })
+  })
+
+  it("uploads dropped source files through guarded write permission", async () => {
+    const uploadSources = vi.fn().mockResolvedValue({
+      projectPath: "/tmp/kb",
+      uploaded: [],
+      skipped: [],
+    })
+    const { harness } = createHarness({ service: { uploadSources } })
+
+    await harness.invoke("synapse:knowledge-base:upload-sources", {
+      projectPath: "/tmp/kb",
+      filePaths: ["/tmp/source.md"],
+    })
+
+    expect(uploadSources).toHaveBeenCalledWith({
+      projectPath: "/tmp/kb",
+      filePaths: ["/tmp/source.md"],
+    })
+  })
+
+  it("opens the source manager window through guarded read permission", async () => {
+    const { harness, permissionGuard } = createHarness({ service: {} })
+
+    await harness.invoke("synapse:knowledge-base:open-source-manager", {
+      projectId: "project-1",
+      projectPath: "/tmp/kb",
+      projectName: "知识库001",
+    })
+
+    expect(sourceManagerWindowServiceMock.open).toHaveBeenCalledWith({
+      projectId: "project-1",
+      projectPath: "/tmp/kb",
+      projectName: "知识库001",
+    })
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/kb",
+      context: { source: "knowledgeBase.openSourceManager" },
+    })
   })
 
   it("opens raw directory through guarded write and shell permissions", async () => {

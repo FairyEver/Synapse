@@ -50,6 +50,17 @@ void (async () => {
         </AppErrorBoundary>
       </StrictMode>,
     )
+  } else if (windowType === "knowledge-source-manager") {
+    const { KnowledgeBaseSourceManagerWindow } = await import("@/modules/knowledge-base/source-manager-window")
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode>
+        <AppErrorBoundary>
+          <AppNotificationsProvider>
+            <KnowledgeBaseSourceManagerWindow />
+          </AppNotificationsProvider>
+        </AppErrorBoundary>
+      </StrictMode>,
+    )
   } else {
     createRoot(document.getElementById("root")!).render(
       <StrictMode>

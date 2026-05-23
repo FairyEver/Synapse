@@ -15,6 +15,7 @@ import {
   resolveCachedLoginShellPath,
 } from "../../runtime/process"
 import type { StructuredLogger } from "../../runtime/service-registry"
+import type { AgentSdkPluginSpec } from "./project-contributions"
 import { bridgeSdkMessage, type AgentEventEnvelope } from "./sdk-event-bridge"
 import type {
   AgentEvent,
@@ -50,6 +51,7 @@ export interface ClaudeSDKSessionOptions {
   readonly mode?: string
   readonly model?: string
   readonly maxTurns?: number
+  readonly plugins?: readonly AgentSdkPluginSpec[]
   readonly abortSignal?: AbortSignal
   readonly queryFactory?: QueryFactory
   readonly logger?: Pick<StructuredLogger, "warn">
@@ -245,6 +247,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     }
     if (options.model) queryOptions.model = options.model
     if (options.maxTurns !== undefined) queryOptions.maxTurns = options.maxTurns
+    if (options.plugins?.length) queryOptions.plugins = [...options.plugins]
     if (options.sdkSessionId) queryOptions.resume = options.sdkSessionId
     if (this.abortController) queryOptions.abortController = this.abortController
 

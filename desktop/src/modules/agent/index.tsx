@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, Clock, Copy, ShieldAlert } from "lucide-react"
+import { AlertTriangle, Clock, Copy, FolderOpen, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { AgentComposer } from "./components/agent-composer"
+import type { KnowledgeBaseComposerAction } from "./components/knowledge-base-action-menu"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
@@ -56,6 +57,20 @@ const DEFAULT_AGENT_DISPLAY_PROFILE: SynapseAgentDisplayProfile = {
   },
 }
 
+function toKnowledgeBaseComposerActions(
+  commands: readonly SynapseAgentPublishedCommand[],
+): KnowledgeBaseComposerAction[] {
+  return commands
+    .filter((command) => command.ui?.group === "knowledge-base")
+    .map((command) => {
+      const commandText = command.ui?.insertText ?? `/${command.name.replace(/^\/+/, "")}`
+      const label = command.ui?.label ?? command.description ?? command.name
+      const action = command.ui?.action ?? "insert"
+      return { label, action, commandText }
+    })
+    .filter((action) => action.label.trim().length > 0 && action.commandText.trim().length > 0)
+}
+
 type AgentModuleProps = {
   pendingAgentSession?: OpenAgentSessionPayload | null
   onPendingAgentSessionConsumed?: () => void
@@ -94,6 +109,11 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   [config.global.projects])
   const selectedSession = chat.sessions.find((session) =>
     session.projectId === chat.selectedProjectId && session.id === chat.selectedConversationId)
+  const selectedProjectId = chat.selectedProjectId ?? chat.activeProjectId
+  const selectedProject = selectedProjectId
+    ? config.global.projects.find((project) => project.id === selectedProjectId)
+    : undefined
+  const canManageKnowledgeSources = selectedProject?.capabilities?.knowledgeBase?.enabled === true
   const selectedTarget: PendingMessageTarget | undefined = selectedSession
     ? {
         projectId: selectedSession.projectId,
@@ -278,6 +298,25 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       ?.scrollIntoView({ block: "center", behavior: "smooth" })
   }
 
+  const handleOpenSourceManager = async () => {
+    if (!selectedProject) return
+    try {
+      await requireSynapseBridge().knowledgeBase.openSourceManager({
+        projectId: selectedProject.id,
+        projectPath: selectedProject.path,
+        projectName: selectedProject.name,
+      })
+    } catch (rawError) {
+      logger.error("Knowledge base source manager open failed.", {
+        boundary: "renderer.agent.open-source-manager",
+        projectId: selectedProject.id,
+        projectPath: selectedProject.path,
+        ...errorDiagnostic(rawError),
+      })
+      toast("打开失败")
+    }
+  }
+
   const activeProvider = chat.providers?.providers.find((provider) => provider.active)
   const selectedProvider = selectedSession?.providerId
     ? chat.providers?.providers.find((provider) => provider.id === selectedSession.providerId)
@@ -301,6 +340,10 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   }, [selectedAgentDefinition?.commands, chat.commands])
   const slashCandidates = useMemo(
     () => toAgentSlashCandidates(mergedCommands),
+    [mergedCommands],
+  )
+  const knowledgeBaseActions = useMemo(
+    () => toKnowledgeBaseComposerActions(mergedCommands),
     [mergedCommands],
   )
   const selectedDisplayProfile = selectedAgentDefinition?.displayProfile
@@ -335,6 +378,17 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       })
       toast("打开失败")
     })
+  }
+
+  const sendComposerCommand = (commandText: string) => {
+    const content = commandText.trim()
+    if (!content || !selectedTarget) return
+    stick.forcePin()
+    if (chat.sending) {
+      queueMessage(content, selectedTarget)
+      return
+    }
+    void chat.sendMessage(content, selectedTarget)
   }
 
   const sidebar = (
@@ -420,6 +474,18 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                 </Button>
               ) : null}
 
+              {canManageKnowledgeSources ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleOpenSourceManager()}
+                >
+                  <FolderOpen data-icon="inline-start" />
+                  资料管理
+                </Button>
+              ) : null}
+
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -480,6 +546,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               }}
               onDraftChange={setDraft}
               slashCandidates={slashCandidates}
+              knowledgeBaseActions={knowledgeBaseActions}
+              onKnowledgeBaseCommand={sendComposerCommand}
               onInputKeyDown={handleInputKeyDown}
               onSubmit={handleSubmit}
               onCancelTurn={() => void chat.cancelTurn()}

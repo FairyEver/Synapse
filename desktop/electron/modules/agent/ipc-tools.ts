@@ -144,6 +144,13 @@ const importCcSwitchClaudeProvidersRequestSchema = z.object({
 
 // ─── Response schemas ─────────────────────────────────────────────────────────
 
+const publishedCommandUiSchema = z.object({
+  group: z.enum(["knowledge-base"]).optional(),
+  label: z.string().optional(),
+  action: z.enum(["send", "insert"]).optional(),
+  insertText: z.string().optional(),
+})
+
 const publishedCommandSchema = z.object({
   name: z.string(),
   description: z.string().optional(),
@@ -151,6 +158,7 @@ const publishedCommandSchema = z.object({
   kind: z.enum(["builtin", "prompt", "exec", "skill", "agent-native"]),
   adminOnly: z.boolean(),
   allowedPlatforms: z.array(z.string()).optional(),
+  ui: publishedCommandUiSchema.optional(),
 })
 
 const openReferenceResultSchema = z.object({

@@ -17,6 +17,10 @@ import { getPermissionModeCapability } from "../permission-mode-capability"
 import { permissionModeConfirmationText, permissionModeLabels } from "../permission-mode-options"
 import type { PendingMessage } from "../pending-message-queue"
 import { AgentComposerInputBox } from "./agent-composer-input-box"
+import {
+  KnowledgeBaseActionMenu,
+  type KnowledgeBaseComposerAction,
+} from "./knowledge-base-action-menu"
 import { AgentPermissionModeMenu } from "./permission-mode-menu"
 import { AgentSlashMenu } from "./agent-slash-menu"
 import {
@@ -48,6 +52,8 @@ function AgentComposer({
   onRemovePendingMessage,
   onRetryPendingMessage,
   slashCandidates = [],
+  knowledgeBaseActions = [],
+  onKnowledgeBaseCommand,
 }: {
   readonly draft: string
   readonly disabled: boolean
@@ -57,6 +63,7 @@ function AgentComposer({
   readonly permissionMode?: SynapseAgentPermissionMode
   readonly pendingMessages?: readonly PendingMessage[]
   readonly slashCandidates?: readonly AgentSlashCandidate[]
+  readonly knowledgeBaseActions?: readonly KnowledgeBaseComposerAction[]
   readonly onDraftChange: (value: string) => void
   readonly onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
   readonly onSubmit: (event: FormEvent) => void
@@ -66,6 +73,7 @@ function AgentComposer({
   readonly onCreatePermissionModeSession?: (mode: SynapseAgentPermissionMode) => void
   readonly onRemovePendingMessage?: (id: string) => void
   readonly onRetryPendingMessage?: (id: string) => void
+  readonly onKnowledgeBaseCommand?: (commandText: string) => void
 }) {
   const formRef = useRef<HTMLFormElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -169,7 +177,7 @@ function AgentComposer({
     candidate: AgentSlashCandidate,
     fragment: AgentSlashFragment,
   ) => {
-    const next = replaceAgentSlashFragment(draft, fragment, candidate.name)
+    const next = replaceAgentSlashFragment(draft, fragment, candidate.name, candidate.insertText)
     onDraftChange(next.value)
     setSlashMenuDismissed(true)
     requestAnimationFrame(() => {
@@ -179,6 +187,26 @@ function AgentComposer({
       el.setSelectionRange(next.cursor, next.cursor)
       setSelectionStart(next.cursor)
     })
+  }
+
+  const insertKnowledgeBaseCommand = (commandText: string) => {
+    const el = textareaRef.current
+    const start = el?.selectionStart ?? draft.length
+    const end = el?.selectionEnd ?? draft.length
+    const prefix = draft.slice(0, start)
+    const suffix = draft.slice(end)
+    const needsLeadingSpace = prefix.length > 0 && !/\s$/.test(prefix)
+    const insertion = `${needsLeadingSpace ? " " : ""}${commandText}`
+    const nextValue = `${prefix}${insertion}${suffix}`
+    const cursor = prefix.length + insertion.length
+    onDraftChange(nextValue)
+    window.setTimeout(() => {
+      const nextEl = textareaRef.current
+      if (!nextEl) return
+      nextEl.focus()
+      nextEl.setSelectionRange(cursor, cursor)
+      setSelectionStart(cursor)
+    }, 0)
   }
 
   const handleTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -304,7 +332,14 @@ function AgentComposer({
               rows={1}
             />
           )}
-          leadingActions={null}
+          leadingActions={(
+            <KnowledgeBaseActionMenu
+              actions={knowledgeBaseActions}
+              disabled={disabled || sending}
+              onSend={(commandText) => onKnowledgeBaseCommand?.(commandText)}
+              onInsert={insertKnowledgeBaseCommand}
+            />
+          )}
           trailingActions={(
             <>
               <AgentPermissionModeMenu

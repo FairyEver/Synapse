@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { adminApi } from "@/lib/api"
+import { adminApi, type AdminUserRow } from "@/lib/api"
 import { render, waitFor } from "@/test/render"
 import { UsersPage } from "./users-page"
 
@@ -54,8 +54,50 @@ describe("UsersPage", () => {
     expect(adminApi.listUsers).toHaveBeenCalledTimes(1)
   })
 
+  it("shows every team membership for each user", async () => {
+    vi.mocked(adminApi.listUsers).mockResolvedValue({
+      data: [
+        {
+          id: "user-1",
+          email: "member@example.com",
+          status: "active",
+          memberships: [
+            {
+              role: "owner",
+              team: { id: "team-1", name: "研发组" },
+            },
+            {
+              role: "member",
+              team: { id: "team-2", name: "测试组" },
+            },
+          ],
+          createdAt: "2026-05-20T00:00:00.000Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    })
+
+    const result = await render(<UsersPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("member@example.com")
+      expect(result.container.textContent).toContain("研发组 / owner")
+      expect(result.container.textContent).toContain("测试组 / member")
+    })
+  })
+
   it("disables the status button while an update is submitting", async () => {
-    let resolveUpdate: (value: unknown) => void = () => undefined
+    const updatedUser: AdminUserRow = {
+      id: "user-1",
+      email: "user@example.com",
+      status: "disabled",
+      memberships: [],
+      createdAt: "2026-05-20T00:00:00.000Z",
+    }
+    let resolveUpdate: (value: AdminUserRow | PromiseLike<AdminUserRow>) => void = () => undefined
     vi.mocked(adminApi.listUsers).mockResolvedValue({
       data: [
         {
@@ -90,7 +132,7 @@ describe("UsersPage", () => {
     button?.click()
     expect(adminApi.updateUserStatus).toHaveBeenCalledTimes(1)
 
-    resolveUpdate({})
+    resolveUpdate(updatedUser)
   })
 
   it("asks for confirmation before disabling a team owner", async () => {

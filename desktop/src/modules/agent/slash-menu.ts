@@ -7,6 +7,7 @@ export type AgentSlashCandidate = {
   readonly description?: string
   readonly kind: AgentSlashCandidateKind
   readonly source: SynapseAgentPublishedCommand["source"]
+  readonly insertText?: string
 }
 
 export type AgentSlashFragment = {
@@ -33,6 +34,7 @@ export function toAgentSlashCandidates(
       description: command.description,
       kind: command.kind === "skill" || command.source === "skill" ? "skill" : "command",
       source: command.source,
+      insertText: command.ui?.insertText,
     }))
 }
 
@@ -56,8 +58,9 @@ export function replaceAgentSlashFragment(
   value: string,
   fragment: AgentSlashFragment,
   name: string,
+  insertText?: string,
 ): { readonly value: string; readonly cursor: number } {
-  const insertion = `/${name.replace(/^\/+/, "")}`
+  const insertion = insertText ?? `/${name.replace(/^\/+/, "")}`
   const nextValue = `${value.slice(0, fragment.start)}${insertion}${value.slice(fragment.end)}`
   return {
     value: nextValue,

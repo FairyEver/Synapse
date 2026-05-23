@@ -80,8 +80,11 @@ describe("wiki command prompts", () => {
 
     const content = expectObjectOutput(output, "prompt")
     expect(content).toContain("执行知识库导入模板。")
+    expect(content).toContain(projectPath)
     expect(content).toContain(".raw/note.md")
     expect(content).toContain("## 清单更新要求")
+    expect(content).toContain("address_map")
+    expect(content).toContain("claude-obsidian")
   })
 
   it("builds a Chinese markdown quick query prompt with mode and question", async () => {

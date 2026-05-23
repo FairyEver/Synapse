@@ -1,0 +1,457 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>资料管理原型</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --surface: Canvas;
+      --text: CanvasText;
+      --muted: color-mix(in srgb, CanvasText 58%, Canvas);
+      --subtle: color-mix(in srgb, CanvasText 6%, Canvas);
+      --line: color-mix(in srgb, CanvasText 14%, Canvas);
+      --line-strong: color-mix(in srgb, CanvasText 22%, Canvas);
+      --active: Highlight;
+      --active-text: HighlightText;
+      --radius: 8px;
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--surface);
+      color: var(--text);
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    button,
+    input {
+      font: inherit;
+    }
+
+    .app {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) 320px;
+      min-height: 100vh;
+      overflow: hidden;
+    }
+
+    .list-pane {
+      display: flex;
+      min-width: 0;
+      min-height: 100vh;
+      flex-direction: column;
+      padding: 16px 18px 14px;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding-bottom: 12px;
+    }
+
+    .search {
+      display: flex;
+      min-width: 0;
+      flex: 1;
+      align-items: center;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 0 10px;
+      color: var(--muted);
+    }
+
+    .search svg {
+      flex: 0 0 auto;
+    }
+
+    .search input {
+      min-width: 0;
+      width: 100%;
+      border: 0;
+      outline: 0;
+      background: transparent;
+      color: var(--text);
+      padding: 8px 0;
+    }
+
+    .search input::placeholder {
+      color: var(--muted);
+    }
+
+    .count {
+      flex: 0 0 auto;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .table {
+      min-height: 0;
+      flex: 1;
+      overflow: auto;
+      border-top: 1px solid var(--line);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    .col-status {
+      width: 112px;
+    }
+
+    .col-size {
+      width: 96px;
+    }
+
+    .col-time {
+      width: 132px;
+    }
+
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: color-mix(in srgb, Canvas 92%, CanvasText);
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 500;
+      text-align: left;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 8px;
+      vertical-align: middle;
+    }
+
+    td {
+      height: 44px;
+    }
+
+    .name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 500;
+    }
+
+    .path {
+      margin-top: 2px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .right {
+      text-align: right;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 56px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 2px 8px;
+      color: var(--muted);
+      font-size: 12px;
+      white-space: nowrap;
+    }
+
+    .status.primary {
+      border-color: var(--active);
+      color: var(--active);
+    }
+
+    .drop-pane {
+      display: flex;
+      min-height: 100vh;
+      flex-direction: column;
+      border-left: 1px solid var(--line);
+      padding: 16px;
+      background: color-mix(in srgb, CanvasText 3%, Canvas);
+    }
+
+    .drop-zone {
+      display: flex;
+      min-height: 180px;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 12px;
+      border: 1px dashed var(--line-strong);
+      border-radius: var(--radius);
+      background: var(--surface);
+      padding: 20px;
+      text-align: center;
+    }
+
+    .drop-zone.dragging {
+      border-color: var(--active);
+      background: color-mix(in srgb, Highlight 8%, Canvas);
+    }
+
+    .drop-icon {
+      display: grid;
+      width: 40px;
+      height: 40px;
+      place-items: center;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      color: var(--muted);
+    }
+
+    .drop-title {
+      font-weight: 600;
+    }
+
+    .drop-caption,
+    .meta {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .actions {
+      display: grid;
+      gap: 8px;
+      margin-top: 12px;
+    }
+
+    .button {
+      display: inline-flex;
+      height: 34px;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: var(--text);
+      color: var(--surface);
+      cursor: default;
+      font-weight: 500;
+    }
+
+    .button.secondary {
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    .side-footer {
+      margin-top: auto;
+      border-top: 1px solid var(--line);
+      padding-top: 12px;
+    }
+
+    @media (max-width: 760px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .drop-pane {
+        min-height: auto;
+        border-left: 0;
+        border-top: 1px solid var(--line);
+      }
+
+      .drop-zone {
+        min-height: 132px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="app">
+    <section class="list-pane" aria-label="资料列表">
+      <div class="toolbar">
+        <label class="search" aria-label="搜索资料">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <circle cx="11" cy="11" r="7" stroke="currentColor" stroke-width="2"></circle>
+            <path d="m16.5 16.5 4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+          </svg>
+          <input id="search" placeholder="搜索资料" autocomplete="off">
+        </label>
+        <div class="count"><span id="visible-count">8</span> / 8</div>
+      </div>
+
+      <div class="table">
+        <table>
+          <colgroup>
+            <col>
+            <col class="col-status">
+            <col class="col-size">
+            <col class="col-time">
+          </colgroup>
+          <thead>
+            <tr>
+              <th>资料</th>
+              <th>状态</th>
+              <th class="right">大小</th>
+              <th class="right">更新时间</th>
+            </tr>
+          </thead>
+          <tbody id="rows">
+            <tr data-keywords="AI产品需求说明.md raw/AI产品需求说明.md">
+              <td>
+                <div class="name">AI产品需求说明.md</div>
+                <div class="path">raw/AI产品需求说明.md</div>
+              </td>
+              <td><span class="status primary">新文件</span></td>
+              <td class="right">42 KB</td>
+              <td class="right">05-23 14:20</td>
+            </tr>
+            <tr data-keywords="竞品调研.pdf raw/竞品调研.pdf">
+              <td>
+                <div class="name">竞品调研.pdf</div>
+                <div class="path">raw/竞品调研.pdf</div>
+              </td>
+              <td><span class="status">已放入</span></td>
+              <td class="right">2.4 MB</td>
+              <td class="right">05-22 18:11</td>
+            </tr>
+            <tr data-keywords="客户访谈纪要.docx raw/客户访谈纪要.docx">
+              <td>
+                <div class="name">客户访谈纪要.docx</div>
+                <div class="path">raw/客户访谈纪要.docx</div>
+              </td>
+              <td><span class="status primary">有更新</span></td>
+              <td class="right">168 KB</td>
+              <td class="right">05-22 11:03</td>
+            </tr>
+            <tr data-keywords="实施清单.xlsx raw/实施清单.xlsx">
+              <td>
+                <div class="name">实施清单.xlsx</div>
+                <div class="path">raw/实施清单.xlsx</div>
+              </td>
+              <td><span class="status">已放入</span></td>
+              <td class="right">96 KB</td>
+              <td class="right">05-21 17:45</td>
+            </tr>
+            <tr data-keywords="API变更记录.md raw/API变更记录.md">
+              <td>
+                <div class="name">API变更记录.md</div>
+                <div class="path">raw/API变更记录.md</div>
+              </td>
+              <td><span class="status">已放入</span></td>
+              <td class="right">18 KB</td>
+              <td class="right">05-20 09:35</td>
+            </tr>
+            <tr data-keywords="排期表.csv raw/排期表.csv">
+              <td>
+                <div class="name">排期表.csv</div>
+                <div class="path">raw/排期表.csv</div>
+              </td>
+              <td><span class="status">暂不支持</span></td>
+              <td class="right">12 KB</td>
+              <td class="right">05-18 16:08</td>
+            </tr>
+            <tr data-keywords="上线复盘.md raw/上线复盘.md">
+              <td>
+                <div class="name">上线复盘.md</div>
+                <div class="path">raw/上线复盘.md</div>
+              </td>
+              <td><span class="status">已放入</span></td>
+              <td class="right">24 KB</td>
+              <td class="right">05-16 10:12</td>
+            </tr>
+            <tr data-keywords="旧版方案.pages raw/旧版方案.pages">
+              <td>
+                <div class="name">旧版方案.pages</div>
+                <div class="path">raw/旧版方案.pages</div>
+              </td>
+              <td><span class="status">读取失败</span></td>
+              <td class="right">820 KB</td>
+              <td class="right">05-12 13:49</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <aside class="drop-pane" aria-label="添加资料">
+      <div id="drop-zone" class="drop-zone">
+        <div class="drop-icon" aria-hidden="true">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none">
+            <path d="M12 3v12" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+            <path d="m7 8 5-5 5 5" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path>
+            <path d="M5 17v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+          </svg>
+        </div>
+        <div>
+          <div class="drop-title">放入资料</div>
+          <div class="drop-caption">拖拽文件到这里</div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button class="button" type="button">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <path d="M12 5v14" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+            <path d="M5 12h14" stroke="currentColor" stroke-width="2" stroke-linecap="round"></path>
+          </svg>
+          选择文件
+        </button>
+        <button class="button secondary" type="button">打开目录</button>
+      </div>
+
+      <div class="side-footer">
+        <div class="meta">目标目录：raw/</div>
+      </div>
+    </aside>
+  </main>
+
+  <script>
+    const search = document.querySelector("#search");
+    const rows = Array.from(document.querySelectorAll("#rows tr"));
+    const count = document.querySelector("#visible-count");
+    const dropZone = document.querySelector("#drop-zone");
+
+    function updateRows() {
+      const keyword = search.value.trim().toLowerCase();
+      let visible = 0;
+      for (const row of rows) {
+        const matched = row.dataset.keywords.toLowerCase().includes(keyword);
+        row.hidden = !matched;
+        if (matched) visible += 1;
+      }
+      count.textContent = String(visible);
+    }
+
+    search.addEventListener("input", updateRows);
+
+    for (const type of ["dragenter", "dragover"]) {
+      dropZone.addEventListener(type, (event) => {
+        event.preventDefault();
+        dropZone.classList.add("dragging");
+      });
+    }
+
+    for (const type of ["dragleave", "drop"]) {
+      dropZone.addEventListener(type, (event) => {
+        event.preventDefault();
+        dropZone.classList.remove("dragging");
+      });
+    }
+  </script>
+</body>
+</html>

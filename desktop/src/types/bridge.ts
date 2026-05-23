@@ -104,7 +104,11 @@ import type {
   SynapseKnowledgeBaseInitializePayload,
   SynapseKnowledgeBaseInitializeResult,
   SynapseKnowledgeBaseInspection,
+  SynapseKnowledgeBaseListSourcesResult,
+  SynapseKnowledgeBaseOpenSourceManagerPayload,
   SynapseKnowledgeBaseOpenRawResult,
+  SynapseKnowledgeBaseUploadSourcesPayload,
+  SynapseKnowledgeBaseUploadSourcesResult,
 } from "./knowledge-base"
 import type {
   SynapseCreateLocalRepositoryPayload,
@@ -580,6 +584,13 @@ export type SynapseBridge = {
       payload: SynapseKnowledgeBaseInitializePayload,
     ) => Promise<SynapseKnowledgeBaseInitializeResult>
     openRawDirectory: (projectPath: string) => Promise<SynapseKnowledgeBaseOpenRawResult>
+    listSources: (projectPath: string) => Promise<SynapseKnowledgeBaseListSourcesResult>
+    uploadSources: (
+      payload: SynapseKnowledgeBaseUploadSourcesPayload,
+    ) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
+    selectAndUploadSources: (projectPath: string) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
+    openSourceManager: (payload: SynapseKnowledgeBaseOpenSourceManagerPayload) => Promise<void>
+    filePathForDroppedFile: (file: File) => string | null
   }
   shell: {
     openExternal: (url: string) => Promise<void>

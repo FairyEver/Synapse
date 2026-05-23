@@ -168,7 +168,7 @@ export class LogFileService {
     const handle = await open(filePath, "r");
     try {
       let position = fileSize;
-      let prefix = Buffer.alloc(0);
+      let prefix: Buffer<ArrayBufferLike> = Buffer.alloc(0);
 
       while (position > 0) {
         const readLength = Math.min(RECENT_LOG_CHUNK_SIZE_BYTES, position);
