@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 
+import { createDefaultFileConversionService } from "../index"
 import { buildFileConversionFixtures } from "./fixtures/build-fixtures"
 
 const roots: string[] = []
@@ -65,5 +66,32 @@ describe("file conversion fixture builders", () => {
     expectSignature(pdfText, "%PDF")
     expectNoSignature(malformedDocx, "PK")
     expectNoSignature(malformedPdf, "%PDF")
+  })
+})
+
+describe("file conversion real DOCX fixtures", () => {
+  it("preserves docx headings and paragraphs as markdown", async () => {
+    const root = await tempDir()
+    const fixtures = await buildFileConversionFixtures(root)
+
+    const result = await createDefaultFileConversionService().convert({ filePath: fixtures.docxBasic })
+
+    expect(result.format).toBe("docx")
+    expect(result.kind).toBe("document")
+    expect(result.text).toContain("Quarterly Review")
+    expect(result.text).toContain("Revenue grew 12 percent.")
+    expect(result.markdown).toContain("# Quarterly Review")
+  })
+
+  it("preserves docx table content in markdown", async () => {
+    const root = await tempDir()
+    const fixtures = await buildFileConversionFixtures(root)
+
+    const result = await createDefaultFileConversionService().convert({ filePath: fixtures.docxTable })
+
+    expect(result.markdown).toContain("Budget Table")
+    expect(result.markdown).toContain("Department")
+    expect(result.markdown).toContain("Product")
+    expect(result.markdown).toContain("120000")
   })
 })

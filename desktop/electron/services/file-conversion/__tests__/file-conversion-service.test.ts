@@ -63,8 +63,8 @@ describe("modern file extractors", () => {
     await writeFile(filePath, "docx")
     const service = new FileConversionService({
       extractors: [new DocxExtractor({
-        extractRawText: async () => ({
-          value: "Quarterly Report\nRevenue grew 12%.",
+        convertToHtml: async () => ({
+          value: "<h1>Quarterly Report</h1><p>Revenue grew 12%.</p>",
           messages: [{ type: "warning", message: "Ignored style" }],
         }),
       })],
@@ -75,10 +75,10 @@ describe("modern file extractors", () => {
     expect(result).toMatchObject({
       format: "docx",
       kind: "document",
-      title: "report.docx",
-      text: "Quarterly Report\nRevenue grew 12%.",
+      title: "Quarterly Report",
     })
-    expect(result.markdown).toContain("# report.docx")
+    expect(result.markdown).toContain("# Quarterly Report")
+    expect(result.text).toContain("Revenue grew 12%.")
     expect(result.warnings).toEqual([{ code: "warning", message: "Ignored style" }])
   })
 
