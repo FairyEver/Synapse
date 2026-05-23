@@ -1,6 +1,6 @@
 import type { ExecutionContext } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
-import { of, lastValueFrom } from "rxjs"
+import { of, lastValueFrom, throwError } from "rxjs"
 import { AuditLogInterceptor } from "./audit-log.interceptor"
 
 function createContext(options: {
@@ -197,6 +197,35 @@ describe("AuditLogInterceptor", () => {
         action: "backup.delete",
         targetType: "backup",
         targetId: "synapse-backup.tar.gz",
+      }))
+    })
+  })
+
+  it("records failed backup operations", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "DELETE",
+        path: "/api/admin/backup/synapse-backup.tar.gz",
+        params: { filename: "synapse-backup.tar.gz" },
+      }),
+      { handle: () => throwError(() => new Error("COS unavailable")) },
+    ))).rejects.toThrow("COS unavailable")
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "backup.delete.failed",
+        targetType: "backup",
+        targetId: "synapse-backup.tar.gz",
+        detail: {
+          method: "DELETE",
+          path: "/api/admin/backup/synapse-backup.tar.gz",
+          body: undefined,
+          error: "COS unavailable",
+        },
       }))
     })
   })

@@ -31,28 +31,45 @@ export class AuditLogInterceptor implements NestInterceptor {
 
     const path = request.path
     const method = request.method
+    const recordAudit = async (responseBody: unknown, error?: unknown) => {
+      const { action, targetType, targetId } = resolveAuditTarget(
+        method,
+        path,
+        request.params as Record<string, string>,
+        responseBody,
+      )
+      if (!action) return
 
-    return next.handle().pipe(
-      tap(async (responseBody) => {
-        const { action, targetType, targetId } = resolveAuditTarget(
+      void this.auditLog.record({
+        adminEmail: request.admin?.email ?? await this.auth.getEmail(),
+        action: error ? `${action}.failed` : action,
+        targetType,
+        targetId,
+        detail: {
           method,
           path,
-          request.params as Record<string, string>,
-          responseBody,
-        )
-        if (!action) return
+          body: redactSensitiveBody(request.body),
+          ...(error ? { error: formatError(error) } : {}),
+        },
+        ipAddress: request.ip ?? "",
+      })
+    }
 
-        void this.auditLog.record({
-          adminEmail: request.admin?.email ?? await this.auth.getEmail(),
-          action,
-          targetType,
-          targetId,
-          detail: { method, path, body: redactSensitiveBody(request.body) },
-          ipAddress: request.ip ?? "",
-        })
+    return next.handle().pipe(
+      tap({
+        next: (responseBody) => {
+          void recordAudit(responseBody)
+        },
+        error: (error) => {
+          void recordAudit(undefined, error)
+        },
       }),
     )
   }
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function redactSensitiveBody(value: unknown): unknown {
