@@ -22,6 +22,8 @@ describe("adminApi", () => {
     await adminApi.deleteBackup("synapse-backup.tar.gz")
     await adminApi.cleanupLogs("2026-05-01")
     await adminApi.updateUserStatus("user-1", "disabled")
+    await adminApi.listTeamAccessRoles("team-1")
+    await adminApi.replaceTeamRolePermissions("team-1", "role-1", ["database.use"])
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -65,6 +67,20 @@ describe("adminApi", () => {
         method: "PATCH",
         credentials: "include",
         body: JSON.stringify({ status: "disabled" }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      9,
+      "/api/admin/teams/team-1/access-roles",
+      expect.objectContaining({ credentials: "include" }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      10,
+      "/api/admin/teams/team-1/access-roles/role-1/permissions",
+      expect.objectContaining({
+        method: "PUT",
+        credentials: "include",
+        body: JSON.stringify({ permissionKeys: ["database.use"] }),
       }),
     )
   })

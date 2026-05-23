@@ -115,6 +115,23 @@ export class AdminController {
     return this.admin.replaceTeamEntitlements(teamId, result.data.permissionKeys, request.admin!, request.ip)
   }
 
+  @Get("/teams/:teamId/access-roles")
+  listTeamAccessRoles(@Param("teamId") teamId: string) {
+    return this.admin.listTeamAccessRoles(teamId)
+  }
+
+  @Put("/teams/:teamId/access-roles/:roleId/permissions")
+  async replaceRolePermissions(
+    @Param("teamId") teamId: string,
+    @Param("roleId") roleId: string,
+    @Body() body: unknown,
+    @Req() request: AdminRequest,
+  ) {
+    const result = teamEntitlementsSchema.safeParse(body)
+    if (!result.success) throw new BadRequestException("角色权限无效。")
+    return this.admin.replaceRolePermissions(teamId, roleId, result.data.permissionKeys, request.admin!, request.ip)
+  }
+
   @Get("/audit-logs/export")
   async exportAuditLogs(
     @Query() query: Record<string, unknown>,

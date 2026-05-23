@@ -34,6 +34,21 @@ const adminTeamSelect = {
   createdAt: true,
 } as const
 
+const adminTeamAccessRoleSelect = {
+  id: true,
+  name: true,
+  description: true,
+  kind: true,
+  locked: true,
+  sortOrder: true,
+  permissions: {
+    select: { permissionKey: true },
+    orderBy: { permissionKey: "asc" },
+  },
+  createdAt: true,
+  updatedAt: true,
+} as const
+
 function isRecordNotFoundError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025"
 }
@@ -208,6 +223,39 @@ export class AdminService {
       targetType: "team",
       targetId: teamId,
       detail: { permissionKeys: next },
+      ipAddress,
+    })
+    return { permissionKeys: next }
+  }
+
+  async listTeamAccessRoles(teamId: string) {
+    await this.assertTeamExists(teamId)
+    const roles = await this.prisma.teamAccessRole.findMany({
+      where: { teamId },
+      select: adminTeamAccessRoleSelect,
+      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
+    })
+    return roles.map(({ permissions, ...role }) => ({
+      ...role,
+      permissionKeys: permissions.map((permission) => permission.permissionKey),
+    }))
+  }
+
+  async replaceRolePermissions(
+    teamId: string,
+    roleId: string,
+    permissionKeys: readonly string[],
+    admin: { readonly id: string; readonly email: string },
+    ipAddress = "system",
+  ) {
+    await this.assertTeamExists(teamId)
+    const next = await this.permissions.replaceRolePermissions({ teamId, roleId, permissionKeys })
+    await this.auditLog?.record({
+      adminEmail: admin.email,
+      action: "admin.team_role_permissions.update",
+      targetType: "team_access_role",
+      targetId: roleId,
+      detail: { teamId, permissionKeys: next },
       ipAddress,
     })
     return { permissionKeys: next }

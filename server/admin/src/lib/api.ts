@@ -72,6 +72,18 @@ export interface TeamEntitlementsResponse {
   readonly permissionKeys: string[]
 }
 
+export interface TeamAccessRoleRow {
+  readonly id: string
+  readonly name: string
+  readonly description: string | null
+  readonly kind: "system" | "custom"
+  readonly locked: boolean
+  readonly sortOrder: number
+  readonly permissionKeys: string[]
+  readonly createdAt: string
+  readonly updatedAt: string
+}
+
 export interface AdminInvitationRow {
   readonly id: string
   readonly type: "user_signup" | "team_join"
@@ -261,6 +273,16 @@ export const adminApi = {
       method: "PUT",
       body: JSON.stringify({ permissionKeys }),
     }),
+  listTeamAccessRoles: (teamId: string) =>
+    request<TeamAccessRoleRow[]>(`${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/access-roles`),
+  replaceTeamRolePermissions: (teamId: string, roleId: string, permissionKeys: readonly string[]) =>
+    request<TeamEntitlementsResponse>(
+      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/access-roles/${encodeURIComponent(roleId)}/permissions`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ permissionKeys }),
+      },
+    ),
   listBackups: () => request<BackupFile[]>(`${adminApiBasePath}/backup/list`),
   triggerBackup: () =>
     request<void>(`${adminApiBasePath}/backup`, {
