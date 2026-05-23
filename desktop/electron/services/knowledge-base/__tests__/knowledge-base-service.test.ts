@@ -44,6 +44,18 @@ describe("KnowledgeBaseService", () => {
     await expect(readFile(path.join(targetPath, ".codex", "skills", "wiki-ingest", "SKILL.md"), "utf8")).rejects.toThrow()
   })
 
+  it("does not copy DragonScale upstream scripts into a user vault", async () => {
+    const targetPath = await tempDir()
+    const service = new KnowledgeBaseService()
+
+    await service.initialize({ projectPath: targetPath, mode: "create" })
+
+    await expect(access(path.join(targetPath, "scripts", "allocate-address.sh"))).rejects.toThrow()
+    await expect(access(path.join(targetPath, "scripts", "boundary-score.py"))).rejects.toThrow()
+    await expect(access(path.join(targetPath, "scripts", "tiling-check.py"))).rejects.toThrow()
+    await expect(access(path.join(targetPath, ".vault-meta", "address-counter.txt"))).rejects.toThrow()
+  })
+
   it("repairs missing files without overwriting existing wiki content", async () => {
     const targetPath = await tempDir()
     const service = new KnowledgeBaseService()
