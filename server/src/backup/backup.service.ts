@@ -28,6 +28,41 @@ export interface BackupItem {
   lastModified: string
 }
 
+export interface PgDumpOptions {
+  args: string[]
+  env: NodeJS.ProcessEnv
+}
+
+export function buildPgDumpOptions(
+  databaseUrl: string,
+  dumpFile: string,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): PgDumpOptions {
+  const url = new URL(databaseUrl)
+  const env: NodeJS.ProcessEnv = {
+    ...baseEnv,
+    PGPASSWORD: decodeURIComponent(url.password),
+  }
+  const sslMode = url.searchParams.get("sslmode")
+  if (sslMode) env.PGSSLMODE = sslMode
+
+  return {
+    args: [
+      "-h",
+      url.hostname,
+      "-p",
+      url.port || "5432",
+      "-U",
+      decodeURIComponent(url.username),
+      "-d",
+      decodeURIComponent(url.pathname.replace(/^\//, "")),
+      "-f",
+      dumpFile,
+    ],
+    env,
+  }
+}
+
 @Injectable()
 export class BackupService {
   private readonly env: ServerEnv
@@ -146,7 +181,8 @@ export class BackupService {
     const dumpFile = path.join(tmpDir, `synapse-dump-${Date.now()}.sql`)
     const gzFile = `${dumpFile}.gz`
 
-    await execFileAsync("pg_dump", ["--dbname", this.env.databaseUrl, "-f", dumpFile])
+    const pgDump = buildPgDumpOptions(this.env.databaseUrl, dumpFile)
+    await execFileAsync("pg_dump", pgDump.args, { env: pgDump.env })
 
     const readStream = fs.createReadStream(dumpFile)
     const writeStream = fs.createWriteStream(gzFile)
