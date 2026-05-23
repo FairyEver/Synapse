@@ -19,6 +19,7 @@ function createPrismaMock() {
     },
     userSession: {
       create: vi.fn().mockResolvedValue({ id: "session-1" }),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       findUnique: vi.fn(),
       update: vi.fn(),
     },
@@ -67,6 +68,29 @@ describe("UserAuthService", () => {
       targetType: "user",
       targetId: "user-1",
       ipAddress: "system",
+    })
+  })
+
+  it("cleans expired and stale revoked sessions", async () => {
+    const prisma = createPrismaMock()
+    prisma.userSession.deleteMany.mockResolvedValue({ count: 3 })
+    const service = new UserAuthService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
+      { accessMinutes: 15, refreshDays: 30 },
+    )
+    const now = new Date("2026-05-23T12:00:00.000Z")
+
+    await expect(service.cleanupExpiredSessions(now)).resolves.toBe(3)
+
+    expect(prisma.userSession.deleteMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { expiresAt: { lt: now } },
+          { revokedAt: { lt: new Date("2026-05-16T12:00:00.000Z") } },
+        ],
+      },
     })
   })
 })

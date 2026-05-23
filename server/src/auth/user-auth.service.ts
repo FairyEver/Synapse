@@ -1,5 +1,6 @@
 import { BadRequestException, Inject, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
+import { Cron } from "@nestjs/schedule"
 import { Prisma, type User } from "@prisma/client"
 import { AuditLogService } from "../common/audit-log.service"
 import { hashPassword, verifyPassword } from "./password"
@@ -29,6 +30,8 @@ function addDays(date: Date, days: number): Date {
   next.setDate(next.getDate() + days)
   return next
 }
+
+const revokedSessionRetentionMs = 7 * 24 * 60 * 60 * 1000
 
 @Injectable()
 export class UserAuthService {
@@ -143,6 +146,24 @@ export class UserAuthService {
       })
     }
     return { ok: true }
+  }
+
+  @Cron("0 4 * * *")
+  async scheduledSessionCleanup(): Promise<void> {
+    await this.cleanupExpiredSessions()
+  }
+
+  async cleanupExpiredSessions(now = new Date()): Promise<number> {
+    const revokedBefore = new Date(now.getTime() - revokedSessionRetentionMs)
+    const result = await this.prisma.userSession.deleteMany({
+      where: {
+        OR: [
+          { expiresAt: { lt: now } },
+          { revokedAt: { lt: revokedBefore } },
+        ],
+      },
+    })
+    return result.count
   }
 
   async getMe(userId: string): Promise<unknown> {
