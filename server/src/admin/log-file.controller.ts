@@ -1,7 +1,8 @@
-import { Controller, Get, Delete, Query, Res, UseGuards, BadRequestException } from "@nestjs/common";
+import { Controller, Get, Delete, Query, Req, Res, UseGuards, BadRequestException } from "@nestjs/common";
 import type { Response } from "express";
 import { LogFileService } from "./log-file.service";
-import { AdminAuthGuard } from "../admin-auth/admin-auth.guard";
+import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard";
+import { AuditLogService } from "../common/audit-log.service";
 
 const DEFAULT_RECENT_LOG_LIMIT = 200;
 const MAX_RECENT_LOG_LIMIT = 1000;
@@ -18,7 +19,10 @@ function parseRecentLogLimit(limitStr?: string): number {
 @Controller("/api/admin/logs")
 @UseGuards(AdminAuthGuard)
 export class LogFileController {
-  constructor(private readonly logFileService: LogFileService) {}
+  constructor(
+    private readonly logFileService: LogFileService,
+    private readonly auditLog: AuditLogService,
+  ) {}
 
   @Get("files")
   async listFiles() {
@@ -57,11 +61,19 @@ export class LogFileController {
   }
 
   @Delete("cleanup")
-  async cleanup(@Query("before") before?: string) {
+  async cleanup(@Query("before") before: string | undefined, @Req() request?: AdminRequest) {
     if (!before || !/^\d{4}-\d{2}-\d{2}$/.test(before)) {
       throw new BadRequestException("Query param 'before' must be YYYY-MM-DD format");
     }
     const deleted = await this.logFileService.cleanup(before);
+    await this.auditLog.record({
+      adminEmail: request?.admin?.email ?? "",
+      action: "logs.cleanup",
+      targetType: "logs",
+      targetId: before,
+      detail: { before, deleted },
+      ipAddress: request?.ip ?? "",
+    });
     return { deleted };
   }
 }

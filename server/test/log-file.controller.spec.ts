@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { LogFileController } from "../src/admin/log-file.controller";
 import { LogFileService } from "../src/admin/log-file.service";
 import { AdminAuthGuard } from "../src/admin-auth/admin-auth.guard";
+import { AuditLogService } from "../src/common/audit-log.service";
 
 const TEST_LOG_DIR = join(process.cwd(), "test-logs-ctrl");
 
@@ -33,6 +34,7 @@ describe("LogFileController", () => {
       controllers: [LogFileController],
       providers: [
         { provide: LogFileService, useValue: new LogFileService(TEST_LOG_DIR) },
+        { provide: AuditLogService, useValue: { record: async () => undefined } },
       ],
     })
       .overrideGuard(AdminAuthGuard)
