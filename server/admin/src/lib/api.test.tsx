@@ -20,6 +20,7 @@ describe("adminApi", () => {
     await adminApi.listBackups()
     await adminApi.triggerBackup()
     await adminApi.deleteBackup("synapse-backup.tar.gz")
+    await adminApi.cleanupLogs("2026-05-01")
     await adminApi.updateUserStatus("user-1", "disabled")
 
     expect(fetchMock).toHaveBeenNthCalledWith(
@@ -54,6 +55,11 @@ describe("adminApi", () => {
     )
     expect(fetchMock).toHaveBeenNthCalledWith(
       7,
+      "/api/admin/logs/cleanup?before=2026-05-01",
+      expect.objectContaining({ method: "DELETE", credentials: "include" }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      8,
       "/api/admin/users/user-1/status",
       expect.objectContaining({
         method: "PATCH",

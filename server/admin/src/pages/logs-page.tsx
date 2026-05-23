@@ -51,6 +51,8 @@ export function LogsPage() {
   const [error, setError] = useState<string | null>(null);
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  const [cleanupBefore, setCleanupBefore] = useState("");
+  const [cleaning, setCleaning] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -75,6 +77,20 @@ export function LogsPage() {
   useEffect(() => {
     fetchData();
   }, [level]);
+
+  const handleCleanup = async () => {
+    if (!cleanupBefore || !window.confirm(`确定清理 ${cleanupBefore} 之前的日志？`)) return;
+    setCleaning(true);
+    setError(null);
+    try {
+      await adminApi.cleanupLogs(cleanupBefore);
+      await fetchData();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "清理失败");
+    } finally {
+      setCleaning(false);
+    }
+  };
 
   if (error) return <PageState>{error}</PageState>;
 
@@ -170,6 +186,21 @@ export function LogsPage() {
             </Button>
             <Button size="sm" onClick={() => adminApi.downloadLogs()}>
               下载全部
+            </Button>
+            <Input
+              type="date"
+              value={cleanupBefore}
+              onChange={(e) => setCleanupBefore(e.target.value)}
+              className="w-36"
+              aria-label="清理日期"
+            />
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => void handleCleanup()}
+              disabled={!cleanupBefore || cleaning}
+            >
+              {cleaning ? "清理中…" : "清理早于日期"}
             </Button>
           </div>
         </div>

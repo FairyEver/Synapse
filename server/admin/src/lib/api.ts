@@ -282,6 +282,12 @@ export const adminApi = {
     const qs = params.toString();
     window.open(`${adminApiBasePath}/logs/download${qs ? `?${qs}` : ""}`, "_blank");
   },
+  cleanupLogs(before: string) {
+    const params = new URLSearchParams({ before });
+    return request<{ deleted: number }>(`${adminApiBasePath}/logs/cleanup?${params.toString()}`, {
+      method: "DELETE",
+    });
+  },
 }
 
 export const userAuthApi = {
