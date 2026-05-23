@@ -69,28 +69,26 @@ describe("adminApi", () => {
     )
   })
 
-  it("opens admin exports under /api/admin", () => {
+  it("starts admin downloads under /api/admin without opening popups", () => {
     const openMock = vi.fn()
     vi.stubGlobal("open", openMock)
+    const clicked: Array<{ readonly href: string | null; readonly download: string }> = []
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function click(this: HTMLAnchorElement) {
+      clicked.push({
+        href: this.getAttribute("href"),
+        download: this.download,
+      })
+    })
 
     adminApi.exportAuditLogs({ action: "users.post" })
     adminApi.downloadLogs({ from: "2026-05-01" })
     adminApi.downloadBackup("synapse backup.tar.gz")
 
-    expect(openMock).toHaveBeenNthCalledWith(
-      1,
-      "/api/admin/audit-logs/export?action=users.post",
-      "_blank",
-    )
-    expect(openMock).toHaveBeenNthCalledWith(
-      2,
-      "/api/admin/logs/download?from=2026-05-01",
-      "_blank",
-    )
-    expect(openMock).toHaveBeenNthCalledWith(
-      3,
-      "/api/admin/backup/download/synapse%20backup.tar.gz",
-      "_blank",
-    )
+    expect(openMock).not.toHaveBeenCalled()
+    expect(clicked).toEqual([
+      { href: "/api/admin/audit-logs/export?action=users.post", download: "audit-logs.csv" },
+      { href: "/api/admin/logs/download?from=2026-05-01", download: "logs.zip" },
+      { href: "/api/admin/backup/download/synapse%20backup.tar.gz", download: "synapse backup.tar.gz" },
+    ])
   })
 })

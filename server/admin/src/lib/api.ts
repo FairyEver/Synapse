@@ -211,6 +211,16 @@ function paginationSuffix(options: { readonly page?: number; readonly pageSize?:
   return value ? `?${value}` : ""
 }
 
+function startDownload(url: string, filename: string): void {
+  const link = document.createElement("a")
+  link.href = url
+  link.download = filename
+  link.rel = "noopener"
+  document.body.append(link)
+  link.click()
+  link.remove()
+}
+
 export const adminApi = {
   getSession: () => request<AdminSession>(`${adminApiBasePath}/session`),
   login: (input: { email: string; password: string }) =>
@@ -257,7 +267,7 @@ export const adminApi = {
       method: "POST",
     }),
   downloadBackup: (filename: string) => {
-    window.open(`${adminApiBasePath}/backup/download/${encodeURIComponent(filename)}`, "_blank")
+    startDownload(`${adminApiBasePath}/backup/download/${encodeURIComponent(filename)}`, filename)
   },
   deleteBackup: (filename: string) =>
     request<{ ok: true }>(`${adminApiBasePath}/backup/${encodeURIComponent(filename)}`, {
@@ -289,7 +299,7 @@ export const adminApi = {
     if (options.from) query.set("from", options.from)
     if (options.to) query.set("to", options.to)
     const suffix = query.size > 0 ? `?${query.toString()}` : ""
-    window.open(`${adminApiBasePath}/audit-logs/export${suffix}`, "_blank")
+    startDownload(`${adminApiBasePath}/audit-logs/export${suffix}`, "audit-logs.csv")
   },
   async listLogFiles(): Promise<LogFileInfo[]> {
     return request<LogFileInfo[]>(`${adminApiBasePath}/logs/files`);
@@ -306,7 +316,7 @@ export const adminApi = {
     if (opts?.from) params.set("from", opts.from);
     if (opts?.to) params.set("to", opts.to);
     const qs = params.toString();
-    window.open(`${adminApiBasePath}/logs/download${qs ? `?${qs}` : ""}`, "_blank");
+    startDownload(`${adminApiBasePath}/logs/download${qs ? `?${qs}` : ""}`, "logs.zip");
   },
   cleanupLogs(before: string) {
     const params = new URLSearchParams({ before });
