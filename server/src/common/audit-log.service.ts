@@ -1,4 +1,5 @@
-import { Injectable } from "@nestjs/common"
+import { Injectable, Optional } from "@nestjs/common"
+import { PinoLogger } from "nestjs-pino"
 import { PrismaService } from "../prisma/prisma.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse } from "./pagination"
 
@@ -6,7 +7,10 @@ const auditLogSortFields = ["createdAt", "adminEmail", "action", "targetType", "
 
 @Injectable()
 export class AuditLogService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly logger?: PinoLogger,
+  ) {}
 
   async record(input: {
     adminEmail: string
@@ -16,16 +20,26 @@ export class AuditLogService {
     detail?: unknown
     ipAddress: string
   }): Promise<void> {
-    await this.prisma.auditLog.create({
-      data: {
-        adminEmail: input.adminEmail,
+    try {
+      await this.prisma.auditLog.create({
+        data: {
+          adminEmail: input.adminEmail,
+          action: input.action,
+          targetType: input.targetType,
+          targetId: input.targetId,
+          detail: input.detail ?? undefined,
+          ipAddress: input.ipAddress,
+        },
+      })
+    } catch (error) {
+      this.logger?.warn({
+        err: error,
         action: input.action,
         targetType: input.targetType,
         targetId: input.targetId,
-        detail: input.detail ?? undefined,
-        ipAddress: input.ipAddress,
-      },
-    })
+        adminEmail: input.adminEmail,
+      }, "Failed to record audit log")
+    }
   }
 
   async list(options: {
