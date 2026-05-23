@@ -54,6 +54,45 @@ describe("UsersPage", () => {
     expect(adminApi.listUsers).toHaveBeenCalledTimes(1)
   })
 
+  it("disables the status button while an update is submitting", async () => {
+    let resolveUpdate: (value: unknown) => void = () => undefined
+    vi.mocked(adminApi.listUsers).mockResolvedValue({
+      data: [
+        {
+          id: "user-1",
+          email: "user@example.com",
+          status: "active",
+          memberships: [],
+          createdAt: "2026-05-20T00:00:00.000Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    })
+    vi.mocked(adminApi.updateUserStatus).mockReturnValue(new Promise((resolve) => {
+      resolveUpdate = resolve
+    }))
+
+    const result = await render(<UsersPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("user@example.com")
+    })
+    const button = Array.from(result.container.querySelectorAll("button"))
+      .find((item) => item.textContent === "停用")
+    button?.click()
+
+    await waitFor(() => {
+      expect(button?.disabled).toBe(true)
+    })
+    button?.click()
+    expect(adminApi.updateUserStatus).toHaveBeenCalledTimes(1)
+
+    resolveUpdate({})
+  })
+
   it("loads the next users page", async () => {
     vi.mocked(adminApi.listUsers)
       .mockResolvedValueOnce({

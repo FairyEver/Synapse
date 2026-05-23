@@ -25,14 +25,23 @@ export function UsersPage() {
     [page],
   )
   const [actionError, setActionError] = React.useState<string | null>(null)
+  const [submittingIds, setSubmittingIds] = React.useState<ReadonlySet<string>>(() => new Set())
 
   async function toggleStatus(user: AdminUserRow) {
+    if (submittingIds.has(user.id)) return
     setActionError(null)
+    setSubmittingIds((previous) => new Set(previous).add(user.id))
     try {
       await adminApi.updateUserStatus(user.id, user.status === "active" ? "disabled" : "active")
       reload()
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : "操作失败")
+    } finally {
+      setSubmittingIds((previous) => {
+        const next = new Set(previous)
+        next.delete(user.id)
+        return next
+      })
     }
   }
 
@@ -71,7 +80,12 @@ export function UsersPage() {
                   <TableCell>{membership ? `${membership.team.name} / ${membership.role}` : "-"}</TableCell>
                   <TableCell>{formatDate(user.createdAt)}</TableCell>
                   <TableActionCell>
-                    <Button variant="outline" size="sm" onClick={() => void toggleStatus(user)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={submittingIds.has(user.id)}
+                      onClick={() => void toggleStatus(user)}
+                    >
                       {user.status === "active" ? "停用" : "启用"}
                     </Button>
                   </TableActionCell>
