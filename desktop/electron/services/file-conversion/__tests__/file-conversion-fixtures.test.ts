@@ -124,3 +124,20 @@ describe("file conversion real XLSX fixtures", () => {
     expect(result.markdown).not.toContain("Column 31")
   })
 })
+
+describe("file conversion real PDF fixtures", () => {
+  it("extracts text and metadata from a real pdf fixture", async () => {
+    const root = await tempDir()
+    const fixtures = await buildFileConversionFixtures(root)
+
+    const result = await createDefaultFileConversionService().convert({ filePath: fixtures.pdfText })
+
+    expect(result.format).toBe("pdf")
+    expect(result.kind).toBe("pdf")
+    expect(result.text).toContain("Quarterly Review PDF")
+    expect(result.text).toContain("Page two renewal risk in APAC.")
+    expect(result.metadata.pages).toEqual(expect.any(Number))
+    expect(result.metadata.pages as number).toBeGreaterThanOrEqual(2)
+    expect(result.markdown).toContain("# text.pdf")
+  })
+})

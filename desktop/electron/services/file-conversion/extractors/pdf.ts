@@ -3,7 +3,13 @@ import { readFile } from "node:fs/promises"
 import { PDFParse } from "pdf-parse"
 
 import { normalizeMarkdownTitle } from "../markdown"
-import { FileConversionError, type FileConversionInput, type FileConversionResult, type FileExtractor } from "../types"
+import {
+  FileConversionError,
+  type FileConversionInput,
+  type FileConversionResult,
+  type FileConversionWarning,
+  type FileExtractor,
+} from "../types"
 
 type PdfParseResult = {
   readonly text: string
@@ -39,6 +45,13 @@ export class PdfExtractor implements FileExtractor {
       const data = await this.parsePdf(await readFile(input.filePath))
       const title = normalizeMarkdownTitle(asString(data.info?.Title), input.filePath)
       const text = data.text.trim()
+      const warnings: FileConversionWarning[] = []
+      if (text.length === 0) {
+        warnings.push({
+          code: "empty_extraction",
+          message: "PDF parser returned no text.",
+        })
+      }
       return {
         sourcePath: input.filePath,
         format: "pdf",
@@ -50,7 +63,7 @@ export class PdfExtractor implements FileExtractor {
           pages: data.numpages ?? data.total,
           info: data.info ?? {},
         },
-        warnings: [],
+        warnings,
       }
     } catch (error) {
       throw new FileConversionError("parse_failed", "Could not parse PDF file.", { cause: error })
