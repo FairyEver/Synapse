@@ -11,7 +11,7 @@ function parseRecentLogLimit(limitStr?: string): number {
   if (!limitStr) return DEFAULT_RECENT_LOG_LIMIT;
   const limit = Number.parseInt(limitStr, 10);
   if (!Number.isFinite(limit)) {
-    throw new BadRequestException("Query param 'limit' must be a number");
+    throw new BadRequestException("limit 参数必须为数字。");
   }
   return Math.min(Math.max(limit, 1), MAX_RECENT_LOG_LIMIT);
 }
@@ -43,7 +43,7 @@ export class LogFileController {
   ) {
     const limit = parseRecentLogLimit(limitStr);
     if (level && !["debug", "info", "warn", "error", "fatal"].includes(level)) {
-      throw new BadRequestException(`Invalid level: ${level}`);
+      throw new BadRequestException(`无效的日志级别：${level}`);
     }
     const entries = await this.logFileService.readRecent({ level, limit });
     await this.recordLogAudit(request, {
@@ -80,7 +80,7 @@ export class LogFileController {
   @Delete("cleanup")
   async cleanup(@Query("before") before: string | undefined, @Req() request?: AdminRequest) {
     if (!before || !/^\d{4}-\d{2}-\d{2}$/.test(before)) {
-      throw new BadRequestException("Query param 'before' must be YYYY-MM-DD format");
+      throw new BadRequestException("before 参数必须为 YYYY-MM-DD 格式。");
     }
     const deleted = await this.logFileService.cleanup(before);
     await this.recordLogAudit(request, {

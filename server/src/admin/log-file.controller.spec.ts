@@ -1,4 +1,3 @@
-import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { LogFileController } from "./log-file.controller";
 import type { LogFileService } from "./log-file.service";
@@ -81,7 +80,23 @@ describe("LogFileController", () => {
 
     await expect(controller.getRecent(undefined, "abc"))
       .rejects
-      .toBeInstanceOf(BadRequestException);
+      .toThrow("limit 参数必须为数字。");
+  });
+
+  it("rejects invalid recent log levels with a localized message", async () => {
+    const { controller } = createController();
+
+    await expect(controller.getRecent("trace", "50"))
+      .rejects
+      .toThrow("无效的日志级别：trace");
+  });
+
+  it("rejects invalid cleanup dates with a localized message", async () => {
+    const { controller } = createController();
+
+    await expect(controller.cleanup("2026/05/01"))
+      .rejects
+      .toThrow("before 参数必须为 YYYY-MM-DD 格式。");
   });
 
   it("records audit logs for cleanup", async () => {
