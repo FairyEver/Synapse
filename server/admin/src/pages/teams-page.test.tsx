@@ -64,4 +64,43 @@ describe("TeamsPage", () => {
       expect(result.container.textContent).toContain("二组")
     })
   })
+
+  it("renders member emails and role labels", async () => {
+    vi.mocked(adminApi.listTeams).mockResolvedValue({
+      data: [
+        {
+          id: "team-1",
+          name: "一组",
+          createdByUser: { email: "owner@example.com" },
+          memberships: [
+            {
+              role: "owner",
+              user: { email: "owner@example.com" },
+              createdAt: "2026-05-20T00:00:00.000Z",
+            },
+            {
+              role: "member",
+              user: { email: "member@example.com" },
+              createdAt: "2026-05-21T00:00:00.000Z",
+            },
+          ],
+          createdAt: "2026-05-20T00:00:00.000Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    })
+
+    const result = await render(<TeamsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("owner@example.com")
+    })
+
+    expect(result.container.textContent).toContain("member@example.com")
+    expect(result.container.textContent).toContain("所有者")
+    expect(result.container.textContent).toContain("成员")
+  })
 })
