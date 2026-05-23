@@ -411,6 +411,38 @@ describe("AgentCommandRouter", () => {
     ).resultText).toBe("local-build:--prod")
   })
 
+  it("rejects remote non-admin users for admin-only custom prompt commands", async () => {
+    const { providerService } = makeProviderService()
+    const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
+    const registry = new CustomCommandRegistry({
+      projectId: "project-1",
+      commands,
+      now: fixedNow,
+    })
+    await registry.addPrompt({
+      name: "admin-plan",
+      prompt: "Use admin context",
+      adminOnly: true,
+    })
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      customCommands: registry,
+      resetSession: async () => baseConversation(),
+    })
+
+    const result = expectRuntimeResult(
+      await router.handle({
+        ...baseMessage("/admin-plan"),
+        platform: "relay",
+        replyCtx: { isAdmin: false },
+      }, baseConversation()),
+    )
+
+    expect(result.error).toBe("Command requires admin: /admin-plan")
+  })
+
   it("stores the requested shell for admin exec commands", async () => {
     const { providerService } = makeProviderService()
     const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")

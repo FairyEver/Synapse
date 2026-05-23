@@ -151,14 +151,14 @@ export class AgentCommandRouter {
       if (!commandAllowedOnPlatform(customCommand, message.platform)) {
         return commandResult(conversation.id, `Command is not available on ${message.platform}.`, true)
       }
+      if (!isMessageAdmin(message) && customCommand.adminOnly) {
+        return commandResult(conversation.id, `Command requires admin: /${name}`, true)
+      }
       if (customCommand.kind === "prompt") {
         return {
           kind: "prompt",
           content: expandCustomCommandPrompt(customCommand, parsed.args, message),
         }
-      }
-      if (!isMessageAdmin(message) && customCommand.adminOnly) {
-        return commandResult(conversation.id, `Command requires admin: /${name}`, true)
       }
       if (!this.deps.runCustomCommand) {
         return commandResult(conversation.id, "Command execution is unavailable.", true)
