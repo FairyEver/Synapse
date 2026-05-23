@@ -13,7 +13,9 @@ import type {
   SynapseKnowledgeBaseUploadSourcesPayload,
   SynapseKnowledgeBaseUploadSourcesResult,
 } from "../../../src/types/knowledge-base"
+import { createDefaultFileConversionService, type FileConversionService } from "../file-conversion"
 import { scanKnowledgeBaseSources } from "./source-scan"
+import { stageKnowledgeBaseSources } from "./source-staging"
 
 export const KNOWLEDGE_BASE_TEMPLATE_VERSION = "2026-05-21"
 
@@ -33,15 +35,18 @@ const REQUIRED_PATHS = [
 type KnowledgeBaseServiceDeps = {
   templateRoot?: string
   now?: () => Date
+  fileConversionService?: Pick<FileConversionService, "convert">
 }
 
 export class KnowledgeBaseService {
   private readonly templateRoot: string
   private readonly now: () => Date
+  private readonly fileConversionService: Pick<FileConversionService, "convert">
 
   constructor(deps: KnowledgeBaseServiceDeps = {}) {
     this.templateRoot = deps.templateRoot ?? resolveTemplateRoot()
     this.now = deps.now ?? (() => new Date())
+    this.fileConversionService = deps.fileConversionService ?? createDefaultFileConversionService()
   }
 
   async inspect(projectPath: string): Promise<SynapseKnowledgeBaseInspection> {
@@ -142,36 +147,12 @@ export class KnowledgeBaseService {
   }
 
   async uploadSources(payload: SynapseKnowledgeBaseUploadSourcesPayload): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
-    const projectPath = path.resolve(payload.projectPath)
-    const targetRelativeDir = path.join(".raw", ...datePathSegments(this.now()))
-    const targetDir = assertInside(projectPath, path.join(projectPath, targetRelativeDir))
-    await assertNoSymlinkInRequiredPath(projectPath, targetRelativeDir)
-    await mkdir(targetDir, { recursive: true })
-
-    const uploaded: SynapseKnowledgeBaseUploadSourcesResult["uploaded"] = []
-    const skipped: SynapseKnowledgeBaseUploadSourcesResult["skipped"] = []
-    for (const filePath of payload.filePaths) {
-      const sourcePath = path.resolve(filePath)
-      try {
-        const sourceStat = await lstat(sourcePath)
-        if (!sourceStat.isFile()) {
-          skipped.push({ path: filePath, reason: "not-file" })
-          continue
-        }
-        const targetPath = await resolveCollisionPath(targetDir, path.basename(sourcePath))
-        await copyFile(sourcePath, targetPath)
-        uploaded.push({
-          originalPath: filePath,
-          relativePath: normalizeRelativePath(path.relative(projectPath, targetPath)),
-          name: path.basename(targetPath),
-          size: sourceStat.size,
-        })
-      } catch {
-        skipped.push({ path: filePath, reason: "read-error" })
-      }
-    }
-
-    return { projectPath, uploaded, skipped }
+    return stageKnowledgeBaseSources({
+      projectPath: payload.projectPath,
+      filePaths: payload.filePaths,
+      now: this.now,
+      converter: this.fileConversionService,
+    })
   }
 }
 
@@ -235,25 +216,6 @@ function isSupportedSourcePath(relativePath: string): boolean {
 
 function normalizeRelativePath(value: string): string {
   return value.split(path.sep).join("/")
-}
-
-function datePathSegments(date: Date): string[] {
-  return [
-    String(date.getFullYear()).padStart(4, "0"),
-    String(date.getMonth() + 1).padStart(2, "0"),
-    String(date.getDate()).padStart(2, "0"),
-  ]
-}
-
-async function resolveCollisionPath(directoryPath: string, fileName: string): Promise<string> {
-  const parsed = path.parse(fileName)
-  let candidate = path.join(directoryPath, fileName)
-  let index = 2
-  while (await pathExists(candidate)) {
-    candidate = path.join(directoryPath, `${parsed.name}-${index}${parsed.ext}`)
-    index += 1
-  }
-  return candidate
 }
 
 function resolveTemplateRoot(): string {

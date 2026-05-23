@@ -63,6 +63,11 @@ export type SynapseKnowledgeBaseUploadedSource = {
   relativePath: string
   name: string
   size: number
+  originalRelativePath?: string
+  conversionWarnings?: Array<{
+    code: string
+    message: string
+  }>
 }
 
 export type SynapseKnowledgeBaseUploadSourcesResult = {
@@ -70,6 +75,6 @@ export type SynapseKnowledgeBaseUploadSourcesResult = {
   uploaded: SynapseKnowledgeBaseUploadedSource[]
   skipped: Array<{
     path: string
-    reason: "not-file" | "read-error"
+    reason: "not-file" | "read-error" | "conversion-error"
   }>
 }

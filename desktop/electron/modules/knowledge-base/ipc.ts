@@ -58,10 +58,15 @@ const uploadSourcesResultSchema = z.object({
     relativePath: z.string(),
     name: z.string(),
     size: z.number(),
+    originalRelativePath: z.string().optional(),
+    conversionWarnings: z.array(z.object({
+      code: z.string(),
+      message: z.string(),
+    })).optional(),
   })),
   skipped: z.array(z.object({
     path: z.string(),
-    reason: z.enum(["not-file", "read-error"]),
+    reason: z.enum(["not-file", "read-error", "conversion-error"]),
   })),
 })
 
