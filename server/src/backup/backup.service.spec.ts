@@ -39,6 +39,29 @@ describe("buildBackupKey", () => {
 })
 
 describe("BackupService", () => {
+  it("maps COS LastModified to the admin API createdAt field", async () => {
+    const logger = { error: vi.fn() }
+    const service = createBackupService({
+      getBucket: vi.fn((_options, callback) => callback(null, {
+        Contents: [
+          {
+            Key: "backups/synapse-backup.tar.gz",
+            Size: "2048",
+            LastModified: "2026-05-23T00:00:00.000Z",
+          },
+        ],
+      })),
+    }, logger)
+
+    await expect(service.listBackups()).resolves.toEqual([
+      {
+        filename: "synapse-backup.tar.gz",
+        size: 2048,
+        createdAt: "2026-05-23T00:00:00.000Z",
+      },
+    ])
+  })
+
   it("propagates COS list failures instead of returning an empty list", async () => {
     const error = new Error("COS unavailable")
     const logger = { error: vi.fn() }

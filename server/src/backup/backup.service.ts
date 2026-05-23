@@ -25,7 +25,7 @@ export interface BackupResult {
 export interface BackupItem {
   filename: string
   size: number
-  lastModified: string
+  createdAt: string
 }
 
 export interface PgDumpOptions {
@@ -170,7 +170,7 @@ export class BackupService {
               .map((obj) => ({
                 filename: obj.Key.replace(this.prefix, ""),
                 size: Number(obj.Size),
-                lastModified: obj.LastModified,
+                createdAt: obj.LastModified,
               }))
             resolve(items)
           },
@@ -296,7 +296,7 @@ export class BackupService {
     try {
       const items = await this.listBackups()
       const expired = items.filter(
-        (item) => new Date(item.lastModified) < thirtyDaysAgo,
+        (item) => new Date(item.createdAt) < thirtyDaysAgo,
       )
 
       for (const item of expired) {
