@@ -138,14 +138,20 @@ export class TeamsService {
     if (!membership) throw new BadRequestException("账号未加入团队。")
 
     if (membership.role === "owner") {
-      const memberCount = await this.prisma.teamMembership.count({ where: { teamId: membership.teamId } })
-      if (memberCount > 1) {
-        throw new BadRequestException("请先移除其他成员。")
-      }
       await this.prisma.$transaction(async (tx) => {
+        const memberCount = await tx.teamMembership.count({ where: { teamId: membership.teamId } })
+        if (memberCount > 1) {
+          throw new BadRequestException("请先移除其他成员。")
+        }
+        const deletedMembership = await tx.teamMembership.deleteMany({ where: { userId, teamId: membership.teamId } })
+        if (deletedMembership.count === 0) {
+          throw new BadRequestException("账号未加入团队。")
+        }
         await tx.invitation.deleteMany({ where: { teamId: membership.teamId } })
-        await tx.teamMembership.delete({ where: { userId } })
-        await tx.team.delete({ where: { id: membership.teamId } })
+        const deletedTeam = await tx.team.deleteMany({ where: { id: membership.teamId } })
+        if (deletedTeam.count === 0) {
+          throw new BadRequestException("团队已解散。")
+        }
       })
     } else {
       await this.prisma.teamMembership.delete({ where: { userId } })

@@ -110,27 +110,57 @@ describe("TeamsService", () => {
   it("prevents an owner from leaving while members remain", async () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "owner", teamId: "team-1", userId: "user-1" })
-    prisma.teamMembership.count.mockResolvedValue(2)
+    const deleteMemberships = vi.fn()
+    prisma.$transaction.mockImplementationOnce((callback) => callback({
+      teamMembership: {
+        count: vi.fn().mockResolvedValue(2),
+        deleteMany: deleteMemberships,
+      },
+      invitation: { deleteMany: vi.fn() },
+      team: { deleteMany: vi.fn() },
+    }))
     const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never)
 
     await expect(service.leaveTeam("user-1")).rejects.toThrow(BadRequestException)
-    expect(prisma.teamMembership.delete).not.toHaveBeenCalled()
+    expect(deleteMemberships).not.toHaveBeenCalled()
   })
 
   it("deletes the team when the last owner leaves", async () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "owner", teamId: "team-1", userId: "user-1" })
-    prisma.teamMembership.count.mockResolvedValue(1)
     const deleteInvitations = vi.fn().mockResolvedValue({ count: 1 })
+    const deleteMemberships = vi.fn().mockResolvedValue({ count: 1 })
+    const deleteTeams = vi.fn().mockResolvedValue({ count: 1 })
     prisma.$transaction.mockImplementationOnce((callback) => callback({
       invitation: { deleteMany: deleteInvitations },
-      teamMembership: { delete: vi.fn().mockResolvedValue({ id: "membership-1" }) },
-      team: { delete: vi.fn().mockResolvedValue({ id: "team-1" }) },
+      teamMembership: {
+        count: vi.fn().mockResolvedValue(1),
+        deleteMany: deleteMemberships,
+      },
+      team: { deleteMany: deleteTeams },
     }))
     const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never)
 
     await expect(service.leaveTeam("user-1")).resolves.toEqual({ ok: true })
+    expect(deleteMemberships).toHaveBeenCalledWith({ where: { userId: "user-1", teamId: "team-1" } })
     expect(deleteInvitations).toHaveBeenCalledWith({ where: { teamId: "team-1" } })
+    expect(deleteTeams).toHaveBeenCalledWith({ where: { id: "team-1" } })
+  })
+
+  it("returns a business error when the owner membership was already deleted", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue({ role: "owner", teamId: "team-1", userId: "user-1" })
+    prisma.$transaction.mockImplementationOnce((callback) => callback({
+      invitation: { deleteMany: vi.fn() },
+      teamMembership: {
+        count: vi.fn().mockResolvedValue(1),
+        deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
+      },
+      team: { deleteMany: vi.fn() },
+    }))
+    const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never)
+
+    await expect(service.leaveTeam("user-1")).rejects.toThrow("账号未加入团队。")
   })
 
   it("records member removals with the owner email", async () => {
