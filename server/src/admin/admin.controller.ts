@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
@@ -14,6 +14,10 @@ const userStatusSchema = z.object({
 
 const bulkInvitationDeleteSchema = z.object({
   ids: z.array(z.string().min(1)).min(1),
+}).strict()
+
+const teamEntitlementsSchema = z.object({
+  permissionKeys: z.array(z.string().min(1)),
 }).strict()
 
 const userSortFields = ["createdAt", "updatedAt", "email", "status"] as const
@@ -87,6 +91,27 @@ export class AdminController {
   @Get("/teams")
   listTeams(@Query() query: Record<string, unknown>) {
     return this.admin.listTeams(parsePagination(query, { allowedSortFields: teamSortFields }))
+  }
+
+  @Get("/permissions")
+  listPermissions() {
+    return this.admin.listPermissions()
+  }
+
+  @Get("/teams/:teamId/entitlements")
+  listTeamEntitlements(@Param("teamId") teamId: string) {
+    return this.admin.listTeamEntitlements(teamId)
+  }
+
+  @Put("/teams/:teamId/entitlements")
+  async replaceTeamEntitlements(
+    @Param("teamId") teamId: string,
+    @Body() body: unknown,
+    @Req() request: AdminRequest,
+  ) {
+    const result = teamEntitlementsSchema.safeParse(body)
+    if (!result.success) throw new BadRequestException("团队权限无效。")
+    return this.admin.replaceTeamEntitlements(teamId, result.data.permissionKeys, request.admin!, request.ip)
   }
 
   @Get("/audit-logs/export")

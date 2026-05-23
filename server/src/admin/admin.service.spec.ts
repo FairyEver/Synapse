@@ -3,6 +3,14 @@ import { Prisma } from "@prisma/client"
 import type { PrismaService } from "../prisma/prisma.service"
 import { AdminService } from "./admin.service"
 
+function createPermissionsMock() {
+  return {
+    listPermissionDefinitions: vi.fn().mockReturnValue([{ key: "database.use" }]),
+    listTeamEntitlements: vi.fn().mockResolvedValue(["database.use"]),
+    replaceTeamEntitlements: vi.fn().mockResolvedValue(["agent.chat.use", "database.use"]),
+  }
+}
+
 function createNotFoundError() {
   return new Prisma.PrismaClientKnownRequestError("Record not found", {
     code: "P2025",
@@ -40,6 +48,7 @@ describe("AdminService", () => {
     const service = new AdminService(
       prisma as unknown as PrismaService,
       {} as never,
+      createPermissionsMock() as never,
     )
 
     const result = await service.getSystemOverview()
@@ -50,7 +59,7 @@ describe("AdminService", () => {
 
   it("loads users without exposing password hashes", async () => {
     const prisma = createPrismaMock()
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never)
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never)
 
     await service.listUsers()
 
@@ -73,7 +82,7 @@ describe("AdminService", () => {
 
   it("disables a user without returning the password hash", async () => {
     const prisma = createPrismaMock()
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never)
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never)
 
     await service.updateUserStatus("user-1", { status: "disabled" })
 
@@ -100,7 +109,7 @@ describe("AdminService", () => {
     const prisma = createPrismaMock()
     prisma.user.update.mockRejectedValue(createNotFoundError())
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
 
     await expect(service.updateUserStatus("missing-user", { status: "disabled" }))
       .rejects
@@ -116,7 +125,7 @@ describe("AdminService", () => {
         findMany: vi.fn(),
       },
     }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never)
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never)
 
     await service.listInvitations()
 
@@ -142,7 +151,7 @@ describe("AdminService", () => {
     const prisma = createPrismaMock()
     prisma.invitation.delete.mockResolvedValue({ id: "invite-1" })
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
 
     await service.deleteInvitation("invite-1", "admin@example.com", "203.0.113.20")
 
@@ -160,7 +169,7 @@ describe("AdminService", () => {
     const prisma = createPrismaMock()
     prisma.invitation.delete.mockRejectedValue(createNotFoundError())
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
 
     await expect(service.deleteInvitation("missing-invite", "admin@example.com", "203.0.113.50"))
       .rejects
@@ -178,7 +187,7 @@ describe("AdminService", () => {
     const prisma = createPrismaMock()
     prisma.invitation.deleteMany.mockResolvedValue({ count: 2 })
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
 
     await expect(service.deleteInvitations(["invite-1", "invite-2"], "admin@example.com", "203.0.113.30"))
       .resolves
@@ -200,7 +209,7 @@ describe("AdminService", () => {
   it("records user status update audit logs with the request IP", async () => {
     const prisma = createPrismaMock()
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
 
     await service.updateUserStatus("user-1", { status: "disabled" }, "admin@example.com", "203.0.113.40")
 
@@ -211,6 +220,54 @@ describe("AdminService", () => {
       targetId: "user-1",
       detail: { status: "disabled" },
       ipAddress: "203.0.113.40",
+    })
+  })
+
+  it("lists permission definitions", () => {
+    const permissions = createPermissionsMock()
+    const service = new AdminService(createPrismaMock() as unknown as PrismaService, {} as never, permissions as never)
+
+    expect(service.listPermissions()).toEqual([{ key: "database.use" }])
+    expect(permissions.listPermissionDefinitions).toHaveBeenCalledWith()
+  })
+
+  it("lists team entitlements", async () => {
+    const permissions = createPermissionsMock()
+    const service = new AdminService(createPrismaMock() as unknown as PrismaService, {} as never, permissions as never)
+
+    await expect(service.listTeamEntitlements("team-1"))
+      .resolves
+      .toEqual({ permissionKeys: ["database.use"] })
+    expect(permissions.listTeamEntitlements).toHaveBeenCalledWith("team-1")
+  })
+
+  it("replaces team entitlements and records an audit log", async () => {
+    const permissions = createPermissionsMock()
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(createPrismaMock() as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
+
+    await expect(service.replaceTeamEntitlements(
+      "team-1",
+      ["database.use", "agent.chat.use"],
+      { id: "admin-1", email: "admin@example.com" },
+      "203.0.113.60",
+    ))
+      .resolves
+      .toEqual({ permissionKeys: ["agent.chat.use", "database.use"] })
+
+    expect(permissions.replaceTeamEntitlements).toHaveBeenCalledWith({
+      teamId: "team-1",
+      permissionKeys: ["database.use", "agent.chat.use"],
+      grantedByAdminId: "admin-1",
+      source: "manual",
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.team_entitlements.update",
+      targetType: "team",
+      targetId: "team-1",
+      detail: { permissionKeys: ["agent.chat.use", "database.use"] },
+      ipAddress: "203.0.113.60",
     })
   })
 })

@@ -3,6 +3,7 @@ import { Prisma, type UserStatus } from "@prisma/client"
 import { AuditLogService } from "../common/audit-log.service"
 import { InvitationsService } from "../invitations/invitations.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
+import { PermissionsService } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
 
 const adminUserSelect = {
@@ -27,6 +28,7 @@ export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly invitations: InvitationsService,
+    private readonly permissions: PermissionsService,
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
@@ -150,6 +152,37 @@ export class AdminService {
       this.prisma.team.count(),
     ])
     return { data, total, page: page.page, pageSize: page.pageSize }
+  }
+
+  listPermissions() {
+    return this.permissions.listPermissionDefinitions()
+  }
+
+  async listTeamEntitlements(teamId: string) {
+    return { permissionKeys: await this.permissions.listTeamEntitlements(teamId) }
+  }
+
+  async replaceTeamEntitlements(
+    teamId: string,
+    permissionKeys: readonly string[],
+    admin: { readonly id: string; readonly email: string },
+    ipAddress = "system",
+  ) {
+    const next = await this.permissions.replaceTeamEntitlements({
+      teamId,
+      permissionKeys,
+      grantedByAdminId: admin.id,
+      source: "manual",
+    })
+    await this.auditLog?.record({
+      adminEmail: admin.email,
+      action: "admin.team_entitlements.update",
+      targetType: "team",
+      targetId: teamId,
+      detail: { permissionKeys: next },
+      ipAddress,
+    })
+    return { permissionKeys: next }
   }
 
   async listInvitations(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {

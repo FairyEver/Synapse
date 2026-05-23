@@ -195,4 +195,55 @@ describe("AdminController", () => {
       .rejects
       .toThrow("用户状态无效。")
   })
+
+  it("lists permission definitions through the service", () => {
+    const listPermissions = vi.fn().mockReturnValue([{ key: "database.use" }])
+    const controller = createController({ listPermissions } as never)
+
+    expect(controller.listPermissions()).toEqual([{ key: "database.use" }])
+    expect(listPermissions).toHaveBeenCalledWith()
+  })
+
+  it("lists team entitlements through the service", async () => {
+    const listTeamEntitlements = vi.fn().mockResolvedValue({ permissionKeys: ["database.use"] })
+    const controller = createController({ listTeamEntitlements } as never)
+
+    await expect(controller.listTeamEntitlements("team-1"))
+      .resolves
+      .toEqual({ permissionKeys: ["database.use"] })
+    expect(listTeamEntitlements).toHaveBeenCalledWith("team-1")
+  })
+
+  it("replaces team entitlements through the service", async () => {
+    const replaceTeamEntitlements = vi.fn().mockResolvedValue({ permissionKeys: ["database.use"] })
+    const controller = createController({ replaceTeamEntitlements } as never)
+
+    await expect(controller.replaceTeamEntitlements(
+      "team-1",
+      { permissionKeys: ["database.use"] },
+      { admin: { id: "admin-1", email: "admin@example.com" }, ip: "203.0.113.70" } as never,
+    ))
+      .resolves
+      .toEqual({ permissionKeys: ["database.use"] })
+    expect(replaceTeamEntitlements).toHaveBeenCalledWith(
+      "team-1",
+      ["database.use"],
+      { id: "admin-1", email: "admin@example.com" },
+      "203.0.113.70",
+    )
+  })
+
+  it("rejects invalid team entitlement bodies", async () => {
+    const replaceTeamEntitlements = vi.fn()
+    const controller = createController({ replaceTeamEntitlements } as never)
+
+    await expect(controller.replaceTeamEntitlements(
+      "team-1",
+      { permissionKeys: [""] },
+      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
+    ))
+      .rejects
+      .toThrow("团队权限无效。")
+    expect(replaceTeamEntitlements).not.toHaveBeenCalled()
+  })
 })
