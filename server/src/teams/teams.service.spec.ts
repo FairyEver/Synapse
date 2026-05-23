@@ -147,6 +147,32 @@ describe("TeamsService", () => {
     expect(deleteTeams).toHaveBeenCalledWith({ where: { id: "team-1" } })
   })
 
+  it("does not fail owner leave after deletion when audit actor lookup fails", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue({ role: "owner", teamId: "team-1", userId: "user-1" })
+    prisma.user.findUnique.mockRejectedValue(new Error("connection lost"))
+    prisma.$transaction.mockImplementationOnce((callback) => callback({
+      invitation: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) },
+      teamMembership: {
+        count: vi.fn().mockResolvedValue(1),
+        deleteMany: vi.fn().mockResolvedValue({ count: 1 }),
+      },
+      team: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) },
+    }))
+    const auditLog = { record: vi.fn() }
+    const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never, auditLog as never)
+
+    await expect(service.leaveTeam("user-1", "203.0.113.30")).resolves.toEqual({ ok: true })
+
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "user-1",
+      action: "team.leave",
+      targetType: "team",
+      targetId: "team-1",
+      ipAddress: "203.0.113.30",
+    }))
+  })
+
   it("returns a business error when the owner membership was already deleted", async () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "owner", teamId: "team-1", userId: "user-1" })

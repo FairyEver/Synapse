@@ -177,7 +177,11 @@ export class TeamsService {
 
   private async getAuditActorEmail(userId: string): Promise<string> {
     if (!this.auditLog) return userId
-    return this.getUserEmail(userId)
+    try {
+      return await this.getUserEmail(userId)
+    } catch {
+      return userId
+    }
   }
 
   private async getUserEmail(userId: string): Promise<string> {
