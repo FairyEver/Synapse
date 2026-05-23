@@ -105,5 +105,8 @@ function readId(body: unknown): string {
   if (body && typeof body === "object" && "id" in body) {
     return String((body as { id: unknown }).id)
   }
+  if (body && typeof body === "object" && "filename" in body) {
+    return String((body as { filename: unknown }).filename)
+  }
   return "unknown"
 }

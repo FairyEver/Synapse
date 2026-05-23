@@ -139,6 +139,28 @@ describe("AuditLogInterceptor", () => {
     })
   })
 
+  it("uses backup result filenames as backup trigger audit targets", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "POST",
+        path: "/api/admin/backup",
+      }),
+      { handle: () => of({ filename: "synapse-backup-20260523.tar.gz", status: "success" }) },
+    ))
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "backup.post",
+        targetType: "backup",
+        targetId: "synapse-backup-20260523.tar.gz",
+      }))
+    })
+  })
+
   it("does not duplicate admin service audit records", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
