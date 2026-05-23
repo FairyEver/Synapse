@@ -21,6 +21,29 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
+export const AUDIT_ACTION_FILTER_OPTIONS = [
+  { value: "all", label: "全部操作" },
+  { value: "admin.login.success", label: "admin.login.success" },
+  { value: "dashboard.login.failure", label: "dashboard.login.failure" },
+  { value: "user.dashboard_login.success", label: "user.dashboard_login.success" },
+  { value: "admin.invitation.create", label: "admin.invitation.create" },
+  { value: "admin.invitation.delete", label: "admin.invitation.delete" },
+  { value: "admin.invitation.delete_many", label: "admin.invitation.delete_many" },
+  { value: "admin.user.status_update", label: "admin.user.status_update" },
+  { value: "user.register.success", label: "user.register.success" },
+  { value: "user.login.success", label: "user.login.success" },
+  { value: "user.login.failure", label: "user.login.failure" },
+  { value: "team.create", label: "team.create" },
+  { value: "team.invitation.create", label: "team.invitation.create" },
+  { value: "team.join", label: "team.join" },
+  { value: "team.member.remove", label: "team.member.remove" },
+  { value: "team.leave", label: "team.leave" },
+  { value: "backup.list", label: "backup.list" },
+  { value: "backup.download", label: "backup.download" },
+  { value: "backup.post", label: "backup.post" },
+  { value: "backup.delete", label: "backup.delete" },
+] as const
+
 export function AuditLogsPage() {
   const [action, setAction] = React.useState<string>("all")
   const [from, setFrom] = React.useState("")
@@ -45,7 +68,9 @@ export function AuditLogsPage() {
             <SelectValue placeholder="全部操作" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部操作</SelectItem>
+            {AUDIT_ACTION_FILTER_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
         <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" />
