@@ -45,6 +45,7 @@ export const AUDIT_ACTION_FILTER_OPTIONS = [
   { value: "backup.download", label: "backup.download" },
   { value: "backup.post", label: "backup.post" },
   { value: "backup.delete", label: "backup.delete" },
+  { value: "logs.download", label: "logs.download" },
 ] as const
 
 export function AuditLogsPage() {

@@ -27,6 +27,7 @@ describe("AuditLogsPage", () => {
       { value: "dashboard.login.disabled", label: "dashboard.login.disabled" },
       { value: "team.create", label: "team.create" },
       { value: "backup.download", label: "backup.download" },
+      { value: "logs.download", label: "logs.download" },
     ]))
     expect(AUDIT_ACTION_FILTER_OPTIONS.length).toBeGreaterThan(1)
   })

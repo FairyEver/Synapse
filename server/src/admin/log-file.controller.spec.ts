@@ -7,6 +7,7 @@ import type { AuditLogService } from "../common/audit-log.service";
 function createController() {
   const service = {
     cleanup: vi.fn().mockResolvedValue(2),
+    downloadAsZip: vi.fn().mockResolvedValue(Buffer.from("zip-bytes")),
     readRecent: vi.fn().mockResolvedValue([]),
   };
   const auditLog = {
@@ -56,5 +57,34 @@ describe("LogFileController", () => {
       detail: { before: "2026-05-01", deleted: 2 },
       ipAddress: "203.0.113.10",
     });
+  });
+
+  it("records audit logs for downloads", async () => {
+    const { controller, auditLog, service } = createController();
+    const response = {
+      set: vi.fn(),
+      send: vi.fn(),
+    };
+
+    await controller.download("2026-05-01", "2026-05-23", response as never, {
+      admin: { email: "admin@example.com" },
+      ip: "203.0.113.10",
+    } as never);
+
+    expect(service.downloadAsZip).toHaveBeenCalledWith({ from: "2026-05-01", to: "2026-05-23" });
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "logs.download",
+      targetType: "logs",
+      targetId: "logs-2026-05-01-2026-05-23.zip",
+      detail: {
+        from: "2026-05-01",
+        to: "2026-05-23",
+        filename: "logs-2026-05-01-2026-05-23.zip",
+        bytes: 9,
+      },
+      ipAddress: "203.0.113.10",
+    });
+    expect(response.send).toHaveBeenCalledWith(Buffer.from("zip-bytes"));
   });
 });

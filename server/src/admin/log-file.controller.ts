@@ -46,6 +46,7 @@ export class LogFileController {
     @Query("from") from: string | undefined,
     @Query("to") to: string | undefined,
     @Res() res: Response,
+    @Req() request?: AdminRequest,
   ) {
     const buffer = await this.logFileService.downloadAsZip({ from, to });
     const filename = from || to
@@ -56,6 +57,14 @@ export class LogFileController {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${filename}"`,
       "Content-Length": buffer.length.toString(),
+    });
+    await this.auditLog.record({
+      adminEmail: request?.admin?.email ?? "",
+      action: "logs.download",
+      targetType: "logs",
+      targetId: filename,
+      detail: { from, to, filename, bytes: buffer.length },
+      ipAddress: request?.ip ?? "",
     });
     res.send(buffer);
   }
