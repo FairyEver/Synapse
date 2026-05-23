@@ -52,10 +52,16 @@ export function wikiNoIngestChangesCopy(input: {
 }
 
 export function wikiIngestAppendixCopy(input: {
+  readonly projectPath: string
   readonly changedSources: readonly KnowledgeBaseSourceScanItem[]
   readonly skippedSources: readonly KnowledgeBaseSkippedSource[]
 }): string {
   return [
+    "## 项目目录",
+    "",
+    `- \`${input.projectPath}\``,
+    "- 所有相对路径都以该目录为根；不要使用其他硬编码路径。",
+    "",
     "## 预检来源",
     "",
     ...input.changedSources.map((source) =>
@@ -75,8 +81,9 @@ export function wikiIngestAppendixCopy(input: {
     "## 清单更新要求",
     "",
     "- 处理完成后更新 `.raw/.manifest.json`。",
-    "- 保持 `version: 1`。",
-    "- 每个已处理来源都写入当前 `hash`、`ingested_at`、`pages_created`、`pages_updated`。",
+    "- 使用 claude-obsidian 兼容格式：`version`、`created`、`description`、`sources`、`address_map`。",
+    "- `sources` 的 key 使用 `.raw/...`，每个已处理来源都写入当前 `hash`、`ingested_at`、`pages_created`、`pages_updated`。",
+    "- `address_map` 记录 wiki 页面路径到稳定地址的映射。",
     "- 未实际更新的来源不要改动对应清单条目。",
   ].join("\n")
 }

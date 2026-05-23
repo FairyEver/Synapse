@@ -1,4 +1,4 @@
-import { access, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -32,9 +32,16 @@ describe("KnowledgeBaseService", () => {
 
     expect(result.templateVersion).toBe(KNOWLEDGE_BASE_TEMPLATE_VERSION)
     await expect(readFile(path.join(targetPath, ".synapse-kb.json"), "utf8")).resolves.toContain("synapse.knowledgeBase")
-    await expect(readFile(path.join(targetPath, ".raw", ".manifest.json"), "utf8")).resolves.toContain("\"sources\"")
+    await expect(readFile(path.join(targetPath, ".raw", ".manifest.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
+      version: 1,
+      description: expect.stringContaining("Ingest delta tracker"),
+      sources: {},
+      address_map: {},
+    })
     await expect(readFile(path.join(targetPath, "wiki", "hot.md"), "utf8")).resolves.toContain("# Hot Cache")
     await expect(readFile(path.join(targetPath, ".agents", "skills", "wiki", "SKILL.md"), "utf8")).rejects.toThrow()
+    await expect(readFile(path.join(targetPath, ".claude", "skills", "wiki-ingest", "SKILL.md"), "utf8")).rejects.toThrow()
+    await expect(readFile(path.join(targetPath, ".codex", "skills", "wiki-ingest", "SKILL.md"), "utf8")).rejects.toThrow()
   })
 
   it("repairs missing files without overwriting existing wiki content", async () => {
@@ -113,5 +120,61 @@ describe("KnowledgeBaseService", () => {
 
     await expect(service.openRawDirectory(targetPath)).rejects.toThrow("符号链接")
     await expect(readFile(path.join(outsidePath, ".manifest.json"), "utf8")).rejects.toThrow()
+  })
+
+  it("lists raw source files with user-facing import statuses", async () => {
+    const targetPath = await tempDir()
+    const service = new KnowledgeBaseService()
+    await mkdir(path.join(targetPath, ".raw"), { recursive: true })
+    await writeFile(path.join(targetPath, ".raw", "note.md"), "alpha\n")
+    await writeFile(path.join(targetPath, ".raw", "deck.pdf"), "binary")
+    const initial = await service.listSources(targetPath)
+    const note = initial.sources.find((source) => source.relativePath === ".raw/note.md")
+    if (!note) throw new Error("expected note source")
+    await writeFile(path.join(targetPath, ".raw", ".manifest.json"), `${JSON.stringify({
+      version: 1,
+      sources: {
+        ".raw/note.md": {
+          hash: note.hash,
+          ingested_at: "2026-05-23T00:00:00.000Z",
+          pages_created: [],
+          pages_updated: [],
+        },
+      },
+    })}\n`)
+
+    const result = await service.listSources(targetPath)
+
+    expect(result.sources.map((source) => ({
+      relativePath: source.relativePath,
+      status: source.status,
+      supported: source.supported,
+    }))).toEqual([
+      { relativePath: ".raw/deck.pdf", status: "unsupported", supported: false },
+      { relativePath: ".raw/note.md", status: "imported", supported: true },
+    ])
+  })
+
+  it("uploads source files into a date folder with collision-safe names", async () => {
+    const targetPath = await tempDir()
+    const sourcePath = path.join(await tempDir(), "note.md")
+    await writeFile(sourcePath, "alpha\n")
+    const service = new KnowledgeBaseService({ now: () => new Date("2026-05-23T10:20:30.000Z") })
+
+    const first = await service.uploadSources({ projectPath: targetPath, filePaths: [sourcePath] })
+    const second = await service.uploadSources({ projectPath: targetPath, filePaths: [sourcePath] })
+
+    expect(first.uploaded).toEqual([expect.objectContaining({
+      originalPath: sourcePath,
+      relativePath: ".raw/2026/05/23/note.md",
+    })])
+    expect(second.uploaded).toEqual([expect.objectContaining({
+      originalPath: sourcePath,
+      relativePath: ".raw/2026/05/23/note-2.md",
+    })])
+    await expect(readFile(path.join(targetPath, ".raw", "2026", "05", "23", "note.md"), "utf8"))
+      .resolves.toBe("alpha\n")
+    await expect(readFile(path.join(targetPath, ".raw", "2026", "05", "23", "note-2.md"), "utf8"))
+      .resolves.toBe("alpha\n")
   })
 })

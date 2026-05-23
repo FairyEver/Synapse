@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, Clock, Copy, ShieldAlert } from "lucide-react"
+import { AlertTriangle, Clock, Copy, FolderOpen, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
@@ -94,6 +94,11 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   [config.global.projects])
   const selectedSession = chat.sessions.find((session) =>
     session.projectId === chat.selectedProjectId && session.id === chat.selectedConversationId)
+  const selectedProjectId = chat.selectedProjectId ?? chat.activeProjectId
+  const selectedProject = selectedProjectId
+    ? config.global.projects.find((project) => project.id === selectedProjectId)
+    : undefined
+  const canManageKnowledgeSources = selectedProject?.capabilities?.knowledgeBase?.enabled === true
   const selectedTarget: PendingMessageTarget | undefined = selectedSession
     ? {
         projectId: selectedSession.projectId,
@@ -278,6 +283,25 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       ?.scrollIntoView({ block: "center", behavior: "smooth" })
   }
 
+  const handleOpenSourceManager = async () => {
+    if (!selectedProject) return
+    try {
+      await requireSynapseBridge().knowledgeBase.openSourceManager({
+        projectId: selectedProject.id,
+        projectPath: selectedProject.path,
+        projectName: selectedProject.name,
+      })
+    } catch (rawError) {
+      logger.error("Knowledge base source manager open failed.", {
+        boundary: "renderer.agent.open-source-manager",
+        projectId: selectedProject.id,
+        projectPath: selectedProject.path,
+        ...errorDiagnostic(rawError),
+      })
+      toast("打开失败")
+    }
+  }
+
   const activeProvider = chat.providers?.providers.find((provider) => provider.active)
   const selectedProvider = selectedSession?.providerId
     ? chat.providers?.providers.find((provider) => provider.id === selectedSession.providerId)
@@ -417,6 +441,18 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                 >
                   <ShieldAlert data-icon="inline-start" />
                   权限 {chat.pendingPermissions.length}
+                </Button>
+              ) : null}
+
+              {canManageKnowledgeSources ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => void handleOpenSourceManager()}
+                >
+                  <FolderOpen data-icon="inline-start" />
+                  资料管理
                 </Button>
               ) : null}
 

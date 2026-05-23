@@ -20,7 +20,7 @@ Synapse 后端服务，包含 API 和 Admin 管理后台。
 
 ```bash
 # 在项目根目录
-pnpm dev
+pnpm dev:server
 ```
 
 自动启动 Postgres 容器、运行迁移、启动 API 和 Admin 开发服务器。

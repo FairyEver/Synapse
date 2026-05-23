@@ -94,6 +94,7 @@ async function buildIngestOutput(
       await readPrompt("ingest.md"),
       "",
       wikiIngestAppendixCopy({
+        projectPath,
         changedSources,
         skippedSources: scan.skippedSources,
       }),

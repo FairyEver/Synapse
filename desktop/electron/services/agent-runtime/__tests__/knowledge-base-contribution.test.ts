@@ -79,6 +79,7 @@ describe("knowledge base Agent contribution", () => {
 
     expect(prepared?.content).toContain("Recent fact.")
     expect(prepared?.content).toContain("不要根据 wikilink 标题猜测文件路径。")
+    expect(prepared?.content).toContain("address_map")
     expect(unchanged?.content).toBe("What changed?")
   })
 
@@ -165,7 +166,28 @@ describe("knowledge base Agent contribution", () => {
     const command = contribution?.commands[0]
     const output = await command?.buildPrompt(["ingest"], baseMessage("/wiki ingest"))
 
-    expect(expectObjectOutput(output, "prompt")).toContain("执行知识库导入")
+    const content = expectObjectOutput(output, "prompt")
+    expect(content).toContain("执行知识库导入")
+    expect(content).toContain("address_map")
+  })
+
+  it("does not hard-route natural language ingest requests in prepareMessage", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{},\"address_map\":{}}\n")
+    await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+
+    const prepared = await Promise.resolve(contribution?.prepareMessage?.({
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local-renderer",
+      content: "汲取知识",
+    }, { isNewLiveSession: false }))
+
+    expect(prepared?.content).toBe("汲取知识")
   })
 
   it("returns a direct /wiki status result", async () => {

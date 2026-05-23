@@ -4,12 +4,9 @@
   "version": "0.0.0",
   "packageManager": "pnpm@10.22.0",
   "scripts": {
-    "dev": "node scripts/dev.mjs",
-    "dev:db": "docker compose --env-file server/.env -f server/compose.yml up -d postgres",
-    "dev:prisma": "node scripts/run-with-server-env.mjs --filter @synapse/server run prisma:migrate",
     "dev:website": "pnpm --filter @synapse/website run dev",
     "dev:desktop": "pnpm --filter @synapse/desktop run dev",
-    "dev:server": "node scripts/run-with-server-env.mjs --filter @synapse/server run dev",
+    "dev:server": "docker compose --env-file server/.env -f server/compose.yml up -d postgres && node scripts/run-with-server-env.mjs --filter @synapse/server run dev",
     "quit": "node scripts/quit.mjs",
     "quit:docker": "docker compose -f server/compose.yml down",
     "quit:processes": "node scripts/quit-processes.mjs",

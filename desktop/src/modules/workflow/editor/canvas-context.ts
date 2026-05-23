@@ -13,6 +13,7 @@ export interface CanvasActions {
   pasteNodes: (position?: { x: number; y: number }) => void
   disconnectNodes: (nodeIds: string[]) => void
   deleteNodes: (nodeIds: string[]) => void
+  deleteEdges: (edgeIds: string[]) => void
   requestRename: (nodeId: string) => void
 }
 

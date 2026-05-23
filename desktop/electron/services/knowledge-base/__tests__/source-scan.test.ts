@@ -85,6 +85,63 @@ describe("knowledge base source scan", () => {
     ])
   })
 
+  it("preserves claude-obsidian manifest metadata and raw-relative source entries", async () => {
+    const root = await tempDir()
+    await mkdir(path.join(root, ".raw"), { recursive: true })
+    await writeFile(path.join(root, ".raw", "a.md"), "alpha\n")
+    const initial = await scanKnowledgeBaseSources(root)
+    const source = initial.sources[0]
+    await writeFile(path.join(root, ".raw", ".manifest.json"), `${JSON.stringify({
+      version: 1,
+      created: "2026-05-23",
+      description: "Ingest delta tracker and address map for the Synapse knowledge base.",
+      sources: {
+        [source.relativePath]: {
+          hash: source.hash,
+        },
+      },
+      address_map: {
+        "wiki/sources/a.md": "c-000001",
+      },
+    })}\n`)
+
+    const result = await scanKnowledgeBaseSources(root)
+
+    expect(result.manifest.status).toBe("valid")
+    expect(result.manifest.manifest.sources).toEqual({
+      ".raw/a.md": { hash: source.hash },
+    })
+    expect(result.manifest.manifest.created).toBe("2026-05-23")
+    expect(result.manifest.manifest.description).toContain("Ingest delta tracker")
+    expect(result.manifest.manifest.address_map).toEqual({
+      "wiki/sources/a.md": "c-000001",
+    })
+    expect(result.sources).toEqual([
+      expect.objectContaining({ relativePath: ".raw/a.md", state: "unchanged" }),
+    ])
+  })
+
+  it("does not treat legacy string hash entries as imported sources", async () => {
+    const root = await tempDir()
+    await mkdir(path.join(root, ".raw"), { recursive: true })
+    await writeFile(path.join(root, ".raw", "a.md"), "alpha\n")
+    const initial = await scanKnowledgeBaseSources(root)
+    const source = initial.sources[0]
+    await writeFile(path.join(root, ".raw", ".manifest.json"), `${JSON.stringify({
+      version: 1,
+      sources: {
+        "a.md": source.hash,
+      },
+      address_map: {},
+    })}\n`)
+
+    const result = await scanKnowledgeBaseSources(root)
+
+    expect(result.sources).toEqual([
+      expect.objectContaining({ relativePath: ".raw/a.md", state: "new" }),
+    ])
+  })
+
   it("reports invalid manifests without throwing", async () => {
     const root = await tempDir()
     await mkdir(path.join(root, ".raw"), { recursive: true })

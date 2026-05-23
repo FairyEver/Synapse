@@ -1,8 +1,9 @@
-import { shell } from "electron"
+import { dialog, shell } from "electron"
 import { z } from "zod"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
 import type { KnowledgeBaseService } from "../../services/knowledge-base"
+import { knowledgeBaseSourceManagerWindowService } from "../../services/knowledge-base/source-manager-window-service"
 import { runGuardedShellOperation } from "../shell/guarded-shell"
 
 const initializePayloadSchema = z.object({
@@ -28,6 +29,46 @@ const inspectionSchema = z.object({
 
 const openRawResultSchema = z.object({
   rawPath: z.string(),
+})
+
+const sourceEntrySchema = z.object({
+  relativePath: z.string(),
+  name: z.string(),
+  size: z.number(),
+  modifiedAt: z.string(),
+  supported: z.boolean(),
+  status: z.enum(["pending", "changed", "imported", "unsupported", "error"]),
+  hash: z.string().optional(),
+})
+
+const listSourcesResultSchema = z.object({
+  projectPath: z.string(),
+  sources: z.array(sourceEntrySchema),
+})
+
+const uploadSourcesPayloadSchema = z.object({
+  projectPath: z.string().min(1),
+  filePaths: z.array(z.string().min(1)),
+})
+
+const uploadSourcesResultSchema = z.object({
+  projectPath: z.string(),
+  uploaded: z.array(z.object({
+    originalPath: z.string(),
+    relativePath: z.string(),
+    name: z.string(),
+    size: z.number(),
+  })),
+  skipped: z.array(z.object({
+    path: z.string(),
+    reason: z.enum(["not-file", "read-error"]),
+  })),
+})
+
+const openSourceManagerPayloadSchema = z.object({
+  projectId: z.string().min(1),
+  projectPath: z.string().min(1),
+  projectName: z.string().min(1),
 })
 
 function service(ctx: IpcHandlerContext): KnowledgeBaseService {
@@ -113,6 +154,69 @@ export const knowledgeBaseIpcModule: IpcModule = {
         resource: request.projectPath,
         source: "knowledgeBase.initialize",
         run: () => service(ctx).initialize(request),
+      }),
+    },
+    listSources: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:list-sources",
+      request: z.object({ projectPath: z.string().min(1) }),
+      response: listSourcesResultSchema,
+      handler: (ctx, request: { projectPath: string }) => runGuardedKnowledgeBaseOperation({
+        ctx,
+        action: "fs.read.outside-userdata",
+        resource: request.projectPath,
+        source: "knowledgeBase.listSources",
+        run: () => service(ctx).listSources(request.projectPath),
+      }),
+    },
+    uploadSources: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:upload-sources",
+      request: uploadSourcesPayloadSchema,
+      response: uploadSourcesResultSchema,
+      handler: (ctx, request: { projectPath: string; filePaths: string[] }) => runGuardedKnowledgeBaseOperation({
+        ctx,
+        action: "fs.write",
+        resource: request.projectPath,
+        source: "knowledgeBase.uploadSources",
+        run: () => service(ctx).uploadSources(request),
+      }),
+    },
+    selectAndUploadSources: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:select-and-upload-sources",
+      request: z.object({ projectPath: z.string().min(1) }),
+      response: uploadSourcesResultSchema,
+      handler: (ctx, request: { projectPath: string }) => runGuardedKnowledgeBaseOperation({
+        ctx,
+        action: "fs.write",
+        resource: request.projectPath,
+        source: "knowledgeBase.selectAndUploadSources",
+        run: async () => {
+          const result = await dialog.showOpenDialog({
+            properties: ["openFile", "multiSelections"],
+          })
+          if (result.canceled || result.filePaths.length === 0) {
+            return { projectPath: request.projectPath, uploaded: [], skipped: [] }
+          }
+          return service(ctx).uploadSources({
+            projectPath: request.projectPath,
+            filePaths: result.filePaths,
+          })
+        },
+      }),
+    },
+    openSourceManager: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:open-source-manager",
+      request: openSourceManagerPayloadSchema,
+      response: z.void(),
+      handler: (ctx, request: { projectId: string; projectPath: string; projectName: string }) => runGuardedKnowledgeBaseOperation({
+        ctx,
+        action: "fs.read.outside-userdata",
+        resource: request.projectPath,
+        source: "knowledgeBase.openSourceManager",
+        run: () => knowledgeBaseSourceManagerWindowService.open(request),
       }),
     },
     openRawDirectory: {

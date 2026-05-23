@@ -21,7 +21,7 @@ import {
   type NodeChange,
 } from "@xyflow/react"
 import "@xyflow/react/dist/style.css"
-import { Clipboard, LayoutGrid, Maximize2 } from "lucide-react"
+import { Clipboard, LayoutGrid, Maximize2, Trash2 } from "lucide-react"
 import { nodeTypes } from "./node-wrappers"
 import { BranchEdge } from "./custom-edge"
 import { CanvasActionsContext, type NodeClipboard } from "./canvas-context"
@@ -37,6 +37,17 @@ const edgeTypes = { branch: BranchEdge }
 const CANVAS_FIT_VIEW_OPTIONS = { padding: 0.1, duration: 200, maxZoom: 1, minZoom: 0.05 }
 const EMPTY_CANVAS_VIEWPORT = { x: 0, y: 0, zoom: 1 }
 const CONFIG_NAME_DATA_KEY = "__synapseConfigName"
+const CONTEXT_MENU_MARGIN = 8
+const CONTEXT_MENU_ESTIMATED_WIDTH = 180
+const CONTEXT_MENU_ESTIMATED_HEIGHT = 120
+
+function clampContextMenuPosition(x: number, y: number): { left: number; top: number } {
+  const { innerWidth, innerHeight } = window
+  return {
+    left: Math.min(x, innerWidth - CONTEXT_MENU_ESTIMATED_WIDTH - CONTEXT_MENU_MARGIN),
+    top: Math.min(y, innerHeight - CONTEXT_MENU_ESTIMATED_HEIGHT - CONTEXT_MENU_MARGIN),
+  }
+}
 
 type WorkflowFlowNode = Node<Record<string, unknown>, string>
 type WorkflowFlowEdge = Edge<{ label?: string }, string>
@@ -452,6 +463,21 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
     onChange(newDef)
   }, [onChange, setEdges, setNodes])
 
+  const deleteEdges = useCallback((edgeIds: string[]) => {
+    if (edgeIds.length === 0) return
+    const idSet = new Set(edgeIds)
+    const updated = edgesRef.current.filter((edge) => !idSet.has(edge.id))
+    edgesRef.current = updated
+    setEdges(updated)
+    logger.info("delete edges", {
+      deletedEdgeIds: edgeIds,
+      remainingEdgeCount: updated.length,
+    })
+    const newDef = { ...definitionRef.current, edges: updated.map(flowEdgeToWorkflowEdge) }
+    definitionRef.current = newDef
+    onChange(newDef)
+  }, [onChange, setEdges])
+
   const requestRename = useCallback((nodeId: string) => {
     onNodeSelect?.(nodeId)
     onRequestRename?.(nodeId)
@@ -481,8 +507,8 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
   }, [fitView, setViewport])
 
   const canvasActions = useMemo(() => ({
-    clipboard, getSelectedNodeIds, copyNodes, pasteNodes, disconnectNodes, deleteNodes, requestRename,
-  }), [clipboard, getSelectedNodeIds, copyNodes, pasteNodes, disconnectNodes, deleteNodes, requestRename])
+    clipboard, getSelectedNodeIds, copyNodes, pasteNodes, disconnectNodes, deleteNodes, deleteEdges, requestRename,
+  }), [clipboard, getSelectedNodeIds, copyNodes, pasteNodes, disconnectNodes, deleteNodes, deleteEdges, requestRename])
 
   // Update refs for imperative handle and keyboard shortcuts
   deleteNodesRef.current = deleteNodes
@@ -546,15 +572,39 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
     }
   }, [paneMenu])
 
+  const [edgeMenu, setEdgeMenu] = useState<{ edgeId: string; screenX: number; screenY: number } | null>(null)
+
+  const onEdgeContextMenu = useCallback((event: MouseEvent | React.MouseEvent, edge: WorkflowFlowEdge) => {
+    event.preventDefault()
+    event.stopPropagation()
+    logger.info("edge context menu opened", { edgeId: edge.id })
+    setEdgeMenu({ edgeId: edge.id, screenX: event.clientX, screenY: event.clientY })
+  }, [])
+
+  const closeEdgeMenu = useCallback(() => setEdgeMenu(null), [])
+
+  useEffect(() => {
+    if (!edgeMenu) return
+    const handleClose = () => setEdgeMenu(null)
+    const handleKeyDown = (e: KeyboardEvent) => { if (e.key === "Escape") handleClose() }
+    window.addEventListener("mousedown", handleClose)
+    window.addEventListener("keydown", handleKeyDown)
+    return () => {
+      window.removeEventListener("mousedown", handleClose)
+      window.removeEventListener("keydown", handleKeyDown)
+    }
+  }, [edgeMenu])
+
   return (
     <CanvasActionsContext.Provider value={canvasActions}>
       <ReactFlow nodes={nodes} edges={edges} nodeTypes={nodeTypes}
         onNodesChange={handleNodesChange} onEdgesChange={handleEdgesChange}
         onConnect={onConnect} onNodeDragStop={onNodeDragStop}
         onDrop={onDrop} onDragOver={onDragOver}
-        onPaneClick={closePaneMenu}
-        onMoveStart={closePaneMenu}
+        onPaneClick={() => { closePaneMenu(); closeEdgeMenu() }}
+        onMoveStart={() => { closePaneMenu(); closeEdgeMenu() }}
         onPaneContextMenu={onPaneContextMenu}
+        onEdgeContextMenu={onEdgeContextMenu}
         edgeTypes={edgeTypes}
         selectionOnDrag selectionMode={SelectionMode.Partial}
         fitView fitViewOptions={CANVAS_FIT_VIEW_OPTIONS}
@@ -565,7 +615,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
       {paneMenu && (
         <div
           className="fixed z-50 min-w-32 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
-          style={{ left: paneMenu.screenX, top: paneMenu.screenY }}
+          style={clampContextMenuPosition(paneMenu.screenX, paneMenu.screenY)}
           onMouseDown={(e) => e.stopPropagation()}
         >
           <button
@@ -599,6 +649,24 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
             <Clipboard className="size-4" />
             粘贴
             <span className="ml-auto text-xs tracking-widest text-muted-foreground">⌘V</span>
+          </button>
+        </div>
+      )}
+      {edgeMenu && (
+        <div
+          className="fixed z-50 min-w-32 overflow-hidden rounded-md border bg-popover p-1 text-popover-foreground shadow-md"
+          style={clampContextMenuPosition(edgeMenu.screenX, edgeMenu.screenY)}
+          onMouseDown={(e) => e.stopPropagation()}
+        >
+          <button
+            className="relative flex w-full cursor-default select-none items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground text-destructive [&>svg]:size-4 [&>svg]:shrink-0"
+            onClick={() => {
+              deleteEdges([edgeMenu.edgeId])
+              setEdgeMenu(null)
+            }}
+          >
+            <Trash2 className="size-4" />
+            删除连线
           </button>
         </div>
       )}

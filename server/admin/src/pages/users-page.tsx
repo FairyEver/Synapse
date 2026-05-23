@@ -75,31 +75,38 @@ export function UsersPage() {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {result.data.map((user) => {
-              const membership = user.memberships[0]
-              return (
-                <TableRow key={user.id}>
-                  <TableCell>{user.email}</TableCell>
-                  <TableCell>
-                    <Badge variant={user.status === "active" ? "default" : "secondary"}>
-                      {user.status === "active" ? "启用" : "停用"}
-                    </Badge>
-                  </TableCell>
-                  <TableCell>{membership ? `${membership.team.name} / ${membership.role}` : "-"}</TableCell>
-                  <TableCell>{formatDate(user.createdAt)}</TableCell>
-                  <TableActionCell>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={submittingIds.has(user.id)}
-                      onClick={() => void toggleStatus(user)}
-                    >
-                      {user.status === "active" ? "停用" : "启用"}
-                    </Button>
-                  </TableActionCell>
-                </TableRow>
-              )
-            })}
+            {result.data.map((user) => (
+              <TableRow key={user.id}>
+                <TableCell>{user.email}</TableCell>
+                <TableCell>
+                  <Badge variant={user.status === "active" ? "default" : "secondary"}>
+                    {user.status === "active" ? "启用" : "停用"}
+                  </Badge>
+                </TableCell>
+                <TableCell>
+                  {user.memberships.length > 0 ? (
+                    <div className="flex flex-col gap-1">
+                      {user.memberships.map((membership) => (
+                        <span key={membership.team.id}>{`${membership.team.name} / ${membership.role}`}</span>
+                      ))}
+                    </div>
+                  ) : (
+                    "-"
+                  )}
+                </TableCell>
+                <TableCell>{formatDate(user.createdAt)}</TableCell>
+                <TableActionCell>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={submittingIds.has(user.id)}
+                    onClick={() => void toggleStatus(user)}
+                  >
+                    {user.status === "active" ? "停用" : "启用"}
+                  </Button>
+                </TableActionCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       )}

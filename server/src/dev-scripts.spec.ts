@@ -22,9 +22,18 @@ describe("server dev scripts", () => {
     expect(scripts["dev:admin"]).toBe("vite --config admin/vite.config.ts --host 0.0.0.0")
   })
 
-  it("keeps the workspace server dev entrypoint on the combined dev script", () => {
+  it("does not expose a combined workspace dev command", () => {
     const workspacePackage = readPackageJson(join(process.cwd(), "../package.json"))
 
+    expect(workspacePackage.scripts?.dev).toBeUndefined()
+  })
+
+  it("keeps the workspace server dev entrypoint on the backend stack script", () => {
+    const workspacePackage = readPackageJson(join(process.cwd(), "../package.json"))
+
+    expect(workspacePackage.scripts?.["dev:server"]).toContain(
+      "docker compose --env-file server/.env -f server/compose.yml up -d postgres",
+    )
     expect(workspacePackage.scripts?.["dev:server"]).toContain(
       "--filter @synapse/server run dev",
     )

@@ -1,13 +1,19 @@
 import { app } from "electron"
 import { constants } from "node:fs"
-import { access, copyFile, lstat, mkdir, readFile, writeFile } from "node:fs/promises"
+import type { Dirent } from "node:fs"
+import { access, copyFile, lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type {
   SynapseKnowledgeBaseInitializePayload,
   SynapseKnowledgeBaseInitializeResult,
   SynapseKnowledgeBaseInspection,
+  SynapseKnowledgeBaseListSourcesResult,
   SynapseKnowledgeBaseOpenRawResult,
+  SynapseKnowledgeBaseSourceEntry,
+  SynapseKnowledgeBaseUploadSourcesPayload,
+  SynapseKnowledgeBaseUploadSourcesResult,
 } from "../../../src/types/knowledge-base"
+import { scanKnowledgeBaseSources } from "./source-scan"
 
 export const KNOWLEDGE_BASE_TEMPLATE_VERSION = "2026-05-21"
 
@@ -26,13 +32,16 @@ const REQUIRED_PATHS = [
 
 type KnowledgeBaseServiceDeps = {
   templateRoot?: string
+  now?: () => Date
 }
 
 export class KnowledgeBaseService {
   private readonly templateRoot: string
+  private readonly now: () => Date
 
   constructor(deps: KnowledgeBaseServiceDeps = {}) {
     this.templateRoot = deps.templateRoot ?? resolveTemplateRoot()
+    this.now = deps.now ?? (() => new Date())
   }
 
   async inspect(projectPath: string): Promise<SynapseKnowledgeBaseInspection> {
@@ -100,6 +109,151 @@ export class KnowledgeBaseService {
     await mkdir(rawPath, { recursive: true })
     return { rawPath }
   }
+
+  async listSources(projectPath: string): Promise<SynapseKnowledgeBaseListSourcesResult> {
+    const rawPath = assertInside(projectPath, path.join(projectPath, ".raw"))
+    await assertNoSymlinkInRequiredPath(projectPath, ".raw")
+    await mkdir(rawPath, { recursive: true })
+    const scan = await scanKnowledgeBaseSources(projectPath)
+    const supportedByPath = new Map(scan.sources.map((source) => [source.relativePath, source]))
+    const rawFiles = await walkRawFiles(projectPath, rawPath)
+    const sources: SynapseKnowledgeBaseSourceEntry[] = []
+
+    for (const file of rawFiles) {
+      const scanned = supportedByPath.get(file.relativePath)
+      const status = scanned
+        ? scanned.state === "new" ? "pending" : scanned.state === "changed" ? "changed" : "imported"
+        : isSupportedSourcePath(file.relativePath) ? "error" : "unsupported"
+      sources.push({
+        relativePath: file.relativePath,
+        name: path.basename(file.relativePath),
+        size: file.size,
+        modifiedAt: file.modifiedAt,
+        supported: Boolean(scanned),
+        status,
+        ...(scanned?.hash ? { hash: scanned.hash } : undefined),
+      })
+    }
+
+    return {
+      projectPath,
+      sources: sources.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt) || a.relativePath.localeCompare(b.relativePath)),
+    }
+  }
+
+  async uploadSources(payload: SynapseKnowledgeBaseUploadSourcesPayload): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
+    const projectPath = path.resolve(payload.projectPath)
+    const targetRelativeDir = path.join(".raw", ...datePathSegments(this.now()))
+    const targetDir = assertInside(projectPath, path.join(projectPath, targetRelativeDir))
+    await assertNoSymlinkInRequiredPath(projectPath, targetRelativeDir)
+    await mkdir(targetDir, { recursive: true })
+
+    const uploaded: SynapseKnowledgeBaseUploadSourcesResult["uploaded"] = []
+    const skipped: SynapseKnowledgeBaseUploadSourcesResult["skipped"] = []
+    for (const filePath of payload.filePaths) {
+      const sourcePath = path.resolve(filePath)
+      try {
+        const sourceStat = await lstat(sourcePath)
+        if (!sourceStat.isFile()) {
+          skipped.push({ path: filePath, reason: "not-file" })
+          continue
+        }
+        const targetPath = await resolveCollisionPath(targetDir, path.basename(sourcePath))
+        await copyFile(sourcePath, targetPath)
+        uploaded.push({
+          originalPath: filePath,
+          relativePath: normalizeRelativePath(path.relative(projectPath, targetPath)),
+          name: path.basename(targetPath),
+          size: sourceStat.size,
+        })
+      } catch {
+        skipped.push({ path: filePath, reason: "read-error" })
+      }
+    }
+
+    return { projectPath, uploaded, skipped }
+  }
+}
+
+type RawFileEntry = {
+  relativePath: string
+  size: number
+  modifiedAt: string
+}
+
+const SUPPORTED_SOURCE_EXTENSIONS = new Set([
+  ".md",
+  ".markdown",
+  ".txt",
+  ".csv",
+  ".json",
+  ".yaml",
+  ".yml",
+  ".html",
+  ".xml",
+])
+
+async function walkRawFiles(projectPath: string, directoryPath: string): Promise<RawFileEntry[]> {
+  let entries: Dirent[]
+  try {
+    entries = await readdir(directoryPath, { withFileTypes: true })
+  } catch {
+    return []
+  }
+
+  const files: RawFileEntry[] = []
+  for (const entry of entries) {
+    const absolutePath = path.join(directoryPath, entry.name)
+    const relativePath = normalizeRelativePath(path.relative(projectPath, absolutePath))
+    if (entry.isSymbolicLink()) continue
+    if (entry.isDirectory()) {
+      files.push(...await walkRawFiles(projectPath, absolutePath))
+      continue
+    }
+    if (!entry.isFile() || relativePath === ".raw/.manifest.json") continue
+    try {
+      const stat = await lstat(absolutePath)
+      files.push({
+        relativePath,
+        size: stat.size,
+        modifiedAt: stat.mtime.toISOString(),
+      })
+    } catch {
+      files.push({
+        relativePath,
+        size: 0,
+        modifiedAt: new Date(0).toISOString(),
+      })
+    }
+  }
+  return files
+}
+
+function isSupportedSourcePath(relativePath: string): boolean {
+  return SUPPORTED_SOURCE_EXTENSIONS.has(path.extname(relativePath).toLowerCase())
+}
+
+function normalizeRelativePath(value: string): string {
+  return value.split(path.sep).join("/")
+}
+
+function datePathSegments(date: Date): string[] {
+  return [
+    String(date.getFullYear()).padStart(4, "0"),
+    String(date.getMonth() + 1).padStart(2, "0"),
+    String(date.getDate()).padStart(2, "0"),
+  ]
+}
+
+async function resolveCollisionPath(directoryPath: string, fileName: string): Promise<string> {
+  const parsed = path.parse(fileName)
+  let candidate = path.join(directoryPath, fileName)
+  let index = 2
+  while (await pathExists(candidate)) {
+    candidate = path.join(directoryPath, `${parsed.name}-${index}${parsed.ext}`)
+    index += 1
+  }
+  return candidate
 }
 
 function resolveTemplateRoot(): string {
@@ -169,7 +323,13 @@ async function readMetadata(projectPath: string): Promise<{ templateVersion?: st
 
 function defaultTemplateFor(relativePath: string): string {
   if (relativePath === ".raw/.manifest.json") {
-    return "{\n  \"version\": 1,\n  \"sources\": {}\n}\n"
+    return `${JSON.stringify({
+      version: 1,
+      created: "2026-05-21",
+      description: "Ingest delta tracker and address map for the Synapse knowledge base. Do not hand-edit; wiki ingest maintains this.",
+      sources: {},
+      address_map: {},
+    }, null, 2)}\n`
   }
   if (relativePath === ".synapse-kb.json") {
     return `${JSON.stringify({

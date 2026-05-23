@@ -10,7 +10,10 @@ export interface KnowledgeBaseManifestSourceEntry {
 
 export interface KnowledgeBaseManifest {
   readonly version: 1
+  readonly created?: string
+  readonly description?: string
   readonly sources: Record<string, KnowledgeBaseManifestSourceEntry>
+  readonly address_map: Record<string, string>
 }
 
 export type KnowledgeBaseManifestReadResult =
@@ -50,21 +53,50 @@ function parseKnowledgeBaseManifest(value: unknown): KnowledgeBaseManifest {
   }
   const sources: Record<string, KnowledgeBaseManifestSourceEntry> = {}
   for (const [sourcePath, item] of Object.entries(record.sources as Record<string, unknown>)) {
-    if (!item || typeof item !== "object" || Array.isArray(item)) continue
-    const source = item as Record<string, unknown>
-    if (typeof source.hash !== "string" || source.hash.length === 0) continue
-    sources[sourcePath] = {
-      hash: source.hash,
-      ...(typeof source.ingested_at === "string" ? { ingested_at: source.ingested_at } : undefined),
-      ...(Array.isArray(source.pages_created) ? { pages_created: source.pages_created.filter(isString) } : undefined),
-      ...(Array.isArray(source.pages_updated) ? { pages_updated: source.pages_updated.filter(isString) } : undefined),
-    }
+    const entry = parseSourceEntry(item)
+    if (!entry) continue
+    sources[sourcePath] = entry
   }
-  return { version: 1, sources }
+  return {
+    version: 1,
+    ...(typeof record.created === "string" ? { created: record.created } : undefined),
+    ...(typeof record.description === "string" ? { description: record.description } : undefined),
+    sources,
+    address_map: parseAddressMap(record.address_map),
+  }
 }
 
 function emptyManifest(): KnowledgeBaseManifest {
-  return { version: 1, sources: {} }
+  return { version: 1, sources: {}, address_map: {} }
+}
+
+function parseSourceEntry(value: unknown): KnowledgeBaseManifestSourceEntry | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null
+  }
+  const source = value as Record<string, unknown>
+  if (typeof source.hash !== "string" || source.hash.length === 0) {
+    return null
+  }
+  return {
+    hash: source.hash,
+    ...(typeof source.ingested_at === "string" ? { ingested_at: source.ingested_at } : undefined),
+    ...(Array.isArray(source.pages_created) ? { pages_created: source.pages_created.filter(isString) } : undefined),
+    ...(Array.isArray(source.pages_updated) ? { pages_updated: source.pages_updated.filter(isString) } : undefined),
+  }
+}
+
+function parseAddressMap(value: unknown): Record<string, string> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return {}
+  }
+  const addressMap: Record<string, string> = {}
+  for (const [pagePath, address] of Object.entries(value as Record<string, unknown>)) {
+    if (typeof address === "string" && address.length > 0) {
+      addressMap[pagePath.split("\\").join("/")] = address
+    }
+  }
+  return addressMap
 }
 
 function isString(value: unknown): value is string {
