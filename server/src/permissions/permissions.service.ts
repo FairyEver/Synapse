@@ -19,6 +19,7 @@ const teamManagementPermissions = [
   "team.role.manage",
   "team.invitation.manage",
 ] as const
+const teamManagementPermissionSet: ReadonlySet<string> = new Set(teamManagementPermissions)
 
 @Injectable()
 export class PermissionsService {
@@ -88,7 +89,7 @@ export class PermissionsService {
       kind: "system",
       locked: true,
       sortOrder: 1,
-      permissionKeys: allPermissionKeys.filter((key) => !teamManagementPermissions.includes(key as never)),
+      permissionKeys: allPermissionKeys.filter((key) => !teamManagementPermissionSet.has(key)),
       client,
     })
     await client.teamMemberAccessRole.createMany({
@@ -131,8 +132,13 @@ export class PermissionsService {
     readonly permissionKeys: readonly string[]
   }): Promise<string[]> {
     const keys = normalizePermissionKeys(input.permissionKeys)
-    await this.assertWithinTeamEntitlements(input.teamId, keys)
     await this.prisma.$transaction(async (tx) => {
+      const role = await tx.teamAccessRole.findFirst({
+        where: { id: input.roleId, teamId: input.teamId },
+        select: { id: true },
+      })
+      if (!role) throw new BadRequestException("团队角色不存在。")
+      await this.assertWithinTeamEntitlements(input.teamId, keys, tx)
       await tx.teamAccessRolePermission.deleteMany({ where: { roleId: input.roleId } })
       if (keys.length === 0) return
       await tx.teamAccessRolePermission.createMany({
@@ -218,8 +224,12 @@ export class PermissionsService {
     return role
   }
 
-  private async assertWithinTeamEntitlements(teamId: string, permissionKeys: readonly string[]): Promise<void> {
-    const entitlements = new Set(await this.listTeamEntitlements(teamId))
+  private async assertWithinTeamEntitlements(
+    teamId: string,
+    permissionKeys: readonly string[],
+    client: PrismaClientLike = this.prisma,
+  ): Promise<void> {
+    const entitlements = new Set(await this.listTeamEntitlements(teamId, client))
     const missing = permissionKeys.filter((key) => !entitlements.has(key))
     if (missing.length > 0) {
       throw new BadRequestException(`权限未对团队开通：${missing.join("，")}`)

@@ -6,7 +6,7 @@ import {
   normalizePermissionKeys,
   permissionDefinitions,
 } from "./permission-registry"
-import { PermissionsService } from "./permissions.service"
+import { ordinaryMemberRoleName, PermissionsService, teamAdminRoleName } from "./permissions.service"
 
 describe("permission registry", () => {
   it("keeps permission keys unique and kebab-case", () => {
@@ -91,7 +91,10 @@ describe("PermissionsService", () => {
 
   it("rejects role permissions outside team entitlements", async () => {
     const prisma = createPermissionPrismaMock()
-    prisma.teamEntitlement.findMany.mockResolvedValue([{ permissionKey: "database.use" }])
+    const tx = createPermissionPrismaMock()
+    prisma.$transaction.mockImplementationOnce((callback) => callback(tx))
+    tx.teamAccessRole.findFirst.mockResolvedValue({ id: "role-1" })
+    tx.teamEntitlement.findMany.mockResolvedValue([{ permissionKey: "database.use" }])
     const service = new PermissionsService(prisma as never)
 
     await expect(service.replaceRolePermissions({
@@ -99,6 +102,126 @@ describe("PermissionsService", () => {
       roleId: "role-1",
       permissionKeys: ["workflow.use"],
     })).rejects.toThrow(BadRequestException)
+  })
+
+  it("rejects role permissions when the role is not in the provided team", async () => {
+    const prisma = createPermissionPrismaMock()
+    const tx = createPermissionPrismaMock()
+    prisma.$transaction.mockImplementationOnce((callback) => callback(tx))
+    prisma.teamEntitlement.findMany.mockResolvedValue([{ permissionKey: "workflow.use" }])
+    tx.teamEntitlement.findMany.mockResolvedValue([{ permissionKey: "workflow.use" }])
+    tx.teamAccessRole.findFirst.mockResolvedValue(null)
+    const service = new PermissionsService(prisma as never)
+
+    await expect(service.replaceRolePermissions({
+      teamId: "team-a",
+      roleId: "team-b-role",
+      permissionKeys: ["workflow.use"],
+    })).rejects.toThrow(BadRequestException)
+
+    expect(tx.teamAccessRole.findFirst).toHaveBeenCalledWith({
+      where: { id: "team-b-role", teamId: "team-a" },
+      select: { id: true },
+    })
+    expect(tx.teamAccessRolePermission.deleteMany).not.toHaveBeenCalled()
+    expect(tx.teamAccessRolePermission.createMany).not.toHaveBeenCalled()
+  })
+
+  it("ensures default team access with admin assignment and ordinary member ceiling", async () => {
+    const prisma = createPermissionPrismaMock()
+    prisma.teamAccessRole.findFirst.mockResolvedValue(null)
+    prisma.teamAccessRole.create
+      .mockResolvedValueOnce({ id: "admin-role" })
+      .mockResolvedValueOnce({ id: "ordinary-role" })
+    const service = new PermissionsService(prisma as never)
+
+    await service.ensureDefaultTeamAccess({
+      teamId: "team-1",
+      ownerMembershipId: "membership-1",
+      ownerUserId: "user-1",
+    })
+
+    expect(prisma.teamEntitlement.createMany).toHaveBeenCalledWith({
+      data: normalizePermissionKeys(allPermissionKeys).map((permissionKey) => ({
+        teamId: "team-1",
+        permissionKey,
+        source: "migration",
+      })),
+      skipDuplicates: true,
+    })
+    expect(prisma.teamAccessRole.create).toHaveBeenNthCalledWith(1, {
+      data: {
+        teamId: "team-1",
+        name: teamAdminRoleName,
+        kind: "system",
+        locked: true,
+        sortOrder: 0,
+      },
+      select: { id: true },
+    })
+    expect(prisma.teamAccessRole.create).toHaveBeenNthCalledWith(2, {
+      data: {
+        teamId: "team-1",
+        name: ordinaryMemberRoleName,
+        kind: "system",
+        locked: true,
+        sortOrder: 1,
+      },
+      select: { id: true },
+    })
+    expect(prisma.teamMemberAccessRole.createMany).toHaveBeenCalledWith({
+      data: [{
+        teamId: "team-1",
+        teamMembershipId: "membership-1",
+        roleId: "admin-role",
+        assignedByUserId: "user-1",
+      }],
+      skipDuplicates: true,
+    })
+
+    const adminPermissionCreate = prisma.teamAccessRolePermission.createMany.mock.calls[0]?.[0]
+    const ordinaryPermissionCreate = prisma.teamAccessRolePermission.createMany.mock.calls[1]?.[0]
+    expect(adminPermissionCreate).toEqual({
+      data: normalizePermissionKeys(allPermissionKeys).map((permissionKey) => ({
+        roleId: "admin-role",
+        permissionKey,
+      })),
+    })
+    expect(ordinaryPermissionCreate.data).toEqual(
+      normalizePermissionKeys(allPermissionKeys)
+        .filter((permissionKey) => ![
+          "team.member.manage",
+          "team.role.manage",
+          "team.invitation.manage",
+        ].includes(permissionKey))
+        .map((permissionKey) => ({ roleId: "ordinary-role", permissionKey })),
+    )
+  })
+
+  it("assigns the ordinary member role with team scope", async () => {
+    const prisma = createPermissionPrismaMock()
+    prisma.teamAccessRole.findFirst.mockResolvedValue({ id: "ordinary-role" })
+    const service = new PermissionsService(prisma as never)
+
+    await service.assignOrdinaryMemberRole({
+      teamId: "team-1",
+      teamMembershipId: "membership-1",
+      assignedByUserId: "user-1",
+    })
+
+    expect(prisma.teamAccessRole.findFirst).toHaveBeenCalledWith({
+      where: { teamId: "team-1", name: ordinaryMemberRoleName },
+      select: { id: true },
+    })
+    expect(prisma.teamMemberAccessRole.createMany).toHaveBeenCalledWith({
+      data: [{
+        teamId: "team-1",
+        teamMembershipId: "membership-1",
+        roleId: "ordinary-role",
+        assignedByUserId: "user-1",
+      }],
+      skipDuplicates: true,
+    })
   })
 
   it("intersects role permissions with entitlements for effective permissions", async () => {
