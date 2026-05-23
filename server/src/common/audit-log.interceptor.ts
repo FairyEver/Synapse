@@ -10,6 +10,8 @@ import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { AuditLogService } from "./audit-log.service"
 
 const WRITE_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"])
+const SENSITIVE_BODY_KEY_PATTERN = /password|token|secret|credential/i
+const REDACTED_VALUE = "[REDACTED]"
 
 @Injectable()
 export class AuditLogInterceptor implements NestInterceptor {
@@ -45,12 +47,23 @@ export class AuditLogInterceptor implements NestInterceptor {
           action,
           targetType,
           targetId,
-          detail: { method, path, body: request.body },
+          detail: { method, path, body: redactSensitiveBody(request.body) },
           ipAddress: request.ip ?? "",
         })
       }),
     )
   }
+}
+
+function redactSensitiveBody(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(redactSensitiveBody)
+  if (!value || typeof value !== "object") return value
+
+  const result: Record<string, unknown> = {}
+  for (const [key, childValue] of Object.entries(value)) {
+    result[key] = SENSITIVE_BODY_KEY_PATTERN.test(key) ? REDACTED_VALUE : redactSensitiveBody(childValue)
+  }
+  return result
 }
 
 function resolveAuditTarget(
