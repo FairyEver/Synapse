@@ -19,6 +19,21 @@ const adminUserSelect = {
   createdAt: true,
 } as const
 
+const adminTeamSelect = {
+  id: true,
+  name: true,
+  createdByUser: { select: { email: true } },
+  memberships: {
+    select: {
+      role: true,
+      createdAt: true,
+      user: { select: { email: true } },
+    },
+    orderBy: { createdAt: "asc" },
+  },
+  createdAt: true,
+} as const
+
 function isRecordNotFoundError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025"
 }
@@ -158,13 +173,7 @@ export class AdminService {
     const [data, total] = await this.prisma.$transaction([
       this.prisma.team.findMany({
         ...toPrismaArgs(page),
-        include: {
-          createdByUser: { select: { email: true } },
-          memberships: {
-            include: { user: { select: { email: true } } },
-            orderBy: { createdAt: "asc" },
-          },
-        },
+        select: adminTeamSelect,
       }),
       this.prisma.team.count(),
     ])

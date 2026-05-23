@@ -45,7 +45,11 @@ function createPrismaMock(counts: {
       findMany: vi.fn(),
       update: vi.fn().mockResolvedValue({}),
     },
-    team: { count: vi.fn(), findUnique: vi.fn().mockResolvedValue({ id: "team-1" }) },
+    team: {
+      count: vi.fn(),
+      findMany: vi.fn(),
+      findUnique: vi.fn().mockResolvedValue({ id: "team-1" }),
+    },
     teamAccessRole: { count: vi.fn() },
     teamAccessRolePermission: { count: vi.fn() },
     teamEntitlement: { count: vi.fn() },
@@ -149,6 +153,31 @@ describe("AdminService", () => {
       .rejects
       .toThrow("用户不存在。")
     expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
+  it("loads teams without exposing internal membership scalar fields", async () => {
+    const prisma = createPrismaMock()
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never)
+
+    await service.listTeams()
+
+    expect(prisma.team.findMany).toHaveBeenCalledWith(expect.objectContaining({
+      select: expect.objectContaining({
+        id: true,
+        name: true,
+        createdByUser: { select: { email: true } },
+        memberships: {
+          select: {
+            role: true,
+            createdAt: true,
+            user: { select: { email: true } },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+        createdAt: true,
+      }),
+    }))
+    expect(prisma.team.findMany.mock.calls[0]?.[0]).not.toHaveProperty("include")
   })
 
   it("loads invitations without exposing token hashes", async () => {
