@@ -1,4 +1,4 @@
-import { open, readdir, readFile, stat } from "node:fs/promises";
+import { open, readdir, readFile, stat, unlink } from "node:fs/promises";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LogFileService } from "./log-file.service";
 
@@ -14,6 +14,7 @@ const mockedOpen = vi.mocked(open);
 const mockedReaddir = vi.mocked(readdir);
 const mockedReadFile = vi.mocked(readFile);
 const mockedStat = vi.mocked(stat);
+const mockedUnlink = vi.mocked(unlink);
 
 describe("LogFileService", () => {
   beforeEach(() => {
@@ -73,6 +74,25 @@ describe("LogFileService", () => {
     ]);
     expect(mockedReadFile).not.toHaveBeenCalled();
     expect(handle.read).toHaveBeenCalledTimes(1);
+  });
+
+  it("continues cleanup when one log file cannot be deleted", async () => {
+    mockedReaddir.mockResolvedValue(["server.2026-05-01.log", "server.2026-05-02.log"] as never);
+    mockedStat.mockResolvedValue({
+      size: 12,
+      mtime: new Date("2026-05-23T00:00:00.000Z"),
+    } as never);
+    mockedUnlink.mockImplementation(async (path) => {
+      if (String(path).endsWith("server.2026-05-01.log")) {
+        throw new Error("permission denied");
+      }
+      return undefined;
+    });
+    const service = new LogFileService("/tmp/synapse-logs");
+
+    await expect(service.cleanup("2026-05-03")).resolves.toBe(1);
+
+    expect(mockedUnlink).toHaveBeenCalledTimes(2);
   });
 });
 

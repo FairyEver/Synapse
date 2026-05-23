@@ -138,8 +138,12 @@ export class LogFileService {
       const dateMatch = file.name.match(/(\d{4}-\d{2}-\d{2})/);
       if (!dateMatch) continue;
       if (dateMatch[1] < before) {
-        await unlink(join(this.logDir, file.name));
-        deleted++;
+        try {
+          await unlink(join(this.logDir, file.name));
+          deleted++;
+        } catch {
+          continue;
+        }
       }
     }
 
