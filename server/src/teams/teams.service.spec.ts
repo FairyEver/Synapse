@@ -69,6 +69,34 @@ describe("TeamsService", () => {
     await expect(service.createInvitation("user-1", "https://app.example.com")).rejects.toThrow(ForbiddenException)
   })
 
+  it("returns the joined member with user fields", async () => {
+    const prisma = createPrismaMock()
+    const member = {
+      id: "membership-2",
+      teamId: "team-1",
+      userId: "user-2",
+      role: "member",
+      user: { id: "user-2", email: "member@example.com", status: "active" },
+    }
+    const createMembership = vi.fn().mockResolvedValue(member)
+    prisma.teamMembership.findUnique.mockResolvedValue(null)
+    prisma.$transaction.mockImplementationOnce((callback) => callback({
+      teamMembership: {
+        create: createMembership,
+      },
+    }))
+    const invitations = {
+      consumeInvitation: vi.fn().mockResolvedValue({ teamId: "team-1" }),
+    }
+    const service = new TeamsService(prisma as never, invitations as never)
+
+    await expect(service.joinTeam("user-2", { invitationToken: "team-token" })).resolves.toEqual(member)
+    expect(createMembership).toHaveBeenCalledWith({
+      data: { teamId: "team-1", userId: "user-2", role: "member" },
+      include: { user: { select: { id: true, email: true, status: true } } },
+    })
+  })
+
   it("lets a member leave their team", async () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "member", teamId: "team-1", userId: "user-2" })

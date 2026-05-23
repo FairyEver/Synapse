@@ -81,6 +81,7 @@ export class TeamsService {
       if (!invitation.teamId) throw new BadRequestException("邀请无效或已过期。")
       const membership = await tx.teamMembership.create({
         data: { teamId: invitation.teamId, userId, role: "member" },
+        include: { user: { select: { id: true, email: true, status: true } } },
       })
       return { membership, teamId: invitation.teamId }
     })
