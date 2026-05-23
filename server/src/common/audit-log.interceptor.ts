@@ -7,6 +7,7 @@ import {
 import type { Request } from "express"
 import { Observable, tap } from "rxjs"
 import { AdminAuthService } from "../admin-auth/admin-auth.service"
+import type { AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AuditLogService } from "./audit-log.service"
 
 const SENSITIVE_BODY_KEY_PATTERN = /password|token|secret|credential/i
@@ -21,7 +22,7 @@ export class AuditLogInterceptor implements NestInterceptor {
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<unknown> {
     const request = context.switchToHttp().getRequest<
-      Request & { cookies?: Record<string, string> }
+      Request & { cookies?: Record<string, string> } & Pick<AdminRequest, "admin">
     >()
 
     if (!shouldAuditRequest(request.method, request.path)) {
@@ -42,7 +43,7 @@ export class AuditLogInterceptor implements NestInterceptor {
         if (!action) return
 
         void this.auditLog.record({
-          adminEmail: await this.auth.getEmail(),
+          adminEmail: request.admin?.email ?? await this.auth.getEmail(),
           action,
           targetType,
           targetId,

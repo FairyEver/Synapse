@@ -8,6 +8,7 @@ function createContext(options: {
   readonly path?: string
   readonly params?: Record<string, string>
   readonly body?: unknown
+  readonly admin?: { id: string; email: string }
 }): ExecutionContext {
   return {
     switchToHttp: () => ({
@@ -17,6 +18,7 @@ function createContext(options: {
         params: options.params ?? {},
         body: options.body,
         ip: "127.0.0.1",
+        admin: options.admin,
       }),
     }),
   } as unknown as ExecutionContext
@@ -89,6 +91,29 @@ describe("AuditLogInterceptor", () => {
         ipAddress: "127.0.0.1",
       })
     })
+  })
+
+  it("attributes backup audits to the current request admin", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "GET",
+        path: "/api/admin/backup/list",
+        admin: { id: "admin-2", email: "current-admin@example.com" },
+      }),
+      { handle: () => of([]) },
+    ))
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        adminEmail: "current-admin@example.com",
+        action: "backup.list",
+      }))
+    })
+    expect(auth.getEmail).not.toHaveBeenCalled()
   })
 
   it("records backup downloads because backup contents are sensitive", async () => {
