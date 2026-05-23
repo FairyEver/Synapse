@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   allPermissionKeys,
   assertActivePermissionKey,
+  normalizePermissionKeys,
   permissionDefinitions,
 } from "./permission-registry"
 
@@ -20,5 +21,18 @@ describe("permission registry", () => {
 
   it("marks first-release permissions as active", () => {
     expect(permissionDefinitions.every((item) => item.status === "active")).toBe(true)
+  })
+
+  it("dedupes and sorts permission keys", () => {
+    expect(normalizePermissionKeys(["workflow.use", "database.use", "workflow.use"])).toEqual([
+      "database.use",
+      "workflow.use",
+    ])
+  })
+
+  it("rejects unknown keys when normalizing permissions", () => {
+    expect(() => normalizePermissionKeys(["database.use", "page.database"])).toThrow(
+      "Unknown permission key: page.database",
+    )
   })
 })

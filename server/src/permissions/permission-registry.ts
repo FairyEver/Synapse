@@ -34,7 +34,7 @@ export const permissionDefinitions: readonly PermissionDefinition[] = definition
   status: "active",
 }))
 
-export const allPermissionKeys = permissionDefinitions.map((item) => item.key)
+export const allPermissionKeys: readonly string[] = permissionDefinitions.map((item) => item.key)
 
 const definitionByKey = new Map(permissionDefinitions.map((item) => [item.key, item]))
 
