@@ -23,7 +23,11 @@ export function parsePagination(
   query: Record<string, unknown>,
   options: { readonly allowedSortFields?: readonly string[] } = {},
 ): PaginationQuery {
-  const pagination = paginationSchema.parse(query)
+  const result = paginationSchema.safeParse(query)
+  if (!result.success) {
+    throw new BadRequestException("分页参数无效。")
+  }
+  const pagination = result.data
   const allowedSortFields = options.allowedSortFields ?? defaultAllowedSortFields
   if (!allowedSortFields.includes(pagination.sortBy)) {
     throw new BadRequestException("排序字段无效。")
