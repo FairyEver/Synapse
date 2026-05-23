@@ -1,15 +1,27 @@
-# Synapse Agent Rules
+# Synapse Agent 规则
 
-Follow this file first for every task in this repository.
+本仓库内的所有任务都先遵循本文件。
 
-If a task touches UI behavior, styling, visual design, typography, color, spacing, component appearance, theming, or any renderer-side presentation, you must read and follow:
+## 模块设计索引
+
+有些模块带有刻意设计的产品边界，局部看似合理的修改很容易破坏这些边界。修改下列模块前，先阅读对应设计说明，并把其中的 "Hard Rules" 视为强约束。
+
+| 模块 | 修改前必读 | 适用范围 |
+| --- | --- | --- |
+| Knowledge Base | `docs/agent-guides/knowledge-base.md` | `desktop/electron/services/knowledge-base/`, `desktop/resources/knowledge-base/`, `desktop/src/modules/knowledge-base/`, 知识库项目模板 |
+| Agent Runtime | `docs/superpowers/specs/2026-05-06-agent-session-architecture-design.md`, `docs/superpowers/specs/2026-05-21-agent-slash-menu-design.md` | `desktop/electron/services/agent-runtime/`, Agent 对话路由、命令、会话 |
+| Workflow | `docs/superpowers/specs/2026-05-16-workflow-mcp-design.md`, `docs/superpowers/specs/2026-05-16-workflow-node-types-design.md`, `docs/superpowers/specs/2026-05-16-workflow-loop-node-design.md` | `desktop/src/modules/workflow/`, workflow MCP, workflow 运行时定义 |
+| Scheduler | `docs/scheduler/path-and-env.md`, `docs/superpowers/specs/2026-05-16-task-scheduler-router-redesign.md` | Scheduler 任务、cron/interval 行为、任务执行环境 |
+| Rules / Skills / Content | `docs/superpowers/specs/2026-04-28-rule-skill-install-status-design.md`, `docs/superpowers/specs/2026-05-10-editor-scan-publish-to-repo-design.md` | 内容仓库、编辑器安装状态、本地编辑器扫描/导入/复制 |
+
+如果任务涉及 UI 行为、样式、视觉设计、排版、颜色、间距、组件外观、主题，或任何 renderer 侧呈现，必须阅读并遵循：
 
 - `.claude/rules/design.md`
 - `.claude/rules/ui-rules.md`
 
-For any visual decision, `.claude/rules/design.md` is the canonical authority for the repository's current shadcn-based visual baseline.
+任何视觉决策都以 `.claude/rules/design.md` 作为本仓库当前 shadcn 视觉基线的权威依据。
 
-## Stack
+## 技术栈
 
 - Electron
 - React
@@ -17,139 +29,138 @@ For any visual decision, `.claude/rules/design.md` is the canonical authority fo
 - shadcn/ui
 - TypeScript
 
-## Synapse MCP shortcut
+## Synapse MCP 快捷指令
 
-When the user mentions `sss`, use the matching `synapse-mcp` MCP tool by intent:
+当用户提到 `sss` 时，按意图使用匹配的 `synapse-mcp` MCP 工具：
 
-- Database, table, column, row, SQL, Database, or data CRUD requests use Database tools.
-- Scheduled task, scheduler, cron/interval, enable/disable, run history, or runtime status requests use scheduler tools.
-- If `sss` appears without a clear domain, infer from context; if still unclear, ask one short clarification.
+- 数据库、表、字段、行、SQL、Database 或数据增删改查请求使用 Database 工具。
+- 定时任务、scheduler、cron/interval、启用/停用、运行历史或 runtime 状态请求使用 scheduler 工具。
+- 如果 `sss` 没有明确领域，先根据上下文推断；仍不明确时，只问一句简短澄清。
 
-## Current UI foundation
+## 当前 UI 基础
 
-- The active shadcn preset is `radix-nova` in `desktop/components.json`.
-- The current primitive base is Radix, not Base UI.
-- `desktop/src/components/ui/` must stay aligned with the current shadcn + Radix setup.
-- Do not add or reintroduce `@base-ui/react` unless the task is an explicit migration approved by the user.
-- When adding or reinstalling shadcn components, preserve the current Radix base. If a task requires shadcn re-initialization or reinstall, use the Radix path rather than switching to `base`.
+- 当前 shadcn preset 是 `desktop/components.json` 中的 `radix-nova`。
+- 当前 primitive 基础是 Radix，不是 Base UI。
+- `desktop/src/components/ui/` 必须保持与当前 shadcn + Radix 设置一致。
+- 除非任务是用户明确批准的迁移，否则不要添加或重新引入 `@base-ui/react`。
+- 添加或重装 shadcn 组件时，保留当前 Radix 基础。如果任务需要重新初始化或重装 shadcn，使用 Radix 路径，不要切换到 `base`。
 
-## Current repository structure
+## 当前仓库结构
 
-- This repo is a pnpm monorepo. The workspace root hosts shared docs (`AGENTS.md`, `CLAUDE.md`, `README.md`), project-scoped Claude rules under `.claude/rules/`, `.github/` CI, and the monorepo `package.json` / `pnpm-workspace.yaml`. Source code lives in the `desktop/` subpackage published as `@synapse/desktop`.
-- Root public entry points are `pnpm dev` and `pnpm quit`; root `dev:*` / `quit:*` scripts are local helpers for those entry points. Run other package-specific scripts directly with `pnpm --filter @synapse/<package> run <script>`.
-- Privileged Electron code lives in `desktop/electron/`.
-- Renderer code lives in `desktop/src/`.
-- Shared shell state and orchestration live in `desktop/src/app-shell/`.
-- Shared UI components live in `desktop/src/components/` and `desktop/src/components/ui/`.
-- Shared pure utilities live in `desktop/src/lib/`.
-- Shared renderer-wide types live in `desktop/src/types/`.
-- New business modules should live in `desktop/src/modules/`, not `desktop/src/features/`.
-- Planned first-class modules include `rules`, `skills`, and `settings`; do not assume those directories already exist unless the task creates them.
+- 本仓库是 pnpm monorepo。工作区根目录包含共享文档（`AGENTS.md`, `CLAUDE.md`, `README.md`）、项目级 Claude 规则 `.claude/rules/`、`.github/` CI，以及 monorepo 的 `package.json` / `pnpm-workspace.yaml`。源代码位于 `desktop/` 子包，并以 `@synapse/desktop` 发布。
+- 根目录公开开发入口是 `pnpm dev:website`、`pnpm dev:server` 和 `pnpm dev:desktop`；根目录刻意没有 `pnpm dev` 命令。使用 `pnpm quit` 停止本地开发进程和 server compose 服务。其他包级脚本直接使用 `pnpm --filter @synapse/<package> run <script>` 运行。
+- 特权 Electron 代码位于 `desktop/electron/`。
+- Renderer 代码位于 `desktop/src/`。
+- 共享 shell 状态与编排位于 `desktop/src/app-shell/`。
+- 共享 UI 组件位于 `desktop/src/components/` 和 `desktop/src/components/ui/`。
+- 共享纯工具函数位于 `desktop/src/lib/`。
+- 共享 renderer 全局类型位于 `desktop/src/types/`。
+- 新业务模块应放在 `desktop/src/modules/`，不要放在 `desktop/src/features/`。
+- 计划中的一等模块包括 `rules`、`skills` 和 `settings`；除非任务创建它们，不要假设这些目录已经存在。
 
-## Core rules
+## 核心规则
 
-- Follow the existing project structure before creating new files or folders.
-- Do not introduce a parallel architecture such as `desktop/src/features/` unless the task is an explicit migration.
-- Prefer small, local changes over broad rewrites.
-- Reuse existing components, hooks, services, and utilities before adding new ones.
-- Do not add dependencies unless explicitly asked.
-- Use function components only. Keep components and hooks pure.
-- Put side effects in event handlers, effects, Electron main-process code, or dedicated services.
-- Use strict TypeScript. Avoid `any`; if it is truly unavoidable, isolate it and explain it.
+- 创建新文件或目录前，先遵循现有项目结构。
+- 除非任务是明确迁移，否则不要引入 `desktop/src/features/` 这类并行架构。
+- 优先做小而局部的修改，避免大范围重写。
+- 新增代码前先复用现有组件、hooks、services 和 utilities。
+- 除非用户明确要求，不要新增依赖。
+- 只使用函数组件。保持组件和 hooks 纯净。
+- 副作用应放在事件处理器、effects、Electron 主进程代码或专用服务中。
+- 使用严格 TypeScript。避免 `any`；如果确实不可避免，隔离使用并说明原因。
 
-## Phase 0 architecture hard constraints (SPEC §1)
+## Phase 0 架构硬约束（SPEC §1）
 
-These must hold for every PR. The `@synapse/desktop` `check:hard-constraints` script
-enforces them; CI runs it on push.
+每个 PR 都必须满足这些约束。`@synapse/desktop` 的 `check:hard-constraints` 脚本会强制检查；CI 会在 push 时运行。
 
-1. **No global singletons in new code**: never write `export default new XxxService()` in `desktop/electron/runtime/` or `desktop/electron/bootstrap/`. Wire services through `ServiceRegistry` (see `desktop/electron/runtime/service-registry`).
-2. **No bare `ipcMain.handle/on`**: only `desktop/electron/runtime/ipc/` may call these. Other code registers via `IpcRegistry.register(IpcModule, ctx)`.
-3. **No bare `webContents.send`**: only `desktop/electron/runtime/event-bus/` (via `WindowBroadcaster`) and `desktop/electron/runtime/window/` (via `WindowManager.broadcast`) may call this. Cross-renderer notifications go through EventBus.
-4. **No bare `http/net/https.createServer`**: only `desktop/electron/runtime/network/` may bind ports. Use `NetworkServiceRegistry.register(descriptor)`.
-5. **No bare `fs.writeFile` for business data**: persist through `DataRepository.namespace(name).upsert/setSingleton`.
-6. **No `modules/A` importing `modules/B/internal`**: cross-module communication goes through `ServiceRegistry.get<T>(id)` or `EventBus`. Shared types live in `src/types/`.
-7. **No empty `catch {}`**: handle, log via `StructuredLogger.warn(...)`, or rethrow with context. Never silently swallow.
-8. **Renderer**: only `window.synapse.*` for Electron capabilities. No direct `ipcRenderer` use.
-9. **`runtime/*` is pure infrastructure**: it never imports `desktop/electron/services/*`, `desktop/electron/database/*`, or business code. Glue lives in `desktop/electron/bootstrap/`.
-10. **Sensitive operations** (shell, file write outside userData, network connect, extension load, agent spawn, secret access): go through `PermissionGuard.check()` and record on `AuditSink`.
-11. **Extensible enums** (content types, editor adapters, connectors, providers, hook types, UI panels): register via `ExtensionPoint`. New hardcoded enums need explicit approval.
+1. **新代码禁止全局单例**：不要在 `desktop/electron/runtime/` 或 `desktop/electron/bootstrap/` 中写 `export default new XxxService()`。通过 `ServiceRegistry` 组装服务（见 `desktop/electron/runtime/service-registry`）。
+2. **禁止裸用 `ipcMain.handle/on`**：只有 `desktop/electron/runtime/ipc/` 可以调用它们。其他代码通过 `IpcRegistry.register(IpcModule, ctx)` 注册。
+3. **禁止裸用 `webContents.send`**：只有 `desktop/electron/runtime/event-bus/`（通过 `WindowBroadcaster`）和 `desktop/electron/runtime/window/`（通过 `WindowManager.broadcast`）可以调用。跨 renderer 通知走 EventBus。
+4. **禁止裸用 `http/net/https.createServer`**：只有 `desktop/electron/runtime/network/` 可以绑定端口。使用 `NetworkServiceRegistry.register(descriptor)`。
+5. **业务数据禁止裸用 `fs.writeFile`**：通过 `DataRepository.namespace(name).upsert/setSingleton` 持久化。
+6. **禁止 `modules/A` 导入 `modules/B/internal`**：跨模块通信通过 `ServiceRegistry.get<T>(id)` 或 `EventBus`。共享类型放在 `src/types/`。
+7. **禁止空 `catch {}`**：必须处理、通过 `StructuredLogger.warn(...)` 记录，或带上下文重新抛出。不要静默吞错。
+8. **Renderer**：Electron 能力只能通过 `window.synapse.*` 使用。不要直接使用 `ipcRenderer`。
+9. **`runtime/*` 是纯基础设施**：永远不要导入 `desktop/electron/services/*`、`desktop/electron/database/*` 或业务代码。胶水代码放在 `desktop/electron/bootstrap/`。
+10. **敏感操作**（shell、写入 userData 之外的文件、网络连接、扩展加载、agent spawn、secret 访问）：必须经过 `PermissionGuard.check()` 并记录到 `AuditSink`。
+11. **可扩展枚举**（content types、editor adapters、connectors、providers、hook types、UI panels）：通过 `ExtensionPoint` 注册。新增硬编码枚举需要明确批准。
 
-When in doubt run `pnpm --filter @synapse/desktop run check:hard-constraints` and `pnpm --filter @synapse/desktop run test`.
-- Keep renderer, preload, and main-process boundaries strict.
-- Filesystem, git, installation, download, dialog, updater, and OS logic belong in Electron main-process code, never in React components.
-- Renderer code may only access privileged capabilities through narrow, typed preload APIs.
-- Never expose raw `ipcRenderer`, `window.require`, or broad Electron APIs to the renderer.
-- Handle async errors explicitly. Do not silently swallow failures.
-- Preserve the existing interaction patterns unless the task explicitly changes them.
-- Never start a development server for verification unless the user explicitly asks. After code changes, leave runtime validation to the user.
-- Never start or invoke runtime debugging, browser previews, Chrome DevTools, MCP browser/page inspection, Playwright sessions, or open running app pages for verification unless the user explicitly asks. Reason through the source code instead.
-- For feature UI, prefer shadcn/ui composition and the default preset styles documented in `.claude/rules/design.md`.
-- When a task changes UI or styling, use existing shadcn components and theme tokens before adding custom visual treatment.
-- Treat the current renderer UI stack as `shadcn/ui + Radix`; do not silently swap the primitive library or preset.
-- Prefer `desktop/src/components/ui/` shadcn primitives over creating new general-purpose components in `desktop/src/components/`.
-- If a needed UI primitive is missing, add the official shadcn component to `desktop/src/components/ui/` or match CLI output closely before hand-rolling a custom primitive.
-- If `.claude/rules/design.md` specifies the active shadcn preset, font imports, tokens, or component usage rules, follow those over ad hoc page-level overrides.
-- Keep the app shell and feature modules on the same shared shadcn baseline instead of maintaining parallel visual systems.
-- If a component, hook, or service grows too large, split it into smaller, well-named units.
+不确定时运行 `pnpm --filter @synapse/desktop run check:hard-constraints` 和 `pnpm --filter @synapse/desktop run test`。
+- 严格保持 renderer、preload 和主进程边界。
+- 文件系统、git、安装、下载、dialog、updater 和 OS 逻辑属于 Electron 主进程代码，不要放进 React 组件。
+- Renderer 代码只能通过窄而类型化的 preload API 访问特权能力。
+- 不要向 renderer 暴露原始 `ipcRenderer`、`window.require` 或宽泛 Electron API。
+- 显式处理异步错误。不要静默吞掉失败。
+- 除非任务明确改变交互，否则保留现有交互模式。
+- 除非用户明确要求，不要为了验证启动开发服务器。代码修改后，把运行时验证留给用户。
+- 除非用户明确要求，不要启动或调用 runtime debugging、browser previews、Chrome DevTools、MCP browser/page inspection、Playwright sessions，也不要打开正在运行的应用页面做验证。通过源码推理完成检查。
+- 功能 UI 优先使用 shadcn/ui 组合方式，以及 `.claude/rules/design.md` 记录的默认 preset 样式。
+- 当任务修改 UI 或样式时，先使用现有 shadcn 组件和主题 token，再考虑新增视觉处理。
+- 将当前 renderer UI 栈视为 `shadcn/ui + Radix`；不要静默替换 primitive 库或 preset。
+- 优先使用 `desktop/src/components/ui/` 中的 shadcn primitives，不要在 `desktop/src/components/` 创建新的通用组件。
+- 如果缺少所需 UI primitive，在 `desktop/src/components/ui/` 添加官方 shadcn 组件，或尽量贴近 CLI 输出；不要先手写自定义 primitive。
+- 如果 `.claude/rules/design.md` 指定了当前 shadcn preset、字体导入、tokens 或组件使用规则，优先遵循它，而不是使用页面级临时覆盖。
+- 保持 app shell 和功能模块共用同一套 shadcn 基线，不要维护并行视觉系统。
+- 如果组件、hook 或 service 变得过大，拆分成更小且命名清晰的单元。
 
-## Karpathy-inspired execution rules
+## Karpathy-inspired 执行规则
 
-Behavioral guidelines to reduce common LLM coding mistakes. Merge with the project-specific rules in this file.
+这些行为准则用于减少常见 LLM 编码错误。与本文件中的项目规则合并执行。
 
-Tradeoff: These guidelines bias toward caution over speed. For trivial tasks, use judgment.
+权衡：这些准则偏向谨慎而不是速度。对于很小的任务，按判断执行。
 
-### 1. Think Before Coding
+### 1. 编码前先思考
 
-Don't assume. Don't hide confusion. Surface tradeoffs.
+不要假设。不要隐藏困惑。说清权衡。
 
-Before implementing:
+实现前：
 
-- State your assumptions explicitly. If uncertain, ask.
-- If multiple interpretations exist, present them - don't pick silently.
-- If a simpler approach exists, say so. Push back when warranted.
-- If something is unclear, stop. Name what's confusing. Ask.
+- 明确说明你的假设。不确定就问。
+- 如果存在多种理解，列出来，不要静默选择。
+- 如果有更简单的方案，说出来。必要时提出反对意见。
+- 如果事情不清楚，停下来。指出哪里困惑，并提问。
 
-### 2. Simplicity First
+### 2. 简单优先
 
-Minimum code that solves the problem. Nothing speculative.
+用能解决问题的最小代码。不要做 speculative 设计。
 
-- No features beyond what was asked.
-- No abstractions for single-use code.
-- No "flexibility" or "configurability" that wasn't requested.
-- No error handling for impossible scenarios.
-- If you write 200 lines and it could be 50, rewrite it.
+- 不添加超出需求的功能。
+- 不为单次使用的代码加抽象。
+- 不添加未经要求的“灵活性”或“可配置性”。
+- 不为不可能出现的场景写错误处理。
+- 如果写了 200 行但 50 行可以解决，重写得更简单。
 
-Ask yourself: "Would a senior engineer say this is overcomplicated?" If yes, simplify.
+问自己："资深工程师会不会觉得这过度复杂？" 如果会，就简化。
 
-### 3. Surgical Changes
+### 3. 外科手术式修改
 
-Touch only what you must. Clean up only your own mess.
+只改必须修改的内容。只清理你自己造成的问题。
 
-When editing existing code:
+编辑现有代码时：
 
-- Don't "improve" adjacent code, comments, or formatting.
-- Don't refactor things that aren't broken.
-- Match existing style, even if you'd do it differently.
-- If you notice unrelated dead code, mention it - don't delete it.
+- 不要“顺手改进”相邻代码、注释或格式。
+- 不要重构没有坏掉的东西。
+- 匹配现有风格，即使你会用不同方式实现。
+- 如果发现无关死代码，提出来，不要删除。
 
-When your changes create orphans:
+当你的修改产生孤儿代码时：
 
-- Remove imports/variables/functions that YOUR changes made unused.
-- Don't remove pre-existing dead code unless asked.
+- 移除由你的修改造成的未使用 imports、变量、函数。
+- 除非用户要求，不要删除预先存在的死代码。
 
-The test: Every changed line should trace directly to the user's request.
+检验标准：每一行变更都应该能直接追溯到用户请求。
 
-### 4. Goal-Driven Execution
+### 4. 目标驱动执行
 
-Define success criteria. Loop until verified.
+定义成功标准。循环推进直到验证完成。
 
-Transform tasks into verifiable goals:
+把任务转换为可验证目标：
 
 - "Add validation" -> "Write tests for invalid inputs, then make them pass"
 - "Fix the bug" -> "Write a test that reproduces it, then make it pass"
 - "Refactor X" -> "Ensure tests pass before and after"
 
-For multi-step tasks, state a brief plan:
+多步骤任务先给出简短计划：
 
 ```text
 1. [Step] -> verify: [check]
@@ -157,45 +168,45 @@ For multi-step tasks, state a brief plan:
 3. [Step] -> verify: [check]
 ```
 
-Strong success criteria let you loop independently. Weak criteria ("make it work") require constant clarification.
+强成功标准能让你独立循环。弱标准（如 "make it work"）需要持续澄清。
 
-These guidelines are working if: fewer unnecessary changes in diffs, fewer rewrites due to overcomplication, and clarifying questions come before implementation rather than after mistakes.
+这些准则生效的表现是：无必要变更更少，因为过度复杂导致的返工更少，澄清问题发生在实现前而不是出错后。
 
-## Design guardrails
+## 设计护栏
 
-For any UI or styling task, treat these as default requirements unless the user explicitly asks for an exception:
+任何 UI 或样式任务，除非用户明确要求例外，都默认遵循这些要求：
 
-- Use the active shadcn preset and CSS variable tokens defined by `desktop/components.json` and `desktop/src/styles/globals.css`.
-- Prefer neutral palette tokens such as `bg-background`, `text-foreground`, `bg-card`, `border-border`, and `bg-muted`.
-- Use the preset's default font imports and tokenized font roles instead of adding separate brand display styles.
-- Prefer stock shadcn radius, border, shadow, and focus-ring treatment over custom arbitrary values.
-- Use this UI decision order: existing business composition that already fits -> existing `desktop/src/components/ui/` component -> new shadcn component added under `desktop/src/components/ui/` -> thin module-local composition -> last-resort custom primitive.
-- Compose from shadcn components before hand-rolling parallel UI primitives.
-- Let Tailwind primarily handle layout, spacing, sizing, responsive behavior, overflow, and simple typography; do not use it as the main way to restyle buttons, inputs, cards, dialogs, or tabs.
-- Do not create a new shared presentational primitive in `desktop/src/components/` when a shadcn equivalent exists or can be added.
-- Avoid hard-coded brand colors, custom shadow systems, decorative gradients, and page-specific visual languages unless the task explicitly asks for them.
+- 使用 `desktop/components.json` 和 `desktop/src/styles/globals.css` 中定义的当前 shadcn preset 与 CSS variable tokens。
+- 优先使用中性 palette tokens，例如 `bg-background`、`text-foreground`、`bg-card`、`border-border` 和 `bg-muted`。
+- 使用 preset 默认字体导入和 tokenized font roles，不要额外添加独立品牌展示字体。
+- 优先使用 shadcn 默认 radius、border、shadow 和 focus-ring 处理，不要使用自定义 arbitrary values。
+- UI 决策顺序：已经合适的现有业务组合 -> 现有 `desktop/src/components/ui/` 组件 -> 新增到 `desktop/src/components/ui/` 的 shadcn 组件 -> 模块内薄组合 -> 最后才是自定义 primitive。
+- 先用 shadcn 组件组合，再考虑手写并行 UI primitives。
+- Tailwind 主要用于布局、间距、尺寸、响应式、overflow 和简单排版；不要把它作为重写按钮、输入框、卡片、对话框或 tabs 样式的主要方式。
+- 当存在或可以添加 shadcn 等价组件时，不要在 `desktop/src/components/` 创建新的共享展示 primitive。
+- 除非任务明确要求，避免硬编码品牌色、自定义阴影系统、装饰性渐变和页面级独立视觉语言。
 
-## Product copy guardrails
+## 产品文案护栏
 
-- Treat all UI copy as product copy for end users, not implementation notes for developers.
-- Never put roadmap notes, future-phase plans, architectural rationale, state-boundary explanations, technical caveats, or design self-justification into the interface unless the user explicitly needs that information to complete the current task.
-- Empty, loading, disabled, and error states should be brief and action-oriented. Tell the user what they can do now or what just happened, in plain language.
-- Prefer one clear next step over multi-sentence explanation.
-- Before keeping any UI sentence, ask: "Would a normal user need this to use the feature right now?" If not, remove it.
+- 把所有 UI 文案都视为面向最终用户的产品文案，不是给开发者看的实现说明。
+- 除非用户确实需要这些信息来完成当前任务，否则不要把路线图说明、未来阶段计划、架构理由、状态边界解释、技术 caveat 或设计自证放进界面。
+- 空状态、加载状态、禁用状态和错误状态应简短、行动导向。用朴素语言告诉用户现在能做什么，或刚刚发生了什么。
+- 优先提供一个清楚的下一步，而不是多句解释。
+- 保留任何 UI 句子前，先问："普通用户现在使用这个功能时真的需要这句话吗？" 如果不需要，就删掉。
 
-## Placement rules
+## 放置规则
 
-- New renderer business logic should usually live inside the relevant module under `desktop/src/modules/<module>/`.
-- Inside a module, prefer `components/`, `hooks/`, `services/`, `types.ts`, and `utils.ts` when those boundaries help.
-- Shared pure helpers belong in `desktop/src/lib/`.
-- Shared renderer-wide types belong in `desktop/src/types/`.
-- When Electron logic grows, split it into clearly named files under `desktop/electron/` instead of inflating `desktop/electron/main.ts`.
-- Keep `desktop/src/App.tsx` focused on app-shell composition and top-level tab orchestration, not deep feature logic.
+- 新 renderer 业务逻辑通常应放在相关模块的 `desktop/src/modules/<module>/` 下。
+- 模块内部在边界有帮助时，优先使用 `components/`、`hooks/`、`services/`、`types.ts` 和 `utils.ts`。
+- 共享纯 helper 放在 `desktop/src/lib/`。
+- 共享 renderer 全局类型放在 `desktop/src/types/`。
+- 当 Electron 逻辑变多时，拆到 `desktop/electron/` 下命名清晰的文件中，不要把 `desktop/electron/main.ts` 越堆越大。
+- 保持 `desktop/src/App.tsx` 专注于 app-shell 组合和顶层 tab 编排，不要放入深层功能逻辑。
 
-## Before finishing
+## 完成前
 
-- Check whether an existing file already solves part of the task.
-- Keep the final diff minimal and focused.
-- Ensure naming is explicit and consistent.
-- Update types, validation, and error handling when behavior changes.
-- Make sure another engineer can extend the code without reverse-engineering hidden abstractions.
+- 检查是否已有文件解决了任务的一部分。
+- 保持最终 diff 最小且聚焦。
+- 确保命名明确且一致。
+- 行为变化时，同步更新类型、校验和错误处理。
+- 确保另一位工程师无需反向推理隐藏抽象，也能继续扩展代码。
