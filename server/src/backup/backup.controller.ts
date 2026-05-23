@@ -1,4 +1,4 @@
-import { Controller, Delete, Get, Param, Post, Res, UseGuards } from "@nestjs/common"
+import { Controller, Delete, Get, InternalServerErrorException, Param, Post, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
 import { BackupService } from "./backup.service"
@@ -10,7 +10,11 @@ export class BackupController {
 
   @Post()
   async triggerBackup() {
-    return this.backupService.performBackup()
+    const result = await this.backupService.performBackup()
+    if (result.status === "failed") {
+      throw new InternalServerErrorException(result.error || "备份失败")
+    }
+    return result
   }
 
   @Get("list")
