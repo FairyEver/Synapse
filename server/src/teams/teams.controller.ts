@@ -19,7 +19,7 @@ export class TeamsController {
 
   @Post()
   createTeam(@Req() request: AuthenticatedTeamRequest, @Body() body: unknown) {
-    return this.teams.createTeam(request.user!.id, parseBody(createTeamSchema, body, "团队创建请求无效。"))
+    return this.teams.createTeam(request.user!.id, parseBody(createTeamSchema, body, "团队创建请求无效。"), request.ip)
   }
 
   @Get("/me")
@@ -35,12 +35,13 @@ export class TeamsController {
         configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
         request,
       }),
+      request.ip,
     )
   }
 
   @Post("/join")
   joinTeam(@Req() request: AuthenticatedTeamRequest, @Body() body: unknown) {
-    return this.teams.joinTeam(request.user!.id, parseBody(joinTeamSchema, body, "加入团队请求无效。"))
+    return this.teams.joinTeam(request.user!.id, parseBody(joinTeamSchema, body, "加入团队请求无效。"), request.ip)
   }
 
   @Get("/members")
@@ -50,12 +51,12 @@ export class TeamsController {
 
   @Delete("/members/:userId")
   removeMember(@Req() request: AuthenticatedTeamRequest, @Param("userId") userId: string) {
-    return this.teams.removeMember(request.user!.id, userId)
+    return this.teams.removeMember(request.user!.id, userId, request.ip)
   }
 
   @Delete("/me")
   leaveTeam(@Req() request: AuthenticatedTeamRequest) {
-    return this.teams.leaveTeam(request.user!.id)
+    return this.teams.leaveTeam(request.user!.id, request.ip)
   }
 }
 

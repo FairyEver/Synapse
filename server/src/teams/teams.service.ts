@@ -11,7 +11,7 @@ export class TeamsService {
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
-  async createTeam(userId: string, input: { name: string }) {
+  async createTeam(userId: string, input: { name: string }, ipAddress = "system") {
     const existing = await this.getMembership(userId)
     if (existing) throw new BadRequestException("账号已属于一个团队。")
 
@@ -30,7 +30,7 @@ export class TeamsService {
       action: "team.create",
       targetType: "team",
       targetId: team.id,
-      ipAddress: "system",
+      ipAddress,
     })
     return team
   }
@@ -51,7 +51,7 @@ export class TeamsService {
     })
   }
 
-  async createInvitation(userId: string, publicAppUrl: string) {
+  async createInvitation(userId: string, publicAppUrl: string, ipAddress = "system") {
     const membership = await this.getMembership(userId)
     if (!membership || membership.role !== "owner") {
       throw new ForbiddenException()
@@ -63,12 +63,12 @@ export class TeamsService {
       action: "team.invitation.create",
       targetType: "invitation",
       targetId: invitation.id,
-      ipAddress: "system",
+      ipAddress,
     })
     return invitation
   }
 
-  async joinTeam(userId: string, input: { invitationToken: string }) {
+  async joinTeam(userId: string, input: { invitationToken: string }, ipAddress = "system") {
     const existing = await this.getMembership(userId)
     if (existing) throw new BadRequestException("账号已属于一个团队。")
 
@@ -90,7 +90,7 @@ export class TeamsService {
       action: "team.join",
       targetType: "team",
       targetId: result.teamId,
-      ipAddress: "system",
+      ipAddress,
     })
     return result.membership
   }
@@ -105,7 +105,7 @@ export class TeamsService {
     })
   }
 
-  async removeMember(ownerUserId: string, targetUserId: string) {
+  async removeMember(ownerUserId: string, targetUserId: string, ipAddress = "system") {
     const ownerMembership = await this.getMembership(ownerUserId)
     if (!ownerMembership || ownerMembership.role !== "owner") {
       throw new ForbiddenException()
@@ -127,12 +127,12 @@ export class TeamsService {
       targetType: "user",
       targetId: targetUserId,
       detail: { teamId: ownerMembership.teamId },
-      ipAddress: "system",
+      ipAddress,
     })
     return { ok: true }
   }
 
-  async leaveTeam(userId: string) {
+  async leaveTeam(userId: string, ipAddress = "system") {
     const membership = await this.getMembership(userId)
     if (!membership) throw new BadRequestException("账号未加入团队。")
 
@@ -155,7 +155,7 @@ export class TeamsService {
       action: "team.leave",
       targetType: "team",
       targetId: membership.teamId,
-      ipAddress: "system",
+      ipAddress,
     })
     return { ok: true }
   }
