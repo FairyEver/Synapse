@@ -121,13 +121,16 @@ describe("TeamsService", () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "owner", teamId: "team-1", userId: "user-1" })
     prisma.teamMembership.count.mockResolvedValue(1)
+    const deleteInvitations = vi.fn().mockResolvedValue({ count: 1 })
     prisma.$transaction.mockImplementationOnce((callback) => callback({
+      invitation: { deleteMany: deleteInvitations },
       teamMembership: { delete: vi.fn().mockResolvedValue({ id: "membership-1" }) },
       team: { delete: vi.fn().mockResolvedValue({ id: "team-1" }) },
     }))
     const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never)
 
     await expect(service.leaveTeam("user-1")).resolves.toEqual({ ok: true })
+    expect(deleteInvitations).toHaveBeenCalledWith({ where: { teamId: "team-1" } })
   })
 
   it("records member removals with the owner email", async () => {

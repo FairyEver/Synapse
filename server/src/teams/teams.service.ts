@@ -143,6 +143,7 @@ export class TeamsService {
         throw new BadRequestException("请先移除其他成员。")
       }
       await this.prisma.$transaction(async (tx) => {
+        await tx.invitation.deleteMany({ where: { teamId: membership.teamId } })
         await tx.teamMembership.delete({ where: { userId } })
         await tx.team.delete({ where: { id: membership.teamId } })
       })
