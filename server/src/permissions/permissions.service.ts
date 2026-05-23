@@ -185,7 +185,7 @@ export class PermissionsService {
     const keys = normalizePermissionKeys(permissionKeys)
     if (keys.length === 0) return
     await client.teamEntitlement.createMany({
-      data: keys.map((permissionKey) => ({ teamId, permissionKey, source: "migration" })),
+      data: keys.map((permissionKey) => ({ teamId, permissionKey, source: "plan" })),
       skipDuplicates: true,
     })
   }

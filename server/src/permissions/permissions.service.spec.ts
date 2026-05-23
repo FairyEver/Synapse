@@ -185,7 +185,7 @@ describe("PermissionsService", () => {
       data: normalizePermissionKeys(allPermissionKeys).map((permissionKey) => ({
         teamId: "team-1",
         permissionKey,
-        source: "migration",
+        source: "plan",
       })),
       skipDuplicates: true,
     })
