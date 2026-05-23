@@ -5,6 +5,8 @@ import { BackupPage } from "./backup-page"
 
 vi.mock("@/lib/api", () => ({
   adminApi: {
+    deleteBackup: vi.fn(),
+    downloadBackup: vi.fn(),
     listBackups: vi.fn(),
     triggerBackup: vi.fn(),
   },
@@ -44,6 +46,34 @@ describe("BackupPage", () => {
     await waitFor(() => {
       expect(result.container.textContent).toContain("COS 不可用")
       expect(result.container.textContent).not.toContain("synapse-backup-old.tar.gz")
+    })
+  })
+
+  it("downloads and deletes backup rows", async () => {
+    vi.mocked(adminApi.listBackups)
+      .mockResolvedValueOnce([
+        {
+          filename: "synapse-backup-old.tar.gz",
+          size: 1024,
+          createdAt: "2026-05-22T00:00:00.000Z",
+        },
+      ])
+      .mockResolvedValueOnce([])
+    vi.mocked(adminApi.deleteBackup).mockResolvedValue({ ok: true })
+
+    const result = await render(<BackupPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("synapse-backup-old.tar.gz")
+    })
+    result.container.querySelector<HTMLButtonElement>("[aria-label='下载备份 synapse-backup-old.tar.gz']")?.click()
+    result.container.querySelector<HTMLButtonElement>("[aria-label='删除备份 synapse-backup-old.tar.gz']")?.click()
+
+    await waitFor(() => {
+      expect(adminApi.downloadBackup).toHaveBeenCalledWith("synapse-backup-old.tar.gz")
+      expect(adminApi.deleteBackup).toHaveBeenCalledWith("synapse-backup-old.tar.gz")
+      expect(result.container.textContent).toContain("暂无备份记录")
     })
   })
 })

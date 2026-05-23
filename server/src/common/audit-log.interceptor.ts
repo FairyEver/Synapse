@@ -68,7 +68,10 @@ function redactSensitiveBody(value: unknown): unknown {
 
 function shouldAuditRequest(method: string, path: string): boolean {
   if (WRITE_METHODS.has(method)) return true
-  return method === "GET" && path === "/api/admin/backup/list"
+  return method === "GET" && (
+    path === "/api/admin/backup/list" ||
+    path.startsWith("/api/admin/backup/download/")
+  )
 }
 
 function resolveAuditTarget(
@@ -77,12 +80,13 @@ function resolveAuditTarget(
   params: Record<string, string>,
   responseBody: unknown,
 ): { action: string; targetType: string; targetId: string } {
-  const id = params.id ?? readId(responseBody)
+  const id = params.id ?? params.filename ?? readId(responseBody)
   const segments = path.replace("/api/admin/", "").split("/")
   const resource = segments[0] ?? "unknown"
 
   let action = `${resource}.${method.toLowerCase()}`
   if (resource === "backup" && segments.includes("list")) action = "backup.list"
+  if (resource === "backup" && segments.includes("download")) action = "backup.download"
   if (segments.includes("archive")) action = `${resource}.archive`
   if (segments.includes("risk-lock")) action = `${resource}.risk-lock`
   if (segments.includes("replace")) action = `${resource}.replace`

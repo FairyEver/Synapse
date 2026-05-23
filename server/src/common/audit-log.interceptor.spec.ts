@@ -6,6 +6,7 @@ import { AuditLogInterceptor } from "./audit-log.interceptor"
 function createContext(options: {
   readonly method?: string
   readonly path?: string
+  readonly params?: Record<string, string>
   readonly body?: unknown
 }): ExecutionContext {
   return {
@@ -13,7 +14,7 @@ function createContext(options: {
       getRequest: () => ({
         method: options.method ?? "POST",
         path: options.path ?? "/api/admin/login",
-        params: {},
+        params: options.params ?? {},
         body: options.body,
         ip: "127.0.0.1",
       }),
@@ -70,6 +71,29 @@ describe("AuditLogInterceptor", () => {
         detail: { method: "GET", path: "/api/admin/backup/list", body: undefined },
         ipAddress: "127.0.0.1",
       })
+    })
+  })
+
+  it("records backup downloads because backup contents are sensitive", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "GET",
+        path: "/api/admin/backup/download/synapse-backup.tar.gz",
+        params: { filename: "synapse-backup.tar.gz" },
+      }),
+      { handle: () => of(Buffer.from("backup")) },
+    ))
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "backup.download",
+        targetType: "backup",
+        targetId: "synapse-backup.tar.gz",
+      }))
     })
   })
 })

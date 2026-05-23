@@ -50,6 +50,16 @@ export function BackupPage() {
     }
   }
 
+  async function handleDelete(filename: string) {
+    setError(null)
+    try {
+      await adminApi.deleteBackup(filename)
+      loadList()
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "删除失败")
+    }
+  }
+
   return (
     <div className="grid gap-2">
       <div className="flex items-center">
@@ -69,6 +79,7 @@ export function BackupPage() {
               <TableHead>文件名</TableHead>
               <TableHead>大小</TableHead>
               <TableHead>备份时间</TableHead>
+              <TableHead>操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -77,6 +88,28 @@ export function BackupPage() {
                 <TableCell>{file.filename}</TableCell>
                 <TableCell>{formatSize(file.size)}</TableCell>
                 <TableCell>{formatDate(file.createdAt)}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-label={`下载备份 ${file.filename}`}
+                      onClick={() => adminApi.downloadBackup(file.filename)}
+                    >
+                      下载
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      aria-label={`删除备份 ${file.filename}`}
+                      onClick={() => void handleDelete(file.filename)}
+                    >
+                      删除
+                    </Button>
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

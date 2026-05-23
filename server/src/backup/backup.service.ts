@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common"
+import { BadRequestException, Injectable, ServiceUnavailableException } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import { PinoLogger } from "nestjs-pino"
 import { execFile } from "node:child_process"
@@ -31,6 +31,13 @@ export interface BackupItem {
 export interface PgDumpOptions {
   args: string[]
   env: NodeJS.ProcessEnv
+}
+
+export function buildBackupKey(prefix: string, filename: string): string {
+  if (!filename || filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
+    throw new BadRequestException("备份文件名无效。")
+  }
+  return `${prefix}${filename}`
 }
 
 export function buildPgDumpOptions(
@@ -174,6 +181,52 @@ export class BackupService {
       this.logger.error({ error: message }, "Failed to list backups")
       return []
     }
+  }
+
+  async downloadBackup(filename: string): Promise<Buffer> {
+    if (!this.cos) throw new ServiceUnavailableException("备份未配置。")
+    const key = buildBackupKey(this.prefix, filename)
+
+    const body = await new Promise<unknown>((resolve, reject) => {
+      this.cos!.getObject(
+        {
+          Bucket: this.bucket,
+          Region: this.region,
+          Key: key,
+        },
+        (err, data) => {
+          if (err) {
+            reject(err)
+            return
+          }
+          resolve(data.Body)
+        },
+      )
+    })
+
+    if (Buffer.isBuffer(body)) return body
+    if (body instanceof Uint8Array) return Buffer.from(body)
+    if (typeof body === "string") return Buffer.from(body)
+    throw new Error("备份文件内容无效。")
+  }
+
+  async deleteBackup(filename: string): Promise<void> {
+    if (!this.cos) throw new ServiceUnavailableException("备份未配置。")
+    const key = buildBackupKey(this.prefix, filename)
+
+    await new Promise<void>((resolve, reject) => {
+      this.cos!.deleteObject(
+        {
+          Bucket: this.bucket,
+          Region: this.region,
+          Key: key,
+        },
+        (err) => {
+          if (err) reject(err)
+          else resolve()
+        },
+      )
+    })
   }
 
   private async dumpDatabase(): Promise<string> {

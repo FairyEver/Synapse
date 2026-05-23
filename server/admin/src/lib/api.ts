@@ -230,6 +230,13 @@ export const adminApi = {
     request<void>(`${adminApiBasePath}/backup`, {
       method: "POST",
     }),
+  downloadBackup: (filename: string) => {
+    window.open(`${adminApiBasePath}/backup/download/${encodeURIComponent(filename)}`, "_blank")
+  },
+  deleteBackup: (filename: string) =>
+    request<{ ok: true }>(`${adminApiBasePath}/backup/${encodeURIComponent(filename)}`, {
+      method: "DELETE",
+    }),
   listAuditLogs: (options: {
     readonly action?: string
     readonly from?: string

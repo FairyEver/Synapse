@@ -19,6 +19,7 @@ describe("adminApi", () => {
     await adminApi.logout()
     await adminApi.listBackups()
     await adminApi.triggerBackup()
+    await adminApi.deleteBackup("synapse-backup.tar.gz")
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -45,6 +46,11 @@ describe("adminApi", () => {
       "/api/admin/backup",
       expect.objectContaining({ method: "POST", credentials: "include" }),
     )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      6,
+      "/api/admin/backup/synapse-backup.tar.gz",
+      expect.objectContaining({ method: "DELETE", credentials: "include" }),
+    )
   })
 
   it("opens admin exports under /api/admin", () => {
@@ -53,6 +59,7 @@ describe("adminApi", () => {
 
     adminApi.exportAuditLogs({ action: "users.post" })
     adminApi.downloadLogs({ from: "2026-05-01" })
+    adminApi.downloadBackup("synapse backup.tar.gz")
 
     expect(openMock).toHaveBeenNthCalledWith(
       1,
@@ -62,6 +69,11 @@ describe("adminApi", () => {
     expect(openMock).toHaveBeenNthCalledWith(
       2,
       "/api/admin/logs/download?from=2026-05-01",
+      "_blank",
+    )
+    expect(openMock).toHaveBeenNthCalledWith(
+      3,
+      "/api/admin/backup/download/synapse%20backup.tar.gz",
       "_blank",
     )
   })

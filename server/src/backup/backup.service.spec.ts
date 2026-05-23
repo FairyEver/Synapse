@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { buildPgDumpOptions } from "./backup.service"
+import { buildBackupKey, buildPgDumpOptions } from "./backup.service"
 
 describe("buildPgDumpOptions", () => {
   it("keeps database passwords out of pg_dump command arguments", () => {
@@ -23,5 +23,17 @@ describe("buildPgDumpOptions", () => {
     expect(options.args).not.toContain(databaseUrl)
     expect(options.env.PGPASSWORD).toBe("secret@pass")
     expect(options.env.PGSSLMODE).toBe("require")
+  })
+})
+
+describe("buildBackupKey", () => {
+  it("rejects path traversal filenames", () => {
+    expect(() => buildBackupKey("backups/", "../dump.tar.gz")).toThrow("备份文件名无效。")
+    expect(() => buildBackupKey("backups/", "nested/dump.tar.gz")).toThrow("备份文件名无效。")
+    expect(() => buildBackupKey("backups/", "nested\\dump.tar.gz")).toThrow("备份文件名无效。")
+  })
+
+  it("builds keys for plain backup filenames", () => {
+    expect(buildBackupKey("backups/", "synapse-backup.tar.gz")).toBe("backups/synapse-backup.tar.gz")
   })
 })
