@@ -1,7 +1,8 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Post, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Optional, Post, Req, Res, UseGuards } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Response } from "express"
 import { z } from "zod"
+import { AuditLogService } from "../common/audit-log.service"
 import { AdminAuthGuard, type AdminRequest } from "./admin-auth.guard"
 import { AdminAuthService } from "./admin-auth.service"
 
@@ -12,7 +13,10 @@ const loginSchema = z.object({
 
 @Controller("/api/admin")
 export class AdminAuthController {
-  constructor(private readonly auth: AdminAuthService) {}
+  constructor(
+    private readonly auth: AdminAuthService,
+    @Optional() private readonly auditLog?: AuditLogService,
+  ) {}
 
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post("/login")
@@ -32,8 +36,19 @@ export class AdminAuthController {
   }
 
   @Post("/logout")
-  logout(@Res({ passthrough: true }) response: Response) {
+  async logout(@Res({ passthrough: true }) response: Response, @Req() request: AdminRequest) {
+    const token = request.cookies?.synapse_admin
+    const admin = typeof token === "string" ? await this.auth.verify(token) : null
     response.clearCookie("synapse_admin")
+    if (admin) {
+      await this.auditLog?.record({
+        adminEmail: admin.email,
+        action: "admin.logout",
+        targetType: "admin",
+        targetId: admin.id,
+        ipAddress: request.ip ?? "system",
+      })
+    }
     return { ok: true }
   }
 

@@ -24,6 +24,7 @@ describe("AuditLogsPage", () => {
       { value: "all", label: "全部操作" },
       { value: "admin.invitation.create", label: "admin.invitation.create" },
       { value: "admin.invitation.delete.not_found", label: "admin.invitation.delete.not_found" },
+      { value: "admin.logout", label: "admin.logout" },
       { value: "admin.user.status_update", label: "admin.user.status_update" },
       { value: "dashboard.login.disabled", label: "dashboard.login.disabled" },
       { value: "user.login.disabled", label: "user.login.disabled" },
