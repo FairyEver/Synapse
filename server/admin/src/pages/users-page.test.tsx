@@ -84,8 +84,8 @@ describe("UsersPage", () => {
 
     await waitFor(() => {
       expect(result.container.textContent).toContain("member@example.com")
-      expect(result.container.textContent).toContain("研发组 / owner")
-      expect(result.container.textContent).toContain("测试组 / member")
+      expect(result.container.textContent).toContain("研发组 / 所有者")
+      expect(result.container.textContent).toContain("测试组 / 成员")
     })
   })
 

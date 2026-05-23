@@ -16,6 +16,7 @@ import {
 import { useApiResource } from "@/hooks/use-api-resource"
 import { adminApi, type AdminUserRow, type PaginatedResponse } from "@/lib/api"
 import { formatDate } from "@/lib/format"
+import { formatTeamRole } from "@/lib/team-role"
 import { SignupInvitationAction } from "./signup-invitation-action"
 
 export function UsersPage() {
@@ -87,7 +88,9 @@ export function UsersPage() {
                   {user.memberships.length > 0 ? (
                     <div className="flex flex-col gap-1">
                       {user.memberships.map((membership) => (
-                        <span key={membership.team.id}>{`${membership.team.name} / ${membership.role}`}</span>
+                        <span key={membership.team.id}>
+                          {`${membership.team.name} / ${formatTeamRole(membership.role)}`}
+                        </span>
                       ))}
                     </div>
                   ) : (

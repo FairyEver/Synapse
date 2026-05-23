@@ -26,11 +26,7 @@ import {
 import { useApiResource } from "@/hooks/use-api-resource"
 import { adminApi, type AdminTeamRow, type PaginatedResponse, type PermissionDefinition } from "@/lib/api"
 import { formatDate } from "@/lib/format"
-
-const teamRoleLabels = {
-  owner: "所有者",
-  member: "成员",
-} as const
+import { formatTeamRole } from "@/lib/team-role"
 
 const permissionGroupLabels: Record<string, string> = {
   agent: "Agent",
@@ -40,10 +36,6 @@ const permissionGroupLabels: Record<string, string> = {
   local: "本机",
   team: "团队",
   usage: "使用分析",
-}
-
-function formatTeamRole(role: AdminTeamRow["memberships"][number]["role"]): string {
-  return teamRoleLabels[role]
 }
 
 function formatPermissionGroup(group: string): string {

@@ -31,10 +31,7 @@ import {
 import { useApiResource } from "@/hooks/use-api-resource"
 import { userDashboardApi, type MyTeam, type TeamMember } from "@/lib/api"
 import { formatDate } from "@/lib/format"
-
-function roleLabel(role: TeamMember["role"]): string {
-  return role === "owner" ? "所有者" : "成员"
-}
+import { formatTeamRole } from "@/lib/team-role"
 
 export function UserTeamPage() {
   const { data: membership, error, loading, reload } = useApiResource<MyTeam | null>(() => userDashboardApi.getMyTeam())
@@ -189,7 +186,7 @@ export function UserTeamPage() {
             <TableRow key={member.id}>
               <TableCell>{member.user.email}</TableCell>
               <TableCell>
-                <Badge variant={member.role === "owner" ? "default" : "secondary"}>{roleLabel(member.role)}</Badge>
+                <Badge variant={member.role === "owner" ? "default" : "secondary"}>{formatTeamRole(member.role)}</Badge>
               </TableCell>
               <TableCell>{formatDate(member.createdAt)}</TableCell>
               {isOwner ? (
