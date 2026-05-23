@@ -1,4 +1,5 @@
 import { BadRequestException, Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common"
+import { Throttle } from "@nestjs/throttler"
 import { z } from "zod"
 import { AuthenticatedUserRequest, UserAuthGuard } from "./user-auth.guard"
 import { UserAuthService } from "./user-auth.service"
@@ -22,11 +23,13 @@ const refreshSchema = z.object({
 export class UserAuthController {
   constructor(private readonly auth: UserAuthService) {}
 
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post("/register")
   register(@Body() body: unknown) {
     return this.auth.register(parseBody(registerSchema, body, "注册请求无效。"))
   }
 
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post("/login")
   login(@Body() body: unknown) {
     return this.auth.login(parseBody(loginSchema, body, "登录请求无效。"))
