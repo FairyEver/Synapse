@@ -4,6 +4,7 @@ import { PrismaService } from "../prisma/prisma.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse } from "./pagination"
 
 const auditLogSortFields = ["createdAt", "adminEmail", "action", "targetType", "targetId"] as const
+export const auditLogExportLimit = 50000
 
 interface AuditLogFilterOptions {
   readonly action?: string
@@ -77,10 +78,11 @@ export class AuditLogService {
     return { data, total, page: pagination.page, pageSize: pagination.pageSize }
   }
 
-  listForExport(options: AuditLogFilterOptions): Promise<unknown[]> {
+  listForExport(options: AuditLogFilterOptions, limit = auditLogExportLimit): Promise<unknown[]> {
     return this.prisma.auditLog.findMany({
       where: buildAuditLogWhere(options),
       orderBy: { createdAt: "desc" },
+      take: limit + 1,
     })
   }
 }

@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post,
 import type { Response } from "express"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
-import { AuditLogService } from "../common/audit-log.service"
+import { AuditLogService, auditLogExportLimit } from "../common/audit-log.service"
 import { toCsv } from "../common/csv-export"
 import { parsePagination } from "../common/pagination"
 import { resolvePublicAppUrl } from "../invitations/invitation-url"
@@ -98,6 +98,9 @@ export class AdminController {
       from: typeof query.from === "string" ? query.from : undefined,
       to: typeof query.to === "string" ? query.to : undefined,
     })
+    if (data.length > auditLogExportLimit) {
+      throw new BadRequestException(`导出记录超过 ${auditLogExportLimit} 条，请缩小时间范围。`)
+    }
     const csv = toCsv(data as Record<string, unknown>[], [
       "id", "adminEmail", "action", "targetType", "targetId", "ipAddress", "createdAt",
     ])

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import { AdminController } from "./admin.controller"
 import type { AdminService } from "./admin.service"
-import type { AuditLogService } from "../common/audit-log.service"
+import { auditLogExportLimit, type AuditLogService } from "../common/audit-log.service"
 
 function createController(
   service: Partial<AdminService>,
@@ -92,6 +92,23 @@ describe("AdminController", () => {
       from: undefined,
       to: undefined,
     })
+  })
+
+  it("rejects audit log exports over the export limit", async () => {
+    const listForExport = vi.fn().mockResolvedValue(Array.from(
+      { length: auditLogExportLimit + 1 },
+      (_, index) => ({ id: `audit-${index}` }),
+    ))
+    const response = {
+      setHeader: vi.fn(),
+      send: vi.fn(),
+    }
+    const controller = createController({}, { listForExport })
+
+    await expect(controller.exportAuditLogs({}, response as never))
+      .rejects
+      .toThrow(`导出记录超过 ${auditLogExportLimit} 条，请缩小时间范围。`)
+    expect(response.send).not.toHaveBeenCalled()
   })
 
   it("creates signup invitations through the service", async () => {
