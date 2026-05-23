@@ -9,7 +9,6 @@ import { Observable, tap } from "rxjs"
 import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { AuditLogService } from "./audit-log.service"
 
-const WRITE_METHODS = new Set(["POST", "PATCH", "PUT", "DELETE"])
 const SENSITIVE_BODY_KEY_PATTERN = /password|token|secret|credential/i
 const REDACTED_VALUE = "[REDACTED]"
 
@@ -68,8 +67,6 @@ function redactSensitiveBody(value: unknown): unknown {
 
 function shouldAuditRequest(method: string, path: string): boolean {
   if (path.startsWith("/api/admin/backup")) return shouldAuditBackupRequest(method, path)
-  if (path.startsWith("/api/admin/")) return false
-  if (WRITE_METHODS.has(method)) return true
   return false
 }
 

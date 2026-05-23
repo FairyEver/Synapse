@@ -30,7 +30,7 @@ describe("AuditLogInterceptor", () => {
 
     await lastValueFrom(interceptor.intercept(
       createContext({
-        path: "/api/auth/register",
+        path: "/api/admin/backup",
         body: {
           email: "admin@example.com",
           password: "plain-password",
@@ -51,6 +51,22 @@ describe("AuditLogInterceptor", () => {
     })
     expect(JSON.stringify(detail)).not.toContain("plain-password")
     expect(JSON.stringify(detail)).not.toContain("refresh-token")
+  })
+
+  it("does not audit non-admin write endpoints", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "POST",
+        path: "/api/teams",
+      }),
+      { handle: () => of({ id: "team-1" }) },
+    ))
+
+    expect(auditLog.record).not.toHaveBeenCalled()
   })
 
   it("records backup list reads because backups are sensitive admin data", async () => {
