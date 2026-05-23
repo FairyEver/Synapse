@@ -8,6 +8,7 @@ function createController() {
   const service = {
     cleanup: vi.fn().mockResolvedValue(2),
     downloadAsZip: vi.fn().mockResolvedValue(Buffer.from("zip-bytes")),
+    listFiles: vi.fn().mockResolvedValue([{ name: "server.log", size: 123, modifiedAt: "2026-05-23T00:00:00.000Z" }]),
     readRecent: vi.fn().mockResolvedValue([]),
   };
   const auditLog = {
@@ -24,12 +25,55 @@ function createController() {
 }
 
 describe("LogFileController", () => {
+  it("records audit logs for file list reads", async () => {
+    const { controller, auditLog, service } = createController();
+
+    await expect(controller.listFiles({
+      admin: { email: "admin@example.com" },
+      ip: "203.0.113.10",
+    } as never)).resolves.toEqual([{ name: "server.log", size: 123, modifiedAt: "2026-05-23T00:00:00.000Z" }]);
+
+    expect(service.listFiles).toHaveBeenCalled();
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "logs.list_files",
+      targetType: "logs",
+      targetId: "files",
+      detail: { count: 1 },
+      ipAddress: "203.0.113.10",
+    });
+  });
+
   it("caps recent log limit", async () => {
     const { controller, service } = createController();
 
     await controller.getRecent(undefined, "999999999");
 
     expect(service.readRecent).toHaveBeenCalledWith({ level: undefined, limit: 1000 });
+  });
+
+  it("records audit logs for recent log reads", async () => {
+    const { controller, auditLog, service } = createController();
+    service.readRecent.mockResolvedValueOnce([
+      { time: "2026-05-23T00:00:00.000Z", level: "error", msg: "failed" },
+    ]);
+
+    await expect(controller.getRecent("error", "50", {
+      admin: { email: "admin@example.com" },
+      ip: "203.0.113.10",
+    } as never)).resolves.toEqual([
+      { time: "2026-05-23T00:00:00.000Z", level: "error", msg: "failed" },
+    ]);
+
+    expect(service.readRecent).toHaveBeenCalledWith({ level: "error", limit: 50 });
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "logs.recent",
+      targetType: "logs",
+      targetId: "recent",
+      detail: { level: "error", limit: 50, count: 1 },
+      ipAddress: "203.0.113.10",
+    });
   });
 
   it("rejects non-numeric recent log limit", async () => {

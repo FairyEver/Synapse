@@ -25,20 +25,33 @@ export class LogFileController {
   ) {}
 
   @Get("files")
-  async listFiles() {
-    return this.logFileService.listFiles();
+  async listFiles(@Req() request?: AdminRequest) {
+    const files = await this.logFileService.listFiles();
+    await this.recordLogAudit(request, {
+      action: "logs.list_files",
+      targetId: "files",
+      detail: { count: files.length },
+    });
+    return files;
   }
 
   @Get("recent")
   async getRecent(
     @Query("level") level?: string,
     @Query("limit") limitStr?: string,
+    @Req() request?: AdminRequest,
   ) {
     const limit = parseRecentLogLimit(limitStr);
     if (level && !["debug", "info", "warn", "error", "fatal"].includes(level)) {
       throw new BadRequestException(`Invalid level: ${level}`);
     }
-    return this.logFileService.readRecent({ level, limit });
+    const entries = await this.logFileService.readRecent({ level, limit });
+    await this.recordLogAudit(request, {
+      action: "logs.recent",
+      targetId: "recent",
+      detail: { level, limit, count: entries.length },
+    });
+    return entries;
   }
 
   @Get("download")
@@ -58,13 +71,10 @@ export class LogFileController {
       "Content-Disposition": `attachment; filename="${filename}"`,
       "Content-Length": buffer.length.toString(),
     });
-    await this.auditLog.record({
-      adminEmail: request?.admin?.email ?? "",
+    await this.recordLogAudit(request, {
       action: "logs.download",
-      targetType: "logs",
       targetId: filename,
       detail: { from, to, filename, bytes: buffer.length },
-      ipAddress: request?.ip ?? "",
     });
     res.send(buffer);
   }
@@ -75,14 +85,25 @@ export class LogFileController {
       throw new BadRequestException("Query param 'before' must be YYYY-MM-DD format");
     }
     const deleted = await this.logFileService.cleanup(before);
-    await this.auditLog.record({
-      adminEmail: request?.admin?.email ?? "",
+    await this.recordLogAudit(request, {
       action: "logs.cleanup",
-      targetType: "logs",
       targetId: before,
       detail: { before, deleted },
-      ipAddress: request?.ip ?? "",
     });
     return { deleted };
+  }
+
+  private recordLogAudit(
+    request: AdminRequest | undefined,
+    input: { action: string; targetId: string; detail: unknown },
+  ) {
+    return this.auditLog.record({
+      adminEmail: request?.admin?.email ?? "",
+      action: input.action,
+      targetType: "logs",
+      targetId: input.targetId,
+      detail: input.detail,
+      ipAddress: request?.ip ?? "",
+    });
   }
 }
