@@ -41,7 +41,13 @@ export class LogFileService {
 
     for (const name of entries) {
       if (!name.endsWith(".log")) continue;
-      const fileStat = await stat(join(this.logDir, name));
+      let fileStat: Awaited<ReturnType<typeof stat>>;
+      try {
+        fileStat = await stat(join(this.logDir, name));
+      } catch (error) {
+        if (this.isFileNotFoundError(error)) continue;
+        throw error;
+      }
       files.push({
         name,
         size: fileStat.size,
@@ -143,5 +149,9 @@ export class LogFileService {
     if (level <= 40) return "warn";
     if (level <= 50) return "error";
     return "fatal";
+  }
+
+  private isFileNotFoundError(error: unknown): boolean {
+    return error instanceof Error && "code" in error && error.code === "ENOENT";
   }
 }
