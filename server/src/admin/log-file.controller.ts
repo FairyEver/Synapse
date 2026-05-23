@@ -3,6 +3,18 @@ import type { Response } from "express";
 import { LogFileService } from "./log-file.service";
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard";
 
+const DEFAULT_RECENT_LOG_LIMIT = 200;
+const MAX_RECENT_LOG_LIMIT = 1000;
+
+function parseRecentLogLimit(limitStr?: string): number {
+  if (!limitStr) return DEFAULT_RECENT_LOG_LIMIT;
+  const limit = Number.parseInt(limitStr, 10);
+  if (!Number.isFinite(limit)) {
+    throw new BadRequestException("Query param 'limit' must be a number");
+  }
+  return Math.min(Math.max(limit, 1), MAX_RECENT_LOG_LIMIT);
+}
+
 @Controller("/api/admin/logs")
 @UseGuards(AdminAuthGuard)
 export class LogFileController {
@@ -18,7 +30,7 @@ export class LogFileController {
     @Query("level") level?: string,
     @Query("limit") limitStr?: string,
   ) {
-    const limit = limitStr ? parseInt(limitStr, 10) : 200;
+    const limit = parseRecentLogLimit(limitStr);
     if (level && !["debug", "info", "warn", "error", "fatal"].includes(level)) {
       throw new BadRequestException(`Invalid level: ${level}`);
     }
