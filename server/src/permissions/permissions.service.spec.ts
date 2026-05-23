@@ -89,6 +89,27 @@ describe("PermissionsService", () => {
     })
   })
 
+  it("removes role permissions outside replacement team entitlements", async () => {
+    const prisma = createPermissionPrismaMock()
+    const tx = createPermissionPrismaMock()
+    prisma.$transaction.mockImplementationOnce((callback) => callback(tx))
+    const service = new PermissionsService(prisma as never)
+
+    await service.replaceTeamEntitlements({
+      teamId: "team-1",
+      permissionKeys: ["database.use", "workflow.use"],
+      grantedByAdminId: "admin-1",
+      source: "manual",
+    })
+
+    expect(tx.teamAccessRolePermission.deleteMany).toHaveBeenCalledWith({
+      where: {
+        role: { teamId: "team-1" },
+        permissionKey: { notIn: ["database.use", "workflow.use"] },
+      },
+    })
+  })
+
   it("lists only active team entitlements in query order", async () => {
     const prisma = createPermissionPrismaMock()
     prisma.teamEntitlement.findMany.mockResolvedValue([

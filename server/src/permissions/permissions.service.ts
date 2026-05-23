@@ -53,6 +53,7 @@ export class PermissionsService {
     const keys = normalizePermissionKeys(input.permissionKeys)
     await this.prisma.$transaction(async (tx) => {
       await tx.teamEntitlement.deleteMany({ where: { teamId: input.teamId } })
+      await this.deleteRolePermissionsOutsideTeamEntitlements(input.teamId, keys, tx)
       if (keys.length === 0) return
       await tx.teamEntitlement.createMany({
         data: keys.map((permissionKey) => ({
@@ -234,5 +235,18 @@ export class PermissionsService {
     if (missing.length > 0) {
       throw new BadRequestException(`权限未对团队开通：${missing.join("，")}`)
     }
+  }
+
+  private async deleteRolePermissionsOutsideTeamEntitlements(
+    teamId: string,
+    permissionKeys: readonly string[],
+    client: PrismaClientLike,
+  ): Promise<void> {
+    await client.teamAccessRolePermission.deleteMany({
+      where: {
+        role: { teamId },
+        ...(permissionKeys.length > 0 ? { permissionKey: { notIn: [...permissionKeys] } } : {}),
+      },
+    })
   }
 }
