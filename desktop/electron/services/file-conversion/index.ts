@@ -11,7 +11,7 @@ export { DocxExtractor, type DocxExtractorOptions } from "./extractors/docx"
 export { LegacyOfficeExtractor, type LegacyOfficeExtractorOptions } from "./extractors/legacy-office"
 export { PdfExtractor, type PdfExtractorOptions } from "./extractors/pdf"
 export { PptxExtractor, type PptxExtractorOptions } from "./extractors/pptx"
-export { XlsxExtractor } from "./extractors/xlsx"
+export { XlsxExtractor, type XlsxExtractorOptions } from "./extractors/xlsx"
 export {
   FileConversionError,
   type FileConversionErrorCode,

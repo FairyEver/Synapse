@@ -95,3 +95,32 @@ describe("file conversion real DOCX fixtures", () => {
     expect(result.markdown).toContain("120000")
   })
 })
+
+describe("file conversion real XLSX fixtures", () => {
+  it("renders each xlsx sheet as a markdown section", async () => {
+    const root = await tempDir()
+    const fixtures = await buildFileConversionFixtures(root)
+
+    const result = await createDefaultFileConversionService().convert({ filePath: fixtures.xlsxMultiSheet })
+
+    expect(result.format).toBe("xlsx")
+    expect(result.kind).toBe("spreadsheet")
+    expect(result.markdown).toContain("## Sheet: Summary")
+    expect(result.markdown).toContain("## Sheet: Risks")
+    expect(result.markdown).toContain("| Department | Budget | Date |")
+    expect(result.markdown).toContain("| APAC | Renewal delay |")
+  })
+
+  it("truncates wide xlsx sheets with a warning", async () => {
+    const root = await tempDir()
+    const fixtures = await buildFileConversionFixtures(root)
+
+    const result = await createDefaultFileConversionService().convert({ filePath: fixtures.xlsxWideSheet })
+
+    expect(result.warnings).toEqual(expect.arrayContaining([
+      expect.objectContaining({ code: "xlsx_truncated" }),
+    ]))
+    expect(result.markdown).toContain("Column 30")
+    expect(result.markdown).not.toContain("Column 31")
+  })
+})
