@@ -169,7 +169,7 @@ function AgentComposer({
     candidate: AgentSlashCandidate,
     fragment: AgentSlashFragment,
   ) => {
-    const next = replaceAgentSlashFragment(draft, fragment, candidate.name)
+    const next = replaceAgentSlashFragment(draft, fragment, candidate.name, candidate.insertText)
     onDraftChange(next.value)
     setSlashMenuDismissed(true)
     requestAnimationFrame(() => {

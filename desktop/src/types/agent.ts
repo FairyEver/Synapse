@@ -335,6 +335,13 @@ export interface SynapseAgentRuntimeStatus {
   readonly agents: SynapseAgentRuntimeStatusItem[]
 }
 
+export interface SynapseAgentPublishedCommandUi {
+  readonly group?: "knowledge-base"
+  readonly label?: string
+  readonly action?: "send" | "insert"
+  readonly insertText?: string
+}
+
 export interface SynapseAgentPublishedCommand {
   readonly name: string
   readonly description?: string
@@ -342,6 +349,7 @@ export interface SynapseAgentPublishedCommand {
   readonly kind: "builtin" | "prompt" | "exec" | "skill" | "agent-native"
   readonly adminOnly: boolean
   readonly allowedPlatforms?: string[]
+  readonly ui?: SynapseAgentPublishedCommandUi
 }
 
 export interface SynapseAgentPendingPermission {

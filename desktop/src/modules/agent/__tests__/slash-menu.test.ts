@@ -136,4 +136,40 @@ describe("agent slash menu utilities", () => {
       },
     ])
   })
+
+  it("keeps command names with spaces for wiki subcommands", () => {
+    const items = filterAgentSlashCandidates([
+      {
+        name: "wiki ingest",
+        description: "汲取来源",
+        kind: "command",
+        source: "custom",
+        insertText: "/wiki ingest",
+      },
+      {
+        name: "wiki query",
+        description: "查询知识库",
+        kind: "command",
+        source: "custom",
+        insertText: "/wiki query ",
+      },
+    ], "wiki")
+
+    expect(items.map((item) => item.name)).toEqual(["wiki ingest", "wiki query"])
+  })
+
+  it("uses insertText when replacing slash fragments", () => {
+    const fragment = findAgentSlashFragment("Ask /wiki", 9)
+    expect(fragment).not.toBeNull()
+
+    expect(replaceAgentSlashFragment(
+      "Ask /wiki",
+      fragment!,
+      "wiki query",
+      "/wiki query ",
+    )).toEqual({
+      value: "Ask /wiki query ",
+      cursor: 16,
+    })
+  })
 })
