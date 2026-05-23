@@ -5,6 +5,7 @@ import {
   findAgentSlashFragment,
   groupAgentSlashCandidates,
   replaceAgentSlashFragment,
+  toAgentSlashCandidates,
   type AgentSlashCandidate,
 } from "../slash-menu"
 
@@ -156,6 +157,28 @@ describe("agent slash menu utilities", () => {
     ], "wiki")
 
     expect(items.map((item) => item.name)).toEqual(["wiki ingest", "wiki query"])
+  })
+
+  it("converts published wiki subcommands with insert text", () => {
+    expect(toAgentSlashCandidates([{
+      name: "wiki query",
+      description: "查询知识库",
+      source: "custom",
+      kind: "prompt",
+      adminOnly: false,
+      ui: {
+        group: "knowledge-base",
+        label: "查询知识库",
+        action: "insert",
+        insertText: "/wiki query ",
+      },
+    }])).toEqual([{
+      name: "wiki query",
+      description: "查询知识库",
+      kind: "command",
+      source: "custom",
+      insertText: "/wiki query ",
+    }])
   })
 
   it("uses insertText when replacing slash fragments", () => {

@@ -335,7 +335,7 @@ function AgentComposer({
           leadingActions={(
             <KnowledgeBaseActionMenu
               actions={knowledgeBaseActions}
-              disabled={disabled || sending}
+              disabled={disabled}
               onSend={(commandText) => onKnowledgeBaseCommand?.(commandText)}
               onInsert={insertKnowledgeBaseCommand}
             />

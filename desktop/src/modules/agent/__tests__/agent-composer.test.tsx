@@ -637,6 +637,94 @@ describe("AgentComposer", () => {
     expect(onSendCommand).toHaveBeenCalledWith("/wiki ingest")
   })
 
+  it("sends hot refresh from the knowledge base action menu", async () => {
+    const onSendCommand = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          knowledgeBaseActions={[{
+            label: "刷新热点",
+            action: "send",
+            commandText: "/wiki hot",
+          }]}
+          onKnowledgeBaseCommand={onSendCommand}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    openKnowledgeBaseMenu(container)
+    const item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find((node) => node.textContent === "刷新热点") as HTMLElement
+    expect(item).toBeTruthy()
+
+    await act(async () => {
+      item.click()
+    })
+
+    expect(onSendCommand).toHaveBeenCalledWith("/wiki hot")
+  })
+
+  it("keeps knowledge base actions available while a turn is sending", async () => {
+    const onSendCommand = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={true}
+          cancelPhase="idle"
+          knowledgeBaseActions={[{
+            label: "汲取来源",
+            action: "send",
+            commandText: "/wiki ingest",
+          }]}
+          onKnowledgeBaseCommand={onSendCommand}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const trigger = container.querySelector<HTMLButtonElement>('button[aria-label="知识库"]')
+    expect(trigger).toBeTruthy()
+    expect(trigger?.disabled).toBe(false)
+
+    openKnowledgeBaseMenu(container)
+    const item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find((node) => node.textContent === "汲取来源") as HTMLElement
+    expect(item).toBeTruthy()
+
+    await act(async () => {
+      item.click()
+    })
+
+    expect(onSendCommand).toHaveBeenCalledWith("/wiki ingest")
+  })
+
   it("inserts query command and focuses the composer textarea", async () => {
     const onDraftChange = vi.fn()
     const container = document.createElement("div")
