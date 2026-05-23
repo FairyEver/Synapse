@@ -103,6 +103,42 @@ describe("AdminAuthService", () => {
     })
   })
 
+  it("allows a same-email user to log in when the matching administrator is disabled", async () => {
+    const auditLog = { record: vi.fn() }
+    const { service, prisma } = await createTestService(auditLog)
+    const sharedPasswordHash = await hashPassword("shared-password")
+    prisma.adminUser.findFirst.mockResolvedValueOnce({
+      id: "admin-1",
+      email: "admin@d2.com",
+      passwordHash: sharedPasswordHash,
+      status: "disabled",
+    })
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: "user-1",
+      email: "admin@d2.com",
+      passwordHash: sharedPasswordHash,
+      status: "active",
+    })
+
+    const result = await service.login("admin@d2.com", "shared-password", "203.0.113.12")
+
+    expect(result).toMatchObject({ email: "admin@d2.com", role: "user" })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@d2.com",
+      action: "dashboard.login.disabled",
+      targetType: "admin",
+      targetId: "admin-1",
+      ipAddress: "203.0.113.12",
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@d2.com",
+      action: "user.dashboard_login.success",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "203.0.113.12",
+    })
+  })
+
   it("accepts normal user credentials for dashboard login", async () => {
     const { service, prisma } = await createTestService()
     prisma.user.findUnique.mockResolvedValueOnce({

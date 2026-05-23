@@ -36,6 +36,7 @@ export class AdminAuthService {
     const admin = await this.prisma.adminUser.findFirst({ orderBy: { createdAt: "asc" } })
     const matchedAdmin = admin && normalizedEmail === admin.email ? admin : null
     const passwordMatches = matchedAdmin ? await verifyPassword(password, matchedAdmin.passwordHash) : false
+    let disabledAdminPasswordMatched = false
     if (matchedAdmin && matchedAdmin.status === "active" && passwordMatches) {
       const token = this.jwt.sign({ sub: matchedAdmin.id, email: matchedAdmin.email, type: "admin" } satisfies AdminJwtPayload)
       await this.auditLog?.record({
@@ -55,7 +56,7 @@ export class AdminAuthService {
         targetId: matchedAdmin.id,
         ipAddress,
       })
-      throw new UnauthorizedException("邮箱或密码错误。")
+      disabledAdminPasswordMatched = true
     }
 
     const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
@@ -80,6 +81,10 @@ export class AdminAuthService {
         ipAddress,
       })
       throw new UnauthorizedException("账号已停用。")
+    }
+
+    if (disabledAdminPasswordMatched) {
+      throw new UnauthorizedException("邮箱或密码错误。")
     }
 
     await this.auditLog?.record({
