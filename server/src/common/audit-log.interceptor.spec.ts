@@ -178,6 +178,40 @@ describe("AuditLogInterceptor", () => {
     expect(auditLog.record).not.toHaveBeenCalled()
   })
 
+  it("records failed authenticated admin operations without duplicating service success audits", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "PATCH",
+        path: "/api/admin/users/user-1/status",
+        params: { id: "user-1" },
+        body: { status: "disabled" },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => throwError(() => new Error("用户不存在。")) },
+    ))).rejects.toThrow("用户不存在。")
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith({
+        adminEmail: "current-admin@example.com",
+        action: "admin.user.status_update.failed",
+        targetType: "user",
+        targetId: "user-1",
+        detail: {
+          method: "PATCH",
+          path: "/api/admin/users/user-1/status",
+          body: { status: "disabled" },
+          error: "用户不存在。",
+        },
+        ipAddress: "127.0.0.1",
+      })
+    })
+    expect(auth.getEmail).not.toHaveBeenCalled()
+  })
+
   it("keeps automatic audit records for backup writes", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }

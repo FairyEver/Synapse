@@ -12,6 +12,15 @@ import { AuditLogService } from "./audit-log.service"
 
 const SENSITIVE_BODY_KEY_PATTERN = /password|token|secret|credential/i
 const REDACTED_VALUE = "[REDACTED]"
+const USER_STATUS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/status$/
+const TEAM_ENTITLEMENTS_PATH_PATTERN = /^\/api\/admin\/teams\/[^/]+\/entitlements$/
+
+interface AuditPolicy {
+  readonly success: boolean
+  readonly failure: boolean
+}
+
+const noAudit: AuditPolicy = { success: false, failure: false }
 
 @Injectable()
 export class AuditLogInterceptor implements NestInterceptor {
@@ -25,7 +34,8 @@ export class AuditLogInterceptor implements NestInterceptor {
       Request & { cookies?: Record<string, string> } & Pick<AdminRequest, "admin">
     >()
 
-    if (!shouldAuditRequest(request.method, request.path)) {
+    const policy = resolveAuditPolicy(request.method, request.path, Boolean(request.admin?.email))
+    if (!policy.success && !policy.failure) {
       return next.handle()
     }
 
@@ -58,10 +68,10 @@ export class AuditLogInterceptor implements NestInterceptor {
     return next.handle().pipe(
       tap({
         next: (responseBody) => {
-          void recordAudit(responseBody)
+          if (policy.success) void recordAudit(responseBody)
         },
         error: (error) => {
-          void recordAudit(undefined, error)
+          if (policy.failure) void recordAudit(undefined, error)
         },
       }),
     )
@@ -83,9 +93,15 @@ function redactSensitiveBody(value: unknown): unknown {
   return result
 }
 
-function shouldAuditRequest(method: string, path: string): boolean {
-  if (path.startsWith("/api/admin/backup")) return shouldAuditBackupRequest(method, path)
-  return false
+function resolveAuditPolicy(method: string, path: string, hasAuthenticatedAdmin: boolean): AuditPolicy {
+  if (path.startsWith("/api/admin/backup")) {
+    const shouldAudit = shouldAuditBackupRequest(method, path)
+    return { success: shouldAudit, failure: shouldAudit }
+  }
+  if (hasAuthenticatedAdmin && path.startsWith("/api/admin/")) {
+    return { success: false, failure: true }
+  }
+  return noAudit
 }
 
 function shouldAuditBackupRequest(method: string, path: string): boolean {
@@ -103,6 +119,9 @@ function resolveAuditTarget(
   params: Record<string, string>,
   responseBody: unknown,
 ): { action: string; targetType: string; targetId: string } {
+  const knownAdminTarget = resolveKnownAdminAuditTarget(method, path, params, responseBody)
+  if (knownAdminTarget) return knownAdminTarget
+
   const id = params.id ?? params.filename ?? readId(responseBody)
   const segments = path.replace("/api/admin/", "").split("/")
   const resource = segments[0] ?? "unknown"
@@ -116,6 +135,39 @@ function resolveAuditTarget(
   if (segments.includes("status")) action = `${resource}.status`
 
   return { action, targetType: resource, targetId: id }
+}
+
+function resolveKnownAdminAuditTarget(
+  method: string,
+  path: string,
+  params: Record<string, string>,
+  responseBody: unknown,
+): { action: string; targetType: string; targetId: string } | null {
+  if (method === "POST" && path === "/api/admin/invitations") {
+    return { action: "admin.invitation.create", targetType: "invitation", targetId: readId(responseBody) }
+  }
+  if (method === "DELETE" && path === "/api/admin/invitations") {
+    return { action: "admin.invitation.delete_many", targetType: "invitation", targetId: readId(responseBody) }
+  }
+  if (method === "DELETE" && path.startsWith("/api/admin/invitations/")) {
+    return { action: "admin.invitation.delete", targetType: "invitation", targetId: params.id ?? readId(responseBody) }
+  }
+  if (method === "PATCH" && USER_STATUS_PATH_PATTERN.test(path)) {
+    return { action: "admin.user.status_update", targetType: "user", targetId: params.id ?? readId(responseBody) }
+  }
+  if (method === "PUT" && TEAM_ENTITLEMENTS_PATH_PATTERN.test(path)) {
+    return { action: "admin.team_entitlements.update", targetType: "team", targetId: params.teamId ?? readId(responseBody) }
+  }
+  if (method === "GET" && path === "/api/admin/audit-logs/export") {
+    return { action: "admin.audit_logs.export", targetType: "audit_log", targetId: "export" }
+  }
+  if (method === "GET" && path === "/api/admin/logs/download") {
+    return { action: "logs.download", targetType: "logs", targetId: readId(responseBody) }
+  }
+  if (method === "DELETE" && path === "/api/admin/logs/cleanup") {
+    return { action: "logs.cleanup", targetType: "logs", targetId: readId(responseBody) }
+  }
+  return null
 }
 
 function readId(body: unknown): string {
