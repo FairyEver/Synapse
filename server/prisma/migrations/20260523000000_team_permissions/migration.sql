@@ -35,6 +35,7 @@ CREATE TABLE "TeamAccessRolePermission" (
 
 CREATE TABLE "TeamMemberAccessRole" (
   "id" TEXT NOT NULL,
+  "teamId" TEXT NOT NULL,
   "teamMembershipId" TEXT NOT NULL,
   "roleId" TEXT NOT NULL,
   "assignedByUserId" TEXT,
@@ -47,16 +48,18 @@ CREATE INDEX "TeamEntitlement_teamId_idx" ON "TeamEntitlement"("teamId");
 CREATE INDEX "TeamEntitlement_permissionKey_idx" ON "TeamEntitlement"("permissionKey");
 CREATE INDEX "TeamEntitlement_expiresAt_idx" ON "TeamEntitlement"("expiresAt");
 CREATE UNIQUE INDEX "TeamAccessRole_teamId_name_key" ON "TeamAccessRole"("teamId", "name");
+CREATE UNIQUE INDEX "TeamAccessRole_teamId_id_key" ON "TeamAccessRole"("teamId", "id");
 CREATE INDEX "TeamAccessRole_teamId_idx" ON "TeamAccessRole"("teamId");
 CREATE UNIQUE INDEX "TeamAccessRolePermission_roleId_permissionKey_key" ON "TeamAccessRolePermission"("roleId", "permissionKey");
 CREATE INDEX "TeamAccessRolePermission_permissionKey_idx" ON "TeamAccessRolePermission"("permissionKey");
 CREATE UNIQUE INDEX "TeamMemberAccessRole_teamMembershipId_roleId_key" ON "TeamMemberAccessRole"("teamMembershipId", "roleId");
 CREATE INDEX "TeamMemberAccessRole_roleId_idx" ON "TeamMemberAccessRole"("roleId");
+CREATE UNIQUE INDEX "TeamMembership_teamId_id_key" ON "TeamMembership"("teamId", "id");
 
 ALTER TABLE "TeamEntitlement" ADD CONSTRAINT "TeamEntitlement_teamId_fkey" FOREIGN KEY ("teamId") REFERENCES "Team"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "TeamEntitlement" ADD CONSTRAINT "TeamEntitlement_grantedByAdminId_fkey" FOREIGN KEY ("grantedByAdminId") REFERENCES "AdminUser"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 ALTER TABLE "TeamAccessRole" ADD CONSTRAINT "TeamAccessRole_teamId_fkey" FOREIGN KEY ("teamId") REFERENCES "Team"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "TeamAccessRolePermission" ADD CONSTRAINT "TeamAccessRolePermission_roleId_fkey" FOREIGN KEY ("roleId") REFERENCES "TeamAccessRole"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "TeamMemberAccessRole" ADD CONSTRAINT "TeamMemberAccessRole_teamMembershipId_fkey" FOREIGN KEY ("teamMembershipId") REFERENCES "TeamMembership"("id") ON DELETE CASCADE ON UPDATE CASCADE;
-ALTER TABLE "TeamMemberAccessRole" ADD CONSTRAINT "TeamMemberAccessRole_roleId_fkey" FOREIGN KEY ("roleId") REFERENCES "TeamAccessRole"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "TeamMemberAccessRole" ADD CONSTRAINT "TeamMemberAccessRole_teamId_teamMembershipId_fkey" FOREIGN KEY ("teamId", "teamMembershipId") REFERENCES "TeamMembership"("teamId", "id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "TeamMemberAccessRole" ADD CONSTRAINT "TeamMemberAccessRole_teamId_roleId_fkey" FOREIGN KEY ("teamId", "roleId") REFERENCES "TeamAccessRole"("teamId", "id") ON DELETE CASCADE ON UPDATE CASCADE;
 ALTER TABLE "TeamMemberAccessRole" ADD CONSTRAINT "TeamMemberAccessRole_assignedByUserId_fkey" FOREIGN KEY ("assignedByUserId") REFERENCES "User"("id") ON DELETE SET NULL ON UPDATE CASCADE;

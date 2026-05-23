@@ -88,6 +88,7 @@ model TeamMembership {
   createdAt   DateTime               @default(now())
 
   @@unique([teamId, userId])
+  @@unique([teamId, id])
   @@index([teamId])
 }
 
@@ -123,6 +124,7 @@ model TeamAccessRole {
   updatedAt   DateTime                   @updatedAt
 
   @@unique([teamId, name])
+  @@unique([teamId, id])
   @@index([teamId])
 }
 
@@ -139,10 +141,11 @@ model TeamAccessRolePermission {
 
 model TeamMemberAccessRole {
   id               String         @id @default(cuid())
+  teamId           String
   teamMembershipId String
-  teamMembership   TeamMembership @relation(fields: [teamMembershipId], references: [id], onDelete: Cascade)
+  teamMembership   TeamMembership @relation(fields: [teamId, teamMembershipId], references: [teamId, id], onDelete: Cascade)
   roleId           String
-  role             TeamAccessRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  role             TeamAccessRole @relation(fields: [teamId, roleId], references: [teamId, id], onDelete: Cascade)
   assignedByUserId String?
   assignedByUser   User?          @relation("AssignedAccessRoles", fields: [assignedByUserId], references: [id])
   assignedAt       DateTime       @default(now())
