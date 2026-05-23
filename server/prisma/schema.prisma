@@ -22,19 +22,31 @@ enum TeamRole {
   member
 }
 
+enum TeamEntitlementSource {
+  manual
+  plan
+  migration
+}
+
+enum TeamAccessRoleKind {
+  system
+  custom
+}
+
 enum InvitationType {
   user_signup
   team_join
 }
 
 model AdminUser {
-  id           String      @id @default(cuid())
-  email        String      @unique
-  passwordHash String
-  status       AdminStatus @default(active)
-  invitations  Invitation[]
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  id                      String            @id @default(cuid())
+  email                   String            @unique
+  passwordHash            String
+  status                  AdminStatus       @default(active)
+  invitations             Invitation[]
+  grantedTeamEntitlements TeamEntitlement[]
+  createdAt               DateTime          @default(now())
+  updatedAt               DateTime          @updatedAt
 }
 
 model User {
@@ -47,6 +59,7 @@ model User {
   sessions            UserSession[]
   acceptedInvitations Invitation[] @relation("AcceptedInvitations")
   createdInvitations  Invitation[] @relation("UserCreatedInvitations")
+  assignedAccessRoles TeamMemberAccessRole[] @relation("AssignedAccessRoles")
   createdAt           DateTime     @default(now())
   updatedAt           DateTime     @updatedAt
 }
@@ -58,21 +71,84 @@ model Team {
   createdByUser   User             @relation("TeamCreator", fields: [createdByUserId], references: [id])
   memberships     TeamMembership[]
   invitations     Invitation[]
+  entitlements     TeamEntitlement[]
+  accessRoles      TeamAccessRole[]
   createdAt       DateTime         @default(now())
   updatedAt       DateTime         @updatedAt
 }
 
 model TeamMembership {
-  id        String   @id @default(cuid())
-  teamId    String
-  team      Team     @relation(fields: [teamId], references: [id])
-  userId    String   @unique
-  user      User     @relation(fields: [userId], references: [id])
-  role      TeamRole
-  createdAt DateTime @default(now())
+  id          String                 @id @default(cuid())
+  teamId      String
+  team        Team                   @relation(fields: [teamId], references: [id])
+  userId      String                 @unique
+  user        User                   @relation(fields: [userId], references: [id])
+  role        TeamRole
+  accessRoles TeamMemberAccessRole[]
+  createdAt   DateTime               @default(now())
 
   @@unique([teamId, userId])
   @@index([teamId])
+}
+
+model TeamEntitlement {
+  id               String                @id @default(cuid())
+  teamId           String
+  team             Team                  @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  permissionKey    String
+  source           TeamEntitlementSource @default(manual)
+  grantedByAdminId String?
+  grantedByAdmin   AdminUser?            @relation(fields: [grantedByAdminId], references: [id])
+  grantedAt        DateTime              @default(now())
+  expiresAt        DateTime?
+
+  @@unique([teamId, permissionKey])
+  @@index([teamId])
+  @@index([permissionKey])
+  @@index([expiresAt])
+}
+
+model TeamAccessRole {
+  id          String                     @id @default(cuid())
+  teamId      String
+  team        Team                       @relation(fields: [teamId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  kind        TeamAccessRoleKind
+  locked      Boolean                    @default(false)
+  sortOrder   Int                        @default(0)
+  permissions TeamAccessRolePermission[]
+  members     TeamMemberAccessRole[]
+  createdAt   DateTime                   @default(now())
+  updatedAt   DateTime                   @updatedAt
+
+  @@unique([teamId, name])
+  @@index([teamId])
+}
+
+model TeamAccessRolePermission {
+  id            String         @id @default(cuid())
+  roleId        String
+  role          TeamAccessRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permissionKey String
+  createdAt     DateTime       @default(now())
+
+  @@unique([roleId, permissionKey])
+  @@index([permissionKey])
+}
+
+model TeamMemberAccessRole {
+  id               String         @id @default(cuid())
+  teamMembershipId String
+  teamMembership   TeamMembership @relation(fields: [teamMembershipId], references: [id], onDelete: Cascade)
+  roleId           String
+  role             TeamAccessRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  assignedByUserId String?
+  assignedByUser   User?          @relation("AssignedAccessRoles", fields: [assignedByUserId], references: [id])
+  assignedAt       DateTime       @default(now())
+
+  @@unique([teamMembershipId, roleId])
+  @@index([roleId])
 }
 
 model Invitation {
