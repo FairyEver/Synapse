@@ -141,3 +141,18 @@ describe("file conversion real PDF fixtures", () => {
     expect(result.markdown).toContain("# text.pdf")
   })
 })
+
+describe("file conversion real PPTX fixtures", () => {
+  it("extracts text from a real pptx fixture", async () => {
+    const root = await tempDir()
+    const fixtures = await buildFileConversionFixtures(root)
+
+    const result = await createDefaultFileConversionService().convert({ filePath: fixtures.pptxBasic })
+
+    expect(result.format).toBe("pptx")
+    expect(result.kind).toBe("presentation")
+    expect(result.text).toContain("Quarterly Review Deck")
+    expect(result.text).toContain("Revenue expansion")
+    expect(result.markdown).toContain("# basic.pptx")
+  })
+})

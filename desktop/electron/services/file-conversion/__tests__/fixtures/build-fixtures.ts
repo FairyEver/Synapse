@@ -145,8 +145,8 @@ async function writePptxBasic(filePath: string): Promise<void> {
   const pptx = new pptxgen()
   pptx.layout = "LAYOUT_WIDE"
   const first = pptx.addSlide()
-  first.addText("Quarterly Review", { x: 0.5, y: 0.5, w: 8, h: 0.6 })
-  first.addText("Revenue grew 12 percent.", { x: 0.5, y: 1.4, w: 8, h: 0.6 })
+  first.addText("Quarterly Review Deck", { x: 0.5, y: 0.5, w: 8, h: 0.6 })
+  first.addText("Revenue expansion", { x: 0.5, y: 1.4, w: 8, h: 0.6 })
   const second = pptx.addSlide()
   second.addText("Risks", { x: 0.5, y: 0.5, w: 8, h: 0.6 })
   second.addText("Renewal delay in APAC.", { x: 0.5, y: 1.4, w: 8, h: 0.6 })
