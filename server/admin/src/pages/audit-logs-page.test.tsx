@@ -70,9 +70,38 @@ describe("AuditLogsPage", () => {
       expect(result.container.textContent).toContain("log-filtered")
     })
   })
+
+  it("uses the response page size for pagination", async () => {
+    vi.mocked(adminApi.listAuditLogs)
+      .mockResolvedValueOnce(createAuditPage({ page: 1, id: "log-1", total: 60, pageSize: 50 }))
+      .mockResolvedValueOnce(createAuditPage({ page: 2, id: "log-2", total: 60, pageSize: 50 }))
+
+    const result = await render(<AuditLogsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("log-1")
+    })
+    Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "下一页")
+      ?.click()
+
+    await waitFor(() => {
+      expect(adminApi.listAuditLogs).toHaveBeenLastCalledWith({
+        action: undefined,
+        from: undefined,
+        to: undefined,
+        page: 2,
+      })
+      expect(result.container.textContent).toContain("log-2")
+    })
+    const nextButton = Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "下一页")
+    expect(nextButton?.disabled).toBe(true)
+  })
 })
 
-function createAuditPage(input: { page: number; id: string; total: number }) {
+function createAuditPage(input: { page: number; id: string; total: number; pageSize?: number }) {
   return {
     data: [
       {
@@ -88,6 +117,6 @@ function createAuditPage(input: { page: number; id: string; total: number }) {
     ],
     total: input.total,
     page: input.page,
-    pageSize: 20,
+    pageSize: input.pageSize ?? 20,
   }
 }

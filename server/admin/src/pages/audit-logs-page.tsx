@@ -3,6 +3,7 @@ import { adminApi, type AuditLog, type PaginatedResponse } from "@/lib/api"
 import { useApiResource } from "@/hooks/use-api-resource"
 import { formatDate } from "@/lib/format"
 import { PageState } from "@/components/page-state"
+import { PaginationFooter } from "@/components/pagination-footer"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -119,17 +120,12 @@ export function AuditLogsPage() {
         </TableBody>
       </Table>
 
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>共 {result.total} 条</span>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            上一页
-          </Button>
-          <Button variant="outline" size="sm" disabled={page * 20 >= result.total} onClick={() => setPage(page + 1)}>
-            下一页
-          </Button>
-        </div>
-      </div>
+      <PaginationFooter
+        page={result.page}
+        pageSize={result.pageSize}
+        total={result.total}
+        onPageChange={setPage}
+      />
     </div>
   )
 }
