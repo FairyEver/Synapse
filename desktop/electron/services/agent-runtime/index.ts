@@ -166,6 +166,8 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         commandRunner: runner,
         registeredPromptCommands: async () =>
           (await resolveAgentProjectContribution(ctx.projectId)).commands,
+        sdkPlugins: async () =>
+          (await resolveAgentProjectContribution(ctx.projectId)).sdkPlugins ?? [],
         prepareMessage: async (message, context) => {
           const contribution = await resolveAgentProjectContribution(ctx.projectId)
           return contribution.prepareMessage?.(message, context) ?? message

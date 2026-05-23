@@ -22,6 +22,10 @@ export async function createKnowledgeBaseAgentContribution(
   const hotCachePath = path.join(input.project.path, "wiki", "hot.md")
 
   return {
+    sdkPlugins: [{
+      type: "local",
+      path: resolveKnowledgeBasePluginPath(),
+    }],
     commands: [{
       name: "wiki",
       buildPrompt: (args) => buildKnowledgeBaseCommandPrompt(input.project.path, args),
@@ -127,6 +131,20 @@ function resolvePromptRoots(): readonly string[] {
     return [path.join(resourcesPath, "knowledge-base", "prompts"), devRoot]
   }
   return [devRoot]
+}
+
+function resolveKnowledgeBasePluginPath(): string {
+  if (process.env.SYNAPSE_KB_PLUGIN_ROOT) {
+    return process.env.SYNAPSE_KB_PLUGIN_ROOT
+  }
+  const resourcesPath = (process as NodeJS.Process & { resourcesPath?: string }).resourcesPath
+  const cwd = path.resolve(process.cwd())
+  const desktopRoot = path.basename(cwd) === "desktop" ? cwd : path.join(cwd, "desktop")
+  const devRoot = path.join(desktopRoot, "resources", "knowledge-base", "claude-plugin")
+  if (resourcesPath) {
+    return path.join(resourcesPath, "knowledge-base", "claude-plugin")
+  }
+  return devRoot
 }
 
 function isMissingPathError(error: unknown): boolean {

@@ -59,6 +59,17 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("passes local SDK plugins to Claude Agent SDK", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, {
+      plugins: [{ type: "local", path: "/Applications/Synapse/resources/knowledge-base/claude-plugin" }],
+    })
+
+    expect(getOptions()).toMatchObject({
+      plugins: [{ type: "local", path: "/Applications/Synapse/resources/knowledge-base/claude-plugin" }],
+    })
+  })
+
   it("enables the SDK bypass permission confirmation for bypass mode", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, { mode: "bypassPermissions" })

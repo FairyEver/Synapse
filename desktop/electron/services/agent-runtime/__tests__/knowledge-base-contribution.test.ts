@@ -43,6 +43,20 @@ describe("knowledge base Agent contribution", () => {
     expect(contribution?.commands.map((command) => command.name)).toEqual(["wiki"])
   })
 
+  it("contributes the Synapse knowledge-base SDK plugin outside the vault", async () => {
+    const projectPath = await tempDir()
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+
+    expect(contribution?.sdkPlugins).toHaveLength(1)
+    expect(contribution?.sdkPlugins?.[0]).toMatchObject({ type: "local" })
+    expect(contribution?.sdkPlugins?.[0]?.path).toContain(
+      path.join("resources", "knowledge-base", "claude-plugin"),
+    )
+    expect(contribution?.sdkPlugins?.[0]?.path.startsWith(projectPath)).toBe(false)
+  })
+
   it("adds wiki commands and hot cache bootstrap for knowledge base projects", async () => {
     const projectPath = await tempDir()
     await mkdir(path.join(projectPath, "wiki"), { recursive: true })
@@ -171,7 +185,7 @@ describe("knowledge base Agent contribution", () => {
     expect(content).toContain("address_map")
   })
 
-  it("does not hard-route natural language ingest requests in prepareMessage", async () => {
+  it("keeps natural-language ingest requests unchanged because plugin skills handle routing", async () => {
     const projectPath = await tempDir()
     await mkdir(path.join(projectPath, ".raw"), { recursive: true })
     await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{},\"address_map\":{}}\n")
@@ -188,6 +202,7 @@ describe("knowledge base Agent contribution", () => {
     }, { isNewLiveSession: false }))
 
     expect(prepared?.content).toBe("汲取知识")
+    expect(contribution?.sdkPlugins?.[0]?.path.startsWith(projectPath)).toBe(false)
   })
 
   it("returns a direct /wiki status result", async () => {
