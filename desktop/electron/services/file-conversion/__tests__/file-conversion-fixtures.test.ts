@@ -153,6 +153,7 @@ describe("file conversion real PPTX fixtures", () => {
     expect(result.kind).toBe("presentation")
     expect(result.text).toContain("Quarterly Review Deck")
     expect(result.text).toContain("Revenue expansion")
+    expect(result.text).toContain("Renewal delay in APAC.")
     expect(result.markdown).toContain("# basic.pptx")
   })
 })
