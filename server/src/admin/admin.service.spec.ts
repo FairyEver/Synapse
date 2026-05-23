@@ -43,8 +43,12 @@ function createPrismaMock(counts: {
     auditLog: { count: vi.fn() },
     user: {
       count: vi.fn(),
+      findUnique: vi.fn().mockResolvedValue({ status: "active" }),
       findMany: vi.fn(),
       update: vi.fn().mockResolvedValue({}),
+    },
+    teamMembership: {
+      findFirst: vi.fn().mockResolvedValue(null),
     },
     team: {
       count: vi.fn(),
@@ -148,6 +152,7 @@ describe("AdminService", () => {
 
   it("reports a missing user when updating status", async () => {
     const prisma = createPrismaMock()
+    prisma.user.findUnique.mockResolvedValue(null)
     prisma.user.update.mockRejectedValue(createNotFoundError())
     const auditLog = { record: vi.fn() }
     const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
@@ -155,6 +160,22 @@ describe("AdminService", () => {
     await expect(service.updateUserStatus("missing-user", { status: "disabled" }))
       .rejects
       .toThrow("用户不存在。")
+    expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
+  it("rejects disabling the only active owner of a team", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findFirst.mockResolvedValue({
+      team: { id: "team-1", name: "研发组" },
+    })
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
+
+    await expect(service.updateUserStatus("user-1", { status: "disabled" }))
+      .rejects
+      .toThrow("不能停用团队唯一所有者。")
+
+    expect(prisma.user.update).not.toHaveBeenCalled()
     expect(auditLog.record).not.toHaveBeenCalled()
   })
 
@@ -178,6 +199,7 @@ describe("AdminService", () => {
           orderBy: { createdAt: "asc" },
         },
         createdAt: true,
+        updatedAt: true,
       }),
     }))
     expect(prisma.team.findMany.mock.calls[0]?.[0]).not.toHaveProperty("include")

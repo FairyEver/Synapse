@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException, Optional } from "@nestjs/common"
+import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common"
 import { Prisma, type UserStatus } from "@prisma/client"
 import { AuditLogService } from "../common/audit-log.service"
 import { InvitationsService } from "../invitations/invitations.service"
@@ -166,6 +166,15 @@ export class AdminService {
   }
 
   async updateUserStatus(id: string, input: { status: UserStatus }, actorEmail = "system", ipAddress = "system") {
+    const existing = await this.prisma.user.findUnique({
+      where: { id },
+      select: { status: true },
+    })
+    if (!existing) throw new NotFoundException("用户不存在。")
+    if (input.status === "disabled" && existing.status !== "disabled") {
+      await this.assertCanDisableUser(id)
+    }
+
     const user = await this.prisma.user.update({
       where: { id },
       data: { status: input.status },
@@ -183,6 +192,26 @@ export class AdminService {
       ipAddress,
     })
     return user
+  }
+
+  private async assertCanDisableUser(userId: string): Promise<void> {
+    const blockingOwnership = await this.prisma.teamMembership.findFirst({
+      where: {
+        userId,
+        role: "owner",
+        team: {
+          memberships: {
+            none: {
+              userId: { not: userId },
+              role: "owner",
+              user: { status: "active" },
+            },
+          },
+        },
+      },
+      select: { team: { select: { id: true } } },
+    })
+    if (blockingOwnership) throw new BadRequestException("不能停用团队唯一所有者。")
   }
 
   async listTeams(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {
