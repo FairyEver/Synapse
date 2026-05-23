@@ -56,6 +56,21 @@ export function AuditLogsPage() {
     [action, from, to, page],
   )
 
+  function handleActionChange(value: string) {
+    setAction(value)
+    setPage(1)
+  }
+
+  function handleFromChange(value: string) {
+    setFrom(value)
+    setPage(1)
+  }
+
+  function handleToChange(value: string) {
+    setTo(value)
+    setPage(1)
+  }
+
   if (loading) return <PageState>加载中…</PageState>
   if (error) return <PageState>{`加载失败：${error}`}</PageState>
   if (!result) return null
@@ -63,7 +78,7 @@ export function AuditLogsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Select value={action} onValueChange={setAction}>
+        <Select value={action} onValueChange={handleActionChange}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="全部操作" />
           </SelectTrigger>
@@ -73,8 +88,8 @@ export function AuditLogsPage() {
             ))}
           </SelectContent>
         </Select>
-        <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" />
-        <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />
+        <Input type="date" value={from} onChange={(e) => handleFromChange(e.target.value)} className="w-40" />
+        <Input type="date" value={to} onChange={(e) => handleToChange(e.target.value)} className="w-40" />
         <Button variant="outline" onClick={() => adminApi.exportAuditLogs({ action: actionFilter, from: from || undefined, to: to || undefined })}>
           导出 CSV
         </Button>
