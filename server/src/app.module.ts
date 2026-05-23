@@ -11,6 +11,7 @@ import { UserAuthModule } from "./auth/user-auth.module"
 import { BackupModule } from "./backup/backup.module"
 import { HealthModule } from "./health/health.module"
 import { InvitationsModule } from "./invitations/invitations.module"
+import { PermissionsModule } from "./permissions/permissions.module"
 import { PrismaModule } from "./prisma/prisma.module"
 import { TeamsModule } from "./teams/teams.module"
 import { AuditLogInterceptor } from "./common/audit-log.interceptor"
@@ -49,6 +50,7 @@ import { AuditLogInterceptor } from "./common/audit-log.interceptor"
       serveRoot: "/dashboard",
     }),
     PrismaModule,
+    PermissionsModule,
     InvitationsModule,
     UserAuthModule,
     TeamsModule,
