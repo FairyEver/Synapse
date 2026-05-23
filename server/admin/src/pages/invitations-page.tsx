@@ -1,6 +1,7 @@
 import * as React from "react"
 import { Copy, Trash2 } from "lucide-react"
 import { PageState } from "@/components/page-state"
+import { PaginationFooter } from "@/components/pagination-footer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -29,8 +30,10 @@ function formatCreator(invitation: AdminInvitationRow): string {
 }
 
 export function InvitationsPage() {
+  const [page, setPage] = React.useState(1)
   const { data: result, error, loading, reload } = useApiResource<PaginatedResponse<AdminInvitationRow>>(
-    () => adminApi.listInvitations(),
+    () => adminApi.listInvitations({ page }),
+    [page],
   )
   const [selectedIds, setSelectedIds] = React.useState<ReadonlySet<string>>(() => new Set())
   const [actionError, setActionError] = React.useState<string | null>(null)
@@ -201,6 +204,14 @@ export function InvitationsPage() {
           </TableBody>
         </Table>
       )}
+      {result ? (
+        <PaginationFooter
+          page={result.page}
+          pageSize={result.pageSize}
+          total={result.total}
+          onPageChange={setPage}
+        />
+      ) : null}
     </div>
   )
 }

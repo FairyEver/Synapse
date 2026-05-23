@@ -69,6 +69,61 @@ describe("InvitationsPage", () => {
     expect(result.container.textContent).toContain("owner@example.com")
   })
 
+  it("loads the next invitations page", async () => {
+    vi.mocked(adminApi.listInvitations)
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: "invite-1",
+            type: "user_signup",
+            expiresAt: "2026-06-10T00:00:00.000Z",
+            usedAt: null,
+            acceptedByUser: null,
+            createdByAdmin: { email: "admin@example.com" },
+            createdByUser: null,
+            team: null,
+            createdAt: "2026-05-20T00:00:00.000Z",
+          },
+        ],
+        total: 21,
+        page: 1,
+        pageSize: 20,
+      } as never)
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: "invite-2",
+            type: "user_signup",
+            expiresAt: "2026-06-11T00:00:00.000Z",
+            usedAt: null,
+            acceptedByUser: null,
+            createdByAdmin: { email: "admin@example.com" },
+            createdByUser: null,
+            team: null,
+            createdAt: "2026-05-21T00:00:00.000Z",
+          },
+        ],
+        total: 21,
+        page: 2,
+        pageSize: 20,
+      } as never)
+
+    const result = await render(<InvitationsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("invite-1")
+    })
+    Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "下一页")
+      ?.click()
+
+    await waitFor(() => {
+      expect(adminApi.listInvitations).toHaveBeenLastCalledWith({ page: 2 })
+      expect(result.container.textContent).toContain("invite-2")
+    })
+  })
+
   it("deletes an invitation and reloads the list", async () => {
     vi.mocked(adminApi.listInvitations)
       .mockResolvedValueOnce({

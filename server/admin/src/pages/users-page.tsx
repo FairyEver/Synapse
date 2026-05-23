@@ -1,5 +1,6 @@
 import * as React from "react"
 import { PageState } from "@/components/page-state"
+import { PaginationFooter } from "@/components/pagination-footer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -18,8 +19,10 @@ import { formatDate } from "@/lib/format"
 import { SignupInvitationAction } from "./signup-invitation-action"
 
 export function UsersPage() {
+  const [page, setPage] = React.useState(1)
   const { data: result, error, loading, reload } = useApiResource<PaginatedResponse<AdminUserRow>>(
-    () => adminApi.listUsers(),
+    () => adminApi.listUsers({ page }),
+    [page],
   )
   const [actionError, setActionError] = React.useState<string | null>(null)
 
@@ -78,6 +81,12 @@ export function UsersPage() {
           </TableBody>
         </Table>
       )}
+      <PaginationFooter
+        page={result.page}
+        pageSize={result.pageSize}
+        total={result.total}
+        onPageChange={setPage}
+      />
     </div>
   )
 }
