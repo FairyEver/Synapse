@@ -179,7 +179,7 @@ export class BackupService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       this.logger.error({ error: message }, "Failed to list backups")
-      return []
+      throw error
     }
   }
 

@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest"
-import { buildBackupKey, buildPgDumpOptions } from "./backup.service"
+import { describe, expect, it, vi } from "vitest"
+import { BackupService, buildBackupKey, buildPgDumpOptions } from "./backup.service"
 
 describe("buildPgDumpOptions", () => {
   it("keeps database passwords out of pg_dump command arguments", () => {
@@ -37,3 +37,35 @@ describe("buildBackupKey", () => {
     expect(buildBackupKey("backups/", "synapse-backup.tar.gz")).toBe("backups/synapse-backup.tar.gz")
   })
 })
+
+describe("BackupService", () => {
+  it("propagates COS list failures instead of returning an empty list", async () => {
+    const error = new Error("COS unavailable")
+    const logger = { error: vi.fn() }
+    const service = createBackupService({
+      getBucket: vi.fn((_options, callback) => callback(error)),
+    }, logger)
+
+    await expect(service.listBackups()).rejects.toThrow("COS unavailable")
+
+    expect(logger.error).toHaveBeenCalledWith({ error: "COS unavailable" }, "Failed to list backups")
+  })
+})
+
+function createBackupService(cos: unknown, logger: { error: ReturnType<typeof vi.fn> }): BackupService {
+  const service = Object.create(BackupService.prototype) as BackupService
+  Object.assign(service as unknown as {
+    cos: unknown
+    bucket: string
+    region: string
+    prefix: string
+    logger: typeof logger
+  }, {
+    cos,
+    bucket: "bucket",
+    region: "ap-guangzhou",
+    prefix: "backups/",
+    logger,
+  })
+  return service
+}
