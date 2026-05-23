@@ -83,7 +83,9 @@ export function wikiIngestAppendixCopy(input: {
     "- 处理完成后更新 `.raw/.manifest.json`。",
     "- 使用 claude-obsidian 兼容格式：`version`、`created`、`description`、`sources`、`address_map`。",
     "- `sources` 的 key 使用 `.raw/...`，每个已处理来源都写入当前 `hash`、`ingested_at`、`pages_created`、`pages_updated`。",
-    "- `address_map` 记录 wiki 页面路径到稳定地址的映射。",
+    "- Synapse 会在导入回合结束后补齐 DragonScale 地址并更新 `address_map`。",
+    "- 不要编辑 `.vault-meta/address-counter.txt`；地址计数器由 Synapse 内部服务维护。",
+    "- 如果重写已有页面，保留页面中已有的 `address:` frontmatter。",
     "- 未实际更新的来源不要改动对应清单条目。",
   ].join("\n")
 }

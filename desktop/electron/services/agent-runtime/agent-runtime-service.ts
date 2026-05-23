@@ -35,7 +35,7 @@ import {
   renderReferenceView,
   resolveLocalReference,
 } from "./references"
-import type { AgentSdkPluginSpec } from "./project-contributions"
+import type { AgentProjectAfterTurnInput, AgentSdkPluginSpec } from "./project-contributions"
 import {
   AgentSessionRepository,
   conversationId,
@@ -97,6 +97,7 @@ export interface AgentRuntimeServiceDeps {
     message: AgentMessage,
     context: { readonly isNewLiveSession: boolean },
   ) => AgentMessage | Promise<AgentMessage>
+  readonly afterTurn?: (input: AgentProjectAfterTurnInput) => void | Promise<void>
   readonly replyTargets?: {
     rememberReplyTarget(target: ReplyTarget): void
     dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): Promise<void>
@@ -194,6 +195,7 @@ export class AgentRuntimeService {
         agentEvents: deps.agentEvents,
         now: deps.now,
         prepareMessage: deps.prepareMessage,
+        afterTurn: deps.afterTurn,
       },
       repository: this.repository,
       sessionManager: this.sessionManager,

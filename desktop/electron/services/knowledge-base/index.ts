@@ -8,8 +8,17 @@ export {
 export {
   DragonScaleScriptRunner,
 } from "./dragonscale/script-runner"
+export {
+  KnowledgeBaseIngestFinalizer,
+} from "./ingest-finalizer"
+export {
+  isKnowledgeBaseIngestIntent,
+} from "./ingest-intent"
 export type {
   DragonScaleAddress,
   DragonScaleAddressAllocation,
   DragonScaleAddressServiceResult,
 } from "./dragonscale/types"
+export type {
+  KnowledgeBaseIngestFinalizerResult,
+} from "./ingest-finalizer"

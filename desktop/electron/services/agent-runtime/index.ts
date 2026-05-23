@@ -174,6 +174,10 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
           const contribution = await resolveAgentProjectContribution(ctx.projectId)
           return contribution.prepareMessage?.(message, context) ?? message
         },
+        afterTurn: async (input) => {
+          const contribution = await resolveAgentProjectContribution(ctx.projectId)
+          await contribution.afterTurn?.(input)
+        },
       })
       service.startIdleReclaim()
       return service

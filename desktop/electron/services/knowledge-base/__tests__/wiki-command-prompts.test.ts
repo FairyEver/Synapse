@@ -85,6 +85,8 @@ describe("wiki command prompts", () => {
     expect(content).toContain("## 清单更新要求")
     expect(content).toContain("address_map")
     expect(content).toContain("claude-obsidian")
+    expect(content).toContain("Synapse 会在导入回合结束后补齐 DragonScale 地址")
+    expect(content).toContain("不要编辑 `.vault-meta/address-counter.txt`")
   })
 
   it("builds a Chinese markdown quick query prompt with mode and question", async () => {

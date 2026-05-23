@@ -349,6 +349,21 @@ describe("ConversationRouter", () => {
     ])
   })
 
+  it("calls afterTurn after a live turn completes", async () => {
+    const afterTurn = vi.fn()
+    const session = new ScriptedSession([
+      { type: "result", content: "reply", done: true, sdkSessionId: "sdk-1" },
+    ], "sdk-1")
+    const { router } = createRouter({ session, afterTurn })
+
+    await router.send(baseMessage("hello"))
+
+    expect(afterTurn).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.objectContaining({ content: "hello" }),
+      result: expect.objectContaining({ resultText: "reply" }),
+    }))
+  })
+
   it("stores original prompt command content while sending the expanded prompt", async () => {
     const commandRouter = {
       handle: vi.fn(async () => ({
@@ -819,6 +834,7 @@ function createRouter(input: {
   readonly eventBus?: ConversationRouterDeps["eventBus"]
   readonly logger?: ConversationRouterDeps["logger"]
   readonly prepareMessage?: ConversationRouterDeps["prepareMessage"]
+  readonly afterTurn?: ConversationRouterDeps["afterTurn"]
 } = {}) {
   const conversations = input.conversations ?? new MemoryNamespace<ConversationEntryV1>("conversations")
   const providerService = new FakeProviderService(input.activeProviderId ?? "anthropic", input.env ?? {})
@@ -866,6 +882,7 @@ function createRouter(input: {
       logger: input.logger,
       now: fixedNow,
       prepareMessage: input.prepareMessage,
+      afterTurn: input.afterTurn,
     },
     repository,
     sessionManager,

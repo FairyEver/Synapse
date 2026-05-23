@@ -1,4 +1,4 @@
-import { readFile } from "node:fs/promises"
+import { lstat, mkdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 export interface KnowledgeBaseManifestSourceEntry {
@@ -38,6 +38,19 @@ export async function readKnowledgeBaseManifest(projectPath: string): Promise<Kn
       manifest: emptyManifest(),
     }
   }
+}
+
+export async function writeKnowledgeBaseManifest(
+  projectPath: string,
+  manifest: KnowledgeBaseManifest,
+): Promise<void> {
+  const root = path.resolve(projectPath)
+  const rawPath = assertInside(root, path.join(root, ".raw"))
+  const manifestPath = assertInside(root, path.join(rawPath, ".manifest.json"))
+  await assertNoSymlinkInPath(root, ".raw")
+  await assertNoSymlinkInPath(root, ".raw/.manifest.json")
+  await mkdir(rawPath, { recursive: true })
+  await writeFile(manifestPath, `${JSON.stringify(normalizeManifest(manifest), null, 2)}\n`, "utf8")
 }
 
 function parseKnowledgeBaseManifest(value: unknown): KnowledgeBaseManifest {
@@ -97,6 +110,46 @@ function parseAddressMap(value: unknown): Record<string, string> {
     }
   }
   return addressMap
+}
+
+function normalizeManifest(manifest: KnowledgeBaseManifest): KnowledgeBaseManifest {
+  return {
+    version: 1,
+    ...(manifest.created ? { created: manifest.created } : undefined),
+    ...(manifest.description ? { description: manifest.description } : undefined),
+    sources: manifest.sources,
+    address_map: Object.fromEntries(
+      Object.entries(manifest.address_map)
+        .map(([pagePath, address]) => [pagePath.split("\\").join("/"), address] as const)
+        .sort(([left], [right]) => left.localeCompare(right)),
+    ),
+  }
+}
+
+function assertInside(rootPath: string, targetPath: string): string {
+  const root = path.resolve(rootPath)
+  const target = path.resolve(targetPath)
+  const relative = path.relative(root, target)
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error("目标路径不在项目目录中。")
+  }
+  return target
+}
+
+async function assertNoSymlinkInPath(projectPath: string, relativePath: string): Promise<void> {
+  let currentPath = projectPath
+  for (const segment of relativePath.split(/[\\/]/)) {
+    currentPath = path.join(currentPath, segment)
+    try {
+      const stat = await lstat(currentPath)
+      if (stat.isSymbolicLink()) {
+        throw new Error(`知识库路径不能包含符号链接：${path.relative(projectPath, currentPath)}`)
+      }
+    } catch (error) {
+      if (isMissingPathError(error)) return
+      throw error
+    }
+  }
 }
 
 function isString(value: unknown): value is string {

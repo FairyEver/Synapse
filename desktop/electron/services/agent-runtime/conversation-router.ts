@@ -12,6 +12,7 @@ import type { AgentCommandRouter, AgentCommandRouterResult } from "./command-rou
 import type { AgentGovernanceService } from "./governance"
 import type { AgentSessionRepository } from "./session-repository"
 import type { SessionManager } from "./session-manager"
+import type { AgentProjectAfterTurnInput } from "./project-contributions"
 import type {
   PendingPermissionState,
   RuntimeSessionState,
@@ -44,6 +45,7 @@ export interface ConversationRouterDeps {
     message: AgentMessage,
     context: { readonly isNewLiveSession: boolean },
   ) => AgentMessage | Promise<AgentMessage>
+  readonly afterTurn?: (input: AgentProjectAfterTurnInput) => void | Promise<void>
 }
 
 const DEFAULT_PENDING_QUEUE_LIMIT = 5
@@ -378,6 +380,7 @@ export class ConversationRouter {
           abortSignal,
           liveEventTimeoutMs,
         )
+        await this.runAfterTurn(message, result, conversation.id, sessionHandle.created)
 
         if (isBackgroundPlatform) {
           const tDone = this.isoNow()
@@ -503,6 +506,24 @@ export class ConversationRouter {
       agentSessionId: saved.sdkSessionId,
       threadId: saved.sdkSessionId,
       error,
+    }
+  }
+
+  private async runAfterTurn(
+    message: AgentMessage,
+    result: AgentRuntimeTurnResult,
+    conversationId: string,
+    isNewLiveSession: boolean,
+  ): Promise<void> {
+    if (!this.deps.afterTurn) return
+    try {
+      await Promise.resolve(this.deps.afterTurn({ message, result, conversationId, isNewLiveSession }))
+    } catch (error) {
+      this.deps.logger?.warn("Agent afterTurn hook failed.", {
+        boundary: "agent-runtime.after-turn",
+        conversationId,
+        error: errorMetadata(error),
+      })
     }
   }
 

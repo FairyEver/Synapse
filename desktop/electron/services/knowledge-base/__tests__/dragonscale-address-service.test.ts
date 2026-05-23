@@ -111,6 +111,26 @@ describe("DragonScaleAddressService", () => {
       .resolves.toBe("4\n")
   })
 
+  it("serializes concurrent allocations across service instances", async () => {
+    const root = await tempDir()
+    await mkdir(path.join(root, ".vault-meta"), { recursive: true })
+    await writeFile(path.join(root, ".vault-meta", "address-counter.txt"), "1\n")
+
+    const results = await Promise.all([
+      new DragonScaleAddressService().allocate(root),
+      new DragonScaleAddressService().allocate(root),
+      new DragonScaleAddressService().allocate(root),
+    ])
+
+    expect(results.map((result) => result.address).sort()).toEqual([
+      "c-000001",
+      "c-000002",
+      "c-000003",
+    ])
+    await expect(readFile(path.join(root, ".vault-meta", "address-counter.txt"), "utf8"))
+      .resolves.toBe("4\n")
+  })
+
   it("exports the address service from the knowledge-base service barrel", async () => {
     const module = await import("../index")
 
