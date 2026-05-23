@@ -92,16 +92,26 @@ export class AdminController {
   @Get("/audit-logs/export")
   async exportAuditLogs(
     @Query() query: Record<string, unknown>,
+    @Req() request: AdminRequest,
     @Res() response: Response,
   ) {
-    const data = await this.auditLog.listForExport({
+    const filters = {
       action: typeof query.action === "string" ? query.action : undefined,
       from: typeof query.from === "string" ? query.from : undefined,
       to: typeof query.to === "string" ? query.to : undefined,
-    })
+    }
+    const data = await this.auditLog.listForExport(filters)
     if (data.length > auditLogExportLimit) {
       throw new BadRequestException(`导出记录超过 ${auditLogExportLimit} 条，请缩小时间范围。`)
     }
+    await this.auditLog.record({
+      adminEmail: request.admin!.email,
+      action: "admin.audit_logs.export",
+      targetType: "audit_log",
+      targetId: "export",
+      detail: { filters, count: data.length },
+      ipAddress: request.ip ?? "",
+    })
     const csv = toCsv(data as Record<string, unknown>[], [
       "id", "adminEmail", "action", "targetType", "targetId", "ipAddress", "createdAt",
     ])

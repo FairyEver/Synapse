@@ -30,6 +30,7 @@ export const AUDIT_ACTION_FILTER_OPTIONS = [
   { value: "admin.invitation.create", label: "admin.invitation.create" },
   { value: "admin.invitation.delete", label: "admin.invitation.delete" },
   { value: "admin.invitation.delete_many", label: "admin.invitation.delete_many" },
+  { value: "admin.audit_logs.export", label: "admin.audit_logs.export" },
   { value: "admin.user.status_update", label: "admin.user.status_update" },
   { value: "user.register.success", label: "user.register.success" },
   { value: "user.login.success", label: "user.login.success" },

@@ -57,35 +57,59 @@ describe("AdminController", () => {
         createdAt: "2026-05-22T00:00:00.000Z",
       },
     ])
+    const record = vi.fn().mockResolvedValue(undefined)
     const response = {
       setHeader: vi.fn(),
       send: vi.fn(),
     }
-    const controller = createController({}, { listForExport })
+    const controller = createController({}, { listForExport, record })
 
-    await controller.exportAuditLogs({
-      action: "users.patch",
-      from: "2026-05-01",
-      to: "2026-05-21",
-    }, response as never)
+    await controller.exportAuditLogs(
+      {
+        action: "users.patch",
+        from: "2026-05-01",
+        to: "2026-05-21",
+      },
+      {
+        admin: { email: "admin@example.com" },
+        ip: "203.0.113.10",
+      } as never,
+      response as never,
+    )
 
     expect(listForExport).toHaveBeenCalledWith({
       action: "users.patch",
       from: "2026-05-01",
       to: "2026-05-21",
     })
+    expect(record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.audit_logs.export",
+      targetType: "audit_log",
+      targetId: "export",
+      detail: {
+        filters: {
+          action: "users.patch",
+          from: "2026-05-01",
+          to: "2026-05-21",
+        },
+        count: 1,
+      },
+      ipAddress: "203.0.113.10",
+    })
     expect(response.send).toHaveBeenCalledWith(expect.stringContaining("audit-1"))
   })
 
   it("does not pass page size overrides to audit log export", async () => {
     const listForExport = vi.fn().mockResolvedValue([])
+    const record = vi.fn().mockResolvedValue(undefined)
     const response = {
       setHeader: vi.fn(),
       send: vi.fn(),
     }
-    const controller = createController({}, { listForExport })
+    const controller = createController({}, { listForExport, record })
 
-    await controller.exportAuditLogs({ pageSize: "10000" }, response as never)
+    await controller.exportAuditLogs({ pageSize: "10000" }, { admin: { email: "admin@example.com" } } as never, response as never)
 
     expect(listForExport).toHaveBeenCalledWith({
       action: undefined,
@@ -105,7 +129,7 @@ describe("AdminController", () => {
     }
     const controller = createController({}, { listForExport })
 
-    await expect(controller.exportAuditLogs({}, response as never))
+    await expect(controller.exportAuditLogs({}, { admin: { email: "admin@example.com" } } as never, response as never))
       .rejects
       .toThrow(`导出记录超过 ${auditLogExportLimit} 条，请缩小时间范围。`)
     expect(response.send).not.toHaveBeenCalled()
