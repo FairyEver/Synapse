@@ -1,5 +1,16 @@
 import { describe, expect, it, vi } from "vitest"
+import * as fs from "node:fs"
+import { Readable } from "node:stream"
 import { BackupService, buildBackupKey, buildPgDumpOptions } from "./backup.service"
+
+vi.mock("node:fs", async () => {
+  const actual = await vi.importActual<typeof import("node:fs")>("node:fs")
+  return {
+    ...actual,
+    createReadStream: vi.fn(actual.createReadStream),
+    readFileSync: vi.fn(actual.readFileSync),
+  }
+})
 
 describe("buildPgDumpOptions", () => {
   it("keeps database passwords out of pg_dump command arguments", () => {
@@ -138,6 +149,31 @@ describe("BackupService", () => {
       detail: result,
       ipAddress: "system",
     })
+  })
+
+  it("streams backup archives to COS without buffering the whole file", async () => {
+    const archiveStream = Readable.from(["archive"])
+    const createReadStream = vi.mocked(fs.createReadStream).mockReturnValue(archiveStream as fs.ReadStream)
+    const readFileSync = vi.mocked(fs.readFileSync).mockReturnValue(Buffer.from("archive"))
+    const putObject = vi.fn((options, callback) => callback(null))
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService({ putObject }, logger)
+
+    await (service as unknown as {
+      uploadToCos(filePath: string, filename: string): Promise<void>
+    }).uploadToCos("/tmp/synapse-backup.tar.gz", "synapse-backup.tar.gz")
+
+    expect(createReadStream).toHaveBeenCalledWith("/tmp/synapse-backup.tar.gz")
+    expect(readFileSync).not.toHaveBeenCalled()
+    expect(putObject).toHaveBeenCalledWith(
+      {
+        Bucket: "bucket",
+        Region: "ap-guangzhou",
+        Key: "backups/synapse-backup.tar.gz",
+        Body: archiveStream,
+      },
+      expect.any(Function),
+    )
   })
 })
 

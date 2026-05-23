@@ -282,7 +282,7 @@ export class BackupService {
   private async uploadToCos(filePath: string, filename: string): Promise<void> {
     if (!this.cos) throw new Error("COS client not initialized")
 
-    const body = fs.readFileSync(filePath)
+    const body = fs.createReadStream(filePath)
 
     return new Promise((resolve, reject) => {
       this.cos!.putObject(
