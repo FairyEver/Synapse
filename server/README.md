@@ -131,6 +131,9 @@ ADMIN_JWT_SECRET=粘贴第四步生成的那串hex字符
 USER_ACCESS_JWT_SECRET=再次生成并粘贴另一串hex字符
 USER_ACCESS_TOKEN_MINUTES=15
 USER_REFRESH_TOKEN_DAYS=30
+
+# 外部访问地址（用于生成注册邀请和团队邀请链接）
+APP_PUBLIC_URL=https://api.yourdomain.com
 ```
 
 常见配置错误（启动时会报 "服务端环境变量无效"）：
@@ -138,6 +141,7 @@ USER_REFRESH_TOKEN_DAYS=30
 - `ADMIN_JWT_SECRET` 少于 32 位（必须用 `openssl rand -hex 32` 生成的 64 字符）
 - `USER_ACCESS_JWT_SECRET` 少于 32 位，或和 `ADMIN_JWT_SECRET` 相同
 - `ADMIN_EMAIL` 不是合法邮箱格式
+- `APP_PUBLIC_URL` 不是用户可访问的后台地址
 
 ---
 
