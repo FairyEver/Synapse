@@ -37,8 +37,8 @@ export class UserAuthController {
   }
 
   @Post("/refresh")
-  refresh(@Body() body: unknown) {
-    return this.auth.refresh(parseBody(refreshSchema, body, "刷新请求无效。"))
+  refresh(@Body() body: unknown, @Req() request: Request) {
+    return this.auth.refresh(parseBody(refreshSchema, body, "刷新请求无效。"), request.ip)
   }
 
   @Post("/logout")

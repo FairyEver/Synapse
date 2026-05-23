@@ -132,7 +132,7 @@ export class UserAuthService {
     return tokens
   }
 
-  async refresh(input: { refreshToken: string }): Promise<UserTokenPair> {
+  async refresh(input: { refreshToken: string }, ipAddress = "system"): Promise<UserTokenPair> {
     const currentRefreshTokenHash = hashToken(input.refreshToken)
     const session = await this.prisma.userSession.findUnique({
       where: { refreshTokenHash: currentRefreshTokenHash },
@@ -142,6 +142,13 @@ export class UserAuthService {
       throw new UnauthorizedException("未登录或登录已过期。")
     }
     if (session.user.status !== "active") {
+      await this.auditLog?.record({
+        adminEmail: session.user.email,
+        action: "user.refresh.disabled",
+        targetType: "user",
+        targetId: session.user.id,
+        ipAddress,
+      })
       throw new UnauthorizedException("账号已停用。")
     }
 

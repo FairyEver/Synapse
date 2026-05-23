@@ -43,4 +43,15 @@ describe("UserAuthController", () => {
       password: "password",
     }, "203.0.113.21")
   })
+
+  it("passes valid refresh requests with the request ip to the service", () => {
+    const auth = {
+      refresh: vi.fn().mockResolvedValue({ accessToken: "access", refreshToken: "refresh" }),
+    }
+    const controller = new UserAuthController(auth as unknown as UserAuthService)
+
+    controller.refresh({ refreshToken: "refresh-token" }, { ip: "203.0.113.22" } as never)
+
+    expect(auth.refresh).toHaveBeenCalledWith({ refreshToken: "refresh-token" }, "203.0.113.22")
+  })
 })
