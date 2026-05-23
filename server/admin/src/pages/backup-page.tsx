@@ -21,6 +21,7 @@ export function BackupPage() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [backingUp, setBackingUp] = React.useState(false)
+  const [deletingFilename, setDeletingFilename] = React.useState<string | null>(null)
 
   const loadList = React.useCallback(() => {
     setLoading(true)
@@ -51,12 +52,18 @@ export function BackupPage() {
   }
 
   async function handleDelete(filename: string) {
+    if (!window.confirm(`确定删除备份 ${filename}？`)) {
+      return
+    }
     setError(null)
+    setDeletingFilename(filename)
     try {
       await adminApi.deleteBackup(filename)
       loadList()
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "删除失败")
+    } finally {
+      setDeletingFilename(null)
     }
   }
 
@@ -104,9 +111,10 @@ export function BackupPage() {
                       variant="destructive"
                       size="sm"
                       aria-label={`删除备份 ${file.filename}`}
+                      disabled={deletingFilename === file.filename}
                       onClick={() => void handleDelete(file.filename)}
                     >
-                      删除
+                      {deletingFilename === file.filename ? "删除中…" : "删除"}
                     </Button>
                   </div>
                 </TableCell>
