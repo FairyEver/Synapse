@@ -24,6 +24,7 @@ describe("AuditLogsPage", () => {
       { value: "all", label: "全部操作" },
       { value: "admin.invitation.create", label: "admin.invitation.create" },
       { value: "admin.user.status_update", label: "admin.user.status_update" },
+      { value: "dashboard.login.disabled", label: "dashboard.login.disabled" },
       { value: "team.create", label: "team.create" },
       { value: "backup.download", label: "backup.download" },
     ]))

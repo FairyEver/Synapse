@@ -47,6 +47,16 @@ export class AdminAuthService {
       })
       return { email: matchedAdmin.email, token, role: "admin" }
     }
+    if (matchedAdmin && matchedAdmin.status !== "active" && passwordMatches) {
+      await this.auditLog?.record({
+        adminEmail: matchedAdmin.email,
+        action: "dashboard.login.disabled",
+        targetType: "admin",
+        targetId: matchedAdmin.id,
+        ipAddress,
+      })
+      throw new UnauthorizedException("邮箱或密码错误。")
+    }
 
     const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
     const userPasswordMatches = user ? await verifyPassword(password, user.passwordHash) : false

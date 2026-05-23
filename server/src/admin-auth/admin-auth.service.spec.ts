@@ -80,8 +80,9 @@ describe("AdminAuthService", () => {
     })
   })
 
-  it("rejects a disabled administrator", async () => {
-    const { service, prisma } = await createTestService()
+  it("records disabled administrator login attempts separately from wrong passwords", async () => {
+    const auditLog = { record: vi.fn() }
+    const { service, prisma } = await createTestService(auditLog)
     prisma.adminUser.findFirst.mockResolvedValueOnce({
       id: "admin-1",
       email: "admin@d2.com",
@@ -92,6 +93,14 @@ describe("AdminAuthService", () => {
     await expect(service.login("admin@d2.com", "admin@pwd1234!"))
       .rejects
       .toThrow("邮箱或密码错误。")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@d2.com",
+      action: "dashboard.login.disabled",
+      targetType: "admin",
+      targetId: "admin-1",
+      ipAddress: "system",
+    })
   })
 
   it("accepts normal user credentials for dashboard login", async () => {
