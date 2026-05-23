@@ -73,9 +73,55 @@ describe("BackupService", () => {
 
     expect(logger.error).toHaveBeenCalledWith({ error: "COS unavailable" }, "Failed to list backups")
   })
+
+  it("continues cleaning expired backups when one delete fails", async () => {
+    const deleteObject = vi.fn((options, callback) => {
+      if (options.Key === "backups/expired-a.tar.gz") callback(new Error("delete failed"))
+      else callback(null)
+    })
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService({
+      deleteObject,
+      getBucket: vi.fn((_options, callback) => callback(null, {
+        Contents: [
+          {
+            Key: "backups/expired-a.tar.gz",
+            Size: "1",
+            LastModified: "2026-04-01T00:00:00.000Z",
+          },
+          {
+            Key: "backups/expired-b.tar.gz",
+            Size: "1",
+            LastModified: "2026-04-02T00:00:00.000Z",
+          },
+        ],
+      })),
+    }, logger)
+
+    await (service as unknown as { cleanExpiredBackups(): Promise<void> }).cleanExpiredBackups()
+
+    expect(deleteObject).toHaveBeenCalledTimes(2)
+    expect(deleteObject).toHaveBeenNthCalledWith(
+      2,
+      {
+        Bucket: "bucket",
+        Region: "ap-guangzhou",
+        Key: "backups/expired-b.tar.gz",
+      },
+      expect.any(Function),
+    )
+    expect(logger.warn).toHaveBeenCalledWith(
+      { error: "delete failed", filename: "expired-a.tar.gz" },
+      "Failed to delete expired backup",
+    )
+  })
 })
 
-function createBackupService(cos: unknown, logger: { error: ReturnType<typeof vi.fn> }): BackupService {
+function createBackupService(cos: unknown, logger: {
+  error: ReturnType<typeof vi.fn>
+  info?: ReturnType<typeof vi.fn>
+  warn?: ReturnType<typeof vi.fn>
+}): BackupService {
   const service = Object.create(BackupService.prototype) as BackupService
   Object.assign(service as unknown as {
     cos: unknown

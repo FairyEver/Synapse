@@ -300,19 +300,24 @@ export class BackupService {
       )
 
       for (const item of expired) {
-        await new Promise<void>((resolve, reject) => {
-          this.cos!.deleteObject(
-            {
-              Bucket: this.bucket,
-              Region: this.region,
-              Key: `${this.prefix}${item.filename}`,
-            },
-            (err) => {
-              if (err) reject(err)
-              else resolve()
-            },
-          )
-        })
+        try {
+          await new Promise<void>((resolve, reject) => {
+            this.cos!.deleteObject(
+              {
+                Bucket: this.bucket,
+                Region: this.region,
+                Key: `${this.prefix}${item.filename}`,
+              },
+              (err) => {
+                if (err) reject(err)
+                else resolve()
+              },
+            )
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          this.logger.warn({ error: message, filename: item.filename }, "Failed to delete expired backup")
+        }
       }
 
       if (expired.length > 0) {
