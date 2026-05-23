@@ -53,6 +53,7 @@ describe("AdminController", () => {
         action: "users.patch",
         targetType: "user",
         targetId: "user-1",
+        detail: { status: "disabled" },
         ipAddress: "127.0.0.1",
         createdAt: "2026-05-22T00:00:00.000Z",
       },
@@ -97,7 +98,8 @@ describe("AdminController", () => {
       },
       ipAddress: "203.0.113.10",
     })
-    expect(response.send).toHaveBeenCalledWith(expect.stringContaining("audit-1"))
+    expect(response.send).toHaveBeenCalledWith(expect.stringContaining("detail"))
+    expect(response.send).toHaveBeenCalledWith(expect.stringContaining(`""status"":""disabled""`))
   })
 
   it("does not pass page size overrides to audit log export", async () => {

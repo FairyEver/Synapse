@@ -139,7 +139,7 @@ export class AdminController {
       ipAddress: request.ip ?? "",
     })
     const csv = toCsv(data as Record<string, unknown>[], [
-      "id", "adminEmail", "action", "targetType", "targetId", "ipAddress", "createdAt",
+      "id", "adminEmail", "action", "targetType", "targetId", "detail", "ipAddress", "createdAt",
     ])
     response.setHeader("Content-Type", "text/csv; charset=utf-8")
     response.setHeader("Content-Disposition", "attachment; filename=audit-logs.csv")
