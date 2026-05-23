@@ -49,10 +49,12 @@ describe("UserTeamPage", () => {
   afterEach(() => {
     cleanup?.()
     cleanup = null
+    vi.unstubAllGlobals()
     vi.clearAllMocks()
   })
 
   it("disables team leave while the request is pending", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true))
     vi.mocked(userDashboardApi.getMyTeam).mockResolvedValue(team)
     vi.mocked(userDashboardApi.leaveTeam).mockImplementation(() => new Promise(() => undefined))
 
@@ -68,6 +70,7 @@ describe("UserTeamPage", () => {
     leaveButton?.click()
 
     await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalledWith("退出后团队将被解散。继续退出？")
       expect(leaveButton?.disabled).toBe(true)
       expect(userDashboardApi.leaveTeam).toHaveBeenCalledTimes(1)
     })
@@ -76,6 +79,7 @@ describe("UserTeamPage", () => {
   })
 
   it("disables member removal while the request is pending", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true))
     vi.mocked(userDashboardApi.getMyTeam).mockResolvedValue(team)
     vi.mocked(userDashboardApi.removeMember).mockImplementation(() => new Promise(() => undefined))
 
@@ -91,10 +95,45 @@ describe("UserTeamPage", () => {
     removeButton?.click()
 
     await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalledWith("确定移除 member@example.com？")
       expect(removeButton?.disabled).toBe(true)
       expect(userDashboardApi.removeMember).toHaveBeenCalledTimes(1)
     })
     removeButton?.click()
     expect(userDashboardApi.removeMember).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not leave the team when confirmation is cancelled", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => false))
+    vi.mocked(userDashboardApi.getMyTeam).mockResolvedValue(team)
+
+    const result = await render(<UserTeamPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("Core Team")
+    })
+    Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("退出团队"))
+      ?.click()
+
+    expect(userDashboardApi.leaveTeam).not.toHaveBeenCalled()
+  })
+
+  it("does not remove a member when confirmation is cancelled", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => false))
+    vi.mocked(userDashboardApi.getMyTeam).mockResolvedValue(team)
+
+    const result = await render(<UserTeamPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("member@example.com")
+    })
+    Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("移除"))
+      ?.click()
+
+    expect(userDashboardApi.removeMember).not.toHaveBeenCalled()
   })
 })

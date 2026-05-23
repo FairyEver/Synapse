@@ -86,6 +86,7 @@ export function UserTeamPage() {
   }
 
   async function removeMember(member: TeamMember) {
+    if (!window.confirm(`确定移除 ${member.user.email}？`)) return
     setSubmitting(true)
     setActionError(null)
     try {
@@ -99,6 +100,8 @@ export function UserTeamPage() {
   }
 
   async function leaveTeam() {
+    const message = membership?.role === "owner" ? "退出后团队将被解散。继续退出？" : "确定退出团队？"
+    if (!window.confirm(message)) return
     setSubmitting(true)
     setActionError(null)
     try {
