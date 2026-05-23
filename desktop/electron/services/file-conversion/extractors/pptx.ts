@@ -2,8 +2,9 @@ import path from "node:path"
 
 import { OfficeParser } from "officeparser"
 
+import { parserError } from "../errors"
 import { normalizeMarkdownTitle } from "../markdown"
-import { FileConversionError, type FileConversionInput, type FileConversionResult, type FileExtractor } from "../types"
+import { type FileConversionInput, type FileConversionResult, type FileExtractor } from "../types"
 
 type ParseOffice = (filePath: string) => Promise<string>
 
@@ -37,7 +38,7 @@ export class PptxExtractor implements FileExtractor {
         }],
       }
     } catch (error) {
-      throw new FileConversionError("parse_failed", "Could not parse PPTX file.", { cause: error })
+      throw parserError("PPTX", error)
     }
   }
 }

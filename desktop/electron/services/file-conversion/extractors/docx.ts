@@ -1,9 +1,10 @@
 import { createRequire } from "node:module"
 import path from "node:path"
 
+import { parserError } from "../errors"
 import { htmlToMarkdown } from "../html-to-markdown"
 import { normalizeMarkdownTitle } from "../markdown"
-import { FileConversionError, type FileConversionInput, type FileConversionResult, type FileExtractor } from "../types"
+import { type FileConversionInput, type FileConversionResult, type FileExtractor } from "../types"
 
 const require = createRequire(__filename)
 
@@ -59,7 +60,7 @@ export class DocxExtractor implements FileExtractor {
         })),
       }
     } catch (error) {
-      throw new FileConversionError("parse_failed", "Could not parse DOCX file.", { cause: error })
+      throw parserError("DOCX", error)
     }
   }
 }

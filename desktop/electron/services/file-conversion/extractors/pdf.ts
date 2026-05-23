@@ -2,9 +2,9 @@ import { readFile } from "node:fs/promises"
 
 import { PDFParse } from "pdf-parse"
 
+import { parserError } from "../errors"
 import { normalizeMarkdownTitle } from "../markdown"
 import {
-  FileConversionError,
   type FileConversionInput,
   type FileConversionResult,
   type FileConversionWarning,
@@ -66,7 +66,7 @@ export class PdfExtractor implements FileExtractor {
         warnings,
       }
     } catch (error) {
-      throw new FileConversionError("parse_failed", "Could not parse PDF file.", { cause: error })
+      throw parserError("PDF", error)
     }
   }
 }
