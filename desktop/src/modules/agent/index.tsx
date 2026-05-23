@@ -10,6 +10,7 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { AgentComposer } from "./components/agent-composer"
+import type { KnowledgeBaseComposerAction } from "./components/knowledge-base-action-menu"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
@@ -54,6 +55,20 @@ const DEFAULT_AGENT_DISPLAY_PROFILE: SynapseAgentDisplayProfile = {
     error: "Failed",
     denied: "Denied",
   },
+}
+
+function toKnowledgeBaseComposerActions(
+  commands: readonly SynapseAgentPublishedCommand[],
+): KnowledgeBaseComposerAction[] {
+  return commands
+    .filter((command) => command.ui?.group === "knowledge-base")
+    .map((command) => {
+      const commandText = command.ui?.insertText ?? `/${command.name.replace(/^\/+/, "")}`
+      const label = command.ui?.label ?? command.description ?? command.name
+      const action = command.ui?.action ?? "insert"
+      return { label, action, commandText }
+    })
+    .filter((action) => action.label.trim().length > 0 && action.commandText.trim().length > 0)
 }
 
 type AgentModuleProps = {
@@ -327,6 +342,10 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     () => toAgentSlashCandidates(mergedCommands),
     [mergedCommands],
   )
+  const knowledgeBaseActions = useMemo(
+    () => toKnowledgeBaseComposerActions(mergedCommands),
+    [mergedCommands],
+  )
   const selectedDisplayProfile = selectedAgentDefinition?.displayProfile
     ?? DEFAULT_AGENT_DISPLAY_PROFILE
   const selectedCliLabel = agentCliLabel(selectedSession?.agentType)
@@ -359,6 +378,17 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       })
       toast("打开失败")
     })
+  }
+
+  const sendComposerCommand = (commandText: string) => {
+    const content = commandText.trim()
+    if (!content || !selectedTarget) return
+    stick.forcePin()
+    if (chat.sending) {
+      queueMessage(content, selectedTarget)
+      return
+    }
+    void chat.sendMessage(content, selectedTarget)
   }
 
   const sidebar = (
@@ -516,6 +546,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               }}
               onDraftChange={setDraft}
               slashCandidates={slashCandidates}
+              knowledgeBaseActions={knowledgeBaseActions}
+              onKnowledgeBaseCommand={sendComposerCommand}
               onInputKeyDown={handleInputKeyDown}
               onSubmit={handleSubmit}
               onCancelTurn={() => void chat.cancelTurn()}
