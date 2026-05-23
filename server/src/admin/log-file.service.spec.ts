@@ -1,6 +1,36 @@
 import { open, readdir, readFile, stat, unlink } from "node:fs/promises";
+import { Writable } from "node:stream";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LogFileService } from "./log-file.service";
+
+const archiverMock = vi.hoisted(() => {
+  let handlers: Record<string, () => void> = {};
+  const archive = {
+    file: vi.fn(),
+    finalize: vi.fn(async () => {
+      handlers.end?.();
+    }),
+    on: vi.fn((event: string, handler: () => void) => {
+      handlers[event] = handler;
+      return archive;
+    }),
+    pipe: vi.fn(),
+    pointer: vi.fn(() => 42),
+  };
+  return {
+    archive,
+    factory: vi.fn(() => archive),
+    reset: () => {
+      handlers = {};
+      archive.file.mockClear();
+      archive.finalize.mockClear();
+      archive.on.mockClear();
+      archive.pipe.mockClear();
+      archive.pointer.mockClear();
+      archive.pointer.mockReturnValue(42);
+    },
+  };
+});
 
 vi.mock("node:fs/promises", () => ({
   open: vi.fn(),
@@ -8,6 +38,10 @@ vi.mock("node:fs/promises", () => ({
   stat: vi.fn(),
   readFile: vi.fn(),
   unlink: vi.fn(),
+}));
+
+vi.mock("archiver", () => ({
+  default: archiverMock.factory,
 }));
 
 const mockedOpen = vi.mocked(open);
@@ -19,6 +53,7 @@ const mockedUnlink = vi.mocked(unlink);
 describe("LogFileService", () => {
   beforeEach(() => {
     vi.resetAllMocks();
+    archiverMock.reset();
   });
 
   it("skips log files deleted between readdir and stat", async () => {
@@ -93,6 +128,29 @@ describe("LogFileService", () => {
     await expect(service.cleanup("2026-05-03")).resolves.toBe(1);
 
     expect(mockedUnlink).toHaveBeenCalledTimes(2);
+  });
+
+  it("streams log zip data to the provided writable without buffering the archive", async () => {
+    mockedReaddir.mockResolvedValue(["server.2026-05-01.log", "server.2026-05-02.log"] as never);
+    mockedStat.mockResolvedValue({
+      size: 12,
+      mtime: new Date("2026-05-23T00:00:00.000Z"),
+    } as never);
+    const service = new LogFileService("/tmp/synapse-logs");
+    const output = new Writable({
+      write(_chunk, _encoding, callback) {
+        callback();
+      },
+    });
+
+    await expect(service.streamZipTo(output, { from: "2026-05-01", to: "2026-05-02" }))
+      .resolves
+      .toEqual({ bytes: 42, fileCount: 2 });
+
+    expect(archiverMock.archive.pipe).toHaveBeenCalledWith(output);
+    expect(archiverMock.archive.file).toHaveBeenCalledTimes(2);
+    expect(archiverMock.archive.finalize).toHaveBeenCalledWith();
+    expect(mockedReadFile).not.toHaveBeenCalled();
   });
 });
 

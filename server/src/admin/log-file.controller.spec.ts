@@ -7,9 +7,9 @@ import type { AuditLogService } from "../common/audit-log.service";
 function createController() {
   const service = {
     cleanup: vi.fn().mockResolvedValue(2),
-    downloadAsZip: vi.fn().mockResolvedValue(Buffer.from("zip-bytes")),
     listFiles: vi.fn().mockResolvedValue([{ name: "server.log", size: 123, modifiedAt: "2026-05-23T00:00:00.000Z" }]),
     readRecent: vi.fn().mockResolvedValue([]),
+    streamZipTo: vi.fn().mockResolvedValue({ bytes: 9, fileCount: 2 }),
   };
   const auditLog = {
     record: vi.fn().mockResolvedValue(undefined),
@@ -115,7 +115,11 @@ describe("LogFileController", () => {
       ip: "203.0.113.10",
     } as never);
 
-    expect(service.downloadAsZip).toHaveBeenCalledWith({ from: "2026-05-01", to: "2026-05-23" });
+    expect(service.streamZipTo).toHaveBeenCalledWith(response, { from: "2026-05-01", to: "2026-05-23" });
+    expect(response.set).toHaveBeenCalledWith({
+      "Content-Type": "application/zip",
+      "Content-Disposition": "attachment; filename=\"logs-2026-05-01-2026-05-23.zip\"",
+    });
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "admin@example.com",
       action: "logs.download",
@@ -126,9 +130,10 @@ describe("LogFileController", () => {
         to: "2026-05-23",
         filename: "logs-2026-05-01-2026-05-23.zip",
         bytes: 9,
+        fileCount: 2,
       },
       ipAddress: "203.0.113.10",
     });
-    expect(response.send).toHaveBeenCalledWith(Buffer.from("zip-bytes"));
+    expect(response.send).not.toHaveBeenCalled();
   });
 });

@@ -61,7 +61,6 @@ export class LogFileController {
     @Res() res: Response,
     @Req() request?: AdminRequest,
   ) {
-    const buffer = await this.logFileService.downloadAsZip({ from, to });
     const filename = from || to
       ? `logs-${from ?? "start"}-${to ?? "now"}.zip`
       : "logs-all.zip";
@@ -69,14 +68,13 @@ export class LogFileController {
     res.set({
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${filename}"`,
-      "Content-Length": buffer.length.toString(),
     });
+    const result = await this.logFileService.streamZipTo(res, { from, to });
     await this.recordLogAudit(request, {
       action: "logs.download",
       targetId: filename,
-      detail: { from, to, filename, bytes: buffer.length },
+      detail: { from, to, filename, bytes: result.bytes, fileCount: result.fileCount },
     });
-    res.send(buffer);
   }
 
   @Delete("cleanup")

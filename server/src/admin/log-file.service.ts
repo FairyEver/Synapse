@@ -1,6 +1,7 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
 import { open, readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import type { Writable } from "node:stream";
 import archiver from "archiver";
 
 export const LOG_DIR_TOKEN = "LOG_DIR";
@@ -26,6 +27,11 @@ export interface LogEntry {
   msg: string;
   req?: { method: string; url: string };
   err?: { message: string; stack: string };
+}
+
+export interface LogZipStreamResult {
+  bytes: number;
+  fileCount: number;
 }
 
 @Injectable()
@@ -101,32 +107,35 @@ export class LogFileService {
     return results;
   }
 
-  async downloadAsZip(opts: { from?: string; to?: string } = {}): Promise<Buffer> {
-    const { from, to } = opts;
-    const files = await this.listFiles();
-
-    const filtered = files.filter((f) => {
-      const dateMatch = f.name.match(/(\d{4}-\d{2}-\d{2})/);
-      if (!dateMatch) return !from && !to;
-      const fileDate = dateMatch[1];
-      if (from && fileDate < from) return false;
-      if (to && fileDate > to) return false;
-      return true;
-    });
-
+  async streamZipTo(output: Writable, opts: { from?: string; to?: string } = {}): Promise<LogZipStreamResult> {
+    const filtered = await this.listDownloadFiles(opts);
     return new Promise((resolve, reject) => {
       const archive = archiver("zip", { zlib: { level: 6 } });
-      const chunks: Buffer[] = [];
 
-      archive.on("data", (chunk: Buffer) => chunks.push(chunk));
-      archive.on("end", () => resolve(Buffer.concat(chunks)));
       archive.on("error", reject);
+      output.on("error", reject);
+      archive.on("end", () => resolve({ bytes: archive.pointer(), fileCount: filtered.length }));
+      archive.pipe(output);
 
       for (const file of filtered) {
         archive.file(join(this.logDir, file.name), { name: file.name });
       }
 
       archive.finalize();
+    });
+  }
+
+  private async listDownloadFiles(opts: { from?: string; to?: string } = {}): Promise<LogFileInfo[]> {
+    const { from, to } = opts;
+    const files = await this.listFiles();
+
+    return files.filter((file) => {
+      const dateMatch = file.name.match(/(\d{4}-\d{2}-\d{2})/);
+      if (!dateMatch) return !from && !to;
+      const fileDate = dateMatch[1];
+      if (from && fileDate < from) return false;
+      if (to && fileDate > to) return false;
+      return true;
     });
   }
 
