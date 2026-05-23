@@ -2,6 +2,8 @@ import { Injectable } from "@nestjs/common"
 import { PrismaService } from "../prisma/prisma.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse } from "./pagination"
 
+const auditLogSortFields = ["createdAt", "adminEmail", "action", "targetType", "targetId"] as const
+
 @Injectable()
 export class AuditLogService {
   constructor(private readonly prisma: PrismaService) {}
@@ -32,7 +34,7 @@ export class AuditLogService {
     readonly to?: string
     readonly query?: Record<string, unknown>
   }): Promise<PaginatedResponse<unknown>> {
-    const pagination = parsePagination(options.query ?? {})
+    const pagination = parsePagination(options.query ?? {}, { allowedSortFields: auditLogSortFields })
     const where: Record<string, unknown> = {}
     if (options.action) where.action = options.action
     if (options.from || options.to) {

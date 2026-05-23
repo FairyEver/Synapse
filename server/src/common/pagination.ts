@@ -1,4 +1,7 @@
+import { BadRequestException } from "@nestjs/common"
 import { z } from "zod"
+
+const defaultAllowedSortFields = ["createdAt"] as const
 
 export const paginationSchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
@@ -16,8 +19,16 @@ export interface PaginatedResponse<T> {
   pageSize: number
 }
 
-export function parsePagination(query: Record<string, unknown>): PaginationQuery {
-  return paginationSchema.parse(query)
+export function parsePagination(
+  query: Record<string, unknown>,
+  options: { readonly allowedSortFields?: readonly string[] } = {},
+): PaginationQuery {
+  const pagination = paginationSchema.parse(query)
+  const allowedSortFields = options.allowedSortFields ?? defaultAllowedSortFields
+  if (!allowedSortFields.includes(pagination.sortBy)) {
+    throw new BadRequestException("排序字段无效。")
+  }
+  return pagination
 }
 
 export function toPrismaArgs(pagination: PaginationQuery) {

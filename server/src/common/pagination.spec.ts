@@ -23,6 +23,18 @@ describe("pagination", () => {
     expect(() => parsePagination({ page: "0" })).toThrow()
   })
 
+  it("rejects sort fields outside the default allowlist", () => {
+    expect(() => parsePagination({ sortBy: "passwordHash" })).toThrow("排序字段无效。")
+  })
+
+  it("accepts resource-specific sort fields", () => {
+    const result = parsePagination({ sortBy: "email", sortOrder: "asc" }, {
+      allowedSortFields: ["createdAt", "email"],
+    })
+    expect(result.sortBy).toBe("email")
+    expect(result.sortOrder).toBe("asc")
+  })
+
   it("converts to Prisma skip/take/orderBy", () => {
     const pagination = parsePagination({ page: "2", pageSize: "10" })
     const args = toPrismaArgs(pagination)

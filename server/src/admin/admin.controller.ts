@@ -16,6 +16,10 @@ const bulkInvitationDeleteSchema = z.object({
   ids: z.array(z.string().min(1)).min(1),
 }).strict()
 
+const userSortFields = ["createdAt", "updatedAt", "email", "status"] as const
+const teamSortFields = ["createdAt", "updatedAt", "name"] as const
+const invitationSortFields = ["createdAt", "expiresAt", "usedAt", "type"] as const
+
 @UseGuards(AdminAuthGuard)
 @Controller("/api/admin")
 export class AdminController {
@@ -52,7 +56,7 @@ export class AdminController {
 
   @Get("/invitations")
   listInvitations(@Query() query: Record<string, unknown>) {
-    return this.admin.listInvitations(parsePagination(query))
+    return this.admin.listInvitations(parsePagination(query, { allowedSortFields: invitationSortFields }))
   }
 
   @Delete("/invitations")
@@ -69,7 +73,7 @@ export class AdminController {
 
   @Get("/users")
   listUsers(@Query() query: Record<string, unknown>) {
-    return this.admin.listUsers(parsePagination(query))
+    return this.admin.listUsers(parsePagination(query, { allowedSortFields: userSortFields }))
   }
 
   @Patch("/users/:id/status")
@@ -81,7 +85,7 @@ export class AdminController {
 
   @Get("/teams")
   listTeams(@Query() query: Record<string, unknown>) {
-    return this.admin.listTeams(parsePagination(query))
+    return this.admin.listTeams(parsePagination(query, { allowedSortFields: teamSortFields }))
   }
 
   @Get("/audit-logs/export")
