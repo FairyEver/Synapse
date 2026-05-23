@@ -23,6 +23,10 @@ function createPrismaMock(counts: {
   readonly users?: number
   readonly teams?: number
   readonly invitations?: number
+  readonly teamEntitlements?: number
+  readonly teamAccessRoles?: number
+  readonly teamAccessRolePermissions?: number
+  readonly teamMemberAccessRoles?: number
 } = {}) {
   return {
     $transaction: vi.fn().mockResolvedValue([
@@ -30,6 +34,10 @@ function createPrismaMock(counts: {
       counts.users ?? 0,
       counts.teams ?? 0,
       counts.invitations ?? 0,
+      counts.teamEntitlements ?? 0,
+      counts.teamAccessRoles ?? 0,
+      counts.teamAccessRolePermissions ?? 0,
+      counts.teamMemberAccessRoles ?? 0,
     ]),
     auditLog: { count: vi.fn() },
     user: {
@@ -38,13 +46,26 @@ function createPrismaMock(counts: {
       update: vi.fn().mockResolvedValue({}),
     },
     team: { count: vi.fn(), findUnique: vi.fn().mockResolvedValue({ id: "team-1" }) },
+    teamAccessRole: { count: vi.fn() },
+    teamAccessRolePermission: { count: vi.fn() },
+    teamEntitlement: { count: vi.fn() },
+    teamMemberAccessRole: { count: vi.fn() },
     invitation: { count: vi.fn(), delete: vi.fn(), deleteMany: vi.fn() },
   }
 }
 
 describe("AdminService", () => {
   it("returns retained system overview counts", async () => {
-    const prisma = createPrismaMock({ auditLogs: 2, users: 3, teams: 1, invitations: 4 })
+    const prisma = createPrismaMock({
+      auditLogs: 2,
+      users: 3,
+      teams: 1,
+      invitations: 4,
+      teamEntitlements: 14,
+      teamAccessRoles: 2,
+      teamAccessRolePermissions: 25,
+      teamMemberAccessRoles: 3,
+    })
     const service = new AdminService(
       prisma as unknown as PrismaService,
       {} as never,
@@ -53,8 +74,21 @@ describe("AdminService", () => {
 
     const result = await service.getSystemOverview()
 
-    expect(result.counts).toEqual({ auditLogs: 2, users: 3, teams: 1, invitations: 4 })
+    expect(result.counts).toEqual({
+      auditLogs: 2,
+      users: 3,
+      teams: 1,
+      invitations: 4,
+      teamEntitlements: 14,
+      teamAccessRoles: 2,
+      teamAccessRolePermissions: 25,
+      teamMemberAccessRoles: 3,
+    })
     expect(prisma.invitation.count).toHaveBeenCalledWith()
+    expect(prisma.teamEntitlement.count).toHaveBeenCalledWith()
+    expect(prisma.teamAccessRole.count).toHaveBeenCalledWith()
+    expect(prisma.teamAccessRolePermission.count).toHaveBeenCalledWith()
+    expect(prisma.teamMemberAccessRole.count).toHaveBeenCalledWith()
   })
 
   it("loads users without exposing password hashes", async () => {

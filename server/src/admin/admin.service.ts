@@ -33,11 +33,24 @@ export class AdminService {
   ) {}
 
   async getSystemOverview() {
-    const [auditLogs, users, teams, invitations] = await this.prisma.$transaction([
+    const [
+      auditLogs,
+      users,
+      teams,
+      invitations,
+      teamEntitlements,
+      teamAccessRoles,
+      teamAccessRolePermissions,
+      teamMemberAccessRoles,
+    ] = await this.prisma.$transaction([
       this.prisma.auditLog.count(),
       this.prisma.user.count(),
       this.prisma.team.count(),
       this.prisma.invitation.count(),
+      this.prisma.teamEntitlement.count(),
+      this.prisma.teamAccessRole.count(),
+      this.prisma.teamAccessRolePermission.count(),
+      this.prisma.teamMemberAccessRole.count(),
     ])
 
     return {
@@ -47,6 +60,10 @@ export class AdminService {
         users,
         teams,
         invitations,
+        teamEntitlements,
+        teamAccessRoles,
+        teamAccessRolePermissions,
+        teamMemberAccessRoles,
       },
     }
   }

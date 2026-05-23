@@ -10,6 +10,10 @@ export interface SystemOverview {
     readonly users: number
     readonly teams: number
     readonly invitations: number
+    readonly teamEntitlements: number
+    readonly teamAccessRoles: number
+    readonly teamAccessRolePermissions: number
+    readonly teamMemberAccessRoles: number
   }
 }
 

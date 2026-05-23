@@ -47,7 +47,16 @@ describe("App", () => {
     vi.mocked(adminApi.getSession).mockResolvedValue({ email: "admin@d2.com", role: "admin" })
     vi.mocked(adminApi.getSystemOverview).mockResolvedValue({
       serverTime: "2026-05-21T00:00:00.000Z",
-      counts: { auditLogs: 0, users: 0, teams: 0, invitations: 0 },
+      counts: {
+        auditLogs: 0,
+        users: 0,
+        teams: 0,
+        invitations: 0,
+        teamEntitlements: 0,
+        teamAccessRoles: 0,
+        teamAccessRolePermissions: 0,
+        teamMemberAccessRoles: 0,
+      },
     })
 
     const result = await render(<App />)
@@ -86,7 +95,16 @@ describe("App", () => {
     vi.mocked(adminApi.getSession).mockResolvedValue({ email: "17114674882@qq.com", role: "admin" })
     vi.mocked(adminApi.getSystemOverview).mockResolvedValue({
       serverTime: "2026-05-21T00:00:00.000Z",
-      counts: { auditLogs: 0, users: 0, teams: 0, invitations: 0 },
+      counts: {
+        auditLogs: 0,
+        users: 0,
+        teams: 0,
+        invitations: 0,
+        teamEntitlements: 0,
+        teamAccessRoles: 0,
+        teamAccessRolePermissions: 0,
+        teamMemberAccessRoles: 0,
+      },
     })
 
     const result = await render(<App />)
