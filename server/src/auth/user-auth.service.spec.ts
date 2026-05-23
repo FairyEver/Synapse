@@ -59,7 +59,7 @@ describe("UserAuthService", () => {
       auditLog as never,
     )
 
-    await expect(service.login({ email: "u@example.com", password: "StrongPassword123!" }))
+    await expect(service.login({ email: "u@example.com", password: "StrongPassword123!" }, "203.0.113.22"))
       .rejects
       .toThrow("账号已停用。")
     expect(auditLog.record).toHaveBeenCalledWith({
@@ -67,7 +67,86 @@ describe("UserAuthService", () => {
       action: "user.login.disabled",
       targetType: "user",
       targetId: "user-1",
-      ipAddress: "system",
+      ipAddress: "203.0.113.22",
+    })
+  })
+
+  it("records login failure audits with the request ip", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.findUnique.mockResolvedValue(null)
+    const auditLog = { record: vi.fn() }
+    const service = new UserAuthService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
+      { accessMinutes: 15, refreshDays: 30 },
+      auditLog as never,
+    )
+
+    await expect(service.login({ email: "missing@example.com", password: "x" }, "203.0.113.23"))
+      .rejects
+      .toThrow(UnauthorizedException)
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "missing@example.com",
+      action: "user.login.failure",
+      targetType: "user",
+      targetId: "unknown",
+      ipAddress: "203.0.113.23",
+    })
+  })
+
+  it("records login success audits with the request ip", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      passwordHash: await hashPassword("StrongPassword123!"),
+      status: "active",
+    })
+    const auditLog = { record: vi.fn() }
+    const service = new UserAuthService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
+      { accessMinutes: 15, refreshDays: 30 },
+      auditLog as never,
+    )
+
+    await service.login({ email: "u@example.com", password: "StrongPassword123!" }, "203.0.113.24")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.login.success",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "203.0.113.24",
+    })
+  })
+
+  it("records registration success audits with the request ip", async () => {
+    const prisma = createPrismaMock()
+    const auditLog = { record: vi.fn() }
+    const service = new UserAuthService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
+      { accessMinutes: 15, refreshDays: 30 },
+      auditLog as never,
+    )
+
+    await service.register({
+      invitationToken: "invite-token",
+      email: "U@example.com",
+      password: "StrongPassword123!",
+    }, "203.0.113.25")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.register.success",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "203.0.113.25",
     })
   })
 

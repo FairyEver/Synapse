@@ -20,8 +20,27 @@ describe("UserAuthController", () => {
     }
     const controller = new UserAuthController(auth as unknown as UserAuthService)
 
-    controller.login({ email: "user@example.com", password: "password" })
+    controller.login({ email: "user@example.com", password: "password" }, { ip: "203.0.113.20" } as never)
 
-    expect(auth.login).toHaveBeenCalledWith({ email: "user@example.com", password: "password" })
+    expect(auth.login).toHaveBeenCalledWith({ email: "user@example.com", password: "password" }, "203.0.113.20")
+  })
+
+  it("passes valid register requests with the request ip to the service", () => {
+    const auth = {
+      register: vi.fn().mockResolvedValue({ accessToken: "access", refreshToken: "refresh" }),
+    }
+    const controller = new UserAuthController(auth as unknown as UserAuthService)
+
+    controller.register({
+      invitationToken: "invite-token",
+      email: "user@example.com",
+      password: "password",
+    }, { ip: "203.0.113.21" } as never)
+
+    expect(auth.register).toHaveBeenCalledWith({
+      invitationToken: "invite-token",
+      email: "user@example.com",
+      password: "password",
+    }, "203.0.113.21")
   })
 })

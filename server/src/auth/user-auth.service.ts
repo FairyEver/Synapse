@@ -43,7 +43,7 @@ export class UserAuthService {
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
-  async register(input: { invitationToken: string; email: string; password: string }): Promise<UserTokenPair> {
+  async register(input: { invitationToken: string; email: string; password: string }, ipAddress = "system"): Promise<UserTokenPair> {
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
@@ -65,7 +65,7 @@ export class UserAuthService {
         action: "user.register.success",
         targetType: "user",
         targetId: result.user.id,
-        ipAddress: "system",
+        ipAddress,
       })
       return result.tokens
     } catch (error) {
@@ -76,7 +76,7 @@ export class UserAuthService {
     }
   }
 
-  async login(input: { email: string; password: string }): Promise<UserTokenPair> {
+  async login(input: { email: string; password: string }, ipAddress = "system"): Promise<UserTokenPair> {
     const email = input.email.trim().toLowerCase()
     const user = await this.prisma.user.findUnique({ where: { email } })
     const passwordMatches = user ? await verifyPassword(input.password, user.passwordHash) : false
@@ -86,7 +86,7 @@ export class UserAuthService {
         action: "user.login.failure",
         targetType: "user",
         targetId: user?.id ?? "unknown",
-        ipAddress: "system",
+        ipAddress,
       })
       throw new UnauthorizedException("邮箱或密码错误。")
     }
@@ -96,7 +96,7 @@ export class UserAuthService {
         action: "user.login.disabled",
         targetType: "user",
         targetId: user.id,
-        ipAddress: "system",
+        ipAddress,
       })
       throw new UnauthorizedException("账号已停用。")
     }
@@ -106,7 +106,7 @@ export class UserAuthService {
       action: "user.login.success",
       targetType: "user",
       targetId: user.id,
-      ipAddress: "system",
+      ipAddress,
     })
     return tokens
   }
