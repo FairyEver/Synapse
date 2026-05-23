@@ -21,15 +21,13 @@ fi
 EXISTING=$(ssh "$SERVER" "grep -c '^COS_SECRET_ID=' $ENV_FILE 2>/dev/null || echo 0")
 if [ "$EXISTING" -gt 0 ]; then
   echo "检测到已有 COS 配置："
-  ssh "$SERVER" "grep '^COS_' $ENV_FILE; grep '^BACKUP_ENCRYPT_KEY' $ENV_FILE" 2>/dev/null | sed 's/SECRET_KEY=.*/SECRET_KEY=***/'
+  ssh "$SERVER" "grep '^COS_' $ENV_FILE" 2>/dev/null | sed 's/SECRET_KEY=.*/SECRET_KEY=***/'
   echo ""
   read -p "是否覆盖？[y/N]: " CONFIRM
   if [ "$CONFIRM" != "y" ] && [ "$CONFIRM" != "Y" ]; then
     echo "已取消"
     exit 0
   fi
-  # 删除旧配置
-  ssh "$SERVER" "sed -i '/^COS_/d; /^BACKUP_ENCRYPT_KEY/d' $ENV_FILE"
 fi
 
 echo ""
@@ -38,17 +36,15 @@ read -p "腾讯云 COS SecretKey: " COS_SECRET_KEY
 read -p "COS 存储桶名称 (如 synapse-backup-1250000000): " COS_BUCKET
 read -p "COS 地域 (如 ap-guangzhou): " COS_REGION
 
-BACKUP_ENCRYPT_KEY=$(openssl rand -hex 32)
-
 echo ""
 echo ">>> 写入远程 .env..."
+ssh "$SERVER" "sed -i '/^COS_/d; /^BACKUP_ENCRYPT_KEY/d' $ENV_FILE"
 ssh "$SERVER" "cat >> $ENV_FILE" << EOF
 
 COS_SECRET_ID=$COS_SECRET_ID
 COS_SECRET_KEY=$COS_SECRET_KEY
 COS_BUCKET=$COS_BUCKET
 COS_REGION=$COS_REGION
-BACKUP_ENCRYPT_KEY=$BACKUP_ENCRYPT_KEY
 EOF
 
 echo ">>> 重启服务..."
@@ -64,8 +60,5 @@ echo "========================================="
 echo "  配置完成"
 echo "========================================="
 echo ""
-echo "⚠️  请妥善保存备份加密密钥："
-echo "  BACKUP_ENCRYPT_KEY=$BACKUP_ENCRYPT_KEY"
-echo ""
-echo "恢复备份时需要此密钥，丢失将无法解密密钥文件。"
+echo "COS 备份配置已写入远程 .env。"
 echo ""

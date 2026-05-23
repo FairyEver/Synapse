@@ -64,16 +64,6 @@ echo "  ADMIN_JWT_SECRET: $JWT_SECRET"
 echo "  USER_ACCESS_JWT_SECRET: $USER_ACCESS_JWT_SECRET"
 echo ""
 
-echo ">>> 生成 License 密钥对..."
-openssl genpkey -algorithm Ed25519 -out private.pem
-openssl pkey -in private.pem -pubout -out public.pem
-
-PRIVATE_KEY=$(awk 'NR>1{line=line $0} END{print "-----BEGIN PRIVATE KEY-----\\n" line "\\n-----END PRIVATE KEY-----"}' private.pem)
-PUBLIC_KEY=$(awk 'NR>1{line=line $0} END{print "-----BEGIN PUBLIC KEY-----\\n" line "\\n-----END PUBLIC KEY-----"}' public.pem)
-
-echo "  密钥对已生成"
-echo ""
-
 # 收集用户输入
 read -p "管理员邮箱: " ADMIN_EMAIL
 read -p "管理员密码 (至少12位): " ADMIN_PASSWORD
@@ -90,6 +80,15 @@ if [ -z "$DB_PASSWORD" ]; then
   echo "  数据库密码已自动生成: $DB_PASSWORD"
 fi
 
+DEFAULT_APP_PUBLIC_URL="https://synapse.d2.pub"
+read -p "应用公开访问地址 [$DEFAULT_APP_PUBLIC_URL]: " APP_PUBLIC_URL
+APP_PUBLIC_URL=${APP_PUBLIC_URL:-$DEFAULT_APP_PUBLIC_URL}
+while [ -n "$APP_PUBLIC_URL" ] && [[ "$APP_PUBLIC_URL" != http://* ]] && [[ "$APP_PUBLIC_URL" != https://* ]]; do
+  echo "  请输入 http:// 或 https:// 开头的地址"
+  read -p "应用公开访问地址 [$DEFAULT_APP_PUBLIC_URL]: " APP_PUBLIC_URL
+  APP_PUBLIC_URL=${APP_PUBLIC_URL:-$DEFAULT_APP_PUBLIC_URL}
+done
+
 echo ""
 echo ">>> 备份配置（可选，回车跳过）"
 echo "  配置腾讯云 COS 后将启用自动备份功能"
@@ -100,8 +99,6 @@ if [ -n "$COS_SECRET_ID" ]; then
   read -p "腾讯云 COS SecretKey: " COS_SECRET_KEY
   read -p "COS 存储桶名称 (如 synapse-backup-1250000000): " COS_BUCKET
   read -p "COS 地域 (如 ap-guangzhou): " COS_REGION
-  BACKUP_ENCRYPT_KEY=$(openssl rand -hex 32)
-  echo "  备份加密密钥已自动生成"
 fi
 
 echo ""
@@ -118,24 +115,12 @@ USER_ACCESS_JWT_SECRET=$USER_ACCESS_JWT_SECRET
 USER_ACCESS_TOKEN_MINUTES=15
 USER_REFRESH_TOKEN_DAYS=30
 
-LICENSE_PRIVATE_KEY="$PRIVATE_KEY"
-LICENSE_PUBLIC_KEY="$PUBLIC_KEY"
-LICENSE_KEY_ID=prod-key-001
-LICENSE_LEASE_DAYS=7
-
-ACTIVATION_ATTEMPT_RETENTION_DAYS=90
-ACTIVATION_RATE_WINDOW_MINUTES=15
-ACTIVATION_RATE_MAX_FAILURES_PER_IP=20
-ACTIVATION_RATE_MAX_FAILURES_PER_EMAIL=8
-ACTIVATION_RATE_MAX_FAILURES_PER_DEVICE=8
-ACTIVATION_RISK_WINDOW_MINUTES=60
-ACTIVATION_RISK_MAX_DISTINCT_IPS_PER_CODE=6
-ACTIVATION_RISK_MAX_DISTINCT_EMAILS_PER_CODE=4
-ACTIVATION_RISK_MAX_DISTINCT_DEVICES_PER_CODE=4
-ACTIVATION_RISK_MAX_BOUND_CONFLICTS_PER_CODE=3
-
 DATABASE_POOL_SIZE=10
 PORT=3000
+EOF
+
+cat >> .env << EOF
+APP_PUBLIC_URL=$APP_PUBLIC_URL
 EOF
 
 if [ -n "$COS_SECRET_ID" ]; then
@@ -145,15 +130,11 @@ COS_SECRET_ID=$COS_SECRET_ID
 COS_SECRET_KEY=$COS_SECRET_KEY
 COS_BUCKET=$COS_BUCKET
 COS_REGION=$COS_REGION
-BACKUP_ENCRYPT_KEY=$BACKUP_ENCRYPT_KEY
 EOF
 fi
 
 echo ">>> .env 文件已生成"
 echo ""
-
-# 清理临时密钥文件
-rm -f private.pem public.pem
 
 # 构建并启动
 echo ">>> 开始构建并启动服务..."

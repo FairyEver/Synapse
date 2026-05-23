@@ -17,16 +17,20 @@ step() {
 
 echo ""
 
-# [1/5] 确保远程目录存在
+# [1/7] 确保远程目录存在
 step 1 "确保远程目录存在" \
   ssh "$SERVER" "mkdir -p $REMOTE_DIR"
 
-# [2/5] 同步代码（只传后端需要的文件）
+# [2/7] 同步代码（只传后端需要的文件）
 step 2 "同步代码到服务器" \
   rsync -avz --delete \
     --exclude='server/node_modules' \
     --exclude='server/.env' \
     --exclude='server/dist' \
+    --include='/.dockerignore' \
+    --include='/setup.sh' \
+    --include='/restart.sh' \
+    --include='/cos.sh' \
     --include='/server/***' \
     --include='/pnpm-lock.yaml' \
     --include='/pnpm-workspace.yaml' \
