@@ -49,15 +49,24 @@ describe("UserAuthService", () => {
       passwordHash: await hashPassword("StrongPassword123!"),
       status: "disabled",
     })
+    const auditLog = { record: vi.fn() }
     const service = new UserAuthService(
       prisma as never,
       { consumeInvitation: vi.fn() } as never,
       new JwtService({ secret: "user-secret-at-least-32-characters!" }),
       { accessMinutes: 15, refreshDays: 30 },
+      auditLog as never,
     )
 
     await expect(service.login({ email: "u@example.com", password: "StrongPassword123!" }))
       .rejects
       .toThrow("账号已停用。")
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.login.disabled",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "system",
+    })
   })
 })

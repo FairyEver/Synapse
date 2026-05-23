@@ -88,6 +88,13 @@ export class UserAuthService {
       throw new UnauthorizedException("邮箱或密码错误。")
     }
     if (user.status !== "active") {
+      await this.auditLog?.record({
+        adminEmail: email,
+        action: "user.login.disabled",
+        targetType: "user",
+        targetId: user.id,
+        ipAddress: "system",
+      })
       throw new UnauthorizedException("账号已停用。")
     }
     const tokens = await this.issueTokenPair(user)
