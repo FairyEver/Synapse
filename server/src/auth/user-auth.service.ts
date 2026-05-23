@@ -112,8 +112,9 @@ export class UserAuthService {
   }
 
   async refresh(input: { refreshToken: string }): Promise<UserTokenPair> {
+    const currentRefreshTokenHash = hashToken(input.refreshToken)
     const session = await this.prisma.userSession.findUnique({
-      where: { refreshTokenHash: hashToken(input.refreshToken) },
+      where: { refreshTokenHash: currentRefreshTokenHash },
       include: { user: true },
     })
     if (!session || session.revokedAt || session.expiresAt <= new Date()) {
@@ -124,14 +125,20 @@ export class UserAuthService {
     }
 
     const refreshToken = createOpaqueToken()
-    await this.prisma.userSession.update({
-      where: { id: session.id },
+    const result = await this.prisma.userSession.updateMany({
+      where: {
+        id: session.id,
+        refreshTokenHash: currentRefreshTokenHash,
+      },
       data: {
         refreshTokenHash: hashToken(refreshToken),
         expiresAt: addDays(new Date(), this.options.refreshDays),
         lastUsedAt: new Date(),
       },
     })
+    if (result.count === 0) {
+      throw new UnauthorizedException("未登录或登录已过期。")
+    }
     return { accessToken: this.signAccessToken(session.user), refreshToken }
   }
 

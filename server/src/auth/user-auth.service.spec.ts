@@ -2,6 +2,7 @@ import { UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { describe, expect, it, vi } from "vitest"
 import { hashPassword } from "./password"
+import { hashToken } from "./token"
 import { UserAuthService } from "./user-auth.service"
 
 function createPrismaMock() {
@@ -22,6 +23,7 @@ function createPrismaMock() {
       deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       findUnique: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
     },
   }
 }
@@ -148,6 +150,39 @@ describe("UserAuthService", () => {
       targetId: "user-1",
       ipAddress: "203.0.113.25",
     })
+  })
+
+  it("rejects refresh when another request already rotated the session token", async () => {
+    const prisma = createPrismaMock()
+    prisma.userSession.findUnique.mockResolvedValue({
+      id: "session-1",
+      refreshTokenHash: hashToken("refresh-token"),
+      revokedAt: null,
+      expiresAt: new Date("2026-05-24T12:00:00.000Z"),
+      user: {
+        id: "user-1",
+        email: "u@example.com",
+        status: "active",
+      },
+    })
+    prisma.userSession.updateMany.mockResolvedValue({ count: 0 })
+    const service = new UserAuthService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
+      { accessMinutes: 15, refreshDays: 30 },
+    )
+
+    await expect(service.refresh({ refreshToken: "refresh-token" }))
+      .rejects
+      .toThrow("未登录或登录已过期。")
+
+    expect(prisma.userSession.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+      where: {
+        id: "session-1",
+        refreshTokenHash: hashToken("refresh-token"),
+      },
+    }))
   })
 
   it("cleans expired and stale revoked sessions", async () => {
