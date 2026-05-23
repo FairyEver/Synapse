@@ -30,11 +30,22 @@ function createPrismaMock() {
   }
 }
 
+function createPermissionsMock() {
+  return {
+    ensureDefaultTeamAccess: vi.fn(),
+    assignOrdinaryMemberRole: vi.fn(),
+  }
+}
+
 describe("TeamsService", () => {
   it("rejects team creation when the user already belongs to a team", async () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ id: "membership-1" })
-    const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn(), consumeInvitation: vi.fn() } as never)
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn(), consumeInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
+    )
 
     await expect(service.createTeam("user-1", { name: "Team" })).rejects.toThrow(BadRequestException)
   })
@@ -47,6 +58,7 @@ describe("TeamsService", () => {
     const service = new TeamsService(
       prisma as never,
       { createTeamInvitation: vi.fn(), consumeInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
       auditLog as never,
     )
 
@@ -61,10 +73,40 @@ describe("TeamsService", () => {
     }))
   })
 
+  it("initializes default access roles when creating a team", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue(null)
+    const membership = { id: "membership-1", teamId: "team-1", userId: "user-1", role: "owner" }
+    const tx = {
+      team: { create: vi.fn().mockResolvedValue({ id: "team-1", name: "Team", createdByUserId: "user-1" }) },
+      teamMembership: { create: vi.fn().mockResolvedValue(membership) },
+    }
+    prisma.$transaction.mockImplementationOnce((callback) => callback(tx))
+    const permissions = { ensureDefaultTeamAccess: vi.fn() }
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn(), consumeInvitation: vi.fn() } as never,
+      permissions as never,
+    )
+
+    await service.createTeam("user-1", { name: "Team" })
+
+    expect(permissions.ensureDefaultTeamAccess).toHaveBeenCalledWith({
+      teamId: "team-1",
+      ownerMembershipId: "membership-1",
+      ownerUserId: "user-1",
+      client: tx,
+    })
+  })
+
   it("rejects team invitations from non-owners", async () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "member", teamId: "team-1" })
-    const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never)
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
+    )
 
     await expect(service.createInvitation("user-1", "https://app.example.com")).rejects.toThrow(ForbiddenException)
   })
@@ -88,7 +130,7 @@ describe("TeamsService", () => {
     const invitations = {
       consumeInvitation: vi.fn().mockResolvedValue({ teamId: "team-1" }),
     }
-    const service = new TeamsService(prisma as never, invitations as never)
+    const service = new TeamsService(prisma as never, invitations as never, createPermissionsMock() as never)
 
     await expect(service.joinTeam("user-2", { invitationToken: "team-token" })).resolves.toEqual(member)
     expect(createMembership).toHaveBeenCalledWith({
@@ -97,11 +139,43 @@ describe("TeamsService", () => {
     })
   })
 
+  it("assigns the ordinary access role when joining a team", async () => {
+    const prisma = createPrismaMock()
+    const member = {
+      id: "membership-2",
+      teamId: "team-1",
+      userId: "user-2",
+      role: "member",
+      user: { id: "user-2", email: "member@example.com", status: "active" },
+    }
+    const tx = {
+      teamMembership: { create: vi.fn().mockResolvedValue(member) },
+    }
+    prisma.teamMembership.findUnique.mockResolvedValue(null)
+    prisma.$transaction.mockImplementationOnce((callback) => callback(tx))
+    const permissions = { assignOrdinaryMemberRole: vi.fn() }
+    const invitations = { consumeInvitation: vi.fn().mockResolvedValue({ teamId: "team-1" }) }
+    const service = new TeamsService(prisma as never, invitations as never, permissions as never)
+
+    await service.joinTeam("user-2", { invitationToken: "team-token" })
+
+    expect(permissions.assignOrdinaryMemberRole).toHaveBeenCalledWith({
+      teamId: "team-1",
+      teamMembershipId: "membership-2",
+      assignedByUserId: "user-2",
+      client: tx,
+    })
+  })
+
   it("lets a member leave their team", async () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "member", teamId: "team-1", userId: "user-2" })
     prisma.teamMembership.delete.mockResolvedValue({ id: "membership-2" })
-    const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never)
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
+    )
 
     await expect(service.leaveTeam("user-2")).resolves.toEqual({ ok: true })
     expect(prisma.teamMembership.delete).toHaveBeenCalledWith({ where: { userId: "user-2" } })
@@ -119,7 +193,11 @@ describe("TeamsService", () => {
       invitation: { deleteMany: vi.fn() },
       team: { deleteMany: vi.fn() },
     }))
-    const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never)
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
+    )
 
     await expect(service.leaveTeam("user-1")).rejects.toThrow(BadRequestException)
     expect(deleteMemberships).not.toHaveBeenCalled()
@@ -139,7 +217,11 @@ describe("TeamsService", () => {
       },
       team: { deleteMany: deleteTeams },
     }))
-    const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never)
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
+    )
 
     await expect(service.leaveTeam("user-1")).resolves.toEqual({ ok: true })
     expect(deleteMemberships).toHaveBeenCalledWith({ where: { userId: "user-1", teamId: "team-1" } })
@@ -160,7 +242,12 @@ describe("TeamsService", () => {
       team: { deleteMany: vi.fn().mockResolvedValue({ count: 1 }) },
     }))
     const auditLog = { record: vi.fn() }
-    const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never, auditLog as never)
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
+      auditLog as never,
+    )
 
     await expect(service.leaveTeam("user-1", "203.0.113.30")).resolves.toEqual({ ok: true })
 
@@ -184,7 +271,11 @@ describe("TeamsService", () => {
       },
       team: { deleteMany: vi.fn() },
     }))
-    const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never)
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
+    )
 
     await expect(service.leaveTeam("user-1")).rejects.toThrow("账号未加入团队。")
   })
@@ -197,7 +288,12 @@ describe("TeamsService", () => {
     prisma.user.findUnique.mockResolvedValue({ email: "owner@example.com" })
     prisma.teamMembership.delete.mockResolvedValue({ id: "membership-2" })
     const auditLog = { record: vi.fn() }
-    const service = new TeamsService(prisma as never, { createTeamInvitation: vi.fn() } as never, auditLog as never)
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
+      auditLog as never,
+    )
 
     await expect(service.removeMember("owner-1", "user-2", "203.0.113.20")).resolves.toEqual({ ok: true })
 

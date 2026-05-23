@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, Optional } from "@nestjs/common"
 import { AuditLogService } from "../common/audit-log.service"
 import { InvitationsService } from "../invitations/invitations.service"
+import { PermissionsService } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
 
 @Injectable()
@@ -8,6 +9,7 @@ export class TeamsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly invitations: InvitationsService,
+    private readonly permissions: PermissionsService,
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
@@ -19,8 +21,14 @@ export class TeamsService {
       const team = await tx.team.create({
         data: { name: input.name.trim(), createdByUserId: userId },
       })
-      await tx.teamMembership.create({
+      const membership = await tx.teamMembership.create({
         data: { teamId: team.id, userId, role: "owner" },
+      })
+      await this.permissions.ensureDefaultTeamAccess({
+        teamId: team.id,
+        ownerMembershipId: membership.id,
+        ownerUserId: userId,
+        client: tx,
       })
       return team
     })
@@ -82,6 +90,12 @@ export class TeamsService {
       const membership = await tx.teamMembership.create({
         data: { teamId: invitation.teamId, userId, role: "member" },
         include: { user: { select: { id: true, email: true, status: true } } },
+      })
+      await this.permissions.assignOrdinaryMemberRole({
+        teamId: invitation.teamId,
+        teamMembershipId: membership.id,
+        assignedByUserId: userId,
+        client: tx,
       })
       return { membership, teamId: invitation.teamId }
     })
