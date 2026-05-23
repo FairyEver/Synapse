@@ -52,7 +52,7 @@ describe("AdminAuthService", () => {
     const auditLog = { record: vi.fn() }
     const { service } = await createTestService(auditLog)
 
-    await expect(service.login("random@evil.com", "wrong-password"))
+    await expect(service.login("random@evil.com", "wrong-password", "203.0.113.9"))
       .rejects
       .toThrow("邮箱或密码错误。")
 
@@ -61,7 +61,22 @@ describe("AdminAuthService", () => {
       action: "dashboard.login.failure",
       targetType: "account",
       targetId: "unknown",
-      ipAddress: "system",
+      ipAddress: "203.0.113.9",
+    })
+  })
+
+  it("records the request ip for administrator login success", async () => {
+    const auditLog = { record: vi.fn() }
+    const { service } = await createTestService(auditLog)
+
+    await service.login("admin@d2.com", "admin@pwd1234!", "203.0.113.10")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@d2.com",
+      action: "admin.login.success",
+      targetType: "admin",
+      targetId: "admin-1",
+      ipAddress: "203.0.113.10",
     })
   })
 

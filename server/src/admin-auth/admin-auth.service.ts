@@ -31,7 +31,7 @@ export class AdminAuthService {
     return admin?.email ?? ""
   }
 
-  async login(email: string, password: string): Promise<{ email: string; token: string; role: DashboardRole }> {
+  async login(email: string, password: string, ipAddress = "system"): Promise<{ email: string; token: string; role: DashboardRole }> {
     const normalizedEmail = email.trim().toLowerCase()
     const admin = await this.prisma.adminUser.findFirst({ orderBy: { createdAt: "asc" } })
     const matchedAdmin = admin && normalizedEmail === admin.email ? admin : null
@@ -43,7 +43,7 @@ export class AdminAuthService {
         action: "admin.login.success",
         targetType: "admin",
         targetId: matchedAdmin.id,
-        ipAddress: "system",
+        ipAddress,
       })
       return { email: matchedAdmin.email, token, role: "admin" }
     }
@@ -57,7 +57,7 @@ export class AdminAuthService {
         action: "user.dashboard_login.success",
         targetType: "user",
         targetId: user.id,
-        ipAddress: "system",
+        ipAddress,
       })
       return { email: user.email, token, role: "user" }
     }
@@ -67,7 +67,7 @@ export class AdminAuthService {
       action: "dashboard.login.failure",
       targetType: "account",
       targetId: matchedAdmin?.id ?? user?.id ?? "unknown",
-      ipAddress: "system",
+      ipAddress,
     })
     throw new UnauthorizedException("邮箱或密码错误。")
   }

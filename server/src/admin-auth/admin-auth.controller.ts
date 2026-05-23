@@ -16,13 +16,13 @@ export class AdminAuthController {
 
   @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post("/login")
-  async login(@Body() body: unknown, @Res({ passthrough: true }) response: Response) {
+  async login(@Body() body: unknown, @Req() request: AdminRequest, @Res({ passthrough: true }) response: Response) {
     const result = loginSchema.safeParse(body)
     if (!result.success) {
       throw new BadRequestException("登录请求无效。")
     }
-    const request = result.data
-    const session = await this.auth.login(request.email, request.password)
+    const credentials = result.data
+    const session = await this.auth.login(credentials.email, credentials.password, request.ip)
     response.cookie("synapse_admin", session.token, {
       httpOnly: true,
       sameSite: "lax",
