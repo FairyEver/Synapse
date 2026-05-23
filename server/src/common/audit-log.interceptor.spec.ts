@@ -30,6 +30,7 @@ describe("AuditLogInterceptor", () => {
 
     await lastValueFrom(interceptor.intercept(
       createContext({
+        path: "/api/auth/register",
         body: {
           email: "admin@example.com",
           password: "plain-password",
@@ -91,6 +92,46 @@ describe("AuditLogInterceptor", () => {
     await vi.waitFor(() => {
       expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
         action: "backup.download",
+        targetType: "backup",
+        targetId: "synapse-backup.tar.gz",
+      }))
+    })
+  })
+
+  it("does not duplicate admin service audit records", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "DELETE",
+        path: "/api/admin/invitations/invite-1",
+        params: { id: "invite-1" },
+      }),
+      { handle: () => of({ ok: true }) },
+    ))
+
+    expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
+  it("keeps automatic audit records for backup writes", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "DELETE",
+        path: "/api/admin/backup/synapse-backup.tar.gz",
+        params: { filename: "synapse-backup.tar.gz" },
+      }),
+      { handle: () => of({ ok: true }) },
+    ))
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "backup.delete",
         targetType: "backup",
         targetId: "synapse-backup.tar.gz",
       }))

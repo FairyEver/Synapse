@@ -67,7 +67,15 @@ function redactSensitiveBody(value: unknown): unknown {
 }
 
 function shouldAuditRequest(method: string, path: string): boolean {
+  if (path.startsWith("/api/admin/backup")) return shouldAuditBackupRequest(method, path)
+  if (path.startsWith("/api/admin/")) return false
   if (WRITE_METHODS.has(method)) return true
+  return false
+}
+
+function shouldAuditBackupRequest(method: string, path: string): boolean {
+  if (method === "POST" && path === "/api/admin/backup") return true
+  if (method === "DELETE" && path.startsWith("/api/admin/backup/")) return true
   return method === "GET" && (
     path === "/api/admin/backup/list" ||
     path.startsWith("/api/admin/backup/download/")
