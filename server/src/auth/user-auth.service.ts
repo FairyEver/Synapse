@@ -1,7 +1,7 @@
 import { BadRequestException, Inject, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { Cron } from "@nestjs/schedule"
-import { Prisma, type User } from "@prisma/client"
+import { Prisma, type TeamAccessRole, type TeamMembership, type TeamRole, type User } from "@prisma/client"
 import { AuditLogService } from "../common/audit-log.service"
 import { hashPassword, verifyPassword } from "./password"
 import { createOpaqueToken, hashToken } from "./token"
@@ -19,6 +19,25 @@ export interface UserAuthOptions {
 export interface UserTokenPair {
   readonly accessToken: string
   readonly refreshToken: string
+}
+
+export interface UserMeAccessRole {
+  readonly id: TeamAccessRole["id"]
+  readonly name: TeamAccessRole["name"]
+}
+
+export interface UserMeTeam {
+  readonly id: string
+  readonly name: string
+  readonly membershipId: TeamMembership["id"]
+  readonly membershipRole: TeamRole
+  readonly roles: readonly UserMeAccessRole[]
+  readonly effectivePermissions: readonly string[]
+}
+
+export interface UserMeResponse {
+  readonly user: Pick<User, "id" | "email" | "status">
+  readonly teams: readonly UserMeTeam[]
 }
 
 interface UserJwtPayload {
@@ -175,7 +194,7 @@ export class UserAuthService {
     return result.count
   }
 
-  async getMe(userId: string): Promise<unknown> {
+  async getMe(userId: string): Promise<UserMeResponse> {
     const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: {
@@ -193,7 +212,7 @@ export class UserAuthService {
               },
               orderBy: { assignedAt: "asc" },
             },
-            team: { select: { id: true, name: true, createdByUserId: true } },
+            team: { select: { id: true, name: true } },
           },
           orderBy: { createdAt: "asc" },
         },

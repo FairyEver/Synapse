@@ -3,7 +3,7 @@ import { JwtService } from "@nestjs/jwt"
 import { describe, expect, it, vi } from "vitest"
 import { hashPassword } from "./password"
 import { hashToken } from "./token"
-import { UserAuthService } from "./user-auth.service"
+import { UserAuthService, type UserMeResponse } from "./user-auth.service"
 
 function createPrismaMock() {
   return {
@@ -244,7 +244,7 @@ describe("UserAuthService", () => {
             { role: { id: "role-1", name: "团队管理员" } },
             { role: { id: "role-2", name: "普通成员" } },
           ],
-          team: { id: "team-1", name: "Team One", createdByUserId: "user-1" },
+          team: { id: "team-1", name: "Team One" },
         },
         {
           id: "membership-2",
@@ -253,7 +253,7 @@ describe("UserAuthService", () => {
           accessRoles: [
             { role: { id: "role-3", name: "普通成员" } },
           ],
-          team: { id: "team-2", name: "Team Two", createdByUserId: "user-2" },
+          team: { id: "team-2", name: "Team Two" },
         },
       ],
     })
@@ -270,7 +270,7 @@ describe("UserAuthService", () => {
       permissions as never,
     )
 
-    await expect(service.getMe("user-1")).resolves.toEqual({
+    const expected: UserMeResponse = {
       user: { id: "user-1", email: "u@example.com", status: "active" },
       teams: [
         {
@@ -293,7 +293,9 @@ describe("UserAuthService", () => {
           effectivePermissions: ["agent.chat.use"],
         },
       ],
-    })
+    }
+
+    await expect(service.getMe("user-1")).resolves.toEqual(expected)
 
     expect(prisma.user.findUniqueOrThrow).toHaveBeenCalledWith({
       where: { id: "user-1" },
@@ -312,7 +314,7 @@ describe("UserAuthService", () => {
               },
               orderBy: { assignedAt: "asc" },
             },
-            team: { select: { id: true, name: true, createdByUserId: true } },
+            team: { select: { id: true, name: true } },
           },
           orderBy: { createdAt: "asc" },
         },
