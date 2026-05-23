@@ -151,14 +151,14 @@ export class AgentCommandRouter {
       if (!commandAllowedOnPlatform(customCommand, message.platform)) {
         return commandResult(conversation.id, `Command is not available on ${message.platform}.`, true)
       }
+      if (!isMessageAdmin(message) && customCommand.adminOnly) {
+        return commandResult(conversation.id, `Command requires admin: /${name}`, true)
+      }
       if (customCommand.kind === "prompt") {
         return {
           kind: "prompt",
           content: expandCustomCommandPrompt(customCommand, parsed.args, message),
         }
-      }
-      if (!isMessageAdmin(message) && customCommand.adminOnly) {
-        return commandResult(conversation.id, `Command requires admin: /${name}`, true)
       }
       if (!this.deps.runCustomCommand) {
         return commandResult(conversation.id, "Command execution is unavailable.", true)
@@ -197,6 +197,9 @@ export class AgentCommandRouter {
     if (args.length === 0) {
       return commandResult(conversation.id, formatModelList(provider?.model, models))
     }
+    if (!isMessageAdmin(message)) {
+      return commandResult(conversation.id, "Only admins can change models.", true)
+    }
 
     const targetInput = parseModelSwitchArgs(args)
     if (!targetInput) {
@@ -232,6 +235,9 @@ export class AgentCommandRouter {
     const modes = modesForAgent(agentType)
     if (args.length === 0) {
       return commandResult(conversation.id, formatModeList(conversation.agentConfig?.mode, modes))
+    }
+    if (!isMessageAdmin(message)) {
+      return commandResult(conversation.id, "Only admins can change permission modes.", true)
     }
 
     const target = resolveModeTarget(args[0] ?? "", modes)

@@ -1,5 +1,5 @@
 import { Inject, Injectable, Optional } from "@nestjs/common";
-import { readdir, stat, readFile, unlink } from "node:fs/promises";
+import { open, readdir, stat, unlink } from "node:fs/promises";
 import { join } from "node:path";
 import archiver from "archiver";
 
@@ -12,6 +12,7 @@ const PINO_LEVELS: Record<string, number> = {
   error: 50,
   fatal: 60,
 };
+const RECENT_LOG_CHUNK_SIZE_BYTES = 64 * 1024;
 
 export interface LogFileInfo {
   name: string;
@@ -41,7 +42,13 @@ export class LogFileService {
 
     for (const name of entries) {
       if (!name.endsWith(".log")) continue;
-      const fileStat = await stat(join(this.logDir, name));
+      let fileStat: Awaited<ReturnType<typeof stat>>;
+      try {
+        fileStat = await stat(join(this.logDir, name));
+      } catch (error) {
+        if (this.isFileNotFoundError(error)) continue;
+        throw error;
+      }
       files.push({
         name,
         size: fileStat.size,
@@ -68,24 +75,26 @@ export class LogFileService {
     for (const file of files) {
       if (results.length >= limit) break;
 
-      const content = await readFile(join(this.logDir, file.name), "utf-8");
-      const lines = content.trim().split("\n").reverse();
-
-      for (const line of lines) {
-        if (results.length >= limit) break;
-        try {
-          const parsed = JSON.parse(line);
-          if (targetLevel !== undefined && parsed.level !== targetLevel) continue;
-          results.push({
-            time: new Date(parsed.time).toISOString(),
-            level: this.levelToName(parsed.level),
-            msg: parsed.msg ?? parsed.message ?? "",
-            ...(parsed.req && { req: { method: parsed.req.method, url: parsed.req.url } }),
-            ...(parsed.err && { err: { message: parsed.err.message, stack: parsed.err.stack } }),
-          });
-        } catch {
-          // skip malformed lines
+      try {
+        for await (const line of this.readLinesFromTail(join(this.logDir, file.name), file.size)) {
+          if (results.length >= limit) break;
+          try {
+            const parsed = JSON.parse(line);
+            if (targetLevel !== undefined && parsed.level !== targetLevel) continue;
+            results.push({
+              time: new Date(parsed.time).toISOString(),
+              level: this.levelToName(parsed.level),
+              msg: parsed.msg ?? parsed.message ?? "",
+              ...(parsed.req && { req: { method: parsed.req.method, url: parsed.req.url } }),
+              ...(parsed.err && { err: { message: parsed.err.message, stack: parsed.err.stack } }),
+            });
+          } catch {
+            // skip malformed lines
+          }
         }
+      } catch (error) {
+        if (this.isFileNotFoundError(error)) continue;
+        throw error;
       }
     }
 
@@ -129,8 +138,12 @@ export class LogFileService {
       const dateMatch = file.name.match(/(\d{4}-\d{2}-\d{2})/);
       if (!dateMatch) continue;
       if (dateMatch[1] < before) {
-        await unlink(join(this.logDir, file.name));
-        deleted++;
+        try {
+          await unlink(join(this.logDir, file.name));
+          deleted++;
+        } catch {
+          continue;
+        }
       }
     }
 
@@ -143,5 +156,53 @@ export class LogFileService {
     if (level <= 40) return "warn";
     if (level <= 50) return "error";
     return "fatal";
+  }
+
+  private isFileNotFoundError(error: unknown): boolean {
+    return error instanceof Error && "code" in error && error.code === "ENOENT";
+  }
+
+  private async *readLinesFromTail(filePath: string, fileSize: number): AsyncGenerator<string> {
+    if (fileSize <= 0) return;
+
+    const handle = await open(filePath, "r");
+    try {
+      let position = fileSize;
+      let prefix = Buffer.alloc(0);
+
+      while (position > 0) {
+        const readLength = Math.min(RECENT_LOG_CHUNK_SIZE_BYTES, position);
+        position -= readLength;
+
+        const buffer = Buffer.allocUnsafe(readLength);
+        const { bytesRead } = await handle.read(buffer, 0, readLength, position);
+        if (bytesRead === 0) break;
+
+        const parts = this.splitByNewline(Buffer.concat([buffer.subarray(0, bytesRead), prefix]));
+        prefix = parts.shift() ?? Buffer.alloc(0);
+
+        for (let index = parts.length - 1; index >= 0; index--) {
+          const line = parts[index].toString("utf8").trim();
+          if (line) yield line;
+        }
+      }
+
+      const firstLine = prefix.toString("utf8").trim();
+      if (firstLine) yield firstLine;
+    } finally {
+      await handle.close();
+    }
+  }
+
+  private splitByNewline(buffer: Buffer): Buffer[] {
+    const parts: Buffer[] = [];
+    let start = 0;
+    for (let index = 0; index < buffer.length; index++) {
+      if (buffer[index] !== 10) continue;
+      parts.push(buffer.subarray(start, index));
+      start = index + 1;
+    }
+    parts.push(buffer.subarray(start));
+    return parts;
   }
 }

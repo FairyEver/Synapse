@@ -21,6 +21,7 @@ export function BackupPage() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [backingUp, setBackingUp] = React.useState(false)
+  const [deletingFilename, setDeletingFilename] = React.useState<string | null>(null)
 
   const loadList = React.useCallback(() => {
     setLoading(true)
@@ -28,6 +29,7 @@ export function BackupPage() {
     adminApi.listBackups()
       .then(setList)
       .catch((caught: unknown) => {
+        setList([])
         setError(caught instanceof Error ? caught.message : "请求失败")
       })
       .finally(() => setLoading(false))
@@ -46,6 +48,22 @@ export function BackupPage() {
       setError(caught instanceof Error ? caught.message : "备份失败")
     } finally {
       setBackingUp(false)
+    }
+  }
+
+  async function handleDelete(filename: string) {
+    if (!window.confirm(`确定删除备份 ${filename}？`)) {
+      return
+    }
+    setError(null)
+    setDeletingFilename(filename)
+    try {
+      await adminApi.deleteBackup(filename)
+      loadList()
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "删除失败")
+    } finally {
+      setDeletingFilename(null)
     }
   }
 
@@ -68,6 +86,7 @@ export function BackupPage() {
               <TableHead>文件名</TableHead>
               <TableHead>大小</TableHead>
               <TableHead>备份时间</TableHead>
+              <TableHead>操作</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -76,6 +95,29 @@ export function BackupPage() {
                 <TableCell>{file.filename}</TableCell>
                 <TableCell>{formatSize(file.size)}</TableCell>
                 <TableCell>{formatDate(file.createdAt)}</TableCell>
+                <TableCell>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      aria-label={`下载备份 ${file.filename}`}
+                      onClick={() => adminApi.downloadBackup(file.filename)}
+                    >
+                      下载
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="sm"
+                      aria-label={`删除备份 ${file.filename}`}
+                      disabled={deletingFilename === file.filename}
+                      onClick={() => void handleDelete(file.filename)}
+                    >
+                      {deletingFilename === file.filename ? "删除中…" : "删除"}
+                    </Button>
+                  </div>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

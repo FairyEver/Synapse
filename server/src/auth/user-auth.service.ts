@@ -1,10 +1,12 @@
 import { BadRequestException, Inject, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
-import { Prisma, type User } from "@prisma/client"
+import { Cron } from "@nestjs/schedule"
+import { Prisma, type TeamAccessRole, type TeamMembership, type TeamRole, type User } from "@prisma/client"
 import { AuditLogService } from "../common/audit-log.service"
 import { hashPassword, verifyPassword } from "./password"
 import { createOpaqueToken, hashToken } from "./token"
 import { InvitationsService } from "../invitations/invitations.service"
+import { PermissionsService } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
 
 export const userAuthOptionsToken = "USER_AUTH_OPTIONS"
@@ -19,6 +21,25 @@ export interface UserTokenPair {
   readonly refreshToken: string
 }
 
+export interface UserMeAccessRole {
+  readonly id: TeamAccessRole["id"]
+  readonly name: TeamAccessRole["name"]
+}
+
+export interface UserMeTeam {
+  readonly id: string
+  readonly name: string
+  readonly membershipId: TeamMembership["id"]
+  readonly membershipRole: TeamRole
+  readonly roles: readonly UserMeAccessRole[]
+  readonly effectivePermissions: readonly string[]
+}
+
+export interface UserMeResponse {
+  readonly user: Pick<User, "id" | "email" | "status">
+  readonly teams: readonly UserMeTeam[]
+}
+
 interface UserJwtPayload {
   readonly sub: string
   readonly email: string
@@ -30,6 +51,8 @@ function addDays(date: Date, days: number): Date {
   return next
 }
 
+const revokedSessionRetentionMs = 7 * 24 * 60 * 60 * 1000
+
 @Injectable()
 export class UserAuthService {
   constructor(
@@ -37,10 +60,11 @@ export class UserAuthService {
     private readonly invitations: InvitationsService,
     private readonly jwt: JwtService,
     @Inject(userAuthOptionsToken) private readonly options: UserAuthOptions,
+    private readonly permissions: PermissionsService,
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
-  async register(input: { invitationToken: string; email: string; password: string }): Promise<UserTokenPair> {
+  async register(input: { invitationToken: string; email: string; password: string }, ipAddress = "system"): Promise<UserTokenPair> {
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
@@ -62,7 +86,7 @@ export class UserAuthService {
         action: "user.register.success",
         targetType: "user",
         targetId: result.user.id,
-        ipAddress: "system",
+        ipAddress,
       })
       return result.tokens
     } catch (error) {
@@ -73,7 +97,7 @@ export class UserAuthService {
     }
   }
 
-  async login(input: { email: string; password: string }): Promise<UserTokenPair> {
+  async login(input: { email: string; password: string }, ipAddress = "system"): Promise<UserTokenPair> {
     const email = input.email.trim().toLowerCase()
     const user = await this.prisma.user.findUnique({ where: { email } })
     const passwordMatches = user ? await verifyPassword(input.password, user.passwordHash) : false
@@ -83,11 +107,18 @@ export class UserAuthService {
         action: "user.login.failure",
         targetType: "user",
         targetId: user?.id ?? "unknown",
-        ipAddress: "system",
+        ipAddress,
       })
       throw new UnauthorizedException("邮箱或密码错误。")
     }
     if (user.status !== "active") {
+      await this.auditLog?.record({
+        adminEmail: email,
+        action: "user.login.disabled",
+        targetType: "user",
+        targetId: user.id,
+        ipAddress,
+      })
       throw new UnauthorizedException("账号已停用。")
     }
     const tokens = await this.issueTokenPair(user)
@@ -96,14 +127,15 @@ export class UserAuthService {
       action: "user.login.success",
       targetType: "user",
       targetId: user.id,
-      ipAddress: "system",
+      ipAddress,
     })
     return tokens
   }
 
   async refresh(input: { refreshToken: string }): Promise<UserTokenPair> {
+    const currentRefreshTokenHash = hashToken(input.refreshToken)
     const session = await this.prisma.userSession.findUnique({
-      where: { refreshTokenHash: hashToken(input.refreshToken) },
+      where: { refreshTokenHash: currentRefreshTokenHash },
       include: { user: true },
     })
     if (!session || session.revokedAt || session.expiresAt <= new Date()) {
@@ -114,14 +146,20 @@ export class UserAuthService {
     }
 
     const refreshToken = createOpaqueToken()
-    await this.prisma.userSession.update({
-      where: { id: session.id },
+    const result = await this.prisma.userSession.updateMany({
+      where: {
+        id: session.id,
+        refreshTokenHash: currentRefreshTokenHash,
+      },
       data: {
         refreshTokenHash: hashToken(refreshToken),
         expiresAt: addDays(new Date(), this.options.refreshDays),
         lastUsedAt: new Date(),
       },
     })
+    if (result.count === 0) {
+      throw new UnauthorizedException("未登录或登录已过期。")
+    }
     return { accessToken: this.signAccessToken(session.user), refreshToken }
   }
 
@@ -138,8 +176,26 @@ export class UserAuthService {
     return { ok: true }
   }
 
-  async getMe(userId: string): Promise<unknown> {
-    return this.prisma.user.findUniqueOrThrow({
+  @Cron("0 4 * * *")
+  async scheduledSessionCleanup(): Promise<void> {
+    await this.cleanupExpiredSessions()
+  }
+
+  async cleanupExpiredSessions(now = new Date()): Promise<number> {
+    const revokedBefore = new Date(now.getTime() - revokedSessionRetentionMs)
+    const result = await this.prisma.userSession.deleteMany({
+      where: {
+        OR: [
+          { expiresAt: { lt: now } },
+          { revokedAt: { lt: revokedBefore } },
+        ],
+      },
+    })
+    return result.count
+  }
+
+  async getMe(userId: string): Promise<UserMeResponse> {
+    const user = await this.prisma.user.findUniqueOrThrow({
       where: { id: userId },
       select: {
         id: true,
@@ -147,12 +203,35 @@ export class UserAuthService {
         status: true,
         memberships: {
           select: {
+            id: true,
+            teamId: true,
             role: true,
-            team: { select: { id: true, name: true, createdByUserId: true } },
+            accessRoles: {
+              select: {
+                role: { select: { id: true, name: true } },
+              },
+              orderBy: { assignedAt: "asc" },
+            },
+            team: { select: { id: true, name: true } },
           },
+          orderBy: { createdAt: "asc" },
         },
       },
     })
+
+    const teams = await Promise.all(user.memberships.map(async (membership) => ({
+      id: membership.team.id,
+      name: membership.team.name,
+      membershipId: membership.id,
+      membershipRole: membership.role,
+      roles: membership.accessRoles.map((item) => item.role),
+      effectivePermissions: await this.permissions.getEffectivePermissions(user.id, membership.teamId),
+    })))
+
+    return {
+      user: { id: user.id, email: user.email, status: user.status },
+      teams,
+    }
   }
 
   async verifyAccessToken(token: string): Promise<{ userId: string }> {

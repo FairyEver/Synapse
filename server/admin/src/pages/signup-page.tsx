@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { userAuthApi } from "@/lib/api"
+import { adminApi, userAuthApi } from "@/lib/api"
 
 type SignupPageProps = {
   readonly inviteToken: string
@@ -19,7 +19,7 @@ export function SignupPage({ inviteToken }: SignupPageProps) {
   const [password, setPassword] = React.useState("")
   const [error, setError] = React.useState<string | null>(null)
   const [submitting, setSubmitting] = React.useState(false)
-  const [registered, setRegistered] = React.useState(false)
+  const [registeredDestination, setRegisteredDestination] = React.useState<"teams" | "login" | null>(null)
 
   async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -27,9 +27,17 @@ export function SignupPage({ inviteToken }: SignupPageProps) {
     setError(null)
     try {
       await userAuthApi.register({ invitationToken: inviteToken, email, password })
-      setRegistered(true)
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "注册失败")
+      setSubmitting(false)
+      return
+    }
+
+    try {
+      await adminApi.login({ email, password })
+      setRegisteredDestination("teams")
+    } catch {
+      setRegisteredDestination("login")
     } finally {
       setSubmitting(false)
     }
@@ -47,7 +55,11 @@ export function SignupPage({ inviteToken }: SignupPageProps) {
     )
   }
 
-  if (registered) {
+  if (registeredDestination) {
+    const action = registeredDestination === "teams"
+      ? { href: "/dashboard/#/teams", label: "进入团队" }
+      : { href: "/dashboard/login", label: "去登录" }
+
     return (
       <main className="flex min-h-screen items-center justify-center p-6">
         <Card className="w-full max-w-sm">
@@ -56,7 +68,7 @@ export function SignupPage({ inviteToken }: SignupPageProps) {
           </CardHeader>
           <CardContent>
             <Button asChild>
-              <a href="/dashboard/login">去登录</a>
+              <a href={action.href}>{action.label}</a>
             </Button>
           </CardContent>
         </Card>

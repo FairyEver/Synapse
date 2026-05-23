@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import { hashPassword } from "../auth/password"
 import { AdminAuthService } from "./admin-auth.service"
 
-async function createTestService() {
+async function createTestService(auditLog?: { record: ReturnType<typeof vi.fn> }) {
   const jwt = new JwtService({ secret: "test-secret-at-least-32-chars-long!", signOptions: { expiresIn: "1h" } })
   const passwordHash = await hashPassword("admin@pwd1234!")
   const prisma = {
@@ -26,7 +26,7 @@ async function createTestService() {
     },
   }
   return {
-    service: new AdminAuthService(jwt, prisma as never),
+    service: new AdminAuthService(jwt, prisma as never, auditLog as never),
     prisma,
   }
 }
@@ -48,8 +48,41 @@ describe("AdminAuthService", () => {
       .toThrow("邮箱或密码错误。")
   })
 
-  it("rejects a disabled administrator", async () => {
-    const { service, prisma } = await createTestService()
+  it("does not attribute unknown email login failures to the first admin", async () => {
+    const auditLog = { record: vi.fn() }
+    const { service } = await createTestService(auditLog)
+
+    await expect(service.login("random@evil.com", "wrong-password", "203.0.113.9"))
+      .rejects
+      .toThrow("邮箱或密码错误。")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "random@evil.com",
+      action: "dashboard.login.failure",
+      targetType: "account",
+      targetId: "unknown",
+      ipAddress: "203.0.113.9",
+    })
+  })
+
+  it("records the request ip for administrator login success", async () => {
+    const auditLog = { record: vi.fn() }
+    const { service } = await createTestService(auditLog)
+
+    await service.login("admin@d2.com", "admin@pwd1234!", "203.0.113.10")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@d2.com",
+      action: "admin.login.success",
+      targetType: "admin",
+      targetId: "admin-1",
+      ipAddress: "203.0.113.10",
+    })
+  })
+
+  it("records disabled administrator login attempts separately from wrong passwords", async () => {
+    const auditLog = { record: vi.fn() }
+    const { service, prisma } = await createTestService(auditLog)
     prisma.adminUser.findFirst.mockResolvedValueOnce({
       id: "admin-1",
       email: "admin@d2.com",
@@ -60,6 +93,14 @@ describe("AdminAuthService", () => {
     await expect(service.login("admin@d2.com", "admin@pwd1234!"))
       .rejects
       .toThrow("邮箱或密码错误。")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@d2.com",
+      action: "dashboard.login.disabled",
+      targetType: "admin",
+      targetId: "admin-1",
+      ipAddress: "system",
+    })
   })
 
   it("accepts normal user credentials for dashboard login", async () => {
@@ -76,6 +117,30 @@ describe("AdminAuthService", () => {
     expect(result.email).toBe("user@example.com")
     expect(result.role).toBe("user")
     expect(result.token.length).toBeGreaterThan(20)
+  })
+
+  it("records disabled dashboard user login attempts separately from wrong passwords", async () => {
+    const auditLog = { record: vi.fn() }
+    const { service, prisma } = await createTestService(auditLog)
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: "user-1",
+      email: "user@example.com",
+      passwordHash: await hashPassword("user-password"),
+      status: "disabled",
+    })
+
+    await expect(service.login("user@example.com", "user-password", "203.0.113.11"))
+      .rejects
+      .toThrow("账号已停用。")
+
+    expect(auditLog.record).toHaveBeenCalledTimes(1)
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "user@example.com",
+      action: "user.dashboard_login.disabled",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "203.0.113.11",
+    })
   })
 
   it("does not verify a normal user token as an administrator", async () => {

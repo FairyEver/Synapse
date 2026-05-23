@@ -1,4 +1,4 @@
-import { Injectable } from "@nestjs/common"
+import { BadRequestException, Injectable, Optional, ServiceUnavailableException } from "@nestjs/common"
 import { Cron } from "@nestjs/schedule"
 import { PinoLogger } from "nestjs-pino"
 import { execFile } from "node:child_process"
@@ -10,6 +10,7 @@ import { pipeline } from "node:stream/promises"
 import { createGzip } from "node:zlib"
 import * as tar from "tar"
 import type COS from "cos-nodejs-sdk-v5"
+import { AuditLogService } from "../common/audit-log.service"
 import { isBackupConfigured, loadEnv, type ServerEnv } from "../config/env"
 
 const execFileAsync = promisify(execFile)
@@ -25,7 +26,49 @@ export interface BackupResult {
 export interface BackupItem {
   filename: string
   size: number
-  lastModified: string
+  createdAt: string
+}
+
+export interface PgDumpOptions {
+  args: string[]
+  env: NodeJS.ProcessEnv
+}
+
+export function buildBackupKey(prefix: string, filename: string): string {
+  if (!filename || filename.includes("..") || filename.includes("/") || filename.includes("\\")) {
+    throw new BadRequestException("备份文件名无效。")
+  }
+  return `${prefix}${filename}`
+}
+
+export function buildPgDumpOptions(
+  databaseUrl: string,
+  dumpFile: string,
+  baseEnv: NodeJS.ProcessEnv = process.env,
+): PgDumpOptions {
+  const url = new URL(databaseUrl)
+  const env: NodeJS.ProcessEnv = {
+    ...baseEnv,
+    PGPASSWORD: decodeURIComponent(url.password),
+  }
+  const sslMode = url.searchParams.get("sslmode")
+  if (sslMode) env.PGSSLMODE = sslMode
+
+  return {
+    args: [
+      "-h",
+      url.hostname,
+      "-p",
+      url.port || "5432",
+      "-U",
+      decodeURIComponent(url.username),
+      "-d",
+      decodeURIComponent(url.pathname.replace(/^\//, "")),
+      "-f",
+      dumpFile,
+    ],
+    env,
+  }
 }
 
 @Injectable()
@@ -36,7 +79,10 @@ export class BackupService {
   private readonly region: string
   private readonly prefix = "backups/"
 
-  constructor(private readonly logger: PinoLogger) {
+  constructor(
+    private readonly logger: PinoLogger,
+    @Optional() private readonly auditLog?: AuditLogService,
+  ) {
     this.env = loadEnv(process.env)
     this.bucket = this.env.cosBucket ?? ""
     this.region = this.env.cosRegion ?? ""
@@ -56,7 +102,15 @@ export class BackupService {
       this.logger.info("Backup not configured, skipping scheduled backup")
       return
     }
-    await this.performBackup()
+    const result = await this.performBackup()
+    await this.auditLog?.record({
+      adminEmail: "system",
+      action: "backup.scheduled",
+      targetType: "backup",
+      targetId: result.filename,
+      detail: result,
+      ipAddress: "system",
+    })
   }
 
   async performBackup(): Promise<BackupResult> {
@@ -128,7 +182,7 @@ export class BackupService {
               .map((obj) => ({
                 filename: obj.Key.replace(this.prefix, ""),
                 size: Number(obj.Size),
-                lastModified: obj.LastModified,
+                createdAt: obj.LastModified,
               }))
             resolve(items)
           },
@@ -137,8 +191,54 @@ export class BackupService {
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
       this.logger.error({ error: message }, "Failed to list backups")
-      return []
+      throw error
     }
+  }
+
+  async downloadBackup(filename: string): Promise<Buffer> {
+    if (!this.cos) throw new ServiceUnavailableException("备份未配置。")
+    const key = buildBackupKey(this.prefix, filename)
+
+    const body = await new Promise<unknown>((resolve, reject) => {
+      this.cos!.getObject(
+        {
+          Bucket: this.bucket,
+          Region: this.region,
+          Key: key,
+        },
+        (err, data) => {
+          if (err) {
+            reject(err)
+            return
+          }
+          resolve(data.Body)
+        },
+      )
+    })
+
+    if (Buffer.isBuffer(body)) return body
+    if (body instanceof Uint8Array) return Buffer.from(body)
+    if (typeof body === "string") return Buffer.from(body)
+    throw new Error("备份文件内容无效。")
+  }
+
+  async deleteBackup(filename: string): Promise<void> {
+    if (!this.cos) throw new ServiceUnavailableException("备份未配置。")
+    const key = buildBackupKey(this.prefix, filename)
+
+    await new Promise<void>((resolve, reject) => {
+      this.cos!.deleteObject(
+        {
+          Bucket: this.bucket,
+          Region: this.region,
+          Key: key,
+        },
+        (err) => {
+          if (err) reject(err)
+          else resolve()
+        },
+      )
+    })
   }
 
   private async dumpDatabase(): Promise<string> {
@@ -146,7 +246,8 @@ export class BackupService {
     const dumpFile = path.join(tmpDir, `synapse-dump-${Date.now()}.sql`)
     const gzFile = `${dumpFile}.gz`
 
-    await execFileAsync("pg_dump", ["--dbname", this.env.databaseUrl, "-f", dumpFile])
+    const pgDump = buildPgDumpOptions(this.env.databaseUrl, dumpFile)
+    await execFileAsync("pg_dump", pgDump.args, { env: pgDump.env })
 
     const readStream = fs.createReadStream(dumpFile)
     const writeStream = fs.createWriteStream(gzFile)
@@ -207,23 +308,28 @@ export class BackupService {
     try {
       const items = await this.listBackups()
       const expired = items.filter(
-        (item) => new Date(item.lastModified) < thirtyDaysAgo,
+        (item) => new Date(item.createdAt) < thirtyDaysAgo,
       )
 
       for (const item of expired) {
-        await new Promise<void>((resolve, reject) => {
-          this.cos!.deleteObject(
-            {
-              Bucket: this.bucket,
-              Region: this.region,
-              Key: `${this.prefix}${item.filename}`,
-            },
-            (err) => {
-              if (err) reject(err)
-              else resolve()
-            },
-          )
-        })
+        try {
+          await new Promise<void>((resolve, reject) => {
+            this.cos!.deleteObject(
+              {
+                Bucket: this.bucket,
+                Region: this.region,
+                Key: `${this.prefix}${item.filename}`,
+              },
+              (err) => {
+                if (err) reject(err)
+                else resolve()
+              },
+            )
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          this.logger.warn({ error: message, filename: item.filename }, "Failed to delete expired backup")
+        }
       }
 
       if (expired.length > 0) {

@@ -3,6 +3,7 @@ import { adminApi, type AuditLog, type PaginatedResponse } from "@/lib/api"
 import { useApiResource } from "@/hooks/use-api-resource"
 import { formatDate } from "@/lib/format"
 import { PageState } from "@/components/page-state"
+import { PaginationFooter } from "@/components/pagination-footer"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import {
@@ -21,6 +22,36 @@ import {
   TableRow,
 } from "@/components/ui/table"
 
+export const AUDIT_ACTION_FILTER_OPTIONS = [
+  { value: "all", label: "全部操作" },
+  { value: "admin.login.success", label: "admin.login.success" },
+  { value: "dashboard.login.failure", label: "dashboard.login.failure" },
+  { value: "dashboard.login.disabled", label: "dashboard.login.disabled" },
+  { value: "user.dashboard_login.success", label: "user.dashboard_login.success" },
+  { value: "admin.invitation.create", label: "admin.invitation.create" },
+  { value: "admin.invitation.delete", label: "admin.invitation.delete" },
+  { value: "admin.invitation.delete_many", label: "admin.invitation.delete_many" },
+  { value: "admin.invitation.delete.not_found", label: "admin.invitation.delete.not_found" },
+  { value: "admin.audit_logs.export", label: "admin.audit_logs.export" },
+  { value: "admin.logout", label: "admin.logout" },
+  { value: "admin.user.status_update", label: "admin.user.status_update" },
+  { value: "user.register.success", label: "user.register.success" },
+  { value: "user.login.success", label: "user.login.success" },
+  { value: "user.login.failure", label: "user.login.failure" },
+  { value: "user.login.disabled", label: "user.login.disabled" },
+  { value: "team.create", label: "team.create" },
+  { value: "team.invitation.create", label: "team.invitation.create" },
+  { value: "team.join", label: "team.join" },
+  { value: "team.member.remove", label: "team.member.remove" },
+  { value: "team.leave", label: "team.leave" },
+  { value: "backup.list", label: "backup.list" },
+  { value: "backup.download", label: "backup.download" },
+  { value: "backup.post", label: "backup.post" },
+  { value: "backup.delete", label: "backup.delete" },
+  { value: "logs.download", label: "logs.download" },
+  { value: "logs.cleanup", label: "logs.cleanup" },
+] as const
+
 export function AuditLogsPage() {
   const [action, setAction] = React.useState<string>("all")
   const [from, setFrom] = React.useState("")
@@ -33,6 +64,21 @@ export function AuditLogsPage() {
     [action, from, to, page],
   )
 
+  function handleActionChange(value: string) {
+    setAction(value)
+    setPage(1)
+  }
+
+  function handleFromChange(value: string) {
+    setFrom(value)
+    setPage(1)
+  }
+
+  function handleToChange(value: string) {
+    setTo(value)
+    setPage(1)
+  }
+
   if (loading) return <PageState>加载中…</PageState>
   if (error) return <PageState>{`加载失败：${error}`}</PageState>
   if (!result) return null
@@ -40,16 +86,18 @@ export function AuditLogsPage() {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-2">
-        <Select value={action} onValueChange={setAction}>
+        <Select value={action} onValueChange={handleActionChange}>
           <SelectTrigger className="w-48">
             <SelectValue placeholder="全部操作" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">全部操作</SelectItem>
+            {AUDIT_ACTION_FILTER_OPTIONS.map((option) => (
+              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+            ))}
           </SelectContent>
         </Select>
-        <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" />
-        <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />
+        <Input type="date" value={from} onChange={(e) => handleFromChange(e.target.value)} className="w-40" />
+        <Input type="date" value={to} onChange={(e) => handleToChange(e.target.value)} className="w-40" />
         <Button variant="outline" onClick={() => adminApi.exportAuditLogs({ action: actionFilter, from: from || undefined, to: to || undefined })}>
           导出 CSV
         </Button>
@@ -79,17 +127,12 @@ export function AuditLogsPage() {
         </TableBody>
       </Table>
 
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>共 {result.total} 条</span>
-        <div className="flex gap-2">
-          <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(page - 1)}>
-            上一页
-          </Button>
-          <Button variant="outline" size="sm" disabled={page * 20 >= result.total} onClick={() => setPage(page + 1)}>
-            下一页
-          </Button>
-        </div>
-      </div>
+      <PaginationFooter
+        page={result.page}
+        pageSize={result.pageSize}
+        total={result.total}
+        onPageChange={setPage}
+      />
     </div>
   )
 }

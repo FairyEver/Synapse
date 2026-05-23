@@ -1,4 +1,6 @@
+import * as React from "react"
 import { PageState } from "@/components/page-state"
+import { PaginationFooter } from "@/components/pagination-footer"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
@@ -17,13 +19,38 @@ import { formatDate } from "@/lib/format"
 import { SignupInvitationAction } from "./signup-invitation-action"
 
 export function UsersPage() {
+  const [page, setPage] = React.useState(1)
   const { data: result, error, loading, reload } = useApiResource<PaginatedResponse<AdminUserRow>>(
-    () => adminApi.listUsers(),
+    () => adminApi.listUsers({ page }),
+    [page],
   )
+  const [actionError, setActionError] = React.useState<string | null>(null)
+  const [submittingIds, setSubmittingIds] = React.useState<ReadonlySet<string>>(() => new Set())
 
   async function toggleStatus(user: AdminUserRow) {
-    await adminApi.updateUserStatus(user.id, user.status === "active" ? "disabled" : "active")
-    reload()
+    if (submittingIds.has(user.id)) return
+    const nextStatus = user.status === "active" ? "disabled" : "active"
+    if (
+      nextStatus === "disabled" &&
+      user.memberships.some((membership) => membership.role === "owner") &&
+      !window.confirm("停用团队所有者会使该团队无法继续邀请或管理成员。继续停用？")
+    ) {
+      return
+    }
+    setActionError(null)
+    setSubmittingIds((previous) => new Set(previous).add(user.id))
+    try {
+      await adminApi.updateUserStatus(user.id, nextStatus)
+      reload()
+    } catch (caught) {
+      setActionError(caught instanceof Error ? caught.message : "操作失败")
+    } finally {
+      setSubmittingIds((previous) => {
+        const next = new Set(previous)
+        next.delete(user.id)
+        return next
+      })
+    }
   }
 
   if (loading) return <PageState>加载中</PageState>
@@ -33,6 +60,7 @@ export function UsersPage() {
   return (
     <div className="space-y-4">
       <SignupInvitationAction onCreated={reload} />
+      {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
       {result.data.length === 0 ? (
         <PageState>暂无用户</PageState>
       ) : (
@@ -60,7 +88,12 @@ export function UsersPage() {
                   <TableCell>{membership ? `${membership.team.name} / ${membership.role}` : "-"}</TableCell>
                   <TableCell>{formatDate(user.createdAt)}</TableCell>
                   <TableActionCell>
-                    <Button variant="outline" size="sm" onClick={() => void toggleStatus(user)}>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      disabled={submittingIds.has(user.id)}
+                      onClick={() => void toggleStatus(user)}
+                    >
                       {user.status === "active" ? "停用" : "启用"}
                     </Button>
                   </TableActionCell>
@@ -70,6 +103,12 @@ export function UsersPage() {
           </TableBody>
         </Table>
       )}
+      <PaginationFooter
+        page={result.page}
+        pageSize={result.pageSize}
+        total={result.total}
+        onPageChange={setPage}
+      />
     </div>
   )
 }

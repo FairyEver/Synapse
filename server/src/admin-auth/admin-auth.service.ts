@@ -31,20 +31,31 @@ export class AdminAuthService {
     return admin?.email ?? ""
   }
 
-  async login(email: string, password: string): Promise<{ email: string; token: string; role: DashboardRole }> {
+  async login(email: string, password: string, ipAddress = "system"): Promise<{ email: string; token: string; role: DashboardRole }> {
     const normalizedEmail = email.trim().toLowerCase()
     const admin = await this.prisma.adminUser.findFirst({ orderBy: { createdAt: "asc" } })
-    const passwordMatches = admin ? await verifyPassword(password, admin.passwordHash) : false
-    if (admin && admin.status === "active" && normalizedEmail === admin.email && passwordMatches) {
-      const token = this.jwt.sign({ sub: admin.id, email: admin.email, type: "admin" } satisfies AdminJwtPayload)
+    const matchedAdmin = admin && normalizedEmail === admin.email ? admin : null
+    const passwordMatches = matchedAdmin ? await verifyPassword(password, matchedAdmin.passwordHash) : false
+    if (matchedAdmin && matchedAdmin.status === "active" && passwordMatches) {
+      const token = this.jwt.sign({ sub: matchedAdmin.id, email: matchedAdmin.email, type: "admin" } satisfies AdminJwtPayload)
       await this.auditLog?.record({
-        adminEmail: admin.email,
+        adminEmail: matchedAdmin.email,
         action: "admin.login.success",
         targetType: "admin",
-        targetId: admin.id,
-        ipAddress: "system",
+        targetId: matchedAdmin.id,
+        ipAddress,
       })
-      return { email: admin.email, token, role: "admin" }
+      return { email: matchedAdmin.email, token, role: "admin" }
+    }
+    if (matchedAdmin && matchedAdmin.status !== "active" && passwordMatches) {
+      await this.auditLog?.record({
+        adminEmail: matchedAdmin.email,
+        action: "dashboard.login.disabled",
+        targetType: "admin",
+        targetId: matchedAdmin.id,
+        ipAddress,
+      })
+      throw new UnauthorizedException("邮箱或密码错误。")
     }
 
     const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
@@ -56,17 +67,27 @@ export class AdminAuthService {
         action: "user.dashboard_login.success",
         targetType: "user",
         targetId: user.id,
-        ipAddress: "system",
+        ipAddress,
       })
       return { email: user.email, token, role: "user" }
+    }
+    if (user && user.status !== "active" && userPasswordMatches) {
+      await this.auditLog?.record({
+        adminEmail: user.email,
+        action: "user.dashboard_login.disabled",
+        targetType: "user",
+        targetId: user.id,
+        ipAddress,
+      })
+      throw new UnauthorizedException("账号已停用。")
     }
 
     await this.auditLog?.record({
       adminEmail: normalizedEmail,
       action: "dashboard.login.failure",
       targetType: "account",
-      targetId: admin?.id ?? user?.id ?? "unknown",
-      ipAddress: "system",
+      targetId: matchedAdmin?.id ?? user?.id ?? "unknown",
+      ipAddress,
     })
     throw new UnauthorizedException("邮箱或密码错误。")
   }

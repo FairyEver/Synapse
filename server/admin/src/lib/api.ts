@@ -230,6 +230,13 @@ export const adminApi = {
     request<void>(`${adminApiBasePath}/backup`, {
       method: "POST",
     }),
+  downloadBackup: (filename: string) => {
+    window.open(`${adminApiBasePath}/backup/download/${encodeURIComponent(filename)}`, "_blank")
+  },
+  deleteBackup: (filename: string) =>
+    request<{ ok: true }>(`${adminApiBasePath}/backup/${encodeURIComponent(filename)}`, {
+      method: "DELETE",
+    }),
   listAuditLogs: (options: {
     readonly action?: string
     readonly from?: string
@@ -274,6 +281,12 @@ export const adminApi = {
     if (opts?.to) params.set("to", opts.to);
     const qs = params.toString();
     window.open(`${adminApiBasePath}/logs/download${qs ? `?${qs}` : ""}`, "_blank");
+  },
+  cleanupLogs(before: string) {
+    const params = new URLSearchParams({ before });
+    return request<{ deleted: number }>(`${adminApiBasePath}/logs/cleanup?${params.toString()}`, {
+      method: "DELETE",
+    });
   },
 }
 

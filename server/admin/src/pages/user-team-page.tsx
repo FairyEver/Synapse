@@ -86,22 +86,31 @@ export function UserTeamPage() {
   }
 
   async function removeMember(member: TeamMember) {
+    if (!window.confirm(`确定移除 ${member.user.email}？`)) return
+    setSubmitting(true)
     setActionError(null)
     try {
       await userDashboardApi.removeMember(member.userId)
       reload()
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : "移除失败")
+    } finally {
+      setSubmitting(false)
     }
   }
 
   async function leaveTeam() {
+    const message = membership?.role === "owner" ? "退出后团队将被解散。继续退出？" : "确定退出团队？"
+    if (!window.confirm(message)) return
+    setSubmitting(true)
     setActionError(null)
     try {
       await userDashboardApi.leaveTeam()
       reload()
     } catch (caught) {
       setActionError(caught instanceof Error ? caught.message : "退出失败")
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -159,7 +168,7 @@ export function UserTeamPage() {
               创建团队邀请
             </Button>
           ) : null}
-          <Button type="button" variant="outline" onClick={() => void leaveTeam()}>
+          <Button type="button" variant="outline" disabled={submitting} onClick={() => void leaveTeam()}>
             <LogOutIcon data-icon="inline-start" />
             退出团队
           </Button>
@@ -190,6 +199,7 @@ export function UserTeamPage() {
                       type="button"
                       size="sm"
                       variant="outline"
+                      disabled={submitting}
                       onClick={() => void removeMember(member)}
                     >
                       <UserMinusIcon data-icon="inline-start" />

@@ -19,6 +19,7 @@ describe("InvitationsPage", () => {
   afterEach(() => {
     cleanup?.()
     cleanup = null
+    vi.unstubAllGlobals()
     vi.clearAllMocks()
   })
 
@@ -69,7 +70,63 @@ describe("InvitationsPage", () => {
     expect(result.container.textContent).toContain("owner@example.com")
   })
 
+  it("loads the next invitations page", async () => {
+    vi.mocked(adminApi.listInvitations)
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: "invite-1",
+            type: "user_signup",
+            expiresAt: "2026-06-10T00:00:00.000Z",
+            usedAt: null,
+            acceptedByUser: null,
+            createdByAdmin: { email: "admin@example.com" },
+            createdByUser: null,
+            team: null,
+            createdAt: "2026-05-20T00:00:00.000Z",
+          },
+        ],
+        total: 21,
+        page: 1,
+        pageSize: 20,
+      } as never)
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: "invite-2",
+            type: "user_signup",
+            expiresAt: "2026-06-11T00:00:00.000Z",
+            usedAt: null,
+            acceptedByUser: null,
+            createdByAdmin: { email: "admin@example.com" },
+            createdByUser: null,
+            team: null,
+            createdAt: "2026-05-21T00:00:00.000Z",
+          },
+        ],
+        total: 21,
+        page: 2,
+        pageSize: 20,
+      } as never)
+
+    const result = await render(<InvitationsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("invite-1")
+    })
+    Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "下一页")
+      ?.click()
+
+    await waitFor(() => {
+      expect(adminApi.listInvitations).toHaveBeenLastCalledWith({ page: 2 })
+      expect(result.container.textContent).toContain("invite-2")
+    })
+  })
+
   it("deletes an invitation and reloads the list", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true))
     vi.mocked(adminApi.listInvitations)
       .mockResolvedValueOnce({
         data: [
@@ -96,7 +153,42 @@ describe("InvitationsPage", () => {
         pageSize: 20,
       } as never)
     vi.mocked(adminApi.deleteInvitation).mockResolvedValue({ ok: true })
-    const confirm = vi.spyOn(window, "confirm")
+    const result = await render(<InvitationsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("invite-1")
+    })
+    result.container.querySelector<HTMLButtonElement>("[aria-label='删除邀请 invite-1']")?.click()
+
+    await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalledWith("确定删除邀请 invite-1？")
+      expect(adminApi.deleteInvitation).toHaveBeenCalledWith("invite-1")
+      expect(result.container.textContent).toContain("暂无邀请")
+    })
+  })
+
+  it("shows an action error when deleting an invitation fails", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true))
+    vi.mocked(adminApi.listInvitations).mockResolvedValue({
+      data: [
+        {
+          id: "invite-1",
+          type: "user_signup",
+          expiresAt: "2026-06-10T00:00:00.000Z",
+          usedAt: null,
+          acceptedByUser: null,
+          createdByAdmin: { email: "admin@example.com" },
+          createdByUser: null,
+          team: null,
+          createdAt: "2026-05-20T00:00:00.000Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    } as never)
+    vi.mocked(adminApi.deleteInvitation).mockRejectedValue(new Error("邀请不存在。"))
     const result = await render(<InvitationsPage />)
     cleanup = result.unmount
 
@@ -107,9 +199,40 @@ describe("InvitationsPage", () => {
 
     await waitFor(() => {
       expect(adminApi.deleteInvitation).toHaveBeenCalledWith("invite-1")
-      expect(result.container.textContent).toContain("暂无邀请")
+      expect(result.container.textContent).toContain("邀请不存在。")
     })
-    expect(confirm).not.toHaveBeenCalled()
+    expect(adminApi.listInvitations).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not delete an invitation when confirmation is cancelled", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => false))
+    vi.mocked(adminApi.listInvitations).mockResolvedValue({
+      data: [
+        {
+          id: "invite-1",
+          type: "user_signup",
+          expiresAt: "2026-06-10T00:00:00.000Z",
+          usedAt: null,
+          acceptedByUser: null,
+          createdByAdmin: { email: "admin@example.com" },
+          createdByUser: null,
+          team: null,
+          createdAt: "2026-05-20T00:00:00.000Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    } as never)
+    const result = await render(<InvitationsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("invite-1")
+    })
+    result.container.querySelector<HTMLButtonElement>("[aria-label='删除邀请 invite-1']")?.click()
+
+    expect(adminApi.deleteInvitation).not.toHaveBeenCalled()
   })
 
   it("copies an invitation link from the list", async () => {
@@ -147,7 +270,8 @@ describe("InvitationsPage", () => {
     })
   })
 
-  it("deletes selected invitations in bulk without confirmation", async () => {
+  it("deletes selected invitations in bulk after confirmation", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true))
     vi.mocked(adminApi.listInvitations)
       .mockResolvedValueOnce({
         data: [
@@ -185,7 +309,6 @@ describe("InvitationsPage", () => {
         pageSize: 20,
       } as never)
     vi.mocked(adminApi.deleteInvitations).mockResolvedValue({ ok: true, count: 2 })
-    const confirm = vi.spyOn(window, "confirm")
     const result = await render(<InvitationsPage />)
     cleanup = result.unmount
 
@@ -201,9 +324,88 @@ describe("InvitationsPage", () => {
     deleteSelectedButton?.click()
 
     await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalledWith("确定删除所选 2 个邀请？")
       expect(adminApi.deleteInvitations).toHaveBeenCalledWith(["invite-1", "invite-2"])
       expect(result.container.textContent).toContain("暂无邀请")
     })
-    expect(confirm).not.toHaveBeenCalled()
+  })
+
+  it("shows an action error when bulk deletion fails", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true))
+    vi.mocked(adminApi.listInvitations).mockResolvedValue({
+      data: [
+        {
+          id: "invite-1",
+          type: "user_signup",
+          expiresAt: "2026-06-10T00:00:00.000Z",
+          usedAt: null,
+          acceptedByUser: null,
+          createdByAdmin: { email: "admin@example.com" },
+          createdByUser: null,
+          team: null,
+          createdAt: "2026-05-20T00:00:00.000Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    } as never)
+    vi.mocked(adminApi.deleteInvitations).mockRejectedValue(new Error("删除失败"))
+    const result = await render(<InvitationsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("invite-1")
+    })
+    result.container.querySelector<HTMLButtonElement>("[aria-label='选择全部邀请']")?.click()
+    const deleteSelectedButton = Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "删除所选")
+    await waitFor(() => {
+      expect(deleteSelectedButton?.disabled).toBe(false)
+    })
+    deleteSelectedButton?.click()
+
+    await waitFor(() => {
+      expect(adminApi.deleteInvitations).toHaveBeenCalledWith(["invite-1"])
+      expect(result.container.textContent).toContain("删除失败")
+    })
+    expect(adminApi.listInvitations).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not delete selected invitations when confirmation is cancelled", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => false))
+    vi.mocked(adminApi.listInvitations).mockResolvedValue({
+      data: [
+        {
+          id: "invite-1",
+          type: "user_signup",
+          expiresAt: "2026-06-10T00:00:00.000Z",
+          usedAt: null,
+          acceptedByUser: null,
+          createdByAdmin: { email: "admin@example.com" },
+          createdByUser: null,
+          team: null,
+          createdAt: "2026-05-20T00:00:00.000Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    } as never)
+    const result = await render(<InvitationsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("invite-1")
+    })
+    result.container.querySelector<HTMLButtonElement>("[aria-label='选择全部邀请']")?.click()
+    const deleteSelectedButton = Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "删除所选")
+    await waitFor(() => {
+      expect(deleteSelectedButton?.disabled).toBe(false)
+    })
+    deleteSelectedButton?.click()
+
+    expect(adminApi.deleteInvitations).not.toHaveBeenCalled()
   })
 })

@@ -1,6 +1,7 @@
 import { BadRequestException, ForbiddenException, Injectable, Optional } from "@nestjs/common"
 import { AuditLogService } from "../common/audit-log.service"
 import { InvitationsService } from "../invitations/invitations.service"
+import { PermissionsService } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
 
 @Injectable()
@@ -8,10 +9,11 @@ export class TeamsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly invitations: InvitationsService,
+    private readonly permissions: PermissionsService,
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
-  async createTeam(userId: string, input: { name: string }) {
+  async createTeam(userId: string, input: { name: string }, ipAddress = "system") {
     const existing = await this.getMembership(userId)
     if (existing) throw new BadRequestException("账号已属于一个团队。")
 
@@ -19,17 +21,24 @@ export class TeamsService {
       const team = await tx.team.create({
         data: { name: input.name.trim(), createdByUserId: userId },
       })
-      await tx.teamMembership.create({
+      const membership = await tx.teamMembership.create({
         data: { teamId: team.id, userId, role: "owner" },
+      })
+      await this.permissions.ensureDefaultTeamAccess({
+        teamId: team.id,
+        ownerMembershipId: membership.id,
+        ownerUserId: userId,
+        client: tx,
       })
       return team
     })
+    const actorEmail = await this.getAuditActorEmail(userId)
     await this.auditLog?.record({
-      adminEmail: userId,
+      adminEmail: actorEmail,
       action: "team.create",
       targetType: "team",
       targetId: team.id,
-      ipAddress: "system",
+      ipAddress,
     })
     return team
   }
@@ -50,23 +59,24 @@ export class TeamsService {
     })
   }
 
-  async createInvitation(userId: string, publicAppUrl: string) {
+  async createInvitation(userId: string, publicAppUrl: string, ipAddress = "system") {
     const membership = await this.getMembership(userId)
     if (!membership || membership.role !== "owner") {
       throw new ForbiddenException()
     }
     const invitation = await this.invitations.createTeamInvitation({ userId, teamId: membership.teamId, publicAppUrl })
+    const actorEmail = await this.getAuditActorEmail(userId)
     await this.auditLog?.record({
-      adminEmail: userId,
+      adminEmail: actorEmail,
       action: "team.invitation.create",
       targetType: "invitation",
       targetId: invitation.id,
-      ipAddress: "system",
+      ipAddress,
     })
     return invitation
   }
 
-  async joinTeam(userId: string, input: { invitationToken: string }) {
+  async joinTeam(userId: string, input: { invitationToken: string }, ipAddress = "system") {
     const existing = await this.getMembership(userId)
     if (existing) throw new BadRequestException("账号已属于一个团队。")
 
@@ -79,15 +89,23 @@ export class TeamsService {
       if (!invitation.teamId) throw new BadRequestException("邀请无效或已过期。")
       const membership = await tx.teamMembership.create({
         data: { teamId: invitation.teamId, userId, role: "member" },
+        include: { user: { select: { id: true, email: true, status: true } } },
+      })
+      await this.permissions.assignOrdinaryMemberRole({
+        teamId: invitation.teamId,
+        teamMembershipId: membership.id,
+        assignedByUserId: userId,
+        client: tx,
       })
       return { membership, teamId: invitation.teamId }
     })
+    const actorEmail = await this.getAuditActorEmail(userId)
     await this.auditLog?.record({
-      adminEmail: userId,
+      adminEmail: actorEmail,
       action: "team.join",
       targetType: "team",
       targetId: result.teamId,
-      ipAddress: "system",
+      ipAddress,
     })
     return result.membership
   }
@@ -102,7 +120,7 @@ export class TeamsService {
     })
   }
 
-  async removeMember(ownerUserId: string, targetUserId: string) {
+  async removeMember(ownerUserId: string, targetUserId: string, ipAddress = "system") {
     const ownerMembership = await this.getMembership(ownerUserId)
     if (!ownerMembership || ownerMembership.role !== "owner") {
       throw new ForbiddenException()
@@ -117,40 +135,49 @@ export class TeamsService {
     }
 
     await this.prisma.teamMembership.delete({ where: { userId: targetUserId } })
+    const actorEmail = await this.getAuditActorEmail(ownerUserId)
     await this.auditLog?.record({
-      adminEmail: ownerUserId,
+      adminEmail: actorEmail,
       action: "team.member.remove",
       targetType: "user",
       targetId: targetUserId,
       detail: { teamId: ownerMembership.teamId },
-      ipAddress: "system",
+      ipAddress,
     })
     return { ok: true }
   }
 
-  async leaveTeam(userId: string) {
+  async leaveTeam(userId: string, ipAddress = "system") {
     const membership = await this.getMembership(userId)
     if (!membership) throw new BadRequestException("账号未加入团队。")
 
     if (membership.role === "owner") {
-      const memberCount = await this.prisma.teamMembership.count({ where: { teamId: membership.teamId } })
-      if (memberCount > 1) {
-        throw new BadRequestException("请先移除其他成员。")
-      }
       await this.prisma.$transaction(async (tx) => {
-        await tx.teamMembership.delete({ where: { userId } })
-        await tx.team.delete({ where: { id: membership.teamId } })
+        const memberCount = await tx.teamMembership.count({ where: { teamId: membership.teamId } })
+        if (memberCount > 1) {
+          throw new BadRequestException("请先移除其他成员。")
+        }
+        const deletedMembership = await tx.teamMembership.deleteMany({ where: { userId, teamId: membership.teamId } })
+        if (deletedMembership.count === 0) {
+          throw new BadRequestException("账号未加入团队。")
+        }
+        await tx.invitation.deleteMany({ where: { teamId: membership.teamId } })
+        const deletedTeam = await tx.team.deleteMany({ where: { id: membership.teamId } })
+        if (deletedTeam.count === 0) {
+          throw new BadRequestException("团队已解散。")
+        }
       })
     } else {
       await this.prisma.teamMembership.delete({ where: { userId } })
     }
 
+    const actorEmail = await this.getAuditActorEmail(userId)
     await this.auditLog?.record({
-      adminEmail: userId,
+      adminEmail: actorEmail,
       action: "team.leave",
       targetType: "team",
       targetId: membership.teamId,
-      ipAddress: "system",
+      ipAddress,
     })
     return { ok: true }
   }
@@ -160,5 +187,22 @@ export class TeamsService {
       where: { userId },
       include: { team: true },
     })
+  }
+
+  private async getAuditActorEmail(userId: string): Promise<string> {
+    if (!this.auditLog) return userId
+    try {
+      return await this.getUserEmail(userId)
+    } catch {
+      return userId
+    }
+  }
+
+  private async getUserEmail(userId: string): Promise<string> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true },
+    })
+    return user?.email ?? userId
   }
 }

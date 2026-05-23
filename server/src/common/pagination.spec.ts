@@ -1,3 +1,4 @@
+import { BadRequestException } from "@nestjs/common"
 import { describe, expect, it } from "vitest"
 import { parsePagination, toPrismaArgs } from "./pagination"
 
@@ -15,12 +16,28 @@ describe("pagination", () => {
     expect(result.pageSize).toBe(50)
   })
 
-  it("clamps pageSize to max 100", () => {
-    expect(() => parsePagination({ pageSize: "200" })).toThrow()
+  it("rejects pageSize > 100 with bad request", () => {
+    expect(() => parsePagination({ pageSize: "200" })).toThrow(BadRequestException)
   })
 
-  it("rejects page < 1", () => {
-    expect(() => parsePagination({ page: "0" })).toThrow()
+  it("rejects page < 1 with bad request", () => {
+    expect(() => parsePagination({ page: "0" })).toThrow(BadRequestException)
+  })
+
+  it("rejects non-numeric pageSize with bad request", () => {
+    expect(() => parsePagination({ pageSize: "abc" })).toThrow(BadRequestException)
+  })
+
+  it("rejects sort fields outside the default allowlist", () => {
+    expect(() => parsePagination({ sortBy: "passwordHash" })).toThrow("排序字段无效。")
+  })
+
+  it("accepts resource-specific sort fields", () => {
+    const result = parsePagination({ sortBy: "email", sortOrder: "asc" }, {
+      allowedSortFields: ["createdAt", "email"],
+    })
+    expect(result.sortBy).toBe("email")
+    expect(result.sortOrder).toBe("asc")
   })
 
   it("converts to Prisma skip/take/orderBy", () => {

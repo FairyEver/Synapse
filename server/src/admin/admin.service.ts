@@ -1,15 +1,34 @@
-import { Injectable, Optional } from "@nestjs/common"
-import type { UserStatus } from "@prisma/client"
+import { Injectable, NotFoundException, Optional } from "@nestjs/common"
+import { Prisma, type UserStatus } from "@prisma/client"
 import { AuditLogService } from "../common/audit-log.service"
 import { InvitationsService } from "../invitations/invitations.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
+import { PermissionsService } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
+
+const adminUserSelect = {
+  id: true,
+  email: true,
+  status: true,
+  memberships: {
+    select: {
+      role: true,
+      team: { select: { id: true, name: true } },
+    },
+  },
+  createdAt: true,
+} as const
+
+function isRecordNotFoundError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025"
+}
 
 @Injectable()
 export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly invitations: InvitationsService,
+    private readonly permissions: PermissionsService,
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
@@ -18,7 +37,7 @@ export class AdminService {
       this.prisma.auditLog.count(),
       this.prisma.user.count(),
       this.prisma.team.count(),
-      this.prisma.invitation.count({ where: { type: "user_signup" } }),
+      this.prisma.invitation.count(),
     ])
 
     return {
@@ -32,31 +51,45 @@ export class AdminService {
     }
   }
 
-  async createSignupInvitation(admin: { readonly id: string; readonly email: string }, publicAppUrl: string) {
+  async createSignupInvitation(admin: { readonly id: string; readonly email: string }, publicAppUrl: string, ipAddress = "system") {
     const invitation = await this.invitations.createSignupInvitation({ adminId: admin.id, publicAppUrl })
     await this.auditLog?.record({
       adminEmail: admin.email,
       action: "admin.invitation.create",
       targetType: "invitation",
       targetId: invitation.id,
-      ipAddress: "system",
+      ipAddress,
     })
     return invitation
   }
 
-  async deleteInvitation(id: string, actorEmail = "system") {
-    await this.prisma.invitation.delete({ where: { id } })
+  async deleteInvitation(id: string, actorEmail = "system", ipAddress = "system") {
+    try {
+      await this.prisma.invitation.delete({ where: { id } })
+    } catch (error: unknown) {
+      if (isRecordNotFoundError(error)) {
+        await this.auditLog?.record({
+          adminEmail: actorEmail,
+          action: "admin.invitation.delete.not_found",
+          targetType: "invitation",
+          targetId: id,
+          ipAddress,
+        })
+        throw new NotFoundException("邀请不存在。")
+      }
+      throw error
+    }
     await this.auditLog?.record({
       adminEmail: actorEmail,
       action: "admin.invitation.delete",
       targetType: "invitation",
       targetId: id,
-      ipAddress: "system",
+      ipAddress,
     })
     return { ok: true }
   }
 
-  async deleteInvitations(ids: readonly string[], actorEmail = "system") {
+  async deleteInvitations(ids: readonly string[], actorEmail = "system", ipAddress = "system") {
     const result = await this.prisma.invitation.deleteMany({
       where: { id: { in: [...ids] } },
     })
@@ -64,9 +97,9 @@ export class AdminService {
       adminEmail: actorEmail,
       action: "admin.invitation.delete_many",
       targetType: "invitation",
-      targetId: ids.join(","),
+      targetId: `batch:${result.count}`,
       detail: { ids: [...ids], count: result.count },
-      ipAddress: "system",
+      ipAddress,
     })
     return { ok: true, count: result.count }
   }
@@ -76,21 +109,21 @@ export class AdminService {
     const [data, total] = await this.prisma.$transaction([
       this.prisma.user.findMany({
         ...toPrismaArgs(page),
-        include: {
-          memberships: {
-            include: { team: { select: { id: true, name: true } } },
-          },
-        },
+        select: adminUserSelect,
       }),
       this.prisma.user.count(),
     ])
     return { data, total, page: page.page, pageSize: page.pageSize }
   }
 
-  async updateUserStatus(id: string, input: { status: UserStatus }, actorEmail = "system") {
+  async updateUserStatus(id: string, input: { status: UserStatus }, actorEmail = "system", ipAddress = "system") {
     const user = await this.prisma.user.update({
       where: { id },
       data: { status: input.status },
+      select: adminUserSelect,
+    }).catch((error: unknown) => {
+      if (isRecordNotFoundError(error)) throw new NotFoundException("用户不存在。")
+      throw error
     })
     await this.auditLog?.record({
       adminEmail: actorEmail,
@@ -98,7 +131,7 @@ export class AdminService {
       targetType: "user",
       targetId: id,
       detail: { status: input.status },
-      ipAddress: "system",
+      ipAddress,
     })
     return user
   }
@@ -121,15 +154,62 @@ export class AdminService {
     return { data, total, page: page.page, pageSize: page.pageSize }
   }
 
+  listPermissions() {
+    return this.permissions.listPermissionDefinitions()
+  }
+
+  async listTeamEntitlements(teamId: string) {
+    await this.assertTeamExists(teamId)
+    return { permissionKeys: await this.permissions.listTeamEntitlements(teamId) }
+  }
+
+  async replaceTeamEntitlements(
+    teamId: string,
+    permissionKeys: readonly string[],
+    admin: { readonly id: string; readonly email: string },
+    ipAddress = "system",
+  ) {
+    await this.assertTeamExists(teamId)
+    const next = await this.permissions.replaceTeamEntitlements({
+      teamId,
+      permissionKeys,
+      grantedByAdminId: admin.id,
+      source: "manual",
+    })
+    await this.auditLog?.record({
+      adminEmail: admin.email,
+      action: "admin.team_entitlements.update",
+      targetType: "team",
+      targetId: teamId,
+      detail: { permissionKeys: next },
+      ipAddress,
+    })
+    return { permissionKeys: next }
+  }
+
+  private async assertTeamExists(teamId: string): Promise<void> {
+    const team = await this.prisma.team.findUnique({
+      where: { id: teamId },
+      select: { id: true },
+    })
+    if (!team) throw new NotFoundException("团队不存在。")
+  }
+
   async listInvitations(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {
     const page = pagination ?? parsePagination({})
     const [data, total] = await this.prisma.$transaction([
       this.prisma.invitation.findMany({
         ...toPrismaArgs(page),
-        include: {
+        select: {
+          id: true,
+          type: true,
+          inviteUrl: true,
+          expiresAt: true,
+          usedAt: true,
           acceptedByUser: { select: { email: true } },
           createdByAdmin: { select: { email: true } },
           createdByUser: { select: { email: true } },
+          createdAt: true,
           team: { select: { name: true } },
         },
       }),

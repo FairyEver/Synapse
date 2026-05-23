@@ -126,9 +126,9 @@ POSTGRES_PASSWORD=Abc123456789
 ADMIN_EMAIL=你的邮箱@example.com
 ADMIN_PASSWORD=设一个至少12位的密码
 
-# JWT 密钥（至少 32 位，粘贴第四步生成的 hex 字符）
+# JWT 密钥（分别执行一次第四步，为管理员和用户令牌生成不同的 hex 字符）
 ADMIN_JWT_SECRET=粘贴第四步生成的那串hex字符
-USER_ACCESS_JWT_SECRET=可复用上面的hex字符，也可以单独生成
+USER_ACCESS_JWT_SECRET=再次生成并粘贴另一串hex字符
 USER_ACCESS_TOKEN_MINUTES=15
 USER_REFRESH_TOKEN_DAYS=30
 ```
@@ -136,7 +136,7 @@ USER_REFRESH_TOKEN_DAYS=30
 常见配置错误（启动时会报 "服务端环境变量无效"）：
 - `ADMIN_PASSWORD` 少于 12 位
 - `ADMIN_JWT_SECRET` 少于 32 位（必须用 `openssl rand -hex 32` 生成的 64 字符）
-- `USER_ACCESS_JWT_SECRET` 少于 32 位
+- `USER_ACCESS_JWT_SECRET` 少于 32 位，或和 `ADMIN_JWT_SECRET` 相同
 - `ADMIN_EMAIL` 不是合法邮箱格式
 
 ---
