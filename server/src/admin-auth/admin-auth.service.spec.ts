@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest"
 import { hashPassword } from "../auth/password"
 import { AdminAuthService } from "./admin-auth.service"
 
-async function createTestService() {
+async function createTestService(auditLog?: { record: ReturnType<typeof vi.fn> }) {
   const jwt = new JwtService({ secret: "test-secret-at-least-32-chars-long!", signOptions: { expiresIn: "1h" } })
   const passwordHash = await hashPassword("admin@pwd1234!")
   const prisma = {
@@ -26,7 +26,7 @@ async function createTestService() {
     },
   }
   return {
-    service: new AdminAuthService(jwt, prisma as never),
+    service: new AdminAuthService(jwt, prisma as never, auditLog as never),
     prisma,
   }
 }
@@ -46,6 +46,23 @@ describe("AdminAuthService", () => {
     await expect(service.login("admin@d2.com", "wrong-password"))
       .rejects
       .toThrow("邮箱或密码错误。")
+  })
+
+  it("does not attribute unknown email login failures to the first admin", async () => {
+    const auditLog = { record: vi.fn() }
+    const { service } = await createTestService(auditLog)
+
+    await expect(service.login("random@evil.com", "wrong-password"))
+      .rejects
+      .toThrow("邮箱或密码错误。")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "random@evil.com",
+      action: "dashboard.login.failure",
+      targetType: "account",
+      targetId: "unknown",
+      ipAddress: "system",
+    })
   })
 
   it("rejects a disabled administrator", async () => {
