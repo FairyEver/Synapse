@@ -1,15 +1,18 @@
-import { readdir, stat } from "node:fs/promises";
+import { open, readdir, readFile, stat } from "node:fs/promises";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { LogFileService } from "./log-file.service";
 
 vi.mock("node:fs/promises", () => ({
+  open: vi.fn(),
   readdir: vi.fn(),
   stat: vi.fn(),
   readFile: vi.fn(),
   unlink: vi.fn(),
 }));
 
+const mockedOpen = vi.mocked(open);
 const mockedReaddir = vi.mocked(readdir);
+const mockedReadFile = vi.mocked(readFile);
 const mockedStat = vi.mocked(stat);
 
 describe("LogFileService", () => {
@@ -48,4 +51,41 @@ describe("LogFileService", () => {
 
     await expect(service.listFiles()).rejects.toThrow("permission denied");
   });
+
+  it("reads recent entries from the file tail without loading the whole file", async () => {
+    const entry = JSON.stringify({ time: "2026-05-23T01:00:00.000Z", level: 30, msg: "ready" });
+    const content = `${"not-json\n".repeat(20_000)}${entry}\n`;
+    const handle = mockReadableFile(content);
+    mockedReaddir.mockResolvedValue(["app.log"] as never);
+    mockedStat.mockResolvedValue({
+      size: Buffer.byteLength(content),
+      mtime: new Date("2026-05-23T00:00:00.000Z"),
+    } as never);
+
+    const service = new LogFileService("/tmp/synapse-logs");
+
+    await expect(service.readRecent({ limit: 1 })).resolves.toEqual([
+      {
+        time: "2026-05-23T01:00:00.000Z",
+        level: "info",
+        msg: "ready",
+      },
+    ]);
+    expect(mockedReadFile).not.toHaveBeenCalled();
+    expect(handle.read).toHaveBeenCalledTimes(1);
+  });
 });
+
+function mockReadableFile(content: string) {
+  const bytes = Buffer.from(content);
+  const handle = {
+    read: vi.fn(async (target: Buffer, offset: number, length: number, position: number) => {
+      const chunk = bytes.subarray(position, position + length);
+      chunk.copy(target, offset);
+      return { bytesRead: chunk.length, buffer: target };
+    }),
+    close: vi.fn(async () => undefined),
+  };
+  mockedOpen.mockResolvedValue(handle as never);
+  return handle;
+}
