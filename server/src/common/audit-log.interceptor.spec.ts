@@ -3,14 +3,18 @@ import { describe, expect, it, vi } from "vitest"
 import { of, lastValueFrom } from "rxjs"
 import { AuditLogInterceptor } from "./audit-log.interceptor"
 
-function createContext(body: unknown): ExecutionContext {
+function createContext(options: {
+  readonly method?: string
+  readonly path?: string
+  readonly body?: unknown
+}): ExecutionContext {
   return {
     switchToHttp: () => ({
       getRequest: () => ({
-        method: "POST",
-        path: "/api/admin/login",
+        method: options.method ?? "POST",
+        path: options.path ?? "/api/admin/login",
         params: {},
-        body,
+        body: options.body,
         ip: "127.0.0.1",
       }),
     }),
@@ -25,9 +29,11 @@ describe("AuditLogInterceptor", () => {
 
     await lastValueFrom(interceptor.intercept(
       createContext({
-        email: "admin@example.com",
-        password: "plain-password",
-        nested: { refreshToken: "refresh-token" },
+        body: {
+          email: "admin@example.com",
+          password: "plain-password",
+          nested: { refreshToken: "refresh-token" },
+        },
       }),
       { handle: () => of({ id: "session-1" }) },
     ))
@@ -43,5 +49,27 @@ describe("AuditLogInterceptor", () => {
     })
     expect(JSON.stringify(detail)).not.toContain("plain-password")
     expect(JSON.stringify(detail)).not.toContain("refresh-token")
+  })
+
+  it("records backup list reads because backups are sensitive admin data", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await lastValueFrom(interceptor.intercept(
+      createContext({ method: "GET", path: "/api/admin/backup/list" }),
+      { handle: () => of([]) },
+    ))
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith({
+        adminEmail: "admin@example.com",
+        action: "backup.list",
+        targetType: "backup",
+        targetId: "unknown",
+        detail: { method: "GET", path: "/api/admin/backup/list", body: undefined },
+        ipAddress: "127.0.0.1",
+      })
+    })
   })
 })

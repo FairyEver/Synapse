@@ -1,5 +1,5 @@
 import { Module } from "@nestjs/common"
-import { APP_GUARD } from "@nestjs/core"
+import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core"
 import { ScheduleModule } from "@nestjs/schedule"
 import { ServeStaticModule } from "@nestjs/serve-static"
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
@@ -13,6 +13,7 @@ import { HealthModule } from "./health/health.module"
 import { InvitationsModule } from "./invitations/invitations.module"
 import { PrismaModule } from "./prisma/prisma.module"
 import { TeamsModule } from "./teams/teams.module"
+import { AuditLogInterceptor } from "./common/audit-log.interceptor"
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { TeamsModule } from "./teams/teams.module"
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
+    { provide: APP_INTERCEPTOR, useClass: AuditLogInterceptor },
   ],
 })
 export class AppModule {}

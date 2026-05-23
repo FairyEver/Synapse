@@ -25,7 +25,7 @@ export class AuditLogInterceptor implements NestInterceptor {
       Request & { cookies?: Record<string, string> }
     >()
 
-    if (!WRITE_METHODS.has(request.method)) {
+    if (!shouldAuditRequest(request.method, request.path)) {
       return next.handle()
     }
 
@@ -66,6 +66,11 @@ function redactSensitiveBody(value: unknown): unknown {
   return result
 }
 
+function shouldAuditRequest(method: string, path: string): boolean {
+  if (WRITE_METHODS.has(method)) return true
+  return method === "GET" && path === "/api/admin/backup/list"
+}
+
 function resolveAuditTarget(
   method: string,
   path: string,
@@ -77,6 +82,7 @@ function resolveAuditTarget(
   const resource = segments[0] ?? "unknown"
 
   let action = `${resource}.${method.toLowerCase()}`
+  if (resource === "backup" && segments.includes("list")) action = "backup.list"
   if (segments.includes("archive")) action = `${resource}.archive`
   if (segments.includes("risk-lock")) action = `${resource}.risk-lock`
   if (segments.includes("replace")) action = `${resource}.replace`
