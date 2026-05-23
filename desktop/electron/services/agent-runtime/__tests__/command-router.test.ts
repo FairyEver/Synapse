@@ -102,6 +102,53 @@ describe("AgentCommandRouter", () => {
     })
   })
 
+  it("rejects remote non-admin users when switching models", async () => {
+    const { providerService } = makeProviderService()
+    await providerService.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      active: true,
+      model: "claude-sonnet-4.5",
+      haikuModel: "claude-haiku-3.5",
+      env: {},
+    })
+    const resets: string[] = []
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      resetSession: async (message) => {
+        resets.push(message.sessionKey)
+        return baseConversation()
+      },
+    })
+
+    const list = expectRuntimeResult(
+      await router.handle({
+        ...baseMessage("/model"),
+        platform: "relay",
+        replyCtx: { isAdmin: false },
+      }, baseConversation()),
+    )
+    expect(list.resultText).toContain("claude-sonnet-4.5")
+
+    const result = expectRuntimeResult(
+      await router.handle({
+        ...baseMessage("/model haiku"),
+        platform: "relay",
+        replyCtx: { isAdmin: false },
+      }, baseConversation()),
+    )
+
+    expect(result.error).toBe("Only admins can change models.")
+    await expect(providerService.getActiveProvider()).resolves.toMatchObject({
+      model: "claude-sonnet-4.5",
+    })
+    expect(resets).toEqual([])
+  })
+
   it("logs conversation provider lookup failures with command context", async () => {
     const records: Array<{ readonly message: string, readonly meta?: Record<string, unknown> }> = []
     const providerService = {
@@ -337,6 +384,41 @@ describe("AgentCommandRouter", () => {
     const unknown = expectRuntimeResult(await router.handle(baseMessage("/unknown"), baseConversation()))
     expect(unknown.error).toBe("Unsupported command: /unknown")
     expect(resets).toEqual(["s1"])
+  })
+
+  it("rejects remote non-admin users when switching permission modes", async () => {
+    const { providerService } = makeProviderService()
+    const modeSwitches: string[] = []
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      resetSession: async () => baseConversation(),
+      setPermissionMode: async (_message, _conversation, mode) => {
+        modeSwitches.push(mode)
+        return { ...baseConversation(), agentConfig: { mode } }
+      },
+    })
+
+    const list = expectRuntimeResult(
+      await router.handle({
+        ...baseMessage("/mode"),
+        platform: "relay",
+        replyCtx: { isAdmin: false },
+      }, baseConversation()),
+    )
+    expect(list.resultText).toContain("acceptEdits")
+
+    const result = expectRuntimeResult(
+      await router.handle({
+        ...baseMessage("/mode acceptEdits"),
+        platform: "relay",
+        replyCtx: { isAdmin: false },
+      }, baseConversation()),
+    )
+
+    expect(result.error).toBe("Only admins can change permission modes.")
+    expect(modeSwitches).toEqual([])
   })
 
   it("routes registered prompt commands and explicit agent-native slash passthrough", async () => {
