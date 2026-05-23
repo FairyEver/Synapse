@@ -95,7 +95,7 @@ export class AdminService {
       adminEmail: actorEmail,
       action: "admin.invitation.delete_many",
       targetType: "invitation",
-      targetId: ids.join(","),
+      targetId: `batch:${result.count}`,
       detail: { ids: [...ids], count: result.count },
       ipAddress,
     })

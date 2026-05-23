@@ -191,7 +191,7 @@ describe("AdminService", () => {
       adminEmail: "admin@example.com",
       action: "admin.invitation.delete_many",
       targetType: "invitation",
-      targetId: "invite-1,invite-2",
+      targetId: "batch:2",
       detail: { ids: ["invite-1", "invite-2"], count: 2 },
       ipAddress: "203.0.113.30",
     })
