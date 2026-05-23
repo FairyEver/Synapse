@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { RegisteredPromptCommandOutput } from "../../agent-runtime/command-router"
 import { createKnowledgeBaseAgentContribution } from "../../knowledge-base/agent-contribution"
@@ -305,6 +305,44 @@ describe("knowledge base Agent contribution", () => {
     const output = await contribution?.commands[0]?.buildPrompt(["status"], baseMessage("/wiki status"))
 
     expect(expectObjectOutput(output, "result")).toContain("- 来源：1")
+  })
+
+  it("runs the ingest finalizer after natural-language ingest turns", async () => {
+    const projectPath = await tempDir()
+    const finalize = vi.fn(async () => ({ assigned: [], reused: [] }))
+
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+      ingestFinalizer: { finalize },
+    })
+
+    await contribution?.afterTurn?.({
+      message: baseMessage("汲取知识"),
+      result: { conversationId: "conv-1", resultText: "done", events: [] },
+      conversationId: "conv-1",
+      isNewLiveSession: false,
+    })
+
+    expect(finalize).toHaveBeenCalledWith(projectPath)
+  })
+
+  it("does not run the ingest finalizer for query turns", async () => {
+    const projectPath = await tempDir()
+    const finalize = vi.fn(async () => ({ assigned: [], reused: [] }))
+
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+      ingestFinalizer: { finalize },
+    })
+
+    await contribution?.afterTurn?.({
+      message: baseMessage("/wiki query topic"),
+      result: { conversationId: "conv-1", resultText: "done", events: [] },
+      conversationId: "conv-1",
+      isNewLiveSession: false,
+    })
+
+    expect(finalize).not.toHaveBeenCalled()
   })
 
   it("expands /wiki query into query prompt with mode", async () => {

@@ -5,10 +5,13 @@ import type { SynapseProjectConfig } from "../../../src/types/config"
 import type { RegisteredPromptCommandOutput } from "../agent-runtime/command-router"
 import type { AgentProjectContribution } from "../agent-runtime/project-contributions"
 import type { AgentMessage } from "../agent-runtime/types"
+import { KnowledgeBaseIngestFinalizer } from "./ingest-finalizer"
+import { isKnowledgeBaseIngestIntent } from "./ingest-intent"
 import { buildKnowledgeBaseCommandOutput } from "./wiki-command-prompts"
 
 type CreateKnowledgeBaseAgentContributionInput = {
   readonly project: SynapseProjectConfig
+  readonly ingestFinalizer?: Pick<KnowledgeBaseIngestFinalizer, "finalize">
 }
 
 const KNOWLEDGE_BASE_PUBLISHED_COMMANDS = [
@@ -29,6 +32,7 @@ export async function createKnowledgeBaseAgentContribution(
 
   const bootstrap = await readPrompt("bootstrap.md")
   const hotCachePath = path.join(input.project.path, "wiki", "hot.md")
+  const ingestFinalizer = input.ingestFinalizer ?? new KnowledgeBaseIngestFinalizer()
 
   return {
     sdkPlugins: [{
@@ -46,6 +50,11 @@ export async function createKnowledgeBaseAgentContribution(
       }
       const hotCache = await readOptional(hotCachePath)
       return prependBootstrap(message, bootstrap, hotCache)
+    },
+    async afterTurn({ message, result }) {
+      if (result.error) return
+      if (!isKnowledgeBaseIngestIntent(message.content)) return
+      await ingestFinalizer.finalize(input.project.path)
     },
   }
 }

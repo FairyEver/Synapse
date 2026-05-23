@@ -1,0 +1,71 @@
+import { mkdir, mkdtemp, readFile, rm, symlink } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { afterEach, describe, expect, it } from "vitest"
+
+import {
+  readKnowledgeBaseManifest,
+  writeKnowledgeBaseManifest,
+  type KnowledgeBaseManifest,
+} from "../manifest"
+
+const roots: string[] = []
+
+async function tempDir(): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-kb-manifest-"))
+  roots.push(dir)
+  return dir
+}
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+})
+
+describe("writeKnowledgeBaseManifest", () => {
+  it("writes pretty JSON and preserves manifest fields", async () => {
+    const root = await tempDir()
+    const manifest: KnowledgeBaseManifest = {
+      version: 1,
+      created: "2026-05-23",
+      description: "Ingest delta tracker and address map for the Synapse knowledge base.",
+      sources: {
+        ".raw/a.md": {
+          hash: "hash-a",
+          ingested_at: "2026-05-23T00:00:00.000Z",
+          pages_created: ["wiki/sources/a.md"],
+          pages_updated: ["wiki/index.md"],
+        },
+      },
+      address_map: {
+        "wiki\\concepts\\Alpha.md": "c-000001",
+      },
+    }
+
+    await writeKnowledgeBaseManifest(root, manifest)
+
+    await expect(readFile(path.join(root, ".raw", ".manifest.json"), "utf8"))
+      .resolves.toContain("\"wiki/concepts/Alpha.md\": \"c-000001\"")
+    await expect(readKnowledgeBaseManifest(root)).resolves.toMatchObject({
+      status: "valid",
+      manifest: {
+        created: "2026-05-23",
+        sources: manifest.sources,
+        address_map: {
+          "wiki/concepts/Alpha.md": "c-000001",
+        },
+      },
+    })
+  })
+
+  it("rejects symlinked raw directories", async () => {
+    const root = await tempDir()
+    const outside = await tempDir()
+    await symlink(outside, path.join(root, ".raw"), "dir")
+
+    await expect(writeKnowledgeBaseManifest(root, {
+      version: 1,
+      sources: {},
+      address_map: {},
+    })).rejects.toThrow("符号链接")
+  })
+})

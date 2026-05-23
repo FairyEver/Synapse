@@ -4,9 +4,9 @@ import path from "node:path"
 
 import type { DragonScaleAddress, DragonScaleAddressServiceResult } from "./types"
 
-export class DragonScaleAddressService {
-  private readonly locks = new Map<string, Promise<void>>()
+const vaultLocks = new Map<string, Promise<void>>()
 
+export class DragonScaleAddressService {
   async allocate(vaultPath: string): Promise<DragonScaleAddressServiceResult> {
     return this.withVaultLock(vaultPath, async () => {
       const counterPath = await this.ensureCounter(vaultPath)
@@ -70,20 +70,20 @@ export class DragonScaleAddressService {
 
   private async withVaultLock<T>(vaultPath: string, work: () => Promise<T>): Promise<T> {
     const key = path.resolve(vaultPath)
-    const previous = this.locks.get(key) ?? Promise.resolve()
+    const previous = vaultLocks.get(key) ?? Promise.resolve()
     let release: () => void = () => undefined
     const current = new Promise<void>((resolve) => {
       release = resolve
     })
     const queued = previous.catch(() => undefined).then(() => current)
-    this.locks.set(key, queued)
+    vaultLocks.set(key, queued)
     await previous.catch(() => undefined)
     try {
       return await work()
     } finally {
       release()
-      if (this.locks.get(key) === queued) {
-        this.locks.delete(key)
+      if (vaultLocks.get(key) === queued) {
+        vaultLocks.delete(key)
       }
     }
   }
