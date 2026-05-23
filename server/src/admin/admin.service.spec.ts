@@ -156,16 +156,22 @@ describe("AdminService", () => {
     })
   })
 
-  it("reports a missing invitation when deleting", async () => {
+  it("records missing invitation delete attempts", async () => {
     const prisma = createPrismaMock()
     prisma.invitation.delete.mockRejectedValue(createNotFoundError())
     const auditLog = { record: vi.fn() }
     const service = new AdminService(prisma as unknown as PrismaService, {} as never, auditLog as never)
 
-    await expect(service.deleteInvitation("missing-invite", "admin@example.com"))
+    await expect(service.deleteInvitation("missing-invite", "admin@example.com", "203.0.113.50"))
       .rejects
       .toThrow("邀请不存在。")
-    expect(auditLog.record).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.invitation.delete.not_found",
+      targetType: "invitation",
+      targetId: "missing-invite",
+      ipAddress: "203.0.113.50",
+    })
   })
 
   it("deletes invitations in bulk and records an audit log", async () => {
