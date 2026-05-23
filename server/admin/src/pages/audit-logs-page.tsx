@@ -36,6 +36,7 @@ export const AUDIT_ACTION_FILTER_OPTIONS = [
   { value: "user.register.success", label: "user.register.success" },
   { value: "user.login.success", label: "user.login.success" },
   { value: "user.login.failure", label: "user.login.failure" },
+  { value: "user.login.disabled", label: "user.login.disabled" },
   { value: "team.create", label: "team.create" },
   { value: "team.invitation.create", label: "team.invitation.create" },
   { value: "team.join", label: "team.join" },
@@ -46,6 +47,7 @@ export const AUDIT_ACTION_FILTER_OPTIONS = [
   { value: "backup.post", label: "backup.post" },
   { value: "backup.delete", label: "backup.delete" },
   { value: "logs.download", label: "logs.download" },
+  { value: "logs.cleanup", label: "logs.cleanup" },
 ] as const
 
 export function AuditLogsPage() {

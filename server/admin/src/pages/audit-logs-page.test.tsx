@@ -25,9 +25,11 @@ describe("AuditLogsPage", () => {
       { value: "admin.invitation.create", label: "admin.invitation.create" },
       { value: "admin.user.status_update", label: "admin.user.status_update" },
       { value: "dashboard.login.disabled", label: "dashboard.login.disabled" },
+      { value: "user.login.disabled", label: "user.login.disabled" },
       { value: "team.create", label: "team.create" },
       { value: "backup.download", label: "backup.download" },
       { value: "logs.download", label: "logs.download" },
+      { value: "logs.cleanup", label: "logs.cleanup" },
     ]))
     expect(AUDIT_ACTION_FILTER_OPTIONS.length).toBeGreaterThan(1)
   })
