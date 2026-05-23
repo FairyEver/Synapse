@@ -12,12 +12,12 @@ type CreateKnowledgeBaseAgentContributionInput = {
 }
 
 const KNOWLEDGE_BASE_PUBLISHED_COMMANDS = [
-  knowledgeBaseAction("wiki ingest", "汲取来源", "send", "/wiki ingest"),
-  knowledgeBaseAction("wiki query", "查询知识库", "insert", "/wiki query "),
-  knowledgeBaseAction("wiki hot", "刷新热点", "send", "/wiki hot"),
-  knowledgeBaseAction("wiki save", "保存记录", "send", "/wiki save"),
-  knowledgeBaseAction("wiki lint", "检查知识库", "send", "/wiki lint"),
-  knowledgeBaseAction("wiki status", "查看状态", "send", "/wiki status"),
+  knowledgeBaseAction("wiki ingest", "汲取来源", "扫描 .raw/ 变更来源并导入到 wiki。", "send", "/wiki ingest"),
+  knowledgeBaseAction("wiki query", "查询知识库", "插入查询指令，继续输入要检索的问题。", "insert", "/wiki query "),
+  knowledgeBaseAction("wiki hot", "刷新热点", "更新 wiki/hot.md 的近期事实和活跃主题。", "send", "/wiki hot"),
+  knowledgeBaseAction("wiki save", "保存记录", "将当前对话要点追加到知识库日志。", "send", "/wiki save"),
+  knowledgeBaseAction("wiki lint", "检查知识库", "检查知识库结构、索引和链接状态。", "send", "/wiki lint"),
+  knowledgeBaseAction("wiki status", "查看状态", "查看来源清单、页面数量和知识库状态。", "send", "/wiki status"),
 ] as const
 
 export async function createKnowledgeBaseAgentContribution(
@@ -160,12 +160,13 @@ function resolveKnowledgeBasePluginPath(): string {
 function knowledgeBaseAction(
   name: string,
   label: string,
+  description: string,
   action: "send" | "insert",
   insertText: string,
 ) {
   return {
     name,
-    description: label,
+    description,
     source: "custom" as const,
     kind: "prompt" as const,
     adminOnly: false,

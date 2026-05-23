@@ -200,6 +200,34 @@ describe("AgentToolEvent", () => {
     expect(copyButton?.getAttribute("aria-label")).toBe("复制工具输出")
   })
 
+  it("wraps long tool output without enabling horizontal scrollbars", () => {
+    const html = renderToStaticMarkup(<AgentToolEvent
+      item={{
+        id: "tool-long-json",
+        kind: "toolCall",
+        timestamp: "2026-04-28T00:00:00.000Z",
+        toolName: "Todo",
+        toolInput: `{"todos":[{"content":"${"读取新来源文件和当前清单".repeat(20)}","status":"in_progress"}]}`,
+      }}
+      profile={{
+        ...profile,
+        toolDefaultCollapsed: "expanded",
+        toolPreviewChars: 2000,
+      }}
+    />)
+    const container = document.createElement("div")
+    container.innerHTML = html
+
+    const output = container.querySelector("pre")
+    const outputFrame = output?.parentElement
+
+    expect(html).not.toContain("data-orientation=\"horizontal\"")
+    expect(outputFrame?.className).toContain("overflow-x-hidden")
+    expect(outputFrame?.className).toContain("max-w-full")
+    expect(output?.className).toContain("break-all")
+    expect(output?.textContent).toContain("读取新来源文件和当前清单")
+  })
+
   it("opens permission requests by default", () => {
     const html = renderToStaticMarkup(<AgentToolEvent
       item={{

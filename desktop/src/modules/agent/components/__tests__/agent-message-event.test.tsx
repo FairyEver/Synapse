@@ -273,6 +273,41 @@ describe("AgentMessageEvent", () => {
     expect(copyButton?.classList.contains("cursor-pointer")).toBe(true)
   })
 
+  it("constrains streamdown code blocks inside assistant messages", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-code-layout",
+            kind: "message",
+            role: "assistant",
+            content: "## 新增知识地图\n\n```text\n实施后首次对比 claude-obsidian 功能差距总结\n├── 概念：自然语言 Ingest 路由\n└── 实体：DragonScale\n```",
+            timestamp: "2026-04-27T03:15:00.000Z",
+          }}
+          profile={profile}
+          onOpenReference={vi.fn()}
+        />,
+      )
+    })
+
+    const codeBlock = container.querySelector<HTMLElement>("[data-streamdown='code-block']")
+    const markdownRoot = codeBlock?.parentElement
+    const messageFrame = codeBlock?.closest(".group\\/message")
+
+    expect(codeBlock).not.toBeNull()
+    expect(messageFrame?.className).toContain("min-w-0")
+    expect(messageFrame?.className).toContain("max-w-[76ch]")
+    expect(codeBlock?.getAttribute("style")).toBeNull()
+    expect(markdownRoot?.className).toContain("[&_[data-streamdown='code-block']]:max-w-full")
+    expect(markdownRoot?.className).toContain("[&_[data-streamdown='code-block']]:overflow-hidden")
+    expect(codeBlock?.textContent).toContain("实施后首次对比 claude-obsidian 功能差距总结")
+  })
+
   it("tracks local reference open clicks without logging the raw reference", async () => {
     const onOpenReference = vi.fn()
     const container = document.createElement("div")

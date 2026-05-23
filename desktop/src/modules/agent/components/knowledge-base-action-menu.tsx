@@ -7,9 +7,15 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  HoverCard,
+  HoverCardContent,
+  HoverCardTrigger,
+} from "@/components/ui/hover-card"
 
 export type KnowledgeBaseComposerAction = {
   readonly label: string
+  readonly description?: string
   readonly action: "send" | "insert"
   readonly commandText: string
 }
@@ -50,18 +56,27 @@ export function KnowledgeBaseActionMenu({
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
         {actions.map((item) => (
-          <DropdownMenuItem
-            key={`${item.action}:${item.commandText}`}
-            onSelect={() => {
-              if (item.action === "insert") {
-                onInsert(item.commandText)
-                return
-              }
-              onSend(item.commandText)
-            }}
-          >
-            {item.label}
-          </DropdownMenuItem>
+          <HoverCard key={`${item.action}:${item.commandText}`} openDelay={100} closeDelay={100}>
+            <HoverCardTrigger asChild>
+              <DropdownMenuItem
+                onSelect={() => {
+                  if (item.action === "insert") {
+                    onInsert(item.commandText)
+                    return
+                  }
+                  onSend(item.commandText)
+                }}
+              >
+                <span className="min-w-0 flex-1 truncate">{item.label}</span>
+              </DropdownMenuItem>
+            </HoverCardTrigger>
+            <HoverCardContent side="right" align="center">
+              <div className="font-medium">{item.commandText.trim()}</div>
+              {item.description ? (
+                <p className="mt-1 text-sm text-muted-foreground">{item.description}</p>
+              ) : null}
+            </HoverCardContent>
+          </HoverCard>
         ))}
       </DropdownMenuContent>
     </DropdownMenu>

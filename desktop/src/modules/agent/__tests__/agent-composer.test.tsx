@@ -612,6 +612,7 @@ describe("AgentComposer", () => {
           cancelPhase="idle"
           knowledgeBaseActions={[{
             label: "汲取来源",
+            description: "扫描 .raw/ 变更来源并导入到 wiki。",
             action: "send",
             commandText: "/wiki ingest",
           }]}
@@ -637,6 +638,47 @@ describe("AgentComposer", () => {
     expect(onSendCommand).toHaveBeenCalledWith("/wiki ingest")
   })
 
+  it("shows knowledge base command descriptions in hover cards", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          knowledgeBaseActions={[{
+            label: "汲取来源",
+            description: "扫描 .raw/ 变更来源并导入到 wiki。",
+            action: "send",
+            commandText: "/wiki ingest",
+          }]}
+          onKnowledgeBaseCommand={vi.fn()}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    openKnowledgeBaseMenu(container)
+    const item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find((node) => node.textContent === "汲取来源") as HTMLElement
+    expect(item).toBeTruthy()
+
+    await hoverElement(item)
+
+    expect(document.body.textContent).toContain("/wiki ingest")
+    expect(document.body.textContent).toContain("扫描 .raw/ 变更来源并导入到 wiki。")
+  })
+
   it("sends hot refresh from the knowledge base action menu", async () => {
     const onSendCommand = vi.fn()
     const container = document.createElement("div")
@@ -654,6 +696,7 @@ describe("AgentComposer", () => {
           cancelPhase="idle"
           knowledgeBaseActions={[{
             label: "刷新热点",
+            description: "更新 wiki/hot.md 的近期事实和活跃主题。",
             action: "send",
             commandText: "/wiki hot",
           }]}
@@ -696,6 +739,7 @@ describe("AgentComposer", () => {
           cancelPhase="idle"
           knowledgeBaseActions={[{
             label: "汲取来源",
+            description: "扫描 .raw/ 变更来源并导入到 wiki。",
             action: "send",
             commandText: "/wiki ingest",
           }]}
@@ -742,6 +786,7 @@ describe("AgentComposer", () => {
           cancelPhase="idle"
           knowledgeBaseActions={[{
             label: "查询知识库",
+            description: "插入查询指令，继续输入要检索的问题。",
             action: "insert",
             commandText: "/wiki query ",
           }]}

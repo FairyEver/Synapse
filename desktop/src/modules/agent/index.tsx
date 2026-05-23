@@ -66,7 +66,7 @@ function toKnowledgeBaseComposerActions(
       const commandText = command.ui?.insertText ?? `/${command.name.replace(/^\/+/, "")}`
       const label = command.ui?.label ?? command.description ?? command.name
       const action = command.ui?.action ?? "insert"
-      return { label, action, commandText }
+      return { label, description: command.description, action, commandText }
     })
     .filter((action) => action.label.trim().length > 0 && action.commandText.trim().length > 0)
 }

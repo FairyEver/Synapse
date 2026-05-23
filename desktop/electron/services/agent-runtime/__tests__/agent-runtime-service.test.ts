@@ -126,7 +126,7 @@ describe("AgentRuntimeService", () => {
       registeredPromptCommands,
       publishedProjectCommands: async () => [{
         name: "wiki ingest",
-        description: "汲取来源",
+        description: "扫描 .raw/ 变更来源并导入到 wiki。",
         source: "custom",
         kind: "prompt",
         adminOnly: false,

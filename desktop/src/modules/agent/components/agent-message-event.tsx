@@ -1,6 +1,6 @@
-import type { MouseEvent, ReactNode } from "react"
+import { isValidElement, type ComponentProps, type MouseEvent, type ReactNode } from "react"
 import { toast } from "sonner"
-import { Streamdown, type Components } from "streamdown"
+import { CodeBlockCopyButton, Streamdown, type Components } from "streamdown"
 import { createRendererLogger } from "@/app-shell/logging"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
@@ -32,6 +32,11 @@ const STREAMDOWN_TRANSLATIONS = {
   copied: "已复制",
   copyCode: "复制代码",
 } as const
+const agentMessageMarkdownClassName = cn(
+  MARKDOWN_BODY_CLASSNAME,
+  "min-w-0 max-w-full overflow-hidden break-words",
+  "[&_[data-streamdown='code-block']]:max-w-full [&_[data-streamdown='code-block']]:overflow-hidden",
+)
 const STREAMDOWN_COMPONENTS = {
   a: ({ node: _node, href, children, ...props }) => {
     const reference = streamdownLinkReference(href, children)
@@ -46,6 +51,7 @@ const STREAMDOWN_COMPONENTS = {
       </a>
     )
   },
+  code: AgentMessageCode,
 } satisfies Components
 const logger = createRendererLogger("agent")
 
@@ -171,13 +177,14 @@ function AssistantMessageBody({
   }
 
   return (
-    <div className="group/message max-w-[76ch] px-1 py-2">
+    <div className="group/message min-w-0 max-w-[76ch] px-1 py-2">
       <div
         data-allow-select="true"
+        className="min-w-0 max-w-full overflow-hidden"
         onClick={handleClick}
       >
         <Streamdown
-          className={cn(MARKDOWN_BODY_CLASSNAME, "break-words")}
+          className={agentMessageMarkdownClassName}
           components={STREAMDOWN_COMPONENTS}
           controls={STREAMDOWN_CONTROLS}
           isAnimating={streaming}
@@ -198,6 +205,60 @@ function AssistantMessageBody({
       />
     </div>
   )
+}
+
+function AgentMessageCode({
+  node: _node,
+  className,
+  children,
+  ...props
+}: ComponentProps<"code"> & { readonly node?: unknown }) {
+  if (!("data-block" in props)) {
+    return (
+      <code
+        {...props}
+        className={cn("rounded bg-muted px-1.5 py-0.5 font-mono text-sm", className)}
+      >
+        {children}
+      </code>
+    )
+  }
+
+  const code = textFromReactNode(children).replace(/\n$/, "")
+  const language = languageFromCodeClassName(className)
+
+  return (
+    <div
+      data-streamdown="code-block"
+      data-language={language}
+      className="my-4 min-w-0 max-w-full overflow-hidden rounded-lg border border-border bg-muted/40"
+    >
+      <div className="flex h-8 items-center justify-between border-b border-border px-3">
+        <span className="font-mono text-xs text-muted-foreground">{language}</span>
+        <CodeBlockCopyButton
+          code={code}
+          title="复制代码"
+          className="-mr-1"
+        />
+      </div>
+      <pre className="max-w-full overflow-hidden whitespace-pre-wrap break-all p-3 text-sm leading-6">
+        <code className="block min-w-0 max-w-full whitespace-pre-wrap break-all bg-transparent p-0 font-mono">
+          {code}
+        </code>
+      </pre>
+    </div>
+  )
+}
+
+function languageFromCodeClassName(className: string | undefined): string {
+  return className?.match(/(?:^|\s)language-([^\s]+)/)?.[1] ?? "text"
+}
+
+function textFromReactNode(value: ReactNode): string {
+  if (typeof value === "string" || typeof value === "number") return String(value)
+  if (Array.isArray(value)) return value.map(textFromReactNode).join("")
+  if (isValidElement<{ children?: ReactNode }>(value)) return textFromReactNode(value.props.children)
+  return ""
 }
 
 function wrapLocalReferences(content: string): string {

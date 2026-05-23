@@ -66,7 +66,7 @@ describe("knowledge base Agent contribution", () => {
     expect(contribution?.publishedCommands).toEqual([
       {
         name: "wiki ingest",
-        description: "汲取来源",
+        description: "扫描 .raw/ 变更来源并导入到 wiki。",
         source: "custom",
         kind: "prompt",
         adminOnly: false,
@@ -79,7 +79,7 @@ describe("knowledge base Agent contribution", () => {
       },
       {
         name: "wiki query",
-        description: "查询知识库",
+        description: "插入查询指令，继续输入要检索的问题。",
         source: "custom",
         kind: "prompt",
         adminOnly: false,
@@ -92,7 +92,7 @@ describe("knowledge base Agent contribution", () => {
       },
       {
         name: "wiki hot",
-        description: "刷新热点",
+        description: "更新 wiki/hot.md 的近期事实和活跃主题。",
         source: "custom",
         kind: "prompt",
         adminOnly: false,
@@ -105,7 +105,7 @@ describe("knowledge base Agent contribution", () => {
       },
       {
         name: "wiki save",
-        description: "保存记录",
+        description: "将当前对话要点追加到知识库日志。",
         source: "custom",
         kind: "prompt",
         adminOnly: false,
@@ -118,7 +118,7 @@ describe("knowledge base Agent contribution", () => {
       },
       {
         name: "wiki lint",
-        description: "检查知识库",
+        description: "检查知识库结构、索引和链接状态。",
         source: "custom",
         kind: "prompt",
         adminOnly: false,
@@ -131,7 +131,7 @@ describe("knowledge base Agent contribution", () => {
       },
       {
         name: "wiki status",
-        description: "查看状态",
+        description: "查看来源清单、页面数量和知识库状态。",
         source: "custom",
         kind: "prompt",
         adminOnly: false,
