@@ -75,4 +75,39 @@ describe("LogsPage", () => {
 
     expect(adminApi.cleanupLogs).not.toHaveBeenCalled()
   })
+
+  it("keeps recent logs visible when log files fail to load", async () => {
+    vi.mocked(adminApi.fetchRecentLogs).mockResolvedValue([{
+      time: "2026-05-23T00:00:00.000Z",
+      level: "info",
+      msg: "request completed",
+      req: { method: "GET", url: "/api/admin/logs/recent" },
+    }])
+    vi.mocked(adminApi.listLogFiles).mockRejectedValue(new Error("文件列表加载失败"))
+
+    const result = await render(<LogsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("GET /api/admin/logs/recent")
+      expect(result.container.textContent).toContain("日志文件加载失败：文件列表加载失败")
+    })
+  })
+
+  it("keeps log files visible when recent logs fail to load", async () => {
+    vi.mocked(adminApi.fetchRecentLogs).mockRejectedValue(new Error("最近日志加载失败"))
+    vi.mocked(adminApi.listLogFiles).mockResolvedValue([{
+      name: "server.2026-05-23.log",
+      size: 2048,
+      modifiedAt: "2026-05-23T00:00:00.000Z",
+    }])
+
+    const result = await render(<LogsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("最近日志加载失败：最近日志加载失败")
+      expect(result.container.textContent).toContain("server.2026-05-23.log")
+    })
+  })
 })
