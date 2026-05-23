@@ -5,6 +5,24 @@ import { parsePagination, toPrismaArgs, type PaginatedResponse } from "./paginat
 
 const auditLogSortFields = ["createdAt", "adminEmail", "action", "targetType", "targetId"] as const
 
+interface AuditLogFilterOptions {
+  readonly action?: string
+  readonly from?: string
+  readonly to?: string
+}
+
+function buildAuditLogWhere(options: AuditLogFilterOptions): Record<string, unknown> {
+  const where: Record<string, unknown> = {}
+  if (options.action) where.action = options.action
+  if (options.from || options.to) {
+    where.createdAt = {
+      ...(options.from ? { gte: new Date(options.from) } : {}),
+      ...(options.to ? { lte: new Date(options.to) } : {}),
+    }
+  }
+  return where
+}
+
 @Injectable()
 export class AuditLogService {
   constructor(
@@ -49,14 +67,7 @@ export class AuditLogService {
     readonly query?: Record<string, unknown>
   }): Promise<PaginatedResponse<unknown>> {
     const pagination = parsePagination(options.query ?? {}, { allowedSortFields: auditLogSortFields })
-    const where: Record<string, unknown> = {}
-    if (options.action) where.action = options.action
-    if (options.from || options.to) {
-      where.createdAt = {
-        ...(options.from ? { gte: new Date(options.from) } : {}),
-        ...(options.to ? { lte: new Date(options.to) } : {}),
-      }
-    }
+    const where = buildAuditLogWhere(options)
 
     const [data, total] = await this.prisma.$transaction([
       this.prisma.auditLog.findMany({ where, ...toPrismaArgs(pagination) }),
@@ -64,5 +75,12 @@ export class AuditLogService {
     ])
 
     return { data, total, page: pagination.page, pageSize: pagination.pageSize }
+  }
+
+  listForExport(options: AuditLogFilterOptions): Promise<unknown[]> {
+    return this.prisma.auditLog.findMany({
+      where: buildAuditLogWhere(options),
+      orderBy: { createdAt: "desc" },
+    })
   }
 }

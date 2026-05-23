@@ -45,6 +45,55 @@ describe("AdminController", () => {
     })
   })
 
+  it("exports audit logs without list pagination", async () => {
+    const listForExport = vi.fn().mockResolvedValue([
+      {
+        id: "audit-1",
+        adminEmail: "admin@example.com",
+        action: "users.patch",
+        targetType: "user",
+        targetId: "user-1",
+        ipAddress: "127.0.0.1",
+        createdAt: "2026-05-22T00:00:00.000Z",
+      },
+    ])
+    const response = {
+      setHeader: vi.fn(),
+      send: vi.fn(),
+    }
+    const controller = createController({}, { listForExport })
+
+    await controller.exportAuditLogs({
+      action: "users.patch",
+      from: "2026-05-01",
+      to: "2026-05-21",
+    }, response as never)
+
+    expect(listForExport).toHaveBeenCalledWith({
+      action: "users.patch",
+      from: "2026-05-01",
+      to: "2026-05-21",
+    })
+    expect(response.send).toHaveBeenCalledWith(expect.stringContaining("audit-1"))
+  })
+
+  it("does not pass page size overrides to audit log export", async () => {
+    const listForExport = vi.fn().mockResolvedValue([])
+    const response = {
+      setHeader: vi.fn(),
+      send: vi.fn(),
+    }
+    const controller = createController({}, { listForExport })
+
+    await controller.exportAuditLogs({ pageSize: "10000" }, response as never)
+
+    expect(listForExport).toHaveBeenCalledWith({
+      action: undefined,
+      from: undefined,
+      to: undefined,
+    })
+  })
+
   it("creates signup invitations through the service", async () => {
     const createSignupInvitation = vi.fn().mockResolvedValue({ token: "plain-token" })
     const controller = createController({ createSignupInvitation } as never)

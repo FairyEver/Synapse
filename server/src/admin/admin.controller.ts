@@ -93,13 +93,12 @@ export class AdminController {
     @Query() query: Record<string, unknown>,
     @Res() response: Response,
   ) {
-    const result = await this.auditLog.list({
+    const data = await this.auditLog.listForExport({
       action: typeof query.action === "string" ? query.action : undefined,
       from: typeof query.from === "string" ? query.from : undefined,
       to: typeof query.to === "string" ? query.to : undefined,
-      query: { ...query, pageSize: "10000" },
     })
-    const csv = toCsv(result.data as Record<string, unknown>[], [
+    const csv = toCsv(data as Record<string, unknown>[], [
       "id", "adminEmail", "action", "targetType", "targetId", "ipAddress", "createdAt",
     ])
     response.setHeader("Content-Type", "text/csv; charset=utf-8")

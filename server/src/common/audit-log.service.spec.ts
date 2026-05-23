@@ -45,4 +45,29 @@ describe("AuditLogService", () => {
       adminEmail: auditInput.adminEmail,
     }, "Failed to record audit log")
   })
+
+  it("lists audit logs for export without pagination", async () => {
+    const findMany = vi.fn().mockResolvedValue([{ id: "audit-1" }])
+    const prisma = {
+      auditLog: { findMany },
+    }
+    const service = new AuditLogService(prisma as unknown as PrismaService)
+
+    await expect(service.listForExport({
+      action: "users.patch",
+      from: "2026-05-01",
+      to: "2026-05-21",
+    })).resolves.toEqual([{ id: "audit-1" }])
+
+    expect(findMany).toHaveBeenCalledWith({
+      where: {
+        action: "users.patch",
+        createdAt: {
+          gte: new Date("2026-05-01"),
+          lte: new Date("2026-05-21"),
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    })
+  })
 })
