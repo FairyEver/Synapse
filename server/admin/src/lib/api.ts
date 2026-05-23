@@ -44,6 +44,7 @@ export interface AdminUserRow {
     readonly team: { readonly id: string; readonly name: string }
   }>
   readonly createdAt: string
+  readonly updatedAt: string
 }
 
 export interface AdminTeamRow {
@@ -56,6 +57,7 @@ export interface AdminTeamRow {
     readonly createdAt: string
   }>
   readonly createdAt: string
+  readonly updatedAt: string
 }
 
 export interface PermissionDefinition {

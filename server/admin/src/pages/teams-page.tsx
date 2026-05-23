@@ -140,6 +140,7 @@ export function TeamsPage() {
             <TableHead>所有者</TableHead>
             <TableHead>成员</TableHead>
             <TableHead>创建时间</TableHead>
+            <TableHead>更新时间</TableHead>
             <TableActionHead>操作</TableActionHead>
           </TableRow>
         </TableHeader>
@@ -162,6 +163,7 @@ export function TeamsPage() {
                 </div>
               </TableCell>
               <TableCell>{formatDate(team.createdAt)}</TableCell>
+              <TableCell>{formatDate(team.updatedAt)}</TableCell>
               <TableActionCell>
                 <Button size="sm" variant="outline" onClick={() => setEditingTeam(team)}>
                   <ShieldCheck data-icon="inline-start" />

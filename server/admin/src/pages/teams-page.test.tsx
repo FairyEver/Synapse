@@ -32,6 +32,7 @@ describe("TeamsPage", () => {
             createdByUser: { email: "owner@example.com" },
             memberships: [],
             createdAt: "2026-05-20T00:00:00.000Z",
+            updatedAt: "2026-05-22T00:00:00.000Z",
           },
         ],
         total: 21,
@@ -46,6 +47,7 @@ describe("TeamsPage", () => {
             createdByUser: { email: "owner@example.com" },
             memberships: [],
             createdAt: "2026-05-21T00:00:00.000Z",
+            updatedAt: "2026-05-22T00:00:00.000Z",
           },
         ],
         total: 21,
@@ -60,6 +62,7 @@ describe("TeamsPage", () => {
       expect(result.container.textContent).toContain("一组")
     })
     expect(result.container.textContent).toContain("所有者")
+    expect(result.container.textContent).toContain("更新时间")
     Array.from(result.container.querySelectorAll("button"))
       .find((button) => button.textContent === "下一页")
       ?.click()
@@ -90,6 +93,7 @@ describe("TeamsPage", () => {
             },
           ],
           createdAt: "2026-05-20T00:00:00.000Z",
+          updatedAt: "2026-05-22T00:00:00.000Z",
         },
       ],
       total: 1,
@@ -118,6 +122,7 @@ describe("TeamsPage", () => {
           createdByUser: { email: "owner@example.com" },
           memberships: [],
           createdAt: "2026-05-20T00:00:00.000Z",
+          updatedAt: "2026-05-22T00:00:00.000Z",
         },
       ],
       total: 1,

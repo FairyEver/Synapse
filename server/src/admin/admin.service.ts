@@ -17,6 +17,7 @@ const adminUserSelect = {
     },
   },
   createdAt: true,
+  updatedAt: true,
 } as const
 
 const adminTeamSelect = {
@@ -32,6 +33,7 @@ const adminTeamSelect = {
     orderBy: { createdAt: "asc" },
   },
   createdAt: true,
+  updatedAt: true,
 } as const
 
 const adminTeamAccessRoleSelect = {

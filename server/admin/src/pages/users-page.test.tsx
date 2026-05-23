@@ -29,6 +29,7 @@ describe("UsersPage", () => {
           status: "active",
           memberships: [],
           createdAt: "2026-05-20T00:00:00.000Z",
+          updatedAt: "2026-05-22T00:00:00.000Z",
         },
       ],
       total: 1,
@@ -72,6 +73,7 @@ describe("UsersPage", () => {
             },
           ],
           createdAt: "2026-05-20T00:00:00.000Z",
+          updatedAt: "2026-05-22T00:00:00.000Z",
         },
       ],
       total: 1,
@@ -86,6 +88,8 @@ describe("UsersPage", () => {
       expect(result.container.textContent).toContain("member@example.com")
       expect(result.container.textContent).toContain("研发组 / 所有者")
       expect(result.container.textContent).toContain("测试组 / 成员")
+      expect(result.container.textContent).toContain("更新时间")
+      expect(result.container.textContent).toContain("2026年5月22日")
     })
   })
 
@@ -96,6 +100,7 @@ describe("UsersPage", () => {
       status: "disabled",
       memberships: [],
       createdAt: "2026-05-20T00:00:00.000Z",
+      updatedAt: "2026-05-22T00:00:00.000Z",
     }
     let resolveUpdate: (value: AdminUserRow | PromiseLike<AdminUserRow>) => void = () => undefined
     vi.mocked(adminApi.listUsers).mockResolvedValue({
@@ -106,6 +111,7 @@ describe("UsersPage", () => {
           status: "active",
           memberships: [],
           createdAt: "2026-05-20T00:00:00.000Z",
+          updatedAt: "2026-05-22T00:00:00.000Z",
         },
       ],
       total: 1,
@@ -149,6 +155,7 @@ describe("UsersPage", () => {
             },
           ],
           createdAt: "2026-05-20T00:00:00.000Z",
+          updatedAt: "2026-05-22T00:00:00.000Z",
         },
       ],
       total: 1,
@@ -181,6 +188,7 @@ describe("UsersPage", () => {
             status: "active",
             memberships: [],
             createdAt: "2026-05-20T00:00:00.000Z",
+            updatedAt: "2026-05-22T00:00:00.000Z",
           },
         ],
         total: 21,
@@ -195,6 +203,7 @@ describe("UsersPage", () => {
             status: "active",
             memberships: [],
             createdAt: "2026-05-21T00:00:00.000Z",
+            updatedAt: "2026-05-22T00:00:00.000Z",
           },
         ],
         total: 21,

@@ -114,6 +114,7 @@ describe("AdminService", () => {
           },
         },
         createdAt: true,
+        updatedAt: true,
       }),
     }))
     expect(prisma.user.findMany.mock.calls[0]?.[0].select).not.toHaveProperty("passwordHash")
@@ -139,6 +140,7 @@ describe("AdminService", () => {
           },
         },
         createdAt: true,
+        updatedAt: true,
       }),
     }))
     expect(prisma.user.update.mock.calls[0]?.[0].select).not.toHaveProperty("passwordHash")

@@ -72,6 +72,7 @@ export function UsersPage() {
               <TableHead>状态</TableHead>
               <TableHead>团队</TableHead>
               <TableHead>创建时间</TableHead>
+              <TableHead>更新时间</TableHead>
               <TableActionHead>操作</TableActionHead>
             </TableRow>
           </TableHeader>
@@ -98,6 +99,7 @@ export function UsersPage() {
                   )}
                 </TableCell>
                 <TableCell>{formatDate(user.createdAt)}</TableCell>
+                <TableCell>{formatDate(user.updatedAt)}</TableCell>
                 <TableActionCell>
                   <Button
                     variant="outline"
