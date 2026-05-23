@@ -2,24 +2,66 @@
 
 本仓库内的所有任务都先遵循本文件。
 
-## 模块设计索引
+## 顶层硬性要求
 
-有些模块带有刻意设计的产品边界，局部看似合理的修改很容易破坏这些边界。修改下列模块前，先阅读对应设计说明，并把其中的 "Hard Rules" 视为强约束。
+本节是本仓库的长期硬性要求摘要，只记录不应被长设计文档冲淡的边界。除非用户在当前对话中明确覆盖，否则所有 agent 必须优先遵守。
 
-| 模块 | 修改前必读 | 适用范围 |
-| --- | --- | --- |
-| Knowledge Base | `docs/agent-guides/knowledge-base.md` | `desktop/electron/services/knowledge-base/`, `desktop/resources/knowledge-base/`, `desktop/src/modules/knowledge-base/`, 知识库项目模板 |
-| Agent Runtime | `docs/superpowers/specs/2026-05-06-agent-session-architecture-design.md`, `docs/superpowers/specs/2026-05-21-agent-slash-menu-design.md` | `desktop/electron/services/agent-runtime/`, Agent 对话路由、命令、会话 |
-| Workflow | `docs/superpowers/specs/2026-05-16-workflow-mcp-design.md`, `docs/superpowers/specs/2026-05-16-workflow-node-types-design.md`, `docs/superpowers/specs/2026-05-16-workflow-loop-node-design.md` | `desktop/src/modules/workflow/`, workflow MCP, workflow 运行时定义 |
-| Scheduler | `docs/scheduler/path-and-env.md`, `docs/superpowers/specs/2026-05-16-task-scheduler-router-redesign.md` | Scheduler 任务、cron/interval 行为、任务执行环境 |
-| Rules / Skills / Content | `docs/superpowers/specs/2026-04-28-rule-skill-install-status-design.md`, `docs/superpowers/specs/2026-05-10-editor-scan-publish-to-repo-design.md` | 内容仓库、编辑器安装状态、本地编辑器扫描/导入/复制 |
+### 优先级与冲突处理
+
+- 当前对话里的用户明确要求优先级最高。
+- 本节优先于下方详细说明和模块设计文档。
+- 模块设计文档中的 `Hard Rules`、`Non-Goals`、明确的“禁止 / 不允许 / 必须 / 不支持 / 不新增”语句都是强约束。
+- 如果本节、模块设计文档、当前代码实现或用户需求之间冲突，不要静默选择；先指出冲突并请求确认。
+- 如果本次任务改变了长期设计基线，必须同步更新对应文档，避免后续 agent 继续读取旧规则。
+
+### UI 与文案
+
+- UI 修改必须优先使用当前 shadcn/Radix 基线、`desktop/components.json`、`desktop/src/styles/globals.css`、现有 `desktop/src/components/ui/` 组件和当前模块已有实现。
+- 禁止自定义颜色、hex/rgb/hsl 字面色、Tailwind 任意颜色值、装饰性渐变、glow、emoji heading、卡片套卡片和营销式内部工具界面。
+- 禁止普通场景下的内联 `style={{...}}`；动态运行时值除外。
+- UI 文案只保留必要标题、label、操作、空/错/加载状态；不要写功能介绍、实现解释、重复状态或 AI 自称。
+
+### 工程边界
+
+- 做外科手术式修改，只改任务要求范围内的内容。
+- 新增代码前先查现有模块、组件、hooks、services、utils 和类型。
+- 不新增依赖，除非用户明确要求或设计文档明确批准。
+- 不做未确认的破坏性操作，不静默覆盖用户数据。
+- 生产代码禁止用 `console.log` 当日志；错误必须显式处理、结构化记录或带上下文向上抛出。
+
+### 模块硬边界摘要
+
+- Knowledge Base 用户目录必须保持 Obsidian 兼容 vault 形态，只放 Markdown 结构和 Synapse metadata；不要写入 runnable Agent skill/rule/command/hook、完整 `CLAUDE.md`，也不要把 vault 变成 Claude Code、Codex 或其它 Agent Skills 项目。
+- Knowledge Base 的运行提示、ingest/query/save/lint 行为属于 Synapse 内部资源和项目贡献；Synapse 只能更新 `.raw/.manifest.json`，不得改写 `.raw/` 下其它源文件；AI 维护内容放在 `wiki/`。
+- Agent 会话创建只能基于已配置项目；新会话必须绑定 `agentType`；运行时状态按 conversation 隔离，不要让同项目多会话共享队列、busy 状态或 live session。
+- Agent composer slash menu 只负责插入 `/<name>`，不得立即执行或发送；不得改成通用命令面板；不得新增 renderer 侧目录扫描器或改变后端 command/skill 解析语义。
+- Workflow 必须保持外层 DAG 约束；MCP/agent 写操作必须走 get -> mutate -> validate -> save 的受控路径，校验失败不得保存；不得删除 end 节点。
+- Workflow loop 的退出条件必须由子图内真实节点和 Loop Output 的 continue/break 出口表达，不要退回到隐藏在配置面板里的表达式字符串。
+- Scheduler 子进程环境必须经过 allowlist；`PATH` 默认按用户配置和 login shell 环境 merge；运行诊断必须保留，失败时用于 UI 排查。
+- Rule / Skill / Content 写入编辑器目录、覆盖、替换、备份失败等敏感路径必须经过确认、权限检查和审计；备份失败必须阻断替换；安装和复制文案不能混用。
+- 扫描详情的“发布到仓库”不得静默写库；覆盖路径只能预填本地版本并进入内容详情编辑态，由用户保存后才落库。
+
+## 模块设计文档发现规则
+
+不要在本文件中维护具体设计文档清单。修改带产品边界的模块前，先在 `docs/` 下自动查找相关设计文档作为参考，重点搜索 `docs/agent-guides/`、`docs/superpowers/specs/`、`docs/superpowers/plans/` 和模块专属文档目录。
+
+查找方式：
+
+- 用模块名、目录名和关键能力名搜索，例如 `knowledge-base`、`agent-runtime`、`slash menu`、`workflow`、`scheduler`、`rule skill content`、`editor scan`。
+- 同时用即将修改的路径片段搜索，例如 `desktop/src/modules/workflow`、`desktop/electron/services/agent-runtime`。
+- 优先阅读标题、路径或正文与当前改动直接相关的设计文档；不要为了“保险”批量读取无关长文档。
+- 读取后把其中的 `Hard Rules`、`Non-Goals`、明确的“禁止 / 不允许 / 必须 / 不支持 / 不新增”语句视为强约束。
+- 如果搜索不到可信的相关设计文档，继续遵循本文件和现有代码边界；不要编造文档路径或假设不存在的设计说明。
 
 如果任务涉及 UI 行为、样式、视觉设计、排版、颜色、间距、组件外观、主题，或任何 renderer 侧呈现，必须阅读并遵循：
 
 - `.claude/rules/design.md`
 - `.claude/rules/ui-rules.md`
+- `desktop/components.json`
+- `desktop/src/styles/globals.css`
+- 当前模块已有 UI 实现
 
-任何视觉决策都以 `.claude/rules/design.md` 作为本仓库当前 shadcn 视觉基线的权威依据。
+`.claude/rules/design.md` 是默认视觉基线，但不是在所有时间点都自动高于代码现状。若设计文档与当前 shadcn preset、全局 tokens、已有组件实现或用户明确需求冲突，不要静默套用旧文档；必须指出冲突并请求确认。
 
 ## 技术栈
 
@@ -47,16 +89,16 @@
 
 ## 当前仓库结构
 
-- 本仓库是 pnpm monorepo。工作区根目录包含共享文档（`AGENTS.md`, `CLAUDE.md`, `README.md`）、项目级 Claude 规则 `.claude/rules/`、`.github/` CI，以及 monorepo 的 `package.json` / `pnpm-workspace.yaml`。源代码位于 `desktop/` 子包，并以 `@synapse/desktop` 发布。
-- 根目录公开开发入口是 `pnpm dev:website`、`pnpm dev:server` 和 `pnpm dev:desktop`；根目录刻意没有 `pnpm dev` 命令。使用 `pnpm quit` 停止本地开发进程和 server compose 服务。其他包级脚本直接使用 `pnpm --filter @synapse/<package> run <script>` 运行。
+- 本仓库是 pnpm monorepo。工作区根目录包含共享文档（`AGENTS.md`, `CLAUDE.md`, `README.md`）、项目级 Claude 规则 `.claude/rules/`、`.github/` CI，以及 monorepo 的 `package.json` / `pnpm-workspace.yaml`。工作区包包括 `@synapse/desktop`、`@synapse/website`、`@synapse/server`、`@synapse/auto` 和 `@synapse/auto-web`；桌面应用源码位于 `desktop/` 子包。
+- 根目录公开开发入口是 `pnpm dev:website`、`pnpm dev:server` 和 `pnpm dev:desktop`；根目录刻意没有 `pnpm dev` 命令。使用 `pnpm quit` 停止本地开发进程和 server compose 服务。其他包级脚本直接使用对应包名运行，例如 `pnpm --filter @synapse/desktop run <script>`。
 - 特权 Electron 代码位于 `desktop/electron/`。
 - Renderer 代码位于 `desktop/src/`。
 - 共享 shell 状态与编排位于 `desktop/src/app-shell/`。
 - 共享 UI 组件位于 `desktop/src/components/` 和 `desktop/src/components/ui/`。
 - 共享纯工具函数位于 `desktop/src/lib/`。
 - 共享 renderer 全局类型位于 `desktop/src/types/`。
-- 新业务模块应放在 `desktop/src/modules/`，不要放在 `desktop/src/features/`。
-- 计划中的一等模块包括 `rules`、`skills` 和 `settings`；除非任务创建它们，不要假设这些目录已经存在。
+- Renderer 新业务模块应放在 `desktop/src/modules/`，不要放在 `desktop/src/features/`。
+- 当前已有 renderer 业务模块以 `desktop/src/modules/*` 为准；`rules`、`skills` 和 `settings` 已经存在。新增模块或目录前先查现有结构。
 
 ## 核心规则
 
@@ -71,7 +113,7 @@
 
 ## Phase 0 架构硬约束（SPEC §1）
 
-每个 PR 都必须满足这些约束。`@synapse/desktop` 的 `check:hard-constraints` 脚本会强制检查；CI 会在 push 时运行。
+每个 PR 都必须满足这些约束。`@synapse/desktop` 的 `check:hard-constraints` 脚本会强制检查；CI 会在推送到 `main` 或面向 `main` 的 PR 中运行。
 
 1. **新代码禁止全局单例**：不要在 `desktop/electron/runtime/` 或 `desktop/electron/bootstrap/` 中写 `export default new XxxService()`。通过 `ServiceRegistry` 组装服务（见 `desktop/electron/runtime/service-registry`）。
 2. **禁止裸用 `ipcMain.handle/on`**：只有 `desktop/electron/runtime/ipc/` 可以调用它们。其他代码通过 `IpcRegistry.register(IpcModule, ctx)` 注册。
