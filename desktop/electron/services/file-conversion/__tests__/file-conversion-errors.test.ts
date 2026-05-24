@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 
-import { DocxExtractor, FileConversionService, PdfExtractor, PptxExtractor } from "../index"
+import { DocxExtractor, FileConversionService, PdfExtractor, PptxExtractor, XlsxExtractor } from "../index"
 
 const roots: string[] = []
 
@@ -74,6 +74,24 @@ describe("file conversion parser errors", () => {
     })
   })
 
+  it("reports malformed XLSX parser failures as parse_failed", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "broken.xlsx")
+    await writeFile(filePath, "xlsx")
+    const service = new FileConversionService({
+      extractors: [new XlsxExtractor({
+        parseWorkbook: () => {
+          throw new Error("Invalid workbook structure")
+        },
+      })],
+    })
+
+    await expect(service.convert({ filePath })).rejects.toMatchObject({
+      code: "parse_failed",
+      message: expect.stringContaining("Invalid workbook structure"),
+    })
+  })
+
   it.each([
     ["docx", "password is required", new DocxExtractor({
       convertToHtml: async () => {
@@ -88,6 +106,11 @@ describe("file conversion parser errors", () => {
     ["pptx", "Failed to decrypt package", new PptxExtractor({
       parseOffice: async () => {
         throw new Error("Failed to decrypt package")
+      },
+    })],
+    ["xlsx", "Workbook is password protected", new XlsxExtractor({
+      parseWorkbook: () => {
+        throw new Error("Workbook is password protected")
       },
     })],
   ] as const)("classifies %s parser password/encryption failures as encrypted", async (extension, message, extractor) => {
