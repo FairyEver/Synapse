@@ -92,6 +92,91 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("passes programmatic SDK agents to Claude Agent SDK", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, {
+      agents: {
+        "synapse-kb-ingest-worker": {
+          description: "Processes assigned Knowledge Base sources.",
+          prompt: "Only process assigned sources.",
+          tools: ["Read", "Write"],
+        },
+      },
+    })
+
+    expect(getOptions()).toMatchObject({
+      agents: {
+        "synapse-kb-ingest-worker": {
+          description: "Processes assigned Knowledge Base sources.",
+          prompt: "Only process assigned sources.",
+          tools: ["Read", "Write"],
+        },
+      },
+    })
+  })
+
+  it("denies restricted subagent writes outside allowed paths before prompting", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory, {
+      subagentToolPolicies: {
+        "synapse-kb-ingest-worker": {
+          allowedWriteRoots: ["wiki/sources"],
+          deniedWritePaths: [".raw/.manifest.json", ".vault-meta", "wiki/index.md"],
+        },
+      },
+    })
+    const hooks = getOptions().hooks as {
+      SubagentStart: [{ hooks: [(
+        input: Record<string, unknown>,
+        toolUseID: string | undefined,
+        context: { signal: AbortSignal },
+      ) => Promise<unknown>] }]
+    }
+    await hooks.SubagentStart[0].hooks[0]({
+      hook_event_name: "SubagentStart",
+      agent_id: "agent-1",
+      agent_type: "synapse-kb-ingest-worker",
+    }, undefined, { signal: new AbortController().signal })
+
+    const result = await canUseTool(getOptions())("Write", {
+      file_path: "wiki/index.md",
+      content: "# Index\n",
+    }, {
+      signal: new AbortController().signal,
+      toolUseID: "tool-1",
+      agentID: "agent-1",
+    } as never)
+
+    expect(result).toEqual({
+      behavior: "deny",
+      message: "Subagent synapse-kb-ingest-worker may write only inside: wiki/sources.",
+    })
+    await expect(resolveSoon(session.nextEvent())).resolves.toBe("timeout")
+  })
+
+  it("denies direct session writes through an injected tool policy before prompting", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory, {
+      toolPolicy: (toolName, input) => {
+        if (toolName !== "Write" || input.file_path === "wiki/sources/a.md") return undefined
+        return { behavior: "deny", message: "Only the assigned source page may be written." }
+      },
+    })
+
+    const result = await canUseTool(getOptions())("Write", {
+      file_path: "wiki/index.md",
+      content: "# Index\n",
+    }, {
+      signal: new AbortController().signal,
+    })
+
+    expect(result).toEqual({
+      behavior: "deny",
+      message: "Only the assigned source page may be written.",
+    })
+    await expect(resolveSoon(session.nextEvent())).resolves.toBe("timeout")
+  })
+
   it("enables the SDK bypass permission confirmation for bypass mode", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, { mode: "bypassPermissions" })

@@ -20,7 +20,6 @@ This gives Synapse the DragonScale Mechanism 2 address semantics while keeping t
 Phase 1 already exists on `main`:
 
 - `desktop/electron/services/knowledge-base/dragonscale/address-service.ts`
-- `desktop/electron/services/knowledge-base/dragonscale/script-runner.ts`
 - vendored upstream scripts under `desktop/resources/knowledge-base/dragonscale/upstream/`
 - tests proving user vault templates do not receive runnable scripts
 

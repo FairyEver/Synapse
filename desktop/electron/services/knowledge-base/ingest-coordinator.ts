@@ -1,6 +1,10 @@
+import { readFile } from "node:fs/promises"
+import path from "node:path"
+
 import type { RegisteredPromptCommandOutput } from "../agent-runtime/command-router"
 import { KNOWLEDGE_BASE_INGEST_REPORT_SCHEMA, parseKnowledgeBaseIngestReport } from "./ingest-report"
 import { KnowledgeBaseIngestTurnStore } from "./ingest-turn-store"
+import type { KnowledgeBaseIngestTurnState } from "./ingest-turn-store"
 import { KnowledgeBaseManifestFinalizer } from "./manifest-finalizer"
 import type { KnowledgeBaseManifestFinalizer as ManifestFinalizer } from "./manifest-finalizer"
 import { scanKnowledgeBaseSources } from "./source-scan"
@@ -69,7 +73,7 @@ export class KnowledgeBaseIngestCoordinator {
       }
     }
 
-    this.store.set(input.turnId, {
+    await this.store.set(input.turnId, {
       projectPath: input.projectPath,
       generatedAt: new Date().toISOString(),
       force: input.force,
@@ -85,21 +89,29 @@ export class KnowledgeBaseIngestCoordinator {
         "",
         wikiIngestAppendixCopy({
           projectPath: input.projectPath,
+          force: input.force,
           changedSources,
           skippedSources: scan.skippedSources,
         }),
         "",
+        await imageIntakeAppendixCopy(input.projectPath, changedSources.map((source) => source.relativePath)),
+        "",
         reportContractCopy(),
-      ].join("\n"),
+      ].filter(Boolean).join("\n"),
     }
   }
 
-  markTurnNoFinalize(turnId: string): void {
-    this.store.setNoFinalize(turnId, "direct-result")
+  async markTurnNoFinalize(turnId: string): Promise<void> {
+    await this.store.setNoFinalize(turnId, "direct-result")
+  }
+
+  async getPreflightState(turnId: string): Promise<KnowledgeBaseIngestTurnState | null> {
+    const record = await this.store.get(turnId)
+    return record?.kind === "preflight" ? record.state : null
   }
 
   async finalizeTurn(input: KnowledgeBaseIngestCoordinatorFinalizeInput): Promise<KnowledgeBaseIngestCoordinatorFinalizeResult> {
-    const record = this.store.consume(input.turnId)
+    const record = await this.store.consume(input.turnId)
     if (!record) {
       const result = finalizeSkipped("preflight-missing", "Knowledge Base ingest preflight was missing.")
       this.logger?.warn("Knowledge Base ingest report was not finalized.", {
@@ -117,10 +129,20 @@ export class KnowledgeBaseIngestCoordinator {
     const preflight = record.state
     const parsed = parseKnowledgeBaseIngestReport(input.assistantText)
     if (parsed.status !== "valid") {
+      const warningCodes = parsed.warnings.map((warning) => warning.code)
+      await this.store.setPendingRecovery({
+        projectPath: input.projectPath,
+        conversationId: input.conversationId,
+        turnId: input.turnId,
+        failedAt: new Date().toISOString(),
+        warningCodes,
+        assistantText: input.assistantText,
+        preflight,
+      })
       const result: KnowledgeBaseIngestCoordinatorFinalizeResult = {
         status: "skipped",
         warnings: parsed.warnings,
-        message: finalizationSkippedMessage(parsed.warnings.map((warning) => warning.code)),
+        message: finalizationSkippedMessage(warningCodes),
       }
       this.logger?.warn("Knowledge Base ingest report was not finalized.", {
         boundary: "knowledge-base.ingest-finalizer",
@@ -197,5 +219,32 @@ export function reportContractCopy(): string {
       skipped_sources: [{ source: ".raw/unchanged.md", reason: "unchanged" }],
     }, null, 2),
     "```",
+  ].join("\n")
+}
+
+async function imageIntakeAppendixCopy(projectPath: string, sourcePaths: readonly string[]): Promise<string> {
+  const imageSources = sourcePaths.filter((sourcePath) => sourcePath.startsWith(".raw/images/"))
+  if (imageSources.length === 0) return ""
+
+  const lines: string[] = []
+  for (const sourcePath of imageSources) {
+    const content = await readFile(path.join(projectPath, sourcePath), "utf8")
+    const attachment = /^attachment:\s*(.+?)\s*$/m.exec(content)?.[1]?.trim()
+    lines.push(`- ${sourcePath}${attachment ? ` -> ${attachment}` : ""}`)
+  }
+
+  return [
+    "## Image Intake Sources",
+    "",
+    "These `.raw/images/...md` files are immutable intake records for image attachments.",
+    "For each image intake source:",
+    "- Read the intake Markdown.",
+    "- Read the referenced attachment image with the Agent image-reading capability.",
+    "- Extract visible text, diagram structure, key entities, concepts, and data.",
+    "- Write the durable description and source summary under `wiki/sources/`.",
+    "- Create or update related `wiki/concepts/`, `wiki/entities/`, and `wiki/questions/` pages when useful.",
+    "- Do not edit `.raw/images/*.md`.",
+    "",
+    ...lines,
   ].join("\n")
 }

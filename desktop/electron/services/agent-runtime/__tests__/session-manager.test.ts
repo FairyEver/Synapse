@@ -1,6 +1,7 @@
 import type { ConversationEntryV1 } from "../../../runtime/data-repo"
 import type { StructuredLogger } from "../../../runtime/service-registry"
 import type { ProviderService } from "../../provider"
+import { ClaudeSDKSession } from "../claude-sdk-session"
 import type { AgentSessionRepository } from "../session-repository"
 import { SessionManager, type CreateAgentLiveSessionInput } from "../session-manager"
 import type { RuntimeSessionState } from "../session-lifecycle"
@@ -11,6 +12,20 @@ import type {
   AgentPermissionDecision,
 } from "../types"
 import { describe, expect, it, vi } from "vitest"
+
+vi.mock("../claude-sdk-session", () => ({
+  ClaudeSDKSession: vi.fn(function MockClaudeSDKSession() {
+    return {
+      agentType: "claude-sdk",
+      close: vi.fn(),
+      send: vi.fn(),
+      respondPermission: vi.fn(),
+      nextEvent: vi.fn(),
+      currentSessionId: vi.fn(() => "sdk-1"),
+      alive: vi.fn(() => true),
+    }
+  }),
+}))
 
 describe("SessionManager", () => {
   it("recreates an alive SDK session when the requested mode changes", async () => {
@@ -176,6 +191,83 @@ describe("SessionManager", () => {
         type: "local",
         path: "/Applications/Synapse/resources/knowledge-base/claude-plugin",
       }],
+    }))
+  })
+
+  it("passes project SDK agents into new live sessions", async () => {
+    const states = new Map<string, RuntimeSessionState>()
+    const createSession = vi.fn(() => new FakeLiveSession())
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      createSession,
+      sdkAgents: () => ({
+        "synapse-kb-ingest-worker": {
+          description: "Processes assigned Knowledge Base sources.",
+          prompt: "Only process assigned sources.",
+          tools: ["Read", "Write"],
+        },
+      }),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
+      agents: {
+        "synapse-kb-ingest-worker": expect.objectContaining({
+          description: "Processes assigned Knowledge Base sources.",
+        }),
+      },
+    }))
+  })
+
+  it("passes project SDK agents into the default Claude SDK live session", async () => {
+    vi.mocked(ClaudeSDKSession).mockClear()
+    const states = new Map<string, RuntimeSessionState>()
+    const manager = new SessionManager({
+      projectId: "project-1",
+      workDir: "/tmp/project",
+      repository: {} as AgentSessionRepository,
+      providerService: {
+        buildEnv: vi.fn(async () => ({ ANTHROPIC_API_KEY: "sk-test" })),
+        getActiveProvider: vi.fn(),
+      } as unknown as ProviderService,
+      states,
+      pendingPermissions: new Map(),
+      sdkAgents: () => ({
+        "synapse-kb-ingest-worker": {
+          description: "Processes assigned Knowledge Base sources.",
+          prompt: "Only process assigned sources.",
+          tools: ["Read", "Write"],
+        },
+      }),
+    })
+    const state = manager.stateForConversation("conversation-1", baseMessage("default"))
+
+    await manager.getOrCreateSession({
+      state,
+      conversation: baseConversation(),
+      message: baseMessage("default"),
+    })
+
+    expect(ClaudeSDKSession).toHaveBeenCalledWith(expect.objectContaining({
+      agents: {
+        "synapse-kb-ingest-worker": expect.objectContaining({
+          description: "Processes assigned Knowledge Base sources.",
+        }),
+      },
     }))
   })
 

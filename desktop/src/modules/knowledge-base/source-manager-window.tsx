@@ -268,6 +268,7 @@ function KnowledgeBaseSourceManagerWindow() {
 
       <aside aria-label="添加资料" className="flex h-screen w-80 shrink-0 flex-col border-l border-border bg-muted/30 p-4">
         <div
+          aria-label="拖拽放入资料"
           className={cn(
             "flex min-h-44 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-background p-5 text-center text-sm text-muted-foreground",
             isDragging && "bg-accent text-accent-foreground",
@@ -283,7 +284,7 @@ function KnowledgeBaseSourceManagerWindow() {
           <div className="flex flex-col gap-1">
             <div className="font-medium text-foreground">放入资料</div>
             <div className="text-xs">拖拽文件到这里</div>
-            <div className="text-xs">支持 Markdown、Word、Excel、PDF、PPT、网页 URL</div>
+            <div className="text-xs">支持 Markdown、Word、Excel、PDF、PPT、图片、网页 URL</div>
           </div>
         </div>
 
@@ -317,7 +318,6 @@ function KnowledgeBaseSourceManagerWindow() {
           <div className="space-y-1">
             <div>放入后，在知识库对话里说“汲取知识”。</div>
             <div>旧版 .doc/.ppt 需要本地转换工具。</div>
-            <div>图片和扫描 PDF 暂不支持。</div>
           </div>
           目标目录：raw/
         </div>

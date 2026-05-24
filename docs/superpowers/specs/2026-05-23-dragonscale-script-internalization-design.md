@@ -21,7 +21,7 @@ Relevant upstream files:
 - `skills/autoresearch/SKILL.md`
 - `skills/wiki-fold/SKILL.md`
 
-Synapse may vendor these scripts internally for compatibility tests and temporary execution. Synapse must not copy them into a user vault.
+Synapse may vendor these scripts internally as compatibility oracles. Synapse must not copy them into a user vault or expose a production runner for them.
 
 ## Hard Rules
 
@@ -32,8 +32,8 @@ Synapse may vendor these scripts internally for compatibility tests and temporar
   - `.vault-meta/tiling-thresholds.json`
   - `.vault-meta/tiling-cache.json`
   - `.raw/.manifest.json`
-- Production behavior should eventually run through Synapse services/tools, not shelling out to vendored scripts.
-- During migration, vendored scripts may be used as an oracle or short-term runner only from Synapse-controlled locations.
+- Production behavior must run through Synapse services/tools, not shelling out to vendored scripts.
+- Vendored scripts may be used only as compatibility oracles, fixture inputs, or test references from Synapse-controlled locations.
 - Ordinary Agent conversations, Scheduler tasks, Workflow runs, and non-knowledge-base projects must not load DragonScale runtime behavior.
 
 ## Target Architecture
@@ -59,7 +59,6 @@ Synapse internal resources/
 
 Synapse services/
   desktop/electron/services/knowledge-base/dragonscale/
-    script-runner.ts
     address-service.ts
     boundary-service.ts
     tiling-service.ts
@@ -81,21 +80,7 @@ Purpose:
 
 This phase does not change production ingest behavior by itself.
 
-### Phase 2: Add A Guarded Script Runner
-
-Implement `DragonScaleScriptRunner` to execute vendored scripts only from Synapse resources.
-
-Runner responsibilities:
-
-- Accept an explicit `vaultPath`.
-- Reject paths outside the target vault for script-controlled writes.
-- Pass `SYNAPSE_KB_VAULT_ROOT=<vaultPath>` to patched scripts.
-- Capture `stdout`, `stderr`, and exit code.
-- Go through existing permission/audit infrastructure before running shell commands.
-
-This is a temporary bridge for behavior verification and for the most complex script, `tiling-check.py`, if service parity is not ready.
-
-### Phase 3: Internalize Address Allocation
+### Phase 2: Internalize Address Allocation
 
 Implement `DragonScaleAddressService` in TypeScript.
 
@@ -115,7 +100,7 @@ Required behavior:
 
 Synapse tests should compare this service against the upstream script for representative fixtures.
 
-### Phase 4: Internalize Boundary Scoring
+### Phase 3: Internalize Boundary Scoring
 
 Implement `DragonScaleBoundaryService` in TypeScript.
 
@@ -130,7 +115,7 @@ Required behavior:
 - Use the same recency half-life as upstream unless intentionally changed in a documented spec update.
 - Emit structured results usable by future `autoresearch`.
 
-### Phase 5: Internalize Semantic Tiling
+### Phase 4: Internalize Semantic Tiling
 
 Implement `DragonScaleTilingService` after address and boundary are stable.
 
@@ -158,14 +143,14 @@ Allowed uses:
 
 - Compatibility tests.
 - Fixture generation.
-- Short-term gated runner while a service is not implemented.
 
 Disallowed uses:
 
 - Copying scripts into user vaults.
 - Loading scripts as Agent skills or hooks.
 - Running scripts for ordinary projects.
-- Running scripts without permission/audit checks.
+- Exposing a production script runner from knowledge-base services.
+- Running scripts from production knowledge-base flows.
 
 ## Data Compatibility
 

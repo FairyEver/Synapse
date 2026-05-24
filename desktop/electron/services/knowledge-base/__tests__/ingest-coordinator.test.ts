@@ -46,7 +46,7 @@ describe("KnowledgeBaseIngestCoordinator", () => {
       readPrompt: async () => "INGEST PROMPT",
       logger: { warn },
     })
-    coordinator.store.set("turn-1", {
+    await coordinator.store.set("turn-1", {
       projectPath: "/tmp/kb",
       generatedAt: "2026-05-24T00:00:00.000Z",
       force: false,
@@ -68,8 +68,27 @@ describe("KnowledgeBaseIngestCoordinator", () => {
     }))
   })
 
+  it("keeps a recoverable pending ingest when the final report is missing", async () => {
+    const coordinator = await coordinatorWithPreflight("turn-1")
+
+    await coordinator.finalizeTurn({
+      projectPath: "/tmp/kb",
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      assistantText: "done without report",
+    })
+
+    expect(await coordinator.store.getPendingRecovery("turn-1")).toMatchObject({
+      projectPath: "/tmp/kb",
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      warningCodes: ["report-missing"],
+      assistantText: "done without report",
+    })
+  })
+
   it("formats duplicate report warnings with user-facing copy", async () => {
-    const coordinator = coordinatorWithPreflight("turn-1")
+    const coordinator = await coordinatorWithPreflight("turn-1")
     const block = "```synapse_kb_ingest_report\n{\"schema\":\"synapse.kb.ingest.report.v1\",\"processed_sources\":[]}\n```"
 
     const result = await coordinator.finalizeTurn({
@@ -83,7 +102,7 @@ describe("KnowledgeBaseIngestCoordinator", () => {
   })
 
   it("formats invalid report JSON warnings with user-facing copy", async () => {
-    const coordinator = coordinatorWithPreflight("turn-1")
+    const coordinator = await coordinatorWithPreflight("turn-1")
 
     const result = await coordinator.finalizeTurn({
       projectPath: "/tmp/kb",
@@ -96,7 +115,7 @@ describe("KnowledgeBaseIngestCoordinator", () => {
   })
 
   it("formats report schema warnings with user-facing copy", async () => {
-    const coordinator = coordinatorWithPreflight("turn-1")
+    const coordinator = await coordinatorWithPreflight("turn-1")
 
     const result = await coordinator.finalizeTurn({
       projectPath: "/tmp/kb",
@@ -109,11 +128,11 @@ describe("KnowledgeBaseIngestCoordinator", () => {
   })
 })
 
-function coordinatorWithPreflight(turnId: string): KnowledgeBaseIngestCoordinator {
+async function coordinatorWithPreflight(turnId: string): Promise<KnowledgeBaseIngestCoordinator> {
   const coordinator = new KnowledgeBaseIngestCoordinator({
     readPrompt: async () => "INGEST PROMPT",
   })
-  coordinator.store.set(turnId, {
+  await coordinator.store.set(turnId, {
     projectPath: "/tmp/kb",
     generatedAt: "2026-05-24T00:00:00.000Z",
     force: false,

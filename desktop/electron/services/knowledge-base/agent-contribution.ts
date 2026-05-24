@@ -1,19 +1,43 @@
+import { createHash } from "node:crypto"
 import { readFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { SynapseProjectConfig } from "../../../src/types/config"
 import type { RegisteredPromptCommandOutput } from "../agent-runtime/command-router"
-import type { AgentProjectContribution } from "../agent-runtime/project-contributions"
+import type {
+  AgentProjectContribution,
+  AgentSdkSubagentToolPolicies,
+} from "../agent-runtime/project-contributions"
 import type { AgentMessage } from "../agent-runtime/types"
 import { KnowledgeBaseIngestFinalizer } from "./ingest-finalizer"
 import { KnowledgeBaseIngestCoordinator } from "./ingest-coordinator"
-import { isKnowledgeBaseResearchWriteIntent, isKnowledgeBaseSourceIngestIntent } from "./ingest-intent"
+import { KnowledgeBaseHotCacheStateStore } from "./hot-cache-state"
+import type { KnowledgeBaseIngestTurnStore } from "./ingest-turn-store"
+import { readKnowledgeBaseManifest } from "./manifest"
+import type { KnowledgeBaseParallelIngestRunner } from "./parallel-ingest-runner"
+import { KnowledgeBaseResearchCoordinator } from "./research-coordinator"
+import {
+  KNOWLEDGE_BASE_INGEST_WORKER_AGENT_NAME,
+  knowledgeBaseIngestWorkerAgents,
+} from "./ingest-worker-agent"
+import {
+  isKnowledgeBaseForceIngestIntent,
+  isKnowledgeBaseResearchWriteIntent,
+  isKnowledgeBaseSourceIngestIntent,
+} from "./ingest-intent"
 import { buildKnowledgeBaseCommandOutput } from "./wiki-command-prompts"
 
 type CreateKnowledgeBaseAgentContributionInput = {
   readonly project: SynapseProjectConfig
   readonly ingestCoordinator?: KnowledgeBaseIngestCoordinator
+  readonly ingestTurnStore?: KnowledgeBaseIngestTurnStore
+  readonly hotCacheStateStore?: KnowledgeBaseHotCacheStateStore
+  readonly hotCacheStaleAfterMs?: number
+  readonly nowMs?: () => number
   readonly addressFinalizer?: Pick<KnowledgeBaseIngestFinalizer, "finalize">
+  readonly researchCoordinator?: Pick<KnowledgeBaseResearchCoordinator, "prepareTurn" | "finalizeTurn">
+  readonly parallelIngestRunner?: Pick<KnowledgeBaseParallelIngestRunner, "prepareMergePrompt">
+  readonly parallelIngestSourceThreshold?: number
   readonly logger?: { warn(message: string, metadata?: Record<string, unknown>): void }
 }
 
@@ -38,9 +62,18 @@ export async function createKnowledgeBaseAgentContribution(
   const hotCachePath = path.join(input.project.path, "wiki", "hot.md")
   const ingestCoordinator = input.ingestCoordinator ?? new KnowledgeBaseIngestCoordinator({
     readPrompt,
+    store: input.ingestTurnStore,
     logger: input.logger,
   })
+  const hotCacheStateStore = input.hotCacheStateStore ?? new KnowledgeBaseHotCacheStateStore()
+  const hotCacheStaleAfterMs = input.hotCacheStaleAfterMs ?? 4 * 60 * 60 * 1000
+  const nowMs = input.nowMs ?? (() => Date.now())
   const addressFinalizer = input.addressFinalizer ?? new KnowledgeBaseIngestFinalizer()
+  const researchCoordinator = input.researchCoordinator ?? new KnowledgeBaseResearchCoordinator({
+    readPrompt,
+    addressFinalizer,
+  })
+  const parallelIngestSourceThreshold = input.parallelIngestSourceThreshold ?? 4
 
   return {
     sdkPlugins(message) {
@@ -50,6 +83,28 @@ export async function createKnowledgeBaseAgentContribution(
           path: resolveKnowledgeBasePluginPath(),
         }]
         : []
+    },
+    sdkAgents(message) {
+      return isKnowledgeBaseAgentMessage(message) ? knowledgeBaseIngestWorkerAgents() : {}
+    },
+    sdkSubagentToolPolicies(message): AgentSdkSubagentToolPolicies {
+      if (!isKnowledgeBaseAgentMessage(message)) return {}
+      const policies: AgentSdkSubagentToolPolicies = {
+        [KNOWLEDGE_BASE_INGEST_WORKER_AGENT_NAME]: {
+          allowedWriteRoots: ["wiki/sources"],
+          deniedWritePaths: [
+            ".raw/.manifest.json",
+            ".vault-meta",
+            "wiki/index.md",
+            "wiki/hot.md",
+            "wiki/log.md",
+            "wiki/concepts",
+            "wiki/entities",
+            "wiki/questions",
+          ],
+        },
+      }
+      return policies
     },
     publishedCommands: KNOWLEDGE_BASE_PUBLISHED_COMMANDS.map((command) => ({
       ...command,
@@ -62,14 +117,26 @@ export async function createKnowledgeBaseAgentContribution(
         if (!isKnowledgeBaseAgentMessage(message)) {
           return { kind: "result", error: true, content: "知识库命令只在本地知识库对话中可用。" }
         }
-        return buildKnowledgeBaseCommandPrompt(input.project.path, args, context?.turnId ?? "wiki-command", ingestCoordinator)
+        return buildKnowledgeBaseCommandPrompt(input.project.path, args, context?.turnId ?? "wiki-command", ingestCoordinator, researchCoordinator)
       },
     }],
     async prepareMessage(message, context) {
       if (!isKnowledgeBaseAgentMessage(message)) return message
       let next = message
-      if (context.isNewLiveSession) {
-        const hotCache = await readOptional(hotCachePath)
+      const hotCache = await readOptional(hotCachePath)
+      const hotHash = hashHotCache(hotCache)
+      const shouldInjectHotCache = context.isNewLiveSession || await hotCacheStateStore.shouldInject({
+        conversationId: context.conversationId,
+        hotHash,
+        nowMs: nowMs(),
+        staleAfterMs: hotCacheStaleAfterMs,
+      })
+      if (shouldInjectHotCache) {
+        await hotCacheStateStore.markInjected({
+          conversationId: context.conversationId,
+          hotHash,
+          injectedAtMs: nowMs(),
+        })
         next = prependBootstrap(message, bootstrap, hotCache)
       }
       if (isKnowledgeBaseSourceIngestIntent(message.content) && !/^\/wiki\s+/i.test(message.content.trim())) {
@@ -77,12 +144,38 @@ export async function createKnowledgeBaseAgentContribution(
           projectPath: input.project.path,
           turnId: context.turnId,
           originalContent: message.content,
-          force: false,
+          force: isKnowledgeBaseForceIngestIntent(message.content),
         })
         if (typeof output !== "string" && output.kind === "result") {
-          ingestCoordinator.markTurnNoFinalize(context.turnId)
+          await ingestCoordinator.markTurnNoFinalize(context.turnId)
         }
-        return { ...next, content: typeof output === "string" ? output : output.content }
+        let content = typeof output === "string" ? output : output.content
+        if (typeof output !== "string"
+          && output.kind === "prompt"
+          && input.parallelIngestRunner) {
+          const preflight = await ingestCoordinator.getPreflightState(context.turnId)
+          if (preflight && preflight.changedSources.length >= parallelIngestSourceThreshold) {
+            const manifest = await readKnowledgeBaseManifest(input.project.path)
+            const parallel = await input.parallelIngestRunner.prepareMergePrompt({
+              projectId: message.projectId,
+              projectPath: input.project.path,
+              conversationId: context.conversationId,
+              turnId: context.turnId,
+              userId: message.userId,
+              preflight,
+              manifestSources: manifest.manifest.sources,
+            })
+            if (parallel.status === "merge-ready") {
+              content = parallel.prompt
+            } else {
+              await ingestCoordinator.markTurnNoFinalize(context.turnId)
+              content = parallel.message
+            }
+          }
+        }
+        return shouldInjectHotCache
+          ? prependBootstrap(message, bootstrap, hotCache, content)
+          : { ...next, content }
       }
       return next
     },
@@ -99,13 +192,18 @@ export async function createKnowledgeBaseAgentContribution(
         return eventsForKnowledgeBaseFinalizeMessage(finalizeResult?.message)
       }
       if (isKnowledgeBaseResearchWriteIntent(message.content)) {
-        const finalizeResult = await addressFinalizer.finalize(input.project.path)
-        return eventsForKnowledgeBaseFinalizeMessage(finalizeResult.skippedReason
-          ? "知识库研究后置写入未完成：manifest 无效。"
-          : undefined)
+        const finalizeResult = await researchCoordinator.finalizeTurn({
+          projectPath: input.project.path,
+          assistantText: result.resultText,
+        })
+        return eventsForKnowledgeBaseFinalizeMessage(finalizeResult.message)
       }
     },
   }
+}
+
+function hashHotCache(content: string): string {
+  return createHash("sha256").update(content).digest("hex")
 }
 
 async function isKnowledgeBaseProject(project: SynapseProjectConfig): Promise<boolean> {
@@ -137,14 +235,14 @@ function isKnowledgeBaseMarker(value: unknown): boolean {
   return record.type === "synapse.knowledgeBase" && record.schemaVersion === 1
 }
 
-function prependBootstrap(message: AgentMessage, bootstrap: string, hotCache: string): AgentMessage {
+function prependBootstrap(message: AgentMessage, bootstrap: string, hotCache: string, content = message.content): AgentMessage {
   return {
     ...message,
     content: [
       bootstrap.trim(),
       hotCache.trim() ? `Current wiki/hot.md:\n\n${hotCache.trim()}` : "",
       "User message:",
-      message.content,
+      content,
     ].filter(Boolean).join("\n\n---\n\n"),
   }
 }
@@ -154,12 +252,14 @@ async function buildKnowledgeBaseCommandPrompt(
   args: readonly string[],
   turnId: string,
   ingestCoordinator: Pick<KnowledgeBaseIngestCoordinator, "prepareTurn">,
+  researchCoordinator: Pick<KnowledgeBaseResearchCoordinator, "prepareTurn">,
 ): Promise<RegisteredPromptCommandOutput> {
   return buildKnowledgeBaseCommandOutput({
     projectPath,
     args,
     turnId,
     ingestCoordinator,
+    researchCoordinator,
     readPrompt,
   })
 }

@@ -6,14 +6,13 @@ import { KnowledgeBaseLintPreflightService } from "./lint-preflight"
 import type { KnowledgeBaseLintPreflightResult } from "./lint-preflight"
 import { formatKnowledgeBaseLintPreflightAppendix } from "./lint-preflight"
 import { KnowledgeBaseIngestCoordinator } from "./ingest-coordinator"
-import { KnowledgeBaseResearchPreflightService, formatKnowledgeBaseResearchAppendix } from "./research-preflight"
-import type { KnowledgeBaseResearchPreflightResult } from "./research-preflight"
+import { KnowledgeBaseResearchCoordinator } from "./research-coordinator"
+import { KnowledgeBaseResearchPreflightService } from "./research-preflight"
 import { scanKnowledgeBaseSources } from "./source-scan"
 import {
   wikiLintReportInstructionsCopy,
   wikiQueryParametersCopy,
   wikiRecentLogContextCopy,
-  wikiResearchFinalizerCopy,
   wikiStatusCopy,
   wikiUnknownCommandCopy,
 } from "./wiki-command-copy"
@@ -28,6 +27,7 @@ export interface BuildKnowledgeBaseCommandOutputInput {
   readonly ingestCoordinator?: Pick<KnowledgeBaseIngestCoordinator, "prepareTurn">
   readonly lintPreflight?: Pick<KnowledgeBaseLintPreflightService, "run">
   readonly researchPreflight?: Pick<KnowledgeBaseResearchPreflightService, "prepare">
+  readonly researchCoordinator?: Pick<KnowledgeBaseResearchCoordinator, "prepareTurn">
 }
 
 export async function buildKnowledgeBaseCommandOutput(
@@ -50,7 +50,7 @@ export async function buildKnowledgeBaseCommandOutput(
     case "lint":
       return buildLintOutput(input.projectPath, input.readPrompt, input.lintPreflight)
     case "research":
-      return buildResearchOutput(input.projectPath, commandArgs, input.readPrompt, input.researchPreflight)
+      return buildResearchOutput(input.projectPath, commandArgs, input.readPrompt, input.researchPreflight, input.researchCoordinator)
     default:
       return {
         kind: "result",
@@ -83,19 +83,10 @@ async function buildResearchOutput(
   args: readonly string[],
   readPrompt: (fileName: string) => Promise<string>,
   researchPreflight?: Pick<KnowledgeBaseResearchPreflightService, "prepare">,
+  researchCoordinator?: Pick<KnowledgeBaseResearchCoordinator, "prepareTurn">,
 ): Promise<RegisteredPromptCommandOutput> {
-  const topic = args.join(" ").trim()
-  const preflight = await (researchPreflight ?? new KnowledgeBaseResearchPreflightService()).prepare(projectPath, topic)
-  return {
-    kind: "prompt",
-    content: [
-      await readPrompt("research.md"),
-      "",
-      formatKnowledgeBaseResearchAppendix(preflight as KnowledgeBaseResearchPreflightResult),
-      "",
-      wikiResearchFinalizerCopy(preflight.mode),
-    ].join("\n"),
-  }
+  return (researchCoordinator ?? new KnowledgeBaseResearchCoordinator({ readPrompt, researchPreflight }))
+    .prepareTurn({ projectPath, args })
 }
 
 async function buildStatusOutput(projectPath: string): Promise<RegisteredPromptCommandOutput> {

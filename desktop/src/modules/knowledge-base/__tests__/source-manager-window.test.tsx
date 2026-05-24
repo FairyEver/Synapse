@@ -200,8 +200,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(document.body.textContent).not.toContain("资料管理")
     expect(document.body.textContent).toContain("放入资料")
     expect(document.body.textContent).toContain("目标目录：raw/")
-    expect(document.body.textContent).toContain("支持 Markdown、Word、Excel、PDF、PPT、网页 URL")
-    expect(document.body.textContent).toContain("图片和扫描 PDF 暂不支持")
+    expect(document.body.textContent).toContain("支持 Markdown、Word、Excel、PDF、PPT、图片、网页 URL")
     expect(document.body.textContent).toContain("放入后，在知识库对话里说“汲取知识”")
     expect(document.body.textContent).toContain("新文件")
     expect(document.body.textContent).toContain("有更新")
@@ -253,5 +252,36 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       url: "https://example.com/article",
     })
     expect(bridgeMocks.knowledgeBase.listSources).toHaveBeenCalledTimes(2)
+  })
+
+  it("passes dropped image files to knowledge-base upload", async () => {
+    renderWindow()
+    bridgeMocks.knowledgeBase.filePathForDroppedFile.mockReturnValue("/tmp/diagram.png")
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("AI产品需求说明.md")
+    })
+
+    const dropTarget = document.querySelector<HTMLElement>('[aria-label="拖拽放入资料"]')
+    if (!dropTarget) throw new Error("Drop target not found.")
+
+    const event = new Event("drop", { bubbles: true, cancelable: true })
+    Object.defineProperty(event, "dataTransfer", {
+      value: {
+        files: [new File(["image"], "diagram.png", { type: "image/png" })],
+      },
+    })
+
+    await act(async () => {
+      dropTarget.dispatchEvent(event)
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.uploadSources).toHaveBeenCalledWith({
+        projectPath: "/Users/example/kb",
+        filePaths: ["/tmp/diagram.png"],
+      })
+    })
   })
 })

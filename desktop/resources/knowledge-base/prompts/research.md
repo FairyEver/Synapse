@@ -2,6 +2,8 @@
 
 目标是围绕用户给定或选择的主题进行资料检索、综合和归档。用户最终得到的是 wiki 页面，而不是只得到聊天回复。
 
+不要只回复聊天结论。研究完成后必须写入 wiki 页面。
+
 流程：
 1. 如果 Synapse 附加了明确 topic，直接使用该 topic。
 2. 如果 Synapse 附加了 boundary-first 候选列表，先让用户选择 1-5、输入覆盖 topic，或取消。
@@ -13,6 +15,11 @@
    - `wiki/entities/`：重要人物、组织、产品或地点。
    - `wiki/questions/`：一个 `Research: [Topic]` 综合页。
 6. 更新 `wiki/index.md`、`wiki/hot.md` 和 `wiki/log.md`。
+
+网络检索：
+- 使用 Agent 的 WebSearch/WebFetch 能力。
+- 遵守 Synapse 权限提示；不要试图绕过权限。
+- 最多 3 轮：广泛搜索、补缺搜索、必要时矛盾核查。
 
 写入规则：
 - 不要修改 `.raw/` 下的用户来源文件，除 `.raw/.manifest.json` 外。
