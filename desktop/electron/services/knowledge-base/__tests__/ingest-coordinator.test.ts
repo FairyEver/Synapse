@@ -190,6 +190,35 @@ describe("KnowledgeBaseIngestCoordinator", () => {
     })
   })
 
+  it("rejects processed sources that do not list any wiki page evidence", async () => {
+    const root = await tempDir()
+    await writeManifest(root, {
+      version: 1,
+      sources: {},
+      address_map: {},
+    })
+    await mkdir(path.join(root, ".raw"), { recursive: true })
+    await writeFile(path.join(root, ".raw", "note.md"), "# Source\n")
+
+    const coordinator = new KnowledgeBaseIngestCoordinator()
+    const preflight = await coordinator.prepareTurn({ projectPath: root, force: false })
+    const result = await coordinator.finalizeTurn({
+      projectPath: root,
+      preflightId: preflight.id,
+      assistantText: report([{
+        source: ".raw/note.md",
+        pages_created: [],
+        pages_updated: [],
+      }]),
+    })
+
+    expect(result.acceptedSources).toEqual([])
+    expect(result.warnings).toContain("No wiki page evidence was reported for .raw/note.md")
+    await expect(readKnowledgeBaseManifest(root)).resolves.toMatchObject({
+      manifest: { sources: {} },
+    })
+  })
+
   it("rejects wiki page paths through a symlinked wiki ancestor", async () => {
     const root = await tempDir()
     const outside = await tempDir()

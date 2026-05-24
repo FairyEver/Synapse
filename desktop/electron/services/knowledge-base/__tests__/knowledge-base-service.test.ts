@@ -191,6 +191,33 @@ describe("KnowledgeBaseService", () => {
       .resolves.toBe("alpha\n")
   })
 
+  it("adds a URL source through the injected fetch boundary", async () => {
+    const targetPath = await tempDir()
+    const service = new KnowledgeBaseService({
+      now: () => new Date("2026-05-24T10:20:30.000Z"),
+      fetchUrl: async () => ({
+        url: "https://example.com/article",
+        status: 200,
+        headers: { get: (name: string) => name.toLowerCase() === "content-type" ? "text/html" : null },
+        text: async () => "<html><body><h1>Article</h1><p>Body</p></body></html>",
+      }),
+    })
+
+    const result = await service.addUrlSource({
+      projectPath: targetPath,
+      url: "https://example.com/article",
+    })
+
+    expect(result.uploaded).toEqual([expect.objectContaining({
+      originalPath: "https://example.com/article",
+      relativePath: ".raw/web/2026/05/24/article.md",
+      sourceKind: "url",
+      sourceUrl: "https://example.com/article",
+    })])
+    await expect(readFile(path.join(targetPath, ".raw", "web", "2026", "05", "24", "article.md"), "utf8"))
+      .resolves.toContain('source_url: "https://example.com/article"')
+  })
+
   it("uploads convertible files as generated markdown sources", async () => {
     const targetPath = await tempDir()
     const sourcePath = path.join(await tempDir(), "report.docx")

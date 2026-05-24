@@ -58,6 +58,11 @@ export type SynapseKnowledgeBaseUploadSourcesPayload = {
   filePaths: string[]
 }
 
+export type SynapseKnowledgeBaseAddUrlSourcePayload = {
+  projectPath: string
+  url: string
+}
+
 export type SynapseKnowledgeBaseFileConversionWarning = {
   readonly code: string
   readonly message: string

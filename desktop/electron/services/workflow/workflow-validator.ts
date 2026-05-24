@@ -273,9 +273,11 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
         { kind: "prompt", field: "prompt" },
         { kind: "switch", field: "prompt" },
         { kind: "end", field: "template" },
+        { kind: "file_conversion", field: "inputPath" },
+        { kind: "file_conversion", field: "outputPath" },
+        { kind: "file_conversion", field: "outputDirectory" },
       ]
-      const templateField = TEMPLATE_FIELDS.find((tf) => node.type === tf.kind)
-      if (templateField) {
+      for (const templateField of TEMPLATE_FIELDS.filter((tf) => node.type === tf.kind)) {
         const text = (node.config as Record<string, unknown>)[templateField.field]
         if (typeof text === "string") {
           const placeholders = new Set(

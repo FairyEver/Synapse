@@ -51,6 +51,11 @@ const uploadSourcesPayloadSchema = z.object({
   filePaths: z.array(z.string().min(1)),
 })
 
+const addUrlSourcePayloadSchema = z.object({
+  projectPath: z.string().min(1),
+  url: z.string().min(1),
+})
+
 const uploadSourcesResultSchema = z.object({
   projectPath: z.string(),
   uploaded: z.array(z.object({
@@ -187,6 +192,25 @@ export const knowledgeBaseIpcModule: IpcModule = {
         resource: request.projectPath,
         source: "knowledgeBase.uploadSources",
         run: () => service(ctx).uploadSources(request),
+      }),
+    },
+    addUrlSource: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:add-url-source",
+      request: addUrlSourcePayloadSchema,
+      response: uploadSourcesResultSchema,
+      handler: (ctx, request: { projectPath: string; url: string }) => runGuardedKnowledgeBaseOperation({
+        ctx,
+        action: "network.connect",
+        resource: request.url,
+        source: "knowledgeBase.addUrlSource.fetch",
+        run: () => runGuardedKnowledgeBaseOperation({
+          ctx,
+          action: "fs.write",
+          resource: request.projectPath,
+          source: "knowledgeBase.addUrlSource",
+          run: () => service(ctx).addUrlSource(request),
+        }),
       }),
     },
     selectAndUploadSources: {

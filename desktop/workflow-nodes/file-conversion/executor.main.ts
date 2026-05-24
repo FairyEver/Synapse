@@ -3,6 +3,7 @@ import path from "node:path"
 import type { FileConversionErrorCode, FileConversionResult } from "../../electron/services/file-conversion"
 import { FileConversionError } from "../../electron/services/file-conversion"
 import { sanitizeError } from "../../electron/services/error-sanitize"
+import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
 import { createMainLogger } from "../../electron/services/log-store"
 import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-utils"
 import type { NodeExecutionInput, NodeExecutionResult, NodeExecutor } from "../types"
@@ -15,7 +16,8 @@ export const fileConversionNodeExecutor: NodeExecutor<FileConversionNodeConfig> 
   async execute(input: NodeExecutionInput<FileConversionNodeConfig>): Promise<NodeExecutionResult> {
     const start = Date.now()
     const { config, context, runtimeDeps } = input
-    const inputPath = config.inputPath.trim()
+    const interpolated = interpolateFileConversionConfig(config, input.resolvedVariables)
+    const inputPath = interpolated.inputPath.trim()
 
     if (!runtimeDeps?.fileConversionService) {
       return { status: "failed", output: "", error: "文件转换能力不可用", durationMs: Date.now() - start }
@@ -34,21 +36,21 @@ export const fileConversionNodeExecutor: NodeExecutor<FileConversionNodeConfig> 
     logger.info("file conversion node executing", {
       runId: context.runId,
       inputPathLength: inputPath.length,
-      outputMode: config.outputMode ?? "result",
+      outputMode: interpolated.outputMode ?? "result",
     })
 
     try {
       const converted = await runtimeDeps.fileConversionService.convert({
         filePath: inputPath,
         preferredOutput: "markdown",
-        ocr: normalizeOcrOptions(config.ocr),
+        ocr: normalizeOcrOptions(interpolated.ocr),
       })
 
       input.onProgress?.("processing_output", "处理输出…")
       const outputs = buildConversionOutputs(converted)
 
-      if (config.outputMode === "markdown-file") {
-        const outputPath = resolveMarkdownOutputPath(config, converted)
+      if (interpolated.outputMode === "markdown-file") {
+        const outputPath = resolveMarkdownOutputPath(interpolated, converted)
         if (!isWorkflowFileConversionOutputPathAllowed(outputPath)) {
           return fileConversionFailure({
             start,
@@ -94,7 +96,7 @@ export const fileConversionNodeExecutor: NodeExecutor<FileConversionNodeConfig> 
         format: converted.format,
         kind: converted.kind,
         warningCount: converted.warnings.length,
-        outputMode: config.outputMode ?? "result",
+        outputMode: interpolated.outputMode ?? "result",
         durationMs,
       })
 
@@ -120,6 +122,18 @@ export const fileConversionNodeExecutor: NodeExecutor<FileConversionNodeConfig> 
 }
 
 type WorkflowFileConversionFailureCode = FileConversionErrorCode | "invalid_output_path" | "write_failed"
+
+function interpolateFileConversionConfig(
+  config: FileConversionNodeConfig,
+  variables: Record<string, string>,
+): FileConversionNodeConfig {
+  return {
+    ...config,
+    inputPath: interpolatePrompt(config.inputPath, variables),
+    outputPath: config.outputPath ? interpolatePrompt(config.outputPath, variables) : config.outputPath,
+    outputDirectory: config.outputDirectory ? interpolatePrompt(config.outputDirectory, variables) : config.outputDirectory,
+  }
+}
 
 function normalizeOcrOptions(ocr: FileConversionNodeConfig["ocr"]): { enabled: boolean; languages?: readonly string[]; maxPages?: number } | undefined {
   if (!ocr?.enabled) return undefined

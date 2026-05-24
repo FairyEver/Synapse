@@ -167,6 +167,45 @@ describe("knowledgeBaseIpcModule", () => {
     })
   })
 
+  it("adds a URL source through guarded network and write permissions", async () => {
+    const addUrlSource = vi.fn().mockResolvedValue({
+      projectPath: "/tmp/kb",
+      uploaded: [{
+        originalPath: "https://example.com/article",
+        relativePath: ".raw/web/2026/05/24/article.md",
+        name: "article.md",
+        size: 128,
+        sourceKind: "url",
+        sourceUrl: "https://example.com/article",
+      }],
+      skipped: [],
+    })
+    const { harness, permissionGuard } = createHarness({ service: { addUrlSource } })
+
+    const result = await harness.invoke("synapse:knowledge-base:add-url-source", {
+      projectPath: "/tmp/kb",
+      url: "https://example.com/article",
+    }) as { uploaded: unknown[] }
+
+    expect(addUrlSource).toHaveBeenCalledWith({
+      projectPath: "/tmp/kb",
+      url: "https://example.com/article",
+    })
+    expect(result.uploaded).toHaveLength(1)
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(1, {
+      action: "network.connect",
+      actor: { kind: "user" },
+      resource: "https://example.com/article",
+      context: { source: "knowledgeBase.addUrlSource.fetch" },
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(2, {
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "/tmp/kb",
+      context: { source: "knowledgeBase.addUrlSource" },
+    })
+  })
+
   it("opens the source manager window through guarded read permission", async () => {
     const { harness, permissionGuard } = createHarness({ service: {} })
 

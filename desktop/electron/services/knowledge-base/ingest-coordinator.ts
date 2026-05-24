@@ -175,10 +175,16 @@ export class KnowledgeBaseIngestCoordinator {
         continue
       }
 
-      const pagePaths = await validateWikiPagePaths(projectPath, normalizedSource, [
+      const reportedPagePaths = [
         ...source.pagesCreated,
         ...source.pagesUpdated,
-      ])
+      ]
+      if (reportedPagePaths.length === 0) {
+        warnings.push(`No wiki page evidence was reported for ${normalizedSource}`)
+        continue
+      }
+
+      const pagePaths = await validateWikiPagePaths(projectPath, normalizedSource, reportedPagePaths)
       warnings.push(...pagePaths.warnings)
       if (!pagePaths.ok) continue
 

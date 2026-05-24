@@ -104,6 +104,19 @@ function createBridgeMocks() {
           uploaded: [],
           skipped: [],
         }),
+      addUrlSource: vi.fn<(payload: { projectPath: string; url: string }) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
+        .mockResolvedValue({
+          projectPath: "/Users/example/kb",
+          uploaded: [{
+            originalPath: "https://example.com/article",
+            relativePath: ".raw/web/2026/05/24/article.md",
+            name: "article.md",
+            size: 120,
+            sourceKind: "url",
+            sourceUrl: "https://example.com/article",
+          }],
+          skipped: [],
+        }),
       selectAndUploadSources: vi.fn<(projectPath: string) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
         .mockResolvedValue({
           projectPath: "/Users/example/kb",
@@ -151,6 +164,12 @@ function buttonByText(text: string): HTMLButtonElement {
   const button = [...document.querySelectorAll<HTMLButtonElement>("button")]
     .find((item) => item.textContent?.trim() === text)
   if (!button) throw new Error(`Button not found: ${text}`)
+  return button
+}
+
+function buttonByLabel(label: string): HTMLButtonElement {
+  const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+  if (!button) throw new Error(`Button not found: ${label}`)
   return button
 }
 
@@ -205,5 +224,31 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       expect(bridgeMocks.agent.createSession).not.toHaveBeenCalled()
       expect(bridgeMocks.agent.send).not.toHaveBeenCalled()
     })
+  })
+
+  it("adds URL sources from the side pane", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("AI产品需求说明.md")
+    })
+
+    const urlInput = document.querySelector<HTMLInputElement>('input[placeholder="URL"]')
+    expect(urlInput).not.toBeNull()
+
+    act(() => {
+      changeInput(urlInput!, "https://example.com/article")
+    })
+
+    await act(async () => {
+      buttonByLabel("添加 URL").click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.addUrlSource).toHaveBeenCalledWith({
+      projectPath: "/Users/example/kb",
+      url: "https://example.com/article",
+    })
+    expect(bridgeMocks.knowledgeBase.listSources).toHaveBeenCalledTimes(2)
   })
 })

@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { variableBindingSchema } from "../schemas/variable-binding"
 
 export const fileConversionNodeOcrSchema = z.object({
   enabled: z.boolean().optional(),
@@ -12,6 +13,7 @@ export const fileConversionNodeConfigSchema = z.object({
   outputPath: z.string().optional(),
   outputDirectory: z.string().optional(),
   ocr: fileConversionNodeOcrSchema,
+  variables: z.array(variableBindingSchema).optional(),
 })
 
 export type FileConversionNodeConfig = z.infer<typeof fileConversionNodeConfigSchema>

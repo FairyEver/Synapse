@@ -98,6 +98,30 @@ describe("file conversion workflow node", () => {
     expect(result.output).toBe(conversionResult.markdown)
   })
 
+  it("interpolates bound variables in conversion paths", async () => {
+    const convert = vi.fn().mockResolvedValue(conversionResult)
+    const input = makeInput({
+      inputPath: "{{sourcePath}}",
+      outputMode: "markdown-file",
+      outputDirectory: join(getWorkflowFileConversionOutputRoot(), "{{runDir}}"),
+    }, makeRuntimeDeps({ convert, writeWorkflowFileConversionOutput: vi.fn().mockResolvedValue(undefined) }))
+    input.resolvedVariables = {
+      sourcePath: "/tmp/from-variable.pdf",
+      runDir: "run-1",
+    }
+
+    const result = await fileConversionNodeExecutor.execute(input)
+
+    expect(result.status).toBe("success")
+    expect(convert).toHaveBeenCalledWith({
+      filePath: "/tmp/from-variable.pdf",
+      preferredOutput: "markdown",
+    })
+    expect(result.outputs).toEqual(expect.objectContaining({
+      outputPath: join(getWorkflowFileConversionOutputRoot(), "run-1", "Source.md"),
+    }))
+  })
+
   it("passes OCR options to the injected conversion service", async () => {
     const convert = vi.fn().mockResolvedValue(conversionResult)
 
@@ -298,5 +322,20 @@ describe("file conversion workflow node", () => {
 
     expect(validation.valid).toBe(false)
     expect(validation.errors.some((error) => error.nodeId === "convert" && error.message.includes("工作流输出目录"))).toBe(true)
+  })
+
+  it("validator rejects unbound file conversion path placeholders", () => {
+    const validation = validateWorkflow(makeDefinition({
+      inputPath: "{{sourcePath}}",
+      outputMode: "result",
+      variables: [],
+    }))
+
+    expect(validation.valid).toBe(false)
+    expect(validation.errors.some((error) => (
+      error.nodeId === "convert"
+      && error.message.includes("sourcePath")
+      && error.message.includes("未绑定")
+    ))).toBe(true)
   })
 })

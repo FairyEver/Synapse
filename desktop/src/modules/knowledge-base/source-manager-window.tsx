@@ -1,5 +1,5 @@
 import { type DragEvent, useCallback, useEffect, useMemo, useState } from "react"
-import { FolderOpen, Upload } from "lucide-react"
+import { FolderOpen, Link, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -86,6 +86,7 @@ function KnowledgeBaseSourceManagerWindow() {
   const { error: showError, promise } = useAppNotifications()
   const [sources, setSources] = useState<SynapseKnowledgeBaseSourceEntry[]>([])
   const [query, setQuery] = useState("")
+  const [sourceUrl, setSourceUrl] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [isDragging, setIsDragging] = useState(false)
   const bridge = getSynapseBridge()
@@ -126,6 +127,30 @@ function KnowledgeBaseSourceManagerWindow() {
       },
     )
   }, [bridge, payload, promise, refreshSources])
+
+  const addUrlSource = useCallback(async () => {
+    if (!payload || !bridge) return
+    const url = sourceUrl.trim()
+    if (!url) return
+    await promise(
+      async () => {
+        const result = await bridge.knowledgeBase.addUrlSource({
+          projectPath: payload.projectPath,
+          url,
+        })
+        if (result.uploaded.length > 0) {
+          setSourceUrl("")
+        }
+        await refreshSources()
+        return result
+      },
+      {
+        loading: "正在添加",
+        success: (result) => result.uploaded.length > 0 ? "已添加" : "添加失败",
+        error: "添加失败",
+      },
+    )
+  }, [bridge, payload, promise, refreshSources, sourceUrl])
 
   const chooseFiles = useCallback(async () => {
     if (!payload || !bridge) return
@@ -262,6 +287,21 @@ function KnowledgeBaseSourceManagerWindow() {
         </div>
 
         <div className="mt-3 flex flex-col gap-2">
+          <div className="flex gap-2">
+            <Input
+              value={sourceUrl}
+              onChange={(event) => setSourceUrl(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === "Enter") {
+                  void addUrlSource()
+                }
+              }}
+              placeholder="URL"
+            />
+            <Button type="button" variant="outline" size="icon" onClick={addUrlSource} aria-label="添加 URL">
+              <Link className="size-4" />
+            </Button>
+          </div>
           <Button onClick={chooseFiles}>
             <Upload data-icon="inline-start" />
             选择文件

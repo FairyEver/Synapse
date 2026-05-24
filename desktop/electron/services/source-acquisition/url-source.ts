@@ -232,7 +232,7 @@ function validateAllowedUrl(
   return { ok: true }
 }
 
-function isLocalOrPrivateHost(hostname: string): boolean {
+export function isLocalOrPrivateHost(hostname: string): boolean {
   const host = hostname.toLowerCase().replace(/^\[/, "").replace(/\]$/, "")
   if (host === "localhost" || host.endsWith(".localhost")) return true
 

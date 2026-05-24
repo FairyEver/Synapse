@@ -5,6 +5,14 @@ export interface WorkflowNode {
   id: string; name: string; type: string; position: { x: number; y: number }; config: Record<string, unknown>
 }
 export interface WorkflowEdge { id: string; from: string; to: string; branch?: string }
+export type WorkflowVariableSource =
+  | { readonly type: "param"; readonly param: string }
+  | { readonly type: "node_output"; readonly node: string }
+  | { readonly type: "static"; readonly value: string }
+export interface WorkflowVariableBinding {
+  readonly name: string
+  readonly source: WorkflowVariableSource
+}
 export interface WorkflowFileConversionNodeConfig {
   readonly inputPath: string
   readonly outputMode?: "result" | "markdown-file"
@@ -15,6 +23,7 @@ export interface WorkflowFileConversionNodeConfig {
     readonly languages?: readonly string[]
     readonly maxPages?: number
   }
+  readonly variables?: readonly WorkflowVariableBinding[]
 }
 export interface WorkflowFileConversionNodeResult {
   readonly sourcePath: string

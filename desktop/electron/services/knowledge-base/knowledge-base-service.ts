@@ -6,6 +6,7 @@ import path from "node:path"
 import type {
   SynapseKnowledgeBaseInitializePayload,
   SynapseKnowledgeBaseInitializeResult,
+  SynapseKnowledgeBaseAddUrlSourcePayload,
   SynapseKnowledgeBaseInspection,
   SynapseKnowledgeBaseListSourcesResult,
   SynapseKnowledgeBaseOpenRawResult,
@@ -15,7 +16,9 @@ import type {
 } from "../../../src/types/knowledge-base"
 import { createDefaultFileConversionService, type FileConversionService } from "../file-conversion"
 import { scanKnowledgeBaseSources } from "./source-scan"
-import { stageKnowledgeBaseSources } from "./source-staging"
+import { stageKnowledgeBaseSources, stageKnowledgeBaseUrlSource } from "./source-staging"
+import { createGuardedFetchUrl } from "../source-acquisition/guarded-fetch-url"
+import type { FetchUrl } from "../source-acquisition/url-source"
 
 export const KNOWLEDGE_BASE_TEMPLATE_VERSION = "2026-05-21"
 
@@ -36,17 +39,20 @@ type KnowledgeBaseServiceDeps = {
   templateRoot?: string
   now?: () => Date
   fileConversionService?: Pick<FileConversionService, "convert">
+  fetchUrl?: FetchUrl
 }
 
 export class KnowledgeBaseService {
   private readonly templateRoot: string
   private readonly now: () => Date
   private readonly fileConversionService: Pick<FileConversionService, "convert">
+  private readonly fetchUrl: FetchUrl
 
   constructor(deps: KnowledgeBaseServiceDeps = {}) {
     this.templateRoot = deps.templateRoot ?? resolveTemplateRoot()
     this.now = deps.now ?? (() => new Date())
     this.fileConversionService = deps.fileConversionService ?? createDefaultFileConversionService()
+    this.fetchUrl = deps.fetchUrl ?? createGuardedFetchUrl()
   }
 
   async inspect(projectPath: string): Promise<SynapseKnowledgeBaseInspection> {
@@ -152,6 +158,15 @@ export class KnowledgeBaseService {
       filePaths: payload.filePaths,
       now: this.now,
       converter: this.fileConversionService,
+    })
+  }
+
+  async addUrlSource(payload: SynapseKnowledgeBaseAddUrlSourcePayload): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
+    return stageKnowledgeBaseUrlSource({
+      projectPath: payload.projectPath,
+      url: payload.url,
+      now: this.now,
+      fetchUrl: this.fetchUrl,
     })
   }
 }
