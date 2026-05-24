@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { EmptyState, ErrorState, LoadingState } from '@/components/page-state';
 import { Badge } from '@/components/ui/badge';
@@ -36,8 +36,11 @@ export function LogsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [feedback, setFeedback] = useState('');
+  const latestRequestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const requestId = latestRequestId.current + 1;
+    latestRequestId.current = requestId;
     setIsLoading(true);
     setError('');
     try {
@@ -48,12 +51,16 @@ export function LogsPage() {
         }),
         adminApi.listLogFiles(),
       ]);
+      if (requestId !== latestRequestId.current) return;
       setEntries(nextEntries);
       setFiles(nextFiles);
     } catch (nextError) {
+      if (requestId !== latestRequestId.current) return;
       setError(nextError instanceof Error ? nextError.message : '加载失败');
     } finally {
-      setIsLoading(false);
+      if (requestId === latestRequestId.current) {
+        setIsLoading(false);
+      }
     }
   }, [level]);
 
