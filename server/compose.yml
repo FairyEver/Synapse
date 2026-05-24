@@ -1,6 +1,7 @@
 services:
   postgres:
     image: postgres:16-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_USER: synapse
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-synapse}
@@ -16,6 +17,7 @@ services:
       retries: 10
 
   server:
+    restart: unless-stopped
     build:
       context: ..
       dockerfile: server/Dockerfile
