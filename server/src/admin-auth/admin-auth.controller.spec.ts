@@ -88,6 +88,26 @@ describe("AdminAuthController", () => {
     })
   })
 
+  it("clears dashboard cookies when session revocation fails", async () => {
+    const auth = {
+      verifyDashboardSession: vi.fn().mockResolvedValue({ id: "admin-1", email: "admin@example.com", role: "admin" }),
+      revokeDashboardSession: vi.fn().mockRejectedValue(new Error("database unavailable")),
+    }
+    const response = { cookie: vi.fn(), clearCookie: vi.fn() }
+    const controller = new AdminAuthController(auth as never)
+
+    await expect(controller.logout(response as never, {
+      ip: "203.0.113.10",
+      cookies: { synapse_admin: "admin-token" },
+    } as unknown as AdminRequest)).rejects.toThrow("database unavailable")
+
+    expect(response.clearCookie).toHaveBeenCalledWith("synapse_admin", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    })
+  })
+
   it("records dashboard user logout in audit logs", async () => {
     const auth = {
       revokeDashboardSession: vi.fn().mockResolvedValue(undefined),
