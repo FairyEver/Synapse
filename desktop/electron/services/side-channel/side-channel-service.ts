@@ -172,15 +172,6 @@ export class SideChannelService implements ReplyTargetRuntime {
     const dispatcher = this.dispatchers.get(target.transport.kind)
     const conversationId = event.conversationId ?? target.conversationId
     if (!dispatcher) {
-      this.deps.logger?.warn("Reply target dispatcher missing.", {
-        projectId: target.projectId,
-        sessionKey: target.sessionKey,
-        transportKind: target.transport.kind,
-        connectorId: target.transport.connectorId,
-        eventType: event.type,
-        conversationId,
-        sdkSessionId: event.sdkSessionId,
-      })
       return Promise.resolve()
     }
     return dispatcher.dispatchAgentEvent(target, event).catch((error) => {

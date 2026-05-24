@@ -1,8 +1,9 @@
-import type { RefObject } from "react"
+import type { Ref } from "react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { SynapseAgentTimelineItem } from "@/types/agent"
 
 export const PINNED_THRESHOLD_PX = 80
+const PROGRAMMATIC_SCROLL_GUARD_MS = 600
 
 export function computeIsPinned(metrics: {
   scrollTop: number
@@ -55,7 +56,7 @@ export function latestTimelineContentSignal(item: SynapseAgentTimelineItem | und
 type ScrollOptions = { behavior?: ScrollBehavior }
 
 export type UseStickToBottomReturn = {
-  viewportRef: RefObject<HTMLDivElement | null>
+  viewportRef: Ref<HTMLDivElement>
   isPinned: boolean
   hasUnread: boolean
   scrollToBottom: (options?: ScrollOptions) => void
@@ -65,12 +66,10 @@ export type UseStickToBottomReturn = {
 /**
  * Stick-to-bottom state machine for chat-style timelines.
  *
- * - `isPinned` reflects whether the viewport is within `PINNED_THRESHOLD_PX` of the bottom.
- * - When pinned and `contentSignal` changes, the viewport auto-scrolls to the bottom.
- * - When unpinned and a *new* entry (via `latestEntryId`) appears, `hasUnread` becomes true.
- * - Scrolling back into the threshold clears `hasUnread`.
- * - `forcePin()` is for scenarios where the user expects to see the latest
- *   (session switch, user-sent message, first mount).
+ * - `autoFollow` is the single source of truth for automatic scrolling.
+ * - Entering/sending/jump-to-bottom enables `autoFollow`.
+ * - User scroll intent disables `autoFollow`.
+ * - Content changes scroll only while `autoFollow` is enabled.
  */
 export function useStickToBottom(input: {
   contentSignal: ReadonlyArray<unknown>
@@ -79,19 +78,43 @@ export function useStickToBottom(input: {
   const { contentSignal, latestEntryId } = input
 
   const viewportRef = useRef<HTMLDivElement | null>(null)
+  const [viewportNode, setViewportNode] = useState<HTMLDivElement | null>(null)
+  const autoFollowRef = useRef(true)
   const isPinnedRef = useRef(true)
   const previousLatestIdRef = useRef<string | undefined>(undefined)
   const programmaticScrollUntilRef = useRef(0)
+  const lastTouchYRef = useRef<number | null>(null)
+  const lastScrollTopRef = useRef(0)
+  const instantNextScrollRef = useRef(false)
 
   const [isPinned, setIsPinned] = useState(true)
   const [hasUnread, setHasUnread] = useState(false)
 
+  const setViewportRef = useCallback((node: HTMLDivElement | null) => {
+    viewportRef.current = node
+    setViewportNode(node)
+  }, [])
+
+  const setUnreadState = useCallback((next: boolean) => {
+    setHasUnread(next)
+  }, [])
+
+  const pauseFollowing = useCallback(() => {
+    autoFollowRef.current = false
+    programmaticScrollUntilRef.current = 0
+    if (isPinnedRef.current) {
+      isPinnedRef.current = false
+      setIsPinned(false)
+    }
+  }, [])
+
   const performScrollToBottom = useCallback((options?: ScrollOptions) => {
     const viewport = viewportRef.current
     if (!viewport) return
-    // Mark the next ~150ms of scroll events as programmatic so the listener
+    // Mark the next smooth-scroll window as programmatic so the listener
     // does not flip isPinned off mid-animation.
-    programmaticScrollUntilRef.current = Date.now() + 150
+    programmaticScrollUntilRef.current = Date.now() + PROGRAMMATIC_SCROLL_GUARD_MS
+    lastScrollTopRef.current = viewport.scrollTop
     viewport.scrollTo({
       top: viewport.scrollHeight,
       behavior: options?.behavior ?? "auto",
@@ -99,27 +122,73 @@ export function useStickToBottom(input: {
   }, [])
 
   const scrollToBottom = useCallback((options?: ScrollOptions) => {
-    performScrollToBottom(options)
-  }, [performScrollToBottom])
-
-  const forcePin = useCallback(() => {
+    autoFollowRef.current = true
     isPinnedRef.current = true
     setIsPinned(true)
-    setHasUnread(false)
+    setUnreadState(false)
+    performScrollToBottom(options)
+  }, [performScrollToBottom, setUnreadState])
+
+  const forcePin = useCallback(() => {
+    autoFollowRef.current = true
+    instantNextScrollRef.current = true
+    isPinnedRef.current = true
+    setIsPinned(true)
+    setUnreadState(false)
     performScrollToBottom({ behavior: "auto" })
-  }, [performScrollToBottom])
+  }, [performScrollToBottom, setUnreadState])
 
   // Subscribe to viewport scroll.
   useEffect(() => {
-    const viewport = viewportRef.current
+    const viewport = viewportNode
     if (!viewport) return undefined
 
     let frame: number | null = null
+    const onWheel = (event: WheelEvent) => {
+      if (event.deltaY !== 0) {
+        pauseFollowing()
+      }
+    }
+
+    const onTouchStart = (event: TouchEvent) => {
+      lastTouchYRef.current = event.touches[0]?.clientY ?? null
+    }
+
+    const onTouchMove = (event: TouchEvent) => {
+      const nextY = event.touches[0]?.clientY
+      const previousY = lastTouchYRef.current
+      if (typeof nextY === "number" && typeof previousY === "number" && nextY !== previousY) {
+        pauseFollowing()
+      }
+      lastTouchYRef.current = typeof nextY === "number" ? nextY : null
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (
+        event.key === "ArrowUp"
+        || event.key === "ArrowDown"
+        || event.key === "PageUp"
+        || event.key === "PageDown"
+        || event.key === "Home"
+        || event.key === "End"
+        || event.key === " "
+      ) {
+        pauseFollowing()
+      }
+    }
+
     const onScroll = () => {
       if (frame !== null) return
       frame = window.requestAnimationFrame(() => {
         frame = null
-        if (Date.now() < programmaticScrollUntilRef.current) {
+        const now = Date.now()
+        const scrollingUp = viewport.scrollTop < lastScrollTopRef.current
+        lastScrollTopRef.current = viewport.scrollTop
+        if (scrollingUp) {
+          pauseFollowing()
+          return
+        }
+        if (autoFollowRef.current && now < programmaticScrollUntilRef.current) {
           return
         }
         const next = computeIsPinned({
@@ -127,44 +196,63 @@ export function useStickToBottom(input: {
           scrollHeight: viewport.scrollHeight,
           clientHeight: viewport.clientHeight,
         })
-        if (next !== isPinnedRef.current) {
-          isPinnedRef.current = next
-          setIsPinned(next)
-          if (next) {
-            // User reached the bottom on their own → clear unread.
-            setHasUnread(false)
+        if (!autoFollowRef.current) {
+          if (isPinnedRef.current) {
+            isPinnedRef.current = false
+            setIsPinned(false)
           }
+          return
         }
+        if (!next) {
+          autoFollowRef.current = false
+          isPinnedRef.current = false
+          setIsPinned(false)
+          return
+        }
+        if (!isPinnedRef.current) {
+          isPinnedRef.current = true
+          setIsPinned(true)
+        }
+        setUnreadState(false)
       })
     }
 
+    window.addEventListener("wheel", onWheel, { capture: true, passive: true })
+    viewport.addEventListener("touchstart", onTouchStart, { passive: true })
+    viewport.addEventListener("touchmove", onTouchMove, { passive: true })
+    viewport.addEventListener("keydown", onKeyDown)
     viewport.addEventListener("scroll", onScroll, { passive: true })
     return () => {
+      window.removeEventListener("wheel", onWheel, { capture: true })
+      viewport.removeEventListener("touchstart", onTouchStart)
+      viewport.removeEventListener("touchmove", onTouchMove)
+      viewport.removeEventListener("keydown", onKeyDown)
       viewport.removeEventListener("scroll", onScroll)
       if (frame !== null) window.cancelAnimationFrame(frame)
     }
-  }, [])
+  }, [pauseFollowing, setUnreadState, viewportNode])
 
-  // React to content changes: auto-scroll if pinned, mark unread if a new entry arrived off-screen.
+  // React to content changes: auto-scroll if pinned, mark unread if latest content changed off-screen.
   useEffect(() => {
     const previousId = previousLatestIdRef.current
     previousLatestIdRef.current = latestEntryId
     const newEntryArrived = isLatestEntryNew({ previousId, latestId: latestEntryId })
 
-    if (isPinnedRef.current) {
+    if (autoFollowRef.current) {
       const handle = window.requestAnimationFrame(() => {
-        performScrollToBottom({ behavior: "auto" })
+        const behavior = instantNextScrollRef.current ? "auto" : "smooth"
+        instantNextScrollRef.current = false
+        performScrollToBottom({ behavior })
       })
       return () => window.cancelAnimationFrame(handle)
     }
 
-    if (newEntryArrived) {
-      setHasUnread(true)
+    if (newEntryArrived || latestEntryId) {
+      setUnreadState(true)
     }
     return undefined
     // contentSignal members trigger this effect; latestEntryId is already part of contentSignal.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, contentSignal)
 
-  return { viewportRef, isPinned, hasUnread, scrollToBottom, forcePin }
+  return { viewportRef: setViewportRef, isPinned, hasUnread, scrollToBottom, forcePin }
 }

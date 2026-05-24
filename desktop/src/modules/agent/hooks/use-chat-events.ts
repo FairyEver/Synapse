@@ -217,16 +217,6 @@ function useChatEvents(
         })
         return
       }
-      logger.debug("Agent stream event applied.", {
-        projectId: domainEvent.payload.projectId,
-        eventType: domainEvent.type,
-        ...streamEventLogMeta(domainEvent),
-        sessionKey: domainEvent.payload.sessionKey,
-        platform: domainEvent.payload.platform,
-        selectedProjectId: selectedProjectIdRef.current,
-        selectedConversationId: selectedConversationIdRef.current,
-        selectedSessionKey: selectedSessionKeyRef.current,
-      })
       if (isSdkStreamDeltaEvent(domainEvent)) {
         streamEventsRef.current.push(domainEvent)
         scheduleStreamFlush()

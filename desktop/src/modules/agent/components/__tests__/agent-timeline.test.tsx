@@ -2,8 +2,7 @@
  * @vitest-environment jsdom
  */
 import type { ComponentProps } from "react"
-import { act, createRef } from "react"
-import { createRoot } from "react-dom/client"
+import { createRef } from "react"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
@@ -49,8 +48,6 @@ function renderTimeline(overrides: Partial<ComponentProps<typeof AgentTimeline>>
       onOpenReference={vi.fn()}
       onRespondPermission={vi.fn()}
       viewportRef={createRef<HTMLDivElement>()}
-      showJumpToBottom={false}
-      onJumpToBottom={vi.fn()}
       {...overrides}
     />,
   )
@@ -68,56 +65,10 @@ describe("AgentTimeline", () => {
     expect(html).toContain('data-allow-select="true"')
   })
 
-  it("does not render the jump-to-bottom pill when showJumpToBottom is false", () => {
-    const html = renderTimeline({ showJumpToBottom: false })
-    expect(html).not.toContain("↓ 新消息")
-    expect(html).not.toContain("跳到最新消息")
-  })
-
-  it("renders the jump-to-bottom pill when showJumpToBottom is true", () => {
-    const html = renderTimeline({ showJumpToBottom: true })
-    expect(html).toContain("↓ 新消息")
-    expect(html).toContain('aria-label="跳到最新消息"')
-  })
-
-  it("tracks the jump-to-bottom action with a stable Agent timeline name", async () => {
-    const onJumpToBottom = vi.fn()
-    const container = document.createElement("div")
-    const root = createRoot(container)
-    track.mockClear()
-
-    await act(async () => {
-      root.render(
-        <AgentTimeline
-          items={[]}
-          profile={profile}
-          sending={false}
-          pendingPermissions={[]}
-          onOpenReference={vi.fn()}
-          onRespondPermission={vi.fn()}
-          viewportRef={createRef<HTMLDivElement>()}
-          showJumpToBottom
-          onJumpToBottom={onJumpToBottom}
-        />,
-      )
-    })
-
-    const button = container.querySelector('button[aria-label="跳到最新消息"]')
-    expect(button).toBeTruthy()
-    await act(async () => {
-      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
-    })
-
-    expect(onJumpToBottom).toHaveBeenCalledTimes(1)
-    expect(track).toHaveBeenCalledWith({
-      component: "button",
-      name: "agent-timeline-jump-to-bottom",
-      action: "click",
-    })
-
-    await act(async () => {
-      root.unmount()
-    })
+  it("uses a native scrolling viewport for the timeline", () => {
+    const html = renderTimeline()
+    expect(html).toContain("overflow-y-auto")
+    expect(html).not.toContain('data-slot="scroll-area"')
   })
 
   it("renders an AgentPhaseRow for phase items", () => {

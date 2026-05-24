@@ -1,6 +1,4 @@
 import type { Ref } from "react"
-import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import type {
   SynapseAgentDisplayProfile,
   SynapseAgentPendingPermission,
@@ -20,8 +18,6 @@ function AgentTimeline({
   onOpenReference,
   onRespondPermission,
   viewportRef,
-  showJumpToBottom,
-  onJumpToBottom,
 }: {
   readonly items: readonly SynapseAgentTimelineItem[]
   readonly profile: SynapseAgentDisplayProfile
@@ -31,15 +27,13 @@ function AgentTimeline({
   readonly onOpenReference: (reference: string) => void
   readonly onRespondPermission: (requestId: string, behavior: "allow" | "deny") => void | Promise<void>
   readonly viewportRef: Ref<HTMLDivElement>
-  readonly showJumpToBottom: boolean
-  readonly onJumpToBottom: () => void
 }) {
   // Drives 1s re-renders for any in-progress phase row's elapsed timer.
   useActivePhaseTicker(items)
   const now = Date.now()
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
-      <ScrollArea className="min-h-0 min-w-0 flex-1" viewportRef={viewportRef}>
+      <div ref={viewportRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
         <div data-allow-select="true" className="mx-auto flex min-w-0 max-w-4xl flex-col gap-2 pr-4 pb-34 pt-4">
           {items.length === 0 ? (
             sending ? (
@@ -63,20 +57,7 @@ function AgentTimeline({
             )
           ))}
         </div>
-      </ScrollArea>
-      {showJumpToBottom ? (
-        <Button
-          type="button"
-          variant="secondary"
-          size="sm"
-          onClick={onJumpToBottom}
-          aria-label="跳到最新消息"
-          data-track="agent-timeline-jump-to-bottom"
-          className="absolute bottom-4 right-4 rounded-full shadow-md"
-        >
-          ↓ 新消息
-        </Button>
-      ) : null}
+      </div>
     </div>
   )
 }

@@ -96,6 +96,91 @@ describe("AgentComposer", () => {
     expect(html).not.toContain("lucide-shield-check")
   })
 
+  it("does not render the jump-to-bottom pill unless there are unread messages", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        showJumpToBottom={false}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    expect(html).not.toContain("↓ 新消息")
+    expect(html).not.toContain("跳到最新消息")
+  })
+
+  it("renders the jump-to-bottom pill at the composer top-right", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        showJumpToBottom
+        onJumpToBottom={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("↓ 新消息")
+    expect(html).toContain('aria-label="跳到最新消息"')
+    expect(html).toContain("-top-11")
+    expect(html).toContain("right-0")
+  })
+
+  it("tracks the jump-to-bottom action from the composer", async () => {
+    const onJumpToBottom = vi.fn()
+    const container = document.createElement("div")
+    const root = createRoot(container)
+    roots.push(root)
+    track.mockClear()
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          showJumpToBottom
+          onJumpToBottom={onJumpToBottom}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const button = container.querySelector('button[aria-label="跳到最新消息"]')
+    expect(button).toBeTruthy()
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onJumpToBottom).toHaveBeenCalledTimes(1)
+    expect(track).toHaveBeenCalledWith({
+      component: "button",
+      name: "agent-timeline-jump-to-bottom",
+      action: "click",
+    })
+  })
+
   it("places the permission mode selector next to the send button with the selected label", () => {
     const html = renderToStaticMarkup(
       <AgentComposer

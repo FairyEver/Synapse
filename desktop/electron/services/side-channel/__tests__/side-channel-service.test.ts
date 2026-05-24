@@ -415,7 +415,7 @@ describe("SideChannelService", () => {
     expect(JSON.stringify(warn.mock.calls)).not.toContain("agent result failed")
   })
 
-  it("logs missing Agent event dispatchers with target conversation context", () => {
+  it("ignores missing Agent event dispatchers without logging per stream event", () => {
     const warn = vi.fn()
     const logger = fakeLogger({ warn })
     const service = new SideChannelService({
@@ -435,16 +435,7 @@ describe("SideChannelService", () => {
       sdkSessionId: "sdk-session-1",
     })
 
-    expect(warn).toHaveBeenCalledWith("Reply target dispatcher missing.", expect.objectContaining({
-      projectId: "project-1",
-      sessionKey: "bridge:s1",
-      transportKind: "bridge",
-      connectorId: "bridge",
-      eventType: "result",
-      conversationId: "conv-1",
-      sdkSessionId: "sdk-session-1",
-    }))
-    expect(JSON.stringify(warn.mock.calls)).not.toContain("done")
+    expect(warn).not.toHaveBeenCalled()
   })
 
   it("rejects empty send, unknown project, missing session target, and unauthorized HTTP", async () => {

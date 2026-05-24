@@ -114,6 +114,9 @@ export type LogEntry = {
 
 type RequestOptions = RequestInit;
 
+const adminApiBasePath = '/api/admin';
+const authExpiredListeners = new Set<() => void>();
+
 export class ApiError extends Error {
   readonly status: number;
 
@@ -163,10 +166,37 @@ async function request<T>(path: string, options: RequestOptions = {}) {
   });
 
   if (!response.ok) {
-    throw new ApiError(await readErrorMessage(response), response.status);
+    const message = await readErrorMessage(response);
+    if (shouldNotifyAuthExpired(path, response.status)) {
+      notifyAuthExpired();
+    }
+    throw new ApiError(message, response.status);
   }
 
   return (await response.json()) as T;
+}
+
+export function subscribeAuthExpired(listener: () => void) {
+  authExpiredListeners.add(listener);
+  return () => {
+    authExpiredListeners.delete(listener);
+  };
+}
+
+function notifyAuthExpired() {
+  for (const listener of authExpiredListeners) {
+    listener();
+  }
+}
+
+function shouldNotifyAuthExpired(path: string, status: number) {
+  if (status !== 401 && status !== 403) return false;
+  if (!path.startsWith(adminApiBasePath)) return false;
+  return ![
+    `${adminApiBasePath}/login`,
+    `${adminApiBasePath}/logout`,
+    `${adminApiBasePath}/session`,
+  ].includes(path);
 }
 
 function paginationSuffix(options: { page?: number; pageSize?: number }) {
@@ -208,8 +238,6 @@ async function downloadFile(path: string, filename: string) {
     URL.revokeObjectURL(objectUrl);
   }
 }
-
-const adminApiBasePath = '/api/admin';
 
 export const adminApi = {
   getSession: () => request<AdminSession>(`${adminApiBasePath}/session`),

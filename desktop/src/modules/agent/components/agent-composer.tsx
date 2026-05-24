@@ -49,8 +49,10 @@ function AgentComposer({
   onPermissionModeChange = () => undefined,
   onCreatePermissionModeSession,
   pendingMessages = [],
+  showJumpToBottom = false,
   onRemovePendingMessage,
   onRetryPendingMessage,
+  onJumpToBottom,
   slashCandidates = [],
   knowledgeBaseActions = [],
   onKnowledgeBaseCommand,
@@ -62,6 +64,7 @@ function AgentComposer({
   readonly cancelPhase: "idle" | "cancel_pending" | "cancelled"
   readonly permissionMode?: SynapseAgentPermissionMode
   readonly pendingMessages?: readonly PendingMessage[]
+  readonly showJumpToBottom?: boolean
   readonly slashCandidates?: readonly AgentSlashCandidate[]
   readonly knowledgeBaseActions?: readonly KnowledgeBaseComposerAction[]
   readonly onDraftChange: (value: string) => void
@@ -69,6 +72,7 @@ function AgentComposer({
   readonly onSubmit: (event: FormEvent) => void
   readonly onCancelTurn: () => void
   readonly onForceKillTurn: () => void
+  readonly onJumpToBottom?: () => void
   readonly onPermissionModeChange?: (mode: SynapseAgentPermissionMode) => Promise<void> | void
   readonly onCreatePermissionModeSession?: (mode: SynapseAgentPermissionMode) => void
   readonly onRemovePendingMessage?: (id: string) => void
@@ -262,6 +266,19 @@ function AgentComposer({
         data-track="agent-composer"
         onSubmit={handleSubmit}
       >
+        {showJumpToBottom ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="sm"
+            onClick={onJumpToBottom}
+            aria-label="跳到最新消息"
+            data-track="agent-timeline-jump-to-bottom"
+            className="absolute -top-11 right-0 rounded-full shadow-md"
+          >
+            ↓ 新消息
+          </Button>
+        ) : null}
         <AgentComposerInputBox
           multiline={multiline}
           slashMenu={slashMenuOpen ? (

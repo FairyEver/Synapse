@@ -89,6 +89,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([])
   const pendingSessionRefreshKeyRef = useRef<string | null>(null)
   const pendingMessageIdRef = useRef(0)
+  const pinnedSelectionKeyRef = useRef<string | null>(null)
   const latestEntry = chat.timeline.at(-1)
   const stick = useStickToBottom({
     contentSignal: [
@@ -126,10 +127,12 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const selectedPendingMessages = pendingMessagesForTarget(pendingMessages, selectedTarget)
 
   useEffect(() => {
+    const selectionKey = `${chat.selectedProjectId ?? ""}:${chat.selectedConversationId ?? ""}`
+    if (selectionKey === pinnedSelectionKeyRef.current) return
+    pinnedSelectionKeyRef.current = selectionKey
     stick.forcePin()
-    // forcePin is stable; only fire when the active session identity changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [chat.selectedProjectId, chat.selectedConversationId, chat.selectedSessionKey])
+    // forcePin is stable; only fire when the visible conversation changes.
+  }, [chat.selectedProjectId, chat.selectedConversationId])
 
   useEffect(() => {
     if (!pendingAgentSession) {
@@ -528,8 +531,6 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               onOpenReference={openReference}
               onRespondPermission={(requestId, behavior) => chat.respondPermission(requestId, behavior)}
               viewportRef={stick.viewportRef}
-              showJumpToBottom={!stick.isPinned && stick.hasUnread}
-              onJumpToBottom={() => stick.scrollToBottom({ behavior: "smooth" })}
             />
 
             <AgentComposer
@@ -553,6 +554,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               onSubmit={handleSubmit}
               onCancelTurn={() => void chat.cancelTurn()}
               onForceKillTurn={() => void chat.forceKillTurn()}
+              showJumpToBottom={!stick.isPinned && stick.hasUnread}
+              onJumpToBottom={() => stick.scrollToBottom({ behavior: "smooth" })}
               pendingMessages={selectedPendingMessages}
               onRemovePendingMessage={handleRemovePendingMessage}
               onRetryPendingMessage={handleRetryPendingMessage}

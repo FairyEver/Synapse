@@ -223,17 +223,6 @@ describe("useChatEvents", () => {
     })
 
     expect(refreshPendingPermissions).toHaveBeenCalled()
-    expect(rendererLogger.debug).toHaveBeenCalledWith(
-      "Agent stream event applied.",
-      expect.objectContaining({
-        projectId: "project-1",
-        eventType: "permissionRequest",
-        conversationId: "conversation-1",
-        agentEventType: "permissionRequest",
-        sdkSessionId: "sdk-session-1",
-        selectedConversationId: "conversation-1",
-      }),
-    )
   })
 
   it("batches rapid SDK stream deltas before updating the timeline", async () => {
