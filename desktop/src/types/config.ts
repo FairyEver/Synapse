@@ -19,6 +19,8 @@ export type SynapseKnowledgeBaseProjectCapability = {
   enabled: true
   schemaVersion: 1
   templateVersion: string
+  managed?: true
+  runtimeId?: string
 }
 
 export type SynapseProjectCapabilities = {

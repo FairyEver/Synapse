@@ -170,6 +170,71 @@ describe("Synapse project capabilities", () => {
     expect(config.global.projects[0]?.capabilities).toBeUndefined()
   })
 
+  it("preserves managed knowledge base capability metadata", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [{
+          id: "kb-1",
+          name: "Knowledge",
+          path: "synapse-kb://kb-1",
+          capabilities: {
+            knowledgeBase: {
+              enabled: true,
+              schemaVersion: 1,
+              templateVersion: "2026-05-24",
+              managed: true,
+              runtimeId: "kb-1",
+            },
+          },
+        }],
+      },
+    })
+
+    expect(config.global.projects[0]).toEqual(expect.objectContaining({
+      id: "kb-1",
+      name: "Knowledge",
+      path: "synapse-kb://kb-1",
+      capabilities: {
+        knowledgeBase: {
+          enabled: true,
+          schemaVersion: 1,
+          templateVersion: "2026-05-24",
+          managed: true,
+          runtimeId: "kb-1",
+        },
+      },
+    }))
+  })
+
+  it("drops invalid managed knowledge base runtime ids", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [{
+          id: "kb-1",
+          name: "Knowledge",
+          path: "synapse-kb://kb-1",
+          capabilities: {
+            knowledgeBase: {
+              enabled: true,
+              schemaVersion: 1,
+              templateVersion: "2026-05-24",
+              managed: true,
+              runtimeId: "",
+            },
+          },
+        }],
+      },
+    })
+
+    expect(config.global.projects[0]?.capabilities).toBeUndefined()
+  })
+
   it("applies project capability patches without dropping existing project fields", () => {
     const current = createDefaultConfig()
     const next = applySynapseConfigPatch(current, {
