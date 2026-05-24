@@ -80,6 +80,15 @@ export function LogsPage() {
     }
   }
 
+  async function downloadLogs(options: { from?: string; to?: string } = {}) {
+    setFeedback('');
+    try {
+      await adminApi.downloadLogs(options);
+    } catch (nextError) {
+      setFeedback(nextError instanceof Error ? nextError.message : '下载失败');
+    }
+  }
+
   return (
     <main className="flex min-w-0 flex-1 flex-col gap-6 overflow-x-hidden overflow-y-auto p-4 pt-0">
       <div className="flex flex-wrap items-center gap-2">
@@ -143,11 +152,11 @@ export function LogsPage() {
             />
             <Button
               variant="outline"
-              onClick={() => adminApi.downloadLogs({ from, to })}
+              onClick={() => downloadLogs({ from, to })}
             >
               下载范围
             </Button>
-            <Button onClick={() => adminApi.downloadLogs()}>下载全部</Button>
+            <Button onClick={() => downloadLogs()}>下载全部</Button>
             <Input
               className={filterControlClass}
               type="date"

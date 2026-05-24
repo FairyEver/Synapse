@@ -72,6 +72,15 @@ export function BackupPage() {
     }
   }
 
+  async function downloadBackup(filename: string) {
+    setFeedback('');
+    try {
+      await adminApi.downloadBackup(filename);
+    } catch (nextError) {
+      setFeedback(nextError instanceof Error ? nextError.message : '下载失败');
+    }
+  }
+
   return (
     <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 pt-0">
       <div className="flex items-center justify-between gap-4">
@@ -105,7 +114,7 @@ export function BackupPage() {
                     <div className="flex justify-end gap-2">
                       <Button
                         variant="outline"
-                        onClick={() => adminApi.downloadBackup(file.filename)}
+                        onClick={() => downloadBackup(file.filename)}
                       >
                         下载
                       </Button>
