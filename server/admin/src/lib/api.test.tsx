@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { adminApi } from "./api"
+import { adminApi, userDashboardApi } from "./api"
 
 describe("adminApi", () => {
   afterEach(() => {
@@ -160,5 +160,21 @@ describe("adminApi", () => {
       { href: "blob:logs", download: "logs.zip" },
       { href: "/api/admin/backup/download/synapse%20backup.tar.gz", download: "synapse backup.tar.gz" },
     ])
+  })
+
+  it("loads user dashboard identity from /api/auth/me", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ "Content-Type": "application/json" }),
+      json: () => Promise.resolve({ user: { id: "user-1" }, teams: [] }),
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(userDashboardApi.getMe()).resolves.toEqual({ user: { id: "user-1" }, teams: [] })
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/auth/me",
+      expect.objectContaining({ credentials: "include" }),
+    )
   })
 })

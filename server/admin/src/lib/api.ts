@@ -166,6 +166,7 @@ export interface TeamMember {
   readonly role: "owner" | "member"
   readonly createdAt: string
   readonly user: TeamUser
+  readonly accessRoles: Array<{ readonly role: { readonly id: string; readonly name: string } }>
 }
 
 export interface MyTeam {
@@ -194,6 +195,18 @@ export interface TeamInvitationResponse {
   readonly token: string
   readonly inviteUrl: string
   readonly expiresAt: string
+}
+
+export interface UserMe {
+  readonly user: TeamUser
+  readonly teams: Array<{
+    readonly id: string
+    readonly name: string
+    readonly membershipId: string
+    readonly membershipRole: "owner" | "member"
+    readonly roles: Array<{ readonly id: string; readonly name: string }>
+    readonly effectivePermissions: string[]
+  }>
 }
 
 export interface LogFileInfo {
@@ -432,6 +445,7 @@ export const userAuthApi = {
 }
 
 export const userDashboardApi = {
+  getMe: () => request<UserMe>("/api/auth/me"),
   getMyTeam: () => request<MyTeam | null>("/api/teams/me"),
   createTeam: (input: { readonly name: string }) =>
     request<TeamSummary>("/api/teams", {

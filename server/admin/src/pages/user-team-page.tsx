@@ -29,12 +29,23 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useApiResource } from "@/hooks/use-api-resource"
-import { userDashboardApi, type MyTeam, type TeamMember } from "@/lib/api"
+import { userDashboardApi, type MyTeam, type TeamMember, type UserMe } from "@/lib/api"
 import { formatDate } from "@/lib/format"
 import { formatTeamRole } from "@/lib/team-role"
 
+interface UserTeamPageData {
+  readonly membership: MyTeam | null
+  readonly me: UserMe
+}
+
 export function UserTeamPage() {
-  const { data: membership, error, loading, reload } = useApiResource<MyTeam | null>(() => userDashboardApi.getMyTeam())
+  const { data, error, loading, reload } = useApiResource<UserTeamPageData>(async () => {
+    const [membership, me] = await Promise.all([
+      userDashboardApi.getMyTeam(),
+      userDashboardApi.getMe(),
+    ])
+    return { membership, me }
+  })
   const [teamName, setTeamName] = React.useState("")
   const [inviteUrl, setInviteUrl] = React.useState("")
   const [dialogOpen, setDialogOpen] = React.useState(false)
@@ -97,6 +108,7 @@ export function UserTeamPage() {
   }
 
   async function leaveTeam() {
+    const membership = data?.membership
     const members = membership?.team.memberships ?? []
     if (membership?.role === "owner" && members.length > 1) {
       setActionError("请先移除其他成员。")
@@ -129,6 +141,8 @@ export function UserTeamPage() {
   if (loading) return <PageState>加载中</PageState>
   if (error) return <PageState>{error}</PageState>
 
+  const membership = data?.membership ?? null
+
   if (!membership) {
     return (
       <Card className="max-w-md">
@@ -156,6 +170,9 @@ export function UserTeamPage() {
 
   const members = membership.team.memberships
   const isOwner = membership.role === "owner"
+  const currentTeam = data?.me.teams.find((team) => team.membershipId === membership.id)
+  const currentRoles = currentTeam?.roles ?? []
+  const effectivePermissions = currentTeam?.effectivePermissions ?? []
 
   return (
     <div className="flex flex-col gap-4">
@@ -163,6 +180,14 @@ export function UserTeamPage() {
         <div>
           <h2 className="text-lg font-medium">{membership.team.name}</h2>
           <p className="text-sm text-muted-foreground">成员 {members.length}</p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            <Badge variant={membership.role === "owner" ? "default" : "secondary"}>
+              {formatTeamRole(membership.role)}
+            </Badge>
+            {currentRoles.map((role) => (
+              <Badge key={role.id} variant="outline">{role.name}</Badge>
+            ))}
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {isOwner ? (
@@ -177,6 +202,18 @@ export function UserTeamPage() {
         </div>
       </div>
       {actionError ? <p className="text-sm text-destructive">{actionError}</p> : null}
+      <section className="grid gap-2">
+        <h3 className="text-sm font-medium">我的权限</h3>
+        <div className="flex flex-wrap gap-2">
+          {effectivePermissions.length > 0 ? (
+            effectivePermissions.map((permission) => (
+              <Badge key={permission} variant="secondary">{permission}</Badge>
+            ))
+          ) : (
+            <span className="text-sm text-muted-foreground">暂无权限</span>
+          )}
+        </div>
+      </section>
       <Table>
         <TableHeader>
           <TableRow>
@@ -191,7 +228,14 @@ export function UserTeamPage() {
             <TableRow key={member.id}>
               <TableCell>{member.user.email}</TableCell>
               <TableCell>
-                <Badge variant={member.role === "owner" ? "default" : "secondary"}>{formatTeamRole(member.role)}</Badge>
+                <div className="flex flex-wrap gap-2">
+                  <Badge variant={member.role === "owner" ? "default" : "secondary"}>
+                    {formatTeamRole(member.role)}
+                  </Badge>
+                  {member.accessRoles.map((accessRole) => (
+                    <Badge key={accessRole.role.id} variant="outline">{accessRole.role.name}</Badge>
+                  ))}
+                </div>
               </TableCell>
               <TableCell>{formatDate(member.createdAt)}</TableCell>
               {isOwner ? (

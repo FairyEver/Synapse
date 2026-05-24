@@ -42,6 +42,38 @@ function createPermissionsMock() {
 }
 
 describe("TeamsService", () => {
+  it("loads team members with access roles", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue({ id: "membership-1" })
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn(), consumeInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
+    )
+
+    await expect(service.getMyTeam("user-1")).resolves.toEqual({ id: "membership-1" })
+
+    expect(prisma.teamMembership.findUnique).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      include: {
+        team: {
+          include: {
+            memberships: {
+              include: {
+                user: { select: { id: true, email: true, status: true } },
+                accessRoles: {
+                  select: { role: { select: { id: true, name: true } } },
+                  orderBy: { assignedAt: "asc" },
+                },
+              },
+              orderBy: { createdAt: "asc" },
+            },
+          },
+        },
+      },
+    })
+  })
+
   it("rejects team creation when the user already belongs to a team", async () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ id: "membership-1" })

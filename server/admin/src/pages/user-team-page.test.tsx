@@ -1,5 +1,5 @@
-import { afterEach, describe, expect, it, vi } from "vitest"
-import { userDashboardApi, type MyTeam } from "@/lib/api"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { userDashboardApi, type MyTeam, type UserMe } from "@/lib/api"
 import { render, waitFor } from "@/test/render"
 import { UserTeamPage } from "./user-team-page"
 
@@ -7,6 +7,7 @@ vi.mock("@/lib/api", () => ({
   userDashboardApi: {
     createInvitation: vi.fn(),
     createTeam: vi.fn(),
+    getMe: vi.fn(),
     getMyTeam: vi.fn(),
     leaveTeam: vi.fn(),
     removeMember: vi.fn(),
@@ -30,6 +31,7 @@ const team: MyTeam = {
         role: "owner",
         createdAt: "2026-05-22T00:00:00.000Z",
         user: { id: "owner-1", email: "owner@example.com", status: "active" },
+        accessRoles: [{ role: { id: "role-admin", name: "团队管理员" } }],
       },
       {
         id: "membership-member",
@@ -38,9 +40,22 @@ const team: MyTeam = {
         role: "member",
         createdAt: "2026-05-22T00:00:00.000Z",
         user: { id: "user-2", email: "member@example.com", status: "active" },
+        accessRoles: [{ role: { id: "role-member", name: "普通成员" } }],
       },
     ],
   },
+}
+
+const userMe: UserMe = {
+  user: { id: "owner-1", email: "owner@example.com", status: "active" },
+  teams: [{
+    id: "team-1",
+    name: "Core Team",
+    membershipId: "membership-owner",
+    membershipRole: "owner",
+    roles: [{ id: "role-admin", name: "团队管理员" }],
+    effectivePermissions: ["database.use", "team.member.manage"],
+  }],
 }
 
 const singleOwnerTeam: MyTeam = {
@@ -54,11 +69,30 @@ const singleOwnerTeam: MyTeam = {
 describe("UserTeamPage", () => {
   let cleanup: (() => void) | null = null
 
+  beforeEach(() => {
+    vi.mocked(userDashboardApi.getMe).mockResolvedValue(userMe)
+  })
+
   afterEach(() => {
     cleanup?.()
     cleanup = null
     vi.unstubAllGlobals()
     vi.clearAllMocks()
+  })
+
+  it("shows access roles and effective permissions", async () => {
+    vi.mocked(userDashboardApi.getMyTeam).mockResolvedValue(team)
+
+    const result = await render(<UserTeamPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(userDashboardApi.getMe).toHaveBeenCalledWith()
+      expect(result.container.textContent).toContain("团队管理员")
+      expect(result.container.textContent).toContain("普通成员")
+      expect(result.container.textContent).toContain("database.use")
+      expect(result.container.textContent).toContain("team.member.manage")
+    })
   })
 
   it("asks for dissolution confirmation when the owner is the only member", async () => {

@@ -51,7 +51,13 @@ export class TeamsService {
         team: {
           include: {
             memberships: {
-              include: { user: { select: { id: true, email: true, status: true } } },
+              include: {
+                user: { select: { id: true, email: true, status: true } },
+                accessRoles: {
+                  select: { role: { select: { id: true, name: true } } },
+                  orderBy: { assignedAt: "asc" },
+                },
+              },
               orderBy: { createdAt: "asc" },
             },
           },
