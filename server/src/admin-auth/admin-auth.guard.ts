@@ -18,8 +18,8 @@ export class AdminAuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AdminRequest>()
     const token = request.cookies?.synapse_admin
-    const admin = typeof token === "string" ? await this.auth.verify(token) : null
-    if (!admin) {
+    const session = typeof token === "string" ? await this.auth.verifyDashboardSession(token) : null
+    if (!session) {
       await recordAuthGuardFailure({
         auditLog: this.auditLog,
         action: "admin.auth.verify.failed",
@@ -28,7 +28,10 @@ export class AdminAuthGuard implements CanActivate {
       })
       throw new ForbiddenException("未登录或登录已过期。")
     }
-    request.admin = admin
+    if (session.role !== "admin") {
+      throw new ForbiddenException("未登录或登录已过期。")
+    }
+    request.admin = { id: session.id, email: session.email }
     return true
   }
 }
