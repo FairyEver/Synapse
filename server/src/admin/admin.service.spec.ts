@@ -127,6 +127,7 @@ describe("AdminService", () => {
         status: true,
         memberships: {
           select: {
+            id: true,
             role: true,
             team: { select: { id: true, name: true } },
             accessRoles: {
@@ -157,6 +158,7 @@ describe("AdminService", () => {
         status: true,
         memberships: {
           select: {
+            id: true,
             role: true,
             team: { select: { id: true, name: true } },
             accessRoles: {

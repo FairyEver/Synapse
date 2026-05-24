@@ -14,6 +14,7 @@ const adminUserSelect = {
   status: true,
   memberships: {
     select: {
+      id: true,
       role: true,
       team: { select: { id: true, name: true } },
       accessRoles: {
