@@ -36,6 +36,7 @@ export class UserAuthController {
     return this.auth.login(parseBody(loginSchema, body, "登录请求无效。"), request.ip)
   }
 
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post("/refresh")
   refresh(@Body() body: unknown, @Req() request: Request) {
     return this.auth.refresh(parseBody(refreshSchema, body, "刷新请求无效。"), request.ip)
