@@ -7,7 +7,7 @@ import { BackupPage } from '@/pages/backup-page';
 import { InvitationsPage } from '@/pages/invitations-page';
 import { LoginPage } from '@/pages/login-page';
 import { LogsPage } from '@/pages/logs-page';
-import { SectionPage } from '@/pages/section-page';
+import { SignupPage } from '@/pages/signup-page';
 import { SystemPage } from '@/pages/system-page';
 import { TeamInvitePage } from '@/pages/team-invite-page';
 import { TeamsPage } from '@/pages/teams-page';
@@ -37,7 +37,7 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
-        <Route path="/signup" element={<SectionPage title="注册" />} />
+        <Route path="/signup" element={<SignupPage />} />
         <Route path="/team-invite" element={<TeamInvitePage />} />
         <Route element={<ProtectedRoute />}>
           <Route element={<DashboardLayout />}>

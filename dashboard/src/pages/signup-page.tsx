@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, useNavigate, useSearchParams } from 'react-router';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -14,26 +14,27 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { userApi } from '@/lib/api';
 
-export function TeamInvitePage() {
+export function SignupPage() {
   const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
   const [invitationToken, setInvitationToken] = useState(
-    searchParams.get('token') ?? '',
+    searchParams.get('invite') ?? '',
   );
-  const [feedback, setFeedback] = useState('');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setFeedback('');
     setError('');
     setIsSubmitting(true);
 
     try {
-      await userApi.joinTeam({ invitationToken });
-      setFeedback('已加入团队');
+      await userApi.register({ invitationToken, email, password });
+      navigate('/login', { replace: true });
     } catch (nextError) {
-      setError(nextError instanceof Error ? nextError.message : '加入失败');
+      setError(nextError instanceof Error ? nextError.message : '注册失败');
     } finally {
       setIsSubmitting(false);
     }
@@ -43,7 +44,7 @@ export function TeamInvitePage() {
     <main className="flex min-h-svh items-center justify-center bg-muted p-6">
       <Card className="w-full max-w-sm">
         <CardHeader>
-          <CardTitle>团队邀请</CardTitle>
+          <CardTitle>注册</CardTitle>
           <CardAction>
             <Button asChild variant="link">
               <Link to="/login">登录</Link>
@@ -54,17 +55,34 @@ export function TeamInvitePage() {
           <CardContent>
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">
-                <Label htmlFor="teamInvitationToken">邀请码</Label>
+                <Label htmlFor="invitationToken">邀请码</Label>
                 <Input
-                  id="teamInvitationToken"
+                  id="invitationToken"
                   value={invitationToken}
                   onChange={(event) => setInvitationToken(event.target.value)}
                   required
                 />
               </div>
-              {feedback ? (
-                <p className="text-sm text-muted-foreground">{feedback}</p>
-              ) : null}
+              <div className="grid gap-2">
+                <Label htmlFor="email">邮箱</Label>
+                <Input
+                  id="email"
+                  type="email"
+                  value={email}
+                  onChange={(event) => setEmail(event.target.value)}
+                  required
+                />
+              </div>
+              <div className="grid gap-2">
+                <Label htmlFor="password">密码</Label>
+                <Input
+                  id="password"
+                  type="password"
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
+                  required
+                />
+              </div>
               {error ? (
                 <p className="text-sm text-destructive">{error}</p>
               ) : null}
@@ -72,7 +90,7 @@ export function TeamInvitePage() {
           </CardContent>
           <CardFooter>
             <Button className="w-full" disabled={isSubmitting} type="submit">
-              {isSubmitting ? '加入中' : '加入团队'}
+              {isSubmitting ? '注册中' : '注册'}
             </Button>
           </CardFooter>
         </form>

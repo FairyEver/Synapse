@@ -112,6 +112,11 @@ export type LogEntry = {
   err?: { message: string; stack: string };
 };
 
+export type UserTokenPair = {
+  accessToken: string;
+  refreshToken: string;
+};
+
 type RequestOptions = RequestInit;
 
 const adminApiBasePath = '/api/admin';
@@ -327,4 +332,21 @@ export const adminApi = {
       `${adminApiBasePath}/logs/cleanup?${new URLSearchParams({ before }).toString()}`,
       { method: 'DELETE' },
     ),
+};
+
+export const userApi = {
+  register: (input: {
+    invitationToken: string;
+    email: string;
+    password: string;
+  }) =>
+    request<UserTokenPair>('/api/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  joinTeam: (input: { invitationToken: string }) =>
+    request<unknown>('/api/teams/join', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 };
