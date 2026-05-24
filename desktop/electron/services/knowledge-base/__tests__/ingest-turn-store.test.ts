@@ -14,7 +14,9 @@ describe("KnowledgeBaseIngestTurnStore", () => {
       wikiBefore: { files: {} },
     })
 
-    expect(store.consume("turn-1")?.changedSources).toHaveLength(1)
+    const record = store.consume("turn-1")
+    expect(record?.kind).toBe("preflight")
+    expect(record?.kind === "preflight" ? record.state.changedSources : []).toHaveLength(1)
     expect(store.consume("turn-1")).toBeNull()
   })
 })

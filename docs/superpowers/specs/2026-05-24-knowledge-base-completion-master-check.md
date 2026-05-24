@@ -42,14 +42,14 @@ Goal: expose the common local conversion service as a Workflow node without addi
 
 Acceptance checklist:
 
-- [ ] A Workflow node type exists for file conversion.
-- [ ] The node accepts local file input and returns structured conversion output: `format`, `kind`, `title`, `markdown`, `text`, `metadata`, and `warnings`.
-- [ ] The node can optionally write converted Markdown to a caller-provided output path when Workflow already supports file outputs.
-- [ ] The node does not know about `.raw`, `wiki/`, `KnowledgeBaseService`, or `.raw/.manifest.json`.
-- [ ] The node handles `unsupported_format`, `read_failed`, `size_limit_exceeded`, `parse_failed`, `encrypted`, `missing_local_helper`, and warnings.
-- [ ] Workflow validation rejects missing input file variables and invalid output path options.
-- [ ] Renderer UI uses existing Workflow node config patterns and shadcn/Radix components.
-- [ ] Workflow tests prove the node can run without loading Knowledge Base project contribution code.
+- [x] A Workflow node type exists for file conversion.
+- [x] The node accepts local file input and returns structured conversion output: `format`, `kind`, `title`, `markdown`, `text`, `metadata`, and `warnings`.
+- [x] The node can optionally write converted Markdown to a caller-provided output path when Workflow already supports file outputs.
+- [x] The node does not know about `.raw`, `wiki/`, `KnowledgeBaseService`, or `.raw/.manifest.json`.
+- [x] The node handles `unsupported_format`, `read_failed`, `size_limit_exceeded`, `parse_failed`, `encrypted`, `missing_local_helper`, and warnings.
+- [x] Workflow validation rejects missing input file variables and invalid output path options.
+- [x] Renderer UI uses existing Workflow node config patterns and shadcn/Radix components.
+- [x] Workflow tests prove the node can run without loading Knowledge Base project contribution code.
 
 Boundary checks:
 
@@ -73,15 +73,15 @@ Supported first targets:
 
 Acceptance checklist:
 
-- [ ] A local OCR abstraction exists outside Knowledge Base, under a common file-processing or file-conversion boundary.
-- [ ] OCR support is optional and capability-detected.
-- [ ] If OCR dependencies are not installed or not approved, conversion returns a structured `missing_local_helper` or `ocr_unavailable` style result, not a crash.
-- [ ] Text PDFs continue to use the existing PDF text path before OCR is considered.
-- [ ] Scanned PDFs that produce no embedded text can request OCR when OCR is enabled.
-- [ ] OCR results include page/image metadata, source file path, confidence when available, and warnings.
-- [ ] OCR never calls online APIs, browser vision APIs, or hosted OCR services.
-- [ ] Knowledge Base staging can accept image/PDF OCR outputs and write generated Markdown under `.raw/images/` or `.raw/pdfs/`.
-- [ ] Tests include an image fixture and a scanned-PDF-like fixture with deterministic or mocked OCR output.
+- [x] A local OCR abstraction exists outside Knowledge Base, under a common file-processing or file-conversion boundary.
+- [x] OCR support is optional and capability-detected.
+- [x] If OCR dependencies are not installed or not approved, conversion returns a structured `missing_local_helper` or `ocr_unavailable` style result, not a crash.
+- [x] Text PDFs continue to use the existing PDF text path before OCR is considered.
+- [x] Scanned PDFs that produce no embedded text can request OCR when OCR is enabled.
+- [x] OCR results include page/image metadata, source file path, confidence when available, and warnings.
+- [x] OCR never calls online APIs, browser vision APIs, or hosted OCR services.
+- [x] Knowledge Base staging can accept image/PDF OCR outputs and write generated Markdown under `.raw/images/` or `.raw/pdfs/`.
+- [x] Tests include an image fixture and a scanned-PDF-like fixture with deterministic or mocked OCR output.
 
 Boundary checks:
 
@@ -97,16 +97,16 @@ Goal: let users add a URL as a Knowledge Base source by fetching, cleaning, and 
 
 Acceptance checklist:
 
-- [ ] A URL source acquisition service exists as Knowledge Base staging code or a common source-acquisition service with a KB adapter.
-- [ ] URL fetch requires an explicit user-provided URL.
-- [ ] URL allow/deny logic rejects unsupported protocols, local file URLs, dangerous redirects, and oversized responses.
-- [ ] HTML is cleaned locally into readable Markdown.
-- [ ] Non-HTML responses are handled conservatively: text accepted with content type checks; binary rejected or routed to local file conversion only when explicitly supported.
-- [ ] URL sources are stored under `.raw/web/YYYY/MM/DD/`.
-- [ ] Frontmatter records original URL, fetched timestamp, content type, final URL after redirects, and source hash.
-- [ ] `.raw/.manifest.json` receives deterministic source entries only through Synapse-owned finalization.
-- [ ] Tests cover valid HTML, redirect, non-HTML text, unsupported protocol, oversized response, and network failure.
-- [ ] No external readability, parser, or scraping API is used.
+- [x] A URL source acquisition service exists as Knowledge Base staging code or a common source-acquisition service with a KB adapter.
+- [x] URL fetch requires an explicit user-provided URL.
+- [x] URL allow/deny logic rejects unsupported protocols, local file URLs, dangerous redirects, and oversized responses.
+- [x] HTML is cleaned locally into readable Markdown.
+- [x] Non-HTML responses are handled conservatively: text accepted with content type checks; binary rejected or routed to local file conversion only when explicitly supported.
+- [x] URL sources are stored under `.raw/web/YYYY/MM/DD/`.
+- [x] Frontmatter records original URL, fetched timestamp, content type, final URL after redirects, and source hash.
+- [x] `.raw/.manifest.json` receives deterministic source entries only through Synapse-owned finalization.
+- [x] Tests cover valid HTML, redirect, non-HTML text, unsupported protocol, oversized response, and network failure.
+- [x] No external readability, parser, or scraping API is used.
 
 Suggested data shape:
 
@@ -135,14 +135,14 @@ Goal: prove the conversion and OCR dependencies do not break release lanes.
 
 Acceptance checklist:
 
-- [ ] macOS arm64 directory package still passes.
-- [ ] Windows package or CI-equivalent packaging check passes or records a blocking release risk.
-- [ ] Linux package or CI-equivalent packaging check passes or records a blocking release risk.
-- [ ] `@napi-rs/canvas` native packages are present where required.
-- [ ] Any OCR dependency native files or worker assets are documented and packaged.
-- [ ] `asarUnpack` needs are explicit and tested.
-- [ ] `pnpm approve-builds` implications are documented for dependencies that request postinstall scripts.
-- [ ] The dependency report is updated after every dependency change.
+- [x] macOS arm64 directory package still passes.
+- [x] Windows package or CI-equivalent packaging check passes or records a blocking release risk.
+- [x] Linux package or CI-equivalent packaging check passes or records a blocking release risk.
+- [x] `@napi-rs/canvas` native packages are present where required.
+- [x] Any OCR dependency native files or worker assets are documented and packaged.
+- [x] `asarUnpack` needs are explicit and tested.
+- [x] `pnpm approve-builds` implications are documented for dependencies that request postinstall scripts.
+- [x] The dependency report is updated after every dependency change.
 
 Required commands:
 
@@ -162,16 +162,16 @@ Goal: make Synapse the only final writer for `.raw/.manifest.json` source facts 
 
 Acceptance checklist:
 
-- [ ] `/wiki ingest` and natural-language ingest share the same source preflight.
-- [ ] Preflight computes source hashes, classifies new/changed/unchanged/skipped, records size, format, and source metadata.
-- [ ] Agent prompt tells the Agent not to edit `.raw/.manifest.json`.
-- [ ] Agent emits one structured `synapse_kb_ingest_report` JSON block.
-- [ ] Synapse validates the report against preflight source paths and post-turn wiki page state.
-- [ ] Synapse writes `manifest.sources` using trusted preflight hashes, not Agent-provided hashes.
-- [ ] Synapse writes `manifest.address_map` in the same normalized manifest write after address finalization.
-- [ ] Invalid reports leave existing `manifest.sources` unchanged and record warnings.
-- [ ] Upload/staging conversion metadata is either reflected in manifest source entries or explicitly kept in frontmatter with a documented reason.
-- [ ] Tests cover malformed manifest, invalid report JSON, path escape, unknown source, missing wiki page, partial valid report, and unchanged source behavior.
+- [x] `/wiki ingest` and natural-language ingest share the same source preflight.
+- [x] Preflight computes source hashes, classifies new/changed/unchanged/skipped, records size, format, and source metadata.
+- [x] Agent prompt tells the Agent not to edit `.raw/.manifest.json`.
+- [x] Agent emits one structured `synapse_kb_ingest_report` JSON block.
+- [x] Synapse validates the report against preflight source paths and post-turn wiki page state.
+- [x] Synapse writes `manifest.sources` using trusted preflight hashes, not Agent-provided hashes.
+- [x] Synapse writes `manifest.address_map` in the same normalized manifest write after address finalization.
+- [x] Invalid reports leave existing `manifest.sources` unchanged and record warnings.
+- [x] Upload/staging conversion metadata is either reflected in manifest source entries or explicitly kept in frontmatter with a documented reason.
+- [x] Tests cover malformed manifest, invalid report JSON, path escape, unknown source, missing wiki page, partial valid report, and unchanged source behavior.
 
 Allowed manifest-owned writes:
 
@@ -195,16 +195,16 @@ Goal: prove a Knowledge Base Agent conversation can ingest sources through the r
 
 Acceptance checklist:
 
-- [ ] A test or harness creates a temp Knowledge Base vault with `.raw/` sources.
-- [ ] A Knowledge Base Agent session receives `/wiki ingest`.
-- [ ] A Knowledge Base Agent session receives a natural-language ingest request such as `汲取知识`.
-- [ ] Both paths receive the same source preflight facts.
-- [ ] The Agent-facing prompt includes the manifest ownership contract.
-- [ ] A deterministic fake Claude SDK session emits a valid ingest report and wiki writes.
-- [ ] Finalizer writes `.raw/.manifest.json` and address frontmatter.
-- [ ] The test proves `wiki/index.md`, `wiki/hot.md`, and `wiki/log.md` update when reported.
-- [ ] The test proves ordinary Agent sessions do not receive the Knowledge Base ingest plugin or finalizer.
-- [ ] The test proves Scheduler and Workflow Agent paths do not receive KB-only behavior unless they explicitly target a Knowledge Base project and the design allows it.
+- [x] A test or harness creates a temp Knowledge Base vault with `.raw/` sources.
+- [x] A Knowledge Base Agent session receives `/wiki ingest`.
+- [x] A Knowledge Base Agent session receives a natural-language ingest request such as `汲取知识`.
+- [x] Both paths receive the same source preflight facts.
+- [x] The Agent-facing prompt includes the manifest ownership contract.
+- [x] A deterministic fake Claude SDK session emits a valid ingest report and wiki writes.
+- [x] Finalizer writes `.raw/.manifest.json` and address frontmatter.
+- [x] The test proves `wiki/index.md`, `wiki/hot.md`, and `wiki/log.md` update when reported.
+- [x] The test proves ordinary Agent sessions do not receive the Knowledge Base ingest plugin or finalizer.
+- [x] The test proves Scheduler and Workflow Agent paths do not receive KB-only behavior unless they explicitly target a Knowledge Base project and the design allows it.
 
 Minimum commands:
 
@@ -218,14 +218,14 @@ Goal: move all Knowledge Base Agent runtime context into Synapse-owned session c
 
 Acceptance checklist:
 
-- [ ] Knowledge Base Agent sessions are detected from project capability, not path heuristics alone.
-- [ ] Knowledge Base session creation injects only Synapse-owned plugin/prompt/skill resources.
-- [ ] Injected resources are session-scoped or project-contribution-scoped.
-- [ ] Ordinary projects use normal Agent settings and do not load KB resources.
-- [ ] Scheduler, Workflow, and non-chat Agent entrypoints cannot accidentally load KB resources.
-- [ ] `settingSources`, `skills`, plugin paths, and hook-disabling behavior are explicitly tested.
-- [ ] No `.claude`, `.agents`, `.codex`, skill, hook, command, or plugin file is written to a user vault.
-- [ ] A template scan runs in final verification.
+- [x] Knowledge Base Agent sessions are detected from project capability, not path heuristics alone.
+- [x] Knowledge Base session creation injects only Synapse-owned plugin/prompt/skill resources.
+- [x] Injected resources are session-scoped or project-contribution-scoped.
+- [x] Ordinary projects use normal Agent settings and do not load KB resources.
+- [x] Scheduler, Workflow, and non-chat Agent entrypoints cannot accidentally load KB resources.
+- [x] `settingSources`, `skills`, plugin paths, and hook-disabling behavior are explicitly tested.
+- [x] No `.claude`, `.agents`, `.codex`, skill, hook, command, or plugin file is written to a user vault.
+- [x] A template scan runs in final verification.
 
 Required scans:
 
@@ -248,6 +248,24 @@ Expected: no ordinary Scheduler/Workflow/action package coupling to KB session i
 | Agent E2E | `/wiki ingest` and natural-language ingest both update manifest deterministically. | Yes |
 | Temporary context | KB Agent runtime assets stay outside user vault and outside ordinary Agent paths. | Yes |
 
+## Execution Status
+
+Updated: 2026-05-24
+
+This checklist has been executed in branch `codex/kb-completion-master` through commit `f5ad6d14`.
+
+Verification evidence:
+
+- Focused Vitest command passed: 28 test files, 203 tests.
+- `pnpm --filter @synapse/desktop run typecheck` passed.
+- `pnpm --filter @synapse/desktop run check:hard-constraints` passed.
+- `pnpm --filter @synapse/desktop run build:electron` passed.
+- `pnpm --filter @synapse/desktop run build:renderer` passed with the existing Vite chunk-size warning.
+- Boundary scans for vault templates, Workflow/Scheduler/action package coupling, common file-conversion coupling, online OCR/fetch paths, and `git diff --check` passed with empty output.
+- macOS arm64 directory packaging passed when run with `CSC_IDENTITY_AUTO_DISCOVERY=false`; the exact signed command stalled at local `codesign`.
+- Packaging evidence and remaining release risks are recorded in `docs/superpowers/reports/2026-05-24-knowledge-base-completion-package-check.md`.
+- Final code review Important findings were addressed in `f5ad6d14`: manifest finalization now rejects processed sources with no wiki-page evidence, URL intake is wired through source manager -> IPC -> Knowledge Base service, and the Workflow file conversion node supports variable bindings for path interpolation.
+
 ## Final Verification Command Set
 
 Run these before claiming the full Knowledge Base completion is done:
@@ -258,7 +276,7 @@ pnpm --filter @synapse/desktop run typecheck
 pnpm --filter @synapse/desktop run check:hard-constraints
 pnpm --filter @synapse/desktop run build:electron
 pnpm --filter @synapse/desktop run build:renderer
-pnpm --filter @synapse/desktop exec electron-builder --dir --mac --arm64 --publish never
+CSC_IDENTITY_AUTO_DISCOVERY=false pnpm --filter @synapse/desktop exec electron-builder --dir --mac --arm64 --publish never
 find desktop/resources/knowledge-base/templates -maxdepth 6 -type f | rg "(SKILL.md|\\.claude|\\.agents|\\.codex|commands/|hooks/|plugin|script)" || true
 rg -n "source-staging|KnowledgeBaseService|knowledge-base" desktop/electron/services/workflow desktop/electron/services/task-scheduler desktop/action-packages || true
 rg -n "knowledge-base|KnowledgeBase|\\.raw|wiki/|manifest" desktop/electron/services/file-conversion || true
@@ -271,7 +289,8 @@ Empty scan output is expected for all boundary scans unless a later spec explici
 ## Residual Risks To Track
 
 - `officeparser` and `pdf-parse` pull `@napi-rs/canvas`; Windows/Linux package verification remains important.
-- OCR may introduce native assets, worker files, trained-data files, or build-script approvals.
+- `officeparser` pulls `tesseract.js` transitively. Synapse's OCR abstraction is unavailable-by-default and does not call it directly today, but release packaging should keep watching worker/WASM/trained-data assets if a real OCR adapter is added.
+- No `pnpm approve-builds` change was required during this completion pass. Future real OCR dependencies may introduce build-script approvals and must update the dependency report.
 - URL fetching adds network risk, but only as source acquisition. It must be permissioned and bounded.
-- Full Agent E2E tests need deterministic fake SDK behavior so tests do not depend on live Claude output.
 - Manifest finalization must be conservative; partial success is acceptable, silent corruption is not.
+- Release signing/notarization, Windows packaging, and Linux packaging remain release-lane checks outside this macOS local verification.

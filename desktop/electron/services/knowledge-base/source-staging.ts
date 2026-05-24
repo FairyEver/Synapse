@@ -3,11 +3,12 @@ import { access, copyFile, lstat, mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { SynapseKnowledgeBaseUploadSourcesResult } from "../../../src/types/knowledge-base"
-import type { FileConversionResult } from "../file-conversion"
+import type { FileConversionInput, FileConversionResult } from "../file-conversion"
 import { sourceFrontmatter } from "../file-conversion/markdown"
+import { acquireUrlSource, type FetchUrl } from "../source-acquisition/url-source"
 
 type SourceConverter = {
-  convert(input: { readonly filePath: string }): Promise<FileConversionResult>
+  convert(input: FileConversionInput): Promise<FileConversionResult>
 }
 
 export interface StageKnowledgeBaseSourcesInput {
@@ -15,6 +16,14 @@ export interface StageKnowledgeBaseSourcesInput {
   readonly filePaths: readonly string[]
   readonly now: () => Date
   readonly converter: SourceConverter
+}
+
+export interface StageKnowledgeBaseUrlSourceInput {
+  readonly projectPath: string
+  readonly url: string
+  readonly now: () => Date
+  readonly fetchUrl: FetchUrl
+  readonly signal?: AbortSignal
 }
 
 const TEXT_SOURCE_EXTENSIONS = new Set([
@@ -29,7 +38,7 @@ const TEXT_SOURCE_EXTENSIONS = new Set([
   ".xml",
 ])
 
-const CONVERTIBLE_EXTENSIONS = new Set([".doc", ".docx", ".xlsx", ".pdf", ".ppt", ".pptx"])
+const CONVERTIBLE_EXTENSIONS = new Set([".doc", ".docx", ".xlsx", ".pdf", ".ppt", ".pptx", ".png", ".jpg", ".jpeg", ".webp"])
 
 export async function stageKnowledgeBaseSources(
   input: StageKnowledgeBaseSourcesInput,
@@ -60,6 +69,7 @@ export async function stageKnowledgeBaseSources(
           relativePath: normalizeRelativePath(path.relative(projectPath, targetPath)),
           name: path.basename(targetPath),
           size: sourceStat.size,
+          sourceKind: "file",
         })
         continue
       }
@@ -76,6 +86,7 @@ export async function stageKnowledgeBaseSources(
           relativePath: normalizeRelativePath(path.relative(projectPath, targetPath)),
           name: path.basename(targetPath),
           size: sourceStat.size,
+          sourceKind: "file",
         })
         continue
       }
@@ -90,8 +101,12 @@ export async function stageKnowledgeBaseSources(
 
       let converted: FileConversionResult
       try {
-        converted = await input.converter.convert({ filePath: sourcePath })
+        converted = await input.converter.convert({ filePath: sourcePath, ocr: { enabled: true } })
       } catch {
+        skipped.push({ path: filePath, reason: "conversion-error" })
+        continue
+      }
+      if (hasOcrUnavailableWarning(converted)) {
         skipped.push({ path: filePath, reason: "conversion-error" })
         continue
       }
@@ -118,6 +133,7 @@ export async function stageKnowledgeBaseSources(
         originalRelativePath,
         name: path.basename(markdownPath),
         size: sourceStat.size,
+        sourceKind: "file",
         conversionWarnings: [...converted.warnings],
       })
     } catch {
@@ -128,11 +144,64 @@ export async function stageKnowledgeBaseSources(
   return { projectPath, uploaded, skipped }
 }
 
+export async function stageKnowledgeBaseUrlSource(
+  input: StageKnowledgeBaseUrlSourceInput,
+): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
+  const projectPath = path.resolve(input.projectPath)
+  const result = await acquireUrlSource({
+    url: input.url,
+    fetchUrl: input.fetchUrl,
+    now: input.now,
+    signal: input.signal,
+  })
+
+  if (!result.ok) {
+    return {
+      projectPath,
+      uploaded: [],
+      skipped: [urlAcquisitionFailure(input.url)],
+    }
+  }
+
+  const rawRelativeDir = path.join(".raw", "web", ...datePathSegments(new Date(result.source.fetchedAt)))
+  const rawDir = assertInside(projectPath, path.join(projectPath, rawRelativeDir))
+  await assertNoSymlinkInRelativePath(projectPath, rawRelativeDir)
+  await mkdir(rawDir, { recursive: true })
+
+  const fileName = `${slugFromUrl(result.source.finalUrl)}.md`
+  const targetPath = await resolveCollisionPath(rawDir, fileName)
+  await writeFile(targetPath, result.source.markdown, "utf8")
+
+  return {
+    projectPath,
+    uploaded: [{
+      originalPath: result.source.originalUrl,
+      relativePath: normalizeRelativePath(path.relative(projectPath, targetPath)),
+      name: path.basename(targetPath),
+      size: Buffer.byteLength(result.source.markdown, "utf8"),
+      sourceKind: "url",
+      sourceUrl: result.source.originalUrl,
+    }],
+    skipped: [],
+  }
+}
+
 function rawDirectoryForKind(kind: FileConversionResult["kind"]): string {
   if (kind === "document") return "documents"
   if (kind === "spreadsheet") return "spreadsheets"
   if (kind === "presentation") return "presentations"
+  if (kind === "image") return "images"
   return "pdfs"
+}
+
+function hasOcrUnavailableWarning(result: FileConversionResult): boolean {
+  return result.warnings.some((warning) => warning.code === "ocr_unavailable")
+}
+
+function urlAcquisitionFailure(url: string): SynapseKnowledgeBaseUploadSourcesResult["skipped"][number] {
+  // Public upload result types currently expose only not-file/read-error/conversion-error.
+  // Keep URL acquisition failures centralized here so the API can gain URL-specific reasons later.
+  return { path: url, reason: "read-error" }
 }
 
 function normalizeRelativePath(value: string): string {
@@ -156,6 +225,26 @@ async function resolveCollisionPath(directoryPath: string, fileName: string): Pr
     index += 1
   }
   return candidate
+}
+
+function slugFromUrl(rawUrl: string): string {
+  const url = new URL(rawUrl)
+  const baseName = path.posix.basename(url.pathname) || url.hostname
+  const withoutExtension = baseName.replace(/\.[a-z0-9]{1,8}$/i, "")
+  const decoded = safeDecodeURIComponent(withoutExtension)
+  const slug = decoded
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+  return slug || "source"
+}
+
+function safeDecodeURIComponent(value: string): string {
+  try {
+    return decodeURIComponent(value)
+  } catch {
+    return value
+  }
 }
 
 function assertInside(rootPath: string, targetPath: string): string {

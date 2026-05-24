@@ -6,7 +6,7 @@
 
 写入 wiki 页面后，不要编辑 `.raw/.manifest.json`。Synapse 会在回合结束后根据预检 hash、你的结构化报告和实际文件状态写入 manifest `sources` 和 `address_map`。
 
-你必须在最后输出一个 `synapse_kb_ingest_report` fenced JSON block：
+你必须在最后输出且只输出一个 `synapse_kb_ingest_report` fenced JSON block：
 
 ```synapse_kb_ingest_report
 {
@@ -29,8 +29,8 @@
 
 报告要求：
 - `source` 必须来自预检来源列表。
-- `pages_created` 只放本轮新建的 `wiki/**/*.md`。
-- `pages_updated` 只放本轮更新的 `wiki/**/*.md`。
+- `pages_created` 只放本轮实际新建的 `wiki/**/*.md`。
+- `pages_updated` 只放本轮实际更新的 `wiki/**/*.md`。
 - 不要自行写入 hash、`ingested_at` 或 `address_map`。
 - 不要编辑 `.vault-meta/address-counter.txt`，不要自行发明新的 `c-NNNNNN` 地址。
 - 如果重写已有页面，保留页面中已有的 `address:` frontmatter。

@@ -1,10 +1,18 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { mkdtemp, readFile, rm } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createInMemoryHarness } from "../../../runtime/ipc"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
+import { KnowledgeBaseService } from "../../../services/knowledge-base/knowledge-base-service"
 import { knowledgeBaseIpcModule } from "../ipc"
 
 const electronMock = vi.hoisted(() => ({
+  app: {
+    isPackaged: false,
+    getAppPath: () => process.cwd(),
+  },
   dialog: {
     showOpenDialog: vi.fn(),
   },
@@ -18,6 +26,7 @@ const sourceManagerWindowServiceMock = vi.hoisted(() => ({
 }))
 
 vi.mock("electron", () => ({
+  app: electronMock.app,
   dialog: electronMock.dialog,
   shell: electronMock.shell,
 }))
@@ -25,6 +34,18 @@ vi.mock("electron", () => ({
 vi.mock("../../../services/knowledge-base/source-manager-window-service", () => ({
   knowledgeBaseSourceManagerWindowService: sourceManagerWindowServiceMock,
 }))
+
+const roots: string[] = []
+
+async function tempDir(): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-kb-ipc-"))
+  roots.push(dir)
+  return dir
+}
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+})
 
 describe("knowledgeBaseIpcModule", () => {
   beforeEach(() => {
@@ -165,6 +186,78 @@ describe("knowledgeBaseIpcModule", () => {
       projectPath: "/tmp/kb",
       filePaths: ["/tmp/source.md"],
     })
+  })
+
+  it("adds a URL source through guarded network and write permissions", async () => {
+    const addUrlSource = vi.fn().mockResolvedValue({
+      projectPath: "/tmp/kb",
+      uploaded: [{
+        originalPath: "https://example.com/article",
+        relativePath: ".raw/web/2026/05/24/article.md",
+        name: "article.md",
+        size: 128,
+        sourceKind: "url",
+        sourceUrl: "https://example.com/article",
+      }],
+      skipped: [],
+    })
+    const { harness, permissionGuard } = createHarness({ service: { addUrlSource } })
+
+    const result = await harness.invoke("synapse:knowledge-base:add-url-source", {
+      projectPath: "/tmp/kb",
+      url: "https://example.com/article",
+    }) as { uploaded: unknown[] }
+
+    expect(addUrlSource).toHaveBeenCalledWith({
+      projectPath: "/tmp/kb",
+      url: "https://example.com/article",
+    })
+    expect(result.uploaded).toHaveLength(1)
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(1, {
+      action: "network.connect",
+      actor: { kind: "user" },
+      resource: "https://example.com/article",
+      context: { source: "knowledgeBase.addUrlSource.fetch" },
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(2, {
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "/tmp/kb",
+      context: { source: "knowledgeBase.addUrlSource" },
+    })
+  })
+
+  it("adds a URL source through IPC into the real knowledge base service", async () => {
+    const projectPath = await tempDir()
+    const service = new KnowledgeBaseService({
+      now: () => new Date("2026-05-24T10:20:30.000Z"),
+      fetchUrl: async () => ({
+        url: "https://example.com/article",
+        status: 200,
+        headers: { get: (name: string) => name.toLowerCase() === "content-type" ? "text/html" : null },
+        text: async () => "<html><body><h1>Article</h1><p>Body</p></body></html>",
+      }),
+    })
+    const { harness, permissionGuard } = createHarness({ service })
+
+    const result = await harness.invoke("synapse:knowledge-base:add-url-source", {
+      projectPath,
+      url: "https://example.com/article",
+    }) as { uploaded: Array<{ relativePath: string }> }
+
+    expect(result.uploaded).toEqual([expect.objectContaining({
+      relativePath: ".raw/web/2026/05/24/article.md",
+    })])
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(1, expect.objectContaining({
+      action: "network.connect",
+      resource: "https://example.com/article",
+    }))
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(2, expect.objectContaining({
+      action: "fs.write",
+      resource: projectPath,
+    }))
+    await expect(readFile(path.join(projectPath, ".raw", "web", "2026", "05", "24", "article.md"), "utf8"))
+      .resolves.toContain('source_url: "https://example.com/article"')
   })
 
   it("opens the source manager window through guarded read permission", async () => {

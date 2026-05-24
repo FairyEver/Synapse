@@ -1,11 +1,12 @@
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { access, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { FileConversionResult } from "../../file-conversion"
+import type { FetchUrl } from "../../source-acquisition/url-source"
 import { scanKnowledgeBaseSources } from "../source-scan"
-import { stageKnowledgeBaseSources } from "../source-staging"
+import { stageKnowledgeBaseSources, stageKnowledgeBaseUrlSource } from "../source-staging"
 
 const roots: string[] = []
 
@@ -85,5 +86,77 @@ describe("knowledge base source staging", () => {
     expect(result.uploaded[0]).not.toHaveProperty("originalRelativePath")
     await expect(readFile(path.join(projectPath, ".raw", "2026", "05", "23", "note.md"), "utf8"))
       .resolves.toBe("alpha\n")
+  })
+
+  it("stages URL sources into the dated raw web directory", async () => {
+    const projectPath = await tempDir()
+    const fetchUrl: FetchUrl = async () => ({
+      url: "https://example.com/articles/alpha?utm_source=test",
+      status: 200,
+      headers: {
+        get: (name: string) => name.toLowerCase() === "content-type" ? "text/html" : null,
+      },
+      text: async () => "<html><body><article><h1>Alpha</h1><p>Body</p></article></body></html>",
+    })
+
+    const result = await stageKnowledgeBaseUrlSource({
+      projectPath,
+      url: "https://example.com/articles/alpha?utm_source=test",
+      fetchUrl,
+      now: () => new Date("2026-05-24T00:00:00.000Z"),
+    })
+
+    expect(result.uploaded).toEqual([expect.objectContaining({
+      originalPath: "https://example.com/articles/alpha?utm_source=test",
+      relativePath: ".raw/web/2026/05/24/alpha.md",
+      name: "alpha.md",
+    })])
+    expect(result.skipped).toEqual([])
+    await expect(readFile(path.join(projectPath, ".raw", "web", "2026", "05", "24", "alpha.md"), "utf8"))
+      .resolves.toContain('source_format: "url"')
+    await expect(access(path.join(projectPath, "wiki"))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("keeps URL acquisition failures visible as skipped read errors", async () => {
+    const projectPath = await tempDir()
+    const fetchUrl = vi.fn<FetchUrl>()
+
+    const result = await stageKnowledgeBaseUrlSource({
+      projectPath,
+      url: "javascript:alert(1)",
+      fetchUrl,
+      now: () => new Date("2026-05-24T00:00:00.000Z"),
+    })
+
+    expect(result).toEqual({
+      projectPath,
+      uploaded: [],
+      skipped: [{ path: "javascript:alert(1)", reason: "read-error" }],
+    })
+    expect(fetchUrl).not.toHaveBeenCalled()
+  })
+
+  it("resolves URL source filename collisions", async () => {
+    const projectPath = await tempDir()
+    const fetchUrl: FetchUrl = async () => ({
+      url: "https://example.com/articles/alpha",
+      status: 200,
+      headers: {
+        get: (name: string) => name.toLowerCase() === "content-type" ? "text/html" : null,
+      },
+      text: async () => "<html><body><h1>Alpha</h1></body></html>",
+    })
+    const input = {
+      projectPath,
+      url: "https://example.com/articles/alpha",
+      fetchUrl,
+      now: () => new Date("2026-05-24T00:00:00.000Z"),
+    }
+
+    const first = await stageKnowledgeBaseUrlSource(input)
+    const second = await stageKnowledgeBaseUrlSource(input)
+
+    expect(first.uploaded[0]).toMatchObject({ relativePath: ".raw/web/2026/05/24/alpha.md" })
+    expect(second.uploaded[0]).toMatchObject({ relativePath: ".raw/web/2026/05/24/alpha-2.md" })
   })
 })

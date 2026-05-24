@@ -112,6 +112,8 @@ import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "../services/workflow/workflow-validator"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
+import { createWorkflowFileConversionOutputWriter } from "../services/workflow/file-conversion-output-writer"
+import { createDefaultFileConversionService } from "../services/file-conversion"
 import { sanitizeError } from "../services/error-sanitize"
 import type { WorkflowRunStatus, ValidationError } from "../../src/types/workflow"
 import { agentTimeoutMinsToMs, DEFAULT_AGENT_TIMEOUT_MINS } from "../../workflow-nodes/agent-timeout"
@@ -1288,6 +1290,8 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
     const runtimeDeps: import("../../workflow-nodes/types").NodeRuntimeDeps = {
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
       sendHttpRequest: createHttpSendHandler({ permissionGuard, auditSink }),
+      fileConversionService: createDefaultFileConversionService(),
+      writeWorkflowFileConversionOutput: createWorkflowFileConversionOutputWriter({ permissionGuard, auditSink }),
     }
     return new WorkflowEngine({ sendToAgent }, undefined, runtimeDeps)
   },

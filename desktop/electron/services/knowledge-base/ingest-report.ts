@@ -24,8 +24,10 @@ export type KnowledgeBaseIngestReportParseResult =
   }
   | { readonly status: "missing" | "invalid"; readonly warnings: readonly KnowledgeBaseIngestReportWarning[] }
 
+const INGEST_REPORT_BLOCK = /```(?:json)?\s*synapse_kb_ingest_report\s*\n([\s\S]*?)\n```/g
+
 export function parseKnowledgeBaseIngestReport(content: string): KnowledgeBaseIngestReportParseResult {
-  const blocks = [...content.matchAll(/```synapse_kb_ingest_report\s*\n([\s\S]*?)\n```/g)]
+  const blocks = [...content.matchAll(INGEST_REPORT_BLOCK)]
   if (blocks.length === 0) {
     return {
       status: "missing",

@@ -106,6 +106,7 @@ import type {
   SynapseKnowledgeBaseInspection,
   SynapseKnowledgeBaseListSourcesResult,
   SynapseKnowledgeBaseOpenSourceManagerPayload,
+  SynapseKnowledgeBaseAddUrlSourcePayload,
   SynapseKnowledgeBaseOpenRawResult,
   SynapseKnowledgeBaseUploadSourcesPayload,
   SynapseKnowledgeBaseUploadSourcesResult,
@@ -587,6 +588,9 @@ export type SynapseBridge = {
     listSources: (projectPath: string) => Promise<SynapseKnowledgeBaseListSourcesResult>
     uploadSources: (
       payload: SynapseKnowledgeBaseUploadSourcesPayload,
+    ) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
+    addUrlSource: (
+      payload: SynapseKnowledgeBaseAddUrlSourcePayload,
     ) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
     selectAndUploadSources: (projectPath: string) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
     openSourceManager: (payload: SynapseKnowledgeBaseOpenSourceManagerPayload) => Promise<void>

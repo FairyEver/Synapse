@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { isKnowledgeBaseIngestIntent } from "../ingest-intent"
+import { isKnowledgeBaseForceIngestIntent, isKnowledgeBaseIngestIntent } from "../ingest-intent"
 
 describe("isKnowledgeBaseIngestIntent", () => {
   it.each([
@@ -26,5 +26,11 @@ describe("isKnowledgeBaseIngestIntent", () => {
     "what does the wiki say about planning",
   ])("ignores non-ingest intent: %s", (content) => {
     expect(isKnowledgeBaseIngestIntent(content)).toBe(false)
+  })
+
+  it("detects only explicit /wiki ingest force turns as force ingest", () => {
+    expect(isKnowledgeBaseForceIngestIntent("/wiki ingest --force")).toBe(true)
+    expect(isKnowledgeBaseForceIngestIntent("/wiki ingest")).toBe(false)
+    expect(isKnowledgeBaseForceIngestIntent("process these sources --force")).toBe(false)
   })
 })

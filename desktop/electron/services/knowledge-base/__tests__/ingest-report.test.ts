@@ -31,6 +31,24 @@ describe("parseKnowledgeBaseIngestReport", () => {
     })
   })
 
+  it("parses reports with a json info string before the schema marker", () => {
+    const text = [
+      "```json synapse_kb_ingest_report",
+      JSON.stringify({
+        schema: "synapse.kb.ingest.report.v1",
+        processed_sources: [{ source: ".raw/a.md", pages_created: [], pages_updated: [] }],
+      }),
+      "```",
+    ].join("\n")
+
+    expect(parseKnowledgeBaseIngestReport(text)).toMatchObject({
+      status: "valid",
+      report: {
+        processedSources: [{ source: ".raw/a.md" }],
+      },
+    })
+  })
+
   it("rejects missing and duplicate reports", () => {
     expect(parseKnowledgeBaseIngestReport("done")).toEqual({
       status: "missing",

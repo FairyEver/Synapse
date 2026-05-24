@@ -179,7 +179,7 @@ describe("file conversion contract", () => {
 describe("FileConversionService", () => {
   it("rejects unsupported extensions with a structured error", async () => {
     const root = await tempDir()
-    const filePath = path.join(root, "image.png")
+    const filePath = path.join(root, "archive.zip")
     await writeFile(filePath, "not supported")
     const service = new FileConversionService({ extractors: [] })
 
@@ -210,6 +210,35 @@ describe("FileConversionService", () => {
       sourcePath: filePath,
       format: "docx",
       kind: "document",
+    })
+  })
+
+  it("uses the registered extractor for image formats", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "receipt.png")
+    await writeFile(filePath, "png")
+    const service = new FileConversionService({
+      extractors: [{
+        formats: ["png"],
+        extract: async (input) => ({
+          sourcePath: input.filePath,
+          format: "png",
+          kind: "image",
+          title: "receipt.png",
+          markdown: "# receipt.png\n\ncustom image extractor\n",
+          text: "custom image extractor",
+          metadata: { custom: true },
+          warnings: [],
+        }),
+      }],
+    })
+
+    await expect(service.convert({ filePath })).resolves.toMatchObject({
+      sourcePath: filePath,
+      format: "png",
+      kind: "image",
+      text: "custom image extractor",
+      metadata: { custom: true },
     })
   })
 })

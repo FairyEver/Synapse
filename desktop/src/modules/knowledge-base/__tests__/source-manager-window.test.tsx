@@ -104,6 +104,19 @@ function createBridgeMocks() {
           uploaded: [],
           skipped: [],
         }),
+      addUrlSource: vi.fn<(payload: { projectPath: string; url: string }) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
+        .mockResolvedValue({
+          projectPath: "/Users/example/kb",
+          uploaded: [{
+            originalPath: "https://example.com/article",
+            relativePath: ".raw/web/2026/05/24/article.md",
+            name: "article.md",
+            size: 120,
+            sourceKind: "url",
+            sourceUrl: "https://example.com/article",
+          }],
+          skipped: [],
+        }),
       selectAndUploadSources: vi.fn<(projectPath: string) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
         .mockResolvedValue({
           projectPath: "/Users/example/kb",
@@ -154,6 +167,12 @@ function buttonByText(text: string): HTMLButtonElement {
   return button
 }
 
+function buttonByLabel(label: string): HTMLButtonElement {
+  const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+  if (!button) throw new Error(`Button not found: ${label}`)
+  return button
+}
+
 function changeInput(input: HTMLInputElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
   setter?.call(input, value)
@@ -181,6 +200,9 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(document.body.textContent).not.toContain("资料管理")
     expect(document.body.textContent).toContain("放入资料")
     expect(document.body.textContent).toContain("目标目录：raw/")
+    expect(document.body.textContent).toContain("支持 Markdown、Word、Excel、PDF、PPT、网页 URL")
+    expect(document.body.textContent).toContain("图片和扫描 PDF 暂不支持")
+    expect(document.body.textContent).toContain("放入后，在知识库对话里说“汲取知识”")
     expect(document.body.textContent).toContain("新文件")
     expect(document.body.textContent).toContain("有更新")
     expect(document.body.textContent).toContain("已放入")
@@ -205,5 +227,31 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       expect(bridgeMocks.agent.createSession).not.toHaveBeenCalled()
       expect(bridgeMocks.agent.send).not.toHaveBeenCalled()
     })
+  })
+
+  it("adds URL sources from the side pane", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("AI产品需求说明.md")
+    })
+
+    const urlInput = document.querySelector<HTMLInputElement>('input[placeholder="粘贴网页 URL"]')
+    expect(urlInput).not.toBeNull()
+
+    act(() => {
+      changeInput(urlInput!, "https://example.com/article")
+    })
+
+    await act(async () => {
+      buttonByLabel("添加 URL").click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.addUrlSource).toHaveBeenCalledWith({
+      projectPath: "/Users/example/kb",
+      url: "https://example.com/article",
+    })
+    expect(bridgeMocks.knowledgeBase.listSources).toHaveBeenCalledTimes(2)
   })
 })

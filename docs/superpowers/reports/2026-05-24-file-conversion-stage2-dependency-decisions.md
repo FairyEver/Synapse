@@ -15,6 +15,7 @@ Date: 2026-05-24
 | `pnpm --filter @synapse/desktop why pdf-parse` | Pass | `@synapse/desktop` depends directly on `pdf-parse 2.4.5`. |
 | `pnpm --filter @synapse/desktop why officeparser` | Pass | `@synapse/desktop` depends directly on `officeparser 7.0.3`. |
 | `pnpm --filter @synapse/desktop why @napi-rs/canvas` | Pass | `officeparser 7.0.3 -> pdfjs-dist 5.6.205 -> @napi-rs/canvas 0.1.100`; `pdf-parse 2.4.5 -> @napi-rs/canvas 0.1.80` and `pdf-parse 2.4.5 -> pdfjs-dist 5.4.296 -> @napi-rs/canvas 0.1.80`. |
+| `pnpm --filter @synapse/desktop why tesseract.js` | Pass | `officeparser 7.0.3 -> tesseract.js 7.0.0`. Synapse's OCR abstraction does not call this dependency directly. |
 | `find node_modules desktop/node_modules -path '*@napi-rs*' -o -path '*pdfjs-dist*' \| head -200` | Pass | Found root pnpm entries for `@napi-rs/canvas 0.1.80`, `pdfjs-dist 5.4.296`, and `officeparser`'s `pdfjs-dist` dependency. |
 | `find node_modules desktop/node_modules -name '*.node' -o -name '*.dylib' -o -name '*.so' -o -name '*.dll' \| rg '(@napi-rs\|canvas\|pdfjs\|pdf-parse\|officeparser)'` | Pass | Found native `skia.darwin-arm64.node` files for `@napi-rs/canvas-darwin-arm64` versions `0.1.80` and `0.1.100` under `node_modules`. |
 | `find desktop/release/mac-arm64 -path '*@napi-rs*' -o -path '*pdfjs-dist*' \| head -200` | Pass | Packaged output includes `app.asar.unpacked/node_modules/@napi-rs/canvas-darwin-arm64/skia.darwin-arm64.node` and an `officeparser` nested copy of the same Darwin arm64 native package. |
@@ -30,6 +31,7 @@ Date: 2026-05-24
 | PDF | `pdf-parse` | Keep with monitoring | Real text PDF fixture tests pass, parser errors and empty-text scanned PDFs are classified, and the macOS arm64 directory package includes the required `@napi-rs/canvas-darwin-arm64` native file under `app.asar.unpacked`. Keep monitoring because `pdf-parse 2.4.5` pulls `@napi-rs/canvas 0.1.80` directly and through `pdfjs-dist 5.4.296`. |
 | PPTX | `officeparser` | Keep with limitation and packaging monitoring | Real PPTX fixture tests extract useful title/body text. Slide boundaries remain limited and are represented by `presentation_structure_limited`. `officeparser 7.0.3` pulls `pdfjs-dist 5.6.205 -> @napi-rs/canvas 0.1.100`; this native dependency remains a packaging risk to keep monitoring. |
 | Native canvas | `@napi-rs/canvas` | Keep under observation | The local macOS arm64 dir package completed and included Darwin arm64 `.node` files in `app.asar.unpacked`, but electron-builder emitted optional-platform package warnings for `@napi-rs/canvas` packages. Windows/Linux packaging still need release-lane verification. |
+| OCR boundary | Synapse `LocalOcrEngine` abstraction | Keep unavailable-by-default | The completion work adds an OCR interface and optional Workflow/Knowledge Base plumbing, but no online OCR service and no mandatory OCR runtime. `officeparser` brings `tesseract.js` transitively; Synapse does not call it directly today. |
 
 ## Notes
 
@@ -37,3 +39,4 @@ Date: 2026-05-24
 - Dependency inspection confirms `officeparser` pulls `pdfjs-dist -> @napi-rs/canvas`; this remains a packaging risk to keep monitoring even though the local macOS arm64 directory build completed.
 - Task 7 manifest disposition: Knowledge Base upload staging records conversion metadata in generated Markdown frontmatter and upload results today. `.raw/.manifest.json` does not currently store per-upload conversion-original metadata.
 - The packaging command used was exactly `pnpm --filter @synapse/desktop exec electron-builder --dir --mac --arm64 --publish never`; no alternate package script was needed.
+- Completion follow-up report: `docs/superpowers/reports/2026-05-24-knowledge-base-completion-package-check.md` records the post-OCR/UI packaging pass. In that run, the exact signed macOS directory command stalled at local `codesign`; rerunning with `CSC_IDENTITY_AUTO_DISCOVERY=false` completed the directory package with ad-hoc signing.

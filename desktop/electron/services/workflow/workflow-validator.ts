@@ -1,8 +1,11 @@
+import path from "node:path"
+
 import type { WorkflowDefinition, ValidationResult, ValidationError, ValidationWarning } from "../../../src/types/workflow"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { createMainLogger } from "../log-store"
 import { computeEndReachable } from "./workflow-utils"
 import { agentTimeoutMinsToMs, resolveAgentTimeoutMins } from "../../../workflow-nodes/agent-timeout"
+import { isWorkflowFileConversionOutputPathAllowed } from "../../../workflow-nodes/file-conversion/output-boundary"
 
 const logger = createMainLogger("service.workflow.validator")
 
@@ -64,6 +67,46 @@ function missingWorkflowDefaultError(input: {
       projectId: typeof input.cfg.projectId === "string" && input.cfg.projectId.trim() ? input.cfg.projectId : undefined,
       timeoutMs: agentTimeoutMinsToMs(resolveAgentTimeoutMins(timeoutMins)),
     },
+  }
+}
+
+function validateFileConversionNodeConfig(node: WorkflowDefinition["nodes"][number], errors: ValidationError[]): void {
+  const cfg = node.config as Record<string, unknown>
+  const inputPath = typeof cfg.inputPath === "string" ? cfg.inputPath.trim() : ""
+  if (!inputPath) {
+    errors.push({
+      type: "invalid_config",
+      nodeId: node.id,
+      nodeName: node.name,
+      field: "inputPath",
+      message: `节点「${node.name}」的 inputPath 不能为空`,
+    })
+  }
+
+  if (cfg.outputMode === "markdown-file") {
+    const outputPath = typeof cfg.outputPath === "string" ? cfg.outputPath.trim() : ""
+    const outputDirectory = typeof cfg.outputDirectory === "string" ? cfg.outputDirectory.trim() : ""
+    const pathToValidate = outputPath || (outputDirectory ? path.join(outputDirectory, "converted.md") : "")
+    if (!pathToValidate) {
+      errors.push({
+        type: "invalid_config",
+        nodeId: node.id,
+        nodeName: node.name,
+        field: "outputPath",
+        message: `节点「${node.name}」使用 markdown-file 时 outputPath 或 outputDirectory 不能为空`,
+      })
+      return
+    }
+
+    if (!isWorkflowFileConversionOutputPathAllowed(pathToValidate)) {
+      errors.push({
+        type: "invalid_config",
+        nodeId: node.id,
+        nodeName: node.name,
+        field: "outputPath",
+        message: `节点「${node.name}」的 outputPath 必须位于工作流输出目录内`,
+      })
+    }
   }
 }
 
@@ -174,6 +217,10 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
       }
     }
 
+    if (node.type === "file_conversion") {
+      validateFileConversionNodeConfig(node, errors)
+    }
+
     // Switch node: validate branch ID uniqueness
     if (node.type === "switch") {
       const branches = (node.config as Record<string, unknown>)["branches"]
@@ -226,9 +273,11 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
         { kind: "prompt", field: "prompt" },
         { kind: "switch", field: "prompt" },
         { kind: "end", field: "template" },
+        { kind: "file_conversion", field: "inputPath" },
+        { kind: "file_conversion", field: "outputPath" },
+        { kind: "file_conversion", field: "outputDirectory" },
       ]
-      const templateField = TEMPLATE_FIELDS.find((tf) => node.type === tf.kind)
-      if (templateField) {
+      for (const templateField of TEMPLATE_FIELDS.filter((tf) => node.type === tf.kind)) {
         const text = (node.config as Record<string, unknown>)[templateField.field]
         if (typeof text === "string") {
           const placeholders = new Set(

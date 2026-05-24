@@ -146,11 +146,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         workspacePath: ctx.projectMeta.workspacePath,
         logger: ctx.logger,
       })
-      let projectContributionPromise: Promise<AgentProjectContribution> | null = null
-      const resolveProjectContributionForService = () => {
-        projectContributionPromise ??= resolveAgentProjectContribution(ctx.projectId, ctx.logger)
-        return projectContributionPromise
-      }
+      const resolveProjectContributionForService = createCachedAgentProjectContributionResolver(ctx.projectId, ctx.logger)
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
@@ -203,6 +199,17 @@ async function resolveAgentProjectContribution(
     project ? await createKnowledgeBaseAgentContribution({ project, logger }) : null,
   ].filter((item): item is NonNullable<typeof item> => item !== null)
   return mergeAgentProjectContributions(contributions)
+}
+
+export function createCachedAgentProjectContributionResolver(
+  projectId: string,
+  logger?: Parameters<typeof createKnowledgeBaseAgentContribution>[0]["logger"],
+): () => Promise<AgentProjectContribution> {
+  let projectContributionPromise: Promise<AgentProjectContribution> | null = null
+  return () => {
+    projectContributionPromise ??= resolveAgentProjectContribution(projectId, logger)
+    return projectContributionPromise
+  }
 }
 
 function optionalService<T>(registry: { get<U>(id: string): U }, id: string): T | undefined {

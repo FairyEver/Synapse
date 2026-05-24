@@ -1,10 +1,17 @@
-export type FileConversionKind = "document" | "spreadsheet" | "pdf" | "presentation"
+export type FileConversionKind = "document" | "spreadsheet" | "pdf" | "presentation" | "image"
 
-export type FileConversionFormat = "doc" | "docx" | "xlsx" | "pdf" | "ppt" | "pptx"
+export type FileConversionFormat = "doc" | "docx" | "xlsx" | "pdf" | "ppt" | "pptx" | "png" | "jpg" | "jpeg" | "webp"
+
+export interface FileConversionOcrOptions {
+  readonly enabled: boolean
+  readonly languages?: readonly string[]
+  readonly maxPages?: number
+}
 
 export interface FileConversionInput {
   readonly filePath: string
   readonly preferredOutput?: "markdown" | "text"
+  readonly ocr?: FileConversionOcrOptions
 }
 
 export interface FileConversionWarning {

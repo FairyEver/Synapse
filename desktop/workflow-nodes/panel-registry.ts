@@ -7,6 +7,7 @@ import { SwitchNodePanel } from "./switch/panel"
 import { EndNodePanel } from "./end/panel"
 import { HttpRequestNodePanel } from "./http-request/panel"
 import { ScriptNodePanel } from "./script/panel"
+import { FileConversionNodePanel } from "./file-conversion/panel"
 
 export interface NodePanelProps {
   config: Record<string, unknown>
@@ -32,6 +33,7 @@ const panelRegistry = new Map<string, PanelComponent>([
   ["end", EndNodePanel as unknown as PanelComponent],
   ["http_request", HttpRequestNodePanel as unknown as PanelComponent],
   ["script", ScriptNodePanel as unknown as PanelComponent],
+  ["file_conversion", FileConversionNodePanel as unknown as PanelComponent],
 ])
 
 export function getPanel(type: string): PanelComponent | undefined {
