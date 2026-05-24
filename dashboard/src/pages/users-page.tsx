@@ -49,6 +49,9 @@ export function UsersPage() {
   const { error, isLoading, page, pageSize, refresh, rows, setPage, total } =
     useAdminList(loader);
   const [feedback, setFeedback] = useState('');
+  const [submittingIds, setSubmittingIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
 
   async function createInvitation() {
     setFeedback('');
@@ -62,13 +65,21 @@ export function UsersPage() {
   }
 
   async function updateStatus(user: AdminUserRow) {
+    if (submittingIds.has(user.id)) return;
     const nextStatus = user.status === 'active' ? 'disabled' : 'active';
     setFeedback('');
+    setSubmittingIds((current) => new Set(current).add(user.id));
     try {
       await adminApi.updateUserStatus(user.id, nextStatus);
       await refresh();
     } catch (nextError) {
       setFeedback(nextError instanceof Error ? nextError.message : '操作失败');
+    } finally {
+      setSubmittingIds((current) => {
+        const next = new Set(current);
+        next.delete(user.id);
+        return next;
+      });
     }
   }
 
@@ -118,6 +129,7 @@ export function UsersPage() {
                   <TableCell className="sticky right-0 bg-background text-right">
                     <Button
                       variant="outline"
+                      disabled={submittingIds.has(user.id)}
                       onClick={() => updateStatus(user)}
                     >
                       {user.status === 'active' ? '停用' : '启用'}
