@@ -32,6 +32,7 @@ describe("AuditLogsPage", () => {
   it("offers known audit actions in the filter", () => {
     expect(AUDIT_ACTION_FILTER_OPTIONS).toEqual(expect.arrayContaining([
       { value: "all", label: "全部操作" },
+      { value: "admin.auth.verify.failed", label: "admin.auth.verify.failed" },
       { value: "admin.invitation.create", label: "admin.invitation.create" },
       { value: "admin.invitation.delete.not_found", label: "admin.invitation.delete.not_found" },
       { value: "admin.logout", label: "admin.logout" },

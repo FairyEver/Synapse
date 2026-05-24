@@ -33,6 +33,7 @@ import {
 export const AUDIT_ACTION_FILTER_OPTIONS = [
   { value: "all", label: "全部操作" },
   { value: "admin.login.success", label: "admin.login.success" },
+  { value: "admin.auth.verify.failed", label: "admin.auth.verify.failed" },
   { value: "dashboard.login.failure", label: "dashboard.login.failure" },
   { value: "dashboard.login.disabled", label: "dashboard.login.disabled" },
   { value: "user.dashboard_login.success", label: "user.dashboard_login.success" },
