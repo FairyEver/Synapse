@@ -44,14 +44,17 @@ export class AdminAuthController {
   @Post("/logout")
   async logout(@Res({ passthrough: true }) response: Response, @Req() request: AdminRequest) {
     const token = request.cookies?.[adminCookieName]
-    const admin = typeof token === "string" ? await this.auth.verify(token) : null
+    const session = typeof token === "string" ? await this.auth.verifyDashboardSession(token) : null
+    if (typeof token === "string") {
+      await this.auth.revokeDashboardSession(token)
+    }
     response.clearCookie(adminCookieName, adminCookieOptions())
-    if (admin) {
+    if (session?.role === "admin") {
       await this.auditLog?.record({
-        adminEmail: admin.email,
+        adminEmail: session.email,
         action: "admin.logout",
         targetType: "admin",
-        targetId: admin.id,
+        targetId: session.id,
         ipAddress: request.ip ?? "system",
       })
     }

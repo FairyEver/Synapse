@@ -24,6 +24,11 @@ async function createTestService(auditLog?: { record: ReturnType<typeof vi.fn> }
     user: {
       findUnique: vi.fn().mockResolvedValue(null),
     },
+    dashboardRevokedToken: {
+      findUnique: vi.fn().mockResolvedValue(null),
+      upsert: vi.fn(),
+      deleteMany: vi.fn(),
+    },
   }
   return {
     service: new AdminAuthService(jwt, prisma as never, auditLog as never),
@@ -208,6 +213,37 @@ describe("AdminAuthService", () => {
       id: "user-1",
       email: "user@example.com",
       role: "user",
+    })
+  })
+
+  it("rejects revoked dashboard sessions", async () => {
+    const { service, prisma } = await createTestService()
+    const result = await service.login("admin@d2.com", "admin@pwd1234!")
+    prisma.dashboardRevokedToken.findUnique.mockResolvedValueOnce({ id: "revoked-1" })
+
+    await expect(service.verifyDashboardSession(result.token)).resolves.toBeNull()
+  })
+
+  it("revokes dashboard sessions by token hash", async () => {
+    const { service, prisma } = await createTestService()
+    const result = await service.login("admin@d2.com", "admin@pwd1234!")
+
+    await service.revokeDashboardSession(result.token)
+
+    expect(prisma.dashboardRevokedToken.upsert).toHaveBeenCalledWith({
+      where: { tokenHash: expect.any(String) },
+      update: { expiresAt: expect.any(Date), revokedAt: expect.any(Date) },
+      create: { tokenHash: expect.any(String), expiresAt: expect.any(Date) },
+    })
+  })
+
+  it("cleans expired revoked dashboard tokens", async () => {
+    const { service, prisma } = await createTestService()
+
+    await service.cleanupExpiredRevokedDashboardTokens()
+
+    expect(prisma.dashboardRevokedToken.deleteMany).toHaveBeenCalledWith({
+      where: { expiresAt: { lt: expect.any(Date) } },
     })
   })
 })

@@ -49,6 +49,15 @@ model AdminUser {
   updatedAt               DateTime          @updatedAt
 }
 
+model DashboardRevokedToken {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime @default(now())
+
+  @@index([expiresAt])
+}
+
 model User {
   id                  String       @id @default(cuid())
   email               String       @unique

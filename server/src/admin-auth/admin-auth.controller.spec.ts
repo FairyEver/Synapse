@@ -32,7 +32,8 @@ describe("AdminAuthController", () => {
 
   it("records administrator logout in audit logs", async () => {
     const auth = {
-      verify: vi.fn().mockResolvedValue({ id: "admin-1", email: "admin@example.com" }),
+      revokeDashboardSession: vi.fn().mockResolvedValue(undefined),
+      verifyDashboardSession: vi.fn().mockResolvedValue({ id: "admin-1", email: "admin@example.com", role: "admin" }),
     }
     const auditLog = { record: vi.fn() }
     const controller = new AdminAuthController(auth as never, auditLog as never)
@@ -49,7 +50,8 @@ describe("AdminAuthController", () => {
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
     })
-    expect(auth.verify).toHaveBeenCalledWith("admin-token")
+    expect(auth.verifyDashboardSession).toHaveBeenCalledWith("admin-token")
+    expect(auth.revokeDashboardSession).toHaveBeenCalledWith("admin-token")
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "admin@example.com",
       action: "admin.logout",
@@ -57,5 +59,24 @@ describe("AdminAuthController", () => {
       targetId: "admin-1",
       ipAddress: "203.0.113.12",
     })
+  })
+
+  it("revokes dashboard user tokens without admin logout audit", async () => {
+    const auth = {
+      revokeDashboardSession: vi.fn().mockResolvedValue(undefined),
+      verifyDashboardSession: vi.fn().mockResolvedValue({ id: "user-1", email: "user@example.com", role: "user" }),
+    }
+    const auditLog = { record: vi.fn() }
+    const controller = new AdminAuthController(auth as never, auditLog as never)
+    const response = { clearCookie: vi.fn() }
+    const request = {
+      cookies: { synapse_admin: "user-token" },
+      ip: "203.0.113.12",
+    } as unknown as AdminRequest
+
+    await controller.logout(response as never, request)
+
+    expect(auth.revokeDashboardSession).toHaveBeenCalledWith("user-token")
+    expect(auditLog.record).not.toHaveBeenCalled()
   })
 })
