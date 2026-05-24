@@ -212,6 +212,83 @@ describe("AuditLogInterceptor", () => {
     expect(auth.getEmail).not.toHaveBeenCalled()
   })
 
+  it("records failed team role permission updates with the service audit action", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "PUT",
+        path: "/api/admin/teams/team-1/access-roles/role-1/permissions",
+        params: { teamId: "team-1", roleId: "role-1" },
+        body: { permissionKeys: ["database.use"] },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => throwError(() => new Error("角色不存在。")) },
+    ))).rejects.toThrow("角色不存在。")
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        adminEmail: "current-admin@example.com",
+        action: "admin.team_role_permissions.update.failed",
+        targetType: "team_access_role",
+        targetId: "role-1",
+      }))
+    })
+  })
+
+  it("records failed team member access role assignments with the service audit action", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "POST",
+        path: "/api/admin/teams/team-1/members/membership-1/access-roles",
+        params: { teamId: "team-1", membershipId: "membership-1" },
+        body: { roleId: "role-1" },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => throwError(() => new Error("成员不存在。")) },
+    ))).rejects.toThrow("成员不存在。")
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        adminEmail: "current-admin@example.com",
+        action: "admin.team_member_access_role.assign.failed",
+        targetType: "team_membership",
+        targetId: "membership-1",
+      }))
+    })
+  })
+
+  it("records failed team member access role removals with the service audit action", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "DELETE",
+        path: "/api/admin/teams/team-1/members/membership-1/access-roles/role-1",
+        params: { teamId: "team-1", membershipId: "membership-1", roleId: "role-1" },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => throwError(() => new Error("成员角色不存在。")) },
+    ))).rejects.toThrow("成员角色不存在。")
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        adminEmail: "current-admin@example.com",
+        action: "admin.team_member_access_role.remove.failed",
+        targetType: "team_membership",
+        targetId: "membership-1",
+      }))
+    })
+  })
+
   it("keeps automatic audit records for backup writes", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }
