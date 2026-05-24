@@ -200,6 +200,9 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(document.body.textContent).not.toContain("资料管理")
     expect(document.body.textContent).toContain("放入资料")
     expect(document.body.textContent).toContain("目标目录：raw/")
+    expect(document.body.textContent).toContain("支持 Markdown、Word、Excel、PDF、PPT、网页 URL")
+    expect(document.body.textContent).toContain("图片和扫描 PDF 暂不支持")
+    expect(document.body.textContent).toContain("放入后，在知识库对话里说“汲取知识”")
     expect(document.body.textContent).toContain("新文件")
     expect(document.body.textContent).toContain("有更新")
     expect(document.body.textContent).toContain("已放入")
@@ -233,7 +236,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       expect(document.body.textContent).toContain("AI产品需求说明.md")
     })
 
-    const urlInput = document.querySelector<HTMLInputElement>('input[placeholder="URL"]')
+    const urlInput = document.querySelector<HTMLInputElement>('input[placeholder="粘贴网页 URL"]')
     expect(urlInput).not.toBeNull()
 
     act(() => {

@@ -283,6 +283,7 @@ function KnowledgeBaseSourceManagerWindow() {
           <div className="flex flex-col gap-1">
             <div className="font-medium text-foreground">放入资料</div>
             <div className="text-xs">拖拽文件到这里</div>
+            <div className="text-xs">支持 Markdown、Word、Excel、PDF、PPT、网页 URL</div>
           </div>
         </div>
 
@@ -296,7 +297,7 @@ function KnowledgeBaseSourceManagerWindow() {
                   void addUrlSource()
                 }
               }}
-              placeholder="URL"
+              placeholder="粘贴网页 URL"
             />
             <Button type="button" variant="outline" size="icon" onClick={addUrlSource} aria-label="添加 URL">
               <Link className="size-4" />
@@ -312,7 +313,12 @@ function KnowledgeBaseSourceManagerWindow() {
           </Button>
         </div>
 
-        <div className="mt-auto border-t border-border pt-3 text-xs text-muted-foreground">
+        <div className="mt-auto space-y-2 border-t border-border pt-3 text-xs text-muted-foreground">
+          <div className="space-y-1">
+            <div>放入后，在知识库对话里说“汲取知识”。</div>
+            <div>旧版 .doc/.ppt 需要本地转换工具。</div>
+            <div>图片和扫描 PDF 暂不支持。</div>
+          </div>
           目标目录：raw/
         </div>
       </aside>
