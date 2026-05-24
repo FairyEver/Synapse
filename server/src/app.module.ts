@@ -1,7 +1,6 @@
 import { Module } from "@nestjs/common"
 import { APP_GUARD, APP_INTERCEPTOR } from "@nestjs/core"
 import { ScheduleModule } from "@nestjs/schedule"
-import { ServeStaticModule } from "@nestjs/serve-static"
 import { ThrottlerGuard, ThrottlerModule } from "@nestjs/throttler"
 import { LoggerModule } from "nestjs-pino"
 import { join } from "node:path"
@@ -44,10 +43,6 @@ import { AuditLogInterceptor } from "./common/audit-log.interceptor"
           ],
         },
       },
-    }),
-    ServeStaticModule.forRoot({
-      rootPath: join(process.cwd(), "admin-dist"),
-      serveRoot: "/dashboard",
     }),
     PrismaModule,
     PermissionsModule,

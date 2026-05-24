@@ -1,8 +1,8 @@
-import { access, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { KnowledgeBaseService, KNOWLEDGE_BASE_TEMPLATE_VERSION } from "../knowledge-base-service"
+import { KnowledgeBaseService } from "../knowledge-base-service"
 import type { FileConversionResult } from "../../file-conversion"
 
 vi.mock("electron", () => ({
@@ -19,6 +19,45 @@ async function tempDir(): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-kb-"))
   roots.push(dir)
   return dir
+}
+
+type KnowledgeBaseServiceOptions = ConstructorParameters<typeof KnowledgeBaseService>[0]
+
+async function managedFixture(options: KnowledgeBaseServiceOptions = {}) {
+  const projectId = "kb-1"
+  const userDataPath = await tempDir()
+  const projectPath = path.join(userDataPath, "knowledge-bases", projectId)
+  await mkdir(projectPath, { recursive: true })
+  const service = new KnowledgeBaseService({
+    ...options,
+    userDataPath,
+    loadConfig: async () => ({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "system",
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+        projects: [{
+          id: projectId,
+          name: "Knowledge",
+          path: `synapse-kb://${projectId}`,
+          capabilities: {
+            knowledgeBase: {
+              enabled: true,
+              schemaVersion: 1,
+              templateVersion: "2026-05-24",
+              managed: true,
+              runtimeId: projectId,
+            },
+          },
+        }],
+      },
+      agent: { defaultPermissionMode: "default", defaultProviderModel: null },
+    }),
+  })
+  return { projectId, projectPath, service }
 }
 
 afterEach(async () => {
@@ -50,129 +89,15 @@ describe("KnowledgeBaseService", () => {
     await expect(readFile(path.join(result.runtimePath, ".claude-plugin", "plugin.json"), "utf8")).resolves.toContain("kb")
   })
 
-  it("initializes the vault structure without runnable agent files", async () => {
-    const targetPath = await tempDir()
-    const service = new KnowledgeBaseService()
-
-    const result = await service.initialize({ projectPath: targetPath, mode: "create" })
-
-    expect(result.templateVersion).toBe(KNOWLEDGE_BASE_TEMPLATE_VERSION)
-    await expect(readFile(path.join(targetPath, ".synapse-kb.json"), "utf8")).resolves.toContain("synapse.knowledgeBase")
-    await expect(readFile(path.join(targetPath, ".raw", ".manifest.json"), "utf8").then(JSON.parse)).resolves.toMatchObject({
-      version: 1,
-      description: expect.stringContaining("Ingest delta tracker"),
-      sources: {},
-      address_map: {},
-    })
-    await expect(readFile(path.join(targetPath, "wiki", "hot.md"), "utf8")).resolves.toContain("# Hot Cache")
-    await expect(readFile(path.join(targetPath, ".agents", "skills", "wiki", "SKILL.md"), "utf8")).rejects.toThrow()
-    await expect(readFile(path.join(targetPath, ".claude", "skills", "wiki-ingest", "SKILL.md"), "utf8")).rejects.toThrow()
-    await expect(readFile(path.join(targetPath, ".codex", "skills", "wiki-ingest", "SKILL.md"), "utf8")).rejects.toThrow()
-  })
-
-  it("does not copy DragonScale upstream scripts into a user vault", async () => {
-    const targetPath = await tempDir()
-    const service = new KnowledgeBaseService()
-
-    await service.initialize({ projectPath: targetPath, mode: "create" })
-
-    await expect(access(path.join(targetPath, "scripts", "allocate-address.sh"))).rejects.toThrow()
-    await expect(access(path.join(targetPath, "scripts", "boundary-score.py"))).rejects.toThrow()
-    await expect(access(path.join(targetPath, "scripts", "tiling-check.py"))).rejects.toThrow()
-    await expect(access(path.join(targetPath, ".claude"))).rejects.toThrow()
-    await expect(access(path.join(targetPath, ".agents"))).rejects.toThrow()
-    await expect(access(path.join(targetPath, ".codex"))).rejects.toThrow()
-    await expect(access(path.join(targetPath, ".vault-meta", "address-counter.txt"))).rejects.toThrow()
-  })
-
-  it("repairs missing files without overwriting existing wiki content", async () => {
-    const targetPath = await tempDir()
-    const service = new KnowledgeBaseService()
-    await service.initialize({ projectPath: targetPath, mode: "create" })
-    await writeFile(path.join(targetPath, "wiki", "hot.md"), "# Custom Hot\n")
-    await unlink(path.join(targetPath, "wiki", "log.md"))
-
-    const result = await service.initialize({ projectPath: targetPath, mode: "repair" })
-
-    expect(result.createdFiles).toContain("wiki/log.md")
-    expect(result.createdFiles).not.toContain("wiki/hot.md")
-    await expect(readFile(path.join(targetPath, "wiki", "log.md"), "utf8")).resolves.toContain("# Knowledge Log")
-    await expect(readFile(path.join(targetPath, "wiki", "hot.md"), "utf8")).resolves.toBe("# Custom Hot\n")
-  })
-
-  it("rejects create mode when the target is already a knowledge base", async () => {
-    const targetPath = await tempDir()
-    const service = new KnowledgeBaseService()
-    await service.initialize({ projectPath: targetPath, mode: "create" })
-
-    await expect(service.initialize({ projectPath: targetPath, mode: "create" })).rejects.toThrow("知识库已存在")
-  })
-
-  it("rejects required writes through symlinked project directories", async () => {
-    const targetPath = await tempDir()
-    const outsidePath = await tempDir()
-    const service = new KnowledgeBaseService()
-    await symlink(outsidePath, path.join(targetPath, "wiki"), "dir")
-
-    await expect(service.initialize({ projectPath: targetPath, mode: "repair" })).rejects.toThrow("符号链接")
-    await expect(readFile(path.join(outsidePath, "log.md"), "utf8")).rejects.toThrow()
-  })
-
-  it("rejects required writes through dangling symlinked file paths", async () => {
-    const targetPath = await tempDir()
-    const outsidePath = await tempDir()
-    const outsideLogPath = path.join(outsidePath, "log.md")
-    const service = new KnowledgeBaseService()
-    await service.initialize({ projectPath: targetPath, mode: "create" })
-    await unlink(path.join(targetPath, "wiki", "log.md"))
-    await symlink(outsideLogPath, path.join(targetPath, "wiki", "log.md"))
-
-    await expect(service.initialize({ projectPath: targetPath, mode: "repair" })).rejects.toThrow("符号链接")
-    await expect(readFile(outsideLogPath, "utf8")).rejects.toThrow()
-  })
-
-  it("detects existing knowledge base folders by metadata or folder shape", async () => {
-    const targetPath = await tempDir()
-    const service = new KnowledgeBaseService()
-    await service.initialize({ projectPath: targetPath, mode: "create" })
-
-    await expect(service.inspect(targetPath)).resolves.toMatchObject({
-      isKnowledgeBase: true,
-      hasMetadata: true,
-      hasRequiredShape: true,
-    })
-  })
-
-  it("returns the raw directory after ensuring it exists", async () => {
-    const targetPath = await tempDir()
-    const service = new KnowledgeBaseService()
-
-    const result = await service.openRawDirectory(targetPath)
-
-    expect(result.rawPath).toBe(path.join(targetPath, ".raw"))
-    await expect(access(path.join(targetPath, ".raw"))).resolves.toBeUndefined()
-  })
-
-  it("rejects opening a raw directory through a symlink", async () => {
-    const targetPath = await tempDir()
-    const outsidePath = await tempDir()
-    const service = new KnowledgeBaseService()
-    await symlink(outsidePath, path.join(targetPath, ".raw"), "dir")
-
-    await expect(service.openRawDirectory(targetPath)).rejects.toThrow("符号链接")
-    await expect(readFile(path.join(outsidePath, ".manifest.json"), "utf8")).rejects.toThrow()
-  })
-
   it("lists raw source files with user-facing import statuses", async () => {
-    const targetPath = await tempDir()
-    const service = new KnowledgeBaseService()
-    await mkdir(path.join(targetPath, ".raw"), { recursive: true })
-    await writeFile(path.join(targetPath, ".raw", "note.md"), "alpha\n")
-    await writeFile(path.join(targetPath, ".raw", "deck.pdf"), "binary")
-    const initial = await service.listSources(targetPath)
+    const { projectId, projectPath, service } = await managedFixture()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
+    await writeFile(path.join(projectPath, ".raw", "deck.pdf"), "binary")
+    const initial = await service.listSources(projectId)
     const note = initial.sources.find((source) => source.relativePath === ".raw/note.md")
     if (!note) throw new Error("expected note source")
-    await writeFile(path.join(targetPath, ".raw", ".manifest.json"), `${JSON.stringify({
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), `${JSON.stringify({
       version: 1,
       sources: {
         ".raw/note.md": {
@@ -184,7 +109,7 @@ describe("KnowledgeBaseService", () => {
       },
     })}\n`)
 
-    const result = await service.listSources(targetPath)
+    const result = await service.listSources(projectId)
 
     expect(result.sources.map((source) => ({
       relativePath: source.relativePath,
@@ -197,13 +122,14 @@ describe("KnowledgeBaseService", () => {
   })
 
   it("uploads source files into a date folder with collision-safe names", async () => {
-    const targetPath = await tempDir()
     const sourcePath = path.join(await tempDir(), "note.md")
     await writeFile(sourcePath, "alpha\n")
-    const service = new KnowledgeBaseService({ now: () => new Date("2026-05-23T10:20:30.000Z") })
+    const { projectId, projectPath, service } = await managedFixture({
+      now: () => new Date("2026-05-23T10:20:30.000Z"),
+    })
 
-    const first = await service.uploadSources({ projectPath: targetPath, filePaths: [sourcePath] })
-    const second = await service.uploadSources({ projectPath: targetPath, filePaths: [sourcePath] })
+    const first = await service.uploadSources({ projectId, filePaths: [sourcePath] })
+    const second = await service.uploadSources({ projectId, filePaths: [sourcePath] })
 
     expect(first.uploaded).toEqual([expect.objectContaining({
       originalPath: sourcePath,
@@ -213,15 +139,14 @@ describe("KnowledgeBaseService", () => {
       originalPath: sourcePath,
       relativePath: ".raw/2026/05/23/note-2.md",
     })])
-    await expect(readFile(path.join(targetPath, ".raw", "2026", "05", "23", "note.md"), "utf8"))
+    await expect(readFile(path.join(projectPath, ".raw", "2026", "05", "23", "note.md"), "utf8"))
       .resolves.toBe("alpha\n")
-    await expect(readFile(path.join(targetPath, ".raw", "2026", "05", "23", "note-2.md"), "utf8"))
+    await expect(readFile(path.join(projectPath, ".raw", "2026", "05", "23", "note-2.md"), "utf8"))
       .resolves.toBe("alpha\n")
   })
 
   it("adds a URL source through the injected fetch boundary", async () => {
-    const targetPath = await tempDir()
-    const service = new KnowledgeBaseService({
+    const { projectId, projectPath, service } = await managedFixture({
       now: () => new Date("2026-05-24T10:20:30.000Z"),
       fetchUrl: async () => ({
         url: "https://example.com/article",
@@ -232,7 +157,7 @@ describe("KnowledgeBaseService", () => {
     })
 
     const result = await service.addUrlSource({
-      projectPath: targetPath,
+      projectId,
       url: "https://example.com/article",
     })
 
@@ -242,15 +167,14 @@ describe("KnowledgeBaseService", () => {
       sourceKind: "url",
       sourceUrl: "https://example.com/article",
     })])
-    await expect(readFile(path.join(targetPath, ".raw", "web", "2026", "05", "24", "article.md"), "utf8"))
+    await expect(readFile(path.join(projectPath, ".raw", "web", "2026", "05", "24", "article.md"), "utf8"))
       .resolves.toContain('source_url: "https://example.com/article"')
   })
 
   it("uploads convertible files as generated markdown sources", async () => {
-    const targetPath = await tempDir()
     const sourcePath = path.join(await tempDir(), "report.docx")
     await writeFile(sourcePath, "binary")
-    const service = new KnowledgeBaseService({
+    const { projectId, projectPath, service } = await managedFixture({
       now: () => new Date("2026-05-23T10:20:30.000Z"),
       fileConversionService: {
         convert: async (): Promise<FileConversionResult> => ({
@@ -266,14 +190,14 @@ describe("KnowledgeBaseService", () => {
       },
     })
 
-    const result = await service.uploadSources({ projectPath: targetPath, filePaths: [sourcePath] })
+    const result = await service.uploadSources({ projectId, filePaths: [sourcePath] })
 
     expect(result.uploaded).toEqual([expect.objectContaining({
       originalPath: sourcePath,
       relativePath: ".raw/documents/2026/05/23/report.md",
       originalRelativePath: "_attachments/originals/2026/05/23/report.docx",
     })])
-    await expect(readFile(path.join(targetPath, ".raw", "documents", "2026", "05", "23", "report.md"), "utf8"))
+    await expect(readFile(path.join(projectPath, ".raw", "documents", "2026", "05", "23", "report.md"), "utf8"))
       .resolves.toContain('source_format: "docx"')
   })
 })

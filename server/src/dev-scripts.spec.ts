@@ -11,15 +11,14 @@ function readPackageJson(path: string): PackageJson {
 }
 
 describe("server dev scripts", () => {
-  it("runs api watch and admin vite dev server together", () => {
+  it("runs only the api watch server", () => {
     const serverPackage = readPackageJson(join(process.cwd(), "package.json"))
     const scripts = serverPackage.scripts ?? {}
 
     expect(scripts.dev).toContain("dev:api")
-    expect(scripts.dev).toContain("dev:admin")
     expect(scripts.dev).toContain("APP_PUBLIC_URL=${APP_PUBLIC_URL:-http://localhost:3000}")
     expect(scripts["dev:api"]).toBe("nest start --watch")
-    expect(scripts["dev:admin"]).toBe("vite --config admin/vite.config.ts --host 0.0.0.0")
+    expect(scripts["dev:admin"]).toBeUndefined()
   })
 
   it("does not expose a combined workspace dev command", () => {
@@ -36,6 +35,9 @@ describe("server dev scripts", () => {
     )
     expect(workspacePackage.scripts?.["dev:server"]).toContain(
       "--filter @synapse/server run dev",
+    )
+    expect(workspacePackage.scripts?.["dev:dashboard"]).toBe(
+      "pnpm --filter @synapse/dashboard run dev",
     )
   })
 })

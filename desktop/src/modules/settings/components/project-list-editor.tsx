@@ -38,7 +38,7 @@ type ProjectListEditorProps = {
 }
 
 function isKnowledgeBaseProject(project: SynapseProjectConfig): boolean {
-  return project.capabilities?.knowledgeBase?.enabled === true
+  return project.capabilities?.knowledgeBase?.managed === true
 }
 
 function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {

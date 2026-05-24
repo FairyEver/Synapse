@@ -51,7 +51,7 @@ describe("knowledge base source staging for URL and OCR sources", () => {
     await expect(access(path.join(projectPath, "wiki"))).rejects.toMatchObject({ code: "ENOENT" })
   })
 
-  it("archives image originals and writes OCR markdown under the dated raw images directory", async () => {
+  it("copies image originals and writes intake markdown under the dated raw images directory", async () => {
     const projectPath = await tempDir()
     const inputDir = await tempDir()
     const sourcePath = path.join(inputDir, "receipt.png")
@@ -62,18 +62,8 @@ describe("knowledge base source staging for URL and OCR sources", () => {
       filePaths: [sourcePath],
       now: fixedNow,
       converter: {
-        convert: async (input): Promise<FileConversionResult> => {
-          expect(input).toEqual({ filePath: sourcePath, ocr: { enabled: true } })
-          return {
-            sourcePath,
-            format: "png",
-            kind: "image",
-            title: "receipt.png",
-            markdown: "# receipt.png\n\nTotal 42\n",
-            text: "Total 42",
-            metadata: { mimeType: "image/png" },
-            warnings: [],
-          }
+        convert: async (): Promise<FileConversionResult> => {
+          throw new Error("image intake should not require local OCR")
         },
       },
     })
@@ -82,13 +72,12 @@ describe("knowledge base source staging for URL and OCR sources", () => {
     expect(result.uploaded).toEqual([expect.objectContaining({
       originalPath: sourcePath,
       relativePath: ".raw/images/2026/05/24/receipt.md",
-      originalRelativePath: "_attachments/originals/2026/05/24/receipt.png",
-      sourceKind: "file",
+      originalRelativePath: "_attachments/images/2026/05/24/receipt.png",
     })])
-    await expect(readFile(path.join(projectPath, "_attachments", "originals", "2026", "05", "24", "receipt.png"), "utf8"))
+    await expect(readFile(path.join(projectPath, "_attachments", "images", "2026", "05", "24", "receipt.png"), "utf8"))
       .resolves.toBe("png")
     await expect(readFile(path.join(projectPath, ".raw", "images", "2026", "05", "24", "receipt.md"), "utf8"))
-      .resolves.toContain("Total 42")
+      .resolves.toContain("attachment: _attachments/images/2026/05/24/receipt.png")
     await expect(access(path.join(projectPath, "wiki"))).rejects.toMatchObject({ code: "ENOENT" })
   })
 
@@ -129,64 +118,4 @@ describe("knowledge base source staging for URL and OCR sources", () => {
       .resolves.toContain("Scanned page text")
   })
 
-  it("preserves conversion warnings in the upload result", async () => {
-    const projectPath = await tempDir()
-    const inputDir = await tempDir()
-    const sourcePath = path.join(inputDir, "receipt.jpg")
-    await writeFile(sourcePath, "jpg")
-
-    const result = await stageKnowledgeBaseSources({
-      projectPath,
-      filePaths: [sourcePath],
-      now: fixedNow,
-      converter: {
-        convert: async (): Promise<FileConversionResult> => ({
-          sourcePath,
-          format: "jpg",
-          kind: "image",
-          title: "receipt.jpg",
-          markdown: "# receipt.jpg\n\nTotal 42\n",
-          text: "Total 42",
-          metadata: {},
-          warnings: [{ code: "low_contrast", message: "Image contrast is low." }],
-        }),
-      },
-    })
-
-    expect(result.uploaded).toEqual([expect.objectContaining({
-      relativePath: ".raw/images/2026/05/24/receipt.md",
-      conversionWarnings: [{ code: "low_contrast", message: "Image contrast is low." }],
-    })])
-    expect(result.skipped).toEqual([])
-  })
-
-  it("reports OCR unavailable conversions as conversion errors", async () => {
-    const projectPath = await tempDir()
-    const inputDir = await tempDir()
-    const sourcePath = path.join(inputDir, "scan.webp")
-    await writeFile(sourcePath, "webp")
-
-    const result = await stageKnowledgeBaseSources({
-      projectPath,
-      filePaths: [sourcePath],
-      now: fixedNow,
-      converter: {
-        convert: async (): Promise<FileConversionResult> => ({
-          sourcePath,
-          format: "webp",
-          kind: "image",
-          title: "scan.webp",
-          markdown: "# scan.webp\n\n",
-          text: "",
-          metadata: { ocr: { available: false } },
-          warnings: [{ code: "ocr_unavailable", message: "Local OCR is not configured." }],
-        }),
-      },
-    })
-
-    expect(result.uploaded).toEqual([])
-    expect(result.skipped).toEqual([{ path: sourcePath, reason: "conversion-error" }])
-    await expect(access(path.join(projectPath, ".raw", "images", "2026", "05", "24", "scan.md")))
-      .rejects.toMatchObject({ code: "ENOENT" })
-  })
 })

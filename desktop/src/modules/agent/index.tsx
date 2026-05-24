@@ -114,7 +114,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const selectedProject = selectedProjectId
     ? config.global.projects.find((project) => project.id === selectedProjectId)
     : undefined
-  const canManageKnowledgeSources = selectedProject?.capabilities?.knowledgeBase?.enabled === true
+  const canManageKnowledgeSources =
+    selectedProject?.capabilities?.knowledgeBase?.managed === true
   const selectedTarget: PendingMessageTarget | undefined = selectedSession
     ? {
         projectId: selectedSession.projectId,

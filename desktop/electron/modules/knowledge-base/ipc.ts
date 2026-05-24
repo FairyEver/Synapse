@@ -1,22 +1,9 @@
-import { dialog, shell } from "electron"
+import { dialog } from "electron"
 import { z } from "zod"
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
 import type { KnowledgeBaseService } from "../../services/knowledge-base"
 import { knowledgeBaseSourceManagerWindowService } from "../../services/knowledge-base/source-manager-window-service"
-import { runGuardedShellOperation } from "../shell/guarded-shell"
-
-const initializePayloadSchema = z.object({
-  projectPath: z.string().min(1),
-  mode: z.enum(["create", "repair"]),
-})
-
-const initializeResultSchema = z.object({
-  projectPath: z.string(),
-  templateVersion: z.string(),
-  createdFiles: z.array(z.string()),
-  existingFiles: z.array(z.string()),
-})
 
 const createManagedPayloadSchema = z.object({
   projectId: z.string().min(1),
@@ -33,19 +20,6 @@ const createManagedResultSchema = z.object({
     commit: z.string().optional(),
     syncedAt: z.string().optional(),
   }).optional(),
-})
-
-const inspectionSchema = z.object({
-  projectPath: z.string(),
-  isKnowledgeBase: z.boolean(),
-  hasMetadata: z.boolean(),
-  hasRequiredShape: z.boolean(),
-  missingRequiredPaths: z.array(z.string()),
-  templateVersion: z.string().optional(),
-})
-
-const openRawResultSchema = z.object({
-  rawPath: z.string(),
 })
 
 const sourceEntrySchema = z.object({
@@ -158,32 +132,6 @@ async function runGuardedKnowledgeBaseOperation<T>(options: {
 export const knowledgeBaseIpcModule: IpcModule = {
   id: "knowledge-base",
   methods: {
-    inspect: {
-      kind: "invoke",
-      channel: "synapse:knowledge-base:inspect",
-      request: z.object({ projectPath: z.string().min(1) }),
-      response: inspectionSchema,
-      handler: (ctx, request: { projectPath: string }) => runGuardedKnowledgeBaseOperation({
-        ctx,
-        action: "fs.read.outside-userdata",
-        resource: request.projectPath,
-        source: "knowledgeBase.inspect",
-        run: () => service(ctx).inspect(request.projectPath),
-      }),
-    },
-    initialize: {
-      kind: "invoke",
-      channel: "synapse:knowledge-base:initialize",
-      request: initializePayloadSchema,
-      response: initializeResultSchema,
-      handler: (ctx, request: { projectPath: string; mode: "create" | "repair" }) => runGuardedKnowledgeBaseOperation({
-        ctx,
-        action: "fs.write",
-        resource: request.projectPath,
-        source: "knowledgeBase.initialize",
-        run: () => service(ctx).initialize(request),
-      }),
-    },
     createManaged: {
       kind: "invoke",
       channel: "synapse:knowledge-base:create-managed",
@@ -278,33 +226,6 @@ export const knowledgeBaseIpcModule: IpcModule = {
         source: "knowledgeBase.openSourceManager",
         run: () => knowledgeBaseSourceManagerWindowService.open(request),
       }),
-    },
-    openRawDirectory: {
-      kind: "invoke",
-      channel: "synapse:knowledge-base:open-raw-directory",
-      request: z.object({ projectPath: z.string().min(1) }),
-      response: openRawResultSchema,
-      handler: async (ctx, request: { projectPath: string }) => {
-        const result = await runGuardedKnowledgeBaseOperation({
-          ctx,
-          action: "fs.write",
-          resource: request.projectPath,
-          source: "knowledgeBase.ensureRawDirectory",
-          run: () => service(ctx).openRawDirectory(request.projectPath),
-        })
-        await runGuardedShellOperation({
-          ctx,
-          resource: result.rawPath,
-          source: "knowledgeBase.openRawDirectory",
-          run: async () => {
-            const error = await shell.openPath(result.rawPath)
-            if (error) {
-              throw new Error(error)
-            }
-          },
-        })
-        return result
-      },
     },
   },
   events: {},

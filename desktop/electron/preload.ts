@@ -89,15 +89,12 @@ const IPC_CHANNELS = {
     "uninstall": "synapse:install-status:uninstall",
   },
   "knowledge-base": {
-    "inspect": "synapse:knowledge-base:inspect",
-    "initialize": "synapse:knowledge-base:initialize",
     "createManaged": "synapse:knowledge-base:create-managed",
     "listSources": "synapse:knowledge-base:list-sources",
     "uploadSources": "synapse:knowledge-base:upload-sources",
     "addUrlSource": "synapse:knowledge-base:add-url-source",
     "selectAndUploadSources": "synapse:knowledge-base:select-and-upload-sources",
     "openSourceManager": "synapse:knowledge-base:open-source-manager",
-    "openRawDirectory": "synapse:knowledge-base:open-raw-directory",
   },
   "editor": {
     "getGlobalDirectories": "synapse:editor:get-global-directories",
@@ -528,10 +525,6 @@ const synapseBridge: SynapseBridge = {
     ),
   },
   knowledgeBase: {
-    inspect: (projectPath: string) =>
-      invoke(IPC_CHANNELS["knowledge-base"].inspect)({ projectPath }),
-    initialize: (payload) =>
-      invoke(IPC_CHANNELS["knowledge-base"].initialize)(payload),
     createManaged: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].createManaged)(payload),
     listSources: (projectId: string) =>
@@ -545,8 +538,6 @@ const synapseBridge: SynapseBridge = {
     openSourceManager: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].openSourceManager)(payload),
     filePathForDroppedFile: (file: File) => webUtils.getPathForFile(file) || null,
-    openRawDirectory: (projectPath: string) =>
-      invoke(IPC_CHANNELS["knowledge-base"].openRawDirectory)({ projectPath }),
   },
   shell: {
     openExternal: (url: string) => {

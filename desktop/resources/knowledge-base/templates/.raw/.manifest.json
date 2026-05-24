@@ -1,7 +1,0 @@
-{
-  "version": 1,
-  "created": "2026-05-21",
-  "description": "Ingest delta tracker and address map for the Synapse knowledge base. Do not hand-edit; wiki ingest maintains this.",
-  "sources": {},
-  "address_map": {}
-}

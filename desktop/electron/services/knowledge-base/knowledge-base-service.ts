@@ -1,17 +1,13 @@
 import { app } from "electron"
 import { constants } from "node:fs"
 import type { Dirent } from "node:fs"
-import { access, copyFile, lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises"
+import { access, copyFile, lstat, mkdir, readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 import type {
   SynapseKnowledgeBaseCreateManagedPayload,
   SynapseKnowledgeBaseCreateManagedResult,
-  SynapseKnowledgeBaseInitializePayload,
-  SynapseKnowledgeBaseInitializeResult,
   SynapseKnowledgeBaseAddUrlSourcePayload,
-  SynapseKnowledgeBaseInspection,
   SynapseKnowledgeBaseListSourcesResult,
-  SynapseKnowledgeBaseOpenRawResult,
   SynapseKnowledgeBaseSourceEntry,
   SynapseKnowledgeBaseUploadSourcesPayload,
   SynapseKnowledgeBaseUploadSourcesResult,
@@ -32,21 +28,7 @@ import {
 
 export const KNOWLEDGE_BASE_TEMPLATE_VERSION = "2026-05-21"
 
-const REQUIRED_PATHS = [
-  ".synapse-kb.json",
-  ".raw/.manifest.json",
-  "wiki/index.md",
-  "wiki/hot.md",
-  "wiki/log.md",
-  "wiki/overview.md",
-  "wiki/sources/_index.md",
-  "wiki/concepts/_index.md",
-  "wiki/entities/_index.md",
-  "wiki/questions/_index.md",
-] as const
-
 type KnowledgeBaseServiceDeps = {
-  templateRoot?: string
   managedTemplateRoot?: string
   userDataPath?: string
   loadConfig?: () => Promise<SynapseConfig>
@@ -56,7 +38,6 @@ type KnowledgeBaseServiceDeps = {
 }
 
 export class KnowledgeBaseService {
-  private readonly templateRoot: string
   private readonly managedTemplateRoot: string
   private readonly userDataPath: string
   private readonly loadConfig: () => Promise<SynapseConfig>
@@ -65,72 +46,12 @@ export class KnowledgeBaseService {
   private readonly fetchUrl: FetchUrl
 
   constructor(deps: KnowledgeBaseServiceDeps = {}) {
-    this.templateRoot = deps.templateRoot ?? resolveTemplateRoot()
     this.managedTemplateRoot = deps.managedTemplateRoot ?? resolveManagedTemplateRoot()
     this.userDataPath = deps.userDataPath ?? defaultKnowledgeBaseUserDataPath()
     this.loadConfig = deps.loadConfig ?? (() => configStore.load())
     this.now = deps.now ?? (() => new Date())
     this.fileConversionService = deps.fileConversionService ?? createDefaultFileConversionService()
     this.fetchUrl = deps.fetchUrl ?? createGuardedFetchUrl()
-  }
-
-  async inspect(projectPath: string): Promise<SynapseKnowledgeBaseInspection> {
-    const missingRequiredPaths: string[] = []
-    for (const relativePath of REQUIRED_PATHS) {
-      if (!await pathExists(path.join(projectPath, relativePath))) {
-        missingRequiredPaths.push(relativePath)
-      }
-    }
-
-    const metadata = await readMetadata(projectPath)
-    const hasRequiredShape = missingRequiredPaths.length === 0
-    const hasMetadata = metadata !== null
-
-    return {
-      projectPath,
-      isKnowledgeBase: hasMetadata || hasRequiredShape,
-      hasMetadata,
-      hasRequiredShape,
-      missingRequiredPaths,
-      ...(metadata?.templateVersion ? { templateVersion: metadata.templateVersion } : undefined),
-    }
-  }
-
-  async initialize(payload: SynapseKnowledgeBaseInitializePayload): Promise<SynapseKnowledgeBaseInitializeResult> {
-    const projectPath = path.resolve(payload.projectPath)
-    await mkdir(projectPath, { recursive: true })
-    if (payload.mode === "create" && (await this.inspect(projectPath)).isKnowledgeBase) {
-      throw new Error("知识库已存在。")
-    }
-
-    const createdFiles: string[] = []
-    const existingFiles: string[] = []
-    for (const relativePath of REQUIRED_PATHS) {
-      const targetPath = assertInside(projectPath, path.join(projectPath, relativePath))
-      const templatePath = path.join(this.templateRoot, relativePath)
-      await assertNoSymlinkInRequiredPath(projectPath, relativePath)
-      await mkdir(path.dirname(targetPath), { recursive: true })
-      if (await pathExists(targetPath)) {
-        existingFiles.push(relativePath)
-        continue
-      }
-      if (await pathExists(templatePath)) {
-        await copyFile(templatePath, targetPath)
-      } else {
-        await writeFile(targetPath, defaultTemplateFor(relativePath), "utf8")
-      }
-      createdFiles.push(relativePath)
-    }
-
-    await mkdir(assertInside(projectPath, path.join(projectPath, "_attachments")), { recursive: true })
-    await mkdir(assertInside(projectPath, path.join(projectPath, "wiki", "meta")), { recursive: true })
-
-    return {
-      projectPath,
-      templateVersion: KNOWLEDGE_BASE_TEMPLATE_VERSION,
-      createdFiles,
-      existingFiles,
-    }
   }
 
   async createManaged(payload: SynapseKnowledgeBaseCreateManagedPayload): Promise<SynapseKnowledgeBaseCreateManagedResult> {
@@ -161,13 +82,6 @@ export class KnowledgeBaseService {
       templateVersion: KNOWLEDGE_BASE_TEMPLATE_VERSION,
       ...(source ? { templateSource: source } : undefined),
     }
-  }
-
-  async openRawDirectory(projectPath: string): Promise<SynapseKnowledgeBaseOpenRawResult> {
-    const rawPath = assertInside(projectPath, path.join(projectPath, ".raw"))
-    await assertNoSymlinkInRequiredPath(projectPath, ".raw")
-    await mkdir(rawPath, { recursive: true })
-    return { rawPath }
   }
 
   async listSources(projectId: string): Promise<SynapseKnowledgeBaseListSourcesResult> {
@@ -202,8 +116,8 @@ export class KnowledgeBaseService {
     }
   }
 
-  async uploadSources(payload: SynapseKnowledgeBaseUploadSourcesPayload | { projectPath: string; filePaths: string[] }): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
-    const projectId = "projectId" in payload ? payload.projectId : payload.projectPath
+  async uploadSources(payload: SynapseKnowledgeBaseUploadSourcesPayload): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
+    const projectId = payload.projectId
     const projectPath = await this.resolveProjectPath(projectId)
     const result = await stageKnowledgeBaseSources({
       projectPath,
@@ -214,8 +128,8 @@ export class KnowledgeBaseService {
     return { projectId, uploaded: result.uploaded, skipped: result.skipped }
   }
 
-  async addUrlSource(payload: SynapseKnowledgeBaseAddUrlSourcePayload | { projectPath: string; url: string }): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
-    const projectId = "projectId" in payload ? payload.projectId : payload.projectPath
+  async addUrlSource(payload: SynapseKnowledgeBaseAddUrlSourcePayload): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
+    const projectId = payload.projectId
     const projectPath = await this.resolveProjectPath(projectId)
     const result = await stageKnowledgeBaseUrlSource({
       projectPath,
@@ -227,9 +141,6 @@ export class KnowledgeBaseService {
   }
 
   private async resolveProjectPath(projectId: string): Promise<string> {
-    if (path.isAbsolute(projectId)) {
-      return projectId
-    }
     const config = await this.loadConfig()
     const project = config.global.projects.find((item) => item.id === projectId)
     if (!project) {
@@ -304,26 +215,9 @@ function normalizeRelativePath(value: string): string {
   return value.split(path.sep).join("/")
 }
 
-function resolveTemplateRoot(): string {
-  if (process.env.SYNAPSE_KB_TEMPLATE_ROOT) {
-    return process.env.SYNAPSE_KB_TEMPLATE_ROOT
-  }
-
-  if (isElectronAppPackaged()) {
-    const resourcesPath = (process as NodeJS.Process & { resourcesPath: string }).resourcesPath
-    return path.join(resourcesPath, "knowledge-base", "templates")
-  }
-
-  return path.join(getElectronAppPath(), "resources", "knowledge-base", "templates")
-}
-
 function resolveManagedTemplateRoot(): string {
   if (process.env.SYNAPSE_KB_MANAGED_TEMPLATE_ROOT) {
     return process.env.SYNAPSE_KB_MANAGED_TEMPLATE_ROOT
-  }
-
-  if (process.env.SYNAPSE_KB_TEMPLATE_ROOT) {
-    return process.env.SYNAPSE_KB_TEMPLATE_ROOT
   }
 
   if (isElectronAppPackaged()) {
@@ -410,41 +304,4 @@ async function readTemplateSource(templateRoot: string): Promise<SynapseKnowledg
   } catch {
     return undefined
   }
-}
-
-async function readMetadata(projectPath: string): Promise<{ templateVersion?: string } | null> {
-  try {
-    const content = await readFile(path.join(projectPath, ".synapse-kb.json"), "utf8")
-    const parsed = JSON.parse(content) as Record<string, unknown>
-    if (parsed.type !== "synapse.knowledgeBase" || parsed.schemaVersion !== 1) {
-      return null
-    }
-    return {
-      templateVersion: typeof parsed.templateVersion === "string" ? parsed.templateVersion : undefined,
-    }
-  } catch {
-    return null
-  }
-}
-
-function defaultTemplateFor(relativePath: string): string {
-  if (relativePath === ".raw/.manifest.json") {
-    return `${JSON.stringify({
-      version: 1,
-      created: "2026-05-21",
-      description: "Ingest delta tracker and address map for the Synapse knowledge base. Do not hand-edit; wiki ingest maintains this.",
-      sources: {},
-      address_map: {},
-    }, null, 2)}\n`
-  }
-  if (relativePath === ".synapse-kb.json") {
-    return `${JSON.stringify({
-      type: "synapse.knowledgeBase",
-      schemaVersion: 1,
-      templateVersion: KNOWLEDGE_BASE_TEMPLATE_VERSION,
-      createdBy: "Synapse",
-    }, null, 2)}\n`
-  }
-  const title = path.basename(relativePath, ".md")
-  return `---\ntype: meta\ntitle: "${title}"\nstatus: active\ntags:\n  - meta\n---\n\n# ${title}\n`
 }

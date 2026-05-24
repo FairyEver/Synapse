@@ -33,13 +33,13 @@ services:
       COS_SECRET_KEY: ${COS_SECRET_KEY:-}
       COS_BUCKET: ${COS_BUCKET:-}
       COS_REGION: ${COS_REGION:-}
-      PORT: "3000"
+      PORT: "3001"
     ports:
       - "127.0.0.1:3000:3000"
     depends_on:
       postgres:
         condition: service_healthy
-    command: sh -c "pnpm --filter @synapse/server prisma:migrate && pnpm --filter @synapse/server start"
+    command: sh -c "cd server && npx prisma migrate deploy && cd .. && node server/dist/main.js & nginx -g 'daemon off;'"
 
 volumes:
   synapse-postgres:

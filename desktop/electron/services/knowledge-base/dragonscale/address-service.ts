@@ -1,12 +1,30 @@
+import { createHash } from "node:crypto"
 import type { Dirent } from "node:fs"
-import { mkdir, readFile, readdir, writeFile } from "node:fs/promises"
+import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 
 import type { DragonScaleAddress, DragonScaleAddressServiceResult } from "./types"
 
 const vaultLocks = new Map<string, Promise<void>>()
 
+export interface DragonScaleAddressServiceOptions {
+  readonly lockRoot?: string
+  readonly lockTimeoutMs?: number
+  readonly lockRetryMs?: number
+}
+
 export class DragonScaleAddressService {
+  private readonly lockRoot: string | undefined
+  private readonly lockTimeoutMs: number
+  private readonly lockRetryMs: number
+
+  constructor(options: DragonScaleAddressServiceOptions = {}) {
+    this.lockRoot = options.lockRoot
+    this.lockTimeoutMs = options.lockTimeoutMs ?? 30_000
+    this.lockRetryMs = options.lockRetryMs ?? 50
+  }
+
   async allocate(vaultPath: string): Promise<DragonScaleAddressServiceResult> {
     return this.withVaultLock(vaultPath, async () => {
       const counterPath = await this.ensureCounter(vaultPath)
@@ -78,15 +96,75 @@ export class DragonScaleAddressService {
     const queued = previous.catch(() => undefined).then(() => current)
     vaultLocks.set(key, queued)
     await previous.catch(() => undefined)
+    let releaseFileLock: (() => Promise<void>) | undefined
     try {
+      releaseFileLock = await acquireDragonScaleAddressFileLock(vaultPath, {
+        lockRoot: this.lockRoot,
+        timeoutMs: this.lockTimeoutMs,
+        retryMs: this.lockRetryMs,
+      })
       return await work()
     } finally {
-      release()
-      if (vaultLocks.get(key) === queued) {
-        vaultLocks.delete(key)
+      try {
+        await releaseFileLock?.()
+      } finally {
+        release()
+        if (vaultLocks.get(key) === queued) {
+          vaultLocks.delete(key)
+        }
       }
     }
   }
+}
+
+export function dragonScaleAddressLockPath(
+  vaultPath: string,
+  options: { readonly lockRoot?: string } = {},
+): string {
+  const lockRoot = options.lockRoot ?? path.join(os.tmpdir(), "synapse-kb-address-locks")
+  const key = createHash("sha256").update(path.resolve(vaultPath)).digest("hex")
+  return path.join(lockRoot, `${key}.lock`)
+}
+
+class DragonScaleAddressLockTimeoutError extends Error {
+  constructor(vaultPath: string) {
+    super(`Timed out waiting for DragonScale address lock: ${vaultPath}`)
+    this.name = "DragonScaleAddressLockTimeoutError"
+  }
+}
+
+async function acquireDragonScaleAddressFileLock(
+  vaultPath: string,
+  options: { readonly lockRoot?: string; readonly timeoutMs: number; readonly retryMs: number },
+): Promise<() => Promise<void>> {
+  const lockPath = dragonScaleAddressLockPath(vaultPath, { lockRoot: options.lockRoot })
+  await mkdir(path.dirname(lockPath), { recursive: true })
+  const startedAt = Date.now()
+  while (true) {
+    try {
+      await mkdir(lockPath)
+      return async () => {
+        await rm(lockPath, { recursive: true, force: true })
+      }
+    } catch (error) {
+      if (!isPathExistsError(error)) throw error
+      if (Date.now() - startedAt >= options.timeoutMs) {
+        throw new DragonScaleAddressLockTimeoutError(vaultPath)
+      }
+      await delay(options.retryMs)
+    }
+  }
+}
+
+function isPathExistsError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && (error as { readonly code?: unknown }).code === "EEXIST"
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 async function scanMarkdownAddresses(directoryPath: string): Promise<DragonScaleAddress[]> {

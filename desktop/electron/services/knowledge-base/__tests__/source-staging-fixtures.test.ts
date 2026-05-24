@@ -1,4 +1,4 @@
-import { access, mkdtemp, readFile, rm } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readFile, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -57,6 +57,43 @@ async function tempDir(): Promise<string> {
   return dir
 }
 
+async function managedFixture() {
+  const projectId = "kb-1"
+  const userDataPath = await tempDir()
+  const projectPath = path.join(userDataPath, "knowledge-bases", projectId)
+  await mkdir(projectPath, { recursive: true })
+  const service = new KnowledgeBaseService({
+    now: fixedNow,
+    userDataPath,
+    loadConfig: async () => ({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "system",
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+        projects: [{
+          id: projectId,
+          name: "Knowledge",
+          path: `synapse-kb://${projectId}`,
+          capabilities: {
+            knowledgeBase: {
+              enabled: true,
+              schemaVersion: 1,
+              templateVersion: "2026-05-24",
+              managed: true,
+              runtimeId: projectId,
+            },
+          },
+        }],
+      },
+      agent: { defaultPermissionMode: "default", defaultProviderModel: null },
+    }),
+  })
+  return { projectId, projectPath, service }
+}
+
 afterEach(async () => {
   await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
@@ -68,13 +105,11 @@ describe("knowledge base staging with real converted fixtures", () => {
     rawPath,
     originalPath,
   }) => {
-    const projectPath = await tempDir()
     const fixtureRoot = await tempDir()
     const fixtures = await buildFileConversionFixtures(fixtureRoot)
-    const service = new KnowledgeBaseService({ now: fixedNow })
+    const { projectId, projectPath, service } = await managedFixture()
 
-    await service.initialize({ projectPath, mode: "create" })
-    const result = await service.uploadSources({ projectPath, filePaths: [fixtures[fixtureKey]] })
+    const result = await service.uploadSources({ projectId, filePaths: [fixtures[fixtureKey]] })
 
     expect(result.skipped).toEqual([])
     expect(result.uploaded).toEqual([expect.objectContaining({

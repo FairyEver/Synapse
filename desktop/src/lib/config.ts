@@ -146,19 +146,8 @@ function normalizeKnowledgeBaseCapability(value: unknown): SynapseProjectConfig[
   }
 
   const runtimeId = asTrimmedString(rawKnowledgeBase.runtimeId)
-  if (rawKnowledgeBase.managed === true) {
-    if (!runtimeId) {
-      return undefined
-    }
-    return {
-      knowledgeBase: {
-        enabled: true,
-        schemaVersion: 1,
-        templateVersion,
-        managed: true,
-        runtimeId,
-      },
-    }
+  if (rawKnowledgeBase.managed !== true || !runtimeId) {
+    return undefined
   }
 
   return {
@@ -166,6 +155,8 @@ function normalizeKnowledgeBaseCapability(value: unknown): SynapseProjectConfig[
       enabled: true,
       schemaVersion: 1,
       templateVersion,
+      managed: true,
+      runtimeId,
     },
   }
 }

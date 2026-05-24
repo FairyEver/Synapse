@@ -1,0 +1,47 @@
+{
+  "name": "@synapse/dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Synapse admin dashboard",
+  "scripts": {
+    "build": "max build",
+    "dev": "cross-env UMI_ENV=dev MOCK=none max dev --port 3000 --host 0.0.0.0",
+    "lint": "pnpm biome:lint && pnpm tsc",
+    "biome:lint": "biome lint",
+    "biome": "biome check --write",
+    "preview": "max preview --port 3000",
+    "test": "jest",
+    "tsc": "tsc --noEmit"
+  },
+  "browserslist": [
+    "defaults"
+  ],
+  "dependencies": {
+    "@ant-design/icons": "^6.2.3",
+    "@ant-design/pro-components": "^3.1.12-0",
+    "@tanstack/react-query": "^5.100.6",
+    "antd": "^6.4.3",
+    "antd-style": "^4.1.0",
+    "dayjs": "^1.11.20",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5"
+  },
+  "devDependencies": {
+    "@ant-design/cli": "^6.4.3",
+    "@biomejs/biome": "^2.4.13",
+    "@testing-library/dom": "^10.4.1",
+    "@testing-library/react": "^16.3.2",
+    "@types/jest": "^30.0.0",
+    "@types/node": "^25.9.1",
+    "@types/react": "^19.2.14",
+    "@types/react-dom": "^19.2.3",
+    "@umijs/max": "^4.6.51",
+    "cross-env": "^10.1.0",
+    "jest": "^30.4.1",
+    "jest-environment-jsdom": "^30.4.1",
+    "typescript": "^6.0.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { AdminController } from "./admin.controller"
 import type { AdminService } from "./admin.service"
 import { auditLogExportLimit, type AuditLogService } from "../common/audit-log.service"
@@ -11,6 +11,10 @@ function createController(
 }
 
 describe("AdminController", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs()
+  })
+
   it("returns system overview from the service", async () => {
     const getSystemOverview = vi.fn().mockResolvedValue({
       serverTime: "2026-05-21T00:00:00.000Z",
@@ -171,6 +175,7 @@ describe("AdminController", () => {
   })
 
   it("creates signup invitations through the service", async () => {
+    vi.stubEnv("APP_PUBLIC_URL", "")
     const createSignupInvitation = vi.fn().mockResolvedValue({ token: "plain-token" })
     const controller = createController({ createSignupInvitation } as never)
 

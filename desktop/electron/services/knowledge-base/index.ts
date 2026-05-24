@@ -32,9 +32,6 @@ export {
   formatKnowledgeBaseLintPreflightAppendix,
 } from "./lint-preflight"
 export {
-  isKnowledgeBaseIngestIntent,
-} from "./ingest-intent"
-export {
   defaultKnowledgeBaseUserDataPath,
   isManagedKnowledgeBaseProject,
   knowledgeBaseVirtualPath,

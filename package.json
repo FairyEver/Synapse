@@ -7,6 +7,8 @@
     "dev:website": "pnpm --filter @synapse/website run dev",
     "dev:desktop": "pnpm --filter @synapse/desktop run dev",
     "dev:server": "docker compose --env-file server/.env -f server/compose.yml up -d postgres && node scripts/run-with-server-env.mjs --filter @synapse/server run dev",
+    "dev:dashboard": "pnpm --filter @synapse/dashboard run dev",
+    "dev:server:full": "pnpm run dev:server & pnpm run dev:dashboard & wait",
     "quit": "node scripts/quit.mjs",
     "quit:website": "node scripts/quit-processes.mjs dev:website",
     "quit:desktop": "node scripts/quit-processes.mjs dev:desktop",

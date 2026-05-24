@@ -118,7 +118,7 @@ describe("Synapse config Agent defaults", () => {
 })
 
 describe("Synapse project capabilities", () => {
-  it("preserves valid knowledge base capability config", () => {
+  it("drops legacy non-managed knowledge base capability config", () => {
     const config = sanitizeSynapseConfig({
       activeRepoUuid: null,
       repositories: [],
@@ -139,11 +139,7 @@ describe("Synapse project capabilities", () => {
       },
     })
 
-    expect(config.global.projects[0]?.capabilities?.knowledgeBase).toEqual({
-      enabled: true,
-      schemaVersion: 1,
-      templateVersion: "2026-05-21",
-    })
+    expect(config.global.projects[0]?.capabilities).toBeUndefined()
   })
 
   it("drops malformed knowledge base capability config", () => {
@@ -247,7 +243,9 @@ describe("Synapse project capabilities", () => {
             knowledgeBase: {
               enabled: true,
               schemaVersion: 1,
-              templateVersion: "2026-05-21",
+              templateVersion: "2026-05-24",
+              managed: true,
+              runtimeId: "project-1",
             },
           },
         }],
@@ -256,6 +254,6 @@ describe("Synapse project capabilities", () => {
 
     expect(next.global.projects).toHaveLength(1)
     expect(next.global.projects[0]?.name).toBe("KB")
-    expect(next.global.projects[0]?.capabilities?.knowledgeBase?.enabled).toBe(true)
+    expect(next.global.projects[0]?.capabilities?.knowledgeBase?.managed).toBe(true)
   })
 })

@@ -103,13 +103,9 @@ import type {
 import type {
   SynapseKnowledgeBaseCreateManagedPayload,
   SynapseKnowledgeBaseCreateManagedResult,
-  SynapseKnowledgeBaseInitializePayload,
-  SynapseKnowledgeBaseInitializeResult,
-  SynapseKnowledgeBaseInspection,
   SynapseKnowledgeBaseListSourcesResult,
   SynapseKnowledgeBaseOpenSourceManagerPayload,
   SynapseKnowledgeBaseAddUrlSourcePayload,
-  SynapseKnowledgeBaseOpenRawResult,
   SynapseKnowledgeBaseUploadSourcesPayload,
   SynapseKnowledgeBaseUploadSourcesResult,
 } from "./knowledge-base"
@@ -582,14 +578,9 @@ export type SynapseBridge = {
     onChanged: (listener: (payload: InstallStatusChangedEvent) => void) => () => void
   }
   knowledgeBase: {
-    inspect: (projectPath: string) => Promise<SynapseKnowledgeBaseInspection>
-    initialize: (
-      payload: SynapseKnowledgeBaseInitializePayload,
-    ) => Promise<SynapseKnowledgeBaseInitializeResult>
     createManaged: (
       payload: SynapseKnowledgeBaseCreateManagedPayload,
     ) => Promise<SynapseKnowledgeBaseCreateManagedResult>
-    openRawDirectory: (projectPath: string) => Promise<SynapseKnowledgeBaseOpenRawResult>
     listSources: (projectId: string) => Promise<SynapseKnowledgeBaseListSourcesResult>
     uploadSources: (
       payload: SynapseKnowledgeBaseUploadSourcesPayload,

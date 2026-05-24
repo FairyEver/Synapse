@@ -132,8 +132,11 @@ USER_ACCESS_JWT_SECRET=再次生成并粘贴另一串hex字符
 USER_ACCESS_TOKEN_MINUTES=15
 USER_REFRESH_TOKEN_DAYS=30
 
-# 外部访问地址（用于生成注册邀请和团队邀请链接）
+# 外部访问地址（用于生成注册邀请和团队邀请链接，默认同域访问 /dashboard）
 APP_PUBLIC_URL=https://api.yourdomain.com
+
+# API 在容器内部监听 3001，由容器内 Nginx 统一从 3000 对外暴露
+PORT=3001
 ```
 
 常见配置错误（启动时会报 "服务端环境变量无效"）：
@@ -141,7 +144,8 @@ APP_PUBLIC_URL=https://api.yourdomain.com
 - `ADMIN_JWT_SECRET` 少于 32 位（必须用 `openssl rand -hex 32` 生成的 64 字符）
 - `USER_ACCESS_JWT_SECRET` 少于 32 位，或和 `ADMIN_JWT_SECRET` 相同
 - `ADMIN_EMAIL` 不是合法邮箱格式
-- `APP_PUBLIC_URL` 不是用户可访问的后台地址
+- `APP_PUBLIC_URL` 不是用户可访问的后台域名
+- `PORT` 不应和对外 Nginx 端口混用，默认保持 `3001`
 
 ---
 
@@ -397,8 +401,8 @@ echo '/swapfile swap swap defaults 0 0' >> /etc/fstab
 # 查看谁占用了 3000 端口
 lsof -i :3000
 
-# 如果要换端口，修改 .env 中的 PORT 和 compose.yml 中的 ports 映射
-# 比如改成 3001，同时更新宝塔反向代理的目标 URL
+# 如果要换对外端口，只修改 compose.yml 中的 ports 映射
+# 比如改成 127.0.0.1:3002:3000，同时更新宝塔反向代理的目标 URL
 ```
 
 ### 容器一直重启
