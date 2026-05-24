@@ -1,6 +1,3 @@
-import { mkdir, writeFile } from "node:fs/promises"
-import path from "node:path"
-
 import type { FileConversionErrorCode, FileConversionResult } from "../../electron/services/file-conversion"
 import { FileConversionError } from "../../electron/services/file-conversion"
 import { sanitizeError } from "../../electron/services/error-sanitize"
@@ -8,7 +5,7 @@ import { createMainLogger } from "../../electron/services/log-store"
 import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-utils"
 import type { NodeExecutionInput, NodeExecutionResult, NodeExecutor } from "../types"
 import type { FileConversionNodeConfig } from "./schema"
-import { isWorkflowFileConversionOutputPathAllowed } from "./output-boundary"
+import { isWorkflowFileConversionOutputPathAllowed, WorkflowFileConversionOutputWriteError } from "./output-boundary"
 
 const logger = createMainLogger("workflow.node.file-conversion-executor")
 
@@ -57,9 +54,34 @@ export const fileConversionNodeExecutor: NodeExecutor<FileConversionNodeConfig> 
             message: "outputPath must be inside the workflow output directory.",
           })
         }
+        if (!runtimeDeps.writeWorkflowFileConversionOutput) {
+          return fileConversionFailure({
+            start,
+            inputPath: converted.sourcePath,
+            code: "write_failed",
+            message: "Workflow output writer is unavailable.",
+          })
+        }
 
-        await mkdir(path.dirname(outputPath), { recursive: true })
-        await writeFile(outputPath, converted.markdown, "utf8")
+        try {
+          await runtimeDeps.writeWorkflowFileConversionOutput({
+            outputPath,
+            markdown: converted.markdown,
+            actor: context.actor,
+            runId: context.runId,
+            abortSignal: context.abortSignal,
+          })
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          const code = error instanceof WorkflowFileConversionOutputWriteError ? error.code : "write_failed"
+          logger.warn("file conversion node output write failed", {
+            runId: context.runId,
+            code,
+            errorMessage: truncateWithEllipsis(sanitizeError(message), 200),
+            durationMs: Date.now() - start,
+          })
+          return fileConversionFailure({ start, inputPath: converted.sourcePath, code, message })
+        }
         outputs.outputPath = outputPath
       }
 
@@ -86,7 +108,7 @@ export const fileConversionNodeExecutor: NodeExecutor<FileConversionNodeConfig> 
       logger.warn("file conversion node failed", {
         runId: context.runId,
         code,
-        errorMessage: truncateWithEllipsis(message, 200),
+        errorMessage: truncateWithEllipsis(sanitizeError(message), 200),
         durationMs,
       })
       return fileConversionFailure({ start, inputPath, code, message })
@@ -94,7 +116,7 @@ export const fileConversionNodeExecutor: NodeExecutor<FileConversionNodeConfig> 
   },
 }
 
-type WorkflowFileConversionFailureCode = FileConversionErrorCode | "invalid_output_path"
+type WorkflowFileConversionFailureCode = FileConversionErrorCode | "invalid_output_path" | "write_failed"
 
 function buildConversionOutputs(result: FileConversionResult): Record<string, unknown> {
   return {

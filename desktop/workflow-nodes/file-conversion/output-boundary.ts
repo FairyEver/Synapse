@@ -1,6 +1,21 @@
 import { tmpdir } from "node:os"
 import path from "node:path"
 
+export type WorkflowFileConversionOutputWriteErrorCode = "invalid_output_path" | "write_failed"
+
+export class WorkflowFileConversionOutputWriteError extends Error {
+  readonly code: WorkflowFileConversionOutputWriteErrorCode
+
+  constructor(code: WorkflowFileConversionOutputWriteErrorCode, message: string, options?: { readonly cause?: unknown }) {
+    super(message)
+    this.name = "WorkflowFileConversionOutputWriteError"
+    this.code = code
+    if (options && "cause" in options) {
+      this.cause = options.cause
+    }
+  }
+}
+
 const WORKFLOW_FILE_CONVERSION_OUTPUT_ROOT = path.join(tmpdir(), "synapse-workflow-outputs")
 
 export function getWorkflowFileConversionOutputRoot(): string {

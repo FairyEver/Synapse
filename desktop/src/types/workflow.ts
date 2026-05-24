@@ -23,7 +23,7 @@ export interface WorkflowFileConversionNodeResult {
 }
 export interface WorkflowFileConversionNodeFailure {
   readonly ok: false
-  readonly code: "unsupported_format" | "encrypted" | "missing_local_helper" | "parse_failed" | "read_failed" | "size_limit_exceeded" | "invalid_output_path"
+  readonly code: "unsupported_format" | "encrypted" | "missing_local_helper" | "parse_failed" | "read_failed" | "size_limit_exceeded" | "invalid_output_path" | "write_failed"
   readonly message: string
   readonly sourcePath: string
 }

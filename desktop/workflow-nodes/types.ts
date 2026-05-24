@@ -63,6 +63,13 @@ export interface NodeRuntimeDeps {
   fileConversionService?: {
     convert: (input: import("../electron/services/file-conversion").FileConversionInput) => Promise<import("../electron/services/file-conversion").FileConversionResult>
   }
+  writeWorkflowFileConversionOutput?: (request: {
+    readonly outputPath: string
+    readonly markdown: string
+    readonly actor?: ActorIdentity
+    readonly runId: string
+    readonly abortSignal: AbortSignal
+  }) => Promise<void>
 }
 
 export interface NodeExecutionInput<TConfig> {
