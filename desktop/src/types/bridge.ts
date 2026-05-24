@@ -101,6 +101,8 @@ import type {
   SynapseDiagnosticsReport,
 } from "./diagnostics"
 import type {
+  SynapseKnowledgeBaseCreateManagedPayload,
+  SynapseKnowledgeBaseCreateManagedResult,
   SynapseKnowledgeBaseInitializePayload,
   SynapseKnowledgeBaseInitializeResult,
   SynapseKnowledgeBaseInspection,
@@ -584,6 +586,9 @@ export type SynapseBridge = {
     initialize: (
       payload: SynapseKnowledgeBaseInitializePayload,
     ) => Promise<SynapseKnowledgeBaseInitializeResult>
+    createManaged: (
+      payload: SynapseKnowledgeBaseCreateManagedPayload,
+    ) => Promise<SynapseKnowledgeBaseCreateManagedResult>
     openRawDirectory: (projectPath: string) => Promise<SynapseKnowledgeBaseOpenRawResult>
     listSources: (projectPath: string) => Promise<SynapseKnowledgeBaseListSourcesResult>
     uploadSources: (

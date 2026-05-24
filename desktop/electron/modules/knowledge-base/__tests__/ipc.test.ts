@@ -12,6 +12,7 @@ const electronMock = vi.hoisted(() => ({
   app: {
     isPackaged: false,
     getAppPath: () => process.cwd(),
+    getPath: () => path.join(os.tmpdir(), "synapse-kb-userdata"),
   },
   dialog: {
     showOpenDialog: vi.fn(),
@@ -103,6 +104,35 @@ describe("knowledgeBaseIpcModule", () => {
 
     expect(initialize).toHaveBeenCalledWith({ projectPath: "/tmp/kb", mode: "create" })
     expect(result.createdFiles).toEqual([".synapse-kb.json"])
+  })
+
+  it("creates a managed knowledge base through guarded write permission", async () => {
+    const createManaged = vi.fn().mockResolvedValue({
+      projectId: "kb-1",
+      projectPath: "synapse-kb://kb-1",
+      runtimePath: "/UserData/knowledge-bases/kb-1",
+      templateVersion: "2026-05-24",
+      templateSource: {
+        repo: "https://github.com/AgriciDaniel/claude-obsidian",
+        commit: "75d3b6feb77b96c6bb16599c4550cc9703553d87",
+        syncedAt: "2026-05-24",
+      },
+    })
+    const { harness, permissionGuard } = createHarness({ service: { createManaged } })
+
+    const result = await harness.invoke("synapse:knowledge-base:create-managed", {
+      projectId: "kb-1",
+      name: "Knowledge",
+    }) as { projectPath: string }
+
+    expect(createManaged).toHaveBeenCalledWith({ projectId: "kb-1", name: "Knowledge" })
+    expect(result.projectPath).toBe("synapse-kb://kb-1")
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base:kb-1",
+      context: { source: "knowledgeBase.createManaged" },
+    })
   })
 
   it("lists source files through guarded read permission", async () => {

@@ -18,6 +18,23 @@ const initializeResultSchema = z.object({
   existingFiles: z.array(z.string()),
 })
 
+const createManagedPayloadSchema = z.object({
+  projectId: z.string().min(1),
+  name: z.string().min(1),
+})
+
+const createManagedResultSchema = z.object({
+  projectId: z.string(),
+  projectPath: z.string(),
+  runtimePath: z.string(),
+  templateVersion: z.string(),
+  templateSource: z.object({
+    repo: z.string().optional(),
+    commit: z.string().optional(),
+    syncedAt: z.string().optional(),
+  }).optional(),
+})
+
 const inspectionSchema = z.object({
   projectPath: z.string(),
   isKnowledgeBase: z.boolean(),
@@ -166,6 +183,19 @@ export const knowledgeBaseIpcModule: IpcModule = {
         resource: request.projectPath,
         source: "knowledgeBase.initialize",
         run: () => service(ctx).initialize(request),
+      }),
+    },
+    createManaged: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:create-managed",
+      request: createManagedPayloadSchema,
+      response: createManagedResultSchema,
+      handler: (ctx, request: { projectId: string; name: string }) => runGuardedKnowledgeBaseOperation({
+        ctx,
+        action: "fs.write",
+        resource: `managed-knowledge-base:${request.projectId}`,
+        source: "knowledgeBase.createManaged",
+        run: () => service(ctx).createManaged(request),
       }),
     },
     listSources: {

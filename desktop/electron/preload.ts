@@ -531,6 +531,8 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["knowledge-base"].inspect)({ projectPath }),
     initialize: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].initialize)(payload),
+    createManaged: (payload) =>
+      invoke(IPC_CHANNELS["knowledge-base"].createManaged)(payload),
     listSources: (projectPath: string) =>
       invoke(IPC_CHANNELS["knowledge-base"].listSources)({ projectPath }),
     uploadSources: (payload) =>
