@@ -186,15 +186,19 @@ export function TeamsPage() {
       const orderedKeys = permissions
         .filter((permission) => permissionKeys.has(permission.key))
         .map((permission) => permission.key)
-      const result = await adminApi.replaceTeamEntitlements(editingTeam.id, orderedKeys)
-      for (const role of accessRoles) {
-        if (role.locked) continue
-        const roleKeys = permissions
-          .filter((permission) => result.permissionKeys.includes(permission.key))
-          .filter((permission) => rolePermissionKeys[role.id]?.has(permission.key))
-          .map((permission) => permission.key)
-        await adminApi.replaceTeamRolePermissions(editingTeam.id, role.id, roleKeys)
-      }
+      const entitlementSet = new Set(orderedKeys)
+      const result = await adminApi.replaceTeamPermissions(editingTeam.id, {
+        permissionKeys: orderedKeys,
+        rolePermissions: accessRoles
+          .filter((role) => !role.locked)
+          .map((role) => ({
+            roleId: role.id,
+            permissionKeys: permissions
+              .filter((permission) => entitlementSet.has(permission.key))
+              .filter((permission) => rolePermissionKeys[role.id]?.has(permission.key))
+              .map((permission) => permission.key),
+          })),
+      })
       setPermissionKeys(new Set(result.permissionKeys))
       setEditingTeam(null)
     } catch (caught) {

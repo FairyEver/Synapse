@@ -112,6 +112,65 @@ describe("PermissionsService", () => {
     })
   })
 
+  it("replaces team entitlements and role permissions in one transaction", async () => {
+    const prisma = createPermissionPrismaMock()
+    const tx = createPermissionPrismaMock()
+    prisma.$transaction.mockImplementationOnce((callback) => callback(tx))
+    tx.teamEntitlement.findMany.mockResolvedValue([
+      { permissionKey: "database.use" },
+      { permissionKey: "workflow.use" },
+    ])
+    tx.teamAccessRole.findFirst.mockResolvedValue({ id: "role-1", locked: false })
+    const service = new PermissionsService(prisma as never)
+
+    await expect(service.replaceTeamPermissions({
+      teamId: "team-1",
+      permissionKeys: ["workflow.use", "database.use", "database.use"],
+      rolePermissions: [{
+        roleId: "role-1",
+        permissionKeys: ["workflow.use", "database.use"],
+      }],
+      grantedByAdminId: "admin-1",
+      source: "manual",
+    }))
+      .resolves
+      .toEqual({
+        permissionKeys: ["database.use", "workflow.use"],
+        rolePermissions: [{
+          roleId: "role-1",
+          permissionKeys: ["database.use", "workflow.use"],
+        }],
+      })
+
+    expect(prisma.$transaction).toHaveBeenCalledTimes(1)
+    expect(tx.teamEntitlement.deleteMany).toHaveBeenCalledWith({ where: { teamId: "team-1" } })
+    expect(tx.teamEntitlement.createMany).toHaveBeenCalledWith({
+      data: [
+        { teamId: "team-1", permissionKey: "database.use", grantedByAdminId: "admin-1", source: "manual" },
+        { teamId: "team-1", permissionKey: "workflow.use", grantedByAdminId: "admin-1", source: "manual" },
+      ],
+    })
+    expect(tx.teamAccessRole.findFirst).toHaveBeenCalledWith({
+      where: { id: "role-1", teamId: "team-1" },
+      select: { id: true, locked: true },
+    })
+    expect(tx.teamAccessRolePermission.deleteMany).toHaveBeenNthCalledWith(1, {
+      where: {
+        role: { teamId: "team-1" },
+        permissionKey: { notIn: ["database.use", "workflow.use"] },
+      },
+    })
+    expect(tx.teamAccessRolePermission.deleteMany).toHaveBeenNthCalledWith(2, {
+      where: { roleId: "role-1" },
+    })
+    expect(tx.teamAccessRolePermission.createMany).toHaveBeenCalledWith({
+      data: [
+        { roleId: "role-1", permissionKey: "database.use" },
+        { roleId: "role-1", permissionKey: "workflow.use" },
+      ],
+    })
+  })
+
   it("lists only active team entitlements in query order", async () => {
     const prisma = createPermissionPrismaMock()
     prisma.teamEntitlement.findMany.mockResolvedValue([

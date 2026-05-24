@@ -268,6 +268,54 @@ describe("AdminController", () => {
     )
   })
 
+  it("replaces team permissions through the service", async () => {
+    const replaceTeamPermissions = vi.fn().mockResolvedValue({
+      permissionKeys: ["database.use"],
+      rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
+    })
+    const controller = createController({ replaceTeamPermissions } as never)
+
+    await expect(controller.replaceTeamPermissions(
+      "team-1",
+      {
+        permissionKeys: ["database.use"],
+        rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
+      },
+      { admin: { id: "admin-1", email: "admin@example.com" }, ip: "203.0.113.75" } as never,
+    ))
+      .resolves
+      .toEqual({
+        permissionKeys: ["database.use"],
+        rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
+      })
+    expect(replaceTeamPermissions).toHaveBeenCalledWith(
+      "team-1",
+      {
+        permissionKeys: ["database.use"],
+        rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
+      },
+      { id: "admin-1", email: "admin@example.com" },
+      "203.0.113.75",
+    )
+  })
+
+  it("rejects invalid team permission bodies", async () => {
+    const replaceTeamPermissions = vi.fn()
+    const controller = createController({ replaceTeamPermissions } as never)
+
+    await expect(controller.replaceTeamPermissions(
+      "team-1",
+      {
+        permissionKeys: ["database.use"],
+        rolePermissions: [{ roleId: "role-1", permissionKeys: ["unknown.permission"] }],
+      },
+      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
+    ))
+      .rejects
+      .toThrow("团队权限无效。")
+    expect(replaceTeamPermissions).not.toHaveBeenCalled()
+  })
+
   it("lists team access roles through the service", async () => {
     const listTeamAccessRoles = vi.fn().mockResolvedValue([{ id: "role-1", permissionKeys: ["database.use"] }])
     const controller = createController({ listTeamAccessRoles } as never)

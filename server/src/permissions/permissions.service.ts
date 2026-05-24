@@ -11,6 +11,11 @@ type PrismaClientLike = PrismaService | Prisma.TransactionClient
 type TeamEntitlementSourceInput = "manual" | "plan" | "migration"
 type TeamAccessRoleKindInput = "system" | "custom"
 
+export interface TeamRolePermissionsInput {
+  readonly roleId: string
+  readonly permissionKeys: readonly string[]
+}
+
 export const teamAdminRoleName = "团队管理员"
 export const ordinaryMemberRoleName = "普通成员"
 
@@ -52,19 +57,45 @@ export class PermissionsService {
   }): Promise<string[]> {
     const keys = normalizePermissionKeys(input.permissionKeys)
     await this.prisma.$transaction(async (tx) => {
-      await tx.teamEntitlement.deleteMany({ where: { teamId: input.teamId } })
-      await this.deleteRolePermissionsOutsideTeamEntitlements(input.teamId, keys, tx)
-      if (keys.length === 0) return
-      await tx.teamEntitlement.createMany({
-        data: keys.map((permissionKey) => ({
-          teamId: input.teamId,
-          permissionKey,
-          grantedByAdminId: input.grantedByAdminId,
-          source: input.source,
-        })),
+      await this.replaceTeamEntitlementsOnClient({
+        ...input,
+        permissionKeys: keys,
+        client: tx,
       })
     })
     return keys
+  }
+
+  async replaceTeamPermissions(input: {
+    readonly teamId: string
+    readonly permissionKeys: readonly string[]
+    readonly rolePermissions: readonly TeamRolePermissionsInput[]
+    readonly grantedByAdminId?: string
+    readonly source: TeamEntitlementSourceInput
+  }): Promise<{ permissionKeys: string[]; rolePermissions: TeamRolePermissionsInput[] }> {
+    const keys = normalizePermissionKeys(input.permissionKeys)
+    const rolePermissions = input.rolePermissions.map((role) => ({
+      roleId: role.roleId,
+      permissionKeys: normalizePermissionKeys(role.permissionKeys),
+    }))
+    await this.prisma.$transaction(async (tx) => {
+      await this.replaceTeamEntitlementsOnClient({
+        teamId: input.teamId,
+        permissionKeys: keys,
+        grantedByAdminId: input.grantedByAdminId,
+        source: input.source,
+        client: tx,
+      })
+      for (const role of rolePermissions) {
+        await this.replaceRolePermissionsOnClient({
+          teamId: input.teamId,
+          roleId: role.roleId,
+          permissionKeys: role.permissionKeys,
+          client: tx,
+        })
+      }
+    })
+    return { permissionKeys: keys, rolePermissions }
   }
 
   async ensureDefaultTeamAccess(input: {
@@ -207,17 +238,11 @@ export class PermissionsService {
   }): Promise<string[]> {
     const keys = normalizePermissionKeys(input.permissionKeys)
     await this.prisma.$transaction(async (tx) => {
-      const role = await tx.teamAccessRole.findFirst({
-        where: { id: input.roleId, teamId: input.teamId },
-        select: { id: true, locked: true },
-      })
-      if (!role) throw new BadRequestException("团队角色不存在。")
-      if (role.locked) throw new ForbiddenException("系统内置角色不允许修改权限。")
-      await this.assertWithinTeamEntitlements(input.teamId, keys, tx)
-      await tx.teamAccessRolePermission.deleteMany({ where: { roleId: input.roleId } })
-      if (keys.length === 0) return
-      await tx.teamAccessRolePermission.createMany({
-        data: keys.map((permissionKey) => ({ roleId: input.roleId, permissionKey })),
+      await this.replaceRolePermissionsOnClient({
+        teamId: input.teamId,
+        roleId: input.roleId,
+        permissionKeys: keys,
+        client: tx,
       })
     })
     return keys
@@ -261,6 +286,46 @@ export class PermissionsService {
     await client.teamEntitlement.createMany({
       data: keys.map((permissionKey) => ({ teamId, permissionKey, source: "plan" })),
       skipDuplicates: true,
+    })
+  }
+
+  private async replaceTeamEntitlementsOnClient(input: {
+    readonly teamId: string
+    readonly permissionKeys: readonly string[]
+    readonly grantedByAdminId?: string
+    readonly source: TeamEntitlementSourceInput
+    readonly client: PrismaClientLike
+  }): Promise<void> {
+    await input.client.teamEntitlement.deleteMany({ where: { teamId: input.teamId } })
+    await this.deleteRolePermissionsOutsideTeamEntitlements(input.teamId, input.permissionKeys, input.client)
+    if (input.permissionKeys.length === 0) return
+    await input.client.teamEntitlement.createMany({
+      data: input.permissionKeys.map((permissionKey) => ({
+        teamId: input.teamId,
+        permissionKey,
+        grantedByAdminId: input.grantedByAdminId,
+        source: input.source,
+      })),
+    })
+  }
+
+  private async replaceRolePermissionsOnClient(input: {
+    readonly teamId: string
+    readonly roleId: string
+    readonly permissionKeys: readonly string[]
+    readonly client: PrismaClientLike
+  }): Promise<void> {
+    const role = await input.client.teamAccessRole.findFirst({
+      where: { id: input.roleId, teamId: input.teamId },
+      select: { id: true, locked: true },
+    })
+    if (!role) throw new BadRequestException("团队角色不存在。")
+    if (role.locked) throw new ForbiddenException("系统内置角色不允许修改权限。")
+    await this.assertWithinTeamEntitlements(input.teamId, input.permissionKeys, input.client)
+    await input.client.teamAccessRolePermission.deleteMany({ where: { roleId: input.roleId } })
+    if (input.permissionKeys.length === 0) return
+    await input.client.teamAccessRolePermission.createMany({
+      data: input.permissionKeys.map((permissionKey) => ({ roleId: input.roleId, permissionKey })),
     })
   }
 

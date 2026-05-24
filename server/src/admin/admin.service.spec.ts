@@ -8,6 +8,10 @@ function createPermissionsMock() {
     listPermissionDefinitions: vi.fn().mockReturnValue([{ key: "database.use" }]),
     listTeamEntitlements: vi.fn().mockResolvedValue(["database.use"]),
     replaceTeamEntitlements: vi.fn().mockResolvedValue(["agent.chat.use", "database.use"]),
+    replaceTeamPermissions: vi.fn().mockResolvedValue({
+      permissionKeys: ["agent.chat.use", "database.use"],
+      rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
+    }),
     replaceRolePermissions: vi.fn().mockResolvedValue(["database.use"]),
     listMemberAccessRoles: vi.fn().mockResolvedValue([{ id: "role-1", name: "普通成员" }]),
     assignAccessRole: vi.fn().mockResolvedValue([{ id: "role-1", name: "普通成员" }]),
@@ -446,6 +450,47 @@ describe("AdminService", () => {
 
     expect(permissions.replaceTeamEntitlements).not.toHaveBeenCalled()
     expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
+  it("replaces team permissions atomically and records an audit log", async () => {
+    const permissions = createPermissionsMock()
+    const prisma = createPrismaMock()
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
+
+    await expect(service.replaceTeamPermissions(
+      "team-1",
+      {
+        permissionKeys: ["database.use", "agent.chat.use"],
+        rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
+      },
+      { id: "admin-1", email: "admin@example.com" },
+      "203.0.113.75",
+    ))
+      .resolves
+      .toEqual({
+        permissionKeys: ["agent.chat.use", "database.use"],
+        rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
+      })
+
+    expect(permissions.replaceTeamPermissions).toHaveBeenCalledWith({
+      teamId: "team-1",
+      permissionKeys: ["database.use", "agent.chat.use"],
+      rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
+      grantedByAdminId: "admin-1",
+      source: "manual",
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.team_entitlements.update",
+      targetType: "team",
+      targetId: "team-1",
+      detail: {
+        permissionKeys: ["agent.chat.use", "database.use"],
+        rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
+      },
+      ipAddress: "203.0.113.75",
+    })
   })
 
   it("lists team access roles with flattened permission keys", async () => {

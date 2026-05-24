@@ -12,6 +12,7 @@ vi.mock("@/lib/api", () => ({
     listTeamEntitlements: vi.fn(),
     listMemberAccessRoles: vi.fn(),
     replaceTeamEntitlements: vi.fn(),
+    replaceTeamPermissions: vi.fn(),
     replaceTeamRolePermissions: vi.fn(),
     assignMemberAccessRole: vi.fn(),
     removeMemberAccessRole: vi.fn(),
@@ -172,8 +173,13 @@ describe("TeamsPage", () => {
         updatedAt: "2026-05-22T00:00:00.000Z",
       },
     ])
-    vi.mocked(adminApi.replaceTeamEntitlements).mockResolvedValue({ permissionKeys: ["database.use", "workflow.use"] })
-    vi.mocked(adminApi.replaceTeamRolePermissions).mockResolvedValue({ permissionKeys: ["database.use", "workflow.use"] })
+    vi.mocked(adminApi.replaceTeamPermissions).mockResolvedValue({
+      permissionKeys: ["database.use", "workflow.use"],
+      rolePermissions: [{
+        roleId: "role-1",
+        permissionKeys: ["database.use", "workflow.use"],
+      }],
+    })
 
     const result = await render(<TeamsPage />)
     cleanup = result.unmount
@@ -212,15 +218,18 @@ describe("TeamsPage", () => {
     })
 
     await waitFor(() => {
-      expect(adminApi.replaceTeamEntitlements).toHaveBeenCalledWith(
+      expect(adminApi.replaceTeamPermissions).toHaveBeenCalledWith(
         "team-1",
-        ["database.use", "workflow.use"],
+        {
+          permissionKeys: ["database.use", "workflow.use"],
+          rolePermissions: [{
+            roleId: "role-1",
+            permissionKeys: ["database.use", "workflow.use"],
+          }],
+        },
       )
-      expect(adminApi.replaceTeamRolePermissions).toHaveBeenCalledWith(
-        "team-1",
-        "role-1",
-        ["database.use", "workflow.use"],
-      )
+      expect(adminApi.replaceTeamEntitlements).not.toHaveBeenCalled()
+      expect(adminApi.replaceTeamRolePermissions).not.toHaveBeenCalled()
     })
   })
 

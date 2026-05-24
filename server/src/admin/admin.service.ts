@@ -3,7 +3,7 @@ import { Prisma, type UserStatus } from "@prisma/client"
 import { AuditLogService } from "../common/audit-log.service"
 import { InvitationsService } from "../invitations/invitations.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
-import { PermissionsService } from "../permissions/permissions.service"
+import { PermissionsService, type TeamRolePermissionsInput } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
 
 type AdminPrismaClient = PrismaService | Prisma.TransactionClient
@@ -277,6 +277,34 @@ export class AdminService {
       ipAddress,
     })
     return { permissionKeys: next }
+  }
+
+  async replaceTeamPermissions(
+    teamId: string,
+    input: {
+      readonly permissionKeys: readonly string[]
+      readonly rolePermissions: readonly TeamRolePermissionsInput[]
+    },
+    admin: { readonly id: string; readonly email: string },
+    ipAddress = "system",
+  ) {
+    await this.assertTeamExists(teamId)
+    const next = await this.permissions.replaceTeamPermissions({
+      teamId,
+      permissionKeys: input.permissionKeys,
+      rolePermissions: input.rolePermissions,
+      grantedByAdminId: admin.id,
+      source: "manual",
+    })
+    await this.auditLog?.record({
+      adminEmail: admin.email,
+      action: "admin.team_entitlements.update",
+      targetType: "team",
+      targetId: teamId,
+      detail: next,
+      ipAddress,
+    })
+    return next
   }
 
   async listTeamAccessRoles(teamId: string) {

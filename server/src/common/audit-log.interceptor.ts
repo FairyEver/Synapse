@@ -14,6 +14,7 @@ const SENSITIVE_BODY_KEY_PATTERN = /password|token|secret|credential/i
 const REDACTED_VALUE = "[REDACTED]"
 const USER_STATUS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/status$/
 const TEAM_ENTITLEMENTS_PATH_PATTERN = /^\/api\/admin\/teams\/[^/]+\/entitlements$/
+const TEAM_PERMISSIONS_PATH_PATTERN = /^\/api\/admin\/teams\/[^/]+\/permissions$/
 
 interface AuditPolicy {
   readonly success: boolean
@@ -151,7 +152,7 @@ function resolveKnownAdminAuditTarget(
   if (method === "PATCH" && USER_STATUS_PATH_PATTERN.test(path)) {
     return { action: "admin.user.status_update", targetType: "user", targetId: params.id ?? readId(responseBody) }
   }
-  if (method === "PUT" && TEAM_ENTITLEMENTS_PATH_PATTERN.test(path)) {
+  if (method === "PUT" && (TEAM_ENTITLEMENTS_PATH_PATTERN.test(path) || TEAM_PERMISSIONS_PATH_PATTERN.test(path))) {
     return { action: "admin.team_entitlements.update", targetType: "team", targetId: params.teamId ?? readId(responseBody) }
   }
   if (method === "GET" && path === "/api/admin/audit-logs/export") {

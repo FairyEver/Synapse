@@ -77,6 +77,19 @@ export interface TeamEntitlementsResponse {
   readonly permissionKeys: string[]
 }
 
+export interface TeamPermissionsResponse {
+  readonly permissionKeys: string[]
+  readonly rolePermissions: Array<{
+    readonly roleId: string
+    readonly permissionKeys: string[]
+  }>
+}
+
+export interface TeamRolePermissionsInput {
+  readonly roleId: string
+  readonly permissionKeys: readonly string[]
+}
+
 export interface TeamAccessRoleRow {
   readonly id: string
   readonly name: string
@@ -291,6 +304,17 @@ export const adminApi = {
     request<TeamEntitlementsResponse>(`${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/entitlements`, {
       method: "PUT",
       body: JSON.stringify({ permissionKeys }),
+    }),
+  replaceTeamPermissions: (
+    teamId: string,
+    input: {
+      readonly permissionKeys: readonly string[]
+      readonly rolePermissions: readonly TeamRolePermissionsInput[]
+    },
+  ) =>
+    request<TeamPermissionsResponse>(`${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/permissions`, {
+      method: "PUT",
+      body: JSON.stringify(input),
     }),
   listTeamAccessRoles: (teamId: string) =>
     request<TeamAccessRoleRow[]>(`${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/access-roles`),

@@ -21,6 +21,13 @@ const teamEntitlementsSchema = z.object({
   permissionKeys: z.array(z.string().trim().min(1).refine(isActivePermissionKey)),
 }).strict()
 
+const teamPermissionsSchema = teamEntitlementsSchema.extend({
+  rolePermissions: z.array(z.object({
+    roleId: z.string().trim().min(1),
+    permissionKeys: z.array(z.string().trim().min(1).refine(isActivePermissionKey)),
+  }).strict()),
+}).strict()
+
 const memberAccessRoleSchema = z.object({
   roleId: z.string().trim().min(1),
 }).strict()
@@ -106,6 +113,17 @@ export class AdminController {
   @Get("/teams/:teamId/entitlements")
   listTeamEntitlements(@Param("teamId") teamId: string) {
     return this.admin.listTeamEntitlements(teamId)
+  }
+
+  @Put("/teams/:teamId/permissions")
+  async replaceTeamPermissions(
+    @Param("teamId") teamId: string,
+    @Body() body: unknown,
+    @Req() request: AdminRequest,
+  ) {
+    const result = teamPermissionsSchema.safeParse(body)
+    if (!result.success) throw new BadRequestException("团队权限无效。")
+    return this.admin.replaceTeamPermissions(teamId, result.data, request.admin!, request.ip)
   }
 
   @Put("/teams/:teamId/entitlements")
