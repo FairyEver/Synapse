@@ -92,11 +92,31 @@ describe("LogFileController", () => {
   });
 
   it("rejects invalid cleanup dates with a localized message", async () => {
-    const { controller } = createController();
+    const { controller, service } = createController();
 
     await expect(controller.cleanup("2026/05/01"))
       .rejects
       .toThrow("before 参数必须为 YYYY-MM-DD 格式。");
+    expect(service.cleanup).not.toHaveBeenCalled();
+  });
+
+  it("rejects impossible cleanup dates with a localized message", async () => {
+    const { controller, service } = createController();
+
+    await expect(controller.cleanup("2026-02-31"))
+      .rejects
+      .toThrow("before 参数必须为有效日期。");
+    expect(service.cleanup).not.toHaveBeenCalled();
+  });
+
+  it("rejects future cleanup dates before deleting log files", async () => {
+    const { controller, service } = createController();
+    const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+
+    await expect(controller.cleanup(tomorrow))
+      .rejects
+      .toThrow("before 不能是未来日期。");
+    expect(service.cleanup).not.toHaveBeenCalled();
   });
 
   it("records audit logs for cleanup", async () => {

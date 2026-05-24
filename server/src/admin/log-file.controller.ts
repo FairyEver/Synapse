@@ -16,6 +16,20 @@ function parseRecentLogLimit(limitStr?: string): number {
   return Math.min(Math.max(limit, 1), MAX_RECENT_LOG_LIMIT);
 }
 
+function parseCleanupBeforeDate(before: string | undefined): string {
+  if (!before || !/^\d{4}-\d{2}-\d{2}$/.test(before)) {
+    throw new BadRequestException("before 参数必须为 YYYY-MM-DD 格式。");
+  }
+  const parsed = new Date(`${before}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== before) {
+    throw new BadRequestException("before 参数必须为有效日期。");
+  }
+  if (before > new Date().toISOString().slice(0, 10)) {
+    throw new BadRequestException("before 不能是未来日期。");
+  }
+  return before;
+}
+
 @Controller("/api/admin/logs")
 @UseGuards(AdminAuthGuard)
 export class LogFileController {
@@ -79,14 +93,12 @@ export class LogFileController {
 
   @Delete("cleanup")
   async cleanup(@Query("before") before: string | undefined, @Req() request?: AdminRequest) {
-    if (!before || !/^\d{4}-\d{2}-\d{2}$/.test(before)) {
-      throw new BadRequestException("before 参数必须为 YYYY-MM-DD 格式。");
-    }
-    const deleted = await this.logFileService.cleanup(before);
+    const cutoffDate = parseCleanupBeforeDate(before);
+    const deleted = await this.logFileService.cleanup(cutoffDate);
     await this.recordLogAudit(request, {
       action: "logs.cleanup",
-      targetId: before,
-      detail: { before, deleted },
+      targetId: cutoffDate,
+      detail: { before: cutoffDate, deleted },
     });
     return { deleted };
   }
