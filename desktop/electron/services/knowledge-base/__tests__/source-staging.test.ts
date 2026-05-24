@@ -4,8 +4,9 @@ import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 
 import type { FileConversionResult } from "../../file-conversion"
+import type { FetchUrl } from "../../source-acquisition/url-source"
 import { scanKnowledgeBaseSources } from "../source-scan"
-import { stageKnowledgeBaseSources } from "../source-staging"
+import { stageKnowledgeBaseSources, stageKnowledgeBaseUrlSource } from "../source-staging"
 
 const roots: string[] = []
 
@@ -85,5 +86,33 @@ describe("knowledge base source staging", () => {
     expect(result.uploaded[0]).not.toHaveProperty("originalRelativePath")
     await expect(readFile(path.join(projectPath, ".raw", "2026", "05", "23", "note.md"), "utf8"))
       .resolves.toBe("alpha\n")
+  })
+
+  it("stages URL sources into the dated raw web directory", async () => {
+    const projectPath = await tempDir()
+    const fetchUrl: FetchUrl = async () => ({
+      url: "https://example.com/articles/alpha?utm_source=test",
+      status: 200,
+      headers: {
+        get: (name: string) => name.toLowerCase() === "content-type" ? "text/html" : null,
+      },
+      text: async () => "<html><body><article><h1>Alpha</h1><p>Body</p></article></body></html>",
+    })
+
+    const result = await stageKnowledgeBaseUrlSource({
+      projectPath,
+      url: "https://example.com/articles/alpha?utm_source=test",
+      fetchUrl,
+      now: () => new Date("2026-05-24T00:00:00.000Z"),
+    })
+
+    expect(result.uploaded).toEqual([expect.objectContaining({
+      originalPath: "https://example.com/articles/alpha?utm_source=test",
+      relativePath: ".raw/web/2026/05/24/alpha.md",
+      name: "alpha.md",
+    })])
+    expect(result.skipped).toEqual([])
+    await expect(readFile(path.join(projectPath, ".raw", "web", "2026", "05", "24", "alpha.md"), "utf8"))
+      .resolves.toContain('source_format: "url"')
   })
 })
