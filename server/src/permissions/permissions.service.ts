@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common"
+import { BadRequestException, ForbiddenException, Injectable } from "@nestjs/common"
 import type { Prisma } from "@prisma/client"
 import { PrismaService } from "../prisma/prisma.service"
 import {
@@ -209,9 +209,10 @@ export class PermissionsService {
     await this.prisma.$transaction(async (tx) => {
       const role = await tx.teamAccessRole.findFirst({
         where: { id: input.roleId, teamId: input.teamId },
-        select: { id: true },
+        select: { id: true, locked: true },
       })
       if (!role) throw new BadRequestException("团队角色不存在。")
+      if (role.locked) throw new ForbiddenException("系统内置角色不允许修改权限。")
       await this.assertWithinTeamEntitlements(input.teamId, keys, tx)
       await tx.teamAccessRolePermission.deleteMany({ where: { roleId: input.roleId } })
       if (keys.length === 0) return

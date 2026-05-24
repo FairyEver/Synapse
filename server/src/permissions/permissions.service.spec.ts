@@ -1,4 +1,4 @@
-import { BadRequestException } from "@nestjs/common"
+import { BadRequestException, ForbiddenException } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
 import {
   allPermissionKeys,
@@ -163,8 +163,30 @@ describe("PermissionsService", () => {
 
     expect(tx.teamAccessRole.findFirst).toHaveBeenCalledWith({
       where: { id: "team-b-role", teamId: "team-a" },
-      select: { id: true },
+      select: { id: true, locked: true },
     })
+    expect(tx.teamAccessRolePermission.deleteMany).not.toHaveBeenCalled()
+    expect(tx.teamAccessRolePermission.createMany).not.toHaveBeenCalled()
+  })
+
+  it("rejects replacing permissions on locked roles", async () => {
+    const prisma = createPermissionPrismaMock()
+    const tx = createPermissionPrismaMock()
+    prisma.$transaction.mockImplementationOnce((callback) => callback(tx))
+    tx.teamAccessRole.findFirst.mockResolvedValue({ id: "role-1", locked: true })
+    const service = new PermissionsService(prisma as never)
+
+    await expect(service.replaceRolePermissions({
+      teamId: "team-1",
+      roleId: "role-1",
+      permissionKeys: ["database.use"],
+    })).rejects.toThrow(ForbiddenException)
+
+    expect(tx.teamAccessRole.findFirst).toHaveBeenCalledWith({
+      where: { id: "role-1", teamId: "team-1" },
+      select: { id: true, locked: true },
+    })
+    expect(tx.teamEntitlement.findMany).not.toHaveBeenCalled()
     expect(tx.teamAccessRolePermission.deleteMany).not.toHaveBeenCalled()
     expect(tx.teamAccessRolePermission.createMany).not.toHaveBeenCalled()
   })
