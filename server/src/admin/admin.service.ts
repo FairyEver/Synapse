@@ -129,13 +129,6 @@ export class AdminService {
       await this.prisma.invitation.delete({ where: { id } })
     } catch (error: unknown) {
       if (isRecordNotFoundError(error)) {
-        await this.auditLog?.record({
-          adminEmail: actorEmail,
-          action: "admin.invitation.delete.not_found",
-          targetType: "invitation",
-          targetId: id,
-          ipAddress,
-        })
         throw new NotFoundException("邀请不存在。")
       }
       throw error

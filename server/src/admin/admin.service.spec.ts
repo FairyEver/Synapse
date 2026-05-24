@@ -316,13 +316,7 @@ describe("AdminService", () => {
     await expect(service.deleteInvitation("missing-invite", "admin@example.com", "203.0.113.50"))
       .rejects
       .toThrow("邀请不存在。")
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "admin@example.com",
-      action: "admin.invitation.delete.not_found",
-      targetType: "invitation",
-      targetId: "missing-invite",
-      ipAddress: "203.0.113.50",
-    })
+    expect(auditLog.record).not.toHaveBeenCalled()
   })
 
   it("deletes invitations in bulk and records an audit log", async () => {
