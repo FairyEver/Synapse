@@ -130,17 +130,18 @@ export class AdminAuthService {
   }
 
   async revokeDashboardSession(token: string): Promise<void> {
+    let payload: AdminJwtPayload
     try {
-      const payload = this.jwt.verify<AdminJwtPayload>(token)
-      const expiresAt = payload.exp ? new Date(payload.exp * 1000) : new Date(Date.now() + 8 * 60 * 60 * 1000)
-      await this.prisma.dashboardRevokedToken.upsert({
-        where: { tokenHash: hashToken(token) },
-        update: { expiresAt, revokedAt: new Date() },
-        create: { tokenHash: hashToken(token), expiresAt },
-      })
+      payload = this.jwt.verify<AdminJwtPayload>(token)
     } catch {
       return
     }
+    const expiresAt = payload.exp ? new Date(payload.exp * 1000) : new Date(Date.now() + 8 * 60 * 60 * 1000)
+    await this.prisma.dashboardRevokedToken.upsert({
+      where: { tokenHash: hashToken(token) },
+      update: { expiresAt, revokedAt: new Date() },
+      create: { tokenHash: hashToken(token), expiresAt },
+    })
   }
 
   @Cron("0 4 * * *")

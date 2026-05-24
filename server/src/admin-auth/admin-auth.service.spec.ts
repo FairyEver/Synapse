@@ -237,6 +237,16 @@ describe("AdminAuthService", () => {
     })
   })
 
+  it("propagates dashboard revocation storage failures", async () => {
+    const { service, prisma } = await createTestService()
+    const result = await service.login("admin@d2.com", "admin@pwd1234!")
+    prisma.dashboardRevokedToken.upsert.mockRejectedValueOnce(new Error("database unavailable"))
+
+    await expect(service.revokeDashboardSession(result.token))
+      .rejects
+      .toThrow("database unavailable")
+  })
+
   it("cleans expired revoked dashboard tokens", async () => {
     const { service, prisma } = await createTestService()
 
