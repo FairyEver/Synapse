@@ -48,21 +48,41 @@ export async function createKnowledgeBaseAgentContribution(
   }
 
   return {
-    sdkPlugins: [{
-      type: "local",
-      path: resolveKnowledgeBasePluginPath(),
-    }],
+    resolveSessionResources(context) {
+      if (!supportsKnowledgeBaseAgentEntrypoint(context.message)) {
+        return {}
+      }
+      return {
+        sdkPlugins: [{
+          type: "local",
+          path: resolveKnowledgeBasePluginPath(),
+        }],
+      }
+    },
     publishedCommands: KNOWLEDGE_BASE_PUBLISHED_COMMANDS,
     commands: [{
       name: "wiki",
-      buildPrompt: (args, message) => buildKnowledgeBaseCommandPrompt({
-        projectPath: input.project.path,
-        args,
-        ingestCoordinator,
-        onIngestPreflight: (preflight) => rememberPreflight(message, preflight),
-      }),
+      buildPrompt: (args, message) => {
+        if (!supportsKnowledgeBaseAgentEntrypoint(message)) {
+          return {
+            kind: "result",
+            content: "Knowledge base commands are unavailable from this entrypoint.",
+            error: true,
+          }
+        }
+        return buildKnowledgeBaseCommandPrompt({
+          projectPath: input.project.path,
+          args,
+          ingestCoordinator,
+          onIngestPreflight: (preflight) => rememberPreflight(message, preflight),
+        })
+      },
     }],
     async prepareMessage(message, context) {
+      if (!supportsKnowledgeBaseAgentEntrypoint(message)) {
+        return message
+      }
+
       let next = message
       if (isKnowledgeBaseIngestIntent(message.content) && !hasIngestPreflightAppendix(message.content)) {
         const force = isKnowledgeBaseForceIngestIntent(message.content)
@@ -94,6 +114,7 @@ export async function createKnowledgeBaseAgentContribution(
       return prependBootstrap(next, bootstrap, hotCache)
     },
     async afterTurn({ message, result }) {
+      if (!supportsKnowledgeBaseAgentEntrypoint(message)) return
       if (!isKnowledgeBaseIngestIntent(message.content)) return
       const preflightId = takePreflightId(preflightIdsByMessage, message)
       if (result.error) return
@@ -259,6 +280,10 @@ function takePreflightId(preflightIdsByMessage: Map<string, string[]>, message: 
 
 function hasIngestPreflightAppendix(content: string): boolean {
   return content.includes("## Synapse 预检") && content.includes("synapse_kb_ingest_report")
+}
+
+function supportsKnowledgeBaseAgentEntrypoint(message: AgentMessage): boolean {
+  return message.platform === "local-renderer"
 }
 
 function knowledgeBaseAction(

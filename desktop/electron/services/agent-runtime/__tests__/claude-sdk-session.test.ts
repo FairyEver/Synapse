@@ -70,6 +70,28 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("does not configure SDK plugins for ordinary sessions", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory)
+
+    expect(getOptions()).not.toHaveProperty("plugins")
+  })
+
+  it("keeps hooks disabled when a session-scoped SDK plugin is loaded", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, {
+      plugins: [{ type: "local", path: "/Applications/Synapse/resources/knowledge-base/claude-plugin" }],
+    })
+
+    expect(getOptions()).toMatchObject({
+      settingSources: ["user", "project", "local"],
+      skills: "all",
+      settings: {
+        disableAllHooks: true,
+      },
+    })
+  })
+
   it("enables the SDK bypass permission confirmation for bypass mode", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, { mode: "bypassPermissions" })

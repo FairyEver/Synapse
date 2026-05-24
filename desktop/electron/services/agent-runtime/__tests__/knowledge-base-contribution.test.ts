@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -50,12 +50,26 @@ describe("knowledge base Agent contribution", () => {
       project: knowledgeBaseProject(projectPath),
     })
 
-    expect(contribution?.sdkPlugins).toHaveLength(1)
-    expect(contribution?.sdkPlugins?.[0]).toMatchObject({ type: "local" })
-    expect(contribution?.sdkPlugins?.[0]?.path).toContain(
+    const resources = await contribution?.resolveSessionResources?.({
+      message: baseMessage("hello"),
+      isNewLiveSession: true,
+    })
+
+    expect(resources?.sdkPlugins).toHaveLength(1)
+    expect(resources?.sdkPlugins?.[0]).toMatchObject({ type: "local" })
+    expect(resources?.sdkPlugins?.[0]?.path).toContain(
       path.join("resources", "knowledge-base", "claude-plugin"),
     )
-    expect(contribution?.sdkPlugins?.[0]?.path.startsWith(projectPath)).toBe(false)
+    expect(resources?.sdkPlugins?.[0]?.path.startsWith(projectPath)).toBe(false)
+  })
+
+  it("does not contribute knowledge base session resources for ordinary projects", async () => {
+    const projectPath = await tempDir()
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: { id: "project-1", name: "Plain", path: projectPath },
+    })
+
+    expect(contribution).toBeNull()
   })
 
   it("keeps the Synapse SDK ingest skill from telling agents to edit the manifest", async () => {
@@ -314,7 +328,84 @@ describe("knowledge base Agent contribution", () => {
     expect(prepared?.content).toContain(".raw/note.md")
     expect(prepared?.content).toContain("synapse_kb_ingest_report")
     expect(prepared?.content).toContain("不要编辑 `.raw/.manifest.json`")
-    expect(contribution?.sdkPlugins?.[0]?.path.startsWith(projectPath)).toBe(false)
+    const resources = await contribution?.resolveSessionResources?.({
+      message: baseMessage("汲取知识"),
+      isNewLiveSession: false,
+    })
+
+    expect(resources?.sdkPlugins?.[0]?.path.startsWith(projectPath)).toBe(false)
+  })
+
+  it.each(["scheduled", "workflow"] as const)(
+    "does not inject knowledge base resources or prompts for %s Agent entrypoints",
+    async (platform) => {
+      const projectPath = await tempDir()
+      await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+      await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{},\"address_map\":{}}\n")
+      await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
+      const prepareTurn = vi.fn()
+      const finalizeTurn = vi.fn()
+      const contribution = await createKnowledgeBaseAgentContribution({
+        project: knowledgeBaseProject(projectPath),
+        ingestCoordinator: { prepareTurn, finalizeTurn },
+      })
+      const message = {
+        ...baseMessage("汲取知识"),
+        platform,
+      }
+
+      const resources = await contribution?.resolveSessionResources?.({
+        message,
+        isNewLiveSession: true,
+      })
+      const prepared = await Promise.resolve(contribution?.prepareMessage?.(message, {
+        isNewLiveSession: true,
+      }))
+      const commandOutput = await contribution?.commands[0]?.buildPrompt(["ingest"], {
+        ...message,
+        content: "/wiki ingest",
+      })
+      await contribution?.afterTurn?.({
+        message,
+        result: { conversationId: "conv-1", resultText: "done", events: [] },
+        conversationId: "conv-1",
+        isNewLiveSession: true,
+      })
+
+      expect(resources?.sdkPlugins ?? []).toEqual([])
+      expect(prepared?.content).toBe("汲取知识")
+      expect(expectObjectOutput(commandOutput, "result")).not.toContain("synapse_kb_ingest_report")
+      expect(prepareTurn).not.toHaveBeenCalled()
+      expect(finalizeTurn).not.toHaveBeenCalled()
+    },
+  )
+
+  it("does not write runnable agent assets into the project path while preparing a KB session", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, "wiki"), { recursive: true })
+    await writeFile(path.join(projectPath, "wiki", "hot.md"), "# Hot Cache\n\nRecent fact.\n")
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+
+    await contribution?.resolveSessionResources?.({
+      message: baseMessage("hello"),
+      isNewLiveSession: true,
+    })
+    await Promise.resolve(contribution?.prepareMessage?.({
+      ...baseMessage("hello"),
+      platform: "local-renderer",
+    }, { isNewLiveSession: true }))
+
+    const files = await listFiles(projectPath)
+    expect(files).not.toContain(".claude")
+    expect(files).not.toContain(".agents")
+    expect(files).not.toContain(".codex")
+    expect(files).not.toContain("commands")
+    expect(files).not.toContain("hooks")
+    expect(files).not.toContain("plugins")
+    expect(files).not.toContain("SKILL.md")
+    expect(files.some((file) => file.endsWith("/SKILL.md"))).toBe(false)
   })
 
   it("blocks natural-language ingest when the source manifest is invalid", async () => {
@@ -622,4 +713,18 @@ function expectObjectOutput(
   }
   expect(output.kind).toBe(kind)
   return output.content
+}
+
+async function listFiles(root: string, base = root): Promise<string[]> {
+  const entries = await readdir(root, { withFileTypes: true })
+  const files: string[] = []
+  for (const entry of entries) {
+    const absolutePath = path.join(root, entry.name)
+    const relativePath = path.relative(base, absolutePath)
+    files.push(relativePath)
+    if (entry.isDirectory()) {
+      files.push(...await listFiles(absolutePath, base))
+    }
+  }
+  return files
 }

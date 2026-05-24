@@ -2,7 +2,7 @@ import type { ConversationEntryV1 } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ProviderService } from "../provider"
 import { ClaudeSDKSession } from "./claude-sdk-session"
-import type { AgentSdkPluginSpec } from "./project-contributions"
+import type { AgentSdkPluginSpec, AgentSessionResourceContext } from "./project-contributions"
 import type { AgentSessionRepository } from "./session-repository"
 import type {
   PendingPermissionState,
@@ -47,7 +47,9 @@ export interface SessionManagerDeps {
   readonly logger?: StructuredLogger
   readonly now?: () => Date
   readonly createSession?: AgentLiveSessionFactory
-  readonly sdkPlugins?: () => readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
+  readonly sdkPlugins?: (
+    context: AgentSessionResourceContext,
+  ) => readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
 }
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000
@@ -176,7 +178,10 @@ export class SessionManager {
       env,
       model: env.ANTHROPIC_MODEL,
       mode: modeOverride,
-      plugins: await Promise.resolve(this.deps.sdkPlugins?.() ?? []),
+      plugins: await Promise.resolve(this.deps.sdkPlugins?.({
+        message: input.message,
+        isNewLiveSession: true,
+      }) ?? []),
       abortSignal: input.abortSignal,
     })
     input.state.liveSession = liveSession

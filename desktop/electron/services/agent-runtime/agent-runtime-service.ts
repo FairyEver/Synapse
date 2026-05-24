@@ -35,7 +35,11 @@ import {
   renderReferenceView,
   resolveLocalReference,
 } from "./references"
-import type { AgentProjectAfterTurnInput, AgentSdkPluginSpec } from "./project-contributions"
+import type {
+  AgentProjectAfterTurnInput,
+  AgentSdkPluginSpec,
+  AgentSessionResourceContext,
+} from "./project-contributions"
 import {
   AgentSessionRepository,
   conversationId,
@@ -92,7 +96,9 @@ export interface AgentRuntimeServiceDeps {
   readonly skills?: SkillRegistry
   readonly commandRunner?: CommandExecutionRunner
   readonly executionIsolation?: ProcessIsolationResolver
-  readonly sdkPlugins?: () => readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
+  readonly sdkPlugins?: (
+    context: AgentSessionResourceContext,
+  ) => readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
   readonly prepareMessage?: (
     message: AgentMessage,
     context: { readonly isNewLiveSession: boolean },

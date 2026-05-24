@@ -89,6 +89,7 @@ export {
   mergeAgentProjectContributions,
   type AgentProjectContribution,
   type AgentProjectMessageContext,
+  type AgentSessionResourceContext,
 } from "./project-contributions"
 export {
   AGENT_RUNTIME_SERVICE_ID,
@@ -170,8 +171,8 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
           (await resolveProjectContribution()).commands,
         publishedProjectCommands: async () =>
           (await resolveProjectContribution()).publishedCommands ?? [],
-        sdkPlugins: async () =>
-          (await resolveProjectContribution()).sdkPlugins ?? [],
+        sdkPlugins: async (context) =>
+          (await (await resolveProjectContribution()).resolveSessionResources?.(context))?.sdkPlugins ?? [],
         prepareMessage: async (message, context) => {
           const contribution = await resolveProjectContribution()
           return contribution.prepareMessage?.(message, context) ?? message
