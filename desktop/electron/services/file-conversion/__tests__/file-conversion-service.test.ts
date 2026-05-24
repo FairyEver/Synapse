@@ -1,0 +1,215 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { afterEach, describe, expect, it } from "vitest"
+
+import {
+  FileConversionError,
+  FileConversionService,
+  DocxExtractor,
+  LegacyOfficeExtractor,
+  PdfExtractor,
+  PptxExtractor,
+  XlsxExtractor,
+  type FileConversionFormat,
+  type FileConversionResult,
+} from "../index"
+
+const roots: string[] = []
+
+async function tempDir(): Promise<string> {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-convert-"))
+  roots.push(dir)
+  return dir
+}
+
+afterEach(async () => {
+  await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+})
+
+describe("legacy Office extractor", () => {
+  it("reports missing local helper for legacy Office files", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "legacy.doc")
+    await writeFile(filePath, "legacy")
+    const service = new FileConversionService({ extractors: [new LegacyOfficeExtractor({ helperPath: null })] })
+
+    await expect(service.convert({ filePath })).rejects.toMatchObject({ code: "missing_local_helper" })
+  })
+
+  it("converts legacy Office files through an injected local helper", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "legacy.ppt")
+    await writeFile(filePath, "legacy")
+    const service = new FileConversionService({
+      extractors: [new LegacyOfficeExtractor({
+        helperPath: "/local/tika-app.jar",
+        runHelper: async () => ({ text: "Slide One\nLegacy content", metadata: { parser: "stub" } }),
+      })],
+    })
+
+    const result = await service.convert({ filePath })
+
+    expect(result.format).toBe("ppt")
+    expect(result.kind).toBe("presentation")
+    expect(result.markdown).toContain("Legacy content")
+  })
+})
+
+describe("modern file extractors", () => {
+  it("converts docx parser output into document markdown", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "report.docx")
+    await writeFile(filePath, "docx")
+    const service = new FileConversionService({
+      extractors: [new DocxExtractor({
+        convertToHtml: async () => ({
+          value: "<h1>Quarterly Report</h1><p>Revenue grew 12%.</p>",
+          messages: [{ type: "warning", message: "Ignored style" }],
+        }),
+      })],
+    })
+
+    const result = await service.convert({ filePath })
+
+    expect(result).toMatchObject({
+      format: "docx",
+      kind: "document",
+      title: "Quarterly Report",
+    })
+    expect(result.markdown).toContain("# Quarterly Report")
+    expect(result.text).toContain("Revenue grew 12%.")
+    expect(result.warnings).toEqual([{ code: "warning", message: "Ignored style" }])
+  })
+
+  it("converts xlsx workbooks into markdown tables", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "budget.xlsx")
+    const XLSX = await import("xlsx")
+    const workbook = XLSX.utils.book_new()
+    const sheet = XLSX.utils.aoa_to_sheet([
+      ["Department", "Budget"],
+      ["Product", 120000],
+    ])
+    XLSX.utils.book_append_sheet(workbook, sheet, "Summary")
+    XLSX.writeFile(workbook, filePath)
+    const service = new FileConversionService({ extractors: [new XlsxExtractor()] })
+
+    const result = await service.convert({ filePath })
+
+    expect(result.format).toBe("xlsx")
+    expect(result.kind).toBe("spreadsheet")
+    expect(result.markdown).toContain("## Sheet: Summary")
+    expect(result.markdown).toContain("| Product | 120000 |")
+    expect(result.metadata).toEqual({ sheetNames: ["Summary"] })
+  })
+
+  it("converts pdf parser output into pdf markdown", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "paper.pdf")
+    await writeFile(filePath, "pdf")
+    const service = new FileConversionService({
+      extractors: [new PdfExtractor({
+        parsePdf: async () => ({
+          text: "PDF body",
+          numpages: 2,
+          info: { Title: "Paper Title" },
+        }),
+      })],
+    })
+
+    const result = await service.convert({ filePath })
+
+    expect(result).toMatchObject({
+      format: "pdf",
+      kind: "pdf",
+      title: "Paper Title",
+      text: "PDF body",
+      metadata: { pages: 2, info: { Title: "Paper Title" } },
+    })
+    expect(result.markdown).toContain("# Paper Title")
+  })
+
+  it("converts pptx parser output into presentation markdown", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "deck.pptx")
+    await writeFile(filePath, "pptx")
+    const service = new FileConversionService({
+      extractors: [new PptxExtractor({
+        parseOffice: async () => "Slide one\nSlide two",
+      })],
+    })
+
+    const result = await service.convert({ filePath })
+
+    expect(result).toMatchObject({
+      format: "pptx",
+      kind: "presentation",
+      title: "deck.pptx",
+      text: "Slide one\nSlide two",
+    })
+    expect(result.markdown).toContain("## Slides")
+    expect(result.warnings).toEqual([{
+      code: "presentation_structure_limited",
+      message: "Slide boundaries were not fully available from the parser.",
+    }])
+  })
+})
+
+describe("file conversion contract", () => {
+  it("exports supported file formats and structured errors", () => {
+    const format: FileConversionFormat = "docx"
+    const result: FileConversionResult = {
+      sourcePath: "/tmp/report.docx",
+      format,
+      kind: "document",
+      title: "report.docx",
+      markdown: "# report.docx\n",
+      text: "report.docx",
+      metadata: {},
+      warnings: [],
+    }
+    const error = new FileConversionError("unsupported_format", "Unsupported file format")
+
+    expect(result.format).toBe("docx")
+    expect(error.code).toBe("unsupported_format")
+  })
+})
+
+describe("FileConversionService", () => {
+  it("rejects unsupported extensions with a structured error", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "image.png")
+    await writeFile(filePath, "not supported")
+    const service = new FileConversionService({ extractors: [] })
+
+    await expect(service.convert({ filePath })).rejects.toMatchObject({ code: "unsupported_format" })
+  })
+
+  it("uses the registered extractor for a supported format", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "note.docx")
+    await writeFile(filePath, "docx")
+    const service = new FileConversionService({
+      extractors: [{
+        formats: ["docx"],
+        extract: async (input) => ({
+          sourcePath: input.filePath,
+          format: "docx",
+          kind: "document",
+          title: "note.docx",
+          markdown: "# note.docx\n",
+          text: "note",
+          metadata: {},
+          warnings: [],
+        }),
+      }],
+    })
+
+    await expect(service.convert({ filePath })).resolves.toMatchObject({
+      sourcePath: filePath,
+      format: "docx",
+      kind: "document",
+    })
+  })
+})

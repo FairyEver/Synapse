@@ -119,10 +119,12 @@ describe("knowledgeBaseIpcModule", () => {
       uploaded: [{
         originalPath: "/tmp/source.md",
         relativePath: "2026/05/23/source.md",
+        originalRelativePath: "_attachments/originals/2026/05/23/source.docx",
         name: "source.md",
         size: 12,
+        conversionWarnings: [{ code: "presentation_structure_limited", message: "Limited structure" }],
       }],
-      skipped: [],
+      skipped: [{ path: "/tmp/broken.docx", reason: "conversion-error" }],
     })
     const { harness, permissionGuard } = createHarness({ service: { uploadSources } })
 

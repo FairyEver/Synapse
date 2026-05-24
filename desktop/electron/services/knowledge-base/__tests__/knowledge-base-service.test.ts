@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { KnowledgeBaseService, KNOWLEDGE_BASE_TEMPLATE_VERSION } from "../knowledge-base-service"
+import type { FileConversionResult } from "../../file-conversion"
 
 vi.mock("electron", () => ({
   app: {
@@ -188,5 +189,36 @@ describe("KnowledgeBaseService", () => {
       .resolves.toBe("alpha\n")
     await expect(readFile(path.join(targetPath, ".raw", "2026", "05", "23", "note-2.md"), "utf8"))
       .resolves.toBe("alpha\n")
+  })
+
+  it("uploads convertible files as generated markdown sources", async () => {
+    const targetPath = await tempDir()
+    const sourcePath = path.join(await tempDir(), "report.docx")
+    await writeFile(sourcePath, "binary")
+    const service = new KnowledgeBaseService({
+      now: () => new Date("2026-05-23T10:20:30.000Z"),
+      fileConversionService: {
+        convert: async (): Promise<FileConversionResult> => ({
+          sourcePath,
+          format: "docx",
+          kind: "document",
+          title: "report.docx",
+          markdown: "# report.docx\n\nBody\n",
+          text: "Body",
+          metadata: {},
+          warnings: [],
+        }),
+      },
+    })
+
+    const result = await service.uploadSources({ projectPath: targetPath, filePaths: [sourcePath] })
+
+    expect(result.uploaded).toEqual([expect.objectContaining({
+      originalPath: sourcePath,
+      relativePath: ".raw/documents/2026/05/23/report.md",
+      originalRelativePath: "_attachments/originals/2026/05/23/report.docx",
+    })])
+    await expect(readFile(path.join(targetPath, ".raw", "documents", "2026", "05", "23", "report.md"), "utf8"))
+      .resolves.toContain('source_format: "docx"')
   })
 })
