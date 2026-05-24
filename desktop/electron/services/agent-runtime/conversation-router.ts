@@ -12,7 +12,7 @@ import type { AgentCommandRouter, AgentCommandRouterResult } from "./command-rou
 import type { AgentGovernanceService } from "./governance"
 import type { AgentSessionRepository } from "./session-repository"
 import type { SessionManager } from "./session-manager"
-import type { AgentProjectAfterTurnInput } from "./project-contributions"
+import type { AgentProjectAfterTurnInput, AgentProjectAfterTurnOutput } from "./project-contributions"
 import type {
   PendingPermissionState,
   RuntimeSessionState,
@@ -43,9 +43,14 @@ export interface ConversationRouterDeps {
   readonly permissionTimeoutMs?: number
   readonly prepareMessage?: (
     message: AgentMessage,
-    context: { readonly isNewLiveSession: boolean },
+    context: {
+      readonly isNewLiveSession: boolean
+      readonly conversationId: string
+      readonly turnId: string
+    },
   ) => AgentMessage | Promise<AgentMessage>
-  readonly afterTurn?: (input: AgentProjectAfterTurnInput) => void | Promise<void>
+  readonly afterTurn?: (input: AgentProjectAfterTurnInput) =>
+    void | AgentProjectAfterTurnOutput | Promise<void | AgentProjectAfterTurnOutput>
 }
 
 const DEFAULT_PENDING_QUEUE_LIMIT = 5
@@ -227,12 +232,12 @@ export class ConversationRouter {
       return this.finishWithError(message, conversation.id, governance.reason ?? "Message blocked")
     }
 
+    const turnId = randomUUID()
     let liveMessage = message
-    const commandResult = await this.commandRouter?.handle(message, conversation)
+    const commandResult = await this.commandRouter?.handle(message, conversation, { turnId })
     if (commandResult && isPromptCommandRoute(commandResult)) {
       liveMessage = { ...message, content: commandResult.content }
     } else if (commandResult) {
-      const turnId = randomUUID()
       for (const [index, event] of commandResult.events.entries()) {
         this.emitEvent(message, commandResult.conversationId, event)
         await this.persistAgentEvent(commandResult.conversationId, turnId, index + 1, event).catch(() => {})
@@ -250,6 +255,7 @@ export class ConversationRouter {
       const turn = {
         message,
         conversationId: conversation.id,
+        turnId,
         abortSignal: options.abortSignal,
         liveEventTimeoutMs: options.liveEventTimeoutMs,
         resolve,
@@ -300,6 +306,7 @@ export class ConversationRouter {
             turn.message,
             this.liveMessages.get(turn) ?? turn.message,
             turn.conversationId,
+            turn.turnId,
             ac.signal,
             turn.liveEventTimeoutMs,
           )
@@ -340,12 +347,12 @@ export class ConversationRouter {
     message: AgentMessage,
     liveMessage: AgentMessage,
     conversationId: string,
+    turnId: string,
     abortSignal?: AbortSignal,
     liveEventTimeoutMs?: number,
   ): Promise<AgentRuntimeTurnResult> {
     state.activeTurns += 1
     state.lastActivity = Date.now()
-    const turnId = randomUUID()
     try {
       let conversation = await this.repository.get(conversationId)
       if (!conversation) {
@@ -370,6 +377,8 @@ export class ConversationRouter {
         })
         const preparedMessage = await Promise.resolve(this.deps.prepareMessage?.(liveMessage, {
           isNewLiveSession: sessionHandle.created,
+          conversationId: conversation.id,
+          turnId,
         }) ?? liveMessage)
         const result = await this.processLiveTurn(
           state,
@@ -380,7 +389,7 @@ export class ConversationRouter {
           abortSignal,
           liveEventTimeoutMs,
         )
-        await this.runAfterTurn(message, result, conversation.id, sessionHandle.created)
+        await this.appendAfterTurnEvents(message, result, conversation.id, turnId, sessionHandle.created)
 
         if (isBackgroundPlatform) {
           const tDone = this.isoNow()
@@ -513,17 +522,38 @@ export class ConversationRouter {
     message: AgentMessage,
     result: AgentRuntimeTurnResult,
     conversationId: string,
+    turnId: string,
     isNewLiveSession: boolean,
-  ): Promise<void> {
-    if (!this.deps.afterTurn) return
+  ): Promise<readonly AgentEvent[]> {
+    if (!this.deps.afterTurn) return []
     try {
-      await Promise.resolve(this.deps.afterTurn({ message, result, conversationId, isNewLiveSession }))
+      const output = await Promise.resolve(this.deps.afterTurn({ message, result, conversationId, turnId, isNewLiveSession }))
+      return output?.events ?? []
     } catch (error) {
       this.deps.logger?.warn("Agent afterTurn hook failed.", {
         boundary: "agent-runtime.after-turn",
         conversationId,
+        turnId,
         error: errorMetadata(error),
       })
+      return []
+    }
+  }
+
+  private async appendAfterTurnEvents(
+    message: AgentMessage,
+    result: AgentRuntimeTurnResult,
+    conversationId: string,
+    turnId: string,
+    isNewLiveSession: boolean,
+  ): Promise<void> {
+    const events = await this.runAfterTurn(message, result, conversationId, turnId, isNewLiveSession)
+    const mutableEvents = result.events as AgentEvent[]
+    for (const event of events) {
+      mutableEvents.push(event)
+      this.emitEvent(message, conversationId, event)
+      await this.persistAgentEvent(conversationId, turnId, result.events.length, event)
+      await this.saveEventHistory(conversationId, event)
     }
   }
 
@@ -554,6 +584,8 @@ export class ConversationRouter {
       const liveSession = sessionHandle.liveSession
       const liveMessage = await Promise.resolve(this.deps.prepareMessage?.(message, {
         isNewLiveSession: sessionHandle.created,
+        conversationId: savedConversation.id,
+        turnId,
       }) ?? message)
       const accepted = await liveSession.send(liveMessage)
       if (!accepted) {
@@ -652,7 +684,7 @@ export class ConversationRouter {
         error = errorResult.error
       }
       const saved = await this.saveExecutionResult(conversation, resultText, liveSession.currentSessionId())
-      return {
+      const result: AgentRuntimeRelayResult = {
         conversationId: saved.id,
         events,
         resultText,
@@ -662,6 +694,8 @@ export class ConversationRouter {
         error,
         timedOut: false,
       }
+      await this.appendAfterTurnEvents(message, result, saved.id, turnId, sessionHandle.created)
+      return result
     } catch (rawError) {
       const messageText = rawError instanceof Error ? rawError.message : String(rawError)
       this.deps.logger?.warn("AgentRuntime side session failed.", {

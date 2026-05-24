@@ -6,12 +6,15 @@ import type { RegisteredPromptCommandOutput } from "../agent-runtime/command-rou
 import type { AgentProjectContribution } from "../agent-runtime/project-contributions"
 import type { AgentMessage } from "../agent-runtime/types"
 import { KnowledgeBaseIngestFinalizer } from "./ingest-finalizer"
-import { isKnowledgeBaseIngestIntent } from "./ingest-intent"
+import { KnowledgeBaseIngestCoordinator } from "./ingest-coordinator"
+import { isKnowledgeBaseResearchWriteIntent, isKnowledgeBaseSourceIngestIntent } from "./ingest-intent"
 import { buildKnowledgeBaseCommandOutput } from "./wiki-command-prompts"
 
 type CreateKnowledgeBaseAgentContributionInput = {
   readonly project: SynapseProjectConfig
-  readonly ingestFinalizer?: Pick<KnowledgeBaseIngestFinalizer, "finalize">
+  readonly ingestCoordinator?: KnowledgeBaseIngestCoordinator
+  readonly addressFinalizer?: Pick<KnowledgeBaseIngestFinalizer, "finalize">
+  readonly logger?: { warn(message: string, metadata?: Record<string, unknown>): void }
 }
 
 const KNOWLEDGE_BASE_PUBLISHED_COMMANDS = [
@@ -20,6 +23,7 @@ const KNOWLEDGE_BASE_PUBLISHED_COMMANDS = [
   knowledgeBaseAction("wiki hot", "刷新热点", "更新 wiki/hot.md 的近期事实和活跃主题。", "send", "/wiki hot"),
   knowledgeBaseAction("wiki save", "保存记录", "将当前对话要点追加到知识库日志。", "send", "/wiki save"),
   knowledgeBaseAction("wiki lint", "检查知识库", "检查知识库结构、索引和链接状态。", "send", "/wiki lint"),
+  knowledgeBaseAction("wiki research", "研究入库", "研究一个主题并将结果归档到知识库。", "insert", "/wiki research "),
   knowledgeBaseAction("wiki status", "查看状态", "查看来源清单、页面数量和知识库状态。", "send", "/wiki status"),
 ] as const
 
@@ -32,29 +36,74 @@ export async function createKnowledgeBaseAgentContribution(
 
   const bootstrap = await readPrompt("bootstrap.md")
   const hotCachePath = path.join(input.project.path, "wiki", "hot.md")
-  const ingestFinalizer = input.ingestFinalizer ?? new KnowledgeBaseIngestFinalizer()
+  const ingestCoordinator = input.ingestCoordinator ?? new KnowledgeBaseIngestCoordinator({
+    readPrompt,
+    logger: input.logger,
+  })
+  const addressFinalizer = input.addressFinalizer ?? new KnowledgeBaseIngestFinalizer()
 
   return {
-    sdkPlugins: [{
-      type: "local",
-      path: resolveKnowledgeBasePluginPath(),
-    }],
-    publishedCommands: KNOWLEDGE_BASE_PUBLISHED_COMMANDS,
+    sdkPlugins(message) {
+      return isKnowledgeBaseAgentMessage(message)
+        ? [{
+          type: "local",
+          path: resolveKnowledgeBasePluginPath(),
+        }]
+        : []
+    },
+    publishedCommands: KNOWLEDGE_BASE_PUBLISHED_COMMANDS.map((command) => ({
+      ...command,
+      allowedPlatforms: ["local-renderer"],
+    })),
     commands: [{
       name: "wiki",
-      buildPrompt: (args) => buildKnowledgeBaseCommandPrompt(input.project.path, args),
+      allowedPlatforms: ["local-renderer"],
+      buildPrompt: (args, message, context) => {
+        if (!isKnowledgeBaseAgentMessage(message)) {
+          return { kind: "result", error: true, content: "知识库命令只在本地知识库对话中可用。" }
+        }
+        return buildKnowledgeBaseCommandPrompt(input.project.path, args, context?.turnId ?? "wiki-command", ingestCoordinator)
+      },
     }],
     async prepareMessage(message, context) {
-      if (!context.isNewLiveSession) {
-        return message
+      if (!isKnowledgeBaseAgentMessage(message)) return message
+      let next = message
+      if (context.isNewLiveSession) {
+        const hotCache = await readOptional(hotCachePath)
+        next = prependBootstrap(message, bootstrap, hotCache)
       }
-      const hotCache = await readOptional(hotCachePath)
-      return prependBootstrap(message, bootstrap, hotCache)
+      if (isKnowledgeBaseSourceIngestIntent(message.content) && !/^\/wiki\s+/i.test(message.content.trim())) {
+        const output = await ingestCoordinator.prepareTurn({
+          projectPath: input.project.path,
+          turnId: context.turnId,
+          originalContent: message.content,
+          force: false,
+        })
+        if (typeof output !== "string" && output.kind === "result") {
+          ingestCoordinator.markTurnNoFinalize(context.turnId)
+        }
+        return { ...next, content: typeof output === "string" ? output : output.content }
+      }
+      return next
     },
-    async afterTurn({ message, result }) {
+    async afterTurn({ message, result, conversationId, turnId }) {
+      if (!isKnowledgeBaseAgentMessage(message)) return
       if (result.error) return
-      if (!isKnowledgeBaseIngestIntent(message.content)) return
-      await ingestFinalizer.finalize(input.project.path)
+      if (isKnowledgeBaseSourceIngestIntent(message.content)) {
+        const finalizeResult = await ingestCoordinator.finalizeTurn({
+          projectPath: input.project.path,
+          conversationId,
+          turnId,
+          assistantText: result.resultText,
+        })
+        return eventsForKnowledgeBaseFinalizeMessage(finalizeResult?.message)
+      }
+      if (isKnowledgeBaseResearchWriteIntent(message.content)) {
+        const finalizeResult = await addressFinalizer.finalize(input.project.path)
+        return eventsForKnowledgeBaseFinalizeMessage(finalizeResult.skippedReason
+          ? "知识库研究后置写入未完成：manifest 无效。"
+          : undefined)
+      }
     },
   }
 }
@@ -103,10 +152,14 @@ function prependBootstrap(message: AgentMessage, bootstrap: string, hotCache: st
 async function buildKnowledgeBaseCommandPrompt(
   projectPath: string,
   args: readonly string[],
+  turnId: string,
+  ingestCoordinator: Pick<KnowledgeBaseIngestCoordinator, "prepareTurn">,
 ): Promise<RegisteredPromptCommandOutput> {
   return buildKnowledgeBaseCommandOutput({
     projectPath,
     args,
+    turnId,
+    ingestCoordinator,
     readPrompt,
   })
 }
@@ -186,6 +239,22 @@ function knowledgeBaseAction(
       insertText,
     },
   }
+}
+
+function isKnowledgeBaseAgentMessage(message: AgentMessage): boolean {
+  return message.platform === "local-renderer"
+}
+
+function eventsForKnowledgeBaseFinalizeMessage(message: string | undefined) {
+  return message
+    ? {
+      events: [{
+        type: "error" as const,
+        message,
+        timestamp: new Date().toISOString(),
+      }],
+    }
+    : { events: [] }
 }
 
 function isMissingPathError(error: unknown): boolean {

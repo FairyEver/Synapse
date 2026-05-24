@@ -4,12 +4,35 @@
 
 只处理预检来源列表中的来源。除非提示明确说明这是强制导入，不要扫描整个 `.raw/`。
 
-写入 wiki 页面后，为每个已处理来源更新 `.raw/.manifest.json`。清单使用 claude-obsidian 兼容格式：
-- 顶层保留 `version: 1`，维护 `created`、`description`、`sources`、`address_map`。
-- `sources` 的 key 使用 `.raw/...`，value 写入提供的 sha256 `hash`、ISO 格式的 `ingested_at`、`pages_created` 和 `pages_updated`。
-- Synapse 会在导入回合结束后补齐 DragonScale 地址并更新 `address_map`。
+写入 wiki 页面后，不要编辑 `.raw/.manifest.json`。Synapse 会在回合结束后根据预检 hash、你的结构化报告和实际文件状态写入 manifest `sources` 和 `address_map`。
+
+你必须在最后输出一个 `synapse_kb_ingest_report` fenced JSON block：
+
+```synapse_kb_ingest_report
+{
+  "schema": "synapse.kb.ingest.report.v1",
+  "processed_sources": [
+    {
+      "source": ".raw/example.md",
+      "pages_created": ["wiki/sources/example.md"],
+      "pages_updated": ["wiki/index.md", "wiki/hot.md", "wiki/log.md"]
+    }
+  ],
+  "skipped_sources": [
+    {
+      "source": ".raw/unchanged.md",
+      "reason": "unchanged"
+    }
+  ]
+}
+```
+
+报告要求：
+- `source` 必须来自预检来源列表。
+- `pages_created` 只放本轮新建的 `wiki/**/*.md`。
+- `pages_updated` 只放本轮更新的 `wiki/**/*.md`。
+- 不要自行写入 hash、`ingested_at` 或 `address_map`。
 - 不要编辑 `.vault-meta/address-counter.txt`，不要自行发明新的 `c-NNNNNN` 地址。
 - 如果重写已有页面，保留页面中已有的 `address:` frontmatter。
-- `pages_created` 和 `pages_updated` 必须覆盖本次实际写入的 wiki 页面。
 
 使用包含 `type`、`title`、`status` 和 `tags` 的 Markdown frontmatter。交叉引用使用 wikilink。最后汇报新增页面、更新页面、跳过的未变更来源和冲突。

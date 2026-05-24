@@ -1,5 +1,7 @@
 # DragonScale Ingest Address Finalizer Design
 
+> Superseded for manifest `sources` ownership by `docs/superpowers/specs/2026-05-24-knowledge-base-deterministic-manifest-finalization-design.md`. DragonScale address finalization remains valid, but manifest `sources` are now finalized by Synapse rather than the Agent.
+
 ## Goal
 
 Connect DragonScale address assignment to knowledge-base ingest without putting runnable DragonScale scripts, hooks, commands, or skills into the user's vault.

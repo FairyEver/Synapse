@@ -64,7 +64,7 @@ describe("AllExceptionsFilter", () => {
     expect(statusFn).toHaveBeenCalledWith(404)
   })
 
-  it("maps Prisma P2003 to 409 Conflict", () => {
+  it("maps Prisma P2003 to 400 Bad Request", () => {
     const filter = new AllExceptionsFilter(mockLogger)
     const statusFn = vi.fn().mockReturnThis()
     const jsonFn = vi.fn()
@@ -76,9 +76,9 @@ describe("AllExceptionsFilter", () => {
     })
     filter.catch(error, host)
 
-    expect(statusFn).toHaveBeenCalledWith(409)
+    expect(statusFn).toHaveBeenCalledWith(400)
     expect(jsonFn).toHaveBeenCalledWith(expect.objectContaining({
-      message: "操作冲突，请重试。",
+      message: "请求引用的关联数据不存在。",
     }))
   })
 

@@ -176,6 +176,12 @@ function resolveKnownAdminAuditTarget(
   if (method === "GET" && path === "/api/admin/audit-logs/export") {
     return { action: "admin.audit_logs.export", targetType: "audit_log", targetId: "export" }
   }
+  if (method === "GET" && path === "/api/admin/logs/files") {
+    return { action: "logs.list_files", targetType: "logs", targetId: "files" }
+  }
+  if (method === "GET" && path === "/api/admin/logs/recent") {
+    return { action: "logs.recent", targetType: "logs", targetId: "recent" }
+  }
   if (method === "GET" && path === "/api/admin/logs/download") {
     return { action: "logs.download", targetType: "logs", targetId: readId(responseBody) }
   }

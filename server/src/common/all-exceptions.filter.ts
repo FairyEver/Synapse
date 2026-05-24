@@ -62,7 +62,7 @@ export class AllExceptionsFilter implements ExceptionFilter {
       case "P2002":
         return { statusCode: 409, error: "Conflict", message: "资源已存在。" }
       case "P2003":
-        return { statusCode: 409, error: "Conflict", message: "操作冲突，请重试。" }
+        return { statusCode: 400, error: "Bad Request", message: "请求引用的关联数据不存在。" }
       case "P2025":
         return { statusCode: 404, error: "Not Found", message: "资源不存在。" }
       default:

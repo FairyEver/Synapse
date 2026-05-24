@@ -57,10 +57,16 @@ interface ParsedCommand {
 export interface RegisteredPromptCommand {
   readonly name: string
   readonly description?: string
+  readonly allowedPlatforms?: readonly string[]
   buildPrompt(
     args: readonly string[],
     message: AgentMessage,
+    context?: AgentCommandRouteContext,
   ): Promise<RegisteredPromptCommandOutput> | RegisteredPromptCommandOutput
+}
+
+export interface AgentCommandRouteContext {
+  readonly turnId: string
 }
 
 export type RegisteredPromptCommandOutput =
@@ -103,6 +109,7 @@ export class AgentCommandRouter {
   async handle(
     message: AgentMessage,
     conversation: ConversationEntryV1,
+    context: AgentCommandRouteContext = { turnId: "command-router" },
   ): Promise<AgentCommandRouterResult | null> {
     const parsed = parseCommand(message.content)
     if (!parsed) return null
@@ -125,7 +132,7 @@ export class AgentCommandRouter {
       case "/status":
         return this.handleStatus(conversation)
       default:
-        return this.handleNonBuiltin(message, conversation, parsed)
+        return this.handleNonBuiltin(message, conversation, parsed, context)
     }
   }
 
@@ -133,13 +140,17 @@ export class AgentCommandRouter {
     message: AgentMessage,
     conversation: ConversationEntryV1,
     parsed: ParsedCommand,
+    context: AgentCommandRouteContext,
   ): Promise<AgentCommandRouterResult | null> {
     const name = commandName(parsed.name)
     const registeredPromptCommands = await resolveRegisteredPromptCommands(this.deps.registeredPromptCommands)
     const promptCommand = registeredPromptCommands.find((command) =>
       command.name.toLowerCase() === name)
     if (promptCommand) {
-      const output = await Promise.resolve(promptCommand.buildPrompt(parsed.args, message))
+      if (!registeredPromptCommandAllowedOnPlatform(promptCommand, message.platform)) {
+        return commandResult(conversation.id, `Command is not available on ${message.platform}.`, true)
+      }
+      const output = await Promise.resolve(promptCommand.buildPrompt(parsed.args, message, context))
       return registeredPromptCommandResult(conversation, output)
     }
 
@@ -435,6 +446,14 @@ export class AgentCommandRouter {
     const skills = await this.deps.skills?.listPublished() ?? []
     return [...BUILTIN_COMMANDS, ...custom, ...skills]
   }
+}
+
+function registeredPromptCommandAllowedOnPlatform(
+  command: RegisteredPromptCommand,
+  platform: string,
+): boolean {
+  return !command.allowedPlatforms
+    || command.allowedPlatforms.some((allowed) => allowed.toLowerCase() === platform.toLowerCase())
 }
 
 export async function resolveRegisteredPromptCommands(

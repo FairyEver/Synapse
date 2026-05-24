@@ -364,6 +364,53 @@ describe("ConversationRouter", () => {
     }))
   })
 
+  it("calls afterTurn after a successful side session relay completes", async () => {
+    const afterTurn = vi.fn()
+    const { router } = createRouter({
+      afterTurn,
+      session: new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    await router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 100)
+
+    expect(afterTurn).toHaveBeenCalledWith(expect.objectContaining({
+      message: expect.objectContaining({ content: "relay" }),
+      result: expect.objectContaining({ resultText: "done" }),
+    }))
+  })
+
+  it("emits and persists afterTurn events after a live turn", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const eventRecorder = createEventBusRecorder()
+    const { conversations, router } = createRouter({
+      agentEvents,
+      eventBus: eventRecorder.eventBus,
+      afterTurn: () => ({
+        events: [{ type: "error", message: "Knowledge base finalization failed." }],
+      }),
+      session: new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const saved = await conversations.get(result.conversationId)
+    const persisted = await agentEvents.list()
+
+    expect(result.events).toContainEqual(expect.objectContaining({
+      type: "error",
+      message: "Knowledge base finalization failed.",
+    }))
+    expect(eventRecorder.events).toContainEqual(expect.objectContaining({ type: "error" }))
+    expect(saved?.history).toContainEqual(expect.objectContaining({
+      role: "system",
+      content: "Knowledge base finalization failed.",
+    }))
+    expect(persisted).toContainEqual(expect.objectContaining({ eventType: "error" }))
+  })
+
   it("stores original prompt command content while sending the expanded prompt", async () => {
     const commandRouter = {
       handle: vi.fn(async () => ({
@@ -417,6 +464,8 @@ describe("ConversationRouter", () => {
 
     expect(prepareMessage).toHaveBeenCalledWith(expect.objectContaining({ content: "relay" }), {
       isNewLiveSession: true,
+      conversationId: expect.any(String),
+      turnId: expect.any(String),
     })
     expect(session.sent).toEqual(["new:relay"])
     expect(savedConversation?.history.filter((entry) => entry.role === "user")).toEqual([

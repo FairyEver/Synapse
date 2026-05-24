@@ -27,6 +27,7 @@ export interface RuntimeSessionState {
 export interface QueuedTurn {
   readonly message: AgentMessage
   readonly conversationId: string
+  readonly turnId: string
   readonly abortSignal?: AbortSignal
   readonly liveEventTimeoutMs?: number
   resolve(result: unknown): void

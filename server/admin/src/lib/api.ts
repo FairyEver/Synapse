@@ -237,12 +237,16 @@ export const adminAuthExpiredEvent = "synapse:admin-auth-expired"
 
 function shouldNotifyAdminAuthExpired(path: string, status: number): boolean {
   if (status !== 401 && status !== 403) return false
-  return (
-    path.startsWith(adminApiBasePath) &&
-    path !== `${adminApiBasePath}/login` &&
-    path !== `${adminApiBasePath}/logout` &&
-    path !== `${adminApiBasePath}/session`
-  )
+  const excludedPaths = new Set([
+    `${adminApiBasePath}/login`,
+    `${adminApiBasePath}/logout`,
+    `${adminApiBasePath}/session`,
+    "/api/auth/login",
+    "/api/auth/register",
+    "/api/auth/refresh",
+  ])
+  if (excludedPaths.has(path)) return false
+  return path.startsWith(adminApiBasePath) || path.startsWith("/api/auth/") || path.startsWith("/api/teams/")
 }
 
 function notifyAdminAuthExpired(path: string, status: number): void {

@@ -2,13 +2,18 @@ import { readFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { RegisteredPromptCommandOutput } from "../agent-runtime/command-router"
+import { KnowledgeBaseLintPreflightService } from "./lint-preflight"
+import type { KnowledgeBaseLintPreflightResult } from "./lint-preflight"
+import { formatKnowledgeBaseLintPreflightAppendix } from "./lint-preflight"
+import { KnowledgeBaseIngestCoordinator } from "./ingest-coordinator"
+import { KnowledgeBaseResearchPreflightService, formatKnowledgeBaseResearchAppendix } from "./research-preflight"
+import type { KnowledgeBaseResearchPreflightResult } from "./research-preflight"
 import { scanKnowledgeBaseSources } from "./source-scan"
 import {
-  wikiIngestAppendixCopy,
-  wikiInvalidManifestCopy,
-  wikiNoIngestChangesCopy,
+  wikiLintReportInstructionsCopy,
   wikiQueryParametersCopy,
   wikiRecentLogContextCopy,
+  wikiResearchFinalizerCopy,
   wikiStatusCopy,
   wikiUnknownCommandCopy,
 } from "./wiki-command-copy"
@@ -19,6 +24,10 @@ export interface BuildKnowledgeBaseCommandOutputInput {
   readonly projectPath: string
   readonly args: readonly string[]
   readonly readPrompt: (fileName: string) => Promise<string>
+  readonly turnId?: string
+  readonly ingestCoordinator?: Pick<KnowledgeBaseIngestCoordinator, "prepareTurn">
+  readonly lintPreflight?: Pick<KnowledgeBaseLintPreflightService, "run">
+  readonly researchPreflight?: Pick<KnowledgeBaseResearchPreflightService, "prepare">
 }
 
 export async function buildKnowledgeBaseCommandOutput(
@@ -31,7 +40,7 @@ export async function buildKnowledgeBaseCommandOutput(
     case "status":
       return buildStatusOutput(input.projectPath)
     case "ingest":
-      return buildIngestOutput(input.projectPath, commandArgs, input.readPrompt)
+      return buildIngestOutput(input.projectPath, commandArgs, input.readPrompt, input.turnId, input.ingestCoordinator)
     case "query":
       return buildQueryOutput(commandArgs, input.readPrompt)
     case "hot":
@@ -39,13 +48,53 @@ export async function buildKnowledgeBaseCommandOutput(
     case "save":
       return { kind: "prompt", content: await input.readPrompt("save.md") }
     case "lint":
-      return { kind: "prompt", content: await input.readPrompt("lint.md") }
+      return buildLintOutput(input.projectPath, input.readPrompt, input.lintPreflight)
+    case "research":
+      return buildResearchOutput(input.projectPath, commandArgs, input.readPrompt, input.researchPreflight)
     default:
       return {
         kind: "result",
         error: true,
         content: wikiUnknownCommandCopy(command),
       }
+  }
+}
+
+async function buildLintOutput(
+  projectPath: string,
+  readPrompt: (fileName: string) => Promise<string>,
+  lintPreflight?: Pick<KnowledgeBaseLintPreflightService, "run">,
+): Promise<RegisteredPromptCommandOutput> {
+  const preflight = await (lintPreflight ?? new KnowledgeBaseLintPreflightService()).run(projectPath)
+  return {
+    kind: "prompt",
+    content: [
+      await readPrompt("lint.md"),
+      "",
+      formatKnowledgeBaseLintPreflightAppendix(preflight as KnowledgeBaseLintPreflightResult),
+      "",
+      wikiLintReportInstructionsCopy(preflight.generatedDate),
+    ].join("\n"),
+  }
+}
+
+async function buildResearchOutput(
+  projectPath: string,
+  args: readonly string[],
+  readPrompt: (fileName: string) => Promise<string>,
+  researchPreflight?: Pick<KnowledgeBaseResearchPreflightService, "prepare">,
+): Promise<RegisteredPromptCommandOutput> {
+  const topic = args.join(" ").trim()
+  const preflight = await (researchPreflight ?? new KnowledgeBaseResearchPreflightService()).prepare(projectPath, topic)
+  return {
+    kind: "prompt",
+    content: [
+      await readPrompt("research.md"),
+      "",
+      formatKnowledgeBaseResearchAppendix(preflight as KnowledgeBaseResearchPreflightResult),
+      "",
+      wikiResearchFinalizerCopy(preflight.mode),
+    ].join("\n"),
   }
 }
 
@@ -67,39 +116,15 @@ async function buildIngestOutput(
   projectPath: string,
   args: readonly string[],
   readPrompt: (fileName: string) => Promise<string>,
+  turnId: string | undefined,
+  ingestCoordinator: Pick<KnowledgeBaseIngestCoordinator, "prepareTurn"> | undefined,
 ): Promise<RegisteredPromptCommandOutput> {
-  const scan = await scanKnowledgeBaseSources(projectPath, { force: args.includes("--force") })
-  if (scan.manifest.status === "invalid") {
-    return {
-      kind: "result",
-      error: true,
-      content: wikiInvalidManifestCopy(scan.manifest.error),
-    }
-  }
-
-  const changedSources = scan.sources.filter((source) => source.state !== "unchanged")
-  if (changedSources.length === 0) {
-    return {
-      kind: "result",
-      content: wikiNoIngestChangesCopy({
-        sources: scan.sources.length,
-        skipped: scan.skippedSources.length,
-      }),
-    }
-  }
-
-  return {
-    kind: "prompt",
-    content: [
-      await readPrompt("ingest.md"),
-      "",
-      wikiIngestAppendixCopy({
-        projectPath,
-        changedSources,
-        skippedSources: scan.skippedSources,
-      }),
-    ].join("\n"),
-  }
+  return (ingestCoordinator ?? new KnowledgeBaseIngestCoordinator({ readPrompt })).prepareTurn({
+    projectPath,
+    turnId: turnId ?? "wiki-command",
+    originalContent: `/wiki ingest ${args.join(" ")}`.trim(),
+    force: args.includes("--force"),
+  })
 }
 
 async function buildQueryOutput(

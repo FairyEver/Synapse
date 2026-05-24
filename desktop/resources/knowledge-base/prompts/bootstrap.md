@@ -4,8 +4,7 @@
 
 规则：
 - `.raw/` 存放用户维护的来源文件。除 `.raw/.manifest.json` 外，不要修改 `.raw/` 下的来源文件。
-- `.raw/.manifest.json` 使用 claude-obsidian 兼容格式：`version`、`created`、`description`、`sources`、`address_map`。
-- `sources` 的 key 使用 `.raw/...`；`address_map` 维护 wiki 页面路径到稳定地址的映射。
+- `.raw/.manifest.json` 使用 claude-obsidian 兼容格式；Synapse 在汲取回合结束后根据预检 hash 和结构化报告写入 `sources` 与 `address_map`。
 - `wiki/` 存放维护后的知识页面。
 - 先读取 `wiki/hot.md` 获取近期上下文。
 - 创建或更新页面前先读取 `wiki/index.md`。

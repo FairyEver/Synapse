@@ -84,8 +84,10 @@ describe("wiki command prompts", () => {
     expect(content).toContain(".raw/note.md")
     expect(content).toContain("## 清单更新要求")
     expect(content).toContain("address_map")
-    expect(content).toContain("claude-obsidian")
-    expect(content).toContain("Synapse 会在导入回合结束后补齐 DragonScale 地址")
+    expect(content).toContain("synapse_kb_ingest_report")
+    expect(content).toContain("synapse.kb.ingest.report.v1")
+    expect(content).toContain("pages_created")
+    expect(content).toContain("pages_updated")
     expect(content).toContain("不要编辑 `.vault-meta/address-counter.txt`")
   })
 
@@ -120,6 +122,68 @@ describe("wiki command prompts", () => {
     expect(content).toContain("刷新 `wiki/hot.md`。")
     expect(content).toContain("## 最近日志上下文")
     expect(content).toContain("Recent source update.")
+  })
+
+  it("builds a lint prompt with Synapse deterministic preflight appendix", async () => {
+    const projectPath = await tempDir()
+
+    const output = await buildKnowledgeBaseCommandOutput({
+      projectPath,
+      args: ["lint"],
+      readPrompt: promptReader({ "lint.md": "执行知识库健康检查。" }),
+      lintPreflight: {
+        run: async () => ({
+          generatedDate: "2026-05-24",
+          pagesScanned: 2,
+          issues: [{
+            severity: "error",
+            code: "address.missing-post-rollout",
+            path: "wiki/concepts/Alpha.md",
+            message: "Missing address.",
+          }],
+          address: {
+            counter: 2,
+            highestCAddress: "c-000001",
+            postRolloutPagesChecked: 1,
+            legacyPagesPendingBackfill: 0,
+            issues: [],
+          },
+          tiling: {
+            status: "ok",
+            reportPath: "wiki/meta/tiling-report-2026-05-24.md",
+            errors: 1,
+            reviews: 2,
+            calibrated: false,
+          },
+        }),
+      },
+    })
+
+    const content = expectObjectOutput(output, "prompt")
+    expect(content).toContain("执行知识库健康检查。")
+    expect(content).toContain("## Synapse 确定性预检")
+    expect(content).toContain("address.missing-post-rollout")
+    expect(content).toContain("wiki/meta/tiling-report-2026-05-24.md")
+    expect(content).toContain("不要重新运行 DragonScale 脚本")
+    expect(content).toContain("wiki/meta/lint-report-2026-05-24.md")
+  })
+
+  it("builds a research prompt with explicit topic", async () => {
+    const projectPath = await tempDir()
+
+    const output = await buildKnowledgeBaseCommandOutput({
+      projectPath,
+      args: ["research", "Graph", "databases"],
+      readPrompt: promptReader({ "research.md": "执行知识库研究入库。" }),
+      researchPreflight: {
+        prepare: async () => ({ mode: "explicit-topic", topic: "Graph databases" }),
+      },
+    })
+
+    const content = expectObjectOutput(output, "prompt")
+    expect(content).toContain("执行知识库研究入库。")
+    expect(content).toContain("Topic: Graph databases")
+    expect(content).toContain("新页面地址由 Synapse 后置 finalizer 补齐")
   })
 })
 

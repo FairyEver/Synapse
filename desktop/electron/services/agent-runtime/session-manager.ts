@@ -47,7 +47,8 @@ export interface SessionManagerDeps {
   readonly logger?: StructuredLogger
   readonly now?: () => Date
   readonly createSession?: AgentLiveSessionFactory
-  readonly sdkPlugins?: () => readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
+  readonly sdkPlugins?: (message: AgentMessage, conversation: ConversationEntryV1) =>
+    readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
 }
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000
@@ -176,7 +177,7 @@ export class SessionManager {
       env,
       model: env.ANTHROPIC_MODEL,
       mode: modeOverride,
-      plugins: await Promise.resolve(this.deps.sdkPlugins?.() ?? []),
+      plugins: await Promise.resolve(this.deps.sdkPlugins?.(input.message, input.conversation) ?? []),
       abortSignal: input.abortSignal,
     })
     input.state.liveSession = liveSession

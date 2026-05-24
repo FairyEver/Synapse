@@ -28,11 +28,13 @@ After ingest:
 - Update `wiki/index.md`.
 - Update `wiki/hot.md`.
 - Append a new entry near the top of `wiki/log.md`.
-- Update `.raw/.manifest.json` using the claude-obsidian compatible shape: `version`, `created`, `description`, `sources`, and `address_map`.
-- For each processed source, record `hash`, `ingested_at`, `pages_created`, and `pages_updated` when those facts are available.
+- Do not edit `.raw/.manifest.json`; Synapse finalizes manifest `sources` and `address_map` after the turn.
+- Emit exactly one fenced `synapse_kb_ingest_report` JSON block using schema `synapse.kb.ingest.report.v1`.
+- For each processed source, list the `.raw/...` source path plus `pages_created` and `pages_updated`.
+- Do not write hashes, `ingested_at`, or `address_map` yourself.
 - Do not edit `.vault-meta/address-counter.txt`.
 - Do not invent new `c-NNNNNN` addresses.
 - Preserve existing `address:` frontmatter when rewriting a page.
-- Synapse runs a DragonScale address finalizer after ingest to assign missing addresses and merge `address_map`.
+- Synapse runs a finalizer after ingest to assign missing addresses and merge manifest facts.
 
 If Synapse prepends an internal `/wiki ingest` prompt with prechecked source hashes, follow that prompt exactly.

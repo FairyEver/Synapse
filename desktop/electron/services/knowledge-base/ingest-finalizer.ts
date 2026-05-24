@@ -7,6 +7,7 @@ import { insertAddressIntoWikiPage, readAddressedWikiPages } from "./wiki-page-a
 export interface KnowledgeBaseIngestFinalizerResult {
   readonly assigned: readonly { readonly path: string; readonly address: DragonScaleAddress }[]
   readonly reused: readonly { readonly path: string; readonly address: DragonScaleAddress }[]
+  readonly addressMap: Record<string, string>
   readonly skippedReason?: "invalid-manifest"
 }
 
@@ -21,10 +22,13 @@ export class KnowledgeBaseIngestFinalizer {
     this.addressService = deps.addressService ?? new DefaultDragonScaleAddressService()
   }
 
-  async finalize(projectPath: string): Promise<KnowledgeBaseIngestFinalizerResult> {
+  async finalize(
+    projectPath: string,
+    options: { readonly writeManifest?: boolean } = {},
+  ): Promise<KnowledgeBaseIngestFinalizerResult> {
     const readResult = await readKnowledgeBaseManifest(projectPath)
     if (readResult.status === "invalid") {
-      return { assigned: [], reused: [], skippedReason: "invalid-manifest" }
+      return { assigned: [], reused: [], addressMap: {}, skippedReason: "invalid-manifest" }
     }
 
     const manifest = readResult.manifest
@@ -51,13 +55,13 @@ export class KnowledgeBaseIngestFinalizer {
       assigned.push({ path: page.relativePath, address: allocation.address })
     }
 
-    if (assigned.length > 0 || reused.length > 0) {
+    if ((options.writeManifest ?? true) && (assigned.length > 0 || reused.length > 0)) {
       await writeKnowledgeBaseManifest(projectPath, {
         ...manifest,
         address_map: nextAddressMap,
       })
     }
 
-    return { assigned, reused }
+    return { assigned, reused, addressMap: nextAddressMap }
   }
 }

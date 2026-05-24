@@ -35,7 +35,7 @@ import {
   renderReferenceView,
   resolveLocalReference,
 } from "./references"
-import type { AgentProjectAfterTurnInput, AgentSdkPluginSpec } from "./project-contributions"
+import type { AgentProjectAfterTurnInput, AgentProjectAfterTurnOutput, AgentSdkPluginSpec } from "./project-contributions"
 import {
   AgentSessionRepository,
   conversationId,
@@ -92,12 +92,18 @@ export interface AgentRuntimeServiceDeps {
   readonly skills?: SkillRegistry
   readonly commandRunner?: CommandExecutionRunner
   readonly executionIsolation?: ProcessIsolationResolver
-  readonly sdkPlugins?: () => readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
+  readonly sdkPlugins?: (message: AgentMessage, conversation: ConversationEntryV1) =>
+    readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
   readonly prepareMessage?: (
     message: AgentMessage,
-    context: { readonly isNewLiveSession: boolean },
+    context: {
+      readonly isNewLiveSession: boolean
+      readonly conversationId: string
+      readonly turnId: string
+    },
   ) => AgentMessage | Promise<AgentMessage>
-  readonly afterTurn?: (input: AgentProjectAfterTurnInput) => void | Promise<void>
+  readonly afterTurn?: (input: AgentProjectAfterTurnInput) =>
+    void | AgentProjectAfterTurnOutput | Promise<void | AgentProjectAfterTurnOutput>
   readonly replyTargets?: {
     rememberReplyTarget(target: ReplyTarget): void
     dispatchAgentEvent(target: ReplyTarget, event: AgentEvent): Promise<void>
@@ -107,7 +113,7 @@ export interface AgentRuntimeServiceDeps {
 
 type PublishedProjectCommandSource =
   | readonly PublishedAgentCommand[]
-  | (() => readonly PublishedAgentCommand[] | Promise<readonly PublishedAgentCommand[]>)
+  | ((platform: string) => readonly PublishedAgentCommand[] | Promise<readonly PublishedAgentCommand[]>)
 
 export interface AgentRuntimeStatus {
   readonly projectId: string
@@ -560,14 +566,20 @@ export class AgentRuntimeService {
         || command.allowedPlatforms.some((allowed) => allowed.toLowerCase() === platform.toLowerCase()))
     const skills = await this.deps.skills?.listPublished() ?? []
     const registeredPromptCommands = await resolveRegisteredPromptCommands(this.deps.registeredPromptCommands)
-    const registered = registeredPromptCommands.map((command) => ({
-      name: command.name,
-      description: command.description,
-      source: "custom" as const,
-      kind: "prompt" as const,
-      adminOnly: false,
-    }))
-    const projectPublished = await resolvePublishedProjectCommands(this.deps.publishedProjectCommands)
+    const registered = registeredPromptCommands
+      .filter((command) => !command.allowedPlatforms
+        || command.allowedPlatforms.some((allowed) => allowed.toLowerCase() === platform.toLowerCase()))
+      .map((command) => ({
+        name: command.name,
+        description: command.description,
+        source: "custom" as const,
+        kind: "prompt" as const,
+        adminOnly: false,
+        allowedPlatforms: command.allowedPlatforms,
+      }))
+    const projectPublished = (await resolvePublishedProjectCommands(this.deps.publishedProjectCommands, platform))
+      .filter((command) => !command.allowedPlatforms
+        || command.allowedPlatforms.some((allowed) => allowed.toLowerCase() === platform.toLowerCase()))
     const native = (this.deps.agentNativeSlashAllowlist ?? []).map((name) => ({
       name,
       source: "agent-native" as const,
@@ -1208,9 +1220,10 @@ function scheduledLiveEventTimeoutMs(timeoutMs: number): number | undefined {
 
 async function resolvePublishedProjectCommands(
   source: PublishedProjectCommandSource | undefined,
+  platform: string,
 ): Promise<readonly PublishedAgentCommand[]> {
   if (!source) return []
-  return typeof source === "function" ? await source() : source
+  return typeof source === "function" ? await source(platform) : source
 }
 
 function truncateRunes(value: string, maxRunes: number): string {

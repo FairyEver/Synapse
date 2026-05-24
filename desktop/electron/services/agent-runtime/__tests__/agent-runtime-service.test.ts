@@ -155,6 +155,39 @@ describe("AgentRuntimeService", () => {
     )
   })
 
+  it("filters platform-limited registered and project commands from published commands", async () => {
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations: new MemoryNamespace<ConversationEntryV1>("conversations"),
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+      registeredPromptCommands: async () => [{
+        name: "wiki",
+        description: "Knowledge base command",
+        allowedPlatforms: ["local-renderer"],
+        buildPrompt: () => "expanded wiki prompt",
+      }],
+      publishedProjectCommands: async () => [{
+        name: "wiki ingest",
+        description: "扫描 .raw/ 变更来源并导入到 wiki。",
+        source: "custom",
+        kind: "prompt",
+        adminOnly: false,
+        allowedPlatforms: ["local-renderer"],
+      }],
+    })
+
+    await expect(service.listPublishedCommands("scheduled")).resolves.not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ name: "wiki" }),
+        expect.objectContaining({ name: "wiki ingest" }),
+      ]),
+    )
+  })
+
   it("cancelTurn interrupts before forceKillTurn hard closes the session", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const session = new HangingSession()

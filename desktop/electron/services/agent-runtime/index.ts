@@ -21,7 +21,7 @@ import {
 import { ReplyOutboxService } from "../reply-target"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
 import { CustomCommandRegistry } from "./command-registry"
-import { mergeAgentProjectContributions } from "./project-contributions"
+import { mergeAgentProjectContributions, type AgentProjectContribution } from "./project-contributions"
 import { SkillRegistry } from "./skill-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
 
@@ -146,6 +146,11 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         workspacePath: ctx.projectMeta.workspacePath,
         logger: ctx.logger,
       })
+      let projectContributionPromise: Promise<AgentProjectContribution> | null = null
+      const resolveProjectContributionForService = () => {
+        projectContributionPromise ??= resolveAgentProjectContribution(ctx.projectId, ctx.logger)
+        return projectContributionPromise
+      }
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
@@ -165,17 +170,17 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         skills,
         commandRunner: runner,
         registeredPromptCommands: async () =>
-          (await resolveAgentProjectContribution(ctx.projectId)).commands,
+          (await resolveProjectContributionForService()).commands,
         publishedProjectCommands: async () =>
-          (await resolveAgentProjectContribution(ctx.projectId)).publishedCommands ?? [],
-        sdkPlugins: async () =>
-          (await resolveAgentProjectContribution(ctx.projectId)).sdkPlugins ?? [],
+          (await resolveProjectContributionForService()).publishedCommands ?? [],
+        sdkPlugins: async (message) =>
+          (await resolveProjectContributionForService()).sdkPlugins?.(message) ?? [],
         prepareMessage: async (message, context) => {
-          const contribution = await resolveAgentProjectContribution(ctx.projectId)
+          const contribution = await resolveProjectContributionForService()
           return contribution.prepareMessage?.(message, context) ?? message
         },
         afterTurn: async (input) => {
-          const contribution = await resolveAgentProjectContribution(ctx.projectId)
+          const contribution = await resolveProjectContributionForService()
           await contribution.afterTurn?.(input)
         },
       })
@@ -188,11 +193,14 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
   }
 }
 
-async function resolveAgentProjectContribution(projectId: string) {
+async function resolveAgentProjectContribution(
+  projectId: string,
+  logger?: Parameters<typeof createKnowledgeBaseAgentContribution>[0]["logger"],
+) {
   const appConfig = await configStore.load()
   const project = appConfig.global.projects.find((item) => item.id === projectId)
   const contributions = [
-    project ? await createKnowledgeBaseAgentContribution({ project }) : null,
+    project ? await createKnowledgeBaseAgentContribution({ project, logger }) : null,
   ].filter((item): item is NonNullable<typeof item> => item !== null)
   return mergeAgentProjectContributions(contributions)
 }

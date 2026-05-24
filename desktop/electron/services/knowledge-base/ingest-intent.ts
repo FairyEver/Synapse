@@ -10,6 +10,10 @@ const NATURAL_INGEST_PATTERNS = [
 ] as const
 
 export function isKnowledgeBaseIngestIntent(content: string): boolean {
+  return isKnowledgeBaseSourceIngestIntent(content) || isKnowledgeBaseResearchWriteIntent(content)
+}
+
+export function isKnowledgeBaseSourceIngestIntent(content: string): boolean {
   const trimmed = content.trim()
   if (/^\/wiki\s+ingest(?:\s|$)/i.test(trimmed)) {
     return true
@@ -18,4 +22,8 @@ export function isKnowledgeBaseIngestIntent(content: string): boolean {
     return false
   }
   return NATURAL_INGEST_PATTERNS.some((pattern) => pattern.test(trimmed))
+}
+
+export function isKnowledgeBaseResearchWriteIntent(content: string): boolean {
+  return /^\/wiki\s+research\s+\S/i.test(content.trim())
 }

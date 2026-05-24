@@ -182,6 +182,7 @@ describe("TeamsService", () => {
       userId: "user-2",
       role: "member",
       user: { id: "user-2", email: "member@example.com", status: "active" },
+      accessRoles: [{ role: { id: "role-1", name: "member" } }],
     }
     const createMembership = vi.fn().mockResolvedValue(member)
     prisma.teamMembership.findUnique.mockResolvedValue(null)
@@ -198,7 +199,13 @@ describe("TeamsService", () => {
     await expect(service.joinTeam("user-2", { invitationToken: "team-token" })).resolves.toEqual(member)
     expect(createMembership).toHaveBeenCalledWith({
       data: { teamId: "team-1", userId: "user-2", role: "member" },
-      include: { user: { select: { id: true, email: true, status: true } } },
+      include: {
+        user: { select: { id: true, email: true, status: true } },
+        accessRoles: {
+          select: { role: { select: { id: true, name: true } } },
+          orderBy: { assignedAt: "asc" },
+        },
+      },
     })
   })
 

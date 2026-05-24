@@ -1,9 +1,11 @@
 import type { PublishedAgentCommand } from "./command-registry"
 import type { RegisteredPromptCommand } from "./command-router"
-import type { AgentMessage, AgentRuntimeTurnResult } from "./types"
+import type { AgentEvent, AgentMessage, AgentRuntimeTurnResult } from "./types"
 
 export type AgentProjectMessageContext = {
   readonly isNewLiveSession: boolean
+  readonly conversationId: string
+  readonly turnId: string
 }
 
 export type AgentSdkPluginSpec = {
@@ -15,18 +17,23 @@ export type AgentProjectAfterTurnInput = {
   readonly message: AgentMessage
   readonly result: AgentRuntimeTurnResult
   readonly conversationId: string
+  readonly turnId: string
   readonly isNewLiveSession: boolean
+}
+
+export type AgentProjectAfterTurnOutput = {
+  readonly events?: readonly AgentEvent[]
 }
 
 export type AgentProjectContribution = {
   readonly commands: readonly RegisteredPromptCommand[]
   readonly publishedCommands?: readonly PublishedAgentCommand[]
-  readonly sdkPlugins?: readonly AgentSdkPluginSpec[]
+  sdkPlugins?(message: AgentMessage): readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
   prepareMessage?(
     message: AgentMessage,
     context: AgentProjectMessageContext,
   ): AgentMessage | Promise<AgentMessage>
-  afterTurn?(input: AgentProjectAfterTurnInput): void | Promise<void>
+  afterTurn?(input: AgentProjectAfterTurnInput): void | AgentProjectAfterTurnOutput | Promise<void | AgentProjectAfterTurnOutput>
 }
 
 export function mergeAgentProjectContributions(
@@ -35,7 +42,11 @@ export function mergeAgentProjectContributions(
   return {
     commands: contributions.flatMap((contribution) => contribution.commands),
     publishedCommands: contributions.flatMap((contribution) => contribution.publishedCommands ?? []),
-    sdkPlugins: contributions.flatMap((contribution) => contribution.sdkPlugins ?? []),
+    async sdkPlugins(message) {
+      const plugins = await Promise.all(contributions.map((contribution) =>
+        Promise.resolve(contribution.sdkPlugins?.(message) ?? [])))
+      return plugins.flat()
+    },
     async prepareMessage(message, context) {
       let next = message
       for (const contribution of contributions) {
@@ -44,9 +55,12 @@ export function mergeAgentProjectContributions(
       return next
     },
     async afterTurn(input) {
+      const events: AgentEvent[] = []
       for (const contribution of contributions) {
-        await Promise.resolve(contribution.afterTurn?.(input))
+        const result = await Promise.resolve(contribution.afterTurn?.(input))
+        events.push(...result?.events ?? [])
       }
+      return { events }
     },
   }
 }

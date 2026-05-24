@@ -53,5 +53,6 @@ knowledge-folder/
 
 - Deterministic file facts belong in Electron main-process services: manifest parsing, source discovery, hashing, and command prompt assembly.
 - Semantic wiki writing happens through the project-scoped Agent conversation inside Synapse.
+- Ingest manifest finalization is Synapse-owned. The Agent writes semantic wiki Markdown and emits `synapse.kb.ingest.report.v1`; Synapse validates the report, computes source hashes, and writes `.raw/.manifest.json` `sources` and `address_map`.
 - `/wiki ingest` remains a Synapse internal prompt command. Future aliases such as `/kb ingest` should stay inside the Synapse command/contribution layer.
 - If adding tests, include negative assertions that the vault template does not create `.agents/skills`, `.claude/skills`, `.codex/skills`, or plugin command files.

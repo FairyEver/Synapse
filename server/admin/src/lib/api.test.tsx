@@ -210,6 +210,23 @@ describe("adminApi", () => {
     window.removeEventListener(adminAuthExpiredEvent, listener)
   })
 
+  it("notifies the app when protected user dashboard requests lose authorization", async () => {
+    const listener = vi.fn()
+    window.addEventListener(adminAuthExpiredEvent, listener)
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json" }),
+      json: () => Promise.resolve({ message: "未登录或登录已过期。" }),
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(userDashboardApi.getMyTeam()).rejects.toThrow("未登录或登录已过期。")
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    window.removeEventListener(adminAuthExpiredEvent, listener)
+  })
+
   it("does not notify auth expiration for login failures", async () => {
     const listener = vi.fn()
     window.addEventListener(adminAuthExpiredEvent, listener)

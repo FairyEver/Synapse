@@ -344,6 +344,54 @@ describe("AuditLogInterceptor", () => {
     })
   })
 
+  it("records failed log file list reads with the controller audit action", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "GET",
+        path: "/api/admin/logs/files",
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => throwError(() => new Error("日志目录不可读。")) },
+    ))).rejects.toThrow("日志目录不可读。")
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        adminEmail: "current-admin@example.com",
+        action: "logs.list_files.failed",
+        targetType: "logs",
+        targetId: "files",
+      }))
+    })
+  })
+
+  it("records failed recent log reads with the controller audit action", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "GET",
+        path: "/api/admin/logs/recent",
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => throwError(() => new Error("日志读取失败。")) },
+    ))).rejects.toThrow("日志读取失败。")
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        adminEmail: "current-admin@example.com",
+        action: "logs.recent.failed",
+        targetType: "logs",
+        targetId: "recent",
+      }))
+    })
+  })
+
   it("keeps automatic audit records for backup writes", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }

@@ -54,6 +54,9 @@ describe("KnowledgeBaseService", () => {
     await expect(access(path.join(targetPath, "scripts", "allocate-address.sh"))).rejects.toThrow()
     await expect(access(path.join(targetPath, "scripts", "boundary-score.py"))).rejects.toThrow()
     await expect(access(path.join(targetPath, "scripts", "tiling-check.py"))).rejects.toThrow()
+    await expect(access(path.join(targetPath, ".claude"))).rejects.toThrow()
+    await expect(access(path.join(targetPath, ".agents"))).rejects.toThrow()
+    await expect(access(path.join(targetPath, ".codex"))).rejects.toThrow()
     await expect(access(path.join(targetPath, ".vault-meta", "address-counter.txt"))).rejects.toThrow()
   })
 

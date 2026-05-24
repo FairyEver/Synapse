@@ -1,0 +1,101 @@
+import { createServer, type IncomingMessage, type ServerResponse } from "node:http"
+import type { AddressInfo } from "node:net"
+import { afterEach, describe, expect, it } from "vitest"
+
+import {
+  DragonScaleOllamaEmbeddingProvider,
+  isLocalOllamaUrl,
+  resolveDragonScaleOllamaUrl,
+} from "../index"
+
+const servers: Array<{ close: () => Promise<void> }> = []
+
+async function withServer(handler: (request: IncomingMessage, response: ServerResponse) => void): Promise<string> {
+  const server = createServer(handler)
+  await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve))
+  servers.push({
+    close: () => new Promise<void>((resolve, reject) => {
+      server.close((error) => error ? reject(error) : resolve())
+    }),
+  })
+  const address = server.address() as AddressInfo
+  return `http://127.0.0.1:${address.port}`
+}
+
+afterEach(async () => {
+  await Promise.all(servers.splice(0).map((server) => server.close()))
+})
+
+describe("DragonScaleOllamaEmbeddingProvider", () => {
+  it("validates local and remote Ollama URLs", () => {
+    expect(isLocalOllamaUrl("http://127.0.0.1:11434")).toBe(true)
+    expect(isLocalOllamaUrl("http://localhost:11434")).toBe(true)
+    expect(isLocalOllamaUrl("http://[::1]:11434")).toBe(true)
+    expect(isLocalOllamaUrl("https://example.com")).toBe(false)
+
+    expect(() => resolveDragonScaleOllamaUrl({ ollamaUrl: "https://example.com" })).toThrow("not localhost")
+    expect(resolveDragonScaleOllamaUrl({ ollamaUrl: "https://example.com", allowRemoteOllama: true }))
+      .toBe("https://example.com")
+  })
+
+  it("detects reachable Ollama and pulled models", async () => {
+    const baseUrl = await withServer((request, response) => {
+      response.setHeader("Content-Type", "application/json")
+      if (request.url === "/api/version") {
+        response.end(JSON.stringify({ version: "0.0.0-test" }))
+        return
+      }
+      if (request.url === "/api/tags") {
+        response.end(JSON.stringify({ models: [{ name: "nomic-embed-text:latest" }] }))
+        return
+      }
+      response.statusCode = 404
+      response.end("{}")
+    })
+    const provider = new DragonScaleOllamaEmbeddingProvider()
+
+    await expect(provider.isReachable(baseUrl)).resolves.toBe(true)
+    await expect(provider.hasModel(baseUrl, "nomic-embed-text")).resolves.toBe(true)
+    await expect(provider.hasModel(baseUrl, "other-model")).resolves.toBe(false)
+  })
+
+  it("returns numeric embeddings and rejects malformed responses", async () => {
+    const baseUrl = await withServer((request, response) => {
+      response.setHeader("Content-Type", "application/json")
+      if (request.url === "/api/embeddings" && request.method === "POST") {
+        response.end(JSON.stringify({ embedding: [1, 2, 3] }))
+        return
+      }
+      response.end("{}")
+    })
+
+    await expect(new DragonScaleOllamaEmbeddingProvider().embed({
+      url: baseUrl,
+      model: "nomic-embed-text",
+      text: "hello",
+    })).resolves.toEqual([1, 2, 3])
+
+    const malformedUrl = await withServer((_request, response) => {
+      response.setHeader("Content-Type", "application/json")
+      response.end(JSON.stringify({ embedding: ["bad"] }))
+    })
+    await expect(new DragonScaleOllamaEmbeddingProvider().embed({
+      url: malformedUrl,
+      model: "nomic-embed-text",
+      text: "hello",
+    })).rejects.toThrow("non-numeric")
+  })
+
+  it("rejects oversized JSON responses", async () => {
+    const baseUrl = await withServer((_request, response) => {
+      response.setHeader("Content-Type", "application/json")
+      response.end(`{"payload":"${"x".repeat(4 * 1024 * 1024 + 1)}"}`)
+    })
+
+    await expect(new DragonScaleOllamaEmbeddingProvider().embed({
+      url: baseUrl,
+      model: "nomic-embed-text",
+      text: "hello",
+    })).rejects.toThrow("size limit")
+  })
+})

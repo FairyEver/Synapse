@@ -1,5 +1,7 @@
 # Wiki Phase 1 Design
 
+> Updated baseline: the Agent no longer performs final `.raw/.manifest.json` writes. Synapse computes hashes and finalizes manifest `sources` from the ingest report; see `docs/superpowers/specs/2026-05-24-knowledge-base-deterministic-manifest-finalization-design.md`.
+
 ## Context
 
 Synapse already supports marking a project as a knowledge base and scaffolding an Obsidian-compatible Markdown vault. Knowledge base conversations receive a bootstrap prompt and `wiki/hot.md` context on new live sessions. The current implementation is intentionally lightweight: it registers a `/wiki` prompt command and ships static prompts for `ingest`, `save`, `lint`, `query`, and `hot-cache`.

@@ -1,0 +1,332 @@
+import type { Dirent } from "node:fs"
+import { lstat, readFile, readdir, realpath } from "node:fs/promises"
+import path from "node:path"
+import { TextDecoder } from "node:util"
+
+import {
+  DRAGONSCALE_BOUNDARY_DEFAULT_TOP,
+  DRAGONSCALE_BOUNDARY_HALFLIFE_DAYS,
+  DRAGONSCALE_BOUNDARY_MAX_BODY_BYTES,
+  type DragonScaleBoundaryScoreOptions,
+  type DragonScaleBoundaryScoreReport,
+  type DragonScaleBoundaryScoreResult,
+} from "./boundary-types"
+
+interface BoundaryPage {
+  readonly title: string
+  readonly titleKey: string
+  readonly path: string
+  readonly body: string
+  readonly updated?: string
+  readonly created?: string
+}
+
+interface ParsedFrontmatter {
+  readonly type?: string
+  readonly updated?: string
+  readonly created?: string
+  readonly title?: string
+}
+
+const EXCLUDE_TYPES = new Set(["meta", "fold"])
+const EXCLUDE_FILENAMES = new Set([
+  "_index.md",
+  "index.md",
+  "log.md",
+  "hot.md",
+  "overview.md",
+  "dashboard.md",
+  "Wiki Map.md",
+  "getting-started.md",
+])
+const EXCLUDE_PATH_PREFIXES = ["wiki/folds/", "wiki/meta/"]
+const FRONTMATTER_RE = /^---\n(.*?)\n---\n/s
+const TYPE_RE = /^type:\s*(\S+)/m
+const UPDATED_RE = /^updated:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/m
+const CREATED_RE = /^created:\s*([0-9]{4}-[0-9]{2}-[0-9]{2})/m
+const TITLE_RE = /^title:\s*"?([^"\n]+?)"?\s*$/m
+const WIKILINK_RE = /\[\[([^\]|#]+)(?:#[^\]|]+)?(?:\|[^\]]+)?\]\]/g
+const FENCE_RE = /^(\s*)(`{3,}|~{3,})/
+const UTF8_DECODER = new TextDecoder("utf-8", { fatal: true })
+
+export class DragonScaleBoundaryService {
+  async score(
+    projectPath: string,
+    options: DragonScaleBoundaryScoreOptions = {},
+  ): Promise<DragonScaleBoundaryScoreReport> {
+    const top = options.top ?? DRAGONSCALE_BOUNDARY_DEFAULT_TOP
+    if (!Number.isInteger(top) || top < 1) {
+      throw new Error("DragonScale boundary score top must be >= 1.")
+    }
+
+    const root = path.resolve(projectPath)
+    const today = options.today ?? localDateString(new Date())
+    const pages = await collectPages(root)
+    const { outEdges, inEdges } = buildGraph(pages)
+    let results = [...pages.values()].map((page) => scorePage(page, outEdges, inEdges, today))
+
+    if (options.page) {
+      const pageFilter = normalizeRelativePath(options.page)
+      const key = path.parse(pageFilter).name
+      results = results.filter((result) => result.titleKey === key || result.path === pageFilter)
+      if (results.length === 0) {
+        throw new Error(`No scoreable DragonScale page matches '${options.page}'.`)
+      }
+    } else {
+      if (options.includeScoreZero !== true) {
+        results = results.filter((result) => result.score > 0)
+      }
+      results.sort((left, right) => right.score - left.score || left.titleKey.localeCompare(right.titleKey))
+      results = results.slice(0, top)
+    }
+
+    return {
+      generated: generatedTimestamp(),
+      halflifeDays: DRAGONSCALE_BOUNDARY_HALFLIFE_DAYS,
+      pageCountScoreable: pages.size,
+      results,
+    }
+  }
+}
+
+async function collectPages(root: string): Promise<Map<string, BoundaryPage>> {
+  const wikiPath = path.join(root, "wiki")
+  const rootRealPath = await resolveExistingPath(root)
+  const markdownPaths = await collectMarkdownPaths(root, rootRealPath, wikiPath)
+  markdownPaths.sort((left, right) => normalizeRelativePath(path.relative(root, left)).localeCompare(
+    normalizeRelativePath(path.relative(root, right)),
+  ))
+
+  const pages = new Map<string, BoundaryPage>()
+  for (const markdownPath of markdownPaths) {
+    const relativePath = normalizeRelativePath(path.relative(root, markdownPath))
+    const content = await readSmallUtf8(markdownPath)
+    if (content === null) continue
+    const { frontmatter, body } = parseFrontmatter(content)
+    const parsed = parseFrontmatterFields(frontmatter)
+    if (!included(relativePath, parsed)) continue
+    const titleKey = path.parse(markdownPath).name
+    pages.set(titleKey, {
+      title: parsed.title ?? titleKey,
+      titleKey,
+      path: relativePath,
+      body,
+      ...(parsed.updated ? { updated: parsed.updated } : undefined),
+      ...(parsed.created ? { created: parsed.created } : undefined),
+    })
+  }
+  return pages
+}
+
+async function collectMarkdownPaths(root: string, rootRealPath: string, directoryPath: string): Promise<string[]> {
+  let entries: Dirent[]
+  try {
+    entries = await readdir(directoryPath, { withFileTypes: true })
+  } catch (error) {
+    if (isMissingPathError(error)) return []
+    throw error
+  }
+
+  const results: string[] = []
+  for (const entry of entries.sort((left, right) => left.name.localeCompare(right.name))) {
+    if (entry.isSymbolicLink()) continue
+    const entryPath = path.join(directoryPath, entry.name)
+    if (entry.isDirectory()) {
+      results.push(...await collectMarkdownPaths(root, rootRealPath, entryPath))
+      continue
+    }
+    if (!entry.isFile() || !entry.name.endsWith(".md")) continue
+    const stat = await lstat(entryPath)
+    if (stat.isSymbolicLink()) continue
+    const resolved = await resolveExistingPath(entryPath)
+    if (!isInside(rootRealPath, resolved)) continue
+    if (!isInside(root, entryPath)) continue
+    results.push(entryPath)
+  }
+  return results
+}
+
+async function readSmallUtf8(filePath: string): Promise<string | null> {
+  try {
+    const bytes = await readFile(filePath)
+    if (bytes.byteLength > DRAGONSCALE_BOUNDARY_MAX_BODY_BYTES) return null
+    return UTF8_DECODER.decode(bytes)
+  } catch (error) {
+    if (error instanceof TypeError || error instanceof Error) return null
+    throw error
+  }
+}
+
+function parseFrontmatter(content: string): { readonly frontmatter: string; readonly body: string } {
+  const match = FRONTMATTER_RE.exec(content)
+  if (!match?.[1]) {
+    return { frontmatter: "", body: content }
+  }
+  return { frontmatter: match[1], body: content.slice(match[0].length) }
+}
+
+function parseFrontmatterFields(frontmatter: string): ParsedFrontmatter {
+  return {
+    ...pickField("type", frontmatter, TYPE_RE),
+    ...pickField("updated", frontmatter, UPDATED_RE),
+    ...pickField("created", frontmatter, CREATED_RE),
+    ...pickField("title", frontmatter, TITLE_RE),
+  }
+}
+
+function pickField<K extends keyof ParsedFrontmatter>(
+  key: K,
+  frontmatter: string,
+  regex: RegExp,
+): Pick<ParsedFrontmatter, K> | Record<string, never> {
+  const match = regex.exec(frontmatter)
+  const value = match?.[1]?.trim().replace(/^["']|["']$/g, "")
+  return value ? { [key]: value } as Pick<ParsedFrontmatter, K> : {}
+}
+
+function included(relativePath: string, frontmatter: ParsedFrontmatter): boolean {
+  if (!relativePath.startsWith("wiki/")) return false
+  if (EXCLUDE_FILENAMES.has(path.basename(relativePath))) return false
+  if (EXCLUDE_PATH_PREFIXES.some((prefix) => relativePath.startsWith(prefix))) return false
+  return !frontmatter.type || !EXCLUDE_TYPES.has(frontmatter.type)
+}
+
+function buildGraph(pages: Map<string, BoundaryPage>): {
+  readonly outEdges: Map<string, Set<string>>
+  readonly inEdges: Map<string, Set<string>>
+} {
+  const outEdges = new Map<string, Set<string>>()
+  const inEdges = new Map<string, Set<string>>()
+  for (const titleKey of pages.keys()) {
+    outEdges.set(titleKey, new Set())
+    inEdges.set(titleKey, new Set())
+  }
+
+  for (const [sourceKey, page] of pages.entries()) {
+    for (const targetKey of extractWikilinks(page.body)) {
+      if (targetKey === sourceKey || !pages.has(targetKey)) continue
+      outEdges.get(sourceKey)?.add(targetKey)
+      inEdges.get(targetKey)?.add(sourceKey)
+    }
+  }
+
+  return { outEdges, inEdges }
+}
+
+function extractWikilinks(body: string): Set<string> {
+  const cleaned: string[] = []
+  let fenceChar: string | null = null
+  let fenceLength = 0
+
+  for (const line of body.split(/\r?\n/)) {
+    const fence = FENCE_RE.exec(line)
+    if (fence?.[2]) {
+      const char = fence[2][0]
+      const length = fence[2].length
+      if (fenceChar === null) {
+        fenceChar = char
+        fenceLength = length
+        continue
+      }
+      if (char === fenceChar && length >= fenceLength) {
+        fenceChar = null
+        fenceLength = 0
+        continue
+      }
+    }
+    if (fenceChar !== null) continue
+    cleaned.push(line)
+  }
+
+  const results = new Set<string>()
+  for (const match of cleaned.join("\n").matchAll(WIKILINK_RE)) {
+    const raw = match[1]?.trim()
+    if (!raw) continue
+    const stem = raw.split("/").at(-1)
+    if (stem) results.add(stem)
+  }
+  return results
+}
+
+function scorePage(
+  page: BoundaryPage,
+  outEdges: Map<string, Set<string>>,
+  inEdges: Map<string, Set<string>>,
+  today: string,
+): DragonScaleBoundaryScoreResult {
+  const outDegree = outEdges.get(page.titleKey)?.size ?? 0
+  const inDegree = inEdges.get(page.titleKey)?.size ?? 0
+  const ageDays = daysSince(page.updated ?? page.created, today)
+  const recencyWeight = round4(Math.exp(-ageDays / DRAGONSCALE_BOUNDARY_HALFLIFE_DAYS))
+  return {
+    title: page.title,
+    titleKey: page.titleKey,
+    path: page.path,
+    outDegree,
+    inDegree,
+    ageDays,
+    recencyWeight,
+    score: round4((outDegree - inDegree) * recencyWeight),
+  }
+}
+
+function daysSince(dateString: string | undefined, today: string): number {
+  const day = parseDateOnly(dateString)
+  const now = parseDateOnly(today)
+  if (!day || !now) return 10_000
+  return Math.max(0, Math.floor((now.getTime() - day.getTime()) / 86_400_000))
+}
+
+function parseDateOnly(value: string | undefined): Date | null {
+  if (!value || !/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(value)) return null
+  const [year, month, day] = value.split("-").map(Number)
+  if (!year || !month || !day) return null
+  const date = new Date(Date.UTC(year, month - 1, day))
+  if (date.getUTCFullYear() !== year || date.getUTCMonth() !== month - 1 || date.getUTCDate() !== day) {
+    return null
+  }
+  return date
+}
+
+function round4(value: number): number {
+  return Math.round(value * 10_000) / 10_000
+}
+
+function localDateString(date: Date): string {
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, "0")
+  const day = String(date.getDate()).padStart(2, "0")
+  return `${year}-${month}-${day}`
+}
+
+function generatedTimestamp(): string {
+  return new Date().toISOString().replace(/\.\d{3}Z$/, "Z")
+}
+
+function normalizeRelativePath(value: string): string {
+  return value.split(path.sep).join("/").split("\\").join("/")
+}
+
+async function resolveExistingPath(filePath: string): Promise<string> {
+  try {
+    return await realpath(filePath)
+  } catch (error) {
+    if (isMissingPathError(error)) return path.resolve(filePath)
+    throw error
+  }
+}
+
+function isInside(rootPath: string, targetPath: string): boolean {
+  const root = path.resolve(rootPath)
+  const target = path.resolve(targetPath)
+  const relative = path.relative(root, target)
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
+}
+
+function isMissingPathError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && ((error as { readonly code?: unknown }).code === "ENOENT"
+      || (error as { readonly code?: unknown }).code === "ENOTDIR")
+}
