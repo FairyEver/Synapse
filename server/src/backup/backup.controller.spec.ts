@@ -59,6 +59,56 @@ describe("BackupController", () => {
     expect(Buffer.concat(chunks)).toEqual(Buffer.from("backup"))
   })
 
+  it("rethrows backup stream errors before sending headers", async () => {
+    const error = new Error("COS stream failed")
+    const stream = new Readable({
+      read() {
+        this.destroy(error)
+      },
+    })
+    const service = {
+      downloadBackup: vi.fn().mockReturnValue(stream),
+    }
+    const response = new Writable({
+      write(_chunk: Buffer, _encoding, callback) {
+        callback()
+      },
+    }) as Writable & { set: ReturnType<typeof vi.fn>; headersSent: boolean }
+    response.set = vi.fn()
+    Object.defineProperty(response, "headersSent", { value: false })
+    const controller = new BackupController(service as unknown as BackupService)
+
+    await expect(controller.downloadBackup("synapse-backup.tar", response as never)).rejects.toThrow(error)
+  })
+
+  it("does not rethrow backup stream errors after headers are sent", async () => {
+    const error = new Error("COS stream failed")
+    let readStarted = false
+    const stream = new Readable({
+      read() {
+        if (readStarted) return
+        readStarted = true
+        this.push("partial")
+        this.destroy(error)
+      },
+    })
+    const service = {
+      downloadBackup: vi.fn().mockReturnValue(stream),
+    }
+    const response = new Writable({
+      write(_chunk: Buffer, _encoding, callback) {
+        headersSent = true
+        callback()
+      },
+    }) as Writable & { set: ReturnType<typeof vi.fn>; headersSent: boolean }
+    let headersSent = false
+    response.set = vi.fn()
+    Object.defineProperty(response, "headersSent", { get: () => headersSent })
+    const controller = new BackupController(service as unknown as BackupService)
+
+    await expect(controller.downloadBackup("synapse-backup.tar", response as never)).resolves.toBeUndefined()
+  })
+
   it("deletes a backup file", async () => {
     const service = {
       deleteBackup: vi.fn().mockResolvedValue(undefined),

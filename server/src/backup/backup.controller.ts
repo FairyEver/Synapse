@@ -30,7 +30,11 @@ export class BackupController {
       "Content-Type": contentType(filename),
       "Content-Disposition": contentDisposition(filename),
     })
-    await pipeline(stream, response)
+    try {
+      await pipeline(stream, response)
+    } catch (error: unknown) {
+      if (!response.headersSent) throw error
+    }
   }
 
   @Delete(":filename")
