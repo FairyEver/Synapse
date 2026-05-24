@@ -381,7 +381,6 @@ export class AdminService {
       teamId,
       teamMembershipId: membershipId,
       roleIds,
-      assignedByUserId: admin.id,
     })
     await this.auditLog?.record({
       adminEmail: admin.email,

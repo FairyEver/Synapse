@@ -628,7 +628,6 @@ describe("AdminService", () => {
       teamId: "team-1",
       teamMembershipId: "membership-1",
       roleIds: ["role-2", "role-1"],
-      assignedByUserId: "admin-1",
     })
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "admin@example.com",
