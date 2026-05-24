@@ -42,6 +42,7 @@ describe("AuditLogsPage", () => {
       { value: "admin.team_member_access_roles.replace", label: "admin.team_member_access_roles.replace" },
       { value: "admin.team_member_access_role.assign", label: "admin.team_member_access_role.assign" },
       { value: "admin.team_member_access_role.remove", label: "admin.team_member_access_role.remove" },
+      { value: "user.dashboard_login.disabled", label: "user.dashboard_login.disabled" },
       { value: "dashboard.login.disabled", label: "dashboard.login.disabled" },
       { value: "user.login.disabled", label: "user.login.disabled" },
       { value: "user.logout.success", label: "user.logout.success" },
@@ -50,6 +51,9 @@ describe("AuditLogsPage", () => {
       { value: "backup.download", label: "backup.download" },
       { value: "backup.post.failed", label: "backup.post.failed" },
       { value: "backup.delete.failed", label: "backup.delete.failed" },
+      { value: "backup.scheduled", label: "backup.scheduled" },
+      { value: "backup.cleanup.delete", label: "backup.cleanup.delete" },
+      { value: "backup.cleanup.failed", label: "backup.cleanup.failed" },
       { value: "logs.download", label: "logs.download" },
       { value: "logs.cleanup", label: "logs.cleanup" },
     ]))

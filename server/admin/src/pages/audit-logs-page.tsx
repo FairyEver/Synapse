@@ -28,6 +28,7 @@ export const AUDIT_ACTION_FILTER_OPTIONS = [
   { value: "dashboard.login.failure", label: "dashboard.login.failure" },
   { value: "dashboard.login.disabled", label: "dashboard.login.disabled" },
   { value: "user.dashboard_login.success", label: "user.dashboard_login.success" },
+  { value: "user.dashboard_login.disabled", label: "user.dashboard_login.disabled" },
   { value: "admin.invitation.create", label: "admin.invitation.create" },
   { value: "admin.invitation.delete", label: "admin.invitation.delete" },
   { value: "admin.invitation.delete_many", label: "admin.invitation.delete_many" },
@@ -58,6 +59,9 @@ export const AUDIT_ACTION_FILTER_OPTIONS = [
   { value: "backup.post.failed", label: "backup.post.failed" },
   { value: "backup.delete", label: "backup.delete" },
   { value: "backup.delete.failed", label: "backup.delete.failed" },
+  { value: "backup.scheduled", label: "backup.scheduled" },
+  { value: "backup.cleanup.delete", label: "backup.cleanup.delete" },
+  { value: "backup.cleanup.failed", label: "backup.cleanup.failed" },
   { value: "logs.download", label: "logs.download" },
   { value: "logs.cleanup", label: "logs.cleanup" },
 ] as const
