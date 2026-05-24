@@ -155,8 +155,11 @@ function resolveKnownAdminAuditTarget(
   if (method === "PATCH" && USER_STATUS_PATH_PATTERN.test(path)) {
     return { action: "admin.user.status_update", targetType: "user", targetId: params.id ?? readId(responseBody) }
   }
-  if (method === "PUT" && (TEAM_ENTITLEMENTS_PATH_PATTERN.test(path) || TEAM_PERMISSIONS_PATH_PATTERN.test(path))) {
+  if (method === "PUT" && TEAM_ENTITLEMENTS_PATH_PATTERN.test(path)) {
     return { action: "admin.team_entitlements.update", targetType: "team", targetId: params.teamId ?? readId(responseBody) }
+  }
+  if (method === "PUT" && TEAM_PERMISSIONS_PATH_PATTERN.test(path)) {
+    return { action: "admin.team_permissions.update", targetType: "team", targetId: params.teamId ?? readId(responseBody) }
   }
   if (method === "PUT" && TEAM_ROLE_PERMISSIONS_PATH_PATTERN.test(path)) {
     return { action: "admin.team_role_permissions.update", targetType: "team_access_role", targetId: params.roleId ?? readId(responseBody) }

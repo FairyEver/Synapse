@@ -238,6 +238,35 @@ describe("AuditLogInterceptor", () => {
     })
   })
 
+  it("records failed atomic team permission replacements with the service audit action", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "PUT",
+        path: "/api/admin/teams/team-1/permissions",
+        params: { teamId: "team-1" },
+        body: {
+          permissionKeys: ["database.use"],
+          rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
+        },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => throwError(() => new Error("权限不存在。")) },
+    ))).rejects.toThrow("权限不存在。")
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        adminEmail: "current-admin@example.com",
+        action: "admin.team_permissions.update.failed",
+        targetType: "team",
+        targetId: "team-1",
+      }))
+    })
+  })
+
   it("records failed team member access role assignments with the service audit action", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }

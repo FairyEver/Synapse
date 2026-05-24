@@ -482,7 +482,7 @@ describe("AdminService", () => {
     })
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "admin@example.com",
-      action: "admin.team_entitlements.update",
+      action: "admin.team_permissions.update",
       targetType: "team",
       targetId: "team-1",
       detail: {

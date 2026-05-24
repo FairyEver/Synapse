@@ -298,7 +298,7 @@ export class AdminService {
     })
     await this.auditLog?.record({
       adminEmail: admin.email,
-      action: "admin.team_entitlements.update",
+      action: "admin.team_permissions.update",
       targetType: "team",
       targetId: teamId,
       detail: next,
