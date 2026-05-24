@@ -19,6 +19,10 @@ import { formatDate } from "@/lib/format"
 import { formatTeamRole } from "@/lib/team-role"
 import { SignupInvitationAction } from "./signup-invitation-action"
 
+function formatAccessRoles(membership: AdminUserRow["memberships"][number]): string {
+  return membership.accessRoles.map((item) => item.role.name).join("、") || "-"
+}
+
 export function UsersPage() {
   const [page, setPage] = React.useState(1)
   const { data: result, error, loading, reload } = useApiResource<PaginatedResponse<AdminUserRow>>(
@@ -90,7 +94,7 @@ export function UsersPage() {
                     <div className="flex flex-col gap-1">
                       {user.memberships.map((membership) => (
                         <span key={membership.team.id}>
-                          {`${membership.team.name} / ${formatTeamRole(membership.role)}`}
+                          {`${membership.team.name} / ${formatTeamRole(membership.role)} / ${formatAccessRoles(membership)}`}
                         </span>
                       ))}
                     </div>

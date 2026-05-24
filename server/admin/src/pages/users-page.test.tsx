@@ -66,10 +66,12 @@ describe("UsersPage", () => {
             {
               role: "owner",
               team: { id: "team-1", name: "研发组" },
+              accessRoles: [{ role: { id: "role-1", name: "团队管理员" } }],
             },
             {
               role: "member",
               team: { id: "team-2", name: "测试组" },
+              accessRoles: [{ role: { id: "role-2", name: "普通成员" } }],
             },
           ],
           createdAt: "2026-05-20T00:00:00.000Z",
@@ -86,8 +88,8 @@ describe("UsersPage", () => {
 
     await waitFor(() => {
       expect(result.container.textContent).toContain("member@example.com")
-      expect(result.container.textContent).toContain("研发组 / 所有者")
-      expect(result.container.textContent).toContain("测试组 / 成员")
+      expect(result.container.textContent).toContain("研发组 / 所有者 / 团队管理员")
+      expect(result.container.textContent).toContain("测试组 / 成员 / 普通成员")
       expect(result.container.textContent).toContain("更新时间")
       expect(result.container.textContent).toContain("2026年5月22日")
     })
@@ -152,6 +154,7 @@ describe("UsersPage", () => {
             {
               role: "owner",
               team: { id: "team-1", name: "研发组" },
+              accessRoles: [{ role: { id: "role-1", name: "团队管理员" } }],
             },
           ],
           createdAt: "2026-05-20T00:00:00.000Z",

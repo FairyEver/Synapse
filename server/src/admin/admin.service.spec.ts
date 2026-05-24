@@ -115,6 +115,10 @@ describe("AdminService", () => {
           select: {
             role: true,
             team: { select: { id: true, name: true } },
+            accessRoles: {
+              select: { role: { select: { id: true, name: true } } },
+              orderBy: { assignedAt: "asc" },
+            },
           },
         },
         createdAt: true,
@@ -141,6 +145,10 @@ describe("AdminService", () => {
           select: {
             role: true,
             team: { select: { id: true, name: true } },
+            accessRoles: {
+              select: { role: { select: { id: true, name: true } } },
+              orderBy: { assignedAt: "asc" },
+            },
           },
         },
         createdAt: true,
@@ -195,6 +203,10 @@ describe("AdminService", () => {
             role: true,
             createdAt: true,
             user: { select: { email: true } },
+            accessRoles: {
+              select: { role: { select: { id: true, name: true } } },
+              orderBy: { assignedAt: "asc" },
+            },
           },
           orderBy: { createdAt: "asc" },
         },

@@ -42,6 +42,7 @@ export interface AdminUserRow {
   readonly memberships: Array<{
     readonly role: "owner" | "member"
     readonly team: { readonly id: string; readonly name: string }
+    readonly accessRoles: Array<{ readonly role: { readonly id: string; readonly name: string } }>
   }>
   readonly createdAt: string
   readonly updatedAt: string
@@ -54,6 +55,7 @@ export interface AdminTeamRow {
   readonly memberships: Array<{
     readonly role: "owner" | "member"
     readonly user: { readonly email: string }
+    readonly accessRoles: Array<{ readonly role: { readonly id: string; readonly name: string } }>
     readonly createdAt: string
   }>
   readonly createdAt: string

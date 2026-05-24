@@ -54,6 +54,10 @@ function groupPermissions(permissions: readonly PermissionDefinition[]): Array<{
   return [...grouped.entries()].map(([group, items]) => ({ group, permissions: items }))
 }
 
+function accessRoleNames(membership: AdminTeamRow["memberships"][number]): string[] {
+  return membership.accessRoles.map((item) => item.role.name)
+}
+
 export function TeamsPage() {
   const [page, setPage] = React.useState(1)
   const { data: result, error, loading } = useApiResource<PaginatedResponse<AdminTeamRow>>(
@@ -158,6 +162,9 @@ export function TeamsPage() {
                     >
                       <span className="truncate">{membership.user.email}</span>
                       <Badge variant="outline" className="shrink-0">{formatTeamRole(membership.role)}</Badge>
+                      {accessRoleNames(membership).map((roleName) => (
+                        <Badge key={roleName} variant="secondary" className="shrink-0">{roleName}</Badge>
+                      ))}
                     </div>
                   ))}
                 </div>

@@ -84,11 +84,13 @@ describe("TeamsPage", () => {
             {
               role: "owner",
               user: { email: "owner@example.com" },
+              accessRoles: [{ role: { id: "role-1", name: "团队管理员" } }],
               createdAt: "2026-05-20T00:00:00.000Z",
             },
             {
               role: "member",
               user: { email: "member@example.com" },
+              accessRoles: [{ role: { id: "role-2", name: "普通成员" } }],
               createdAt: "2026-05-21T00:00:00.000Z",
             },
           ],
@@ -111,6 +113,8 @@ describe("TeamsPage", () => {
     expect(result.container.textContent).toContain("member@example.com")
     expect(result.container.textContent).toContain("所有者")
     expect(result.container.textContent).toContain("成员")
+    expect(result.container.textContent).toContain("团队管理员")
+    expect(result.container.textContent).toContain("普通成员")
   })
 
   it("loads and saves team permissions", async () => {
