@@ -10,6 +10,16 @@ vi.mock("@/lib/api", () => ({
   },
 }))
 
+function createDeferred<T>() {
+  let resolve: (value: T) => void = () => {
+    throw new Error("Promise has not been initialized.")
+  }
+  const promise = new Promise<T>((innerResolve) => {
+    resolve = innerResolve
+  })
+  return { promise, resolve }
+}
+
 describe("AuditLogsPage", () => {
   let cleanup: (() => void) | null = null
 
@@ -111,6 +121,54 @@ describe("AuditLogsPage", () => {
     const nextButton = Array.from(result.container.querySelectorAll("button"))
       .find((button) => button.textContent === "下一页")
     expect(nextButton?.disabled).toBe(true)
+  })
+
+  it("shows export failures without clearing the audit list", async () => {
+    vi.mocked(adminApi.listAuditLogs).mockResolvedValue(createAuditPage({ page: 1, id: "log-1", total: 1 }))
+    vi.mocked(adminApi.exportAuditLogs).mockRejectedValue(new Error("导出超过上限"))
+
+    const result = await render(<AuditLogsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("log-1")
+    })
+    Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "导出 CSV")
+      ?.click()
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("导出超过上限")
+      expect(result.container.textContent).toContain("log-1")
+    })
+  })
+
+  it("disables export while the CSV download is running", async () => {
+    const exportRequest = createDeferred<void>()
+    vi.mocked(adminApi.listAuditLogs).mockResolvedValue(createAuditPage({ page: 1, id: "log-1", total: 1 }))
+    vi.mocked(adminApi.exportAuditLogs).mockReturnValue(exportRequest.promise)
+
+    const result = await render(<AuditLogsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("log-1")
+    })
+    const exportButton = Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "导出 CSV")
+
+    exportButton?.click()
+
+    await waitFor(() => {
+      expect(exportButton?.disabled).toBe(true)
+      expect(exportButton?.textContent).toBe("导出中…")
+    })
+    exportRequest.resolve(undefined)
+
+    await waitFor(() => {
+      expect(exportButton?.disabled).toBe(false)
+      expect(exportButton?.textContent).toBe("导出 CSV")
+    })
   })
 })
 

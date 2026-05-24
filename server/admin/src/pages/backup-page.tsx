@@ -21,6 +21,7 @@ export function BackupPage() {
   const [loading, setLoading] = React.useState(true)
   const [error, setError] = React.useState<string | null>(null)
   const [backingUp, setBackingUp] = React.useState(false)
+  const [downloadingFilename, setDownloadingFilename] = React.useState<string | null>(null)
   const [deletingFilename, setDeletingFilename] = React.useState<string | null>(null)
 
   const loadList = React.useCallback(async () => {
@@ -69,6 +70,18 @@ export function BackupPage() {
     }
   }
 
+  async function handleDownload(filename: string) {
+    setError(null)
+    setDownloadingFilename(filename)
+    try {
+      await adminApi.downloadBackup(filename)
+    } catch (caught: unknown) {
+      setError(caught instanceof Error ? caught.message : "下载失败")
+    } finally {
+      setDownloadingFilename(null)
+    }
+  }
+
   return (
     <div className="grid gap-2">
       <div className="flex items-center">
@@ -104,9 +117,10 @@ export function BackupPage() {
                       variant="outline"
                       size="sm"
                       aria-label={`下载备份 ${file.filename}`}
-                      onClick={() => adminApi.downloadBackup(file.filename)}
+                      disabled={downloadingFilename === file.filename}
+                      onClick={() => void handleDownload(file.filename)}
                     >
-                      下载
+                      {downloadingFilename === file.filename ? "下载中…" : "下载"}
                     </Button>
                     <Button
                       type="button"

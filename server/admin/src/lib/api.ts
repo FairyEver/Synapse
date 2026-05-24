@@ -376,9 +376,8 @@ export const adminApi = {
     request<void>(`${adminApiBasePath}/backup`, {
       method: "POST",
     }),
-  downloadBackup: (filename: string) => {
-    startDownload(`${adminApiBasePath}/backup/download/${encodeURIComponent(filename)}`, filename)
-  },
+  downloadBackup: (filename: string) =>
+    downloadFile(`${adminApiBasePath}/backup/download/${encodeURIComponent(filename)}`, filename),
   deleteBackup: (filename: string) =>
     request<{ ok: true }>(`${adminApiBasePath}/backup/${encodeURIComponent(filename)}`, {
       method: "DELETE",
@@ -409,7 +408,7 @@ export const adminApi = {
     if (options.from) query.set("from", options.from)
     if (options.to) query.set("to", options.to)
     const suffix = query.size > 0 ? `?${query.toString()}` : ""
-    startDownload(`${adminApiBasePath}/audit-logs/export${suffix}`, "audit-logs.csv")
+    return downloadFile(`${adminApiBasePath}/audit-logs/export${suffix}`, "audit-logs.csv")
   },
   async listLogFiles(): Promise<LogFileInfo[]> {
     return request<LogFileInfo[]>(`${adminApiBasePath}/logs/files`);

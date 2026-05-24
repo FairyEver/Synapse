@@ -127,6 +127,65 @@ describe("BackupPage", () => {
     })
   })
 
+  it("shows download failures and keeps the backup row visible", async () => {
+    vi.mocked(adminApi.listBackups).mockResolvedValue([
+      {
+        filename: "synapse-backup-old.tar.gz",
+        size: 1024,
+        createdAt: "2026-05-22T00:00:00.000Z",
+      },
+    ])
+    vi.mocked(adminApi.downloadBackup).mockRejectedValue(new Error("文件不存在"))
+
+    const result = await render(<BackupPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("synapse-backup-old.tar.gz")
+    })
+    result.container.querySelector<HTMLButtonElement>("[aria-label='下载备份 synapse-backup-old.tar.gz']")?.click()
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("文件不存在")
+      expect(result.container.textContent).toContain("synapse-backup-old.tar.gz")
+    })
+  })
+
+  it("disables the download button while downloading a backup", async () => {
+    const downloadRequest = createDeferred<void>()
+    vi.mocked(adminApi.listBackups).mockResolvedValue([
+      {
+        filename: "synapse-backup-old.tar.gz",
+        size: 1024,
+        createdAt: "2026-05-22T00:00:00.000Z",
+      },
+    ])
+    vi.mocked(adminApi.downloadBackup).mockReturnValue(downloadRequest.promise)
+
+    const result = await render(<BackupPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("synapse-backup-old.tar.gz")
+    })
+    const downloadButton = result.container.querySelector<HTMLButtonElement>(
+      "[aria-label='下载备份 synapse-backup-old.tar.gz']",
+    )
+
+    downloadButton?.click()
+
+    await waitFor(() => {
+      expect(downloadButton?.disabled).toBe(true)
+      expect(downloadButton?.textContent).toBe("下载中…")
+    })
+    downloadRequest.resolve(undefined)
+
+    await waitFor(() => {
+      expect(downloadButton?.disabled).toBe(false)
+      expect(downloadButton?.textContent).toBe("下载")
+    })
+  })
+
   it("asks for confirmation before deleting a backup", async () => {
     vi.stubGlobal("confirm", vi.fn(() => false))
     vi.mocked(adminApi.listBackups).mockResolvedValue([

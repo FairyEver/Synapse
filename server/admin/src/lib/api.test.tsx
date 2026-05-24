@@ -144,22 +144,43 @@ describe("adminApi", () => {
       })
     })
 
-    adminApi.exportAuditLogs({ action: "users.post" })
+    await adminApi.exportAuditLogs({ action: "users.post" })
     await adminApi.downloadLogs({ from: "2026-05-01" })
-    adminApi.downloadBackup("synapse backup.tar.gz")
+    await adminApi.downloadBackup("synapse backup.tar.gz")
 
     expect(openMock).not.toHaveBeenCalled()
     expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/audit-logs/export?action=users.post",
+      { credentials: "include" },
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
       "/api/admin/logs/download?from=2026-05-01",
+      { credentials: "include" },
+    )
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/backup/download/synapse%20backup.tar.gz",
       { credentials: "include" },
     )
     expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
     expect(revokeObjectURL).toHaveBeenCalledWith("blob:logs")
     expect(clicked).toEqual([
-      { href: "/api/admin/audit-logs/export?action=users.post", download: "audit-logs.csv" },
+      { href: "blob:logs", download: "audit-logs.csv" },
       { href: "blob:logs", download: "logs.zip" },
-      { href: "/api/admin/backup/download/synapse%20backup.tar.gz", download: "synapse backup.tar.gz" },
+      { href: "blob:logs", download: "synapse backup.tar.gz" },
     ])
+  })
+
+  it("surfaces admin download server errors", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      headers: new Headers({ "Content-Type": "application/json" }),
+      json: () => Promise.resolve({ message: "导出失败" }),
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(adminApi.exportAuditLogs({ action: "users.post" })).rejects.toThrow("导出失败")
+    await expect(adminApi.downloadBackup("missing.tar.gz")).rejects.toThrow("导出失败")
   })
 
   it("loads user dashboard identity from /api/auth/me", async () => {

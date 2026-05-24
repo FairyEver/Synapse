@@ -64,6 +64,8 @@ export function AuditLogsPage() {
   const [from, setFrom] = React.useState("")
   const [to, setTo] = React.useState("")
   const [page, setPage] = React.useState(1)
+  const [exporting, setExporting] = React.useState(false)
+  const [exportError, setExportError] = React.useState<string | null>(null)
 
   const actionFilter = action === "all" ? undefined : action
   const { data: result, loading, error } = useApiResource<PaginatedResponse<AuditLog>>(
@@ -86,6 +88,18 @@ export function AuditLogsPage() {
     setPage(1)
   }
 
+  async function handleExport() {
+    setExporting(true)
+    setExportError(null)
+    try {
+      await adminApi.exportAuditLogs({ action: actionFilter, from: from || undefined, to: to || undefined })
+    } catch (caught: unknown) {
+      setExportError(caught instanceof Error ? caught.message : "导出失败")
+    } finally {
+      setExporting(false)
+    }
+  }
+
   if (loading) return <PageState>加载中…</PageState>
   if (error) return <PageState>{`加载失败：${error}`}</PageState>
   if (!result) return null
@@ -105,10 +119,11 @@ export function AuditLogsPage() {
         </Select>
         <Input type="date" value={from} onChange={(e) => handleFromChange(e.target.value)} className="w-40" />
         <Input type="date" value={to} onChange={(e) => handleToChange(e.target.value)} className="w-40" />
-        <Button variant="outline" onClick={() => adminApi.exportAuditLogs({ action: actionFilter, from: from || undefined, to: to || undefined })}>
-          导出 CSV
+        <Button variant="outline" disabled={exporting} onClick={() => void handleExport()}>
+          {exporting ? "导出中…" : "导出 CSV"}
         </Button>
       </div>
+      {exportError ? <PageState>{exportError}</PageState> : null}
       <Table>
         <TableHeader>
           <TableRow>
