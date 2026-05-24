@@ -76,6 +76,7 @@ export function TeamsPage() {
   const [accessRoles, setAccessRoles] = React.useState<TeamAccessRoleRow[]>([])
   const [rolePermissionKeys, setRolePermissionKeys] = React.useState<Record<string, ReadonlySet<string>>>({})
   const [permissionLoading, setPermissionLoading] = React.useState(false)
+  const [permissionReloadToken, setPermissionReloadToken] = React.useState(0)
   const [permissionSaving, setPermissionSaving] = React.useState(false)
   const [permissionError, setPermissionError] = React.useState<string | null>(null)
 
@@ -108,7 +109,7 @@ export function TeamsPage() {
     return () => {
       alive = false
     }
-  }, [editingTeam])
+  }, [editingTeam, permissionReloadToken])
 
   function updatePermissionKey(permissionKey: string, checked: boolean | "indeterminate") {
     if (checked !== true) {
@@ -166,6 +167,10 @@ export function TeamsPage() {
   function closePermissionsDialog(open: boolean) {
     if (open || permissionSaving) return
     setEditingTeam(null)
+  }
+
+  function retryLoadPermissions() {
+    setPermissionReloadToken((value) => value + 1)
   }
 
   if (loading) return <PageState>加载中</PageState>
@@ -233,8 +238,21 @@ export function TeamsPage() {
             <DialogTitle>{editingTeam ? `${editingTeam.name} 权限` : "团队权限"}</DialogTitle>
           </DialogHeader>
           {permissionLoading ? <PageState>加载中</PageState> : null}
-          {permissionError ? <p className="text-sm text-destructive">{permissionError}</p> : null}
-          {!permissionLoading && permissions.length === 0 ? <PageState>暂无权限</PageState> : null}
+          {permissionError ? (
+            <div className="flex items-center justify-between gap-2">
+              <p className="text-sm text-destructive">{permissionError}</p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                disabled={permissionLoading}
+                onClick={retryLoadPermissions}
+              >
+                重试
+              </Button>
+            </div>
+          ) : null}
+          {!permissionError && !permissionLoading && permissions.length === 0 ? <PageState>暂无权限</PageState> : null}
           {!permissionLoading && permissionGroups.length > 0 ? (
             <div className="max-h-96 overflow-y-auto">
               <div className="grid gap-5">

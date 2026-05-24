@@ -218,4 +218,63 @@ describe("TeamsPage", () => {
       )
     })
   })
+
+  it("retries team permission loading inside the dialog", async () => {
+    vi.mocked(adminApi.listTeams).mockResolvedValue({
+      data: [
+        {
+          id: "team-1",
+          name: "一组",
+          createdByUser: { email: "owner@example.com" },
+          memberships: [],
+          createdAt: "2026-05-20T00:00:00.000Z",
+          updatedAt: "2026-05-22T00:00:00.000Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    })
+    vi.mocked(adminApi.listPermissions)
+      .mockRejectedValueOnce(new Error("权限加载失败"))
+      .mockResolvedValueOnce([
+        {
+          key: "database.use",
+          label: "数据",
+          group: "database",
+          level: "module",
+          status: "active",
+          clientVisibility: "visible",
+        },
+      ])
+    vi.mocked(adminApi.listTeamEntitlements).mockResolvedValue({ permissionKeys: ["database.use"] })
+    vi.mocked(adminApi.listTeamAccessRoles).mockResolvedValue([])
+
+    const result = await render(<TeamsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("一组")
+    })
+    act(() => {
+      Array.from(result.container.querySelectorAll("button"))
+        .find((button) => button.textContent === "权限")
+        ?.click()
+    })
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("权限加载失败")
+    })
+    act(() => {
+      Array.from(document.body.querySelectorAll("button"))
+        .find((button) => button.textContent === "重试")
+        ?.click()
+    })
+
+    await waitFor(() => {
+      expect(adminApi.listPermissions).toHaveBeenCalledTimes(2)
+      expect(document.body.textContent).toContain("数据")
+      expect(document.body.textContent).not.toContain("权限加载失败")
+    })
+  })
 })
