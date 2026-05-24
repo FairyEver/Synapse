@@ -39,6 +39,7 @@ import {
   sessionLabel,
 } from "./utils"
 import { toAgentSlashCandidates } from "./slash-menu"
+import { knowledgeBaseStaticCommands } from "./knowledge-base-commands"
 
 const logger = createRendererLogger("agent")
 
@@ -326,16 +327,17 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const mergedCommands = useMemo(() => {
     const defCommands = selectedAgentDefinition?.commands ?? []
     const runtimeCommands = chat.commands ?? []
+    const knowledgeBaseCommands = canManageKnowledgeSources ? knowledgeBaseStaticCommands() : []
     const seen = new Set<string>()
     const result: SynapseAgentPublishedCommand[] = []
-    for (const cmd of [...defCommands, ...runtimeCommands]) {
+    for (const cmd of [...defCommands, ...runtimeCommands, ...knowledgeBaseCommands]) {
       if (!seen.has(cmd.name)) {
         seen.add(cmd.name)
         result.push(cmd as unknown as SynapseAgentPublishedCommand)
       }
     }
     return result
-  }, [selectedAgentDefinition?.commands, chat.commands])
+  }, [canManageKnowledgeSources, selectedAgentDefinition?.commands, chat.commands])
   const slashCandidates = useMemo(
     () => toAgentSlashCandidates(mergedCommands),
     [mergedCommands],

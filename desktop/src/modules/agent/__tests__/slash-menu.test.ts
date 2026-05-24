@@ -8,6 +8,7 @@ import {
   toAgentSlashCandidates,
   type AgentSlashCandidate,
 } from "../slash-menu"
+import { knowledgeBaseStaticCommands } from "../knowledge-base-commands"
 
 const candidates: AgentSlashCandidate[] = [
   {
@@ -179,6 +180,19 @@ describe("agent slash menu utilities", () => {
       source: "custom",
       insertText: "/wiki query ",
     }])
+  })
+
+  it("converts knowledge base static commands into slash candidates", () => {
+    expect(toAgentSlashCandidates(knowledgeBaseStaticCommands()).map((item) => ({
+      name: item.name,
+      insertText: item.insertText,
+    }))).toEqual([
+      { name: "wiki ingest", insertText: "ingest all changed sources in .raw" },
+      { name: "wiki query", insertText: "query: " },
+      { name: "save", insertText: "/save " },
+      { name: "autoresearch", insertText: "/autoresearch " },
+      { name: "wiki lint", insertText: "run wiki-lint" },
+    ])
   })
 
   it("uses insertText when replacing slash fragments", () => {
