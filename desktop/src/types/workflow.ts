@@ -5,6 +5,28 @@ export interface WorkflowNode {
   id: string; name: string; type: string; position: { x: number; y: number }; config: Record<string, unknown>
 }
 export interface WorkflowEdge { id: string; from: string; to: string; branch?: string }
+export interface WorkflowFileConversionNodeConfig {
+  readonly inputPath: string
+  readonly outputMode?: "result" | "markdown-file"
+  readonly outputPath?: string
+}
+export interface WorkflowFileConversionNodeResult {
+  readonly sourcePath: string
+  readonly format: string
+  readonly kind: string
+  readonly title: string
+  readonly markdown: string
+  readonly text: string
+  readonly metadata: Record<string, unknown>
+  readonly warnings: readonly { readonly code: string; readonly message: string }[]
+  readonly outputPath?: string
+}
+export interface WorkflowFileConversionNodeFailure {
+  readonly ok: false
+  readonly code: "unsupported_format" | "encrypted" | "missing_local_helper" | "parse_failed" | "read_failed" | "size_limit_exceeded" | "invalid_output_path"
+  readonly message: string
+  readonly sourcePath: string
+}
 export interface WorkflowDefinition {
   id: string; name: string; description?: string; version: string
   createdAt: number; updatedAt: number

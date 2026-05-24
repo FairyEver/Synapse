@@ -60,6 +60,9 @@ export interface NodeRuntimeDeps {
     run: (request: import("../electron/runtime/process").ControlledProcessRunRequest) => Promise<import("../electron/runtime/process").ControlledProcessResult>
   }
   sendHttpRequest: (request: import("../electron/runtime/network").OutboundHttpRequest) => Promise<import("../electron/runtime/network").OutboundHttpResponse>
+  fileConversionService?: {
+    convert: (input: import("../electron/services/file-conversion").FileConversionInput) => Promise<import("../electron/services/file-conversion").FileConversionResult>
+  }
 }
 
 export interface NodeExecutionInput<TConfig> {

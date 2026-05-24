@@ -3,6 +3,7 @@ import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { createMainLogger } from "../log-store"
 import { computeEndReachable } from "./workflow-utils"
 import { agentTimeoutMinsToMs, resolveAgentTimeoutMins } from "../../../workflow-nodes/agent-timeout"
+import { isWorkflowFileConversionOutputPathAllowed } from "../../../workflow-nodes/file-conversion/output-boundary"
 
 const logger = createMainLogger("service.workflow.validator")
 
@@ -64,6 +65,44 @@ function missingWorkflowDefaultError(input: {
       projectId: typeof input.cfg.projectId === "string" && input.cfg.projectId.trim() ? input.cfg.projectId : undefined,
       timeoutMs: agentTimeoutMinsToMs(resolveAgentTimeoutMins(timeoutMins)),
     },
+  }
+}
+
+function validateFileConversionNodeConfig(node: WorkflowDefinition["nodes"][number], errors: ValidationError[]): void {
+  const cfg = node.config as Record<string, unknown>
+  const inputPath = typeof cfg.inputPath === "string" ? cfg.inputPath.trim() : ""
+  if (!inputPath) {
+    errors.push({
+      type: "invalid_config",
+      nodeId: node.id,
+      nodeName: node.name,
+      field: "inputPath",
+      message: `节点「${node.name}」的 inputPath 不能为空`,
+    })
+  }
+
+  if (cfg.outputMode === "markdown-file") {
+    const outputPath = typeof cfg.outputPath === "string" ? cfg.outputPath.trim() : ""
+    if (!outputPath) {
+      errors.push({
+        type: "invalid_config",
+        nodeId: node.id,
+        nodeName: node.name,
+        field: "outputPath",
+        message: `节点「${node.name}」使用 markdown-file 时 outputPath 不能为空`,
+      })
+      return
+    }
+
+    if (!isWorkflowFileConversionOutputPathAllowed(outputPath)) {
+      errors.push({
+        type: "invalid_config",
+        nodeId: node.id,
+        nodeName: node.name,
+        field: "outputPath",
+        message: `节点「${node.name}」的 outputPath 必须位于工作流输出目录内`,
+      })
+    }
   }
 }
 
@@ -172,6 +211,10 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
       if (!url) {
         errors.push({ type: "invalid_config", nodeId: node.id, message: `节点「${node.name}」的 URL 不能为空` })
       }
+    }
+
+    if (node.type === "file_conversion") {
+      validateFileConversionNodeConfig(node, errors)
     }
 
     // Switch node: validate branch ID uniqueness
