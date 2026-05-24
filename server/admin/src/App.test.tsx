@@ -5,6 +5,7 @@ import { adminApi } from "@/lib/api"
 import { render, waitFor } from "@/test/render"
 
 vi.mock("@/lib/api", () => ({
+  adminAuthExpiredEvent: "synapse:admin-auth-expired",
   adminApi: {
     getSession: vi.fn(),
     logout: vi.fn(),
@@ -201,5 +202,34 @@ describe("App", () => {
     })
     expect(window.location.pathname).toBe("/dashboard/")
     expect(window.location.hash).toBe("#/invitations")
+  })
+
+  it("shows the login page when a protected admin request expires", async () => {
+    vi.mocked(adminApi.getSession).mockResolvedValue({ email: "admin@d2.com", role: "admin" })
+    vi.mocked(adminApi.getSystemOverview).mockResolvedValue({
+      serverTime: "2026-05-21T00:00:00.000Z",
+      counts: {
+        auditLogs: 0,
+        users: 0,
+        teams: 0,
+        invitations: 0,
+        teamEntitlements: 0,
+        teamAccessRoles: 0,
+        teamAccessRolePermissions: 0,
+        teamMemberAccessRoles: 0,
+      },
+    })
+
+    const result = await render(<App />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.querySelector("h1")?.textContent).toBe("系统")
+    })
+    window.dispatchEvent(new CustomEvent("synapse:admin-auth-expired"))
+
+    await waitFor(() => {
+      expect(result.container.querySelector<HTMLInputElement>("#admin-email")).not.toBeNull()
+    })
   })
 })

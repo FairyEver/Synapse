@@ -20,7 +20,7 @@ import { LogsPage } from "@/pages/logs-page"
 import { TeamsPage } from "@/pages/teams-page"
 import { UserTeamPage } from "@/pages/user-team-page"
 import { UsersPage } from "@/pages/users-page"
-import { adminApi, type AdminSession } from "@/lib/api"
+import { adminApi, adminAuthExpiredEvent, type AdminSession } from "@/lib/api"
 import { useIdleTimeout } from "@/hooks/use-idle-timeout"
 
 type Route =
@@ -128,6 +128,14 @@ export default function App() {
       alive = false
     }
   }, [loginRoute, signupRoute])
+
+  React.useEffect(() => {
+    function handleAuthExpired() {
+      setSession(null)
+    }
+    window.addEventListener(adminAuthExpiredEvent, handleAuthExpired)
+    return () => window.removeEventListener(adminAuthExpiredEvent, handleAuthExpired)
+  }, [])
 
   function handleLogout() {
     adminApi

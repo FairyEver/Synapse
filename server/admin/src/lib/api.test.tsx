@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
-import { adminApi, userDashboardApi } from "./api"
+import { adminApi, adminAuthExpiredEvent, userDashboardApi } from "./api"
 
 describe("adminApi", () => {
   afterEach(() => {
@@ -191,6 +191,40 @@ describe("adminApi", () => {
 
     await expect(adminApi.exportAuditLogs({ action: "users.post" })).rejects.toThrow("导出失败")
     await expect(adminApi.downloadBackup("missing.tar.gz")).rejects.toThrow("导出失败")
+  })
+
+  it("notifies the app when protected admin requests lose authorization", async () => {
+    const listener = vi.fn()
+    window.addEventListener(adminAuthExpiredEvent, listener)
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 403,
+      headers: new Headers({ "Content-Type": "application/json" }),
+      json: () => Promise.resolve({ message: "未登录或登录已过期。" }),
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(adminApi.listUsers()).rejects.toThrow("未登录或登录已过期。")
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    window.removeEventListener(adminAuthExpiredEvent, listener)
+  })
+
+  it("does not notify auth expiration for login failures", async () => {
+    const listener = vi.fn()
+    window.addEventListener(adminAuthExpiredEvent, listener)
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: false,
+      status: 401,
+      headers: new Headers({ "Content-Type": "application/json" }),
+      json: () => Promise.resolve({ message: "邮箱或密码错误。" }),
+    })
+    vi.stubGlobal("fetch", fetchMock)
+
+    await expect(adminApi.login({ email: "admin@example.com", password: "bad-password" })).rejects.toThrow("邮箱或密码错误。")
+
+    expect(listener).not.toHaveBeenCalled()
+    window.removeEventListener(adminAuthExpiredEvent, listener)
   })
 
   it("loads user dashboard identity from /api/auth/me", async () => {

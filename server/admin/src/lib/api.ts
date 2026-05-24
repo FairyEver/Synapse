@@ -233,6 +233,22 @@ export class ApiError extends Error {
 }
 
 const adminApiBasePath = "/api/admin"
+export const adminAuthExpiredEvent = "synapse:admin-auth-expired"
+
+function shouldNotifyAdminAuthExpired(path: string, status: number): boolean {
+  if (status !== 401 && status !== 403) return false
+  return (
+    path.startsWith(adminApiBasePath) &&
+    path !== `${adminApiBasePath}/login` &&
+    path !== `${adminApiBasePath}/logout` &&
+    path !== `${adminApiBasePath}/session`
+  )
+}
+
+function notifyAdminAuthExpired(path: string, status: number): void {
+  if (typeof window === "undefined" || !shouldNotifyAdminAuthExpired(path, status)) return
+  window.dispatchEvent(new CustomEvent(adminAuthExpiredEvent))
+}
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const response = await fetch(path, {
@@ -246,6 +262,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const contentType = response.headers.get("content-type")
   const body = contentType?.includes("application/json") ? await response.json() : null
   if (!response.ok) {
+    notifyAdminAuthExpired(path, response.status)
     throw new ApiError(readErrorMessage(body), response.status)
   }
   return body as T
@@ -283,6 +300,7 @@ async function downloadFile(url: string, filename: string): Promise<void> {
   const contentType = response.headers.get("content-type")
   if (!response.ok) {
     const body = contentType?.includes("application/json") ? await response.json() : null
+    notifyAdminAuthExpired(url, response.status)
     throw new ApiError(readErrorMessage(body), response.status)
   }
   const objectUrl = URL.createObjectURL(await response.blob())
