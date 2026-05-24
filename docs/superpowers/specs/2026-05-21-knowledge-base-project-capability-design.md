@@ -1,5 +1,8 @@
 # Knowledge Base Project Capability Design
 
+> Superseded for new Knowledge Bases: use `docs/superpowers/specs/2026-05-24-managed-knowledge-base-runtime-design.md`.
+> This document describes the earlier visible-vault approach and should be treated as historical context only unless a task explicitly targets legacy migration.
+
 ## Summary
 
 Synapse will add a Knowledge Base capability to the existing project concept. A knowledge base is still a local project folder, not a repository and not a separate chat product. The folder stores an Obsidian-compatible Markdown vault, while Synapse owns the advanced maintenance behavior: ingest, query, save, lint, hot cache updates, manifest handling, and future automation.

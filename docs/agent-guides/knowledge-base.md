@@ -2,57 +2,53 @@
 
 ## Purpose
 
-The Knowledge Base feature creates an Obsidian-compatible Markdown vault that users can open, browse, graph, and edit with local Obsidian tools. Synapse owns the advanced AI maintenance behavior: ingest, query, save, lint, hot cache updates, manifest handling, and future automation.
+Knowledge Base is a Synapse-managed project subtype. Users create it from project settings by entering a name; Synapse creates the real backing directory under app-managed storage and registers the project with a virtual `synapse-kb://<id>` path.
 
-This split is intentional. The vault format is portable; the maintenance workflow is a Synapse product capability.
+The backing directory is initialized from `desktop/resources/knowledge-base/claude-obsidian-template/`, which is synced from `AgriciDaniel/claude-obsidian`. It may contain Claude Code plugin, command, hook, skill, script, prompt, and wiki files because it is Synapse-owned runtime state, not a user-selected visible folder.
 
 ## Canonical Design
 
 Read these before changing the module:
 
-- `docs/superpowers/specs/2026-05-21-knowledge-base-project-capability-design.md`
-- `docs/superpowers/plans/2026-05-21-knowledge-base-project-capability.md`
-- `docs/superpowers/plans/2026-05-21-wiki-phase1.md`
+- `docs/superpowers/specs/2026-05-24-managed-knowledge-base-runtime-design.md`
+- `docs/superpowers/plans/2026-05-24-managed-knowledge-base-runtime.md`
+
+Older visible-vault docs are superseded for new knowledge bases.
 
 ## Hard Rules
 
-- Do not write runnable Agent capability files into a user knowledge-base folder.
-- Do not add `.agents/skills`, `.claude/skills`, `.codex/skills`, Claude plugin commands, hooks, or a full `CLAUDE.md` to the vault template.
-- Do not make the vault independently usable as a Claude Code, Codex, or other Agent Skills project.
-- Keep operational prompts inside Synapse resources: `desktop/resources/knowledge-base/prompts/`.
-- Keep user vault templates limited to Obsidian-compatible Markdown structure plus Synapse metadata such as `.synapse-kb.json` and `.raw/.manifest.json`.
-- Synapse may update `.raw/.manifest.json`; it must not edit other source files under `.raw/`.
-- AI-maintained knowledge belongs under `wiki/`.
-- Natural-language ingest/query/save/lint behavior must come from Synapse project contributions and internal prompts, not from copying runnable skills into the user vault.
+- New knowledge bases are managed black-box projects; users do not choose or see the real backing path.
+- Do not reintroduce SDK session injection for Knowledge Base plugins, skills, hooks, commands, agents, or prompts. The managed backing directory already carries the runtime assets.
+- Ordinary projects must not load Knowledge Base runtime files or quick actions.
+- Scheduler, Workflow, and other Agent entry points must not receive Knowledge Base behavior unless they explicitly target a managed Knowledge Base project and resolve its backing directory through the project model.
+- Knowledge Base-specific code stays in `desktop/electron/services/knowledge-base/`, `desktop/resources/knowledge-base/`, or narrow renderer project-capability UI. Do not scatter Knowledge Base checks through generic Agent runtime paths.
+- The UI must not expose an "open real folder" action for managed knowledge bases.
+- Source/material management must go through Synapse APIs and write into the managed backing directory.
+- Synapse may copy user-provided files into `.raw/`; AI-maintained knowledge belongs under `wiki/`.
 
-## Allowed Vault Shape
+## Managed Runtime Shape
 
 ```txt
-knowledge-folder/
-  .synapse-kb.json
+<userData>/knowledge-bases/<runtimeId>/
+  .claude-plugin/
+  commands/
+  hooks/
+  skills/
+  scripts/
+  CLAUDE.md
   .raw/
     .manifest.json
   wiki/
-    index.md
     hot.md
+    index.md
     log.md
-    overview.md
-    sources/
-      _index.md
-    concepts/
-      _index.md
-    entities/
-      _index.md
-    questions/
-      _index.md
-    meta/
-  _attachments/
 ```
 
 ## Implementation Notes
 
-- Deterministic file facts belong in Electron main-process services: manifest parsing, source discovery, hashing, and command prompt assembly.
-- Semantic wiki writing happens through the project-scoped Agent conversation inside Synapse.
-- Ingest manifest finalization is Synapse-owned. The Agent writes semantic wiki Markdown and emits `synapse.kb.ingest.report.v1`; Synapse validates the report, computes source hashes, and writes `.raw/.manifest.json` `sources` and `address_map`.
-- `/wiki ingest` remains a Synapse internal prompt command. Future aliases such as `/kb ingest` should stay inside the Synapse command/contribution layer.
-- If adding tests, include negative assertions that the vault template does not create `.agents/skills`, `.claude/skills`, `.codex/skills`, or plugin command files.
+- `pnpm run kb:sync-template` refreshes the developer template from `AgriciDaniel/claude-obsidian`.
+- Project config stores `capabilities.knowledgeBase.managed: true` and `runtimeId`.
+- Renderer project lists show the Knowledge Base name, not its real path.
+- Agent conversations resolve managed Knowledge Base projects to their backing directory before launching the session.
+- Composer quick actions are renderer-local conveniences and only appear for Knowledge Base projects.
+- File conversion and source staging remain Synapse-owned because users add files through the Synapse UI.

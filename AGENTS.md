@@ -31,10 +31,10 @@
 
 ### 模块硬边界摘要
 
-- Knowledge Base 用户目录必须保持 Obsidian 兼容 vault 形态，只放 Markdown 结构和 Synapse metadata；不要写入 runnable Agent skill/rule/command/hook、完整 `CLAUDE.md`，也不要把 vault 变成 Claude Code、Codex 或其它 Agent Skills 项目。
-- Knowledge Base 的运行提示、ingest/query/save/lint 行为属于 Synapse 内部资源和项目贡献；Synapse 只能更新 `.raw/.manifest.json`，不得改写 `.raw/` 下其它源文件；AI 维护内容放在 `wiki/`。
-- Knowledge Base 创建后，用户项目目录只允许落必须属于知识库资产的文件，例如 `.synapse-kb.json`、`.raw/.manifest.json`、`wiki/`、`wiki/hot.md`、`wiki/index.md`、`wiki/log.md`、`_attachments/` 等。Claude Code / Agent 使用的 plugin、skill、command、hook、agent、规则、脚本和完整运行提示必须尽量不落到用户目录；需要时在创建知识库 Agent 会话时识别项目能力，并通过 Claude Code SDK 的 session 级机制临时加载。
-- Knowledge Base 专用 Agent 能力必须隔离在知识库模块或知识库专属资源目录内，例如 `desktop/electron/services/knowledge-base/`、`desktop/resources/knowledge-base/` 或通用项目贡献接口的最小扩展。不要把知识库专用逻辑散落到普通 Agent 对话、Scheduler、Workflow 或其它触发 Agent 的功能里；普通项目不应加载知识库 plugin、skill、hook 或 prompt。
+- Knowledge Base 是 Synapse 托管项目类型；新建知识库时用户只提供名称，真实目录由 Synapse 创建在 app-managed storage 中，项目路径对用户显示为虚拟 `synapse-kb://<id>`。
+- Knowledge Base 托管运行目录可以包含来自内置 `claude-obsidian` 模板的 Claude Code plugin、skill、command、hook、脚本、提示词和 `CLAUDE.md`，因为它不是用户选择的可见项目目录。
+- Knowledge Base 不再通过 Claude Code SDK session 注入 plugin、skill、hook、command、agent 或 prompt；Agent 会话只需把托管知识库项目解析到其 backing directory，运行逻辑来自目录模板本身。
+- Knowledge Base 专用逻辑必须隔离在知识库模块或知识库专属资源目录内，例如 `desktop/electron/services/knowledge-base/`、`desktop/resources/knowledge-base/` 和最小 renderer 项目能力 UI。不要把知识库专用逻辑散落到普通 Agent 对话、Scheduler、Workflow 或其它触发 Agent 的功能里；普通项目不应加载知识库 plugin、skill、hook、prompt 或快捷动作。
 - Agent 会话创建只能基于已配置项目；新会话必须绑定 `agentType`；运行时状态按 conversation 隔离，不要让同项目多会话共享队列、busy 状态或 live session。
 - Agent composer slash menu 只负责插入 `/<name>`，不得立即执行或发送；不得改成通用命令面板；不得新增 renderer 侧目录扫描器或改变后端 command/skill 解析语义。
 - Workflow 必须保持外层 DAG 约束；MCP/agent 写操作必须走 get -> mutate -> validate -> save 的受控路径，校验失败不得保存；不得删除 end 节点。
