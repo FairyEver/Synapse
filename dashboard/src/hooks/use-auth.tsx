@@ -7,7 +7,12 @@ import {
   useState,
 } from 'react';
 
-import { type AdminSession, ApiError, adminApi } from '@/lib/api';
+import {
+  type AdminSession,
+  ApiError,
+  adminApi,
+  subscribeAuthExpired,
+} from '@/lib/api';
 
 type AuthContextValue = {
   isAuthenticated: boolean;
@@ -48,6 +53,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       isMounted = false;
     };
   }, []);
+
+  useEffect(() => subscribeAuthExpired(() => setSession(null)), []);
 
   const login = useCallback(
     async (credentials: { email: string; password: string }) => {
