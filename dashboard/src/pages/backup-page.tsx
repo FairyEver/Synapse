@@ -18,6 +18,10 @@ export function BackupPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
   const [feedback, setFeedback] = useState('');
+  const [isBackingUp, setIsBackingUp] = useState(false);
+  const [deletingFilenames, setDeletingFilenames] = useState<
+    ReadonlySet<string>
+  >(() => new Set());
 
   const refresh = useCallback(async () => {
     setIsLoading(true);
@@ -36,23 +40,35 @@ export function BackupPage() {
   }, [refresh]);
 
   async function triggerBackup() {
+    if (isBackingUp) return;
     setFeedback('');
+    setIsBackingUp(true);
     try {
       const result = await adminApi.triggerBackup();
       setFeedback(`已备份 ${result.filename}`);
       await refresh();
     } catch (nextError) {
       setFeedback(nextError instanceof Error ? nextError.message : '备份失败');
+    } finally {
+      setIsBackingUp(false);
     }
   }
 
   async function deleteBackup(filename: string) {
+    if (deletingFilenames.has(filename)) return;
     setFeedback('');
+    setDeletingFilenames((current) => new Set(current).add(filename));
     try {
       await adminApi.deleteBackup(filename);
       await refresh();
     } catch (nextError) {
       setFeedback(nextError instanceof Error ? nextError.message : '删除失败');
+    } finally {
+      setDeletingFilenames((current) => {
+        const next = new Set(current);
+        next.delete(filename);
+        return next;
+      });
     }
   }
 
@@ -60,7 +76,9 @@ export function BackupPage() {
     <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 pt-0">
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-muted-foreground">{feedback}</p>
-        <Button onClick={triggerBackup}>立即备份</Button>
+        <Button disabled={isBackingUp} onClick={triggerBackup}>
+          {isBackingUp ? '备份中' : '立即备份'}
+        </Button>
       </div>
       {isLoading ? <LoadingState /> : null}
       {error ? <ErrorState message={error} onRetry={refresh} /> : null}
@@ -93,6 +111,7 @@ export function BackupPage() {
                       </Button>
                       <Button
                         variant="outline"
+                        disabled={deletingFilenames.has(file.filename)}
                         onClick={() => deleteBackup(file.filename)}
                       >
                         删除
