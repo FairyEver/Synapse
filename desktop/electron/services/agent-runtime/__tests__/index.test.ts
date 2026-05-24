@@ -1,55 +1,17 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
-import os from "node:os"
-import path from "node:path"
-import { afterEach, describe, expect, it, vi } from "vitest"
-
-vi.mock("../../config-store", () => ({
-  configStore: {
-    load: vi.fn(async () => ({
-      global: {
-        projects: [{
-          id: "project-1",
-          name: "Project 1",
-          path: "/workspace/project-1",
-          capabilities: {
-            knowledgeBase: {
-              enabled: true,
-              schemaVersion: 1,
-              templateVersion: "test",
-            },
-          },
-        }],
-      },
-    })),
-  },
-}))
+import { describe, expect, it, vi } from "vitest"
 
 import type { ProjectContext } from "../../../runtime/project-container"
 import type { DataNamespace, DataRepository } from "../../../runtime/data-repo"
 import { ServiceNotFoundError, ServiceNotRunningError } from "../../../runtime/service-registry"
-import { configStore } from "../../config-store"
-import { readKnowledgeBaseManifest } from "../../knowledge-base/manifest"
 import {
   AgentRuntimeService,
   createAgentRuntimeProjectService,
-  createCachedAgentProjectContributionResolver,
 } from "../index"
-import type { AgentProjectContribution } from "../project-contributions"
 import type { AgentEvent, AgentMessage } from "../types"
 
-const mockProjectContribution = vi.hoisted(() => ({
-  value: null as AgentProjectContribution | null,
+const createdSessionInputs = vi.hoisted(() => ({
+  values: [] as unknown[],
 }))
-
-vi.mock("../../knowledge-base/agent-contribution", async (importOriginal) => {
-  const original = await importOriginal<typeof import("../../knowledge-base/agent-contribution")>()
-  return {
-    ...original,
-    createKnowledgeBaseAgentContribution: vi.fn(async (input: Parameters<typeof original.createKnowledgeBaseAgentContribution>[0]) =>
-      mockProjectContribution.value ?? original.createKnowledgeBaseAgentContribution(input),
-    ),
-  }
-})
 
 vi.mock("../../provider", () => ({
   createProviderServiceFromDataRepository: vi.fn(() => ({
@@ -70,6 +32,10 @@ vi.mock("../claude-sdk-session", () => ({
       },
     ]
     private closed = false
+
+    constructor(options: unknown) {
+      createdSessionInputs.values.push(options)
+    }
 
     async send(_message: AgentMessage): Promise<boolean> {
       return true
@@ -169,17 +135,8 @@ describe("createAgentRuntimeProjectService", () => {
     }
   })
 
-  it("forwards project afterTurn events into the runtime turn result", async () => {
-    const afterTurnEvent: AgentEvent = {
-      type: "error",
-      message: "知识库后置写入未完成：缺少 synapse_kb_ingest_report。",
-      timestamp: "2026-05-24T00:00:00.000Z",
-    }
-    const afterTurn = vi.fn(async () => ({ events: [afterTurnEvent] }))
-    mockProjectContribution.value = {
-      commands: [],
-      afterTurn,
-    }
+  it("does not inject SDK plugins for managed knowledge base runtime sessions", async () => {
+    createdSessionInputs.values = []
     const serviceFactory = createAgentRuntimeProjectService()
     const ctx = createRunnableProjectContext()
     const service = await serviceFactory.create(ctx)
@@ -193,72 +150,18 @@ describe("createAgentRuntimeProjectService", () => {
         content: "汲取知识",
       })
 
-      expect(afterTurn).toHaveBeenCalledOnce()
-      expect(result.events).toEqual(expect.arrayContaining([afterTurnEvent]))
+      expect(result.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "result", content: "done" }),
+      ]))
+      expect(createdSessionInputs.values.at(-1)).toEqual(expect.objectContaining({
+        cwd: "/workspace/project-1",
+        plugins: [],
+        agents: {},
+        subagentToolPolicies: {},
+      }))
     } finally {
       service.stopIdleReclaim()
-      mockProjectContribution.value = null
     }
-  })
-})
-
-describe("createCachedAgentProjectContributionResolver", () => {
-  const roots: string[] = []
-
-  async function tempDir(): Promise<string> {
-    const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-agent-runtime-index-"))
-    roots.push(dir)
-    return dir
-  }
-
-  afterEach(async () => {
-    await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
-    vi.mocked(configStore.load).mockReset()
-  })
-
-  it("keeps command preflight available to afterTurn through runtime-style callback resolution", async () => {
-    const projectPath = await tempDir()
-    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
-    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{},\"address_map\":{}}\n")
-    await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
-    vi.mocked(configStore.load).mockClear()
-    vi.mocked(configStore.load).mockResolvedValue({
-      global: {
-        projects: [knowledgeBaseProject(projectPath)],
-      },
-    } as never)
-    const dataRepository = createMemoryDataRepository()
-    const resolveContribution = createCachedAgentProjectContributionResolver("project-1", dataRepository)
-
-    await (await resolveContribution()).commands[0]?.buildPrompt(["ingest"], baseMessage("/wiki ingest"), { turnId: "turn-1" })
-    await mkdir(path.join(projectPath, "wiki", "sources"), { recursive: true })
-    await writeFile(path.join(projectPath, "wiki", "sources", "note.md"), "---\ntype: source\naddress: c-000010\n---\n\n# Note\n")
-    await (await resolveContribution()).afterTurn?.({
-      message: baseMessage("/wiki ingest"),
-      result: { conversationId: "conv-1", resultText: ingestReport([{
-        source: ".raw/note.md",
-        pages_created: ["wiki/sources/note.md"],
-        pages_updated: [],
-      }]), events: [] },
-      conversationId: "conv-1",
-      turnId: "turn-1",
-      isNewLiveSession: false,
-    })
-
-    expect(configStore.load).toHaveBeenCalledTimes(1)
-    await expect(readKnowledgeBaseManifest(projectPath)).resolves.toMatchObject({
-      manifest: {
-        sources: {
-          ".raw/note.md": {
-            pages_created: ["wiki/sources/note.md"],
-            pages_updated: [],
-          },
-        },
-        address_map: {
-          "wiki/sources/note.md": "c-000010",
-        },
-      },
-    })
   })
 })
 
@@ -352,40 +255,4 @@ class MemoryNamespace<T> {
   onChange(): () => void {
     return () => undefined
   }
-}
-
-function knowledgeBaseProject(projectPath: string) {
-  return {
-    id: "project-1",
-    name: "KB",
-    path: projectPath,
-    capabilities: {
-      knowledgeBase: {
-        enabled: true,
-        schemaVersion: 1,
-        templateVersion: "2026-05-21",
-      },
-    },
-  } as const
-}
-
-function baseMessage(content: string) {
-  return {
-    projectId: "project-1",
-    sessionKey: "s1",
-    platform: "local-renderer",
-    content,
-  } as const
-}
-
-function ingestReport(processedSources: readonly object[]): string {
-  return [
-    "```json synapse_kb_ingest_report",
-    JSON.stringify({
-      schema: "synapse.kb.ingest.report.v1",
-      processed_sources: processedSources,
-      skipped_sources: [],
-    }),
-    "```",
-  ].join("\n")
 }
