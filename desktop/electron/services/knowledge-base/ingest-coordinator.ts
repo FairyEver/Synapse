@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto"
-import { lstat } from "node:fs/promises"
+import { lstat, realpath } from "node:fs/promises"
 import path from "node:path"
 
 import { KnowledgeBaseIngestFinalizer, type KnowledgeBaseIngestFinalizerResult } from "./ingest-finalizer"
@@ -205,7 +205,12 @@ async function validateWikiPagePaths(
       warnings.push(`Invalid wiki page path was ignored for ${sourcePath}: ${pagePath}`)
       return { ok: false, warnings }
     }
-    if (!await isExistingFile(path.join(projectPath, ...normalized.split("/")))) {
+    const pagePathStatus = await validateProjectFilePath(projectPath, normalized)
+    if (pagePathStatus === "invalid") {
+      warnings.push(`Invalid wiki page path was ignored for ${sourcePath}: ${normalized}`)
+      return { ok: false, warnings }
+    }
+    if (pagePathStatus === "missing") {
       warnings.push(`Listed wiki page does not exist for ${sourcePath}: ${normalized}`)
       return { ok: false, warnings }
     }
@@ -226,14 +231,42 @@ function isValidRelativePath(projectPath: string, relativePath: string, required
   return relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative)
 }
 
-async function isExistingFile(filePath: string): Promise<boolean> {
+async function validateProjectFilePath(
+  projectPath: string,
+  relativePath: string,
+): Promise<"valid" | "missing" | "invalid"> {
+  const segments = relativePath.split("/")
+  let currentPath = projectPath
+  let finalStat
+  for (const segment of segments) {
+    currentPath = path.join(currentPath, segment)
+    try {
+      const stat = await lstat(currentPath)
+      if (stat.isSymbolicLink()) {
+        return "invalid"
+      }
+      finalStat = stat
+    } catch (error) {
+      if (isMissingPathError(error)) return "missing"
+      throw error
+    }
+  }
+
+  if (!finalStat?.isFile()) {
+    return "missing"
+  }
+
   try {
-    const stat = await lstat(filePath)
-    return stat.isFile() && !stat.isSymbolicLink()
+    return isPathInside(await realpath(projectPath), await realpath(currentPath)) ? "valid" : "invalid"
   } catch (error) {
-    if (isMissingPathError(error)) return false
+    if (isMissingPathError(error)) return "missing"
     throw error
   }
+}
+
+function isPathInside(rootPath: string, targetPath: string): boolean {
+  const relative = path.relative(rootPath, targetPath)
+  return relative === "" || (!relative.startsWith(`..${path.sep}`) && relative !== ".." && !path.isAbsolute(relative))
 }
 
 function isMissingPathError(error: unknown): boolean {

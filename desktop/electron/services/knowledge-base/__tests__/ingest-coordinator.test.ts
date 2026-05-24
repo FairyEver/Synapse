@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto"
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
@@ -188,6 +188,36 @@ describe("KnowledgeBaseIngestCoordinator", () => {
     await expect(readKnowledgeBaseManifest(root)).resolves.toMatchObject({
       manifest: { sources: {} },
     })
+  })
+
+  it("rejects wiki page paths through a symlinked wiki ancestor", async () => {
+    const root = await tempDir()
+    const outside = await tempDir()
+    await mkdir(path.join(root, ".raw"), { recursive: true })
+    await writeFile(path.join(root, ".raw", "note.md"), "# Source\n")
+    await mkdir(path.join(outside, "sources"), { recursive: true })
+    const outsidePagePath = path.join(outside, "sources", "note.md")
+    await writeFile(outsidePagePath, "---\ntype: source\n---\n\n# Note\n")
+    await symlink(outside, path.join(root, "wiki"), "dir")
+
+    const coordinator = new KnowledgeBaseIngestCoordinator()
+    const preflight = await coordinator.prepareTurn({ projectPath: root, force: false })
+    const result = await coordinator.finalizeTurn({
+      projectPath: root,
+      preflightId: preflight.id,
+      assistantText: report([{
+        source: ".raw/note.md",
+        pages_created: ["wiki/sources/note.md"],
+        pages_updated: [],
+      }]),
+    })
+
+    expect(result.acceptedSources).toEqual([])
+    expect(result.warnings).toContain("Invalid wiki page path was ignored for .raw/note.md: wiki/sources/note.md")
+    await expect(readKnowledgeBaseManifest(root)).resolves.toMatchObject({
+      manifest: { sources: {} },
+    })
+    await expect(readFile(outsidePagePath, "utf8")).resolves.not.toContain("address:")
   })
 
   it("leaves manifest sources unchanged when report JSON is invalid", async () => {
