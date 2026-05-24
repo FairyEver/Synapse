@@ -6,6 +6,7 @@ import { KnowledgeBaseIngestCoordinator, type KnowledgeBaseIngestPreflight } fro
 import { scanKnowledgeBaseSources } from "./source-scan"
 import {
   wikiIngestAppendixCopy,
+  wikiInvalidManifestCopy,
   wikiNoIngestChangesCopy,
   wikiQueryParametersCopy,
   wikiRecentLogContextCopy,
@@ -80,6 +81,13 @@ async function buildIngestOutput(
 ): Promise<RegisteredPromptCommandOutput> {
   const force = args.includes("--force")
   const preflight = await ingestCoordinator.prepareTurn({ projectPath, force })
+  if (preflight.manifest.status === "invalid") {
+    return {
+      kind: "result",
+      error: true,
+      content: wikiInvalidManifestCopy(preflight.manifest.error),
+    }
+  }
 
   const changedSources = preflight.sources.filter((source) => source.state !== "unchanged")
   if (changedSources.length === 0) {

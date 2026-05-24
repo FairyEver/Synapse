@@ -4,7 +4,7 @@ import path from "node:path"
 
 import { KnowledgeBaseIngestFinalizer, type KnowledgeBaseIngestFinalizerResult } from "./ingest-finalizer"
 import { parseKnowledgeBaseIngestReport, type KnowledgeBaseIngestReportProcessedSource } from "./ingest-report"
-import { readKnowledgeBaseManifest, writeKnowledgeBaseManifest } from "./manifest"
+import { readKnowledgeBaseManifest, type KnowledgeBaseManifestReadResult, writeKnowledgeBaseManifest } from "./manifest"
 import {
   scanKnowledgeBaseSources,
   type KnowledgeBaseSkippedSource,
@@ -25,6 +25,7 @@ export interface FinalizeKnowledgeBaseIngestTurnInput {
 export interface KnowledgeBaseIngestPreflight {
   readonly id: string
   readonly projectPath: string
+  readonly manifest: KnowledgeBaseManifestReadResult
   readonly sources: readonly KnowledgeBaseSourceScanItem[]
   readonly skippedSources: readonly KnowledgeBaseSkippedSource[]
 }
@@ -69,6 +70,7 @@ export class KnowledgeBaseIngestCoordinator {
     return {
       id,
       projectPath,
+      manifest: scan.manifest,
       sources: scan.sources,
       skippedSources: scan.skippedSources,
     }

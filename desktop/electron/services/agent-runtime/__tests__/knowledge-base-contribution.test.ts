@@ -272,6 +272,9 @@ describe("knowledge base Agent contribution", () => {
     const content = expectObjectOutput(output, "prompt")
     expect(content).toContain("执行知识库导入")
     expect(content).toContain("address_map")
+    expect(content).toContain("不要编辑 `.raw/.manifest.json`")
+    expect(content).toContain("synapse_kb_ingest_report")
+    expect(content).not.toContain("为每个已处理来源更新 `.raw/.manifest.json`")
   })
 
   it("injects coordinator preflight for natural-language ingest requests", async () => {
@@ -389,6 +392,55 @@ describe("knowledge base Agent contribution", () => {
         },
         address_map: {
           "wiki/sources/note.md": "c-000008",
+        },
+      },
+    })
+  })
+
+  it("preserves /wiki ingest preflight when runtime callbacks resolve contribution through one cached instance", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{},\"address_map\":{}}\n")
+    await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
+    await mkdir(path.join(projectPath, "wiki", "sources"), { recursive: true })
+    await writeFile(path.join(projectPath, "wiki", "sources", "note.md"), "---\ntype: source\naddress: c-000009\n---\n\n# Note\n")
+    let contributionCreations = 0
+    let cachedContribution: Awaited<ReturnType<typeof createKnowledgeBaseAgentContribution>> | null = null
+    const resolveContribution = async () => {
+      if (!cachedContribution) {
+        contributionCreations += 1
+        cachedContribution = await createKnowledgeBaseAgentContribution({
+          project: knowledgeBaseProject(projectPath),
+        })
+      }
+      return cachedContribution
+    }
+
+    const commandContribution = await resolveContribution()
+    await commandContribution?.commands[0]?.buildPrompt(["ingest"], baseMessage("/wiki ingest"))
+    const afterTurnContribution = await resolveContribution()
+    await afterTurnContribution?.afterTurn?.({
+      message: baseMessage("/wiki ingest"),
+      result: { conversationId: "conv-1", resultText: ingestReport([{
+        source: ".raw/note.md",
+        pages_created: ["wiki/sources/note.md"],
+        pages_updated: [],
+      }]), events: [] },
+      conversationId: "conv-1",
+      isNewLiveSession: false,
+    })
+
+    expect(contributionCreations).toBe(1)
+    await expect(readKnowledgeBaseManifest(projectPath)).resolves.toMatchObject({
+      manifest: {
+        sources: {
+          ".raw/note.md": {
+            pages_created: ["wiki/sources/note.md"],
+            pages_updated: [],
+          },
+        },
+        address_map: {
+          "wiki/sources/note.md": "c-000009",
         },
       },
     })

@@ -67,6 +67,25 @@ describe("wiki command prompts", () => {
     expect(content).toContain("- 来源：1")
   })
 
+  it("returns a direct ingest error when the source manifest is invalid", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{ bad json")
+    await writeFile(path.join(projectPath, ".raw", "note.md"), "部门职责\n")
+
+    const output = await buildKnowledgeBaseCommandOutput({
+      projectPath,
+      args: ["ingest"],
+      readPrompt: promptReader({ "ingest.md": "执行知识库导入模板。" }),
+    })
+
+    const content = expectObjectOutput(output, "result")
+    expect(output).toMatchObject({ error: true })
+    expect(content).toContain("## Wiki 来源清单无效")
+    expect(content).toContain("JSON")
+    expect(content).not.toContain("执行知识库导入模板。")
+  })
+
   it("builds a Chinese markdown ingest prompt with preflight sources and manifest requirements", async () => {
     const projectPath = await tempDir()
     await mkdir(path.join(projectPath, ".raw"), { recursive: true })

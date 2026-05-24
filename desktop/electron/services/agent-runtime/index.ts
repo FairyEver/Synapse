@@ -21,7 +21,7 @@ import {
 import { ReplyOutboxService } from "../reply-target"
 import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runtime-service"
 import { CustomCommandRegistry } from "./command-registry"
-import { mergeAgentProjectContributions } from "./project-contributions"
+import { mergeAgentProjectContributions, type AgentProjectContribution } from "./project-contributions"
 import { SkillRegistry } from "./skill-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
 
@@ -146,6 +146,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         workspacePath: ctx.projectMeta.workspacePath,
         logger: ctx.logger,
       })
+      const resolveProjectContribution = createCachedAgentProjectContributionResolver(ctx.projectId)
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
@@ -165,17 +166,17 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         skills,
         commandRunner: runner,
         registeredPromptCommands: async () =>
-          (await resolveAgentProjectContribution(ctx.projectId)).commands,
+          (await resolveProjectContribution()).commands,
         publishedProjectCommands: async () =>
-          (await resolveAgentProjectContribution(ctx.projectId)).publishedCommands ?? [],
+          (await resolveProjectContribution()).publishedCommands ?? [],
         sdkPlugins: async () =>
-          (await resolveAgentProjectContribution(ctx.projectId)).sdkPlugins ?? [],
+          (await resolveProjectContribution()).sdkPlugins ?? [],
         prepareMessage: async (message, context) => {
-          const contribution = await resolveAgentProjectContribution(ctx.projectId)
+          const contribution = await resolveProjectContribution()
           return contribution.prepareMessage?.(message, context) ?? message
         },
         afterTurn: async (input) => {
-          const contribution = await resolveAgentProjectContribution(ctx.projectId)
+          const contribution = await resolveProjectContribution()
           await contribution.afterTurn?.(input)
         },
       })
@@ -185,6 +186,16 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
     stop(instance) {
       instance.stopIdleReclaim()
     },
+  }
+}
+
+export function createCachedAgentProjectContributionResolver(
+  projectId: string,
+): () => Promise<AgentProjectContribution> {
+  let projectContributionPromise: Promise<AgentProjectContribution> | undefined
+  return () => {
+    projectContributionPromise ??= resolveAgentProjectContribution(projectId)
+    return projectContributionPromise
   }
 }
 
