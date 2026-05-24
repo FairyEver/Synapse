@@ -41,6 +41,9 @@ export function InvitationsPage() {
   const { error, isLoading, page, pageSize, refresh, rows, setPage, total } =
     useAdminList(loader);
   const [feedback, setFeedback] = useState('');
+  const [deletingIds, setDeletingIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
 
   async function createInvitation() {
     setFeedback('');
@@ -61,12 +64,20 @@ export function InvitationsPage() {
   }
 
   async function deleteInvitation(invitation: AdminInvitationRow) {
+    if (deletingIds.has(invitation.id)) return;
     setFeedback('');
+    setDeletingIds((current) => new Set(current).add(invitation.id));
     try {
       await adminApi.deleteInvitation(invitation.id);
       await refresh();
     } catch (nextError) {
       setFeedback(nextError instanceof Error ? nextError.message : '删除失败');
+    } finally {
+      setDeletingIds((current) => {
+        const next = new Set(current);
+        next.delete(invitation.id);
+        return next;
+      });
     }
   }
 
@@ -130,6 +141,7 @@ export function InvitationsPage() {
                       </Button>
                       <Button
                         variant="outline"
+                        disabled={deletingIds.has(invitation.id)}
                         onClick={() => deleteInvitation(invitation)}
                       >
                         删除
