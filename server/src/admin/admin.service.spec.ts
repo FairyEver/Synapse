@@ -32,17 +32,21 @@ function createPrismaMock(counts: {
   readonly teamAccessRolePermissions?: number
   readonly teamMemberAccessRoles?: number
 } = {}) {
-  return {
-    $transaction: vi.fn().mockResolvedValue([
-      counts.auditLogs ?? 0,
-      counts.users ?? 0,
-      counts.teams ?? 0,
-      counts.invitations ?? 0,
-      counts.teamEntitlements ?? 0,
-      counts.teamAccessRoles ?? 0,
-      counts.teamAccessRolePermissions ?? 0,
-      counts.teamMemberAccessRoles ?? 0,
-    ]),
+  const prisma = {
+    $executeRaw: vi.fn(),
+    $transaction: vi.fn((input: unknown) => {
+      if (typeof input === "function") return input(prisma)
+      return Promise.resolve([
+        counts.auditLogs ?? 0,
+        counts.users ?? 0,
+        counts.teams ?? 0,
+        counts.invitations ?? 0,
+        counts.teamEntitlements ?? 0,
+        counts.teamAccessRoles ?? 0,
+        counts.teamAccessRolePermissions ?? 0,
+        counts.teamMemberAccessRoles ?? 0,
+      ])
+    }),
     auditLog: { count: vi.fn() },
     user: {
       count: vi.fn(),
@@ -51,6 +55,7 @@ function createPrismaMock(counts: {
       update: vi.fn().mockResolvedValue({}),
     },
     teamMembership: {
+      findMany: vi.fn().mockResolvedValue([]),
       findFirst: vi.fn().mockResolvedValue(null),
     },
     team: {
@@ -64,6 +69,7 @@ function createPrismaMock(counts: {
     teamMemberAccessRole: { count: vi.fn() },
     invitation: { count: vi.fn(), delete: vi.fn(), deleteMany: vi.fn() },
   }
+  return prisma
 }
 
 describe("AdminService", () => {
@@ -176,9 +182,8 @@ describe("AdminService", () => {
 
   it("rejects disabling the only active owner of a team", async () => {
     const prisma = createPrismaMock()
-    prisma.teamMembership.findFirst.mockResolvedValue({
-      team: { id: "team-1", name: "研发组" },
-    })
+    prisma.teamMembership.findMany.mockResolvedValue([{ teamId: "team-1" }])
+    prisma.teamMembership.findFirst.mockResolvedValue(null)
     const auditLog = { record: vi.fn() }
     const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
 
@@ -188,6 +193,32 @@ describe("AdminService", () => {
 
     expect(prisma.user.update).not.toHaveBeenCalled()
     expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
+  it("locks owner teams before disabling a user", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findMany.mockResolvedValue([{ teamId: "team-1" }])
+    prisma.teamMembership.findFirst.mockResolvedValue({ id: "membership-2" })
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never)
+
+    await service.updateUserStatus("user-1", { status: "disabled" })
+
+    expect(prisma.teamMembership.findMany).toHaveBeenCalledWith({
+      where: { userId: "user-1", role: "owner" },
+      select: { teamId: true },
+      orderBy: { teamId: "asc" },
+    })
+    expect(prisma.$executeRaw).toHaveBeenCalled()
+    expect(prisma.teamMembership.findFirst).toHaveBeenCalledWith({
+      where: {
+        teamId: "team-1",
+        userId: { not: "user-1" },
+        role: "owner",
+        user: { status: "active" },
+      },
+      select: { id: true },
+    })
+    expect(prisma.$executeRaw.mock.invocationCallOrder[0]).toBeLessThan(prisma.user.update.mock.invocationCallOrder[0])
   })
 
   it("loads teams without exposing internal membership scalar fields", async () => {

@@ -6,6 +6,8 @@ import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQ
 import { PermissionsService } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
 
+type AdminPrismaClient = PrismaService | Prisma.TransactionClient
+
 const adminUserSelect = {
   id: true,
   email: true,
@@ -180,15 +182,20 @@ export class AdminService {
       select: { status: true },
     })
     if (!existing) throw new NotFoundException("用户不存在。")
-    if (input.status === "disabled" && existing.status !== "disabled") {
-      await this.assertCanDisableUser(id)
-    }
 
-    const user = await this.prisma.user.update({
+    const updateUser = (client: AdminPrismaClient) => client.user.update({
       where: { id },
       data: { status: input.status },
       select: adminUserSelect,
-    }).catch((error: unknown) => {
+    })
+
+    const user = await (input.status === "disabled" && existing.status !== "disabled"
+      ? this.prisma.$transaction(async (tx) => {
+        await this.assertCanDisableUser(id, tx)
+        return updateUser(tx)
+      })
+      : updateUser(this.prisma)
+    ).catch((error: unknown) => {
       if (isRecordNotFoundError(error)) throw new NotFoundException("用户不存在。")
       throw error
     })
@@ -203,24 +210,28 @@ export class AdminService {
     return user
   }
 
-  private async assertCanDisableUser(userId: string): Promise<void> {
-    const blockingOwnership = await this.prisma.teamMembership.findFirst({
+  private async assertCanDisableUser(userId: string, client: AdminPrismaClient): Promise<void> {
+    const ownerships = await client.teamMembership.findMany({
       where: {
         userId,
         role: "owner",
-        team: {
-          memberships: {
-            none: {
-              userId: { not: userId },
-              role: "owner",
-              user: { status: "active" },
-            },
-          },
-        },
       },
-      select: { team: { select: { id: true } } },
+      select: { teamId: true },
+      orderBy: { teamId: "asc" },
     })
-    if (blockingOwnership) throw new BadRequestException("不能停用团队唯一所有者。")
+    for (const ownership of ownerships) {
+      await client.$executeRaw`SELECT id FROM "Team" WHERE id = ${ownership.teamId} FOR UPDATE`
+      const otherActiveOwner = await client.teamMembership.findFirst({
+        where: {
+          teamId: ownership.teamId,
+          userId: { not: userId },
+          role: "owner",
+          user: { status: "active" },
+        },
+        select: { id: true },
+      })
+      if (!otherActiveOwner) throw new BadRequestException("不能停用团队唯一所有者。")
+    }
   }
 
   async listTeams(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {
