@@ -21,6 +21,10 @@ const teamEntitlementsSchema = z.object({
   permissionKeys: z.array(z.string().trim().min(1).refine(isActivePermissionKey)),
 }).strict()
 
+const memberAccessRoleSchema = z.object({
+  roleId: z.string().trim().min(1),
+}).strict()
+
 const userSortFields = ["createdAt", "updatedAt", "email", "status"] as const
 const teamSortFields = ["createdAt", "updatedAt", "name"] as const
 const invitationSortFields = ["createdAt", "expiresAt", "usedAt", "type"] as const
@@ -130,6 +134,36 @@ export class AdminController {
     const result = teamEntitlementsSchema.safeParse(body)
     if (!result.success) throw new BadRequestException("角色权限无效。")
     return this.admin.replaceRolePermissions(teamId, roleId, result.data.permissionKeys, request.admin!, request.ip)
+  }
+
+  @Get("/teams/:teamId/members/:membershipId/access-roles")
+  listMemberAccessRoles(
+    @Param("teamId") teamId: string,
+    @Param("membershipId") membershipId: string,
+  ) {
+    return this.admin.listMemberAccessRoles(teamId, membershipId)
+  }
+
+  @Post("/teams/:teamId/members/:membershipId/access-roles")
+  async assignMemberAccessRole(
+    @Param("teamId") teamId: string,
+    @Param("membershipId") membershipId: string,
+    @Body() body: unknown,
+    @Req() request: AdminRequest,
+  ) {
+    const result = memberAccessRoleSchema.safeParse(body)
+    if (!result.success) throw new BadRequestException("成员访问角色无效。")
+    return this.admin.assignMemberAccessRole(teamId, membershipId, result.data.roleId, request.admin!, request.ip)
+  }
+
+  @Delete("/teams/:teamId/members/:membershipId/access-roles/:roleId")
+  removeMemberAccessRole(
+    @Param("teamId") teamId: string,
+    @Param("membershipId") membershipId: string,
+    @Param("roleId") roleId: string,
+    @Req() request: AdminRequest,
+  ) {
+    return this.admin.removeMemberAccessRole(teamId, membershipId, roleId, request.admin!, request.ip)
   }
 
   @Get("/audit-logs/export")

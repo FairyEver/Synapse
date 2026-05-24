@@ -300,6 +300,59 @@ export class AdminService {
     return { permissionKeys: next }
   }
 
+  async listMemberAccessRoles(teamId: string, membershipId: string) {
+    await this.assertTeamExists(teamId)
+    return { roles: await this.permissions.listMemberAccessRoles(teamId, membershipId) }
+  }
+
+  async assignMemberAccessRole(
+    teamId: string,
+    membershipId: string,
+    roleId: string,
+    admin: { readonly id: string; readonly email: string },
+    ipAddress = "system",
+  ) {
+    await this.assertTeamExists(teamId)
+    const roles = await this.permissions.assignAccessRole({
+      teamId,
+      teamMembershipId: membershipId,
+      roleId,
+    })
+    await this.auditLog?.record({
+      adminEmail: admin.email,
+      action: "admin.team_member_access_role.assign",
+      targetType: "team_membership",
+      targetId: membershipId,
+      detail: { teamId, roleId },
+      ipAddress,
+    })
+    return { roles }
+  }
+
+  async removeMemberAccessRole(
+    teamId: string,
+    membershipId: string,
+    roleId: string,
+    admin: { readonly id: string; readonly email: string },
+    ipAddress = "system",
+  ) {
+    await this.assertTeamExists(teamId)
+    const roles = await this.permissions.removeAccessRole({
+      teamId,
+      teamMembershipId: membershipId,
+      roleId,
+    })
+    await this.auditLog?.record({
+      adminEmail: admin.email,
+      action: "admin.team_member_access_role.remove",
+      targetType: "team_membership",
+      targetId: membershipId,
+      detail: { teamId, roleId },
+      ipAddress,
+    })
+    return { roles }
+  }
+
   private async assertTeamExists(teamId: string): Promise<void> {
     const team = await this.prisma.team.findUnique({
       where: { id: teamId },

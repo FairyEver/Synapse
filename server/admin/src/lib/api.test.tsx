@@ -24,6 +24,9 @@ describe("adminApi", () => {
     await adminApi.updateUserStatus("user-1", "disabled")
     await adminApi.listTeamAccessRoles("team-1")
     await adminApi.replaceTeamRolePermissions("team-1", "role-1", ["database.use"])
+    await adminApi.listMemberAccessRoles("team-1", "membership-1")
+    await adminApi.assignMemberAccessRole("team-1", "membership-1", "role-1")
+    await adminApi.removeMemberAccessRole("team-1", "membership-1", "role-1")
 
     expect(fetchMock).toHaveBeenNthCalledWith(
       1,
@@ -82,6 +85,25 @@ describe("adminApi", () => {
         credentials: "include",
         body: JSON.stringify({ permissionKeys: ["database.use"] }),
       }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      11,
+      "/api/admin/teams/team-1/members/membership-1/access-roles",
+      expect.objectContaining({ credentials: "include" }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      12,
+      "/api/admin/teams/team-1/members/membership-1/access-roles",
+      expect.objectContaining({
+        method: "POST",
+        credentials: "include",
+        body: JSON.stringify({ roleId: "role-1" }),
+      }),
+    )
+    expect(fetchMock).toHaveBeenNthCalledWith(
+      13,
+      "/api/admin/teams/team-1/members/membership-1/access-roles/role-1",
+      expect.objectContaining({ method: "DELETE", credentials: "include" }),
     )
   })
 

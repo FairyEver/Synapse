@@ -127,6 +127,79 @@ export class PermissionsService {
     })
   }
 
+  async listMemberAccessRoles(
+    teamId: string,
+    teamMembershipId: string,
+    client: PrismaClientLike = this.prisma,
+  ) {
+    await this.assertTeamMembership(teamId, teamMembershipId, client)
+    const rows = await client.teamMemberAccessRole.findMany({
+      where: { teamId, teamMembershipId },
+      select: {
+        assignedAt: true,
+        role: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            kind: true,
+            locked: true,
+            sortOrder: true,
+          },
+        },
+      },
+      orderBy: { assignedAt: "asc" },
+    })
+    return rows.map(({ assignedAt, role }) => ({ ...role, assignedAt }))
+  }
+
+  async assignAccessRole(input: {
+    readonly teamId: string
+    readonly teamMembershipId: string
+    readonly roleId: string
+    readonly assignedByUserId?: string
+  }) {
+    await this.prisma.$transaction(async (tx) => {
+      await this.assertTeamMembership(input.teamId, input.teamMembershipId, tx)
+      await this.assertTeamAccessRole(input.teamId, input.roleId, tx)
+      const data: {
+        teamId: string
+        teamMembershipId: string
+        roleId: string
+        assignedByUserId?: string
+      } = {
+        teamId: input.teamId,
+        teamMembershipId: input.teamMembershipId,
+        roleId: input.roleId,
+      }
+      if (input.assignedByUserId) data.assignedByUserId = input.assignedByUserId
+      await tx.teamMemberAccessRole.createMany({
+        data: [data],
+        skipDuplicates: true,
+      })
+    })
+    return this.listMemberAccessRoles(input.teamId, input.teamMembershipId)
+  }
+
+  async removeAccessRole(input: {
+    readonly teamId: string
+    readonly teamMembershipId: string
+    readonly roleId: string
+  }) {
+    await this.prisma.$transaction(async (tx) => {
+      await this.assertTeamMembership(input.teamId, input.teamMembershipId, tx)
+      const result = await tx.teamMemberAccessRole.deleteMany({
+        where: {
+          teamId: input.teamId,
+          teamMembershipId: input.teamMembershipId,
+          roleId: input.roleId,
+        },
+      })
+      if (result.count === 0) throw new BadRequestException("成员访问角色不存在。")
+    })
+    return this.listMemberAccessRoles(input.teamId, input.teamMembershipId)
+  }
+
   async replaceRolePermissions(input: {
     readonly teamId: string
     readonly roleId: string
@@ -235,6 +308,30 @@ export class PermissionsService {
     if (missing.length > 0) {
       throw new BadRequestException(`权限未对团队开通：${missing.join("，")}`)
     }
+  }
+
+  private async assertTeamMembership(
+    teamId: string,
+    teamMembershipId: string,
+    client: PrismaClientLike,
+  ): Promise<void> {
+    const membership = await client.teamMembership.findFirst({
+      where: { id: teamMembershipId, teamId },
+      select: { id: true },
+    })
+    if (!membership) throw new BadRequestException("团队成员不存在。")
+  }
+
+  private async assertTeamAccessRole(
+    teamId: string,
+    roleId: string,
+    client: PrismaClientLike,
+  ): Promise<void> {
+    const role = await client.teamAccessRole.findFirst({
+      where: { id: roleId, teamId },
+      select: { id: true },
+    })
+    if (!role) throw new BadRequestException("团队角色不存在。")
   }
 
   private async deleteRolePermissionsOutsideTeamEntitlements(

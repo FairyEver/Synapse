@@ -9,6 +9,9 @@ function createPermissionsMock() {
     listTeamEntitlements: vi.fn().mockResolvedValue(["database.use"]),
     replaceTeamEntitlements: vi.fn().mockResolvedValue(["agent.chat.use", "database.use"]),
     replaceRolePermissions: vi.fn().mockResolvedValue(["database.use"]),
+    listMemberAccessRoles: vi.fn().mockResolvedValue([{ id: "role-1", name: "普通成员" }]),
+    assignAccessRole: vi.fn().mockResolvedValue([{ id: "role-1", name: "普通成员" }]),
+    removeAccessRole: vi.fn().mockResolvedValue([]),
   }
 }
 
@@ -477,6 +480,84 @@ describe("AdminService", () => {
       targetId: "role-1",
       detail: { teamId: "team-1", permissionKeys: ["database.use"] },
       ipAddress: "203.0.113.80",
+    })
+  })
+
+  it("lists member access roles through the permissions service", async () => {
+    const permissions = createPermissionsMock()
+    const prisma = createPrismaMock()
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never)
+
+    await expect(service.listMemberAccessRoles("team-1", "membership-1"))
+      .resolves
+      .toEqual({ roles: [{ id: "role-1", name: "普通成员" }] })
+
+    expect(prisma.team.findUnique).toHaveBeenCalledWith({
+      where: { id: "team-1" },
+      select: { id: true },
+    })
+    expect(permissions.listMemberAccessRoles).toHaveBeenCalledWith("team-1", "membership-1")
+  })
+
+  it("assigns member access roles and records an audit log", async () => {
+    const permissions = createPermissionsMock()
+    const prisma = createPrismaMock()
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
+
+    await expect(service.assignMemberAccessRole(
+      "team-1",
+      "membership-1",
+      "role-1",
+      { id: "admin-1", email: "admin@example.com" },
+      "203.0.113.90",
+    ))
+      .resolves
+      .toEqual({ roles: [{ id: "role-1", name: "普通成员" }] })
+
+    expect(permissions.assignAccessRole).toHaveBeenCalledWith({
+      teamId: "team-1",
+      teamMembershipId: "membership-1",
+      roleId: "role-1",
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.team_member_access_role.assign",
+      targetType: "team_membership",
+      targetId: "membership-1",
+      detail: { teamId: "team-1", roleId: "role-1" },
+      ipAddress: "203.0.113.90",
+    })
+  })
+
+  it("removes member access roles and records an audit log", async () => {
+    const permissions = createPermissionsMock()
+    const prisma = createPrismaMock()
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
+
+    await expect(service.removeMemberAccessRole(
+      "team-1",
+      "membership-1",
+      "role-1",
+      { id: "admin-1", email: "admin@example.com" },
+      "203.0.113.91",
+    ))
+      .resolves
+      .toEqual({ roles: [] })
+
+    expect(permissions.removeAccessRole).toHaveBeenCalledWith({
+      teamId: "team-1",
+      teamMembershipId: "membership-1",
+      roleId: "role-1",
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.team_member_access_role.remove",
+      targetType: "team_membership",
+      targetId: "membership-1",
+      detail: { teamId: "team-1", roleId: "role-1" },
+      ipAddress: "203.0.113.91",
     })
   })
 })

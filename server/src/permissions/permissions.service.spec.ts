@@ -58,8 +58,10 @@ function createPermissionPrismaMock() {
     teamMemberAccessRole: {
       createMany: vi.fn(),
       findMany: vi.fn(),
+      deleteMany: vi.fn(),
     },
     teamMembership: {
+      findFirst: vi.fn(),
       findUnique: vi.fn(),
     },
     $transaction: vi.fn((callback) => callback(createPermissionPrismaMock())),
@@ -261,6 +263,138 @@ describe("PermissionsService", () => {
         assignedByUserId: "user-1",
       }],
       skipDuplicates: true,
+    })
+  })
+
+  it("lists member access roles in assignment order", async () => {
+    const prisma = createPermissionPrismaMock()
+    prisma.teamMembership.findFirst.mockResolvedValue({ id: "membership-1" })
+    prisma.teamMemberAccessRole.findMany.mockResolvedValue([
+      {
+        assignedAt: new Date("2026-05-24T00:00:00.000Z"),
+        role: {
+          id: "role-1",
+          name: "普通成员",
+          description: null,
+          kind: "system",
+          locked: true,
+          sortOrder: 1,
+        },
+      },
+    ])
+    const service = new PermissionsService(prisma as never)
+
+    await expect(service.listMemberAccessRoles("team-1", "membership-1"))
+      .resolves
+      .toEqual([
+        {
+          id: "role-1",
+          name: "普通成员",
+          description: null,
+          kind: "system",
+          locked: true,
+          sortOrder: 1,
+          assignedAt: new Date("2026-05-24T00:00:00.000Z"),
+        },
+      ])
+    expect(prisma.teamMembership.findFirst).toHaveBeenCalledWith({
+      where: { id: "membership-1", teamId: "team-1" },
+      select: { id: true },
+    })
+    expect(prisma.teamMemberAccessRole.findMany).toHaveBeenCalledWith({
+      where: { teamId: "team-1", teamMembershipId: "membership-1" },
+      select: {
+        assignedAt: true,
+        role: {
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            kind: true,
+            locked: true,
+            sortOrder: true,
+          },
+        },
+      },
+      orderBy: { assignedAt: "asc" },
+    })
+  })
+
+  it("assigns a member access role only within the same team", async () => {
+    const prisma = createPermissionPrismaMock()
+    const tx = createPermissionPrismaMock()
+    prisma.$transaction.mockImplementationOnce((callback) => callback(tx))
+    tx.teamMembership.findFirst.mockResolvedValue({ id: "membership-1" })
+    tx.teamAccessRole.findFirst.mockResolvedValue({ id: "role-1" })
+    prisma.teamMembership.findFirst.mockResolvedValue({ id: "membership-1" })
+    prisma.teamMemberAccessRole.findMany.mockResolvedValue([])
+    const service = new PermissionsService(prisma as never)
+
+    await service.assignAccessRole({
+      teamId: "team-1",
+      teamMembershipId: "membership-1",
+      roleId: "role-1",
+      assignedByUserId: "user-1",
+    })
+
+    expect(tx.teamMembership.findFirst).toHaveBeenCalledWith({
+      where: { id: "membership-1", teamId: "team-1" },
+      select: { id: true },
+    })
+    expect(tx.teamAccessRole.findFirst).toHaveBeenCalledWith({
+      where: { id: "role-1", teamId: "team-1" },
+      select: { id: true },
+    })
+    expect(tx.teamMemberAccessRole.createMany).toHaveBeenCalledWith({
+      data: [{
+        teamId: "team-1",
+        teamMembershipId: "membership-1",
+        roleId: "role-1",
+        assignedByUserId: "user-1",
+      }],
+      skipDuplicates: true,
+    })
+  })
+
+  it("rejects assigning a role from another team", async () => {
+    const prisma = createPermissionPrismaMock()
+    const tx = createPermissionPrismaMock()
+    prisma.$transaction.mockImplementationOnce((callback) => callback(tx))
+    tx.teamMembership.findFirst.mockResolvedValue({ id: "membership-1" })
+    tx.teamAccessRole.findFirst.mockResolvedValue(null)
+    const service = new PermissionsService(prisma as never)
+
+    await expect(service.assignAccessRole({
+      teamId: "team-1",
+      teamMembershipId: "membership-1",
+      roleId: "other-team-role",
+    })).rejects.toThrow(BadRequestException)
+
+    expect(tx.teamMemberAccessRole.createMany).not.toHaveBeenCalled()
+  })
+
+  it("removes a member access role within the same team", async () => {
+    const prisma = createPermissionPrismaMock()
+    const tx = createPermissionPrismaMock()
+    prisma.$transaction.mockImplementationOnce((callback) => callback(tx))
+    tx.teamMembership.findFirst.mockResolvedValue({ id: "membership-1" })
+    tx.teamMemberAccessRole.deleteMany.mockResolvedValue({ count: 1 })
+    prisma.teamMembership.findFirst.mockResolvedValue({ id: "membership-1" })
+    prisma.teamMemberAccessRole.findMany.mockResolvedValue([])
+    const service = new PermissionsService(prisma as never)
+
+    await service.removeAccessRole({
+      teamId: "team-1",
+      teamMembershipId: "membership-1",
+      roleId: "role-1",
+    })
+
+    expect(tx.teamMembership.findFirst).toHaveBeenCalledWith({
+      where: { id: "membership-1", teamId: "team-1" },
+      select: { id: true },
+    })
+    expect(tx.teamMemberAccessRole.deleteMany).toHaveBeenCalledWith({
+      where: { teamId: "team-1", teamMembershipId: "membership-1", roleId: "role-1" },
     })
   })
 

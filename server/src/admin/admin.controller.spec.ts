@@ -281,6 +281,73 @@ describe("AdminController", () => {
     expect(replaceRolePermissions).not.toHaveBeenCalled()
   })
 
+  it("lists member access roles through the service", async () => {
+    const listMemberAccessRoles = vi.fn().mockResolvedValue({ roles: [{ id: "role-1" }] })
+    const controller = createController({ listMemberAccessRoles } as never)
+
+    await expect(controller.listMemberAccessRoles("team-1", "membership-1"))
+      .resolves
+      .toEqual({ roles: [{ id: "role-1" }] })
+    expect(listMemberAccessRoles).toHaveBeenCalledWith("team-1", "membership-1")
+  })
+
+  it("assigns member access roles through the service", async () => {
+    const assignMemberAccessRole = vi.fn().mockResolvedValue({ roles: [{ id: "role-1" }] })
+    const controller = createController({ assignMemberAccessRole } as never)
+
+    await expect(controller.assignMemberAccessRole(
+      "team-1",
+      "membership-1",
+      { roleId: "role-1" },
+      { admin: { id: "admin-1", email: "admin@example.com" }, ip: "203.0.113.90" } as never,
+    ))
+      .resolves
+      .toEqual({ roles: [{ id: "role-1" }] })
+    expect(assignMemberAccessRole).toHaveBeenCalledWith(
+      "team-1",
+      "membership-1",
+      "role-1",
+      { id: "admin-1", email: "admin@example.com" },
+      "203.0.113.90",
+    )
+  })
+
+  it("removes member access roles through the service", async () => {
+    const removeMemberAccessRole = vi.fn().mockResolvedValue({ roles: [] })
+    const controller = createController({ removeMemberAccessRole } as never)
+
+    await expect(controller.removeMemberAccessRole(
+      "team-1",
+      "membership-1",
+      "role-1",
+      { admin: { id: "admin-1", email: "admin@example.com" }, ip: "203.0.113.91" } as never,
+    ))
+      .resolves
+      .toEqual({ roles: [] })
+    expect(removeMemberAccessRole).toHaveBeenCalledWith(
+      "team-1",
+      "membership-1",
+      "role-1",
+      { id: "admin-1", email: "admin@example.com" },
+      "203.0.113.91",
+    )
+  })
+
+  it("rejects invalid member access role bodies", async () => {
+    const assignMemberAccessRole = vi.fn()
+    const controller = createController({ assignMemberAccessRole } as never)
+
+    await expect(controller.assignMemberAccessRole(
+      "team-1",
+      "membership-1",
+      { roleId: "   " },
+      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
+    ))
+      .rejects
+      .toThrow("成员访问角色无效。")
+    expect(assignMemberAccessRole).not.toHaveBeenCalled()
+  })
+
   it("rejects invalid team entitlement bodies", async () => {
     const replaceTeamEntitlements = vi.fn()
     const controller = createController({ replaceTeamEntitlements } as never)

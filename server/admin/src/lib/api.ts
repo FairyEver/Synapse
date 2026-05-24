@@ -88,6 +88,20 @@ export interface TeamAccessRoleRow {
   readonly updatedAt: string
 }
 
+export interface MemberAccessRoleRow {
+  readonly id: string
+  readonly name: string
+  readonly description: string | null
+  readonly kind: "system" | "custom"
+  readonly locked: boolean
+  readonly sortOrder: number
+  readonly assignedAt: string
+}
+
+export interface MemberAccessRolesResponse {
+  readonly roles: MemberAccessRoleRow[]
+}
+
 export interface AdminInvitationRow {
   readonly id: string
   readonly type: "user_signup" | "team_join"
@@ -286,6 +300,23 @@ export const adminApi = {
         method: "PUT",
         body: JSON.stringify({ permissionKeys }),
       },
+    ),
+  listMemberAccessRoles: (teamId: string, membershipId: string) =>
+    request<MemberAccessRolesResponse>(
+      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}/access-roles`,
+    ),
+  assignMemberAccessRole: (teamId: string, membershipId: string, roleId: string) =>
+    request<MemberAccessRolesResponse>(
+      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}/access-roles`,
+      {
+        method: "POST",
+        body: JSON.stringify({ roleId }),
+      },
+    ),
+  removeMemberAccessRole: (teamId: string, membershipId: string, roleId: string) =>
+    request<MemberAccessRolesResponse>(
+      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}/access-roles/${encodeURIComponent(roleId)}`,
+      { method: "DELETE" },
     ),
   listBackups: () => request<BackupFile[]>(`${adminApiBasePath}/backup/list`),
   triggerBackup: () =>
