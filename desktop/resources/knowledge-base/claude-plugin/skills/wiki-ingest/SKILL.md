@@ -12,7 +12,7 @@ Before ingest:
 1. Read `.raw/.manifest.json` if it exists.
 2. Read `wiki/hot.md` and `wiki/index.md`.
 3. Prefer processing changed or untracked sources from `.raw/`.
-4. Do not modify source files under `.raw/` except `.raw/.manifest.json`.
+4. Do not modify any files under `.raw/`, including `.raw/.manifest.json`.
 
 During ingest:
 
@@ -28,11 +28,31 @@ After ingest:
 - Update `wiki/index.md`.
 - Update `wiki/hot.md`.
 - Append a new entry near the top of `wiki/log.md`.
-- Update `.raw/.manifest.json` using the claude-obsidian compatible shape: `version`, `created`, `description`, `sources`, and `address_map`.
-- For each processed source, record `hash`, `ingested_at`, `pages_created`, and `pages_updated` when those facts are available.
+- Do not edit `.raw/.manifest.json`.
+- Emit one `synapse_kb_ingest_report` fenced JSON block listing processed sources and the wiki pages created or updated.
+- Synapse writes `.raw/.manifest.json` `sources` and `address_map` from that report.
 - Do not edit `.vault-meta/address-counter.txt`.
 - Do not invent new `c-NNNNNN` addresses.
 - Preserve existing `address:` frontmatter when rewriting a page.
 - Synapse runs a DragonScale address finalizer after ingest to assign missing addresses and merge `address_map`.
+
+```json synapse_kb_ingest_report
+{
+  "schema": "synapse.kb.ingest.report.v1",
+  "processed_sources": [
+    {
+      "source": ".raw/example.md",
+      "pages_created": ["wiki/sources/example.md"],
+      "pages_updated": ["wiki/index.md", "wiki/hot.md"]
+    }
+  ],
+  "skipped_sources": [
+    {
+      "source": ".raw/ignored.md",
+      "reason": "brief reason"
+    }
+  ]
+}
+```
 
 If Synapse prepends an internal `/wiki ingest` prompt with prechecked source hashes, follow that prompt exactly.

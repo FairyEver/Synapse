@@ -2,19 +2,21 @@ import { readFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { SynapseProjectConfig } from "../../../src/types/config"
+import type { StructuredLogger } from "../../runtime/logging"
 import type { RegisteredPromptCommandOutput } from "../agent-runtime/command-router"
 import type { AgentProjectContribution } from "../agent-runtime/project-contributions"
 import type { AgentMessage } from "../agent-runtime/types"
 import { KnowledgeBaseIngestCoordinator, type KnowledgeBaseIngestPreflight } from "./ingest-coordinator"
 import { KnowledgeBaseIngestFinalizer } from "./ingest-finalizer"
 import { isKnowledgeBaseForceIngestIntent, isKnowledgeBaseIngestIntent } from "./ingest-intent"
-import { wikiIngestAppendixCopy } from "./wiki-command-copy"
+import { wikiIngestAppendixCopy, wikiInvalidManifestCopy } from "./wiki-command-copy"
 import { buildKnowledgeBaseCommandOutput } from "./wiki-command-prompts"
 
 type CreateKnowledgeBaseAgentContributionInput = {
   readonly project: SynapseProjectConfig
   readonly ingestFinalizer?: Pick<KnowledgeBaseIngestFinalizer, "finalize">
   readonly ingestCoordinator?: Pick<KnowledgeBaseIngestCoordinator, "prepareTurn" | "finalizeTurn">
+  readonly logger?: Pick<StructuredLogger, "warn">
 }
 
 const KNOWLEDGE_BASE_PUBLISHED_COMMANDS = [
@@ -65,16 +67,23 @@ export async function createKnowledgeBaseAgentContribution(
       if (isKnowledgeBaseIngestIntent(message.content) && !hasIngestPreflightAppendix(message.content)) {
         const force = isKnowledgeBaseForceIngestIntent(message.content)
         const preflight = await ingestCoordinator.prepareTurn({ projectPath: input.project.path, force })
-        rememberPreflight(message, preflight)
-        next = {
-          ...message,
-          content: [
-            await readPrompt("ingest.md"),
-            "",
-            message.content,
-            "",
-            wikiIngestPreflightAppendix(input.project.path, preflight, force),
-          ].join("\n"),
+        if (preflight.manifest.status === "invalid") {
+          next = {
+            ...message,
+            content: wikiInvalidManifestCopy(preflight.manifest.error),
+          }
+        } else {
+          rememberPreflight(message, preflight)
+          next = {
+            ...message,
+            content: [
+              await readPrompt("ingest.md"),
+              "",
+              message.content,
+              "",
+              wikiIngestPreflightAppendix(input.project.path, preflight, force),
+            ].join("\n"),
+          }
         }
       }
 
@@ -89,11 +98,18 @@ export async function createKnowledgeBaseAgentContribution(
       const preflightId = takePreflightId(preflightIdsByMessage, message)
       if (result.error) return
       if (!preflightId) return
-      await ingestCoordinator.finalizeTurn({
+      const finalizeResult = await ingestCoordinator.finalizeTurn({
         projectPath: input.project.path,
         preflightId,
         assistantText: result.resultText,
       })
+      if (finalizeResult.warnings.length > 0) {
+        input.logger?.warn("Knowledge base ingest finalization produced warnings.", {
+          boundary: "knowledge-base.ingest.finalize",
+          projectId: input.project.id,
+          warnings: finalizeResult.warnings,
+        })
+      }
     },
   }
 }

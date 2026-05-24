@@ -6,6 +6,7 @@ import type {
   DataRepository,
   OutboxEntryV1,
 } from "../../runtime/data-repo"
+import type { StructuredLogger } from "../../runtime/logging"
 import type { ProjectScopedService } from "../../runtime/project-container"
 import {
   createControlledProcessRunner,
@@ -146,7 +147,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         workspacePath: ctx.projectMeta.workspacePath,
         logger: ctx.logger,
       })
-      const resolveProjectContribution = createCachedAgentProjectContributionResolver(ctx.projectId)
+      const resolveProjectContribution = createCachedAgentProjectContributionResolver(ctx.projectId, ctx.logger)
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
@@ -191,19 +192,20 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
 
 export function createCachedAgentProjectContributionResolver(
   projectId: string,
+  logger?: Pick<StructuredLogger, "warn">,
 ): () => Promise<AgentProjectContribution> {
   let projectContributionPromise: Promise<AgentProjectContribution> | undefined
   return () => {
-    projectContributionPromise ??= resolveAgentProjectContribution(projectId)
+    projectContributionPromise ??= resolveAgentProjectContribution(projectId, logger)
     return projectContributionPromise
   }
 }
 
-async function resolveAgentProjectContribution(projectId: string) {
+async function resolveAgentProjectContribution(projectId: string, logger?: Pick<StructuredLogger, "warn">) {
   const appConfig = await configStore.load()
   const project = appConfig.global.projects.find((item) => item.id === projectId)
   const contributions = [
-    project ? await createKnowledgeBaseAgentContribution({ project }) : null,
+    project ? await createKnowledgeBaseAgentContribution({ project, logger }) : null,
   ].filter((item): item is NonNullable<typeof item> => item !== null)
   return mergeAgentProjectContributions(contributions)
 }

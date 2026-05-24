@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -56,6 +56,19 @@ describe("knowledge base Agent contribution", () => {
       path.join("resources", "knowledge-base", "claude-plugin"),
     )
     expect(contribution?.sdkPlugins?.[0]?.path.startsWith(projectPath)).toBe(false)
+  })
+
+  it("keeps the Synapse SDK ingest skill from telling agents to edit the manifest", async () => {
+    const skillText = await readFile(
+      path.resolve(process.cwd(), "resources", "knowledge-base", "claude-plugin", "skills", "wiki-ingest", "SKILL.md"),
+      "utf8",
+    )
+
+    expect(skillText).toContain("Do not edit `.raw/.manifest.json`")
+    expect(skillText).toContain("synapse_kb_ingest_report")
+    expect(skillText).toContain("Synapse writes `.raw/.manifest.json`")
+    expect(skillText).not.toContain("except `.raw/.manifest.json`")
+    expect(skillText).not.toContain("Update `.raw/.manifest.json`")
   })
 
   it("publishes knowledge base composer actions for knowledge base projects", async () => {
@@ -301,6 +314,28 @@ describe("knowledge base Agent contribution", () => {
     expect(contribution?.sdkPlugins?.[0]?.path.startsWith(projectPath)).toBe(false)
   })
 
+  it("blocks natural-language ingest when the source manifest is invalid", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{ bad json")
+    await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+
+    const prepared = await Promise.resolve(contribution?.prepareMessage?.({
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local-renderer",
+      content: "汲取知识",
+    }, { isNewLiveSession: false }))
+
+    expect(prepared?.content).toContain("## Wiki 来源清单无效")
+    expect(prepared?.content).toContain("JSON")
+    expect(prepared?.content).not.toContain("执行知识库导入")
+    expect(prepared?.content).not.toContain("synapse_kb_ingest_report")
+  })
+
   it("returns a direct /wiki status result", async () => {
     const projectPath = await tempDir()
     await mkdir(path.join(projectPath, ".raw"), { recursive: true })
@@ -457,8 +492,10 @@ describe("knowledge base Agent contribution", () => {
       address_map: {},
     }, null, 2)}\n`)
     await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
+    const warn = vi.fn()
     const contribution = await createKnowledgeBaseAgentContribution({
       project: knowledgeBaseProject(projectPath),
+      logger: { warn },
     })
     await contribution?.commands[0]?.buildPrompt(["ingest"], baseMessage("/wiki ingest"))
 
@@ -479,6 +516,11 @@ describe("knowledge base Agent contribution", () => {
           ".raw/existing.md": { hash: "existing-hash" },
         },
       },
+    })
+    expect(warn).toHaveBeenCalledWith("Knowledge base ingest finalization produced warnings.", {
+      boundary: "knowledge-base.ingest.finalize",
+      projectId: "project-1",
+      warnings: [expect.stringContaining("Ingest report was not accepted")],
     })
   })
 
