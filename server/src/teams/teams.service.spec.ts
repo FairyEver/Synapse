@@ -234,14 +234,22 @@ describe("TeamsService", () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "member", teamId: "team-1", userId: "user-2" })
     prisma.teamMembership.delete.mockResolvedValue({ id: "membership-2" })
+    const auditLog = { record: vi.fn() }
     const service = new TeamsService(
       prisma as never,
       { createTeamInvitation: vi.fn() } as never,
       createPermissionsMock() as never,
+      auditLog as never,
     )
 
     await expect(service.leaveTeam("user-2")).resolves.toEqual({ ok: true })
     expect(prisma.teamMembership.delete).toHaveBeenCalledWith({ where: { userId: "user-2" } })
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "team.leave",
+      targetType: "team",
+      targetId: "team-1",
+      detail: { teamId: "team-1", dissolved: false },
+    }))
   })
 
   it("prevents an owner from leaving while members remain", async () => {
@@ -323,9 +331,10 @@ describe("TeamsService", () => {
 
     expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
       adminEmail: "user-1",
-      action: "team.leave",
+      action: "team.dissolve",
       targetType: "team",
       targetId: "team-1",
+      detail: { teamId: "team-1", dissolved: true },
       ipAddress: "203.0.113.30",
     }))
   })

@@ -61,6 +61,7 @@ export const AUDIT_ACTION_FILTER_OPTIONS = [
   { value: "team.join", label: "team.join" },
   { value: "team.member.remove", label: "team.member.remove" },
   { value: "team.leave", label: "team.leave" },
+  { value: "team.dissolve", label: "team.dissolve" },
   { value: "backup.list", label: "backup.list" },
   { value: "backup.download", label: "backup.download" },
   { value: "backup.post", label: "backup.post" },

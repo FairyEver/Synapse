@@ -48,6 +48,7 @@ describe("AuditLogsPage", () => {
       { value: "user.logout.success", label: "user.logout.success" },
       { value: "user.dashboard_logout", label: "user.dashboard_logout" },
       { value: "team.create", label: "team.create" },
+      { value: "team.dissolve", label: "team.dissolve" },
       { value: "backup.download", label: "backup.download" },
       { value: "backup.post.failed", label: "backup.post.failed" },
       { value: "backup.delete.failed", label: "backup.delete.failed" },

@@ -151,6 +151,7 @@ export class TeamsService {
   async leaveTeam(userId: string, ipAddress = "system") {
     const membership = await this.getMembership(userId)
     if (!membership) throw new BadRequestException("账号未加入团队。")
+    let dissolved = false
 
     if (membership.role === "owner") {
       await this.prisma.$transaction(async (tx) => {
@@ -169,6 +170,7 @@ export class TeamsService {
           throw new BadRequestException("团队已解散。")
         }
       })
+      dissolved = true
     } else {
       await this.prisma.teamMembership.delete({ where: { userId } })
     }
@@ -176,9 +178,10 @@ export class TeamsService {
     const actorEmail = await this.getAuditActorEmail(userId)
     await this.auditLog?.record({
       adminEmail: actorEmail,
-      action: "team.leave",
+      action: dissolved ? "team.dissolve" : "team.leave",
       targetType: "team",
       targetId: membership.teamId,
+      detail: { teamId: membership.teamId, dissolved },
       ipAddress,
     })
     return { ok: true }
