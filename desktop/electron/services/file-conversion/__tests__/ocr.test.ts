@@ -52,6 +52,29 @@ describe("file conversion OCR", () => {
     expect(result.markdown).toContain("OCR text from receipt.png")
   })
 
+  it("converts jpeg files through the image OCR registry path", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "receipt.jpeg")
+    await writeFile(filePath, "jpeg")
+    const service = new FileConversionService({
+      extractors: [],
+      localOcrEngine: {
+        recognize: async (input) => ({
+          text: `OCR text from ${path.basename(input.filePath)} (${input.mimeType})`,
+        }),
+      },
+    })
+
+    const result = await service.convert({ filePath })
+
+    expect(result).toMatchObject({
+      format: "jpeg",
+      kind: "image",
+      text: "OCR text from receipt.jpeg (image/jpeg)",
+      metadata: { mimeType: "image/jpeg" },
+    })
+  })
+
   it("uses OCR for PDFs with empty embedded text only when OCR is enabled", async () => {
     const root = await tempDir()
     const filePath = path.join(root, "scan.pdf")
