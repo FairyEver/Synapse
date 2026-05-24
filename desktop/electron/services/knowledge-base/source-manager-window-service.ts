@@ -43,7 +43,6 @@ function buildSearchParams(payload: SynapseKnowledgeBaseOpenSourceManagerPayload
   const searchParams = new URLSearchParams()
   searchParams.set("window", "knowledge-source-manager")
   searchParams.set("projectId", payload.projectId)
-  searchParams.set("projectPath", payload.projectPath)
   searchParams.set("projectName", payload.projectName)
   return searchParams
 }
@@ -76,7 +75,6 @@ function createSourceManagerWindowKey(payload: SynapseKnowledgeBaseOpenSourceMan
 function createWindowLogMetadata(payload: SynapseKnowledgeBaseOpenSourceManagerPayload): Record<string, string> {
   return {
     projectId: payload.projectId,
-    projectPath: payload.projectPath,
   }
 }
 

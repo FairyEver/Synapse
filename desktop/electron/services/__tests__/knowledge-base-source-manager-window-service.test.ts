@@ -28,7 +28,6 @@ describe("createKnowledgeBaseSourceManagerWindowService", () => {
 
     await service.open({
       projectId: "project-1",
-      projectPath: "/tmp/kb",
       projectName: "知识库001",
     })
 
@@ -43,7 +42,6 @@ describe("createKnowledgeBaseSourceManagerWindowService", () => {
     expect(health.attach).toHaveBeenCalledWith(webContents)
     expect(loadWindow).toHaveBeenCalledWith(window, {
       projectId: "project-1",
-      projectPath: "/tmp/kb",
       projectName: "知识库001",
     })
   })
@@ -75,12 +73,10 @@ describe("createKnowledgeBaseSourceManagerWindowService", () => {
 
     await service.open({
       projectId: "project-1",
-      projectPath: "/tmp/kb",
       projectName: "知识库001",
     })
     await service.open({
       projectId: "project-1",
-      projectPath: "/tmp/kb",
       projectName: "知识库001",
     })
 

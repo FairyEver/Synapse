@@ -56,12 +56,9 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   const [deleteTarget, setDeleteTarget] = useState<{ project: SynapseProjectConfig; sessionCount: number | null } | null>(null)
   const [isKnowledgeBaseDialogOpen, setIsKnowledgeBaseDialogOpen] = useState(false)
   const [knowledgeBaseName, setKnowledgeBaseName] = useState("")
-  const [knowledgeBasePath, setKnowledgeBasePath] = useState("")
   const [knowledgeBaseError, setKnowledgeBaseError] = useState<string | null>(null)
   const [isCreatingKnowledgeBase, setIsCreatingKnowledgeBase] = useState(false)
-  const [markingKnowledgeBaseProjectId, setMarkingKnowledgeBaseProjectId] = useState<string | null>(null)
   const [knowledgeBaseActionError, setKnowledgeBaseActionError] = useState<string | null>(null)
-  const [isOpeningKnowledgeBase, setIsOpeningKnowledgeBase] = useState(false)
   const hasDirectoryPicker = Boolean(window.synapse?.repository)
 
   const resetForm = () => {
@@ -81,7 +78,6 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
 
   const resetKnowledgeBaseForm = () => {
     setKnowledgeBaseName("")
-    setKnowledgeBasePath("")
     setKnowledgeBaseError(null)
   }
 
@@ -155,63 +151,35 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
     }
   }
 
-  const handleChooseKnowledgeBasePath = async () => {
-    const bridge = window.synapse?.repository
-
-    if (!bridge) {
-      setKnowledgeBaseError("目录选择不可用。")
-      return
-    }
-
-    try {
-      logger.info("Opening native directory picker for new knowledge base.")
-      const selectedPath = await bridge.chooseDirectory()
-
-      if (!selectedPath) {
-        logger.info("Knowledge base directory picker was dismissed.")
-        return
-      }
-
-      setKnowledgeBasePath(selectedPath)
-      setKnowledgeBaseName((current) => current.trim() ? current : getProjectNameFromPath(selectedPath))
-      setKnowledgeBaseError(null)
-    } catch (error) {
-      logger.error("Failed to select knowledge base directory.", { error })
-      setKnowledgeBaseError("选择目录失败。")
-    }
-  }
-
   const handleCreateKnowledgeBase = async () => {
     const name = knowledgeBaseName.trim()
-    const projectPath = knowledgeBasePath.trim()
-    if (!name || !projectPath) {
-      setKnowledgeBaseError("项目名称和项目路径都不能为空。")
+    if (!name) {
+      setKnowledgeBaseError("知识库名称不能为空。")
       return
     }
-    if (!window.synapse?.knowledgeBase) {
+    if (!window.synapse?.knowledgeBase?.createManaged) {
       setKnowledgeBaseError("知识库服务不可用。")
       return
     }
-    if (projects.some((project) => arePathsEqualForCompare(project.path, projectPath, { platform }))) {
-      setKnowledgeBaseError("这个项目路径已经存在了。")
-      return
-    }
 
+    const projectId = crypto.randomUUID()
     setIsCreatingKnowledgeBase(true)
     setKnowledgeBaseError(null)
     try {
-      const result = await window.synapse.knowledgeBase.initialize({ projectPath, mode: "create" })
+      const result = await window.synapse.knowledgeBase.createManaged({ projectId, name })
       await onSave([
         ...projects,
         {
-          id: crypto.randomUUID(),
+          id: projectId,
           name,
-          path: projectPath,
+          path: result.projectPath,
           capabilities: {
             knowledgeBase: {
               enabled: true,
               schemaVersion: 1,
               templateVersion: result.templateVersion,
+              managed: true,
+              runtimeId: projectId,
             },
           },
         },
@@ -219,97 +187,10 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       setIsKnowledgeBaseDialogOpen(false)
       resetKnowledgeBaseForm()
     } catch (error) {
-      logger.error("Failed to create knowledge base project.", { error, path: projectPath })
+      logger.error("Failed to create managed knowledge base project.", { error, projectId })
       setKnowledgeBaseError(error instanceof Error ? error.message : "创建失败。")
     } finally {
       setIsCreatingKnowledgeBase(false)
-    }
-  }
-
-  const handleOpenExistingKnowledgeBase = async () => {
-    const repositoryBridge = window.synapse?.repository
-    const knowledgeBaseBridge = window.synapse?.knowledgeBase
-
-    if (!repositoryBridge) {
-      setKnowledgeBaseActionError("目录选择不可用。")
-      return
-    }
-    if (!knowledgeBaseBridge) {
-      setKnowledgeBaseActionError("知识库服务不可用。")
-      return
-    }
-
-    setIsOpeningKnowledgeBase(true)
-    setKnowledgeBaseActionError(null)
-    try {
-      const selectedPath = await repositoryBridge.chooseDirectory()
-      if (!selectedPath) return
-      if (projects.some((project) => arePathsEqualForCompare(project.path, selectedPath, { platform }))) {
-        setKnowledgeBaseActionError("这个项目路径已经存在了。")
-        return
-      }
-      const inspection = await knowledgeBaseBridge.inspect(selectedPath)
-      if (!inspection.isKnowledgeBase) {
-        setKnowledgeBaseActionError("未识别为知识库目录。")
-        return
-      }
-      const result = await knowledgeBaseBridge.initialize({
-        projectPath: selectedPath,
-        mode: "repair",
-      })
-      await onSave([
-        ...projects,
-        {
-          id: crypto.randomUUID(),
-          name: getProjectNameFromPath(selectedPath),
-          path: selectedPath,
-          capabilities: {
-            knowledgeBase: {
-              enabled: true,
-              schemaVersion: 1,
-              templateVersion: result.templateVersion,
-            },
-          },
-        },
-      ])
-    } catch (error) {
-      logger.error("Failed to open knowledge base project.", { error })
-      setKnowledgeBaseActionError("打开知识库失败。")
-    } finally {
-      setIsOpeningKnowledgeBase(false)
-    }
-  }
-
-  const handleMarkProjectAsKnowledgeBase = async (project: SynapseProjectConfig) => {
-    if (!window.synapse?.knowledgeBase) {
-      setKnowledgeBaseActionError("知识库服务不可用。")
-      return
-    }
-    setMarkingKnowledgeBaseProjectId(project.id)
-    setKnowledgeBaseActionError(null)
-    try {
-      const result = await window.synapse.knowledgeBase.initialize({
-        projectPath: project.path,
-        mode: "repair",
-      })
-      await onSave(projects.map((item) => item.id === project.id
-        ? {
-            ...item,
-            capabilities: {
-              ...item.capabilities,
-              knowledgeBase: {
-                enabled: true,
-                schemaVersion: 1,
-                templateVersion: result.templateVersion,
-              },
-            },
-          }
-        : item))
-    } catch (error) {
-      logger.error("Failed to mark project as knowledge base.", { error, projectId: project.id })
-      setKnowledgeBaseActionError("设置知识库失败。")
-    } finally {
-      setMarkingKnowledgeBaseProjectId(null)
     }
   }
 
@@ -363,22 +244,24 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
     }
 
     const trimmedName = editName.trim()
-    const trimmedPath = editPath.trim()
+    const editingKnowledgeBase = isKnowledgeBaseProject(editingProject)
+    const trimmedPath = editingKnowledgeBase ? editingProject.path : editPath.trim()
 
-    if (!trimmedName || !trimmedPath) {
-      setEditError("项目名称和项目路径都不能为空。")
+    if (!trimmedName || (!editingKnowledgeBase && !trimmedPath)) {
+      setEditError(editingKnowledgeBase ? "项目名称不能为空。" : "项目名称和项目路径都不能为空。")
       return
     }
 
-    // Check for duplicate path (excluding current project)
-    const duplicatePath = projects.some(
-      (project) =>
-        arePathsEqualForCompare(project.path, trimmedPath, { platform })
-        && project.id !== editingProject.id,
-    )
-    if (duplicatePath) {
-      setEditError("这个项目路径已经存在了。")
-      return
+    if (!editingKnowledgeBase) {
+      const duplicatePath = projects.some(
+        (project) =>
+          arePathsEqualForCompare(project.path, trimmedPath, { platform })
+          && project.id !== editingProject.id,
+      )
+      if (duplicatePath) {
+        setEditError("这个项目路径已经存在了。")
+        return
+      }
     }
 
     setIsSavingEdit(true)
@@ -428,31 +311,25 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-1">
-                <p className="text-sm text-muted-foreground break-all">
-                  {project.path}
-                </p>
+                {!isKnowledgeBaseProject(project) ? (
+                  <p className="text-sm text-muted-foreground break-all">
+                    {project.path}
+                  </p>
+                ) : null}
               </CardContent>
               <CardFooter className="justify-end gap-2">
-                {!isKnowledgeBaseProject(project) ? (
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={markingKnowledgeBaseProjectId === project.id}
-                    onClick={() => void handleMarkProjectAsKnowledgeBase(project)}
-                  >
-                    设为知识库
-                  </Button>
-                ) : null}
                 {isKnowledgeBaseProject(project) ? (
                   <Button
                     variant="ghost"
                     size="sm"
                     onClick={() => {
-                      void window.synapse?.knowledgeBase?.openRawDirectory(project.path)
-                        .catch((error) => logger.error("Failed to open knowledge base raw directory.", { projectId: project.id, error }))
+                      void window.synapse?.knowledgeBase?.openSourceManager({
+                        projectId: project.id,
+                        projectName: project.name,
+                      }).catch((error) => logger.error("Failed to open knowledge base source manager.", { projectId: project.id, error }))
                     }}
                   >
-                    维护文件
+                    资料管理
                   </Button>
                 ) : null}
                 <Button
@@ -494,9 +371,6 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       )}
 
       <div className="flex flex-wrap gap-2">
-        <Button variant="outline" onClick={() => void handleOpenExistingKnowledgeBase()} disabled={isOpeningKnowledgeBase}>
-          {isOpeningKnowledgeBase ? "打开中..." : "打开知识库"}
-        </Button>
         <Dialog open={isKnowledgeBaseDialogOpen} onOpenChange={handleKnowledgeBaseDialogOpenChange}>
           <DialogTrigger asChild>
             <Button variant="outline">新建知识库</Button>
@@ -507,34 +381,13 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
             </DialogHeader>
             <FieldGroup className="gap-2">
               <Field>
-                <Label htmlFor="knowledge-base-name">项目名称</Label>
+                <Label htmlFor="knowledge-base-name">知识库名称</Label>
                 <Input
                   id="knowledge-base-name"
                   value={knowledgeBaseName}
                   onChange={(event) => setKnowledgeBaseName(event.target.value)}
                   disabled={isCreatingKnowledgeBase}
                 />
-              </Field>
-              <Field>
-                <Label htmlFor="knowledge-base-path">项目路径</Label>
-                <div className="flex gap-2">
-                  <Input
-                    id="knowledge-base-path"
-                    value={knowledgeBasePath}
-                    onChange={(event) => setKnowledgeBasePath(event.target.value)}
-                    disabled={isCreatingKnowledgeBase}
-                  />
-                  {hasDirectoryPicker ? (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      onClick={() => void handleChooseKnowledgeBasePath()}
-                      disabled={isCreatingKnowledgeBase}
-                    >
-                      浏览
-                    </Button>
-                  ) : null}
-                </div>
               </Field>
               <FieldError>{knowledgeBaseError}</FieldError>
             </FieldGroup>
@@ -627,28 +480,30 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                 disabled={isSavingEdit}
               />
             </Field>
-            <Field>
-              <Label htmlFor="edit-project-path">项目路径</Label>
-              <div className="flex gap-2">
-                <Input
-                  id="edit-project-path"
-                  value={editPath}
-                  onChange={(event) => setEditPath(event.target.value)}
-                  placeholder="/path/to/project"
-                  disabled={isSavingEdit}
-                />
-                {hasDirectoryPicker ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => void handleChooseEditPath()}
+            {editingProject && !isKnowledgeBaseProject(editingProject) ? (
+              <Field>
+                <Label htmlFor="edit-project-path">项目路径</Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="edit-project-path"
+                    value={editPath}
+                    onChange={(event) => setEditPath(event.target.value)}
+                    placeholder="/path/to/project"
                     disabled={isSavingEdit}
-                  >
-                    浏览
-                  </Button>
-                ) : null}
-              </div>
-            </Field>
+                  />
+                  {hasDirectoryPicker ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => void handleChooseEditPath()}
+                      disabled={isSavingEdit}
+                    >
+                      浏览
+                    </Button>
+                  ) : null}
+                </div>
+              </Field>
+            ) : null}
             <FieldError>{editError}</FieldError>
           </FieldGroup>
           <DialogFooter>

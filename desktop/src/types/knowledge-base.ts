@@ -44,7 +44,6 @@ export type SynapseKnowledgeBaseOpenRawResult = {
 
 export type SynapseKnowledgeBaseOpenSourceManagerPayload = {
   projectId: string
-  projectPath: string
   projectName: string
 }
 
@@ -66,17 +65,17 @@ export type SynapseKnowledgeBaseSourceEntry = {
 }
 
 export type SynapseKnowledgeBaseListSourcesResult = {
-  projectPath: string
+  projectId: string
   sources: SynapseKnowledgeBaseSourceEntry[]
 }
 
 export type SynapseKnowledgeBaseUploadSourcesPayload = {
-  projectPath: string
+  projectId: string
   filePaths: string[]
 }
 
 export type SynapseKnowledgeBaseAddUrlSourcePayload = {
-  projectPath: string
+  projectId: string
   url: string
 }
 
@@ -97,7 +96,7 @@ export type SynapseKnowledgeBaseUploadedSource = {
 }
 
 export type SynapseKnowledgeBaseUploadSourcesResult = {
-  projectPath: string
+  projectId: string
   uploaded: SynapseKnowledgeBaseUploadedSource[]
   skipped: Array<{
     path: string

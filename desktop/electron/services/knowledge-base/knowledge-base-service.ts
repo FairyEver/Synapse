@@ -16,13 +16,14 @@ import type {
   SynapseKnowledgeBaseUploadSourcesPayload,
   SynapseKnowledgeBaseUploadSourcesResult,
 } from "../../../src/types/knowledge-base"
-import type { SynapseProjectConfig } from "../../../src/types/config"
+import type { SynapseConfig, SynapseProjectConfig } from "../../../src/types/config"
 import { createDefaultFileConversionService, type FileConversionService } from "../file-conversion"
 import { scanKnowledgeBaseSources } from "./source-scan"
 import { stageKnowledgeBaseSources, stageKnowledgeBaseUrlSource } from "./source-staging"
 import { createGuardedFetchUrl } from "../source-acquisition/guarded-fetch-url"
 import type { FetchUrl } from "../source-acquisition/url-source"
-import { knowledgeBaseVirtualPath, resolveManagedKnowledgeBasePath } from "./managed-path"
+import { configStore } from "../config-store"
+import { isManagedKnowledgeBaseProject, knowledgeBaseVirtualPath, resolveManagedKnowledgeBasePath } from "./managed-path"
 
 export const KNOWLEDGE_BASE_TEMPLATE_VERSION = "2026-05-21"
 
@@ -43,6 +44,7 @@ type KnowledgeBaseServiceDeps = {
   templateRoot?: string
   managedTemplateRoot?: string
   userDataPath?: string
+  loadConfig?: () => Promise<SynapseConfig>
   now?: () => Date
   fileConversionService?: Pick<FileConversionService, "convert">
   fetchUrl?: FetchUrl
@@ -52,6 +54,7 @@ export class KnowledgeBaseService {
   private readonly templateRoot: string
   private readonly managedTemplateRoot: string
   private readonly userDataPath: string
+  private readonly loadConfig: () => Promise<SynapseConfig>
   private readonly now: () => Date
   private readonly fileConversionService: Pick<FileConversionService, "convert">
   private readonly fetchUrl: FetchUrl
@@ -60,6 +63,7 @@ export class KnowledgeBaseService {
     this.templateRoot = deps.templateRoot ?? resolveTemplateRoot()
     this.managedTemplateRoot = deps.managedTemplateRoot ?? resolveManagedTemplateRoot()
     this.userDataPath = deps.userDataPath ?? app.getPath("userData")
+    this.loadConfig = deps.loadConfig ?? (() => configStore.load())
     this.now = deps.now ?? (() => new Date())
     this.fileConversionService = deps.fileConversionService ?? createDefaultFileConversionService()
     this.fetchUrl = deps.fetchUrl ?? createGuardedFetchUrl()
@@ -161,7 +165,8 @@ export class KnowledgeBaseService {
     return { rawPath }
   }
 
-  async listSources(projectPath: string): Promise<SynapseKnowledgeBaseListSourcesResult> {
+  async listSources(projectId: string): Promise<SynapseKnowledgeBaseListSourcesResult> {
+    const projectPath = await this.resolveProjectPath(projectId)
     const rawPath = assertInside(projectPath, path.join(projectPath, ".raw"))
     await assertNoSymlinkInRequiredPath(projectPath, ".raw")
     await mkdir(rawPath, { recursive: true })
@@ -187,27 +192,48 @@ export class KnowledgeBaseService {
     }
 
     return {
-      projectPath,
+      projectId,
       sources: sources.sort((a, b) => b.modifiedAt.localeCompare(a.modifiedAt) || a.relativePath.localeCompare(b.relativePath)),
     }
   }
 
-  async uploadSources(payload: SynapseKnowledgeBaseUploadSourcesPayload): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
-    return stageKnowledgeBaseSources({
-      projectPath: payload.projectPath,
+  async uploadSources(payload: SynapseKnowledgeBaseUploadSourcesPayload | { projectPath: string; filePaths: string[] }): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
+    const projectId = "projectId" in payload ? payload.projectId : payload.projectPath
+    const projectPath = await this.resolveProjectPath(projectId)
+    const result = await stageKnowledgeBaseSources({
+      projectPath,
       filePaths: payload.filePaths,
       now: this.now,
       converter: this.fileConversionService,
     })
+    return { projectId, uploaded: result.uploaded, skipped: result.skipped }
   }
 
-  async addUrlSource(payload: SynapseKnowledgeBaseAddUrlSourcePayload): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
-    return stageKnowledgeBaseUrlSource({
-      projectPath: payload.projectPath,
+  async addUrlSource(payload: SynapseKnowledgeBaseAddUrlSourcePayload | { projectPath: string; url: string }): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
+    const projectId = "projectId" in payload ? payload.projectId : payload.projectPath
+    const projectPath = await this.resolveProjectPath(projectId)
+    const result = await stageKnowledgeBaseUrlSource({
+      projectPath,
       url: payload.url,
       now: this.now,
       fetchUrl: this.fetchUrl,
     })
+    return { projectId, uploaded: result.uploaded, skipped: result.skipped }
+  }
+
+  private async resolveProjectPath(projectId: string): Promise<string> {
+    if (path.isAbsolute(projectId)) {
+      return projectId
+    }
+    const config = await this.loadConfig()
+    const project = config.global.projects.find((item) => item.id === projectId)
+    if (!project) {
+      throw new Error("找不到知识库项目。")
+    }
+    if (!isManagedKnowledgeBaseProject(project)) {
+      throw new Error("当前项目不是托管知识库。")
+    }
+    return resolveManagedKnowledgeBasePath(project, this.userDataPath)
   }
 }
 

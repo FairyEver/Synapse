@@ -303,14 +303,12 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     try {
       await requireSynapseBridge().knowledgeBase.openSourceManager({
         projectId: selectedProject.id,
-        projectPath: selectedProject.path,
         projectName: selectedProject.name,
       })
     } catch (rawError) {
       logger.error("Knowledge base source manager open failed.", {
         boundary: "renderer.agent.open-source-manager",
         projectId: selectedProject.id,
-        projectPath: selectedProject.path,
         ...errorDiagnostic(rawError),
       })
       toast("打开失败")

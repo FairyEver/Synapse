@@ -137,7 +137,7 @@ describe("knowledgeBaseIpcModule", () => {
 
   it("lists source files through guarded read permission", async () => {
     const listSources = vi.fn().mockResolvedValue({
-      projectPath: "/tmp/kb",
+      projectId: "kb-1",
       sources: [{
         relativePath: "2026/05/23/source.md",
         name: "source.md",
@@ -151,22 +151,22 @@ describe("knowledgeBaseIpcModule", () => {
     const { harness, permissionGuard } = createHarness({ service: { listSources } })
 
     const result = await harness.invoke("synapse:knowledge-base:list-sources", {
-      projectPath: "/tmp/kb",
+      projectId: "kb-1",
     }) as { sources: unknown[] }
 
-    expect(listSources).toHaveBeenCalledWith("/tmp/kb")
+    expect(listSources).toHaveBeenCalledWith("kb-1")
     expect(result.sources).toHaveLength(1)
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "fs.read.outside-userdata",
       actor: { kind: "user" },
-      resource: "/tmp/kb",
+      resource: "managed-knowledge-base:kb-1",
       context: { source: "knowledgeBase.listSources" },
     })
   })
 
   it("uploads selected source files through guarded write permission", async () => {
     const uploadSources = vi.fn().mockResolvedValue({
-      projectPath: "/tmp/kb",
+      projectId: "kb-1",
       uploaded: [{
         originalPath: "/tmp/source.md",
         relativePath: "2026/05/23/source.md",
@@ -180,47 +180,47 @@ describe("knowledgeBaseIpcModule", () => {
     const { harness, permissionGuard } = createHarness({ service: { uploadSources } })
 
     const result = await harness.invoke("synapse:knowledge-base:select-and-upload-sources", {
-      projectPath: "/tmp/kb",
+      projectId: "kb-1",
     }) as { uploaded: unknown[] }
 
     expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
       properties: ["openFile", "multiSelections"],
     }))
     expect(uploadSources).toHaveBeenCalledWith({
-      projectPath: "/tmp/kb",
+      projectId: "kb-1",
       filePaths: ["/tmp/source.md"],
     })
     expect(result.uploaded).toHaveLength(1)
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "fs.write",
       actor: { kind: "user" },
-      resource: "/tmp/kb",
+      resource: "managed-knowledge-base:kb-1",
       context: { source: "knowledgeBase.selectAndUploadSources" },
     })
   })
 
   it("uploads dropped source files through guarded write permission", async () => {
     const uploadSources = vi.fn().mockResolvedValue({
-      projectPath: "/tmp/kb",
+      projectId: "kb-1",
       uploaded: [],
       skipped: [],
     })
     const { harness } = createHarness({ service: { uploadSources } })
 
     await harness.invoke("synapse:knowledge-base:upload-sources", {
-      projectPath: "/tmp/kb",
+      projectId: "kb-1",
       filePaths: ["/tmp/source.md"],
     })
 
     expect(uploadSources).toHaveBeenCalledWith({
-      projectPath: "/tmp/kb",
+      projectId: "kb-1",
       filePaths: ["/tmp/source.md"],
     })
   })
 
   it("adds a URL source through guarded network and write permissions", async () => {
     const addUrlSource = vi.fn().mockResolvedValue({
-      projectPath: "/tmp/kb",
+      projectId: "kb-1",
       uploaded: [{
         originalPath: "https://example.com/article",
         relativePath: ".raw/web/2026/05/24/article.md",
@@ -234,12 +234,12 @@ describe("knowledgeBaseIpcModule", () => {
     const { harness, permissionGuard } = createHarness({ service: { addUrlSource } })
 
     const result = await harness.invoke("synapse:knowledge-base:add-url-source", {
-      projectPath: "/tmp/kb",
+      projectId: "kb-1",
       url: "https://example.com/article",
     }) as { uploaded: unknown[] }
 
     expect(addUrlSource).toHaveBeenCalledWith({
-      projectPath: "/tmp/kb",
+      projectId: "kb-1",
       url: "https://example.com/article",
     })
     expect(result.uploaded).toHaveLength(1)
@@ -252,14 +252,41 @@ describe("knowledgeBaseIpcModule", () => {
     expect(permissionGuard.check).toHaveBeenNthCalledWith(2, {
       action: "fs.write",
       actor: { kind: "user" },
-      resource: "/tmp/kb",
+      resource: "managed-knowledge-base:kb-1",
       context: { source: "knowledgeBase.addUrlSource" },
     })
   })
 
   it("adds a URL source through IPC into the real knowledge base service", async () => {
-    const projectPath = await tempDir()
+    const userDataPath = await tempDir()
+    const projectPath = path.join(userDataPath, "knowledge-bases", "kb-1")
     const service = new KnowledgeBaseService({
+      userDataPath,
+      loadConfig: async () => ({
+        activeRepoUuid: null,
+        repositories: [],
+        global: {
+          themeMode: "system",
+          favorites: { rule: [], skill: [], prompt: [] },
+          recentlyViewed: { rule: [], skill: [], prompt: [] },
+          contentSortOrder: "modified-desc",
+          projects: [{
+            id: "kb-1",
+            name: "Knowledge",
+            path: "synapse-kb://kb-1",
+            capabilities: {
+              knowledgeBase: {
+                enabled: true,
+                schemaVersion: 1,
+                templateVersion: "2026-05-24",
+                managed: true,
+                runtimeId: "kb-1",
+              },
+            },
+          }],
+        },
+        agent: { defaultPermissionMode: "default", defaultProviderModel: null },
+      }),
       now: () => new Date("2026-05-24T10:20:30.000Z"),
       fetchUrl: async () => ({
         url: "https://example.com/article",
@@ -271,7 +298,7 @@ describe("knowledgeBaseIpcModule", () => {
     const { harness, permissionGuard } = createHarness({ service })
 
     const result = await harness.invoke("synapse:knowledge-base:add-url-source", {
-      projectPath,
+      projectId: "kb-1",
       url: "https://example.com/article",
     }) as { uploaded: Array<{ relativePath: string }> }
 
@@ -284,7 +311,7 @@ describe("knowledgeBaseIpcModule", () => {
     }))
     expect(permissionGuard.check).toHaveBeenNthCalledWith(2, expect.objectContaining({
       action: "fs.write",
-      resource: projectPath,
+      resource: "managed-knowledge-base:kb-1",
     }))
     await expect(readFile(path.join(projectPath, ".raw", "web", "2026", "05", "24", "article.md"), "utf8"))
       .resolves.toContain('source_url: "https://example.com/article"')
@@ -295,19 +322,17 @@ describe("knowledgeBaseIpcModule", () => {
 
     await harness.invoke("synapse:knowledge-base:open-source-manager", {
       projectId: "project-1",
-      projectPath: "/tmp/kb",
       projectName: "知识库001",
     })
 
     expect(sourceManagerWindowServiceMock.open).toHaveBeenCalledWith({
       projectId: "project-1",
-      projectPath: "/tmp/kb",
       projectName: "知识库001",
     })
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "fs.read.outside-userdata",
       actor: { kind: "user" },
-      resource: "/tmp/kb",
+      resource: "managed-knowledge-base:project-1",
       context: { source: "knowledgeBase.openSourceManager" },
     })
   })

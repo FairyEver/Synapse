@@ -7,21 +7,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { ProjectListEditor } from "../components/project-list-editor"
 import type { SynapseProjectConfig } from "@/types/config"
 import type {
-  SynapseKnowledgeBaseInitializePayload,
-  SynapseKnowledgeBaseInitializeResult,
-  SynapseKnowledgeBaseInspection,
-  SynapseKnowledgeBaseOpenRawResult,
+  SynapseKnowledgeBaseCreateManagedPayload,
+  SynapseKnowledgeBaseCreateManagedResult,
 } from "@/types/knowledge-base"
 
 const kbProject: SynapseProjectConfig = {
   id: "project-1",
   name: "Knowledge",
-  path: "/Users/example/kb",
+  path: "synapse-kb://project-1",
   capabilities: {
     knowledgeBase: {
       enabled: true,
       schemaVersion: 1,
-      templateVersion: "2026-05-21",
+      templateVersion: "2026-05-24",
+      managed: true,
+      runtimeId: "project-1",
     },
   },
 }
@@ -72,21 +72,13 @@ function createSynapseBridgeMocks() {
       chooseDirectory: vi.fn<() => Promise<string | null>>().mockResolvedValue("/Users/example/new-kb"),
     },
     knowledgeBase: {
-      inspect: vi.fn<(projectPath: string) => Promise<SynapseKnowledgeBaseInspection>>().mockResolvedValue({
-        projectPath: "/Users/example/new-kb",
-        isKnowledgeBase: true,
-        hasMetadata: true,
-        hasRequiredShape: true,
-        missingRequiredPaths: [],
-        templateVersion: "2026-05-21",
+      createManaged: vi.fn<(payload: SynapseKnowledgeBaseCreateManagedPayload) => Promise<SynapseKnowledgeBaseCreateManagedResult>>().mockResolvedValue({
+        projectId: "new-project-id",
+        projectPath: "synapse-kb://new-project-id",
+        runtimePath: "/UserData/knowledge-bases/new-project-id",
+        templateVersion: "2026-05-24",
       }),
-      initialize: vi.fn<(payload: SynapseKnowledgeBaseInitializePayload) => Promise<SynapseKnowledgeBaseInitializeResult>>().mockResolvedValue({
-        projectPath: "/Users/example/new-kb",
-        templateVersion: "2026-05-21",
-        createdFiles: [],
-        existingFiles: [],
-      }),
-      openRawDirectory: vi.fn<(projectPath: string) => Promise<SynapseKnowledgeBaseOpenRawResult>>().mockResolvedValue({ rawPath: "/Users/example/kb/.raw" }),
+      openSourceManager: vi.fn<(payload: { projectId: string; projectName: string }) => Promise<void>>().mockResolvedValue(undefined),
     },
     agent: {
       listSessions: vi.fn<(projectId: string) => Promise<unknown[]>>().mockResolvedValue([]),
@@ -154,182 +146,62 @@ function deferred<T>() {
 }
 
 describe("ProjectListEditor knowledge base actions", () => {
-  it("shows a knowledge base badge and maintenance action for knowledge base projects", async () => {
+  it("shows a knowledge base badge and source manager action for knowledge base projects", async () => {
     renderEditor([kbProject])
 
     expect(document.body.textContent).toContain("知识库")
+    expect(document.body.textContent).not.toContain("synapse-kb://project-1")
     await act(async () => {
-      buttonByText("维护文件").click()
+      buttonByText("资料管理").click()
       await Promise.resolve()
     })
 
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.openRawDirectory).toHaveBeenCalledWith("/Users/example/kb")
+      expect(bridgeMocks.knowledgeBase.openSourceManager).toHaveBeenCalledWith({
+        projectId: "project-1",
+        projectName: "Knowledge",
+      })
     })
   })
 
-  it("creates a knowledge base project from the add dialog", async () => {
+  it("creates a managed knowledge base project with name only", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     renderEditor([], onSave)
 
     await act(async () => {
       buttonByText("新建知识库").click()
     })
+    expect(document.body.textContent).not.toContain("项目路径")
+    expect(document.body.textContent).not.toContain("浏览")
     await act(async () => {
-      changeInput(inputByLabel("项目名称"), "Knowledge")
+      changeInput(inputByLabel("知识库名称"), "Knowledge")
     })
-    await act(async () => {
-      buttonByText("浏览").click()
-      await Promise.resolve()
-    })
-    await waitForExpectation(() => expect(inputByLabel("项目路径").value).toBe("/Users/example/new-kb"))
     await act(async () => {
       buttonByText("创建").click()
       await Promise.resolve()
     })
 
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.initialize).toHaveBeenCalledWith({
-        projectPath: "/Users/example/new-kb",
-        mode: "create",
+      expect(bridgeMocks.knowledgeBase.createManaged).toHaveBeenCalledWith({
+        projectId: "new-project-id",
+        name: "Knowledge",
       })
       expect(onSave).toHaveBeenCalledWith([
         expect.objectContaining({
+          id: "new-project-id",
           name: "Knowledge",
-          path: "/Users/example/new-kb",
+          path: "synapse-kb://new-project-id",
           capabilities: {
             knowledgeBase: {
               enabled: true,
               schemaVersion: 1,
-              templateVersion: "2026-05-21",
+              templateVersion: "2026-05-24",
+              managed: true,
+              runtimeId: "new-project-id",
             },
           },
         }),
       ])
-    })
-  })
-
-  it("marks an existing project as a knowledge base", async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined)
-    renderEditor([{ id: "project-1", name: "Plain", path: "/Users/example/plain" }], onSave)
-
-    await act(async () => {
-      buttonByText("设为知识库").click()
-      await Promise.resolve()
-    })
-
-    await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.initialize).toHaveBeenCalledWith({
-        projectPath: "/Users/example/plain",
-        mode: "repair",
-      })
-      expect(onSave).toHaveBeenCalledWith([
-        expect.objectContaining({
-          id: "project-1",
-          capabilities: {
-            knowledgeBase: {
-              enabled: true,
-              schemaVersion: 1,
-              templateVersion: "2026-05-21",
-            },
-          },
-        }),
-      ])
-    })
-  })
-
-  it("opens an existing knowledge base folder as a project", async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined)
-    renderEditor([], onSave)
-
-    await act(async () => {
-      buttonByText("打开知识库").click()
-      await Promise.resolve()
-    })
-
-    await waitForExpectation(() => {
-      expect(bridgeMocks.repository.chooseDirectory).toHaveBeenCalled()
-      expect(bridgeMocks.knowledgeBase.inspect).toHaveBeenCalledWith("/Users/example/new-kb")
-      expect(bridgeMocks.knowledgeBase.initialize).toHaveBeenCalledWith({
-        projectPath: "/Users/example/new-kb",
-        mode: "repair",
-      })
-      expect(onSave).toHaveBeenCalledWith([
-        expect.objectContaining({
-          name: "new-kb",
-          path: "/Users/example/new-kb",
-          capabilities: {
-            knowledgeBase: {
-              enabled: true,
-              schemaVersion: 1,
-              templateVersion: "2026-05-21",
-            },
-          },
-        }),
-      ])
-    })
-  })
-
-  it("shows a visible error when the selected folder is not a knowledge base", async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined)
-    bridgeMocks.knowledgeBase.inspect.mockResolvedValue({
-      projectPath: "/Users/example/new-kb",
-      isKnowledgeBase: false,
-      hasMetadata: false,
-      hasRequiredShape: false,
-      missingRequiredPaths: [".raw"],
-    })
-    renderEditor([], onSave)
-
-    await act(async () => {
-      buttonByText("打开知识库").click()
-      await Promise.resolve()
-    })
-
-    await waitForExpectation(() => {
-      expect(document.body.textContent).toContain("未识别为知识库目录。")
-      expect(bridgeMocks.knowledgeBase.initialize).not.toHaveBeenCalled()
-      expect(onSave).not.toHaveBeenCalled()
-    })
-  })
-
-  it("shows a visible error when opening an existing knowledge base fails", async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined)
-    bridgeMocks.knowledgeBase.inspect.mockRejectedValue(new Error("inspect failed"))
-    renderEditor([], onSave)
-
-    await act(async () => {
-      buttonByText("打开知识库").click()
-      await Promise.resolve()
-    })
-
-    await waitForExpectation(() => {
-      expect(document.body.textContent).toContain("打开知识库失败。")
-      expect(onSave).not.toHaveBeenCalled()
-      expect(rendererLogger.error).toHaveBeenCalledWith("Failed to open knowledge base project.", {
-        error: expect.any(Error),
-      })
-    })
-  })
-
-  it("shows a visible error and re-enables the action when marking a project fails", async () => {
-    const onSave = vi.fn().mockResolvedValue(undefined)
-    bridgeMocks.knowledgeBase.initialize.mockRejectedValue(new Error("secret failure detail"))
-    renderEditor([{ id: "project-1", name: "Plain", path: "/Users/example/plain" }], onSave)
-
-    await act(async () => {
-      buttonByText("设为知识库").click()
-      await Promise.resolve()
-    })
-
-    await waitForExpectation(() => {
-      expect(document.body.textContent).toContain("设置知识库失败。")
-      expect(buttonByText("设为知识库").disabled).toBe(false)
-      expect(onSave).not.toHaveBeenCalled()
-      expect(rendererLogger.error).toHaveBeenCalledWith("Failed to mark project as knowledge base.", {
-        error: expect.any(Error),
-        projectId: "project-1",
-      })
     })
   })
 
@@ -340,17 +212,12 @@ describe("ProjectListEditor knowledge base actions", () => {
       buttonByText("新建知识库").click()
     })
     await act(async () => {
-      buttonByText("浏览").click()
-      await Promise.resolve()
-    })
-    await waitForExpectation(() => expect(inputByLabel("项目路径").value).toBe("/Users/example/new-kb"))
-    await act(async () => {
-      changeInput(inputByLabel("项目名称"), "")
+      changeInput(inputByLabel("知识库名称"), "")
     })
     await act(async () => {
       buttonByText("创建").click()
     })
-    expect(document.body.textContent).toContain("项目名称和项目路径都不能为空。")
+    expect(document.body.textContent).toContain("知识库名称不能为空。")
 
     await act(async () => {
       buttonByText("取消").click()
@@ -359,47 +226,21 @@ describe("ProjectListEditor knowledge base actions", () => {
       buttonByText("新建知识库").click()
     })
 
-    expect(inputByLabel("项目名称").value).toBe("")
-    expect(inputByLabel("项目路径").value).toBe("")
-    expect(document.body.textContent).not.toContain("项目名称和项目路径都不能为空。")
-  })
-
-  it("shows a dialog error when choosing a knowledge base path fails", async () => {
-    bridgeMocks.repository.chooseDirectory.mockRejectedValue(new Error("picker failed"))
-    renderEditor([])
-
-    await act(async () => {
-      buttonByText("新建知识库").click()
-    })
-    await act(async () => {
-      buttonByText("浏览").click()
-      await Promise.resolve()
-    })
-
-    await waitForExpectation(() => {
-      expect(document.body.textContent).toContain("选择目录失败。")
-      expect(rendererLogger.error).toHaveBeenCalledWith("Failed to select knowledge base directory.", {
-        error: expect.any(Error),
-      })
-    })
+    expect(inputByLabel("知识库名称").value).toBe("")
+    expect(document.body.textContent).not.toContain("知识库名称不能为空。")
   })
 
   it("keeps the new knowledge base dialog open while creation is pending", async () => {
-    const pendingCreate = deferred<SynapseKnowledgeBaseInitializeResult>()
-    bridgeMocks.knowledgeBase.initialize.mockReturnValueOnce(pendingCreate.promise)
+    const pendingCreate = deferred<SynapseKnowledgeBaseCreateManagedResult>()
+    bridgeMocks.knowledgeBase.createManaged.mockReturnValueOnce(pendingCreate.promise)
     renderEditor([])
 
     await act(async () => {
       buttonByText("新建知识库").click()
     })
     await act(async () => {
-      changeInput(inputByLabel("项目名称"), "Knowledge")
+      changeInput(inputByLabel("知识库名称"), "Knowledge")
     })
-    await act(async () => {
-      buttonByText("浏览").click()
-      await Promise.resolve()
-    })
-    await waitForExpectation(() => expect(inputByLabel("项目路径").value).toBe("/Users/example/new-kb"))
 
     await act(async () => {
       buttonByText("创建").click()
@@ -410,15 +251,14 @@ describe("ProjectListEditor knowledge base actions", () => {
       await Promise.resolve()
     })
 
-    expect(inputByLabel("项目名称").value).toBe("Knowledge")
-    expect(inputByLabel("项目路径").value).toBe("/Users/example/new-kb")
+    expect(inputByLabel("知识库名称").value).toBe("Knowledge")
 
     await act(async () => {
       pendingCreate.resolve({
-        projectPath: "/Users/example/new-kb",
-        templateVersion: "2026-05-21",
-        createdFiles: [],
-        existingFiles: [],
+        projectId: "new-project-id",
+        projectPath: "synapse-kb://new-project-id",
+        runtimePath: "/UserData/knowledge-bases/new-project-id",
+        templateVersion: "2026-05-24",
       })
       await pendingCreate.promise
     })

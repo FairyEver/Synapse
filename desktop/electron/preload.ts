@@ -533,14 +533,14 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["knowledge-base"].initialize)(payload),
     createManaged: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].createManaged)(payload),
-    listSources: (projectPath: string) =>
-      invoke(IPC_CHANNELS["knowledge-base"].listSources)({ projectPath }),
+    listSources: (projectId: string) =>
+      invoke(IPC_CHANNELS["knowledge-base"].listSources)({ projectId }),
     uploadSources: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].uploadSources)(payload),
     addUrlSource: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].addUrlSource)(payload),
-    selectAndUploadSources: (projectPath: string) =>
-      invoke(IPC_CHANNELS["knowledge-base"].selectAndUploadSources)({ projectPath }),
+    selectAndUploadSources: (projectId: string) =>
+      invoke(IPC_CHANNELS["knowledge-base"].selectAndUploadSources)({ projectId }),
     openSourceManager: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].openSourceManager)(payload),
     filePathForDroppedFile: (file: File) => webUtils.getPathForFile(file) || null,

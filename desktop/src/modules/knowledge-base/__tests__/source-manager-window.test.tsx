@@ -7,7 +7,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { KnowledgeBaseSourceManagerWindow } from "../source-manager-window"
 import type {
   SynapseKnowledgeBaseListSourcesResult,
-  SynapseKnowledgeBaseOpenRawResult,
   SynapseKnowledgeBaseUploadSourcesResult,
 } from "@/types/knowledge-base"
 
@@ -50,7 +49,7 @@ beforeEach(() => {
   window.history.pushState(
     null,
     "",
-    "?projectId=project-1&projectPath=%2FUsers%2Fexample%2Fkb&projectName=Knowledge",
+    "?projectId=project-1&projectName=Knowledge",
   )
 })
 
@@ -68,9 +67,9 @@ afterEach(() => {
 function createBridgeMocks() {
   return {
     knowledgeBase: {
-      listSources: vi.fn<(projectPath: string) => Promise<SynapseKnowledgeBaseListSourcesResult>>()
+      listSources: vi.fn<(projectId: string) => Promise<SynapseKnowledgeBaseListSourcesResult>>()
         .mockResolvedValue({
-          projectPath: "/Users/example/kb",
+          projectId: "project-1",
           sources: [
             {
               relativePath: "raw/AI产品需求说明.md",
@@ -98,15 +97,15 @@ function createBridgeMocks() {
             },
           ],
         }),
-      uploadSources: vi.fn<(payload: { projectPath: string; filePaths: string[] }) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
+      uploadSources: vi.fn<(payload: { projectId: string; filePaths: string[] }) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
         .mockResolvedValue({
-          projectPath: "/Users/example/kb",
+          projectId: "project-1",
           uploaded: [],
           skipped: [],
         }),
-      addUrlSource: vi.fn<(payload: { projectPath: string; url: string }) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
+      addUrlSource: vi.fn<(payload: { projectId: string; url: string }) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
         .mockResolvedValue({
-          projectPath: "/Users/example/kb",
+          projectId: "project-1",
           uploaded: [{
             originalPath: "https://example.com/article",
             relativePath: ".raw/web/2026/05/24/article.md",
@@ -117,14 +116,12 @@ function createBridgeMocks() {
           }],
           skipped: [],
         }),
-      selectAndUploadSources: vi.fn<(projectPath: string) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
+      selectAndUploadSources: vi.fn<(projectId: string) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
         .mockResolvedValue({
-          projectPath: "/Users/example/kb",
+          projectId: "project-1",
           uploaded: [],
           skipped: [],
         }),
-      openRawDirectory: vi.fn<(projectPath: string) => Promise<SynapseKnowledgeBaseOpenRawResult>>()
-        .mockResolvedValue({ rawPath: "/Users/example/kb/raw" }),
       filePathForDroppedFile: vi.fn<(file: File) => string | null>(() => null),
     },
     agent: {
@@ -160,13 +157,6 @@ async function waitForExpectation(assertion: () => void): Promise<void> {
   throw lastError
 }
 
-function buttonByText(text: string): HTMLButtonElement {
-  const button = [...document.querySelectorAll<HTMLButtonElement>("button")]
-    .find((item) => item.textContent?.trim() === text)
-  if (!button) throw new Error(`Button not found: ${text}`)
-  return button
-}
-
 function buttonByLabel(label: string): HTMLButtonElement {
   const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
   if (!button) throw new Error(`Button not found: ${label}`)
@@ -199,7 +189,6 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(document.body.textContent).not.toContain("导入知识库")
     expect(document.body.textContent).not.toContain("资料管理")
     expect(document.body.textContent).toContain("放入资料")
-    expect(document.body.textContent).toContain("目标目录：raw/")
     expect(document.body.textContent).toContain("支持 Markdown、Word、Excel、PDF、PPT、图片、网页 URL")
     expect(document.body.textContent).toContain("放入后，在知识库对话里说“汲取知识”")
     expect(document.body.textContent).toContain("新文件")
@@ -216,16 +205,8 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(visibleRowsText()).toContain("客户访谈纪要.docx")
     expect(visibleRowsText()).not.toContain("AI产品需求说明.md")
 
-    await act(async () => {
-      buttonByText("打开目录").click()
-      await Promise.resolve()
-    })
-
-    await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.openRawDirectory).toHaveBeenCalledWith("/Users/example/kb")
-      expect(bridgeMocks.agent.createSession).not.toHaveBeenCalled()
-      expect(bridgeMocks.agent.send).not.toHaveBeenCalled()
-    })
+    expect(bridgeMocks.agent.createSession).not.toHaveBeenCalled()
+    expect(bridgeMocks.agent.send).not.toHaveBeenCalled()
   })
 
   it("adds URL sources from the side pane", async () => {
@@ -248,7 +229,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
 
     expect(bridgeMocks.knowledgeBase.addUrlSource).toHaveBeenCalledWith({
-      projectPath: "/Users/example/kb",
+      projectId: "project-1",
       url: "https://example.com/article",
     })
     expect(bridgeMocks.knowledgeBase.listSources).toHaveBeenCalledTimes(2)
@@ -279,7 +260,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
 
     await waitForExpectation(() => {
       expect(bridgeMocks.knowledgeBase.uploadSources).toHaveBeenCalledWith({
-        projectPath: "/Users/example/kb",
+        projectId: "project-1",
         filePaths: ["/tmp/diagram.png"],
       })
     })

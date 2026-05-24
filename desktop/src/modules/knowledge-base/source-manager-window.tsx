@@ -1,5 +1,5 @@
 import { type DragEvent, useCallback, useEffect, useMemo, useState } from "react"
-import { FolderOpen, Link, Upload } from "lucide-react"
+import { Link, Upload } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Badge } from "@/components/ui/badge"
@@ -50,12 +50,11 @@ const STATUS_VARIANTS: Record<
 function readWindowPayload(): SynapseKnowledgeBaseOpenSourceManagerPayload | null {
   const params = new URLSearchParams(window.location.search)
   const projectId = params.get("projectId")
-  const projectPath = params.get("projectPath")
   const projectName = params.get("projectName")
-  if (!projectId || !projectPath || !projectName) {
+  if (!projectId || !projectName) {
     return null
   }
-  return { projectId, projectPath, projectName }
+  return { projectId, projectName }
 }
 
 function formatBytes(size: number): string {
@@ -95,7 +94,7 @@ function KnowledgeBaseSourceManagerWindow() {
     if (!payload || !bridge) return
     setIsLoading(true)
     try {
-      const result = await bridge.knowledgeBase.listSources(payload.projectPath)
+      const result = await bridge.knowledgeBase.listSources(payload.projectId)
       setSources(result.sources)
     } catch (error) {
       logger.error("Failed to load knowledge base sources.", { error })
@@ -114,7 +113,7 @@ function KnowledgeBaseSourceManagerWindow() {
     await promise(
       async () => {
         const result = await bridge.knowledgeBase.uploadSources({
-          projectPath: payload.projectPath,
+          projectId: payload.projectId,
           filePaths,
         })
         await refreshSources()
@@ -135,7 +134,7 @@ function KnowledgeBaseSourceManagerWindow() {
     await promise(
       async () => {
         const result = await bridge.knowledgeBase.addUrlSource({
-          projectPath: payload.projectPath,
+          projectId: payload.projectId,
           url,
         })
         if (result.uploaded.length > 0) {
@@ -156,7 +155,7 @@ function KnowledgeBaseSourceManagerWindow() {
     if (!payload || !bridge) return
     await promise(
       async () => {
-        const result = await bridge.knowledgeBase.selectAndUploadSources(payload.projectPath)
+        const result = await bridge.knowledgeBase.selectAndUploadSources(payload.projectId)
         await refreshSources()
         return result
       },
@@ -167,16 +166,6 @@ function KnowledgeBaseSourceManagerWindow() {
       },
     )
   }, [bridge, payload, promise, refreshSources])
-
-  const openRawDirectory = useCallback(async () => {
-    if (!payload || !bridge) return
-    try {
-      await bridge.knowledgeBase.openRawDirectory(payload.projectPath)
-    } catch (error) {
-      logger.error("Failed to open knowledge base raw directory.", { error })
-      showError("打开目录失败")
-    }
-  }, [bridge, payload, showError])
 
   const handleDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -308,10 +297,6 @@ function KnowledgeBaseSourceManagerWindow() {
             <Upload data-icon="inline-start" />
             选择文件
           </Button>
-          <Button variant="outline" onClick={openRawDirectory}>
-            <FolderOpen data-icon="inline-start" />
-            打开目录
-          </Button>
         </div>
 
         <div className="mt-auto space-y-2 border-t border-border pt-3 text-xs text-muted-foreground">
@@ -319,7 +304,6 @@ function KnowledgeBaseSourceManagerWindow() {
             <div>放入后，在知识库对话里说“汲取知识”。</div>
             <div>旧版 .doc/.ppt 需要本地转换工具。</div>
           </div>
-          目标目录：raw/
         </div>
       </aside>
     </main>

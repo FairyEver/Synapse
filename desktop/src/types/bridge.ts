@@ -590,14 +590,14 @@ export type SynapseBridge = {
       payload: SynapseKnowledgeBaseCreateManagedPayload,
     ) => Promise<SynapseKnowledgeBaseCreateManagedResult>
     openRawDirectory: (projectPath: string) => Promise<SynapseKnowledgeBaseOpenRawResult>
-    listSources: (projectPath: string) => Promise<SynapseKnowledgeBaseListSourcesResult>
+    listSources: (projectId: string) => Promise<SynapseKnowledgeBaseListSourcesResult>
     uploadSources: (
       payload: SynapseKnowledgeBaseUploadSourcesPayload,
     ) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
     addUrlSource: (
       payload: SynapseKnowledgeBaseAddUrlSourcePayload,
     ) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
-    selectAndUploadSources: (projectPath: string) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
+    selectAndUploadSources: (projectId: string) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
     openSourceManager: (payload: SynapseKnowledgeBaseOpenSourceManagerPayload) => Promise<void>
     filePathForDroppedFile: (file: File) => string | null
   }
