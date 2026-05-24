@@ -38,6 +38,21 @@ export function AuditLogsPage() {
   const { error, isLoading, page, pageSize, refresh, rows, setPage, total } =
     useAdminList(loader);
 
+  function updateAction(value: string) {
+    setPage(1);
+    setAction(value);
+  }
+
+  function updateFrom(value: string) {
+    setPage(1);
+    setFrom(value);
+  }
+
+  function updateTo(value: string) {
+    setPage(1);
+    setTo(value);
+  }
+
   async function exportLogs() {
     setFeedback('');
     try {
@@ -54,19 +69,19 @@ export function AuditLogsPage() {
           className={filterControlClass}
           value={action}
           placeholder="操作"
-          onChange={(event) => setAction(event.target.value)}
+          onChange={(event) => updateAction(event.target.value)}
         />
         <Input
           className={filterControlClass}
           type="date"
           value={from}
-          onChange={(event) => setFrom(event.target.value)}
+          onChange={(event) => updateFrom(event.target.value)}
         />
         <Input
           className={filterControlClass}
           type="date"
           value={to}
-          onChange={(event) => setTo(event.target.value)}
+          onChange={(event) => updateTo(event.target.value)}
         />
         <Button variant="outline" onClick={refresh}>
           查询
