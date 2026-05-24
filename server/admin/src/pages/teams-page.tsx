@@ -200,6 +200,10 @@ export function TeamsPage() {
           })),
       })
       setPermissionKeys(new Set(result.permissionKeys))
+      setRolePermissionKeys(Object.fromEntries(
+        result.rolePermissions.map((role) => [role.roleId, new Set(role.permissionKeys)]),
+      ))
+      reload()
       setEditingTeam(null)
     } catch (caught) {
       setPermissionError(caught instanceof Error ? caught.message : "保存失败")

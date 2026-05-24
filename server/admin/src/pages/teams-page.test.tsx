@@ -295,6 +295,7 @@ describe("TeamsPage", () => {
       )
       expect(adminApi.replaceTeamEntitlements).not.toHaveBeenCalled()
       expect(adminApi.replaceTeamRolePermissions).not.toHaveBeenCalled()
+      expect(adminApi.listTeams).toHaveBeenCalledTimes(2)
     })
   })
 
