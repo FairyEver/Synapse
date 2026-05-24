@@ -205,16 +205,6 @@ function useChatEvents(
         conversationId: selectedConversationIdRef.current,
         sessionKey: selectedSessionKeyRef.current,
       })) {
-        logger.debug("Agent stream event ignored for inactive conversation.", {
-          projectId: domainEvent.payload.projectId,
-          eventType: domainEvent.type,
-          ...streamEventLogMeta(domainEvent),
-          sessionKey: domainEvent.payload.sessionKey,
-          platform: domainEvent.payload.platform,
-          selectedProjectId: selectedProjectIdRef.current,
-          selectedConversationId: selectedConversationIdRef.current,
-          selectedSessionKey: selectedSessionKeyRef.current,
-        })
         return
       }
       if (isSdkStreamDeltaEvent(domainEvent)) {
@@ -333,19 +323,4 @@ function streamEventConversationId(domainEvent: SynapseAgentDomainEvent): string
   return typeof conversationId === "string" && conversationId.length > 0
     ? conversationId
     : undefined
-}
-
-function streamEventLogMeta(domainEvent: SynapseAgentDomainEvent): {
-  readonly conversationId?: string
-  readonly agentEventType?: string
-  readonly sdkSessionId?: string
-} {
-  if (!("event" in domainEvent.payload)) {
-    return { conversationId: streamEventConversationId(domainEvent) }
-  }
-  return {
-    conversationId: streamEventConversationId(domainEvent),
-    agentEventType: domainEvent.payload.event.type,
-    sdkSessionId: domainEvent.payload.event.sdkSessionId,
-  }
 }

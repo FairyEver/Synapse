@@ -95,10 +95,6 @@ export function useStickToBottom(input: {
     setViewportNode(node)
   }, [])
 
-  const setUnreadState = useCallback((next: boolean) => {
-    setHasUnread(next)
-  }, [])
-
   const pauseFollowing = useCallback(() => {
     autoFollowRef.current = false
     programmaticScrollUntilRef.current = 0
@@ -125,18 +121,18 @@ export function useStickToBottom(input: {
     autoFollowRef.current = true
     isPinnedRef.current = true
     setIsPinned(true)
-    setUnreadState(false)
+    setHasUnread(false)
     performScrollToBottom(options)
-  }, [performScrollToBottom, setUnreadState])
+  }, [performScrollToBottom])
 
   const forcePin = useCallback(() => {
     autoFollowRef.current = true
     instantNextScrollRef.current = true
     isPinnedRef.current = true
     setIsPinned(true)
-    setUnreadState(false)
+    setHasUnread(false)
     performScrollToBottom({ behavior: "auto" })
-  }, [performScrollToBottom, setUnreadState])
+  }, [performScrollToBottom])
 
   // Subscribe to viewport scroll.
   useEffect(() => {
@@ -213,7 +209,7 @@ export function useStickToBottom(input: {
           isPinnedRef.current = true
           setIsPinned(true)
         }
-        setUnreadState(false)
+        setHasUnread(false)
       })
     }
 
@@ -230,7 +226,7 @@ export function useStickToBottom(input: {
       viewport.removeEventListener("scroll", onScroll)
       if (frame !== null) window.cancelAnimationFrame(frame)
     }
-  }, [pauseFollowing, setUnreadState, viewportNode])
+  }, [pauseFollowing, viewportNode])
 
   // React to content changes: auto-scroll if pinned, mark unread if latest content changed off-screen.
   useEffect(() => {
@@ -248,7 +244,7 @@ export function useStickToBottom(input: {
     }
 
     if (newEntryArrived || latestEntryId) {
-      setUnreadState(true)
+      setHasUnread(true)
     }
     return undefined
     // contentSignal members trigger this effect; latestEntryId is already part of contentSignal.

@@ -241,8 +241,8 @@ function AgentMessageCode({
           className="-mr-1"
         />
       </div>
-      <pre className="max-w-full overflow-hidden whitespace-pre-wrap break-all p-3 text-sm leading-6">
-        <code className="block min-w-0 max-w-full whitespace-pre-wrap break-all bg-transparent p-0 font-mono">
+      <pre className="!m-0 max-w-full overflow-hidden whitespace-pre-wrap break-all !rounded-none !border-0 !bg-transparent !p-3 text-sm leading-6">
+        <code className="block min-w-0 max-w-full whitespace-pre-wrap break-all !bg-transparent !p-0 font-mono">
           {code}
         </code>
       </pre>

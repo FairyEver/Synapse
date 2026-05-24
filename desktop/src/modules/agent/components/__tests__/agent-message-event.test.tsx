@@ -296,10 +296,17 @@ describe("AgentMessageEvent", () => {
     })
 
     const codeBlock = container.querySelector<HTMLElement>("[data-streamdown='code-block']")
+    const pre = codeBlock?.querySelector("pre")
+    const code = pre?.querySelector("code")
     const markdownRoot = codeBlock?.parentElement
     const messageFrame = codeBlock?.closest(".group\\/message")
 
     expect(codeBlock).not.toBeNull()
+    expect(pre?.className).toContain("!m-0")
+    expect(pre?.className).toContain("!rounded-none")
+    expect(pre?.className).toContain("!border-0")
+    expect(pre?.className).toContain("!bg-transparent")
+    expect(code?.className).toContain("!p-0")
     expect(messageFrame?.className).toContain("min-w-0")
     expect(messageFrame?.className).toContain("max-w-[76ch]")
     expect(codeBlock?.getAttribute("style")).toBeNull()
