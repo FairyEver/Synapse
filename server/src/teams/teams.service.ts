@@ -16,7 +16,17 @@ export class TeamsService {
 
   async createTeam(userId: string, input: { name: string }, ipAddress = "system") {
     const existing = await this.getMembership(userId)
-    if (existing) throw new BadRequestException("账号已属于一个团队。")
+    if (existing) {
+      await this.recordTeamFailure({
+        actorUserId: userId,
+        action: "team.create.failure",
+        targetType: "team",
+        targetId: "unknown",
+        reason: "already_in_team",
+        ipAddress,
+      })
+      throw new BadRequestException("账号已属于一个团队。")
+    }
 
     const team = await this.prisma.$transaction(async (tx) => {
       const team = await tx.team.create({
@@ -82,7 +92,17 @@ export class TeamsService {
 
   async joinTeam(userId: string, input: { invitationToken: string }, ipAddress = "system") {
     const existing = await this.getMembership(userId)
-    if (existing) throw new BadRequestException("账号已属于一个团队。")
+    if (existing) {
+      await this.recordTeamFailure({
+        actorUserId: userId,
+        action: "team.join.failure",
+        targetType: "team",
+        targetId: "unknown",
+        reason: "already_in_team",
+        ipAddress,
+      })
+      throw new BadRequestException("账号已属于一个团队。")
+    }
 
     const result = await this.prisma.$transaction(async (tx) => {
       const invitation = await this.invitations.consumeInvitation({
@@ -108,6 +128,18 @@ export class TeamsService {
         client: tx,
       })
       return { membership, teamId: invitation.teamId }
+    }).catch(async (error: unknown) => {
+      if (isBadRequestMessage(error, "邀请无效或已过期。")) {
+        await this.recordTeamFailure({
+          actorUserId: userId,
+          action: "team.join.failure",
+          targetType: "team",
+          targetId: "unknown",
+          reason: "invalid_invitation",
+          ipAddress,
+        })
+      }
+      throw error
     })
     const actorEmail = await this.getAuditActorEmail(userId)
     await this.auditLog?.record({
@@ -137,16 +169,58 @@ export class TeamsService {
   }
 
   async removeMember(actorUserId: string, targetUserId: string, ipAddress = "system") {
-    const actorMembership = await this.requireTeamPermission(actorUserId, "team.member.manage")
+    let actorMembership: NonNullable<Awaited<ReturnType<typeof this.getMembership>>>
+    try {
+      actorMembership = await this.requireTeamPermission(actorUserId, "team.member.manage")
+    } catch (error) {
+      if (error instanceof ForbiddenException) {
+        await this.recordTeamFailure({
+          actorUserId,
+          action: "team.member.remove.failure",
+          targetType: "user",
+          targetId: targetUserId,
+          reason: "permission_denied",
+          ipAddress,
+        })
+      }
+      throw error
+    }
     if (actorUserId === targetUserId) {
+      await this.recordTeamFailure({
+        actorUserId,
+        action: "team.member.remove.failure",
+        targetType: "user",
+        targetId: targetUserId,
+        reason: "self_remove",
+        detail: { teamId: actorMembership.teamId },
+        ipAddress,
+      })
       throw new BadRequestException("不能移除自己。")
     }
 
     const targetMembership = await this.prisma.teamMembership.findUnique({ where: { userId: targetUserId } })
     if (!targetMembership || targetMembership.teamId !== actorMembership.teamId) {
+      await this.recordTeamFailure({
+        actorUserId,
+        action: "team.member.remove.failure",
+        targetType: "user",
+        targetId: targetUserId,
+        reason: "target_not_found",
+        detail: { teamId: actorMembership.teamId },
+        ipAddress,
+      })
       throw new BadRequestException("成员不存在。")
     }
     if (targetMembership.role === "owner") {
+      await this.recordTeamFailure({
+        actorUserId,
+        action: "team.member.remove.failure",
+        targetType: "user",
+        targetId: targetUserId,
+        reason: "target_is_owner",
+        detail: { teamId: actorMembership.teamId },
+        ipAddress,
+      })
       throw new BadRequestException("不能移除团队所有者。")
     }
 
@@ -237,4 +311,31 @@ export class TeamsService {
     })
     return user?.email ?? userId
   }
+
+  private async recordTeamFailure(input: {
+    readonly actorUserId: string
+    readonly action: "team.create.failure" | "team.join.failure" | "team.member.remove.failure"
+    readonly targetType: "team" | "user"
+    readonly targetId: string
+    readonly reason: string
+    readonly detail?: Record<string, unknown>
+    readonly ipAddress: string
+  }): Promise<void> {
+    const actorEmail = await this.getAuditActorEmail(input.actorUserId)
+    await this.auditLog?.record({
+      adminEmail: actorEmail,
+      action: input.action,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      detail: { ...input.detail, reason: input.reason },
+      ipAddress: input.ipAddress,
+    })
+  }
+}
+
+function isBadRequestMessage(error: unknown, message: string): boolean {
+  if (!(error instanceof BadRequestException)) return false
+  const response = error.getResponse()
+  if (typeof response === "string") return response === message
+  return Boolean(response && typeof response === "object" && "message" in response && (response as { message: unknown }).message === message)
 }

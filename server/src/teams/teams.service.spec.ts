@@ -102,13 +102,24 @@ describe("TeamsService", () => {
   it("rejects team creation when the user already belongs to a team", async () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ id: "membership-1" })
+    prisma.user.findUnique.mockResolvedValue({ email: "user@example.com" })
+    const auditLog = { record: vi.fn() }
     const service = new TeamsService(
       prisma as never,
       { createTeamInvitation: vi.fn(), consumeInvitation: vi.fn() } as never,
       createPermissionsMock() as never,
+      auditLog as never,
     )
 
-    await expect(service.createTeam("user-1", { name: "Team" })).rejects.toThrow(BadRequestException)
+    await expect(service.createTeam("user-1", { name: "Team" }, "203.0.113.11")).rejects.toThrow(BadRequestException)
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "user@example.com",
+      action: "team.create.failure",
+      targetType: "team",
+      targetId: "unknown",
+      detail: { reason: "already_in_team" },
+      ipAddress: "203.0.113.11",
+    })
   })
 
   it("records team creation audits with the user email", async () => {
@@ -259,6 +270,32 @@ describe("TeamsService", () => {
       teamMembershipId: "membership-2",
       assignedByUserId: "user-2",
       client: tx,
+    })
+  })
+
+  it("records invalid team invitation attempts", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue(null)
+    prisma.user.findUnique.mockResolvedValue({ email: "user@example.com" })
+    prisma.$transaction.mockRejectedValue(new BadRequestException("邀请无效或已过期。"))
+    const auditLog = { record: vi.fn() }
+    const service = new TeamsService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
+      auditLog as never,
+    )
+
+    await expect(service.joinTeam("user-1", { invitationToken: "bad-token" }, "203.0.113.13"))
+      .rejects
+      .toThrow("邀请无效或已过期。")
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "user@example.com",
+      action: "team.join.failure",
+      targetType: "team",
+      targetId: "unknown",
+      detail: { reason: "invalid_invitation" },
+      ipAddress: "203.0.113.13",
     })
   })
 
@@ -425,16 +462,27 @@ describe("TeamsService", () => {
       .mockResolvedValueOnce({ role: "owner", teamId: "team-1", userId: "owner-1" })
     const permissions = createPermissionsMock()
     permissions.getEffectivePermissions.mockResolvedValue(["team.member.manage"])
+    prisma.user.findUnique.mockResolvedValue({ email: "manager@example.com" })
+    const auditLog = { record: vi.fn() }
     const service = new TeamsService(
       prisma as never,
       { createTeamInvitation: vi.fn() } as never,
       permissions as never,
+      auditLog as never,
     )
 
-    await expect(service.removeMember("manager-1", "owner-1"))
+    await expect(service.removeMember("manager-1", "owner-1", "203.0.113.21"))
       .rejects
       .toThrow("不能移除团队所有者。")
     expect(prisma.teamMembership.delete).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "manager@example.com",
+      action: "team.member.remove.failure",
+      targetType: "user",
+      targetId: "owner-1",
+      detail: { teamId: "team-1", reason: "target_is_owner" },
+      ipAddress: "203.0.113.21",
+    })
   })
 
   it("allows member removals with the RBAC member management permission", async () => {
@@ -462,14 +510,25 @@ describe("TeamsService", () => {
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "owner", teamId: "team-1", userId: "owner-1" })
     const permissions = createPermissionsMock()
     permissions.getEffectivePermissions.mockResolvedValue([])
+    prisma.user.findUnique.mockResolvedValue({ email: "owner@example.com" })
+    const auditLog = { record: vi.fn() }
     const service = new TeamsService(
       prisma as never,
       { createTeamInvitation: vi.fn() } as never,
       permissions as never,
+      auditLog as never,
     )
 
-    await expect(service.removeMember("owner-1", "user-2")).rejects.toThrow(ForbiddenException)
+    await expect(service.removeMember("owner-1", "user-2", "203.0.113.22")).rejects.toThrow(ForbiddenException)
 
     expect(prisma.teamMembership.delete).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "owner@example.com",
+      action: "team.member.remove.failure",
+      targetType: "user",
+      targetId: "user-2",
+      detail: { reason: "permission_denied" },
+      ipAddress: "203.0.113.22",
+    })
   })
 })
