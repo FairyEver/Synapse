@@ -7,13 +7,15 @@ const throttleLimitMetadata = "THROTTLER:LIMITdefault"
 const throttleTtlMetadata = "THROTTLER:TTLdefault"
 
 describe("UserAuthController", () => {
-  it("applies stricter throttling to register, login, and refresh", () => {
+  it("applies stricter throttling to public auth endpoints", () => {
     expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.register)).toBe(5)
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.register)).toBe(60000)
     expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.login)).toBe(5)
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.login)).toBe(60000)
     expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.refresh)).toBe(5)
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.refresh)).toBe(60000)
+    expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.logout)).toBe(5)
+    expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.logout)).toBe(60000)
   })
 
   it("passes valid login requests to the service", () => {

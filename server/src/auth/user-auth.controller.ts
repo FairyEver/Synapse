@@ -42,6 +42,7 @@ export class UserAuthController {
     return this.auth.refresh(parseBody(refreshSchema, body, "刷新请求无效。"), request.ip)
   }
 
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post("/logout")
   logout(@Body() body: unknown, @Req() request: Request) {
     return this.auth.logout(parseBody(refreshSchema, body, "退出请求无效。"), request.ip)
