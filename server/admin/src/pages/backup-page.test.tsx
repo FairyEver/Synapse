@@ -32,7 +32,7 @@ describe("BackupPage", () => {
     vi.clearAllMocks()
   })
 
-  it("clears stale backup rows when a refresh fails", async () => {
+  it("keeps existing backup rows visible when a refresh fails", async () => {
     vi.mocked(adminApi.listBackups)
       .mockResolvedValueOnce([
         {
@@ -56,7 +56,7 @@ describe("BackupPage", () => {
 
     await waitFor(() => {
       expect(result.container.textContent).toContain("COS 不可用")
-      expect(result.container.textContent).not.toContain("synapse-backup-old.tar.gz")
+      expect(result.container.textContent).toContain("synapse-backup-old.tar.gz")
     })
   })
 

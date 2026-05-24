@@ -31,7 +31,6 @@ export function BackupPage() {
       const backups = await adminApi.listBackups()
       setList(backups)
     } catch (caught: unknown) {
-      setList([])
       setError(caught instanceof Error ? caught.message : "请求失败")
     } finally {
       setLoading(false)
