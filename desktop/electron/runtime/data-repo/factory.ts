@@ -90,7 +90,6 @@ function sqliteIndexesFor(namespace: string): readonly string[] {
     case "repo.pending-pushes":
     case "webhook.runs":
     case "relay.runs":
-    case "knowledge-base.ingest-turns":
       return ["json_extract(value, '$.projectId')"]
     default:
       return []

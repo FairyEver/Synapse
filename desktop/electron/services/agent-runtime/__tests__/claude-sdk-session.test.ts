@@ -62,11 +62,11 @@ describe("ClaudeSDKSession", () => {
   it("passes local SDK plugins to Claude Agent SDK", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, {
-      plugins: [{ type: "local", path: "/Applications/Synapse/resources/knowledge-base/claude-plugin" }],
+      plugins: [{ type: "local", path: "/Applications/Synapse/resources/example-plugin" }],
     })
 
     expect(getOptions()).toMatchObject({
-      plugins: [{ type: "local", path: "/Applications/Synapse/resources/knowledge-base/claude-plugin" }],
+      plugins: [{ type: "local", path: "/Applications/Synapse/resources/example-plugin" }],
     })
   })
 
@@ -80,7 +80,7 @@ describe("ClaudeSDKSession", () => {
   it("keeps hooks disabled when a session-scoped SDK plugin is loaded", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, {
-      plugins: [{ type: "local", path: "/Applications/Synapse/resources/knowledge-base/claude-plugin" }],
+      plugins: [{ type: "local", path: "/Applications/Synapse/resources/example-plugin" }],
     })
 
     expect(getOptions()).toMatchObject({
@@ -96,9 +96,9 @@ describe("ClaudeSDKSession", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, {
       agents: {
-        "synapse-kb-ingest-worker": {
-          description: "Processes assigned Knowledge Base sources.",
-          prompt: "Only process assigned sources.",
+        "synapse-example-worker": {
+          description: "Processes assigned project tasks.",
+          prompt: "Only process assigned tasks.",
           tools: ["Read", "Write"],
         },
       },
@@ -106,9 +106,9 @@ describe("ClaudeSDKSession", () => {
 
     expect(getOptions()).toMatchObject({
       agents: {
-        "synapse-kb-ingest-worker": {
-          description: "Processes assigned Knowledge Base sources.",
-          prompt: "Only process assigned sources.",
+        "synapse-example-worker": {
+          description: "Processes assigned project tasks.",
+          prompt: "Only process assigned tasks.",
           tools: ["Read", "Write"],
         },
       },
@@ -119,9 +119,9 @@ describe("ClaudeSDKSession", () => {
     const { factory, getOptions } = createQueryFactory()
     const session = createSession(factory, {
       subagentToolPolicies: {
-        "synapse-kb-ingest-worker": {
-          allowedWriteRoots: ["wiki/sources"],
-          deniedWritePaths: [".raw/.manifest.json", ".vault-meta", "wiki/index.md"],
+        "synapse-example-worker": {
+          allowedWriteRoots: ["project/outputs"],
+          deniedWritePaths: ["project/state.json", ".vault-meta", "project/index.md"],
         },
       },
     })
@@ -135,11 +135,11 @@ describe("ClaudeSDKSession", () => {
     await hooks.SubagentStart[0].hooks[0]({
       hook_event_name: "SubagentStart",
       agent_id: "agent-1",
-      agent_type: "synapse-kb-ingest-worker",
+      agent_type: "synapse-example-worker",
     }, undefined, { signal: new AbortController().signal })
 
     const result = await canUseTool(getOptions())("Write", {
-      file_path: "wiki/index.md",
+      file_path: "project/index.md",
       content: "# Index\n",
     }, {
       signal: new AbortController().signal,
@@ -149,7 +149,7 @@ describe("ClaudeSDKSession", () => {
 
     expect(result).toEqual({
       behavior: "deny",
-      message: "Subagent synapse-kb-ingest-worker may write only inside: wiki/sources.",
+      message: "Subagent synapse-example-worker may write only inside: project/outputs.",
     })
     await expect(resolveSoon(session.nextEvent())).resolves.toBe("timeout")
   })
@@ -158,13 +158,13 @@ describe("ClaudeSDKSession", () => {
     const { factory, getOptions } = createQueryFactory()
     const session = createSession(factory, {
       toolPolicy: (toolName, input) => {
-        if (toolName !== "Write" || input.file_path === "wiki/sources/a.md") return undefined
+        if (toolName !== "Write" || input.file_path === "project/outputs/a.md") return undefined
         return { behavior: "deny", message: "Only the assigned source page may be written." }
       },
     })
 
     const result = await canUseTool(getOptions())("Write", {
-      file_path: "wiki/index.md",
+      file_path: "project/index.md",
       content: "# Index\n",
     }, {
       signal: new AbortController().signal,

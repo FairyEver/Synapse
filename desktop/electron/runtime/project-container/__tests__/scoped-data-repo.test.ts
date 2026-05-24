@@ -50,20 +50,6 @@ describe("ProjectScopedDataRepoImpl (Phase 0.7)", () => {
     ).rejects.toThrow(/cannot write projectId "p2"/)
   })
 
-  it("scopes knowledge-base ingest turns by project", async () => {
-    const repo = new MemoryRepo()
-    const p1 = new ProjectScopedDataRepoImpl("p1", repo)
-    const p2 = new ProjectScopedDataRepoImpl("p2", repo)
-
-    await p1.namespace<Item>("knowledge-base.ingest-turns").upsert({ id: "turn:p1-turn", turnId: "p1-turn" })
-    await p2.namespace<Item>("knowledge-base.ingest-turns").upsert({ id: "turn:p2-turn", turnId: "p2-turn" })
-
-    await expect(p1.namespace<Item>("knowledge-base.ingest-turns").list()).resolves.toEqual([
-      expect.objectContaining({ id: "turn:p1-turn", projectId: "p1" }),
-    ])
-    await expect(p1.namespace<Item>("knowledge-base.ingest-turns").get("turn:p2-turn")).resolves.toBeNull()
-  })
-
   it("passes global namespaces through unchanged", async () => {
     const repo = new MemoryRepo()
     const p1 = new ProjectScopedDataRepoImpl("p1", repo)

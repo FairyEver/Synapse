@@ -175,7 +175,7 @@ describe("SessionManager", () => {
       createSession,
       sdkPlugins: () => [{
         type: "local",
-        path: "/Applications/Synapse/resources/knowledge-base/claude-plugin",
+        path: "/Applications/Synapse/resources/example-plugin",
       }],
     })
     const state = manager.stateForConversation("conversation-1", baseMessage("default"))
@@ -189,7 +189,7 @@ describe("SessionManager", () => {
     expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
       plugins: [{
         type: "local",
-        path: "/Applications/Synapse/resources/knowledge-base/claude-plugin",
+        path: "/Applications/Synapse/resources/example-plugin",
       }],
     }))
   })
@@ -209,9 +209,9 @@ describe("SessionManager", () => {
       pendingPermissions: new Map(),
       createSession,
       sdkAgents: () => ({
-        "synapse-kb-ingest-worker": {
-          description: "Processes assigned Knowledge Base sources.",
-          prompt: "Only process assigned sources.",
+        "synapse-example-worker": {
+          description: "Processes assigned project tasks.",
+          prompt: "Only process assigned tasks.",
           tools: ["Read", "Write"],
         },
       }),
@@ -226,8 +226,8 @@ describe("SessionManager", () => {
 
     expect(createSession).toHaveBeenCalledWith(expect.objectContaining({
       agents: {
-        "synapse-kb-ingest-worker": expect.objectContaining({
-          description: "Processes assigned Knowledge Base sources.",
+        "synapse-example-worker": expect.objectContaining({
+          description: "Processes assigned project tasks.",
         }),
       },
     }))
@@ -247,9 +247,9 @@ describe("SessionManager", () => {
       states,
       pendingPermissions: new Map(),
       sdkAgents: () => ({
-        "synapse-kb-ingest-worker": {
-          description: "Processes assigned Knowledge Base sources.",
-          prompt: "Only process assigned sources.",
+        "synapse-example-worker": {
+          description: "Processes assigned project tasks.",
+          prompt: "Only process assigned tasks.",
           tools: ["Read", "Write"],
         },
       }),
@@ -264,8 +264,8 @@ describe("SessionManager", () => {
 
     expect(ClaudeSDKSession).toHaveBeenCalledWith(expect.objectContaining({
       agents: {
-        "synapse-kb-ingest-worker": expect.objectContaining({
-          description: "Processes assigned Knowledge Base sources.",
+        "synapse-example-worker": expect.objectContaining({
+          description: "Processes assigned project tasks.",
         }),
       },
     }))

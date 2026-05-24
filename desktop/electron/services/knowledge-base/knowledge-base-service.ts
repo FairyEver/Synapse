@@ -23,7 +23,12 @@ import { stageKnowledgeBaseSources, stageKnowledgeBaseUrlSource } from "./source
 import { createGuardedFetchUrl } from "../source-acquisition/guarded-fetch-url"
 import type { FetchUrl } from "../source-acquisition/url-source"
 import { configStore } from "../config-store"
-import { isManagedKnowledgeBaseProject, knowledgeBaseVirtualPath, resolveManagedKnowledgeBasePath } from "./managed-path"
+import {
+  defaultKnowledgeBaseUserDataPath,
+  isManagedKnowledgeBaseProject,
+  knowledgeBaseVirtualPath,
+  resolveManagedKnowledgeBasePath,
+} from "./managed-path"
 
 export const KNOWLEDGE_BASE_TEMPLATE_VERSION = "2026-05-21"
 
@@ -62,7 +67,7 @@ export class KnowledgeBaseService {
   constructor(deps: KnowledgeBaseServiceDeps = {}) {
     this.templateRoot = deps.templateRoot ?? resolveTemplateRoot()
     this.managedTemplateRoot = deps.managedTemplateRoot ?? resolveManagedTemplateRoot()
-    this.userDataPath = deps.userDataPath ?? app.getPath("userData")
+    this.userDataPath = deps.userDataPath ?? defaultKnowledgeBaseUserDataPath()
     this.loadConfig = deps.loadConfig ?? (() => configStore.load())
     this.now = deps.now ?? (() => new Date())
     this.fileConversionService = deps.fileConversionService ?? createDefaultFileConversionService()
@@ -304,12 +309,12 @@ function resolveTemplateRoot(): string {
     return process.env.SYNAPSE_KB_TEMPLATE_ROOT
   }
 
-  if (app.isPackaged) {
+  if (isElectronAppPackaged()) {
     const resourcesPath = (process as NodeJS.Process & { resourcesPath: string }).resourcesPath
     return path.join(resourcesPath, "knowledge-base", "templates")
   }
 
-  return path.join(app.getAppPath(), "resources", "knowledge-base", "templates")
+  return path.join(getElectronAppPath(), "resources", "knowledge-base", "templates")
 }
 
 function resolveManagedTemplateRoot(): string {
@@ -321,12 +326,20 @@ function resolveManagedTemplateRoot(): string {
     return process.env.SYNAPSE_KB_TEMPLATE_ROOT
   }
 
-  if (app.isPackaged) {
+  if (isElectronAppPackaged()) {
     const resourcesPath = (process as NodeJS.Process & { resourcesPath: string }).resourcesPath
     return path.join(resourcesPath, "knowledge-base", "claude-obsidian-template")
   }
 
-  return path.join(app.getAppPath(), "resources", "knowledge-base", "claude-obsidian-template")
+  return path.join(getElectronAppPath(), "resources", "knowledge-base", "claude-obsidian-template")
+}
+
+function isElectronAppPackaged(): boolean {
+  return (app as { readonly isPackaged?: boolean } | undefined)?.isPackaged === true
+}
+
+function getElectronAppPath(): string {
+  return (app as { getAppPath?: () => string } | undefined)?.getAppPath?.() ?? process.cwd()
 }
 
 function assertInside(rootPath: string, targetPath: string): string {

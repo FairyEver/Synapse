@@ -18,7 +18,7 @@ export function isManagedKnowledgeBaseProject(project: SynapseProjectConfig | nu
 
 export function resolveManagedKnowledgeBasePath(
   project: SynapseProjectConfig,
-  userDataPath = defaultUserDataPath(),
+  userDataPath = defaultKnowledgeBaseUserDataPath(),
 ): string {
   const runtimeId = project.capabilities?.knowledgeBase?.runtimeId
   if (!runtimeId || !RUNTIME_ID_PATTERN.test(runtimeId)) {
@@ -32,11 +32,11 @@ export function resolveProjectWorkspacePath(
   userDataPath?: string,
 ): string {
   return isManagedKnowledgeBaseProject(project)
-    ? resolveManagedKnowledgeBasePath(project, userDataPath ?? defaultUserDataPath())
+    ? resolveManagedKnowledgeBasePath(project, userDataPath ?? defaultKnowledgeBaseUserDataPath())
     : project.path
 }
 
-function defaultUserDataPath(): string {
+export function defaultKnowledgeBaseUserDataPath(): string {
   const electronApp = app as { getPath?: (name: string) => string } | undefined
   return electronApp?.getPath?.("userData") ?? path.join(os.tmpdir(), "synapse-userData")
 }
