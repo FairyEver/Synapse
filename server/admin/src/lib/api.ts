@@ -407,7 +407,6 @@ export const userDashboardApi = {
       method: "POST",
       body: JSON.stringify({ invitationToken }),
     }),
-  listMembers: () => request<TeamMember[]>("/api/teams/members"),
   removeMember: (userId: string) =>
     request<{ ok: true }>(`/api/teams/members/${encodeURIComponent(userId)}`, {
       method: "DELETE",
