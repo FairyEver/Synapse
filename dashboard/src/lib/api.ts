@@ -64,6 +64,44 @@ export type AdminTeamRow = {
   updatedAt: string;
 };
 
+export type PermissionDefinition = {
+  key: string;
+  label: string;
+  description?: string;
+  group: string;
+  level: 'module' | 'action' | 'management';
+  status: 'active' | 'deprecated';
+  clientVisibility: 'visible' | 'hidden';
+};
+
+export type TeamEntitlementsResponse = {
+  permissionKeys: string[];
+};
+
+export type TeamAccessRoleRow = {
+  id: string;
+  name: string;
+  description: string | null;
+  kind: 'system' | 'custom';
+  locked: boolean;
+  sortOrder: number;
+  permissionKeys: string[];
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type MemberAccessRolesResponse = {
+  roles: Array<{
+    id: string;
+    name: string;
+    description: string | null;
+    kind: 'system' | 'custom';
+    locked: boolean;
+    sortOrder: number;
+    assignedAt: string;
+  }>;
+};
+
 export type AdminInvitationRow = {
   id: string;
   type: 'user_signup' | 'team_join';
@@ -282,6 +320,87 @@ export const adminApi = {
   listTeams: (options: { page?: number; pageSize?: number } = {}) =>
     request<PaginatedResponse<AdminTeamRow>>(
       `${adminApiBasePath}/teams${paginationSuffix(options)}`,
+    ),
+  listPermissions: () =>
+    request<PermissionDefinition[]>(`${adminApiBasePath}/permissions`),
+  listTeamEntitlements: (teamId: string) =>
+    request<TeamEntitlementsResponse>(
+      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/entitlements`,
+    ),
+  replaceTeamEntitlements: (teamId: string, permissionKeys: string[]) =>
+    request<TeamEntitlementsResponse>(
+      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/entitlements`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ permissionKeys }),
+      },
+    ),
+  replaceTeamPermissions: (
+    teamId: string,
+    input: {
+      permissionKeys: string[];
+      rolePermissions: Array<{ roleId: string; permissionKeys: string[] }>;
+    },
+  ) =>
+    request<{
+      permissionKeys: string[];
+      rolePermissions: Array<{ roleId: string; permissionKeys: string[] }>;
+    }>(`${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/permissions`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+  listTeamAccessRoles: (teamId: string) =>
+    request<TeamAccessRoleRow[]>(
+      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/access-roles`,
+    ),
+  replaceRolePermissions: (
+    teamId: string,
+    roleId: string,
+    permissionKeys: string[],
+  ) =>
+    request<TeamEntitlementsResponse>(
+      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/access-roles/${encodeURIComponent(roleId)}/permissions`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ permissionKeys }),
+      },
+    ),
+  listMemberAccessRoles: (teamId: string, membershipId: string) =>
+    request<MemberAccessRolesResponse>(
+      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}/access-roles`,
+    ),
+  assignMemberAccessRole: (
+    teamId: string,
+    membershipId: string,
+    roleId: string,
+  ) =>
+    request<MemberAccessRolesResponse>(
+      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}/access-roles`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ roleId }),
+      },
+    ),
+  replaceMemberAccessRoles: (
+    teamId: string,
+    membershipId: string,
+    roleIds: string[],
+  ) =>
+    request<MemberAccessRolesResponse>(
+      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}/access-roles`,
+      {
+        method: 'PUT',
+        body: JSON.stringify({ roleIds }),
+      },
+    ),
+  removeMemberAccessRole: (
+    teamId: string,
+    membershipId: string,
+    roleId: string,
+  ) =>
+    request<MemberAccessRolesResponse>(
+      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}/access-roles/${encodeURIComponent(roleId)}`,
+      { method: 'DELETE' },
     ),
   listBackups: () => request<BackupFile[]>(`${adminApiBasePath}/backup/list`),
   triggerBackup: () =>
