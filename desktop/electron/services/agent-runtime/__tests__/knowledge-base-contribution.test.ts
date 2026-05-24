@@ -29,7 +29,7 @@ describe("knowledge base Agent contribution", () => {
     expect(contribution).toBeNull()
   })
 
-  it("adds wiki commands for projects with a knowledge base marker", async () => {
+  it("returns no Agent contribution for marker-only knowledge base projects", async () => {
     const projectPath = await tempDir()
     await writeFile(path.join(projectPath, ".synapse-kb.json"), `${JSON.stringify({
       type: "synapse.knowledgeBase",
@@ -41,7 +41,7 @@ describe("knowledge base Agent contribution", () => {
       project: { id: "project-1", name: "KB", path: projectPath },
     })
 
-    expect(contribution?.commands.map((command) => command.name)).toEqual(["wiki"])
+    expect(contribution).toBeNull()
   })
 
   it("contributes the Synapse knowledge-base SDK plugin outside the vault", async () => {
