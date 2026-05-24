@@ -265,6 +265,21 @@ function startDownload(url: string, filename: string): void {
   link.remove()
 }
 
+async function downloadFile(url: string, filename: string): Promise<void> {
+  const response = await fetch(url, { credentials: "include" })
+  const contentType = response.headers.get("content-type")
+  if (!response.ok) {
+    const body = contentType?.includes("application/json") ? await response.json() : null
+    throw new ApiError(readErrorMessage(body), response.status)
+  }
+  const objectUrl = URL.createObjectURL(await response.blob())
+  try {
+    startDownload(objectUrl, filename)
+  } finally {
+    URL.revokeObjectURL(objectUrl)
+  }
+}
+
 export const adminApi = {
   getSession: () => request<AdminSession>(`${adminApiBasePath}/session`),
   login: (input: { email: string; password: string }) =>
@@ -398,7 +413,7 @@ export const adminApi = {
     if (opts?.from) params.set("from", opts.from);
     if (opts?.to) params.set("to", opts.to);
     const qs = params.toString();
-    startDownload(`${adminApiBasePath}/logs/download${qs ? `?${qs}` : ""}`, "logs.zip");
+    return downloadFile(`${adminApiBasePath}/logs/download${qs ? `?${qs}` : ""}`, "logs.zip");
   },
   cleanupLogs(before: string) {
     const params = new URLSearchParams({ before });

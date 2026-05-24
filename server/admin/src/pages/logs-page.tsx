@@ -55,6 +55,7 @@ export function LogsPage() {
   const [to, setTo] = useState("");
   const [cleanupBefore, setCleanupBefore] = useState("");
   const [cleaning, setCleaning] = useState(false);
+  const [downloading, setDownloading] = useState<"range" | "all" | null>(null);
 
   const fetchData = async () => {
     setLoading(true);
@@ -98,6 +99,20 @@ export function LogsPage() {
       setError(e instanceof Error ? e.message : "清理失败");
     } finally {
       setCleaning(false);
+    }
+  };
+
+  const handleDownload = async (mode: "range" | "all") => {
+    setDownloading(mode);
+    setError(null);
+    try {
+      await adminApi.downloadLogs(
+        mode === "range" ? { from: from || undefined, to: to || undefined } : undefined,
+      );
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "下载失败");
+    } finally {
+      setDownloading(null);
     }
   };
 
@@ -189,13 +204,13 @@ export function LogsPage() {
             <Button
               variant="outline"
               size="sm"
-              onClick={() => adminApi.downloadLogs({ from: from || undefined, to: to || undefined })}
-              disabled={!from && !to}
+              onClick={() => void handleDownload("range")}
+              disabled={Boolean(downloading) || (!from && !to)}
             >
-              按范围下载
+              {downloading === "range" ? "下载中…" : "按范围下载"}
             </Button>
-            <Button size="sm" onClick={() => adminApi.downloadLogs()}>
-              下载全部
+            <Button size="sm" onClick={() => void handleDownload("all")} disabled={Boolean(downloading)}>
+              {downloading === "all" ? "下载中…" : "下载全部"}
             </Button>
             <Input
               type="date"

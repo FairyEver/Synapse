@@ -4,6 +4,7 @@ import { adminApi } from "./api"
 describe("adminApi", () => {
   afterEach(() => {
     vi.restoreAllMocks()
+    vi.unstubAllGlobals()
   })
 
   it("uses /api/admin for admin session and dashboard data", async () => {
@@ -123,9 +124,18 @@ describe("adminApi", () => {
     )
   })
 
-  it("starts admin downloads under /api/admin without opening popups", () => {
+  it("starts admin downloads under /api/admin without opening popups", async () => {
     const openMock = vi.fn()
     vi.stubGlobal("open", openMock)
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      headers: new Headers({ "Content-Type": "application/zip" }),
+      blob: () => Promise.resolve(new Blob(["logs"])),
+    })
+    vi.stubGlobal("fetch", fetchMock)
+    const createObjectURL = vi.fn(() => "blob:logs")
+    const revokeObjectURL = vi.fn()
+    vi.stubGlobal("URL", { createObjectURL, revokeObjectURL })
     const clicked: Array<{ readonly href: string | null; readonly download: string }> = []
     vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(function click(this: HTMLAnchorElement) {
       clicked.push({
@@ -135,13 +145,19 @@ describe("adminApi", () => {
     })
 
     adminApi.exportAuditLogs({ action: "users.post" })
-    adminApi.downloadLogs({ from: "2026-05-01" })
+    await adminApi.downloadLogs({ from: "2026-05-01" })
     adminApi.downloadBackup("synapse backup.tar.gz")
 
     expect(openMock).not.toHaveBeenCalled()
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/admin/logs/download?from=2026-05-01",
+      { credentials: "include" },
+    )
+    expect(createObjectURL).toHaveBeenCalledWith(expect.any(Blob))
+    expect(revokeObjectURL).toHaveBeenCalledWith("blob:logs")
     expect(clicked).toEqual([
       { href: "/api/admin/audit-logs/export?action=users.post", download: "audit-logs.csv" },
-      { href: "/api/admin/logs/download?from=2026-05-01", download: "logs.zip" },
+      { href: "blob:logs", download: "logs.zip" },
       { href: "/api/admin/backup/download/synapse%20backup.tar.gz", download: "synapse backup.tar.gz" },
     ])
   })

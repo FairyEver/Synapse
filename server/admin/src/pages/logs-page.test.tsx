@@ -3,6 +3,20 @@ import { adminApi } from "@/lib/api"
 import { changeInput, render, waitFor } from "@/test/render"
 import { LOG_LEVEL_FILTER_OPTIONS, LogsPage } from "./logs-page"
 
+function createDeferred<T>() {
+  let resolve: (value: T) => void = () => {
+    throw new Error("Promise has not been initialized.")
+  }
+  let reject: (reason?: unknown) => void = () => {
+    throw new Error("Promise has not been initialized.")
+  }
+  const promise = new Promise<T>((innerResolve, innerReject) => {
+    resolve = innerResolve
+    reject = innerReject
+  })
+  return { promise, resolve, reject }
+}
+
 vi.mock("@/lib/api", () => ({
   adminApi: {
     cleanupLogs: vi.fn(),
@@ -108,6 +122,37 @@ describe("LogsPage", () => {
     await waitFor(() => {
       expect(result.container.textContent).toContain("最近日志加载失败：最近日志加载失败")
       expect(result.container.textContent).toContain("server.2026-05-23.log")
+    })
+  })
+
+  it("shows download progress and errors", async () => {
+    const download = createDeferred<void>()
+    vi.mocked(adminApi.fetchRecentLogs).mockResolvedValue([])
+    vi.mocked(adminApi.listLogFiles).mockResolvedValue([])
+    vi.mocked(adminApi.downloadLogs).mockReturnValue(download.promise)
+
+    const result = await render(<LogsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("暂无日志")
+    })
+    const button = Array.from(result.container.querySelectorAll("button"))
+      .find((item) => item.textContent === "下载全部")
+
+    button?.click()
+
+    await waitFor(() => {
+      expect(adminApi.downloadLogs).toHaveBeenCalledWith(undefined)
+      expect(button?.disabled).toBe(true)
+      expect(button?.textContent).toBe("下载中…")
+    })
+    download.reject(new Error("下载失败"))
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("下载失败")
+      expect(button?.disabled).toBe(false)
+      expect(button?.textContent).toBe("下载全部")
     })
   })
 })
