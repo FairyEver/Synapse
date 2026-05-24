@@ -1,5 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 import * as fs from "node:fs"
+import * as os from "node:os"
+import * as path from "node:path"
 import { Readable } from "node:stream"
 import { BackupService, buildBackupKey, buildPgDumpOptions } from "./backup.service"
 
@@ -268,6 +270,25 @@ describe("BackupService", () => {
       },
       expect.any(Function),
     )
+  })
+
+  it("packs the already-compressed database dump without gziping the tar again", async () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService({}, logger)
+    const dbPath = path.join(os.tmpdir(), `synapse-test-${Date.now()}.sql.gz`)
+    fs.writeFileSync(dbPath, Buffer.from([0x1f, 0x8b, 0x08, 0x00]))
+
+    const archivePath = await (service as unknown as {
+      packFiles(dbPath: string): Promise<string>
+    }).packFiles(dbPath)
+
+    try {
+      expect(archivePath).toMatch(/\.tar$/)
+      expect(fs.readFileSync(archivePath).subarray(0, 2)).not.toEqual(Buffer.from([0x1f, 0x8b]))
+    } finally {
+      fs.rmSync(dbPath, { force: true })
+      fs.rmSync(archivePath, { force: true })
+    }
   })
 })
 

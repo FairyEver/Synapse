@@ -116,7 +116,7 @@ export class BackupService {
   async performBackup(): Promise<BackupResult> {
     this.getBackupCos()
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
-    const filename = `synapse-backup-${timestamp}.tar.gz`
+    const filename = `synapse-backup-${timestamp}.tar`
     const tempFiles: string[] = []
 
     try {
@@ -248,14 +248,14 @@ export class BackupService {
   private async packFiles(dbPath: string): Promise<string> {
     const tmpDir = os.tmpdir()
     const workDir = path.join(tmpDir, `synapse-backup-${Date.now()}`)
-    const archivePath = path.join(tmpDir, `synapse-backup-${Date.now()}.tar.gz`)
+    const archivePath = path.join(tmpDir, `synapse-backup-${Date.now()}.tar`)
 
     fs.mkdirSync(workDir, { recursive: true })
 
     fs.copyFileSync(dbPath, path.join(workDir, "database.sql.gz"))
 
     await tar.create(
-      { gzip: true, file: archivePath, cwd: workDir },
+      { gzip: false, file: archivePath, cwd: workDir },
       ["database.sql.gz"],
     )
 
