@@ -404,6 +404,45 @@ function KnowledgeBaseSourceManagerWindow() {
     </div>
   ), [currentDirectory, directoryTree, expandedDirectories, openTreeDirectory, toggleTreeDirectory])
 
+  const renderMoveTreeItems = useCallback((items: SynapseKnowledgeBaseRawEntry[]) => (
+    <div className="ml-4 flex flex-col gap-1">
+      {items.map((entry) => {
+        const isExpanded = expandedDirectories.has(entry.relativePath)
+        const childItems = directoryTree[entry.relativePath] ?? []
+        return (
+          <div key={entry.relativePath} className="flex flex-col gap-1">
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => toggleTreeDirectory(entry.relativePath)}
+                aria-label={`${isExpanded ? "折叠" : "展开"} ${entry.name}`}
+              >
+                {isExpanded ? <ChevronDown /> : <ChevronRight />}
+              </Button>
+              <Button
+                type="button"
+                variant={moveTargetPath === entry.relativePath ? "secondary" : "ghost"}
+                size="sm"
+                className="min-w-0 flex-1 justify-start"
+                onClick={() => {
+                  setMoveTargetPath(entry.relativePath)
+                  void loadTreeDirectory(entry.relativePath)
+                }}
+                aria-label={`选择目标文件夹 ${entry.name}`}
+              >
+                <Folder data-icon="inline-start" />
+                <span className="truncate">{entry.name}</span>
+              </Button>
+            </div>
+            {isExpanded && childItems.length > 0 ? renderMoveTreeItems(childItems) : null}
+          </div>
+        )
+      })}
+    </div>
+  ), [directoryTree, expandedDirectories, loadTreeDirectory, moveTargetPath, toggleTreeDirectory])
+
   if (!payload) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
@@ -674,16 +713,21 @@ function KnowledgeBaseSourceManagerWindow() {
         <DialogContent>
           <DialogHeader>
             <DialogTitle>移动</DialogTitle>
-            <DialogDescription>留空移动到资料。</DialogDescription>
+            <DialogDescription>选择目标文件夹。</DialogDescription>
           </DialogHeader>
-          <Input
-            value={moveTargetPath}
-            onChange={(event) => setMoveTargetPath(event.target.value)}
-            onKeyDown={(event) => {
-              if (event.key === "Enter") void moveSelected()
-            }}
-            placeholder="目标文件夹"
-          />
+          <div className="max-h-72 overflow-auto rounded-md border border-border p-2">
+            <Button
+              type="button"
+              variant={moveTargetPath === "" ? "secondary" : "ghost"}
+              className="w-full justify-start"
+              onClick={() => setMoveTargetPath("")}
+              aria-label="选择目标文件夹 资料"
+            >
+              <Folder data-icon="inline-start" />
+              资料
+            </Button>
+            {renderMoveTreeItems(directoryTree[""] ?? [])}
+          </div>
           <DialogFooter>
             <Button type="button" variant="outline" onClick={() => setMoveOpen(false)}>取消</Button>
             <Button type="button" onClick={moveSelected} aria-label="确认移动">移动</Button>

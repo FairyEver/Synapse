@@ -307,10 +307,10 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     await act(async () => {
       buttonByLabel("移动所选").click()
     })
-    const moveInput = document.querySelector<HTMLInputElement>('input[placeholder="目标文件夹"]')
-    expect(moveInput).not.toBeNull()
-    act(() => {
-      changeInput(moveInput!, "客户")
+    expect(document.querySelector<HTMLInputElement>('input[placeholder="目标文件夹"]')).toBeNull()
+    await act(async () => {
+      buttonByLabel("选择目标文件夹 客户").click()
+      await Promise.resolve()
     })
     await act(async () => {
       buttonByLabel("确认移动").click()
