@@ -12,6 +12,9 @@ export {
   KnowledgeBaseIngestFinalizer,
 } from "./ingest-finalizer"
 export {
+  KnowledgeBaseIngestCoordinator,
+} from "./ingest-coordinator"
+export {
   isKnowledgeBaseIngestIntent,
 } from "./ingest-intent"
 export type {
@@ -22,3 +25,9 @@ export type {
 export type {
   KnowledgeBaseIngestFinalizerResult,
 } from "./ingest-finalizer"
+export type {
+  FinalizeKnowledgeBaseIngestTurnInput,
+  KnowledgeBaseIngestFinalizeResult,
+  KnowledgeBaseIngestPreflight,
+  PrepareKnowledgeBaseIngestTurnInput,
+} from "./ingest-coordinator"
