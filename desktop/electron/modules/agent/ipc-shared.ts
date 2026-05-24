@@ -11,6 +11,7 @@ import {
   PROVIDER_SERVICE_ID,
 } from "../../services/provider"
 import { configStore } from "../../services/config-store"
+import { resolveProjectWorkspacePath } from "../../services/knowledge-base/managed-path"
 import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
 
@@ -202,7 +203,7 @@ function resolveAgentProjectConfig(
   return {
     uuid: project.id,
     name: project.name,
-    localPath: project.path,
+    localPath: resolveProjectWorkspacePath(project),
   }
 }
 

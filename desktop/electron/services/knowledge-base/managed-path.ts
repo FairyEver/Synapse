@@ -1,4 +1,5 @@
 import { app } from "electron"
+import os from "node:os"
 import path from "node:path"
 import type { SynapseProjectConfig } from "../../../src/types/config"
 
@@ -17,7 +18,7 @@ export function isManagedKnowledgeBaseProject(project: SynapseProjectConfig | nu
 
 export function resolveManagedKnowledgeBasePath(
   project: SynapseProjectConfig,
-  userDataPath = app.getPath("userData"),
+  userDataPath = defaultUserDataPath(),
 ): string {
   const runtimeId = project.capabilities?.knowledgeBase?.runtimeId
   if (!runtimeId || !RUNTIME_ID_PATTERN.test(runtimeId)) {
@@ -28,9 +29,14 @@ export function resolveManagedKnowledgeBasePath(
 
 export function resolveProjectWorkspacePath(
   project: SynapseProjectConfig,
-  userDataPath = app.getPath("userData"),
+  userDataPath?: string,
 ): string {
   return isManagedKnowledgeBaseProject(project)
-    ? resolveManagedKnowledgeBasePath(project, userDataPath)
+    ? resolveManagedKnowledgeBasePath(project, userDataPath ?? defaultUserDataPath())
     : project.path
+}
+
+function defaultUserDataPath(): string {
+  const electronApp = app as { getPath?: (name: string) => string } | undefined
+  return electronApp?.getPath?.("userData") ?? path.join(os.tmpdir(), "synapse-userData")
 }

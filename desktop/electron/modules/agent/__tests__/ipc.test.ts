@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import path from "node:path"
 
 const logStoreMock = vi.hoisted(() => ({
   logger: {
@@ -99,6 +100,55 @@ describe("agentIpcModule", () => {
       agentSessionId: "thread-1",
       threadId: "thread-1",
       error: undefined,
+    })
+  })
+
+  it("opens managed knowledge base projects with their hidden runtime path", async () => {
+    vi.mocked(configStore.load).mockResolvedValue({
+      repositories: [],
+      global: {
+        themeMode: "system",
+        projects: [{
+          id: "kb-1",
+          name: "Knowledge",
+          path: "synapse-kb://kb-1",
+          capabilities: {
+            knowledgeBase: {
+              enabled: true,
+              schemaVersion: 1,
+              templateVersion: "2026-05-24",
+              managed: true,
+              runtimeId: "kb-1",
+            },
+          },
+        }],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+      agent: {
+        defaultPermissionMode: "default",
+      },
+    } as never)
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [{ type: "result", content: "done", done: true }],
+    })
+    const harness = createHarness({
+      agent: {
+        send,
+      },
+    })
+
+    await harness.invoke("synapse:agent:send", {
+      projectId: "kb-1",
+      content: "hello",
+    })
+
+    expect(harness.projectContainers.open).toHaveBeenCalledWith("kb-1", {
+      name: "Knowledge",
+      workspacePath: expect.stringContaining(path.join("knowledge-bases", "kb-1")),
     })
   })
 
