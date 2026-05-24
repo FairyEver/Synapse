@@ -10,9 +10,9 @@ describe("toCsv", () => {
       },
     ], ["id", "detail"])
 
-    expect(csv).toBe([
+    expect(csv).toBe(`\uFEFF${[
       "id,detail",
       `audit-1,"{""filters"":{""action"":""admin.audit_logs.export""},""count"":1}"`,
-    ].join("\n"))
+    ].join("\n")}`)
   })
 })

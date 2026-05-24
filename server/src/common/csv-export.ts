@@ -3,7 +3,7 @@ export function toCsv(rows: Record<string, unknown>[], columns: string[]): strin
   const body = rows.map((row) =>
     columns.map((col) => escapeCsvField(formatCsvValue(row[col]))).join(","),
   )
-  return [header, ...body].join("\n")
+  return `\uFEFF${[header, ...body].join("\n")}`
 }
 
 function formatCsvValue(value: unknown): string {
