@@ -2,8 +2,8 @@ import { createRequire } from "node:module"
 
 import TurndownService from "turndown"
 
-const require = createRequire(__filename)
-const { gfm } = require("turndown-plugin-gfm") as { readonly gfm: TurndownService.Plugin }
+const requireFromHere = createRequire(__filename)
+const { gfm } = requireFromHere("turndown-plugin-gfm") as { readonly gfm: TurndownService.Plugin }
 
 export function htmlToMarkdown(html: string): string {
   const service = new TurndownService({

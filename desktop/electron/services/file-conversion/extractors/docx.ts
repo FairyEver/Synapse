@@ -6,7 +6,7 @@ import { htmlToMarkdown } from "../html-to-markdown"
 import { normalizeMarkdownTitle } from "../markdown"
 import { type FileConversionInput, type FileConversionResult, type FileExtractor } from "../types"
 
-const require = createRequire(__filename)
+const requireFromHere = createRequire(__filename)
 
 type MammothMessage = {
   readonly type: string
@@ -33,7 +33,7 @@ export class DocxExtractor implements FileExtractor {
   private readonly convertToHtml: ConvertToHtml
 
   constructor(options: DocxExtractorOptions = {}) {
-    const mammoth = require("mammoth") as MammothModule
+    const mammoth = requireFromHere("mammoth") as MammothModule
     this.convertToHtml = options.convertToHtml ?? mammoth.convertToHtml
   }
 
