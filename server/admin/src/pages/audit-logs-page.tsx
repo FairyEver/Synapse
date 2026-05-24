@@ -47,7 +47,9 @@ export const AUDIT_ACTION_FILTER_OPTIONS = [
   { value: "backup.list", label: "backup.list" },
   { value: "backup.download", label: "backup.download" },
   { value: "backup.post", label: "backup.post" },
+  { value: "backup.post.failed", label: "backup.post.failed" },
   { value: "backup.delete", label: "backup.delete" },
+  { value: "backup.delete.failed", label: "backup.delete.failed" },
   { value: "logs.download", label: "logs.download" },
   { value: "logs.cleanup", label: "logs.cleanup" },
 ] as const

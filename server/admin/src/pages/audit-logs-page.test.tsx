@@ -30,6 +30,8 @@ describe("AuditLogsPage", () => {
       { value: "user.login.disabled", label: "user.login.disabled" },
       { value: "team.create", label: "team.create" },
       { value: "backup.download", label: "backup.download" },
+      { value: "backup.post.failed", label: "backup.post.failed" },
+      { value: "backup.delete.failed", label: "backup.delete.failed" },
       { value: "logs.download", label: "logs.download" },
       { value: "logs.cleanup", label: "logs.cleanup" },
     ]))
