@@ -114,6 +114,7 @@ export class BackupService {
   }
 
   async performBackup(): Promise<BackupResult> {
+    this.getBackupCos()
     const timestamp = new Date().toISOString().replace(/[:.]/g, "-")
     const filename = `synapse-backup-${timestamp}.tar.gz`
     const tempFiles: string[] = []
@@ -196,11 +197,11 @@ export class BackupService {
   }
 
   async downloadBackup(filename: string): Promise<Buffer> {
-    if (!this.cos) throw new ServiceUnavailableException("备份未配置。")
+    const cos = this.getBackupCos()
     const key = buildBackupKey(this.prefix, filename)
 
     const body = await new Promise<unknown>((resolve, reject) => {
-      this.cos!.getObject(
+      cos.getObject(
         {
           Bucket: this.bucket,
           Region: this.region,
@@ -223,11 +224,11 @@ export class BackupService {
   }
 
   async deleteBackup(filename: string): Promise<void> {
-    if (!this.cos) throw new ServiceUnavailableException("备份未配置。")
+    const cos = this.getBackupCos()
     const key = buildBackupKey(this.prefix, filename)
 
     await new Promise<void>((resolve, reject) => {
-      this.cos!.deleteObject(
+      cos.deleteObject(
         {
           Bucket: this.bucket,
           Region: this.region,
@@ -280,12 +281,12 @@ export class BackupService {
   }
 
   private async uploadToCos(filePath: string, filename: string): Promise<void> {
-    if (!this.cos) throw new Error("COS client not initialized")
+    const cos = this.getBackupCos()
 
     const body = fs.createReadStream(filePath)
 
     return new Promise((resolve, reject) => {
-      this.cos!.putObject(
+      cos.putObject(
         {
           Bucket: this.bucket,
           Region: this.region,
@@ -363,6 +364,13 @@ export class BackupService {
       })
       this.logger.error({ error: message }, "Failed to clean expired backups")
     }
+  }
+
+  private getBackupCos(): COS {
+    if (!isBackupConfigured(this.env) || !this.cos) {
+      throw new ServiceUnavailableException("备份未配置。")
+    }
+    return this.cos
   }
 
   private async recordBackupCleanupAudit(input: {

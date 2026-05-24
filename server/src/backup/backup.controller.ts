@@ -12,7 +12,7 @@ export class BackupController {
   async triggerBackup() {
     const result = await this.backupService.performBackup()
     if (result.status === "failed") {
-      throw new InternalServerErrorException(result.error || "备份失败")
+      throw new InternalServerErrorException("备份失败。")
     }
     return result
   }

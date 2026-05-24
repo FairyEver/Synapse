@@ -50,6 +50,15 @@ describe("buildBackupKey", () => {
 })
 
 describe("BackupService", () => {
+  it("rejects manual backups before dumping when COS is not configured", async () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService(null, logger)
+
+    await expect(service.performBackup()).rejects.toThrow("备份未配置。")
+
+    expect(logger.error).not.toHaveBeenCalled()
+  })
+
   it("maps COS LastModified to the admin API createdAt field", async () => {
     const logger = { error: vi.fn() }
     const service = createBackupService({

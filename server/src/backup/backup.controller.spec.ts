@@ -30,7 +30,7 @@ describe("BackupController", () => {
     }
     const controller = new BackupController(service as unknown as BackupService)
 
-    await expect(controller.triggerBackup()).rejects.toThrow("COS 未配置")
+    await expect(controller.triggerBackup()).rejects.toThrow("备份失败。")
   })
 
   it("sends backup downloads as attachments", async () => {
