@@ -150,6 +150,31 @@ describe("AuditLogsPage", () => {
     })
   })
 
+  it("opens formatted audit details from the table", async () => {
+    vi.mocked(adminApi.listAuditLogs).mockResolvedValue(createAuditPage({
+      page: 1,
+      id: "log-1",
+      total: 1,
+      detail: { status: "disabled", ids: ["invite-1"], count: 1 },
+    }))
+
+    const result = await render(<AuditLogsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("log-1")
+    })
+    Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "详情")
+      ?.click()
+
+    await waitFor(() => {
+      expect(document.body.textContent).toContain("审计详情")
+      expect(document.body.textContent).toContain('"status": "disabled"')
+      expect(document.body.textContent).toContain('"ids"')
+    })
+  })
+
   it("disables export while the CSV download is running", async () => {
     const exportRequest = createDeferred<void>()
     vi.mocked(adminApi.listAuditLogs).mockResolvedValue(createAuditPage({ page: 1, id: "log-1", total: 1 }))
@@ -179,7 +204,7 @@ describe("AuditLogsPage", () => {
   })
 })
 
-function createAuditPage(input: { page: number; id: string; total: number; pageSize?: number }) {
+function createAuditPage(input: { page: number; id: string; total: number; pageSize?: number; detail?: unknown }) {
   return {
     data: [
       {
@@ -188,7 +213,7 @@ function createAuditPage(input: { page: number; id: string; total: number; pageS
         action: "admin.user.status_update",
         targetType: "user",
         targetId: input.id,
-        detail: null,
+        detail: input.detail ?? null,
         ipAddress: "127.0.0.1",
         createdAt: "2026-05-23T00:00:00.000Z",
       },

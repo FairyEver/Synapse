@@ -5,6 +5,14 @@ import { formatDate } from "@/lib/format"
 import { PageState } from "@/components/page-state"
 import { PaginationFooter } from "@/components/pagination-footer"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -139,6 +147,7 @@ export function AuditLogsPage() {
             <TableHead>操作</TableHead>
             <TableHead>目标类型</TableHead>
             <TableHead>目标 ID</TableHead>
+            <TableHead>详情</TableHead>
             <TableHead>IP</TableHead>
           </TableRow>
         </TableHeader>
@@ -150,6 +159,9 @@ export function AuditLogsPage() {
               <TableCell>{log.action}</TableCell>
               <TableCell>{log.targetType}</TableCell>
               <TableCell className="font-mono text-xs">{log.targetId}</TableCell>
+              <TableCell>
+                <AuditDetailCell log={log} />
+              </TableCell>
               <TableCell>{log.ipAddress}</TableCell>
             </TableRow>
           ))}
@@ -164,4 +176,39 @@ export function AuditLogsPage() {
       />
     </div>
   )
+}
+
+function AuditDetailCell({ log }: { readonly log: AuditLog }) {
+  if (!hasAuditDetail(log.detail)) return <span className="text-muted-foreground">-</span>
+
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <Button variant="ghost" size="sm">详情</Button>
+      </DialogTrigger>
+      <DialogContent className="sm:max-w-2xl">
+        <DialogHeader>
+          <DialogTitle>审计详情</DialogTitle>
+          <DialogDescription>{log.action}</DialogDescription>
+        </DialogHeader>
+        <pre className="max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-md bg-muted p-3 font-mono text-xs">
+          {formatAuditDetail(log.detail)}
+        </pre>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function hasAuditDetail(detail: unknown): boolean {
+  return detail !== null && detail !== undefined
+}
+
+function formatAuditDetail(detail: unknown): string {
+  if (typeof detail === "string") return detail
+
+  try {
+    return JSON.stringify(detail, null, 2) ?? String(detail)
+  } catch {
+    return "无法显示详情"
+  }
 }
