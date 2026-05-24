@@ -79,6 +79,70 @@ describe("TeamsPage", () => {
     })
   })
 
+  it("keeps pagination visible when the current teams page is empty", async () => {
+    vi.mocked(adminApi.listTeams)
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: "team-1",
+            name: "一组",
+            createdByUser: { email: "owner@example.com" },
+            memberships: [],
+            createdAt: "2026-05-20T00:00:00.000Z",
+            updatedAt: "2026-05-22T00:00:00.000Z",
+          },
+        ],
+        total: 21,
+        page: 1,
+        pageSize: 20,
+      })
+      .mockResolvedValueOnce({
+        data: [],
+        total: 21,
+        page: 2,
+        pageSize: 20,
+      })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: "team-1",
+            name: "一组",
+            createdByUser: { email: "owner@example.com" },
+            memberships: [],
+            createdAt: "2026-05-20T00:00:00.000Z",
+            updatedAt: "2026-05-22T00:00:00.000Z",
+          },
+        ],
+        total: 21,
+        page: 1,
+        pageSize: 20,
+      })
+
+    const result = await render(<TeamsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("一组")
+    })
+    Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "下一页")
+      ?.click()
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("暂无团队")
+    })
+    const previous = Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "上一页")
+    expect(previous?.disabled).toBe(false)
+
+    previous?.click()
+
+    await waitFor(() => {
+      expect(adminApi.listTeams).toHaveBeenLastCalledWith({ page: 1 })
+      expect(result.container.textContent).toContain("一组")
+    })
+  })
+
   it("renders member emails and role labels", async () => {
     vi.mocked(adminApi.listTeams).mockResolvedValue({
       data: [

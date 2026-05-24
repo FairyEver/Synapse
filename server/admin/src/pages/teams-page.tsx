@@ -252,66 +252,70 @@ export function TeamsPage() {
 
   if (loading) return <PageState>加载中</PageState>
   if (error) return <PageState>{error}</PageState>
-  if (!result || result.data.length === 0) return <PageState>暂无团队</PageState>
+  if (!result) return <PageState>暂无团队</PageState>
 
   const permissionGroups = groupPermissions(permissions)
   const editableRoleCount = accessRoles.filter((role) => !role.locked).length
 
   return (
     <div className="flex flex-col gap-4">
-      <Table>
-        <TableHeader>
-          <TableRow>
-            <TableHead>名称</TableHead>
-            <TableHead>所有者</TableHead>
-            <TableHead>成员</TableHead>
-            <TableHead>创建时间</TableHead>
-            <TableHead>更新时间</TableHead>
-            <TableActionHead>操作</TableActionHead>
-          </TableRow>
-        </TableHeader>
-        <TableBody>
-          {result.data.map((team) => (
-            <TableRow key={team.id}>
-              <TableCell>{team.name}</TableCell>
-              <TableCell>{team.createdByUser.email}</TableCell>
-              <TableCell className="min-w-64 whitespace-normal">
-                <div className="flex flex-col gap-1">
-                  {team.memberships.map((membership) => (
-                    <div
-                      key={`${membership.user.email}-${membership.role}-${membership.createdAt}`}
-                      className="flex min-w-0 items-center gap-2"
-                    >
-                      <span className="truncate">{membership.user.email}</span>
-                      <Badge variant="outline" className="shrink-0">{formatTeamRole(membership.role)}</Badge>
-                      {accessRoleNames(membership).map((roleName) => (
-                        <Badge key={roleName} variant="secondary" className="shrink-0">{roleName}</Badge>
-                      ))}
-                      <Button
-                        type="button"
-                        size="sm"
-                        variant="outline"
-                        className="shrink-0"
-                        onClick={() => setEditingMemberRoles({ team, membership })}
-                      >
-                        角色
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              </TableCell>
-              <TableCell>{formatDate(team.createdAt)}</TableCell>
-              <TableCell>{formatDate(team.updatedAt)}</TableCell>
-              <TableActionCell>
-                <Button size="sm" variant="outline" onClick={() => setEditingTeam(team)}>
-                  <ShieldCheck data-icon="inline-start" />
-                  权限
-                </Button>
-              </TableActionCell>
+      {result.data.length === 0 ? (
+        <PageState>暂无团队</PageState>
+      ) : (
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>名称</TableHead>
+              <TableHead>所有者</TableHead>
+              <TableHead>成员</TableHead>
+              <TableHead>创建时间</TableHead>
+              <TableHead>更新时间</TableHead>
+              <TableActionHead>操作</TableActionHead>
             </TableRow>
-          ))}
-        </TableBody>
-      </Table>
+          </TableHeader>
+          <TableBody>
+            {result.data.map((team) => (
+              <TableRow key={team.id}>
+                <TableCell>{team.name}</TableCell>
+                <TableCell>{team.createdByUser.email}</TableCell>
+                <TableCell className="min-w-64 whitespace-normal">
+                  <div className="flex flex-col gap-1">
+                    {team.memberships.map((membership) => (
+                      <div
+                        key={`${membership.user.email}-${membership.role}-${membership.createdAt}`}
+                        className="flex min-w-0 items-center gap-2"
+                      >
+                        <span className="truncate">{membership.user.email}</span>
+                        <Badge variant="outline" className="shrink-0">{formatTeamRole(membership.role)}</Badge>
+                        {accessRoleNames(membership).map((roleName) => (
+                          <Badge key={roleName} variant="secondary" className="shrink-0">{roleName}</Badge>
+                        ))}
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant="outline"
+                          className="shrink-0"
+                          onClick={() => setEditingMemberRoles({ team, membership })}
+                        >
+                          角色
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </TableCell>
+                <TableCell>{formatDate(team.createdAt)}</TableCell>
+                <TableCell>{formatDate(team.updatedAt)}</TableCell>
+                <TableActionCell>
+                  <Button size="sm" variant="outline" onClick={() => setEditingTeam(team)}>
+                    <ShieldCheck data-icon="inline-start" />
+                    权限
+                  </Button>
+                </TableActionCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      )}
       <PaginationFooter
         page={result.page}
         pageSize={result.pageSize}
