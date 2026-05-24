@@ -195,6 +195,7 @@ export class UserAuthService {
       where: {
         id: session.id,
         refreshTokenHash: currentRefreshTokenHash,
+        revokedAt: null,
       },
       data: {
         refreshTokenHash: hashToken(refreshToken),

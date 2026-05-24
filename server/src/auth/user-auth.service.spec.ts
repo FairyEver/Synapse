@@ -314,6 +314,7 @@ describe("UserAuthService", () => {
       where: {
         id: "session-1",
         refreshTokenHash: hashToken("refresh-token"),
+        revokedAt: null,
       },
     }))
     expect(auditLog.record).toHaveBeenCalledWith({
