@@ -26,6 +26,7 @@ The exact macOS packaging command from the plan reached `codesign` and then stal
 | `find desktop/release/mac-arm64 -name '*.node' ...` | Pass | Packaged output includes two Darwin arm64 `skia.darwin-arm64.node` files under `app.asar.unpacked`. |
 | `find node_modules desktop/node_modules | rg '(traineddata\|worker\|tesseract\|ocr)'` | Informational | Found `pdf.worker` assets and `officeparser -> tesseract.js -> tesseract.js-core` files in local dependencies. |
 | `find desktop/release/mac-arm64 | rg '(tesseract\|traineddata\|ocrUtils\|pdf\\.worker\|wasm)'` | Pass | No matching packaged paths were found in the directory package scan. |
+| `pnpm approve-builds` implications | No change required | This completion pass did not add a real OCR runtime dependency or require new build-script approvals. Future OCR adapters must update this report if they introduce native build scripts, WASM workers, or trained-data assets. |
 
 ## Dependency Graph
 
