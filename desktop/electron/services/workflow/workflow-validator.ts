@@ -1,3 +1,5 @@
+import path from "node:path"
+
 import type { WorkflowDefinition, ValidationResult, ValidationError, ValidationWarning } from "../../../src/types/workflow"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
 import { createMainLogger } from "../log-store"
@@ -83,18 +85,20 @@ function validateFileConversionNodeConfig(node: WorkflowDefinition["nodes"][numb
 
   if (cfg.outputMode === "markdown-file") {
     const outputPath = typeof cfg.outputPath === "string" ? cfg.outputPath.trim() : ""
-    if (!outputPath) {
+    const outputDirectory = typeof cfg.outputDirectory === "string" ? cfg.outputDirectory.trim() : ""
+    const pathToValidate = outputPath || (outputDirectory ? path.join(outputDirectory, "converted.md") : "")
+    if (!pathToValidate) {
       errors.push({
         type: "invalid_config",
         nodeId: node.id,
         nodeName: node.name,
         field: "outputPath",
-        message: `节点「${node.name}」使用 markdown-file 时 outputPath 不能为空`,
+        message: `节点「${node.name}」使用 markdown-file 时 outputPath 或 outputDirectory 不能为空`,
       })
       return
     }
 
-    if (!isWorkflowFileConversionOutputPathAllowed(outputPath)) {
+    if (!isWorkflowFileConversionOutputPathAllowed(pathToValidate)) {
       errors.push({
         type: "invalid_config",
         nodeId: node.id,

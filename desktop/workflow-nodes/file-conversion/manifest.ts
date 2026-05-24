@@ -8,7 +8,7 @@ export const fileConversionNodeManifest: NodeManifest<FileConversionNodeConfig> 
   title: "文件转换",
   icon: FileText,
   color: "bg-primary/10",
-  defaultConfig: { inputPath: "", outputMode: "result" },
+  defaultConfig: { inputPath: "", outputMode: "result", outputPath: "", outputDirectory: "", ocr: { enabled: false, languages: [] } },
   ports: { inputs: [{ id: "in", label: "输入" }], outputs: [{ id: "out", label: "输出" }] },
   cardSummary: (c) => ({
     title: "文件转换",
@@ -18,6 +18,7 @@ export const fileConversionNodeManifest: NodeManifest<FileConversionNodeConfig> 
     { name: "inputPath", kind: "text", label: "输入路径" },
     { name: "outputMode", kind: "select", label: "输出模式", optional: true },
     { name: "outputPath", kind: "text", label: "输出路径", optional: true },
+    { name: "outputDirectory", kind: "text", label: "输出目录", optional: true },
   ],
   configSchema: fileConversionNodeConfigSchema,
 }

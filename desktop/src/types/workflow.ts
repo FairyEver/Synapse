@@ -9,6 +9,12 @@ export interface WorkflowFileConversionNodeConfig {
   readonly inputPath: string
   readonly outputMode?: "result" | "markdown-file"
   readonly outputPath?: string
+  readonly outputDirectory?: string
+  readonly ocr?: {
+    readonly enabled?: boolean
+    readonly languages?: readonly string[]
+    readonly maxPages?: number
+  }
 }
 export interface WorkflowFileConversionNodeResult {
   readonly sourcePath: string

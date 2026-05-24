@@ -29,7 +29,12 @@ export class ImageExtractor implements FileExtractor {
     const format = imageFormatFromPath(input.filePath)
     try {
       const mimeType = IMAGE_MIME_TYPES[format]
-      const result = await this.localOcrEngine.recognize({ filePath: input.filePath, mimeType })
+      const result = await this.localOcrEngine.recognize({
+        filePath: input.filePath,
+        mimeType,
+        languages: input.ocr?.languages,
+        maxPages: input.ocr?.maxPages,
+      })
       const text = result.text.trim()
       const title = normalizeMarkdownTitle(undefined, input.filePath)
       return {

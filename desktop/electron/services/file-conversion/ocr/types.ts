@@ -11,5 +11,10 @@ export interface LocalOcrRecognitionResult {
 }
 
 export interface LocalOcrEngine {
-  recognize(input: { readonly filePath: string; readonly mimeType?: string }): Promise<LocalOcrRecognitionResult>
+  recognize(input: {
+    readonly filePath: string
+    readonly mimeType?: string
+    readonly languages?: readonly string[]
+    readonly maxPages?: number
+  }): Promise<LocalOcrRecognitionResult>
 }

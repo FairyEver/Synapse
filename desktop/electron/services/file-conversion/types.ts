@@ -4,6 +4,8 @@ export type FileConversionFormat = "doc" | "docx" | "xlsx" | "pdf" | "ppt" | "pp
 
 export interface FileConversionOcrOptions {
   readonly enabled: boolean
+  readonly languages?: readonly string[]
+  readonly maxPages?: number
 }
 
 export interface FileConversionInput {

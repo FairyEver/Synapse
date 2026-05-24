@@ -1,3 +1,5 @@
+import path from "node:path"
+
 import type { FileConversionErrorCode, FileConversionResult } from "../../electron/services/file-conversion"
 import { FileConversionError } from "../../electron/services/file-conversion"
 import { sanitizeError } from "../../electron/services/error-sanitize"
@@ -39,13 +41,14 @@ export const fileConversionNodeExecutor: NodeExecutor<FileConversionNodeConfig> 
       const converted = await runtimeDeps.fileConversionService.convert({
         filePath: inputPath,
         preferredOutput: "markdown",
+        ocr: normalizeOcrOptions(config.ocr),
       })
 
       input.onProgress?.("processing_output", "处理输出…")
       const outputs = buildConversionOutputs(converted)
 
       if (config.outputMode === "markdown-file") {
-        const outputPath = config.outputPath?.trim() ?? ""
+        const outputPath = resolveMarkdownOutputPath(config, converted)
         if (!isWorkflowFileConversionOutputPathAllowed(outputPath)) {
           return fileConversionFailure({
             start,
@@ -117,6 +120,33 @@ export const fileConversionNodeExecutor: NodeExecutor<FileConversionNodeConfig> 
 }
 
 type WorkflowFileConversionFailureCode = FileConversionErrorCode | "invalid_output_path" | "write_failed"
+
+function normalizeOcrOptions(ocr: FileConversionNodeConfig["ocr"]): { enabled: boolean; languages?: readonly string[]; maxPages?: number } | undefined {
+  if (!ocr?.enabled) return undefined
+  const languages = (ocr.languages ?? []).map((language) => language.trim()).filter(Boolean)
+  return {
+    enabled: true,
+    ...(languages.length > 0 ? { languages } : {}),
+    ...(typeof ocr.maxPages === "number" && Number.isFinite(ocr.maxPages) ? { maxPages: ocr.maxPages } : {}),
+  }
+}
+
+function resolveMarkdownOutputPath(config: FileConversionNodeConfig, result: FileConversionResult): string {
+  const explicitPath = config.outputPath?.trim()
+  if (explicitPath) return explicitPath
+
+  const outputDirectory = config.outputDirectory?.trim()
+  if (!outputDirectory) return ""
+
+  return path.join(outputDirectory, markdownFileName(result))
+}
+
+function markdownFileName(result: FileConversionResult): string {
+  const sourceBaseName = path.basename(result.sourcePath).replace(/\.[^.]+$/, "")
+  const rawName = path.basename((result.title || sourceBaseName || "converted").trim()).replace(/\.md$/i, "")
+  const safeName = rawName.replace(/[<>:"/\\|?*\x00-\x1F]/g, "-").trim() || "converted"
+  return `${safeName}.md`
+}
 
 function buildConversionOutputs(result: FileConversionResult): Record<string, unknown> {
   return {

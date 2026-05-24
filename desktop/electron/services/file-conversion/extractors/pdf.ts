@@ -79,7 +79,12 @@ export class PdfExtractor implements FileExtractor {
   }
 
   private async extractOcr(input: FileConversionInput, title: string, data: PdfParseResult): Promise<FileConversionResult> {
-    const ocr = await this.localOcrEngine.recognize({ filePath: input.filePath, mimeType: "application/pdf" })
+    const ocr = await this.localOcrEngine.recognize({
+      filePath: input.filePath,
+      mimeType: "application/pdf",
+      languages: input.ocr?.languages,
+      maxPages: input.ocr?.maxPages,
+    })
     const text = ocr.text.trim()
     return {
       sourcePath: input.filePath,

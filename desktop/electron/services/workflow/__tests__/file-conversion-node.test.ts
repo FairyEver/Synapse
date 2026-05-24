@@ -10,6 +10,7 @@ import { FileConversionError, type FileConversionResult } from "../../file-conve
 import { getWorkflowFileConversionOutputRoot } from "../../../../workflow-nodes/file-conversion/output-boundary"
 import { fileConversionNodeExecutor } from "../../../../workflow-nodes/file-conversion"
 import type { NodeExecutionInput, NodeRuntimeDeps } from "../../../../workflow-nodes/types"
+import type { FileConversionNodeConfig } from "../../../../workflow-nodes/file-conversion/schema"
 import "../../../../workflow-nodes/register.main"
 
 const logger = vi.hoisted(() => ({
@@ -47,9 +48,9 @@ function makeRuntimeDeps(input: {
 }
 
 function makeInput(
-  config: Partial<NodeExecutionInput<{ inputPath: string; outputMode?: "result" | "markdown-file"; outputPath?: string }>["config"]>,
+  config: Partial<FileConversionNodeConfig>,
   runtimeDeps = makeRuntimeDeps(),
-): NodeExecutionInput<{ inputPath: string; outputMode?: "result" | "markdown-file"; outputPath?: string }> {
+): NodeExecutionInput<FileConversionNodeConfig> {
   return {
     config: { inputPath: "/tmp/source.docx", outputMode: "result", ...config },
     resolvedVariables: {},
@@ -95,6 +96,20 @@ describe("file conversion workflow node", () => {
     expect(result.status).toBe("success")
     expect(convert).toHaveBeenCalledWith({ filePath: "/tmp/source.docx", preferredOutput: "markdown" })
     expect(result.output).toBe(conversionResult.markdown)
+  })
+
+  it("passes OCR options to the injected conversion service", async () => {
+    const convert = vi.fn().mockResolvedValue(conversionResult)
+
+    await fileConversionNodeExecutor.execute(makeInput({
+      ocr: { enabled: true, languages: ["eng", "chi_sim"], maxPages: 3 },
+    }, makeRuntimeDeps({ convert })))
+
+    expect(convert).toHaveBeenCalledWith({
+      filePath: "/tmp/source.docx",
+      preferredOutput: "markdown",
+      ocr: { enabled: true, languages: ["eng", "chi_sim"], maxPages: 3 },
+    })
   })
 
   it("returns structured conversion output and propagates warnings", async () => {
@@ -155,6 +170,24 @@ describe("file conversion workflow node", () => {
       runId: "run-1",
       abortSignal: expect.any(AbortSignal),
     })
+  })
+
+  it("can derive a markdown output path from an output directory", async () => {
+    const outputDirectory = join(getWorkflowFileConversionOutputRoot(), "run-1")
+    const outputPath = join(outputDirectory, "Source.md")
+    const writeWorkflowFileConversionOutput = vi.fn().mockResolvedValue(undefined)
+
+    const result = await fileConversionNodeExecutor.execute(makeInput(
+      { outputMode: "markdown-file", outputDirectory },
+      makeRuntimeDeps({ writeWorkflowFileConversionOutput }),
+    ))
+
+    expect(result.status).toBe("success")
+    expect(result.outputs).toEqual(expect.objectContaining({ outputPath }))
+    expect(writeWorkflowFileConversionOutput).toHaveBeenCalledWith(expect.objectContaining({
+      outputPath,
+      markdown: conversionResult.markdown,
+    }))
   })
 
   it("returns sanitized write_failed output when markdown-file output writing fails", async () => {

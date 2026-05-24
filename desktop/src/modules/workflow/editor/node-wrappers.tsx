@@ -5,12 +5,14 @@ import { SwitchNodeCard } from "../../../../workflow-nodes/switch/card"
 import { EndNodeCard } from "../../../../workflow-nodes/end/card"
 import { HttpRequestNodeCard } from "../../../../workflow-nodes/http-request/card"
 import { ScriptNodeCard } from "../../../../workflow-nodes/script/card"
+import { FileConversionNodeCard } from "../../../../workflow-nodes/file-conversion/card"
 import { SWITCH_HEADER_H, SWITCH_BRANCH_H } from "../../../../workflow-nodes/switch/constants"
 import type { PromptNodeConfig } from "../../../../workflow-nodes/prompt/schema"
 import type { SwitchNodeConfig } from "../../../../workflow-nodes/switch/schema"
 import type { EndNodeConfig } from "../../../../workflow-nodes/end/schema"
 import type { HttpRequestNodeConfig } from "../../../../workflow-nodes/http-request/schema"
 import type { ScriptNodeConfig } from "../../../../workflow-nodes/script/schema"
+import type { FileConversionNodeConfig } from "../../../../workflow-nodes/file-conversion/schema"
 
 export function PromptNodeWrapper({ id, data, selected }: NodeProps) {
   const name = (data as { name?: string }).name
@@ -85,10 +87,24 @@ export function ScriptNodeWrapper({ id, data, selected }: NodeProps) {
   )
 }
 
+export function FileConversionNodeWrapper({ id, data, selected }: NodeProps) {
+  const name = (data as { name?: string }).name
+  return (
+    <NodeContextMenu nodeId={id} nodeType="file_conversion">
+      <div>
+        <Handle type="target" position={Position.Left} />
+        <FileConversionNodeCard config={data as FileConversionNodeConfig} name={name} selected={selected} nodeId={id} />
+        <Handle type="source" position={Position.Right} />
+      </div>
+    </NodeContextMenu>
+  )
+}
+
 export const nodeTypes = {
   prompt: PromptNodeWrapper,
   switch: SwitchNodeWrapper,
   end: EndNodeWrapper,
   http_request: HttpRequestNodeWrapper,
   script: ScriptNodeWrapper,
+  file_conversion: FileConversionNodeWrapper,
 }
