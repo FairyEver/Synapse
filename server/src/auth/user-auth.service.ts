@@ -65,11 +65,12 @@ export class UserAuthService {
   ) {}
 
   async register(input: { invitationToken: string; email: string; password: string }, ipAddress = "system"): Promise<UserTokenPair> {
+    const email = input.email.trim().toLowerCase()
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
           data: {
-            email: input.email.trim().toLowerCase(),
+            email,
             passwordHash: await hashPassword(input.password),
           },
         })
@@ -91,7 +92,19 @@ export class UserAuthService {
       return result.tokens
     } catch (error) {
       if (isUniqueConstraintError(error)) {
+        await this.recordUserRegistrationFailure({
+          adminEmail: email,
+          reason: "duplicate_email",
+          ipAddress,
+        })
         throw new BadRequestException("邮箱已注册。")
+      }
+      if (isBadRequestMessage(error, "邀请无效或已过期。")) {
+        await this.recordUserRegistrationFailure({
+          adminEmail: email,
+          reason: "invalid_invitation",
+          ipAddress,
+        })
       }
       throw error
     }
@@ -314,6 +327,21 @@ export class UserAuthService {
     })
   }
 
+  private async recordUserRegistrationFailure(input: {
+    readonly adminEmail: string
+    readonly reason: "duplicate_email" | "invalid_invitation"
+    readonly ipAddress: string
+  }): Promise<void> {
+    await this.auditLog?.record({
+      adminEmail: input.adminEmail,
+      action: "user.register.failure",
+      targetType: "user",
+      targetId: "unknown",
+      detail: { reason: input.reason },
+      ipAddress: input.ipAddress,
+    })
+  }
+
   private async issueTokenPair(
     user: Pick<User, "id" | "email">,
     client: Prisma.TransactionClient | PrismaService = this.prisma,
@@ -332,4 +360,11 @@ export class UserAuthService {
 
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
+}
+
+function isBadRequestMessage(error: unknown, message: string): boolean {
+  if (!(error instanceof BadRequestException)) return false
+  const response = error.getResponse()
+  if (typeof response === "string") return response === message
+  return Boolean(response && typeof response === "object" && "message" in response && (response as { message: unknown }).message === message)
 }

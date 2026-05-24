@@ -1,5 +1,6 @@
-import { UnauthorizedException } from "@nestjs/common"
+import { BadRequestException, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
+import { Prisma } from "@prisma/client"
 import { describe, expect, it, vi } from "vitest"
 import { hashPassword } from "./password"
 import { hashToken } from "./token"
@@ -33,6 +34,13 @@ function createPermissionsMock() {
   return {
     getEffectivePermissions: vi.fn(),
   }
+}
+
+function createUniqueConstraintError() {
+  return new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+    code: "P2002",
+    clientVersion: "6.0.0",
+  })
 }
 
 describe("UserAuthService", () => {
@@ -206,6 +214,70 @@ describe("UserAuthService", () => {
       targetType: "user",
       targetId: "user-1",
       ipAddress: "203.0.113.25",
+    })
+  })
+
+  it("records duplicate registration attempts", async () => {
+    const prisma = createPrismaMock()
+    prisma.$transaction.mockRejectedValue(createUniqueConstraintError())
+    const auditLog = { record: vi.fn() }
+    const permissions = createPermissionsMock()
+    const service = new UserAuthService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
+      { accessMinutes: 15, refreshDays: 30 },
+      permissions as never,
+      auditLog as never,
+    )
+
+    await expect(service.register({
+      invitationToken: "invite-token",
+      email: "U@example.com",
+      password: "StrongPassword123!",
+    }, "203.0.113.26"))
+      .rejects
+      .toThrow("邮箱已注册。")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.register.failure",
+      targetType: "user",
+      targetId: "unknown",
+      detail: { reason: "duplicate_email" },
+      ipAddress: "203.0.113.26",
+    })
+  })
+
+  it("records invalid invitation registration attempts", async () => {
+    const prisma = createPrismaMock()
+    prisma.$transaction.mockRejectedValue(new BadRequestException("邀请无效或已过期。"))
+    const auditLog = { record: vi.fn() }
+    const permissions = createPermissionsMock()
+    const service = new UserAuthService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
+      { accessMinutes: 15, refreshDays: 30 },
+      permissions as never,
+      auditLog as never,
+    )
+
+    await expect(service.register({
+      invitationToken: "invalid-token",
+      email: "u@example.com",
+      password: "StrongPassword123!",
+    }, "203.0.113.27"))
+      .rejects
+      .toThrow("邀请无效或已过期。")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.register.failure",
+      targetType: "user",
+      targetId: "unknown",
+      detail: { reason: "invalid_invitation" },
+      ipAddress: "203.0.113.27",
     })
   })
 
