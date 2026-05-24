@@ -129,6 +129,7 @@ describe("AdminService", () => {
           select: {
             id: true,
             role: true,
+            createdAt: true,
             team: { select: { id: true, name: true } },
             accessRoles: {
               select: { role: { select: { id: true, name: true } } },
@@ -160,6 +161,7 @@ describe("AdminService", () => {
           select: {
             id: true,
             role: true,
+            createdAt: true,
             team: { select: { id: true, name: true } },
             accessRoles: {
               select: { role: { select: { id: true, name: true } } },
