@@ -138,7 +138,32 @@ export class UserAuthService {
       where: { refreshTokenHash: currentRefreshTokenHash },
       include: { user: true },
     })
-    if (!session || session.revokedAt || session.expiresAt <= new Date()) {
+    const now = new Date()
+    if (!session) {
+      await this.recordUserAudit({
+        adminEmail: "unknown",
+        action: "user.refresh.invalid",
+        targetId: "unknown",
+        ipAddress,
+      })
+      throw new UnauthorizedException("未登录或登录已过期。")
+    }
+    if (session.revokedAt) {
+      await this.recordUserAudit({
+        adminEmail: session.user.email,
+        action: "user.refresh.revoked",
+        targetId: session.user.id,
+        ipAddress,
+      })
+      throw new UnauthorizedException("未登录或登录已过期。")
+    }
+    if (session.expiresAt <= now) {
+      await this.recordUserAudit({
+        adminEmail: session.user.email,
+        action: "user.refresh.expired",
+        targetId: session.user.id,
+        ipAddress,
+      })
       throw new UnauthorizedException("未登录或登录已过期。")
     }
     if (session.user.status !== "active") {
@@ -165,6 +190,12 @@ export class UserAuthService {
       },
     })
     if (result.count === 0) {
+      await this.recordUserAudit({
+        adminEmail: session.user.email,
+        action: "user.refresh.race_lost",
+        targetId: session.user.id,
+        ipAddress,
+      })
       throw new UnauthorizedException("未登录或登录已过期。")
     }
     return { accessToken: this.signAccessToken(session.user), refreshToken }
@@ -259,6 +290,21 @@ export class UserAuthService {
       { sub: user.id, email: user.email } satisfies UserJwtPayload,
       { expiresIn: `${this.options.accessMinutes}m` },
     )
+  }
+
+  private async recordUserAudit(input: {
+    readonly adminEmail: string
+    readonly action: string
+    readonly targetId: string
+    readonly ipAddress: string
+  }): Promise<void> {
+    await this.auditLog?.record({
+      adminEmail: input.adminEmail,
+      action: input.action,
+      targetType: "user",
+      targetId: input.targetId,
+      ipAddress: input.ipAddress,
+    })
   }
 
   private async issueTokenPair(

@@ -175,7 +175,7 @@ describe("UserAuthService", () => {
       id: "session-1",
       refreshTokenHash: hashToken("refresh-token"),
       revokedAt: null,
-      expiresAt: new Date("2026-05-24T12:00:00.000Z"),
+      expiresAt: new Date("2999-01-01T00:00:00.000Z"),
       user: {
         id: "user-1",
         email: "u@example.com",
@@ -183,6 +183,7 @@ describe("UserAuthService", () => {
       },
     })
     prisma.userSession.updateMany.mockResolvedValue({ count: 0 })
+    const auditLog = { record: vi.fn() }
     const permissions = createPermissionsMock()
     const service = new UserAuthService(
       prisma as never,
@@ -190,9 +191,10 @@ describe("UserAuthService", () => {
       new JwtService({ secret: "user-secret-at-least-32-characters!" }),
       { accessMinutes: 15, refreshDays: 30 },
       permissions as never,
+      auditLog as never,
     )
 
-    await expect(service.refresh({ refreshToken: "refresh-token" }))
+    await expect(service.refresh({ refreshToken: "refresh-token" }, "203.0.113.27"))
       .rejects
       .toThrow("未登录或登录已过期。")
 
@@ -202,6 +204,117 @@ describe("UserAuthService", () => {
         refreshTokenHash: hashToken("refresh-token"),
       },
     }))
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.refresh.race_lost",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "203.0.113.27",
+    })
+  })
+
+  it("records invalid refresh token attempts with the request ip", async () => {
+    const prisma = createPrismaMock()
+    prisma.userSession.findUnique.mockResolvedValue(null)
+    const auditLog = { record: vi.fn() }
+    const permissions = createPermissionsMock()
+    const service = new UserAuthService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
+      { accessMinutes: 15, refreshDays: 30 },
+      permissions as never,
+      auditLog as never,
+    )
+
+    await expect(service.refresh({ refreshToken: "invalid-token" }, "203.0.113.28"))
+      .rejects
+      .toThrow("未登录或登录已过期。")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "unknown",
+      action: "user.refresh.invalid",
+      targetType: "user",
+      targetId: "unknown",
+      ipAddress: "203.0.113.28",
+    })
+    expect(prisma.userSession.updateMany).not.toHaveBeenCalled()
+  })
+
+  it("records revoked refresh token attempts with the request ip", async () => {
+    const prisma = createPrismaMock()
+    prisma.userSession.findUnique.mockResolvedValue({
+      id: "session-1",
+      refreshTokenHash: hashToken("refresh-token"),
+      revokedAt: new Date("2026-05-24T00:00:00.000Z"),
+      expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+      user: {
+        id: "user-1",
+        email: "u@example.com",
+        status: "active",
+      },
+    })
+    const auditLog = { record: vi.fn() }
+    const permissions = createPermissionsMock()
+    const service = new UserAuthService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
+      { accessMinutes: 15, refreshDays: 30 },
+      permissions as never,
+      auditLog as never,
+    )
+
+    await expect(service.refresh({ refreshToken: "refresh-token" }, "203.0.113.29"))
+      .rejects
+      .toThrow("未登录或登录已过期。")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.refresh.revoked",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "203.0.113.29",
+    })
+    expect(prisma.userSession.updateMany).not.toHaveBeenCalled()
+  })
+
+  it("records expired refresh token attempts with the request ip", async () => {
+    const prisma = createPrismaMock()
+    prisma.userSession.findUnique.mockResolvedValue({
+      id: "session-1",
+      refreshTokenHash: hashToken("refresh-token"),
+      revokedAt: null,
+      expiresAt: new Date("2000-01-01T00:00:00.000Z"),
+      user: {
+        id: "user-1",
+        email: "u@example.com",
+        status: "active",
+      },
+    })
+    const auditLog = { record: vi.fn() }
+    const permissions = createPermissionsMock()
+    const service = new UserAuthService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
+      { accessMinutes: 15, refreshDays: 30 },
+      permissions as never,
+      auditLog as never,
+    )
+
+    await expect(service.refresh({ refreshToken: "refresh-token" }, "203.0.113.30"))
+      .rejects
+      .toThrow("未登录或登录已过期。")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.refresh.expired",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "203.0.113.30",
+    })
+    expect(prisma.userSession.updateMany).not.toHaveBeenCalled()
   })
 
   it("records disabled user refresh attempts with the request ip", async () => {
@@ -210,7 +323,7 @@ describe("UserAuthService", () => {
       id: "session-1",
       refreshTokenHash: hashToken("refresh-token"),
       revokedAt: null,
-      expiresAt: new Date("2026-05-24T12:00:00.000Z"),
+      expiresAt: new Date("2999-01-01T00:00:00.000Z"),
       user: {
         id: "user-1",
         email: "u@example.com",
