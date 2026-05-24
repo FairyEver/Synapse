@@ -6,8 +6,8 @@ import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { KnowledgeBaseSourceManagerWindow } from "../source-manager-window"
 import type {
-  SynapseKnowledgeBaseListSourcesResult,
-  SynapseKnowledgeBaseUploadSourcesResult,
+  SynapseKnowledgeBaseListRawDirectoryResult,
+  SynapseKnowledgeBaseRawMutationResult,
 } from "@/types/knowledge-base"
 
 const rendererLogger = vi.hoisted(() => ({
@@ -65,63 +65,54 @@ afterEach(() => {
 })
 
 function createBridgeMocks() {
+  const emptyMutation: SynapseKnowledgeBaseRawMutationResult = {
+    projectId: "project-1",
+    entries: [],
+    skipped: [],
+  }
   return {
     knowledgeBase: {
-      listSources: vi.fn<(projectId: string) => Promise<SynapseKnowledgeBaseListSourcesResult>>()
-        .mockResolvedValue({
+      listRawDirectory: vi.fn<(payload: { projectId: string; directoryPath: string }) => Promise<SynapseKnowledgeBaseListRawDirectoryResult>>()
+        .mockImplementation(async ({ directoryPath }) => ({
           projectId: "project-1",
-          sources: [
-            {
-              relativePath: "raw/AI产品需求说明.md",
-              name: "AI产品需求说明.md",
-              size: 43008,
+          directoryPath,
+          entries: directoryPath === "客户"
+            ? [{
+              relativePath: "客户/访谈.md",
+              name: "访谈.md",
+              kind: "file",
+              size: 24,
               modifiedAt: "2026-05-23T14:20:00.000Z",
-              supported: true,
-              status: "pending",
-            },
-            {
-              relativePath: "raw/客户访谈纪要.docx",
-              name: "客户访谈纪要.docx",
-              size: 172032,
-              modifiedAt: "2026-05-22T11:03:00.000Z",
-              supported: true,
-              status: "changed",
-            },
-            {
-              relativePath: "raw/竞品调研.pdf",
-              name: "竞品调研.pdf",
-              size: 2516582,
-              modifiedAt: "2026-05-22T18:11:00.000Z",
-              supported: true,
-              status: "imported",
-            },
-          ],
-        }),
-      uploadSources: vi.fn<(payload: { projectId: string; filePaths: string[] }) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
-        .mockResolvedValue({
-          projectId: "project-1",
-          uploaded: [],
-          skipped: [],
-        }),
-      addUrlSource: vi.fn<(payload: { projectId: string; url: string }) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
-        .mockResolvedValue({
-          projectId: "project-1",
-          uploaded: [{
-            originalPath: "https://example.com/article",
-            relativePath: ".raw/web/2026/05/24/article.md",
-            name: "article.md",
-            size: 120,
-            sourceKind: "url",
-            sourceUrl: "https://example.com/article",
-          }],
-          skipped: [],
-        }),
-      selectAndUploadSources: vi.fn<(projectId: string) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
-        .mockResolvedValue({
-          projectId: "project-1",
-          uploaded: [],
-          skipped: [],
-        }),
+            }]
+            : [
+              {
+                relativePath: "客户",
+                name: "客户",
+                kind: "directory",
+                size: null,
+                modifiedAt: "2026-05-22T11:03:00.000Z",
+              },
+              {
+                relativePath: "brief.md",
+                name: "brief.md",
+                kind: "file",
+                size: 43008,
+                modifiedAt: "2026-05-23T14:20:00.000Z",
+              },
+            ],
+        })),
+      uploadRawFiles: vi.fn<(payload: { projectId: string; targetDirectoryPath: string; filePaths: string[] }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
+        .mockResolvedValue(emptyMutation),
+      selectAndUploadRawFiles: vi.fn<(payload: { projectId: string; targetDirectoryPath: string }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
+        .mockResolvedValue(emptyMutation),
+      createRawFolder: vi.fn<(payload: { projectId: string; parentDirectoryPath: string; name: string }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
+        .mockResolvedValue(emptyMutation),
+      renameRawEntry: vi.fn<(payload: { projectId: string; relativePath: string; newName: string }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
+        .mockResolvedValue(emptyMutation),
+      moveRawEntries: vi.fn<(payload: { projectId: string; relativePaths: string[]; targetDirectoryPath: string }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
+        .mockResolvedValue(emptyMutation),
+      trashRawEntries: vi.fn<(payload: { projectId: string; relativePaths: string[] }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
+        .mockResolvedValue(emptyMutation),
       filePathForDroppedFile: vi.fn<(file: File) => string | null>(() => null),
     },
     agent: {
@@ -169,81 +160,60 @@ function changeInput(input: HTMLInputElement, value: string): void {
   input.dispatchEvent(new Event("input", { bubbles: true }))
 }
 
-function visibleRowsText(): string {
-  return [...document.querySelectorAll<HTMLTableRowElement>("tbody tr")]
-    .filter((row) => !row.hidden)
-    .map((row) => row.textContent ?? "")
-    .join("\n")
-}
-
 describe("KnowledgeBaseSourceManagerWindow", () => {
-  it("prioritizes the source list and keeps file placement actions in the side pane", async () => {
+  it("renders raw files as a file browser without import statuses", async () => {
     renderWindow()
 
     await waitForExpectation(() => {
-      expect(document.body.textContent).toContain("AI产品需求说明.md")
+      expect(document.body.textContent).toContain("brief.md")
     })
 
-    expect(document.querySelector('[aria-label="资料列表"]')).not.toBeNull()
-    expect(document.querySelector('[aria-label="添加资料"]')).not.toBeNull()
-    expect(document.body.textContent).not.toContain("导入知识库")
-    expect(document.body.textContent).not.toContain("资料管理")
-    expect(document.body.textContent).toContain("放入资料")
-    expect(document.body.textContent).toContain("支持 Markdown、Word、Excel、PDF、PPT、图片、网页 URL")
-    expect(document.body.textContent).toContain("放入后，在知识库对话里说“汲取知识”")
-    expect(document.body.textContent).toContain("新文件")
-    expect(document.body.textContent).toContain("有更新")
-    expect(document.body.textContent).toContain("已放入")
-
-    const searchInput = document.querySelector<HTMLInputElement>('input[placeholder="搜索资料"]')
-    expect(searchInput).not.toBeNull()
-
-    act(() => {
-      changeInput(searchInput!, "客户")
-    })
-
-    expect(visibleRowsText()).toContain("客户访谈纪要.docx")
-    expect(visibleRowsText()).not.toContain("AI产品需求说明.md")
-
+    expect(document.querySelector('[aria-label="资料文件"]')).not.toBeNull()
+    expect(document.body.textContent).toContain("资料")
+    expect(document.body.textContent).toContain("客户")
+    expect(document.body.textContent).not.toContain("新文件")
+    expect(document.body.textContent).not.toContain("已放入")
+    expect(document.body.textContent).not.toContain("粘贴网页 URL")
     expect(bridgeMocks.agent.createSession).not.toHaveBeenCalled()
     expect(bridgeMocks.agent.send).not.toHaveBeenCalled()
   })
 
-  it("adds URL sources from the side pane", async () => {
+  it("opens folders and updates breadcrumbs", async () => {
     renderWindow()
 
     await waitForExpectation(() => {
-      expect(document.body.textContent).toContain("AI产品需求说明.md")
-    })
-
-    const urlInput = document.querySelector<HTMLInputElement>('input[placeholder="粘贴网页 URL"]')
-    expect(urlInput).not.toBeNull()
-
-    act(() => {
-      changeInput(urlInput!, "https://example.com/article")
+      expect(document.body.textContent).toContain("客户")
     })
 
     await act(async () => {
-      buttonByLabel("添加 URL").click()
+      buttonByLabel("打开文件夹 客户").click()
       await Promise.resolve()
     })
 
-    expect(bridgeMocks.knowledgeBase.addUrlSource).toHaveBeenCalledWith({
-      projectId: "project-1",
-      url: "https://example.com/article",
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("访谈.md")
     })
-    expect(bridgeMocks.knowledgeBase.listSources).toHaveBeenCalledTimes(2)
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenLastCalledWith({
+      projectId: "project-1",
+      directoryPath: "客户",
+    })
+    expect(document.querySelector('[aria-label="当前位置"]')?.textContent).toContain("客户")
   })
 
-  it("passes dropped image files to knowledge-base upload", async () => {
+  it("uploads dropped files to the current folder", async () => {
     renderWindow()
     bridgeMocks.knowledgeBase.filePathForDroppedFile.mockReturnValue("/tmp/diagram.png")
 
     await waitForExpectation(() => {
-      expect(document.body.textContent).toContain("AI产品需求说明.md")
+      expect(document.body.textContent).toContain("客户")
     })
 
-    const dropTarget = document.querySelector<HTMLElement>('[aria-label="拖拽放入资料"]')
+    await act(async () => {
+      buttonByLabel("打开文件夹 客户").click()
+      await Promise.resolve()
+    })
+
+    const dropTarget = document.querySelector<HTMLElement>('[aria-label="拖拽上传资料"]')
     if (!dropTarget) throw new Error("Drop target not found.")
 
     const event = new Event("drop", { bubbles: true, cancelable: true })
@@ -259,10 +229,74 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
 
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.uploadSources).toHaveBeenCalledWith({
+      expect(bridgeMocks.knowledgeBase.uploadRawFiles).toHaveBeenCalledWith({
         projectId: "project-1",
+        targetDirectoryPath: "客户",
         filePaths: ["/tmp/diagram.png"],
       })
+    })
+  })
+
+  it("creates folders and batch mutates selected entries", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("新建文件夹").click()
+    })
+    const folderInput = document.querySelector<HTMLInputElement>('input[placeholder="文件夹名称"]')
+    expect(folderInput).not.toBeNull()
+    act(() => {
+      changeInput(folderInput!, "归档")
+    })
+    await act(async () => {
+      buttonByLabel("确认新建").click()
+      await Promise.resolve()
+    })
+    expect(bridgeMocks.knowledgeBase.createRawFolder).toHaveBeenCalledWith({
+      projectId: "project-1",
+      parentDirectoryPath: "",
+      name: "归档",
+    })
+
+    await act(async () => {
+      buttonByLabel("选择 brief.md").click()
+    })
+    await act(async () => {
+      buttonByLabel("移动所选").click()
+    })
+    const moveInput = document.querySelector<HTMLInputElement>('input[placeholder="目标文件夹"]')
+    expect(moveInput).not.toBeNull()
+    act(() => {
+      changeInput(moveInput!, "客户")
+    })
+    await act(async () => {
+      buttonByLabel("确认移动").click()
+      await Promise.resolve()
+    })
+    expect(bridgeMocks.knowledgeBase.moveRawEntries).toHaveBeenCalledWith({
+      projectId: "project-1",
+      relativePaths: ["brief.md"],
+      targetDirectoryPath: "客户",
+    })
+
+    await act(async () => {
+      buttonByLabel("选择 brief.md").click()
+    })
+    await act(async () => {
+      buttonByLabel("移到废纸篓").click()
+    })
+    expect(document.body.textContent).toContain("移到废纸篓？")
+    await act(async () => {
+      buttonByLabel("确认移到废纸篓").click()
+      await Promise.resolve()
+    })
+    expect(bridgeMocks.knowledgeBase.trashRawEntries).toHaveBeenCalledWith({
+      projectId: "project-1",
+      relativePaths: ["brief.md"],
     })
   })
 })
