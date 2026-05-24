@@ -152,7 +152,7 @@ export async function stageKnowledgeBaseUrlSource(
     return {
       projectPath,
       uploaded: [],
-      skipped: [{ path: input.url, reason: "read-error" }],
+      skipped: [urlAcquisitionFailure(input.url)],
     }
   }
 
@@ -182,6 +182,12 @@ function rawDirectoryForKind(kind: FileConversionResult["kind"]): string {
   if (kind === "spreadsheet") return "spreadsheets"
   if (kind === "presentation") return "presentations"
   return "pdfs"
+}
+
+function urlAcquisitionFailure(url: string): SynapseKnowledgeBaseUploadSourcesResult["skipped"][number] {
+  // Public upload result types currently expose only not-file/read-error/conversion-error.
+  // Keep URL acquisition failures centralized here so the API can gain URL-specific reasons later.
+  return { path: url, reason: "read-error" }
 }
 
 function normalizeRelativePath(value: string): string {

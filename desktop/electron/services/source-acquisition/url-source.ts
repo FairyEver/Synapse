@@ -3,6 +3,14 @@ import { isIP } from "node:net"
 
 import { htmlToSourceMarkdown, sourceUrlFrontmatter } from "./html-to-source-markdown"
 
+/**
+ * URL acquisition deliberately injects the fetch boundary so production callers can enforce network policy.
+ *
+ * Implementations must not blindly follow redirects. They must validate every redirect target before connecting,
+ * reject resolved loopback/private/link-local IPs before opening a socket, and expose the final accepted URL here.
+ * acquireUrlSource validates the original URL and returned final URL, but DNS resolution and pre-connect checks
+ * are the FetchUrl implementation's responsibility.
+ */
 export type FetchUrl = (url: string, init: { readonly signal: AbortSignal }) => Promise<{
   readonly url: string
   readonly status: number
@@ -246,9 +254,37 @@ function isPrivateIpv4(host: string): boolean {
 }
 
 function isPrivateIpv6(host: string): boolean {
+  const mappedIpv4 = ipv4FromMappedIpv6(host)
+  if (mappedIpv4) return isPrivateIpv4(mappedIpv4)
+
   if (host === "::1" || host === "::") return true
   const normalized = host.toLowerCase()
   if (normalized.startsWith("fc") || normalized.startsWith("fd")) return true
   if (normalized.startsWith("fe8") || normalized.startsWith("fe9") || normalized.startsWith("fea") || normalized.startsWith("feb")) return true
   return false
+}
+
+function ipv4FromMappedIpv6(host: string): string | null {
+  const normalized = host.toLowerCase()
+  const prefix = "::ffff:"
+  if (!normalized.startsWith(prefix)) return null
+
+  const tail = normalized.slice(prefix.length)
+  if (isIP(tail) === 4) return tail
+
+  const groups = tail.split(":")
+  if (groups.length > 2 || groups.some((group) => group.length === 0)) return null
+  const paddedGroups = groups.length === 1 ? ["0", groups[0]] : groups
+  const high = Number.parseInt(paddedGroups[0], 16)
+  const low = Number.parseInt(paddedGroups[1], 16)
+  if (!Number.isInteger(high) || !Number.isInteger(low) || high < 0 || high > 0xffff || low < 0 || low > 0xffff) {
+    return null
+  }
+
+  return [
+    (high >> 8) & 0xff,
+    high & 0xff,
+    (low >> 8) & 0xff,
+    low & 0xff,
+  ].join(".")
 }
