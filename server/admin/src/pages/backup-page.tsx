@@ -23,27 +23,29 @@ export function BackupPage() {
   const [backingUp, setBackingUp] = React.useState(false)
   const [deletingFilename, setDeletingFilename] = React.useState<string | null>(null)
 
-  const loadList = React.useCallback(() => {
+  const loadList = React.useCallback(async () => {
     setLoading(true)
     setError(null)
-    adminApi.listBackups()
-      .then(setList)
-      .catch((caught: unknown) => {
-        setList([])
-        setError(caught instanceof Error ? caught.message : "请求失败")
-      })
-      .finally(() => setLoading(false))
+    try {
+      const backups = await adminApi.listBackups()
+      setList(backups)
+    } catch (caught: unknown) {
+      setList([])
+      setError(caught instanceof Error ? caught.message : "请求失败")
+    } finally {
+      setLoading(false)
+    }
   }, [])
 
   React.useEffect(() => {
-    loadList()
+    void loadList()
   }, [loadList])
 
   async function handleBackup() {
     setBackingUp(true)
     try {
       await adminApi.triggerBackup()
-      loadList()
+      await loadList()
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "备份失败")
     } finally {
@@ -59,7 +61,7 @@ export function BackupPage() {
     setDeletingFilename(filename)
     try {
       await adminApi.deleteBackup(filename)
-      loadList()
+      await loadList()
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "删除失败")
     } finally {
