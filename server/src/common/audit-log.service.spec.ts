@@ -63,12 +63,41 @@ describe("AuditLogService", () => {
       where: {
         action: "users.patch",
         createdAt: {
-          gte: new Date("2026-05-01"),
-          lt: new Date("2026-05-22"),
+          gte: new Date(2026, 4, 1),
+          lt: new Date(2026, 4, 22),
         },
       },
       orderBy: { createdAt: "desc" },
       take: 50001,
     })
+  })
+
+  it("interprets date-only audit filters as local calendar days", async () => {
+    const previousTimezone = process.env.TZ
+    process.env.TZ = "Asia/Shanghai"
+    try {
+      const findMany = vi.fn().mockResolvedValue([{ id: "audit-1" }])
+      const prisma = {
+        auditLog: { findMany },
+      }
+      const service = new AuditLogService(prisma as unknown as PrismaService)
+
+      await service.listForExport({
+        from: "2026-05-01",
+        to: "2026-05-01",
+      })
+
+      expect(findMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: {
+          createdAt: {
+            gte: new Date(2026, 4, 1),
+            lt: new Date(2026, 4, 2),
+          },
+        },
+      }))
+    } finally {
+      if (previousTimezone === undefined) delete process.env.TZ
+      else process.env.TZ = previousTimezone
+    }
   })
 })

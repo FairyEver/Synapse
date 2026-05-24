@@ -5,6 +5,7 @@ import { parsePagination, toPrismaArgs, type PaginatedResponse } from "./paginat
 
 const auditLogSortFields = ["createdAt", "adminEmail", "action", "targetType", "targetId"] as const
 export const auditLogExportLimit = 50000
+const dateOnlyPattern = /^(\d{4})-(\d{2})-(\d{2})$/
 
 interface AuditLogFilterOptions {
   readonly action?: string
@@ -15,15 +16,21 @@ interface AuditLogFilterOptions {
 function buildAuditLogWhere(options: AuditLogFilterOptions): Record<string, unknown> {
   const where: Record<string, unknown> = {}
   if (options.action) where.action = options.action
-  const toDate = options.to ? new Date(options.to) : null
-  if (toDate) toDate.setUTCDate(toDate.getUTCDate() + 1)
   if (options.from || options.to) {
     where.createdAt = {
-      ...(options.from ? { gte: new Date(options.from) } : {}),
-      ...(toDate ? { lt: toDate } : {}),
+      ...(options.from ? { gte: parseAuditDateBoundary(options.from, "start") } : {}),
+      ...(options.to ? { lt: parseAuditDateBoundary(options.to, "end") } : {}),
     }
   }
   return where
+}
+
+function parseAuditDateBoundary(value: string, boundary: "start" | "end"): Date {
+  const match = dateOnlyPattern.exec(value)
+  if (!match) return new Date(value)
+  const [, year, month, day] = match
+  const offsetDays = boundary === "end" ? 1 : 0
+  return new Date(Number(year), Number(month) - 1, Number(day) + offsetDays)
 }
 
 @Injectable()
