@@ -4,6 +4,7 @@ import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { RegisteredPromptCommandOutput } from "../../agent-runtime/command-router"
+import { mergeAgentProjectContributions } from "../../agent-runtime/project-contributions"
 import { createKnowledgeBaseAgentContribution } from "../../knowledge-base/agent-contribution"
 import { readKnowledgeBaseManifest } from "../../knowledge-base/manifest"
 
@@ -70,6 +71,48 @@ describe("knowledge base Agent contribution", () => {
     })
 
     expect(contribution).toBeNull()
+  })
+
+  it("does not attach KB plugin, preflight, or finalizer behavior to ordinary Agent projects", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{},\"address_map\":{}}\n")
+    await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
+    const prepareTurn = vi.fn()
+    const finalizeTurn = vi.fn()
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: { id: "project-1", name: "Plain", path: projectPath },
+      ingestCoordinator: { prepareTurn, finalizeTurn },
+    })
+    const merged = mergeAgentProjectContributions(contribution ? [contribution] : [])
+    const message = baseMessage("汲取知识")
+
+    const resources = await merged.resolveSessionResources?.({
+      message,
+      isNewLiveSession: true,
+    })
+    const prepared = await Promise.resolve(merged.prepareMessage?.(message, {
+      isNewLiveSession: true,
+    }))
+    await merged.afterTurn?.({
+      message,
+      result: {
+        conversationId: "conv-1",
+        resultText: ingestReport([{
+          source: ".raw/note.md",
+          pages_created: ["wiki/sources/note.md"],
+          pages_updated: [],
+        }]),
+        events: [],
+      },
+      conversationId: "conv-1",
+      isNewLiveSession: true,
+    })
+
+    expect(resources?.sdkPlugins ?? []).toEqual([])
+    expect(prepared?.content).toBe("汲取知识")
+    expect(prepareTurn).not.toHaveBeenCalled()
+    expect(finalizeTurn).not.toHaveBeenCalled()
   })
 
   it("keeps the Synapse SDK ingest skill from telling agents to edit the manifest", async () => {
