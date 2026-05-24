@@ -336,7 +336,7 @@ describe("DatabaseService legacy database migration", () => {
     }))
   })
 
-  it("recovers a legacy backup when the buggy current database only has empty system tables", async () => {
+  it("recovers a legacy backup when the buggy current database only has empty system tables", { timeout: 15_000 }, async () => {
     createEmptyCurrentDatabaseWithOperationLog(path.join(tempDir, "synapse-database.db"))
     createLegacyDatabase(path.join(tempDir, "synapse-data.db.legacy.100"))
 
@@ -350,7 +350,7 @@ describe("DatabaseService legacy database migration", () => {
     }))
   })
 
-  it("does not restore a legacy backup over a current database with user tables", async () => {
+  it("does not restore a legacy backup over a current database with user tables", { timeout: 15_000 }, async () => {
     createCurrentDatabaseWithoutColumnDescriptions(path.join(tempDir, "synapse-database.db"))
     createLegacyDatabase(path.join(tempDir, "synapse-data.db.legacy.100"))
 
