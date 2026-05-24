@@ -10,8 +10,11 @@ vi.mock("@/lib/api", () => ({
     listTeams: vi.fn(),
     listTeamAccessRoles: vi.fn(),
     listTeamEntitlements: vi.fn(),
+    listMemberAccessRoles: vi.fn(),
     replaceTeamEntitlements: vi.fn(),
     replaceTeamRolePermissions: vi.fn(),
+    assignMemberAccessRole: vi.fn(),
+    removeMemberAccessRole: vi.fn(),
   },
 }))
 
@@ -84,12 +87,14 @@ describe("TeamsPage", () => {
           createdByUser: { email: "owner@example.com" },
           memberships: [
             {
+              id: "membership-owner",
               role: "owner",
               user: { email: "owner@example.com" },
               accessRoles: [{ role: { id: "role-1", name: "团队管理员" } }],
               createdAt: "2026-05-20T00:00:00.000Z",
             },
             {
+              id: "membership-member",
               role: "member",
               user: { email: "member@example.com" },
               accessRoles: [{ role: { id: "role-2", name: "普通成员" } }],
@@ -275,6 +280,106 @@ describe("TeamsPage", () => {
       expect(adminApi.listPermissions).toHaveBeenCalledTimes(2)
       expect(document.body.textContent).toContain("数据")
       expect(document.body.textContent).not.toContain("权限加载失败")
+    })
+  })
+
+  it("assigns and removes member access roles", async () => {
+    vi.mocked(adminApi.listTeams).mockResolvedValue({
+      data: [
+        {
+          id: "team-1",
+          name: "一组",
+          createdByUser: { email: "owner@example.com" },
+          memberships: [
+            {
+              id: "membership-member",
+              role: "member",
+              user: { email: "member@example.com" },
+              accessRoles: [{ role: { id: "ordinary-role", name: "普通成员" } }],
+              createdAt: "2026-05-21T00:00:00.000Z",
+            },
+          ],
+          createdAt: "2026-05-20T00:00:00.000Z",
+          updatedAt: "2026-05-22T00:00:00.000Z",
+        },
+      ],
+      total: 1,
+      page: 1,
+      pageSize: 20,
+    })
+    vi.mocked(adminApi.listTeamAccessRoles).mockResolvedValue([
+      {
+        id: "admin-role",
+        name: "团队管理员",
+        description: null,
+        kind: "system",
+        locked: true,
+        sortOrder: 0,
+        permissionKeys: ["team.member.manage"],
+        createdAt: "2026-05-20T00:00:00.000Z",
+        updatedAt: "2026-05-22T00:00:00.000Z",
+      },
+      {
+        id: "ordinary-role",
+        name: "普通成员",
+        description: null,
+        kind: "system",
+        locked: true,
+        sortOrder: 1,
+        permissionKeys: ["database.use"],
+        createdAt: "2026-05-20T00:00:00.000Z",
+        updatedAt: "2026-05-22T00:00:00.000Z",
+      },
+    ])
+    vi.mocked(adminApi.listMemberAccessRoles).mockResolvedValue({
+      roles: [
+        {
+          id: "ordinary-role",
+          name: "普通成员",
+          description: null,
+          kind: "system",
+          locked: true,
+          sortOrder: 1,
+          assignedAt: "2026-05-21T00:00:00.000Z",
+        },
+      ],
+    })
+    vi.mocked(adminApi.assignMemberAccessRole).mockResolvedValue({ roles: [] })
+    vi.mocked(adminApi.removeMemberAccessRole).mockResolvedValue({ roles: [] })
+
+    const result = await render(<TeamsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("member@example.com")
+    })
+    act(() => {
+      Array.from(result.container.querySelectorAll("button"))
+        .find((button) => button.textContent === "角色")
+        ?.click()
+    })
+
+    await waitFor(() => {
+      expect(adminApi.listMemberAccessRoles).toHaveBeenCalledWith("team-1", "membership-member")
+      expect(document.body.textContent).toContain("团队管理员")
+    })
+    const adminRole = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button[role='checkbox']"))
+      .find((checkbox) => checkbox.getAttribute("aria-label") === "分配角色 团队管理员")
+    const ordinaryRole = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button[role='checkbox']"))
+      .find((checkbox) => checkbox.getAttribute("aria-label") === "分配角色 普通成员")
+    act(() => {
+      adminRole?.click()
+      ordinaryRole?.click()
+    })
+    act(() => {
+      Array.from(document.body.querySelectorAll("button"))
+        .find((button) => button.textContent === "保存")
+        ?.click()
+    })
+
+    await waitFor(() => {
+      expect(adminApi.assignMemberAccessRole).toHaveBeenCalledWith("team-1", "membership-member", "admin-role")
+      expect(adminApi.removeMemberAccessRole).toHaveBeenCalledWith("team-1", "membership-member", "ordinary-role")
     })
   })
 })

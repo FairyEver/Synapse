@@ -64,9 +64,14 @@ function accessRoleNames(membership: AdminTeamRow["memberships"][number]): strin
   return membership.accessRoles.map((item) => item.role.name)
 }
 
+interface EditingMemberRoles {
+  readonly team: AdminTeamRow
+  readonly membership: AdminTeamRow["memberships"][number]
+}
+
 export function TeamsPage() {
   const [page, setPage] = React.useState(1)
-  const { data: result, error, loading } = useApiResource<PaginatedResponse<AdminTeamRow>>(
+  const { data: result, error, loading, reload } = useApiResource<PaginatedResponse<AdminTeamRow>>(
     () => adminApi.listTeams({ page }),
     [page],
   )
@@ -79,6 +84,13 @@ export function TeamsPage() {
   const [permissionReloadToken, setPermissionReloadToken] = React.useState(0)
   const [permissionSaving, setPermissionSaving] = React.useState(false)
   const [permissionError, setPermissionError] = React.useState<string | null>(null)
+  const [editingMemberRoles, setEditingMemberRoles] = React.useState<EditingMemberRoles | null>(null)
+  const [memberRoleOptions, setMemberRoleOptions] = React.useState<TeamAccessRoleRow[]>([])
+  const [memberRoleIds, setMemberRoleIds] = React.useState<ReadonlySet<string>>(() => new Set())
+  const [initialMemberRoleIds, setInitialMemberRoleIds] = React.useState<ReadonlySet<string>>(() => new Set())
+  const [memberRoleLoading, setMemberRoleLoading] = React.useState(false)
+  const [memberRoleSaving, setMemberRoleSaving] = React.useState(false)
+  const [memberRoleError, setMemberRoleError] = React.useState<string | null>(null)
 
   React.useEffect(() => {
     if (!editingTeam) return
@@ -110,6 +122,34 @@ export function TeamsPage() {
       alive = false
     }
   }, [editingTeam, permissionReloadToken])
+
+  React.useEffect(() => {
+    if (!editingMemberRoles) return
+    let alive = true
+    setMemberRoleLoading(true)
+    setMemberRoleError(null)
+    Promise.all([
+      adminApi.listTeamAccessRoles(editingMemberRoles.team.id),
+      adminApi.listMemberAccessRoles(editingMemberRoles.team.id, editingMemberRoles.membership.id),
+    ])
+      .then(([roles, current]) => {
+        if (!alive) return
+        const roleIds = new Set(current.roles.map((role) => role.id))
+        setMemberRoleOptions(roles)
+        setMemberRoleIds(roleIds)
+        setInitialMemberRoleIds(new Set(roleIds))
+      })
+      .catch((caught: unknown) => {
+        if (!alive) return
+        setMemberRoleError(caught instanceof Error ? caught.message : "加载失败")
+      })
+      .finally(() => {
+        if (alive) setMemberRoleLoading(false)
+      })
+    return () => {
+      alive = false
+    }
+  }, [editingMemberRoles])
 
   function updatePermissionKey(permissionKey: string, checked: boolean | "indeterminate") {
     if (checked !== true) {
@@ -173,6 +213,39 @@ export function TeamsPage() {
     setPermissionReloadToken((value) => value + 1)
   }
 
+  function updateMemberRole(roleId: string, checked: boolean | "indeterminate") {
+    setMemberRoleIds((previous) => {
+      const next = new Set(previous)
+      if (checked === true) next.add(roleId)
+      else next.delete(roleId)
+      return next
+    })
+  }
+
+  async function saveMemberRoles() {
+    if (!editingMemberRoles) return
+    setMemberRoleSaving(true)
+    setMemberRoleError(null)
+    try {
+      for (const role of memberRoleOptions) {
+        const selected = memberRoleIds.has(role.id)
+        const initiallySelected = initialMemberRoleIds.has(role.id)
+        if (selected && !initiallySelected) {
+          await adminApi.assignMemberAccessRole(editingMemberRoles.team.id, editingMemberRoles.membership.id, role.id)
+        }
+        if (!selected && initiallySelected) {
+          await adminApi.removeMemberAccessRole(editingMemberRoles.team.id, editingMemberRoles.membership.id, role.id)
+        }
+      }
+      reload()
+      setEditingMemberRoles(null)
+    } catch (caught) {
+      setMemberRoleError(caught instanceof Error ? caught.message : "保存失败")
+    } finally {
+      setMemberRoleSaving(false)
+    }
+  }
+
   if (loading) return <PageState>加载中</PageState>
   if (error) return <PageState>{error}</PageState>
   if (!result || result.data.length === 0) return <PageState>暂无团队</PageState>
@@ -210,6 +283,15 @@ export function TeamsPage() {
                       {accessRoleNames(membership).map((roleName) => (
                         <Badge key={roleName} variant="secondary" className="shrink-0">{roleName}</Badge>
                       ))}
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="shrink-0"
+                        onClick={() => setEditingMemberRoles({ team, membership })}
+                      >
+                        角色
+                      </Button>
                     </div>
                   ))}
                 </div>
@@ -344,6 +426,61 @@ export function TeamsPage() {
               onClick={() => void saveTeamPermissions()}
             >
               {permissionSaving ? "保存中" : "保存"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={editingMemberRoles !== null} onOpenChange={(open) => {
+        if (open || memberRoleSaving) return
+        setEditingMemberRoles(null)
+      }}>
+        <DialogContent aria-describedby={undefined} className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{editingMemberRoles?.membership.user.email ?? "成员角色"}</DialogTitle>
+          </DialogHeader>
+          {memberRoleLoading ? <PageState>加载中</PageState> : null}
+          {memberRoleError ? <p className="text-sm text-destructive">{memberRoleError}</p> : null}
+          {!memberRoleError && !memberRoleLoading && memberRoleOptions.length === 0 ? <PageState>暂无角色</PageState> : null}
+          {!memberRoleLoading && memberRoleOptions.length > 0 ? (
+            <div className="grid gap-2">
+              {memberRoleOptions.map((role) => (
+                <Label
+                  key={role.id}
+                  className="flex items-start gap-3 rounded-md border p-3"
+                  htmlFor={`member-role-${role.id}`}
+                >
+                  <Checkbox
+                    id={`member-role-${role.id}`}
+                    aria-label={`分配角色 ${role.name}`}
+                    checked={memberRoleIds.has(role.id)}
+                    disabled={memberRoleSaving}
+                    onCheckedChange={(checked) => updateMemberRole(role.id, checked)}
+                  />
+                  <span className="grid gap-1">
+                    <span>{role.name}</span>
+                    {role.description ? (
+                      <span className="text-xs font-normal text-muted-foreground">{role.description}</span>
+                    ) : null}
+                  </span>
+                </Label>
+              ))}
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              disabled={memberRoleSaving}
+              onClick={() => setEditingMemberRoles(null)}
+            >
+              取消
+            </Button>
+            <Button
+              type="button"
+              disabled={memberRoleLoading || memberRoleSaving || memberRoleOptions.length === 0}
+              onClick={() => void saveMemberRoles()}
+            >
+              {memberRoleSaving ? "保存中" : "保存"}
             </Button>
           </DialogFooter>
         </DialogContent>

@@ -53,6 +53,7 @@ export interface AdminTeamRow {
   readonly name: string
   readonly createdByUser: { readonly email: string }
   readonly memberships: Array<{
+    readonly id: string
     readonly role: "owner" | "member"
     readonly user: { readonly email: string }
     readonly accessRoles: Array<{ readonly role: { readonly id: string; readonly name: string } }>

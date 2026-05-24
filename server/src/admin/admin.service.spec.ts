@@ -203,6 +203,7 @@ describe("AdminService", () => {
         createdByUser: { select: { email: true } },
         memberships: {
           select: {
+            id: true,
             role: true,
             createdAt: true,
             user: { select: { email: true } },
