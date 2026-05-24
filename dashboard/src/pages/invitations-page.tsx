@@ -69,7 +69,11 @@ export function InvitationsPage() {
     setDeletingIds((current) => new Set(current).add(invitation.id));
     try {
       await adminApi.deleteInvitation(invitation.id);
-      await refresh();
+      if (rows.length === 1 && page > 1) {
+        setPage(page - 1);
+      } else {
+        await refresh();
+      }
     } catch (nextError) {
       setFeedback(nextError instanceof Error ? nextError.message : '删除失败');
     } finally {
