@@ -57,8 +57,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 
   const logout = useCallback(async () => {
-    await adminApi.logout();
-    setSession(null);
+    try {
+      await adminApi.logout();
+    } finally {
+      setSession(null);
+    }
   }, []);
 
   const value = useMemo<AuthContextValue>(
