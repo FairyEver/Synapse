@@ -39,6 +39,25 @@ describe("UserAuthGuard", () => {
     })
   })
 
+  it("accepts bearer auth scheme case-insensitively", async () => {
+    const auth = { verifyAccessToken: vi.fn().mockResolvedValue({ userId: "user-1" }) }
+    const dashboardAuth = { verifyDashboardSession: vi.fn() }
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const guard = new UserAuthGuard(auth as never, dashboardAuth as never, auditLog as never)
+    const request = {
+      method: "GET",
+      path: "/api/auth/me",
+      ip: "203.0.113.31",
+      headers: { authorization: "bearer access-token" },
+    }
+
+    await expect(guard.canActivate(createContext(request))).resolves.toBe(true)
+
+    expect(auth.verifyAccessToken).toHaveBeenCalledWith("access-token")
+    expect(request).toMatchObject({ user: { id: "user-1" } })
+    expect(auditLog.record).not.toHaveBeenCalled()
+  })
+
   it("accepts dashboard user cookies for /api/auth/me", async () => {
     const auth = { verifyAccessToken: vi.fn() }
     const dashboardAuth = {

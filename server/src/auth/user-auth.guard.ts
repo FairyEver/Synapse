@@ -20,8 +20,9 @@ export class UserAuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedUserRequest>()
     const header = request.headers.authorization
-    if (header?.startsWith("Bearer ")) {
-      const token = header.slice("Bearer ".length)
+    const bearerToken = readBearerToken(header)
+    if (bearerToken) {
+      const token = bearerToken
       const result = await this.verifyAccessToken(request, token)
       request.user = { id: result.userId }
       return true
@@ -57,4 +58,10 @@ export class UserAuthGuard implements CanActivate {
       throw error
     }
   }
+}
+
+function readBearerToken(header: string | undefined): string | null {
+  const [scheme, token] = header?.split(/\s+/, 2) ?? []
+  if (scheme?.toLowerCase() !== "bearer" || !token) return null
+  return token
 }
