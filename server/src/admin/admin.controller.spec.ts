@@ -516,8 +516,8 @@ describe("AdminController", () => {
     expect(replaceTeamEntitlements).not.toHaveBeenCalled()
   })
 
-  it("rejects empty team entitlement replacements", async () => {
-    const replaceTeamEntitlements = vi.fn()
+  it("allows empty team entitlement replacements", async () => {
+    const replaceTeamEntitlements = vi.fn().mockResolvedValue({ permissionKeys: [] })
     const controller = createController({ replaceTeamEntitlements } as never)
 
     await expect(controller.replaceTeamEntitlements(
@@ -525,9 +525,14 @@ describe("AdminController", () => {
       { permissionKeys: [] },
       { admin: { id: "admin-1", email: "admin@example.com" } } as never,
     ))
-      .rejects
-      .toThrow("团队权限无效。")
-    expect(replaceTeamEntitlements).not.toHaveBeenCalled()
+      .resolves
+      .toEqual({ permissionKeys: [] })
+    expect(replaceTeamEntitlements).toHaveBeenCalledWith(
+      "team-1",
+      [],
+      { id: "admin-1", email: "admin@example.com" },
+      undefined,
+    )
   })
 
   it("rejects unknown team entitlement permission keys", async () => {

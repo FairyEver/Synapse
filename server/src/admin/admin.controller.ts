@@ -20,10 +20,11 @@ const bulkInvitationDeleteSchema = z.object({
 const permissionKeysSchema = z.array(z.string().trim().min(1).refine(isActivePermissionKey))
 
 const teamEntitlementsSchema = z.object({
-  permissionKeys: permissionKeysSchema.min(1),
+  permissionKeys: permissionKeysSchema,
 }).strict()
 
-const teamPermissionsSchema = teamEntitlementsSchema.extend({
+const teamPermissionsSchema = z.object({
+  permissionKeys: permissionKeysSchema.min(1),
   rolePermissions: z.array(z.object({
     roleId: z.string().trim().min(1),
     permissionKeys: permissionKeysSchema,
