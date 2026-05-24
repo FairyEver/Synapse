@@ -74,7 +74,7 @@ describe("UserAuthService", () => {
 
     await expect(service.login({ email: "u@example.com", password: "StrongPassword123!" }, "203.0.113.22"))
       .rejects
-      .toThrow("账号已停用。")
+      .toThrow("邮箱或密码错误。")
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "u@example.com",
       action: "user.login.disabled",

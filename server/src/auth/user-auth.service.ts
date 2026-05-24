@@ -119,7 +119,7 @@ export class UserAuthService {
         targetId: user.id,
         ipAddress,
       })
-      throw new UnauthorizedException("账号已停用。")
+      throw new UnauthorizedException("邮箱或密码错误。")
     }
     const tokens = await this.issueTokenPair(user)
     await this.auditLog?.record({

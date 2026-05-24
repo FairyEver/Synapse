@@ -172,7 +172,7 @@ describe("AdminAuthService", () => {
 
     await expect(service.login("user@example.com", "user-password", "203.0.113.11"))
       .rejects
-      .toThrow("账号已停用。")
+      .toThrow("邮箱或密码错误。")
 
     expect(auditLog.record).toHaveBeenCalledTimes(1)
     expect(auditLog.record).toHaveBeenCalledWith({

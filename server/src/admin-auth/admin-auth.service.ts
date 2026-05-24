@@ -85,7 +85,7 @@ export class AdminAuthService {
         targetId: user.id,
         ipAddress,
       })
-      throw new UnauthorizedException("账号已停用。")
+      throw new UnauthorizedException("邮箱或密码错误。")
     }
 
     if (disabledAdminPasswordMatched) {
