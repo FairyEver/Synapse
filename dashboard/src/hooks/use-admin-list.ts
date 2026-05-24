@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import type { PaginatedResponse } from '@/lib/api';
 
@@ -14,19 +14,26 @@ export function useAdminList<T>(
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const latestRequestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const requestId = latestRequestId.current + 1;
+    latestRequestId.current = requestId;
     setIsLoading(true);
     setError('');
 
     try {
       const result = await loader({ page, pageSize });
+      if (requestId !== latestRequestId.current) return;
       setRows(result.data);
       setTotal(result.total);
     } catch (nextError) {
+      if (requestId !== latestRequestId.current) return;
       setError(nextError instanceof Error ? nextError.message : '加载失败');
     } finally {
-      setIsLoading(false);
+      if (requestId === latestRequestId.current) {
+        setIsLoading(false);
+      }
     }
   }, [loader, page, pageSize]);
 
