@@ -4,6 +4,7 @@ import { PdfExtractor } from "./extractors/pdf"
 import { PptxExtractor } from "./extractors/pptx"
 import { XlsxExtractor } from "./extractors/xlsx"
 import { FileConversionService } from "./service"
+import type { LocalOcrEngine } from "./ocr/types"
 
 export { detectConversionFormat, FileExtractorRegistry } from "./registry"
 export { FileConversionService, type FileConversionServiceOptions } from "./service"
@@ -12,6 +13,8 @@ export { LegacyOfficeExtractor, type LegacyOfficeExtractorOptions } from "./extr
 export { PdfExtractor, type PdfExtractorOptions } from "./extractors/pdf"
 export { PptxExtractor, type PptxExtractorOptions } from "./extractors/pptx"
 export { XlsxExtractor, type XlsxExtractorOptions } from "./extractors/xlsx"
+export { createUnavailableLocalOcrEngine, UnavailableLocalOcrEngine } from "./ocr/local-ocr"
+export type { LocalOcrEngine, LocalOcrRecognitionResult, LocalOcrWarning } from "./ocr/types"
 export {
   FileConversionError,
   type FileConversionErrorCode,
@@ -23,12 +26,17 @@ export {
   type FileExtractor,
 } from "./types"
 
-export function createDefaultFileConversionService(): FileConversionService {
+export interface DefaultFileConversionServiceOptions {
+  readonly localOcrEngine?: LocalOcrEngine
+}
+
+export function createDefaultFileConversionService(options: DefaultFileConversionServiceOptions = {}): FileConversionService {
   return new FileConversionService({
+    localOcrEngine: options.localOcrEngine,
     extractors: [
       new DocxExtractor(),
       new XlsxExtractor(),
-      new PdfExtractor(),
+      new PdfExtractor({ localOcrEngine: options.localOcrEngine }),
       new PptxExtractor(),
       new LegacyOfficeExtractor(),
     ],

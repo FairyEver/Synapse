@@ -4,6 +4,8 @@ import { PDFParse } from "pdf-parse"
 
 import { parserError } from "../errors"
 import { normalizeMarkdownTitle } from "../markdown"
+import { createUnavailableLocalOcrEngine, localOcrResultMetadata } from "../ocr/local-ocr"
+import type { LocalOcrEngine } from "../ocr/types"
 import {
   type FileConversionInput,
   type FileConversionResult,
@@ -30,14 +32,17 @@ type PdfParserConstructor = new (input: { readonly data: Buffer }) => PdfParserI
 
 export interface PdfExtractorOptions {
   readonly parsePdf?: ParsePdf
+  readonly localOcrEngine?: LocalOcrEngine
 }
 
 export class PdfExtractor implements FileExtractor {
   readonly formats = ["pdf"] as const
   private readonly parsePdf: ParsePdf
+  private readonly localOcrEngine: LocalOcrEngine
 
   constructor(options: PdfExtractorOptions = {}) {
     this.parsePdf = options.parsePdf ?? defaultParsePdf
+    this.localOcrEngine = options.localOcrEngine ?? createUnavailableLocalOcrEngine()
   }
 
   async extract(input: FileConversionInput): Promise<FileConversionResult> {
@@ -45,6 +50,9 @@ export class PdfExtractor implements FileExtractor {
       const data = await this.parsePdf(await readFile(input.filePath))
       const title = normalizeMarkdownTitle(asString(data.info?.Title), input.filePath)
       const text = data.text.trim()
+      if (text.length === 0 && input.ocr?.enabled) {
+        return this.extractOcr(input, title, data)
+      }
       const warnings: FileConversionWarning[] = []
       if (text.length === 0) {
         warnings.push({
@@ -67,6 +75,25 @@ export class PdfExtractor implements FileExtractor {
       }
     } catch (error) {
       throw parserError("PDF", error)
+    }
+  }
+
+  private async extractOcr(input: FileConversionInput, title: string, data: PdfParseResult): Promise<FileConversionResult> {
+    const ocr = await this.localOcrEngine.recognize({ filePath: input.filePath, mimeType: "application/pdf" })
+    const text = ocr.text.trim()
+    return {
+      sourcePath: input.filePath,
+      format: "pdf",
+      kind: "pdf",
+      title,
+      markdown: [`# ${title}`, "", text, ""].join("\n"),
+      text,
+      metadata: {
+        pages: data.numpages ?? data.total,
+        info: data.info ?? {},
+        ocr: localOcrResultMetadata(ocr),
+      },
+      warnings: ocr.warnings ?? [],
     }
   }
 }

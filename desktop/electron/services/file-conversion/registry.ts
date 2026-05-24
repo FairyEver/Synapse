@@ -9,6 +9,10 @@ const EXTENSION_FORMATS = new Map<string, FileConversionFormat>([
   [".pdf", "pdf"],
   [".ppt", "ppt"],
   [".pptx", "pptx"],
+  [".png", "png"],
+  [".jpg", "jpg"],
+  [".jpeg", "jpeg"],
+  [".webp", "webp"],
 ])
 
 export function detectConversionFormat(filePath: string): FileConversionFormat {

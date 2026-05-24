@@ -179,7 +179,7 @@ describe("file conversion contract", () => {
 describe("FileConversionService", () => {
   it("rejects unsupported extensions with a structured error", async () => {
     const root = await tempDir()
-    const filePath = path.join(root, "image.png")
+    const filePath = path.join(root, "archive.zip")
     await writeFile(filePath, "not supported")
     const service = new FileConversionService({ extractors: [] })
 
