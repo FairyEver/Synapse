@@ -2,10 +2,10 @@ import { readFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { RegisteredPromptCommandOutput } from "../agent-runtime/command-router"
+import { KnowledgeBaseIngestCoordinator, type KnowledgeBaseIngestPreflight } from "./ingest-coordinator"
 import { scanKnowledgeBaseSources } from "./source-scan"
 import {
   wikiIngestAppendixCopy,
-  wikiInvalidManifestCopy,
   wikiNoIngestChangesCopy,
   wikiQueryParametersCopy,
   wikiRecentLogContextCopy,
@@ -19,6 +19,8 @@ export interface BuildKnowledgeBaseCommandOutputInput {
   readonly projectPath: string
   readonly args: readonly string[]
   readonly readPrompt: (fileName: string) => Promise<string>
+  readonly ingestCoordinator?: Pick<KnowledgeBaseIngestCoordinator, "prepareTurn">
+  readonly onIngestPreflight?: (preflight: KnowledgeBaseIngestPreflight) => void
 }
 
 export async function buildKnowledgeBaseCommandOutput(
@@ -31,7 +33,13 @@ export async function buildKnowledgeBaseCommandOutput(
     case "status":
       return buildStatusOutput(input.projectPath)
     case "ingest":
-      return buildIngestOutput(input.projectPath, commandArgs, input.readPrompt)
+      return buildIngestOutput(
+        input.projectPath,
+        commandArgs,
+        input.readPrompt,
+        input.ingestCoordinator,
+        input.onIngestPreflight,
+      )
     case "query":
       return buildQueryOutput(commandArgs, input.readPrompt)
     case "hot":
@@ -67,26 +75,23 @@ async function buildIngestOutput(
   projectPath: string,
   args: readonly string[],
   readPrompt: (fileName: string) => Promise<string>,
+  ingestCoordinator: Pick<KnowledgeBaseIngestCoordinator, "prepareTurn"> = new KnowledgeBaseIngestCoordinator(),
+  onIngestPreflight?: (preflight: KnowledgeBaseIngestPreflight) => void,
 ): Promise<RegisteredPromptCommandOutput> {
-  const scan = await scanKnowledgeBaseSources(projectPath, { force: args.includes("--force") })
-  if (scan.manifest.status === "invalid") {
-    return {
-      kind: "result",
-      error: true,
-      content: wikiInvalidManifestCopy(scan.manifest.error),
-    }
-  }
+  const force = args.includes("--force")
+  const preflight = await ingestCoordinator.prepareTurn({ projectPath, force })
 
-  const changedSources = scan.sources.filter((source) => source.state !== "unchanged")
+  const changedSources = preflight.sources.filter((source) => source.state !== "unchanged")
   if (changedSources.length === 0) {
     return {
       kind: "result",
       content: wikiNoIngestChangesCopy({
-        sources: scan.sources.length,
-        skipped: scan.skippedSources.length,
+        sources: preflight.sources.length,
+        skipped: preflight.skippedSources.length,
       }),
     }
   }
+  onIngestPreflight?.(preflight)
 
   return {
     kind: "prompt",
@@ -96,7 +101,8 @@ async function buildIngestOutput(
       wikiIngestAppendixCopy({
         projectPath,
         changedSources,
-        skippedSources: scan.skippedSources,
+        skippedSources: preflight.skippedSources,
+        force,
       }),
     ].join("\n"),
   }

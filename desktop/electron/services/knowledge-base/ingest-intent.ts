@@ -19,3 +19,7 @@ export function isKnowledgeBaseIngestIntent(content: string): boolean {
   }
   return NATURAL_INGEST_PATTERNS.some((pattern) => pattern.test(trimmed))
 }
+
+export function isKnowledgeBaseForceIngestIntent(content: string): boolean {
+  return /^\/wiki\s+ingest(?:\s|$)/i.test(content.trim()) && /(?:^|\s)--force(?:\s|$)/i.test(content.trim())
+}

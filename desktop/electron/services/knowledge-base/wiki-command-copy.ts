@@ -55,12 +55,23 @@ export function wikiIngestAppendixCopy(input: {
   readonly projectPath: string
   readonly changedSources: readonly KnowledgeBaseSourceScanItem[]
   readonly skippedSources: readonly KnowledgeBaseSkippedSource[]
+  readonly force: boolean
 }): string {
   return [
+    "## Synapse 预检",
+    "",
     "## 项目目录",
     "",
     `- \`${input.projectPath}\``,
     "- 所有相对路径都以该目录为根；不要使用其他硬编码路径。",
+    ...(input.force
+      ? [
+        "",
+        "## 强制导入",
+        "",
+        "- 本次使用 `/wiki ingest --force`；预检已将支持的来源纳入本回合处理范围。",
+      ]
+      : []),
     "",
     "## 预检来源",
     "",
@@ -78,15 +89,38 @@ export function wikiIngestAppendixCopy(input: {
       ]
       : []),
     "",
-    "## 清单更新要求",
+    "## 清单写入边界",
     "",
-    "- 处理完成后更新 `.raw/.manifest.json`。",
-    "- 使用 claude-obsidian 兼容格式：`version`、`created`、`description`、`sources`、`address_map`。",
-    "- `sources` 的 key 使用 `.raw/...`，每个已处理来源都写入当前 `hash`、`ingested_at`、`pages_created`、`pages_updated`。",
+    "- Agent 不要编辑 `.raw/.manifest.json`。",
+    "- Synapse 会根据本回合报告写入 `.raw/.manifest.json` 的 `sources` 和 `address_map`。",
     "- Synapse 会在导入回合结束后补齐 DragonScale 地址并更新 `address_map`。",
     "- 不要编辑 `.vault-meta/address-counter.txt`；地址计数器由 Synapse 内部服务维护。",
     "- 如果重写已有页面，保留页面中已有的 `address:` frontmatter。",
-    "- 未实际更新的来源不要改动对应清单条目。",
+    "",
+    "## 回合报告要求",
+    "",
+    "- 回复必须包含且只包含一个 `synapse_kb_ingest_report` fenced JSON block。",
+    "- `processed_sources[].source` 只能使用上方预检来源中的 `.raw/...` 路径。",
+    "- `pages_created` 和 `pages_updated` 只能列出本回合实际创建或更新的 `wiki/**/*.md` 文件。",
+    "",
+    "```json synapse_kb_ingest_report",
+    "{",
+    '  "schema": "synapse.kb.ingest.report.v1",',
+    '  "processed_sources": [',
+    "    {",
+    '      "source": ".raw/example.md",',
+    '      "pages_created": ["wiki/sources/example.md"],',
+    '      "pages_updated": ["wiki/index.md", "wiki/hot.md"]',
+    "    }",
+    "  ],",
+    '  "skipped_sources": [',
+    "    {",
+    '      "source": ".raw/ignored.md",',
+    '      "reason": "brief reason"',
+    "    }",
+    "  ]",
+    "}",
+    "```",
   ].join("\n")
 }
 

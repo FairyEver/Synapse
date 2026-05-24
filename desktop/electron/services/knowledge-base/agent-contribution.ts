@@ -5,13 +5,16 @@ import type { SynapseProjectConfig } from "../../../src/types/config"
 import type { RegisteredPromptCommandOutput } from "../agent-runtime/command-router"
 import type { AgentProjectContribution } from "../agent-runtime/project-contributions"
 import type { AgentMessage } from "../agent-runtime/types"
+import { KnowledgeBaseIngestCoordinator, type KnowledgeBaseIngestPreflight } from "./ingest-coordinator"
 import { KnowledgeBaseIngestFinalizer } from "./ingest-finalizer"
-import { isKnowledgeBaseIngestIntent } from "./ingest-intent"
+import { isKnowledgeBaseForceIngestIntent, isKnowledgeBaseIngestIntent } from "./ingest-intent"
+import { wikiIngestAppendixCopy } from "./wiki-command-copy"
 import { buildKnowledgeBaseCommandOutput } from "./wiki-command-prompts"
 
 type CreateKnowledgeBaseAgentContributionInput = {
   readonly project: SynapseProjectConfig
   readonly ingestFinalizer?: Pick<KnowledgeBaseIngestFinalizer, "finalize">
+  readonly ingestCoordinator?: Pick<KnowledgeBaseIngestCoordinator, "prepareTurn" | "finalizeTurn">
 }
 
 const KNOWLEDGE_BASE_PUBLISHED_COMMANDS = [
@@ -32,7 +35,15 @@ export async function createKnowledgeBaseAgentContribution(
 
   const bootstrap = await readPrompt("bootstrap.md")
   const hotCachePath = path.join(input.project.path, "wiki", "hot.md")
-  const ingestFinalizer = input.ingestFinalizer ?? new KnowledgeBaseIngestFinalizer()
+  const ingestCoordinator = input.ingestCoordinator ?? new KnowledgeBaseIngestCoordinator({
+    ingestFinalizer: input.ingestFinalizer,
+  })
+  const preflightIdsByMessage = new Map<string, string[]>()
+
+  const rememberPreflight = (message: AgentMessage, preflight: KnowledgeBaseIngestPreflight) => {
+    const key = messageKey(message)
+    preflightIdsByMessage.set(key, [...(preflightIdsByMessage.get(key) ?? []), preflight.id])
+  }
 
   return {
     sdkPlugins: [{
@@ -42,19 +53,47 @@ export async function createKnowledgeBaseAgentContribution(
     publishedCommands: KNOWLEDGE_BASE_PUBLISHED_COMMANDS,
     commands: [{
       name: "wiki",
-      buildPrompt: (args) => buildKnowledgeBaseCommandPrompt(input.project.path, args),
+      buildPrompt: (args, message) => buildKnowledgeBaseCommandPrompt({
+        projectPath: input.project.path,
+        args,
+        ingestCoordinator,
+        onIngestPreflight: (preflight) => rememberPreflight(message, preflight),
+      }),
     }],
     async prepareMessage(message, context) {
+      let next = message
+      if (isKnowledgeBaseIngestIntent(message.content) && !hasIngestPreflightAppendix(message.content)) {
+        const force = isKnowledgeBaseForceIngestIntent(message.content)
+        const preflight = await ingestCoordinator.prepareTurn({ projectPath: input.project.path, force })
+        rememberPreflight(message, preflight)
+        next = {
+          ...message,
+          content: [
+            await readPrompt("ingest.md"),
+            "",
+            message.content,
+            "",
+            wikiIngestPreflightAppendix(input.project.path, preflight, force),
+          ].join("\n"),
+        }
+      }
+
       if (!context.isNewLiveSession) {
-        return message
+        return next
       }
       const hotCache = await readOptional(hotCachePath)
-      return prependBootstrap(message, bootstrap, hotCache)
+      return prependBootstrap(next, bootstrap, hotCache)
     },
     async afterTurn({ message, result }) {
-      if (result.error) return
       if (!isKnowledgeBaseIngestIntent(message.content)) return
-      await ingestFinalizer.finalize(input.project.path)
+      const preflightId = takePreflightId(preflightIdsByMessage, message)
+      if (result.error) return
+      if (!preflightId) return
+      await ingestCoordinator.finalizeTurn({
+        projectPath: input.project.path,
+        preflightId,
+        assistantText: result.resultText,
+      })
     },
   }
 }
@@ -100,14 +139,31 @@ function prependBootstrap(message: AgentMessage, bootstrap: string, hotCache: st
   }
 }
 
-async function buildKnowledgeBaseCommandPrompt(
-  projectPath: string,
-  args: readonly string[],
-): Promise<RegisteredPromptCommandOutput> {
+async function buildKnowledgeBaseCommandPrompt(input: {
+  readonly projectPath: string
+  readonly args: readonly string[]
+  readonly ingestCoordinator: Pick<KnowledgeBaseIngestCoordinator, "prepareTurn">
+  readonly onIngestPreflight: (preflight: KnowledgeBaseIngestPreflight) => void
+}): Promise<RegisteredPromptCommandOutput> {
   return buildKnowledgeBaseCommandOutput({
-    projectPath,
-    args,
+    projectPath: input.projectPath,
+    args: input.args,
     readPrompt,
+    ingestCoordinator: input.ingestCoordinator,
+    onIngestPreflight: input.onIngestPreflight,
+  })
+}
+
+function wikiIngestPreflightAppendix(
+  projectPath: string,
+  preflight: KnowledgeBaseIngestPreflight,
+  force: boolean,
+): string {
+  return wikiIngestAppendixCopy({
+    projectPath,
+    changedSources: preflight.sources.filter((source) => source.state !== "unchanged"),
+    skippedSources: preflight.skippedSources,
+    force,
   })
 }
 
@@ -164,6 +220,29 @@ function resolveKnowledgeBasePluginPath(): string {
     return path.join(resourcesPath, "knowledge-base", "claude-plugin")
   }
   return devRoot
+}
+
+function messageKey(message: AgentMessage): string {
+  return [
+    message.projectId,
+    message.sessionKey,
+    message.platform,
+    message.content,
+  ].join("\u0000")
+}
+
+function takePreflightId(preflightIdsByMessage: Map<string, string[]>, message: AgentMessage): string | null {
+  const key = messageKey(message)
+  const ids = preflightIdsByMessage.get(key)
+  const id = ids?.shift()
+  if (!ids || ids.length === 0) {
+    preflightIdsByMessage.delete(key)
+  }
+  return id ?? null
+}
+
+function hasIngestPreflightAppendix(content: string): boolean {
+  return content.includes("## Synapse 预检") && content.includes("synapse_kb_ingest_report")
 }
 
 function knowledgeBaseAction(

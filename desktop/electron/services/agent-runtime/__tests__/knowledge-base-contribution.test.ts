@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { RegisteredPromptCommandOutput } from "../../agent-runtime/command-router"
 import { createKnowledgeBaseAgentContribution } from "../../knowledge-base/agent-contribution"
+import { readKnowledgeBaseManifest } from "../../knowledge-base/manifest"
 
 const roots: string[] = []
 
@@ -273,7 +274,7 @@ describe("knowledge base Agent contribution", () => {
     expect(content).toContain("address_map")
   })
 
-  it("keeps natural-language ingest requests unchanged because plugin skills handle routing", async () => {
+  it("injects coordinator preflight for natural-language ingest requests", async () => {
     const projectPath = await tempDir()
     await mkdir(path.join(projectPath, ".raw"), { recursive: true })
     await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{},\"address_map\":{}}\n")
@@ -289,7 +290,11 @@ describe("knowledge base Agent contribution", () => {
       content: "汲取知识",
     }, { isNewLiveSession: false }))
 
-    expect(prepared?.content).toBe("汲取知识")
+    expect(prepared?.content).toContain("汲取知识")
+    expect(prepared?.content).toContain("## Synapse 预检")
+    expect(prepared?.content).toContain(".raw/note.md")
+    expect(prepared?.content).toContain("synapse_kb_ingest_report")
+    expect(prepared?.content).toContain("不要编辑 `.raw/.manifest.json`")
     expect(contribution?.sdkPlugins?.[0]?.path.startsWith(projectPath)).toBe(false)
   })
 
@@ -307,23 +312,122 @@ describe("knowledge base Agent contribution", () => {
     expect(expectObjectOutput(output, "result")).toContain("- 来源：1")
   })
 
-  it("runs the ingest finalizer after natural-language ingest turns", async () => {
+  it("finalizes natural-language ingest through the coordinator with assistant report text", async () => {
     const projectPath = await tempDir()
-    const finalize = vi.fn(async () => ({ assigned: [], reused: [] }))
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{},\"address_map\":{}}\n")
+    await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
+    await mkdir(path.join(projectPath, "wiki", "sources"), { recursive: true })
+    await writeFile(path.join(projectPath, "wiki", "sources", "note.md"), "---\ntype: source\naddress: c-000007\n---\n\n# Note\n")
 
     const contribution = await createKnowledgeBaseAgentContribution({
       project: knowledgeBaseProject(projectPath),
-      ingestFinalizer: { finalize },
     })
+    await Promise.resolve(contribution?.prepareMessage?.({
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local-renderer",
+      content: "汲取知识",
+    }, { isNewLiveSession: false }))
 
     await contribution?.afterTurn?.({
       message: baseMessage("汲取知识"),
-      result: { conversationId: "conv-1", resultText: "done", events: [] },
+      result: { conversationId: "conv-1", resultText: ingestReport([{
+        source: ".raw/note.md",
+        pages_created: ["wiki/sources/note.md"],
+        pages_updated: [],
+      }]), events: [] },
       conversationId: "conv-1",
       isNewLiveSession: false,
     })
 
-    expect(finalize).toHaveBeenCalledWith(projectPath)
+    await expect(readKnowledgeBaseManifest(projectPath)).resolves.toMatchObject({
+      manifest: {
+        sources: {
+          ".raw/note.md": {
+            pages_created: ["wiki/sources/note.md"],
+            pages_updated: [],
+          },
+        },
+        address_map: {
+          "wiki/sources/note.md": "c-000007",
+        },
+      },
+    })
+  })
+
+  it("finalizes /wiki ingest through the coordinator with assistant report text", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{},\"address_map\":{}}\n")
+    await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
+    await mkdir(path.join(projectPath, "wiki", "sources"), { recursive: true })
+    await writeFile(path.join(projectPath, "wiki", "sources", "note.md"), "---\ntype: source\naddress: c-000008\n---\n\n# Note\n")
+
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+    await contribution?.commands[0]?.buildPrompt(["ingest"], baseMessage("/wiki ingest"))
+    await contribution?.afterTurn?.({
+      message: baseMessage("/wiki ingest"),
+      result: { conversationId: "conv-1", resultText: ingestReport([{
+        source: ".raw/note.md",
+        pages_created: ["wiki/sources/note.md"],
+        pages_updated: [],
+      }]), events: [] },
+      conversationId: "conv-1",
+      isNewLiveSession: false,
+    })
+
+    await expect(readKnowledgeBaseManifest(projectPath)).resolves.toMatchObject({
+      manifest: {
+        sources: {
+          ".raw/note.md": {
+            pages_created: ["wiki/sources/note.md"],
+            pages_updated: [],
+          },
+        },
+        address_map: {
+          "wiki/sources/note.md": "c-000008",
+        },
+      },
+    })
+  })
+
+  it("leaves manifest sources unchanged when coordinator finalization rejects an invalid report", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), `${JSON.stringify({
+      version: 1,
+      sources: {
+        ".raw/existing.md": { hash: "existing-hash" },
+      },
+      address_map: {},
+    }, null, 2)}\n`)
+    await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+    await contribution?.commands[0]?.buildPrompt(["ingest"], baseMessage("/wiki ingest"))
+
+    await contribution?.afterTurn?.({
+      message: baseMessage("/wiki ingest"),
+      result: {
+        conversationId: "conv-1",
+        resultText: ["```json synapse_kb_ingest_report", "{ bad json", "```"].join("\n"),
+        events: [],
+      },
+      conversationId: "conv-1",
+      isNewLiveSession: false,
+    })
+
+    await expect(readKnowledgeBaseManifest(projectPath)).resolves.toMatchObject({
+      manifest: {
+        sources: {
+          ".raw/existing.md": { hash: "existing-hash" },
+        },
+      },
+    })
   })
 
   it("does not run the ingest finalizer for query turns", async () => {
@@ -397,6 +501,18 @@ function baseMessage(content: string) {
     platform: "local-renderer",
     content,
   } as const
+}
+
+function ingestReport(processedSources: readonly object[]): string {
+  return [
+    "```json synapse_kb_ingest_report",
+    JSON.stringify({
+      schema: "synapse.kb.ingest.report.v1",
+      processed_sources: processedSources,
+      skipped_sources: [],
+    }),
+    "```",
+  ].join("\n")
 }
 
 function expectObjectOutput(

@@ -82,11 +82,48 @@ describe("wiki command prompts", () => {
     expect(content).toContain("执行知识库导入模板。")
     expect(content).toContain(projectPath)
     expect(content).toContain(".raw/note.md")
-    expect(content).toContain("## 清单更新要求")
+    expect(content).toContain("## Synapse 预检")
+    expect(content).toContain("## 清单写入边界")
+    expect(content).toContain("不要编辑 `.raw/.manifest.json`")
+    expect(content).toContain("Synapse 会根据本回合报告写入 `.raw/.manifest.json`")
+    expect(content).toContain("## 回合报告要求")
+    expect(content).toContain("```json synapse_kb_ingest_report")
+    expect(content).toContain('"schema": "synapse.kb.ingest.report.v1"')
+    expect(content).toContain('"processed_sources"')
     expect(content).toContain("address_map")
-    expect(content).toContain("claude-obsidian")
     expect(content).toContain("Synapse 会在导入回合结束后补齐 DragonScale 地址")
     expect(content).toContain("不要编辑 `.vault-meta/address-counter.txt`")
+  })
+
+  it("includes force context when building /wiki ingest --force", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", "note.md"), "部门职责\n")
+    const scan = await scanKnowledgeBaseSources(projectPath)
+    const source = scan.sources[0]
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), `${JSON.stringify({
+      version: 1,
+      sources: {
+        [source.relativePath]: {
+          hash: source.hash,
+          ingested_at: "2026-05-21T00:00:00.000Z",
+          pages_created: [],
+          pages_updated: [],
+        },
+      },
+      address_map: {},
+    }, null, 2)}\n`)
+
+    const output = await buildKnowledgeBaseCommandOutput({
+      projectPath,
+      args: ["ingest", "--force"],
+      readPrompt: promptReader({ "ingest.md": "执行知识库导入模板。" }),
+    })
+
+    const content = expectObjectOutput(output, "prompt")
+    expect(content).toContain("## 强制导入")
+    expect(content).toContain("本次使用 `/wiki ingest --force`")
+    expect(content).toContain(".raw/note.md")
   })
 
   it("builds a Chinese markdown quick query prompt with mode and question", async () => {
