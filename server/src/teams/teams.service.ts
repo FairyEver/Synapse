@@ -61,10 +61,7 @@ export class TeamsService {
   }
 
   async createInvitation(userId: string, publicAppUrl: string, ipAddress = "system") {
-    const membership = await this.getMembership(userId)
-    if (!membership || membership.role !== "owner") {
-      throw new ForbiddenException()
-    }
+    const membership = await this.requireTeamPermission(userId, "team.invitation.manage")
     const invitation = await this.invitations.createTeamInvitation({ userId, teamId: membership.teamId, publicAppUrl })
     const actorEmail = await this.getAuditActorEmail(userId)
     await this.auditLog?.record({
@@ -121,28 +118,25 @@ export class TeamsService {
     })
   }
 
-  async removeMember(ownerUserId: string, targetUserId: string, ipAddress = "system") {
-    const ownerMembership = await this.getMembership(ownerUserId)
-    if (!ownerMembership || ownerMembership.role !== "owner") {
-      throw new ForbiddenException()
-    }
-    if (ownerUserId === targetUserId) {
-      throw new BadRequestException("不能移除团队所有者。")
+  async removeMember(actorUserId: string, targetUserId: string, ipAddress = "system") {
+    const actorMembership = await this.requireTeamPermission(actorUserId, "team.member.manage")
+    if (actorUserId === targetUserId) {
+      throw new BadRequestException("不能移除自己。")
     }
 
     const targetMembership = await this.prisma.teamMembership.findUnique({ where: { userId: targetUserId } })
-    if (!targetMembership || targetMembership.teamId !== ownerMembership.teamId || targetMembership.role === "owner") {
+    if (!targetMembership || targetMembership.teamId !== actorMembership.teamId || targetMembership.role === "owner") {
       throw new BadRequestException("成员不存在。")
     }
 
     await this.prisma.teamMembership.delete({ where: { userId: targetUserId } })
-    const actorEmail = await this.getAuditActorEmail(ownerUserId)
+    const actorEmail = await this.getAuditActorEmail(actorUserId)
     await this.auditLog?.record({
       adminEmail: actorEmail,
       action: "team.member.remove",
       targetType: "user",
       targetId: targetUserId,
-      detail: { teamId: ownerMembership.teamId },
+      detail: { teamId: actorMembership.teamId },
       ipAddress,
     })
     return { ok: true }
@@ -189,6 +183,14 @@ export class TeamsService {
       where: { userId },
       include: { team: true },
     })
+  }
+
+  private async requireTeamPermission(userId: string, permissionKey: string) {
+    const membership = await this.getMembership(userId)
+    if (!membership) throw new ForbiddenException()
+    const permissionKeys = await this.permissions.getEffectivePermissions(userId, membership.teamId)
+    if (!permissionKeys.includes(permissionKey)) throw new ForbiddenException()
+    return membership
   }
 
   private async lockTeamForMembershipChange(tx: Prisma.TransactionClient, teamId: string): Promise<void> {

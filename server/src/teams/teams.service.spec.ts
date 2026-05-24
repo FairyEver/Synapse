@@ -34,6 +34,10 @@ function createPermissionsMock() {
   return {
     ensureDefaultTeamAccess: vi.fn(),
     assignOrdinaryMemberRole: vi.fn(),
+    getEffectivePermissions: vi.fn().mockResolvedValue([
+      "team.invitation.manage",
+      "team.member.manage",
+    ]),
   }
 }
 
@@ -99,16 +103,43 @@ describe("TeamsService", () => {
     })
   })
 
-  it("rejects team invitations from non-owners", async () => {
+  it("rejects team invitations without the RBAC invitation permission", async () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "member", teamId: "team-1" })
+    const permissions = createPermissionsMock()
+    permissions.getEffectivePermissions.mockResolvedValue([])
     const service = new TeamsService(
       prisma as never,
       { createTeamInvitation: vi.fn() } as never,
-      createPermissionsMock() as never,
+      permissions as never,
     )
 
     await expect(service.createInvitation("user-1", "https://app.example.com")).rejects.toThrow(ForbiddenException)
+  })
+
+  it("allows team invitations with the RBAC invitation permission", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue({ role: "member", teamId: "team-1" })
+    const invitations = {
+      createTeamInvitation: vi.fn().mockResolvedValue({ id: "invite-1" }),
+    }
+    const permissions = createPermissionsMock()
+    permissions.getEffectivePermissions.mockResolvedValue(["team.invitation.manage"])
+    const service = new TeamsService(
+      prisma as never,
+      invitations as never,
+      permissions as never,
+    )
+
+    await expect(service.createInvitation("user-1", "https://app.example.com"))
+      .resolves
+      .toEqual({ id: "invite-1" })
+    expect(permissions.getEffectivePermissions).toHaveBeenCalledWith("user-1", "team-1")
+    expect(invitations.createTeamInvitation).toHaveBeenCalledWith({
+      userId: "user-1",
+      teamId: "team-1",
+      publicAppUrl: "https://app.example.com",
+    })
   })
 
   it("returns the joined member with user fields", async () => {
@@ -312,5 +343,41 @@ describe("TeamsService", () => {
       targetId: "user-2",
       ipAddress: "203.0.113.20",
     }))
+  })
+
+  it("allows member removals with the RBAC member management permission", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique
+      .mockResolvedValueOnce({ role: "member", teamId: "team-1", userId: "manager-1" })
+      .mockResolvedValueOnce({ role: "member", teamId: "team-1", userId: "user-2" })
+    prisma.teamMembership.delete.mockResolvedValue({ id: "membership-2" })
+    const permissions = createPermissionsMock()
+    permissions.getEffectivePermissions.mockResolvedValue(["team.member.manage"])
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn() } as never,
+      permissions as never,
+    )
+
+    await expect(service.removeMember("manager-1", "user-2", "203.0.113.20")).resolves.toEqual({ ok: true })
+
+    expect(permissions.getEffectivePermissions).toHaveBeenCalledWith("manager-1", "team-1")
+    expect(prisma.teamMembership.delete).toHaveBeenCalledWith({ where: { userId: "user-2" } })
+  })
+
+  it("rejects member removals without the RBAC member management permission", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue({ role: "owner", teamId: "team-1", userId: "owner-1" })
+    const permissions = createPermissionsMock()
+    permissions.getEffectivePermissions.mockResolvedValue([])
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn() } as never,
+      permissions as never,
+    )
+
+    await expect(service.removeMember("owner-1", "user-2")).rejects.toThrow(ForbiddenException)
+
+    expect(prisma.teamMembership.delete).not.toHaveBeenCalled()
   })
 })
