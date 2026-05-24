@@ -7,6 +7,7 @@ import { KnowledgeBaseWorkerSessionRunner } from "../ingest-worker-session-runne
 class FakeWorkerSession implements AgentLiveSession {
   readonly agentType = "claude-sdk"
   readonly sent: string[] = []
+  closeCalls = 0
   private events: AgentEvent[]
 
   constructor(resultText: string) {
@@ -21,7 +22,9 @@ class FakeWorkerSession implements AgentLiveSession {
   async nextEvent(): Promise<AgentEvent | null> { return this.events.shift() ?? null }
   currentSessionId(): string | undefined { return "worker-sdk-1" }
   alive(): boolean { return this.events.length > 0 }
-  async close(): Promise<void> {}
+  async close(): Promise<void> {
+    this.closeCalls += 1
+  }
 }
 
 describe("KnowledgeBaseWorkerSessionRunner", () => {
@@ -73,5 +76,6 @@ describe("KnowledgeBaseWorkerSessionRunner", () => {
       providerId: "anthropic",
       targetPage: "wiki/sources/a.md",
     }))
+    expect(session.closeCalls).toBe(1)
   })
 })

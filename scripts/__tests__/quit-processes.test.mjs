@@ -3,6 +3,7 @@ import test from "node:test"
 
 import {
   buildTerminationTargets,
+  filterRemainingDevProcessState,
   matchesSynapseDevProcess,
   parsePsRows,
 } from "../quit-processes.mjs"
@@ -56,6 +57,43 @@ test("matchesSynapseDevProcess requires workspace cwd for relative dev scripts",
   }, { workspaceRoot }), false)
 })
 
+test("matchesSynapseDevProcess filters by requested dev script", () => {
+  assert.equal(matchesSynapseDevProcess({
+    pid: 301,
+    pgid: 301,
+    commandLine: "pnpm --filter @synapse/website run dev",
+    cwd: workspaceRoot,
+  }, { workspaceRoot, targetScripts: ["dev:website"] }), true)
+
+  assert.equal(matchesSynapseDevProcess({
+    pid: 302,
+    pgid: 302,
+    commandLine: "vitepress dev --port 19773",
+    cwd: `${workspaceRoot}/website`,
+  }, { workspaceRoot, targetScripts: ["dev:website"] }), true)
+
+  assert.equal(matchesSynapseDevProcess({
+    pid: 303,
+    pgid: 303,
+    commandLine: "vitepress dev --port 19773",
+    cwd: `${workspaceRoot}/website`,
+  }, { workspaceRoot, targetScripts: ["dev:desktop"] }), false)
+
+  assert.equal(matchesSynapseDevProcess({
+    pid: 304,
+    pgid: 304,
+    commandLine: "node scripts/dev-renderer.mjs",
+    cwd: `${workspaceRoot}/desktop`,
+  }, { workspaceRoot, targetScripts: ["dev:desktop"] }), true)
+
+  assert.equal(matchesSynapseDevProcess({
+    pid: 305,
+    pgid: 305,
+    commandLine: "node scripts/run-with-server-env.mjs --filter @synapse/server run dev",
+    cwd: workspaceRoot,
+  }, { workspaceRoot, targetScripts: ["dev:server"] }), true)
+})
+
 test("parsePsRows preserves commands with spaces", () => {
   assert.deepEqual(parsePsRows("  29931  29921  26199 /path/Electron .\n"), [
     {
@@ -74,4 +112,19 @@ test("buildTerminationTargets keeps tracked process groups and scanned pids", ()
     { pid: 20, pgid: 20, commandLine: "node scripts/dev.mjs", cwd: desktopRoot },
     { pid: process.pid, pgid: 30, commandLine: "node scripts/quit-processes.mjs", cwd: workspaceRoot },
   ]), [-10, 20])
+})
+
+test("filterRemainingDevProcessState keeps unrelated tracked dev scripts", () => {
+  assert.deepEqual(filterRemainingDevProcessState([
+    { pid: 10, processGroupPid: -10, scriptName: "dev:server" },
+    { pid: 20, processGroupPid: -20, scriptName: "dev:desktop" },
+    { pid: 30, processGroupPid: -30, scriptName: "dev:website" },
+  ], ["dev:server"]), [
+    { pid: 20, processGroupPid: -20, scriptName: "dev:desktop" },
+    { pid: 30, processGroupPid: -30, scriptName: "dev:website" },
+  ])
+
+  assert.deepEqual(filterRemainingDevProcessState([
+    { pid: 10, processGroupPid: -10, scriptName: "dev:server" },
+  ], []), [])
 })

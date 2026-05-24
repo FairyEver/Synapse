@@ -3,12 +3,18 @@ import { readdir, readFile, readlink } from "node:fs/promises"
 import path from "node:path"
 import { fileURLToPath } from "node:url"
 import { promisify } from "node:util"
-import { clearDevProcessState, readDevProcessState } from "./dev-state.mjs"
+import { clearDevProcessState, readDevProcessState, writeDevProcessState } from "./dev-state.mjs"
 
 const execFileAsync = promisify(execFile)
 const currentFilePath = fileURLToPath(import.meta.url)
 const defaultWorkspaceRoot = path.resolve(path.dirname(currentFilePath), "..")
-const DEV_PORTS = [19731, 19773, 5433]
+const DEV_SCRIPT_NAMES = ["dev:website", "dev:desktop", "dev:server"]
+const DEV_PORTS_BY_SCRIPT = {
+  "dev:website": [19773],
+  "dev:desktop": [19731],
+  "dev:server": [],
+}
+const DEV_PORTS = Object.values(DEV_PORTS_BY_SCRIPT).flat()
 
 const RELATIVE_DEV_COMMAND_MATCHERS = [
   /scripts[/\\]dev\.mjs/u,
@@ -32,6 +38,36 @@ const WORKSPACE_DEV_COMMAND_MATCHERS = [
   /electron[/\\]dist[/\\]Electron\.app.* \./u,
 ]
 
+const DEV_COMMAND_MATCHERS_BY_SCRIPT = {
+  "dev:website": [
+    /vitepress.*dev/u,
+    /pnpm(?:\.cjs)?.*@synapse[/\\]website.*\brun dev\b/u,
+    /pnpm(?:\.cjs)?.*\bdev:website\b/u,
+  ],
+  "dev:desktop": [
+    /scripts[/\\]dev\.mjs/u,
+    /dev-renderer/u,
+    /dev-electron-app/u,
+    /tsc.*tsconfig\.electron\.json.*--watch/u,
+    /vite\.js.*strictPort/u,
+    /electron[/\\]cli\.js \./u,
+    /\belectron \./u,
+    /electron[/\\]dist[/\\]Electron\.app.* \./u,
+    /pnpm(?:\.cjs)?.*@synapse[/\\]desktop.*\brun dev\b/u,
+    /pnpm(?:\.cjs)?.*\bdev:desktop\b/u,
+    /pnpm(?:\.cjs)?.*\bdev:(?:renderer|electron:build|electron:app)\b/u,
+  ],
+  "dev:server": [
+    /scripts[/\\]run-with-server-env\.mjs.*run dev/u,
+    /nest.*start.*--watch/u,
+    /admin[/\\]vite\.config\.ts/u,
+    /nodemon/u,
+    /server[/\\]dist[/\\]main(?:\s|$)/u,
+    /pnpm(?:\.cjs)?.*@synapse[/\\]server.*\brun dev\b/u,
+    /pnpm(?:\.cjs)?.*\bdev:(?:server|api|admin)\b/u,
+  ],
+}
+
 function normalizePathForMatch(value) {
   return path.resolve(value).replaceAll("\\", "/")
 }
@@ -52,8 +88,36 @@ function commandLooksLikeDevProcess(commandLine) {
   return WORKSPACE_DEV_COMMAND_MATCHERS.some((pattern) => pattern.test(commandLine))
 }
 
+function commandMatchesDevScripts(commandLine, targetScripts) {
+  if (!Array.isArray(targetScripts) || targetScripts.length === 0) {
+    return commandLooksLikeDevProcess(commandLine)
+  }
+
+  return targetScripts.some((scriptName) =>
+    DEV_COMMAND_MATCHERS_BY_SCRIPT[scriptName]?.some((pattern) => pattern.test(commandLine)),
+  )
+}
+
+function parseTargetScripts(args) {
+  const targetScripts = args.filter((value) => DEV_SCRIPT_NAMES.includes(value))
+
+  if (targetScripts.length !== args.length) {
+    const invalid = args.filter((value) => !DEV_SCRIPT_NAMES.includes(value)).join(", ")
+    throw new Error(`Unknown dev script target: ${invalid}`)
+  }
+
+  return targetScripts
+}
+
+function filterRemainingDevProcessState(entries, targetScripts) {
+  if (!Array.isArray(targetScripts) || targetScripts.length === 0) return []
+
+  return entries.filter((entry) => !targetScripts.includes(entry.scriptName))
+}
+
 function matchesSynapseDevProcess(processInfo, options = {}) {
   const workspaceRoot = options.workspaceRoot ?? defaultWorkspaceRoot
+  const targetScripts = options.targetScripts ?? []
   const commandLine = processInfo.commandLine ?? ""
   const cwd = processInfo.cwd
 
@@ -61,11 +125,11 @@ function matchesSynapseDevProcess(processInfo, options = {}) {
   if (processInfo.pid === process.pid) return false
   if (!commandLine || commandLine.includes("quit-processes.mjs")) return false
   if (commandContainsWorkspace(commandLine, workspaceRoot)) {
-    return WORKSPACE_DEV_COMMAND_MATCHERS.some((pattern) => pattern.test(commandLine))
+    return commandMatchesDevScripts(commandLine, targetScripts)
   }
 
   if (pathIsInside(cwd, workspaceRoot)) {
-    return RELATIVE_DEV_COMMAND_MATCHERS.some((pattern) => pattern.test(commandLine))
+    return commandMatchesDevScripts(commandLine, targetScripts)
   }
 
   return false
@@ -98,7 +162,12 @@ async function findScannedProcesses(options = {}) {
 }
 
 async function findTrackedProcesses(options = {}) {
-  return readDevProcessState(options.statePath)
+  const entries = await readDevProcessState(options.statePath)
+  const targetScripts = options.targetScripts ?? []
+
+  if (targetScripts.length === 0) return entries
+
+  return entries.filter((entry) => targetScripts.includes(entry.scriptName))
 }
 
 async function findWindowsProcesses(options = {}) {
@@ -211,7 +280,10 @@ async function findMacProcesses(options = {}) {
 
 async function findPortProcesses(options = {}) {
   const platform = options.platform ?? process.platform
-  const ports = options.ports ?? DEV_PORTS
+  const targetScripts = options.targetScripts ?? []
+  const ports = options.ports ?? (targetScripts.length > 0
+    ? targetScripts.flatMap((scriptName) => DEV_PORTS_BY_SCRIPT[scriptName] ?? [])
+    : DEV_PORTS)
 
   if (ports.length === 0) return []
 
@@ -302,13 +374,29 @@ async function terminateProcess(pid) {
   }
 }
 
+async function updateDevProcessStateAfterQuit(targetScripts) {
+  if (targetScripts.length === 0) {
+    await clearDevProcessState()
+    return
+  }
+
+  const remainingEntries = filterRemainingDevProcessState(await readDevProcessState(), targetScripts)
+  if (remainingEntries.length === 0) {
+    await clearDevProcessState()
+    return
+  }
+
+  await writeDevProcessState(remainingEntries)
+}
+
 async function main() {
-  const { tracked, scanned, portProcesses } = await findMatchingProcesses()
+  const targetScripts = parseTargetScripts(process.argv.slice(2))
+  const { tracked, scanned, portProcesses } = await findMatchingProcesses({ targetScripts })
   const targets = buildTerminationTargets(tracked, [...scanned, ...portProcesses])
   const results = await Promise.all(targets.map(terminateProcess))
   const stoppedCount = results.filter(Boolean).length
 
-  await clearDevProcessState()
+  await updateDevProcessStateAfterQuit(targetScripts)
   console.log(stoppedCount > 0 ? `Stopped ${stoppedCount} process(es).` : "Done.")
 }
 
@@ -318,8 +406,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === currentFilePath) {
 
 export {
   buildTerminationTargets,
+  commandMatchesDevScripts,
   commandLooksLikeDevProcess,
+  filterRemainingDevProcessState,
   findMatchingProcesses,
   matchesSynapseDevProcess,
   parsePsRows,
+  parseTargetScripts,
 }

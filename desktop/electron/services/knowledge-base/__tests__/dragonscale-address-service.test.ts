@@ -3,7 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 
-import { DragonScaleAddressService } from "../dragonscale/address-service"
+import { DragonScaleAddressService, dragonScaleAddressLockPath } from "../dragonscale/address-service"
 
 const roots: string[] = []
 
@@ -129,6 +129,25 @@ describe("DragonScaleAddressService", () => {
     ])
     await expect(readFile(path.join(root, ".vault-meta", "address-counter.txt"), "utf8"))
       .resolves.toBe("4\n")
+  })
+
+  it("uses a project file lock for address counter writes", async () => {
+    const root = await tempDir()
+    const lockRoot = await tempDir()
+    await mkdir(path.join(root, ".vault-meta"), { recursive: true })
+    await writeFile(path.join(root, ".vault-meta", "address-counter.txt"), "1\n")
+    const lockPath = dragonScaleAddressLockPath(root, { lockRoot })
+    await mkdir(lockPath, { recursive: true })
+    const service = new DragonScaleAddressService({
+      lockRoot,
+      lockTimeoutMs: 20,
+      lockRetryMs: 1,
+    })
+
+    await expect(service.allocate(root)).rejects.toThrow("Timed out waiting for DragonScale address lock")
+
+    await rm(lockPath, { recursive: true, force: true })
+    await expect(service.allocate(root)).resolves.toMatchObject({ address: "c-000001" })
   })
 
   it("exports the address service from the knowledge-base service barrel", async () => {

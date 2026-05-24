@@ -84,4 +84,58 @@ describe("KnowledgeBaseParallelIngestRunner", () => {
       message: expect.stringContaining(".raw/a.md"),
     })
   })
+
+  it("continues the merge when one worker throws", async () => {
+    const runner = new KnowledgeBaseParallelIngestRunner({
+      runWorker: async (input) => {
+        if (input.task.sourcePath === ".raw/b.md") {
+          throw new Error("worker crashed")
+        }
+        return {
+          status: "completed" as const,
+          events: [],
+          report: {
+            taskId: input.task.taskId,
+            source: input.task.sourcePath,
+            targetPage: input.task.targetPage,
+            pagesCreated: [input.task.targetPage],
+            pagesUpdated: [],
+            candidateConcepts: [],
+            candidateEntities: [],
+            candidateQuestions: [],
+            skipped: null,
+          },
+        }
+      },
+      getProviderEnv: async () => ({ providerId: "anthropic", env: {} }),
+    })
+
+    const result = await runner.prepareMergePrompt({
+      projectId: "project-1",
+      projectPath: "/vault",
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      userId: "user-1",
+      preflight: {
+        projectPath: "/vault",
+        generatedAt: "2026-05-24T00:00:00.000Z",
+        force: false,
+        changedSources: [
+          { relativePath: ".raw/a.md", hash: "a".repeat(64), state: "new" },
+          { relativePath: ".raw/b.md", hash: "b".repeat(64), state: "new" },
+        ],
+        skippedSources: [],
+        wikiBefore: { files: {} },
+      },
+      manifestSources: {},
+    })
+
+    expect(result).toMatchObject({
+      status: "merge-ready",
+      failedSources: [".raw/b.md"],
+    })
+    if (result.status !== "merge-ready") throw new Error("expected merge-ready result")
+    expect(result.prompt).toContain("wiki/sources/a.md")
+    expect(result.prompt).toContain("Failed worker sources: .raw/b.md")
+  })
 })

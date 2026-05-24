@@ -9,11 +9,12 @@ async function runCleanup(scriptName) {
   }
 }
 
-const dockerResult = await runCleanup("quit:docker")
-const processResult = await runCleanup("quit:processes")
+const serverResult = await runCleanup("quit:server")
+const desktopResult = await runCleanup("quit:desktop")
+const websiteResult = await runCleanup("quit:website")
 
-if (dockerResult.signal || processResult.signal) {
+if (serverResult.signal || desktopResult.signal || websiteResult.signal) {
   process.exit(1)
 }
 
-process.exit(dockerResult.code || processResult.code || 0)
+process.exit(serverResult.code || desktopResult.code || websiteResult.code || 0)

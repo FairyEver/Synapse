@@ -8,7 +8,10 @@
     "dev:desktop": "pnpm --filter @synapse/desktop run dev",
     "dev:server": "docker compose --env-file server/.env -f server/compose.yml up -d postgres && node scripts/run-with-server-env.mjs --filter @synapse/server run dev",
     "quit": "node scripts/quit.mjs",
-    "quit:docker": "docker compose -f server/compose.yml down",
+    "quit:website": "node scripts/quit-processes.mjs dev:website",
+    "quit:desktop": "node scripts/quit-processes.mjs dev:desktop",
+    "quit:server": "node scripts/quit-processes.mjs dev:server && pnpm run quit:docker",
+    "quit:docker": "APP_PUBLIC_URL=${APP_PUBLIC_URL:-http://localhost:3000} docker compose --env-file server/.env -f server/compose.yml down",
     "quit:processes": "node scripts/quit-processes.mjs",
     "desktop:bump:commit:push": "pnpm --filter @synapse/desktop run bump:commit:push",
     "auto": "pnpm --filter @synapse/auto run start"
