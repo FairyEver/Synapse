@@ -248,7 +248,21 @@ export class TeamsService {
       throw new BadRequestException("不能移除团队所有者。")
     }
 
-    await this.prisma.teamMembership.delete({ where: { userId: targetUserId } })
+    const deletedMembership = await this.prisma.teamMembership.deleteMany({
+      where: { userId: targetUserId, teamId: actorMembership.teamId },
+    })
+    if (deletedMembership.count === 0) {
+      await this.recordTeamFailure({
+        actorUserId,
+        action: "team.member.remove.failure",
+        targetType: "user",
+        targetId: targetUserId,
+        reason: "target_not_found",
+        detail: { teamId: actorMembership.teamId },
+        ipAddress,
+      })
+      throw new BadRequestException("成员不存在。")
+    }
     const actorEmail = await this.getAuditActorEmail(actorUserId)
     await this.auditLog?.record({
       adminEmail: actorEmail,
@@ -285,7 +299,10 @@ export class TeamsService {
       })
       dissolved = true
     } else {
-      await this.prisma.teamMembership.delete({ where: { userId } })
+      const deletedMembership = await this.prisma.teamMembership.deleteMany({ where: { userId, teamId: membership.teamId } })
+      if (deletedMembership.count === 0) {
+        throw new BadRequestException("账号未加入团队。")
+      }
     }
 
     const actorEmail = await this.getAuditActorEmail(userId)

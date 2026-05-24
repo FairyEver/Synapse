@@ -10,6 +10,7 @@ function createPrismaMock() {
       findFirst: vi.fn(),
       findMany: vi.fn(),
       delete: vi.fn(),
+      deleteMany: vi.fn(),
       count: vi.fn(),
     },
     team: {
@@ -354,7 +355,7 @@ describe("TeamsService", () => {
   it("lets a member leave their team", async () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ role: "member", teamId: "team-1", userId: "user-2" })
-    prisma.teamMembership.delete.mockResolvedValue({ id: "membership-2" })
+    prisma.teamMembership.deleteMany.mockResolvedValue({ count: 1 })
     const auditLog = { record: vi.fn() }
     const service = new TeamsService(
       prisma as never,
@@ -364,13 +365,26 @@ describe("TeamsService", () => {
     )
 
     await expect(service.leaveTeam("user-2")).resolves.toEqual({ ok: true })
-    expect(prisma.teamMembership.delete).toHaveBeenCalledWith({ where: { userId: "user-2" } })
+    expect(prisma.teamMembership.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-2", teamId: "team-1" } })
     expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "team.leave",
       targetType: "team",
       targetId: "team-1",
       detail: { teamId: "team-1", dissolved: false },
     }))
+  })
+
+  it("returns a business error when a member leave races with another deletion", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue({ role: "member", teamId: "team-1", userId: "user-2" })
+    prisma.teamMembership.deleteMany.mockResolvedValue({ count: 0 })
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
+    )
+
+    await expect(service.leaveTeam("user-2")).rejects.toThrow("账号未加入团队。")
   })
 
   it("prevents an owner from leaving while members remain", async () => {
@@ -487,7 +501,7 @@ describe("TeamsService", () => {
       .mockResolvedValueOnce({ role: "owner", teamId: "team-1", userId: "owner-1" })
       .mockResolvedValueOnce({ role: "member", teamId: "team-1", userId: "user-2" })
     prisma.user.findUnique.mockResolvedValue({ email: "owner@example.com" })
-    prisma.teamMembership.delete.mockResolvedValue({ id: "membership-2" })
+    prisma.teamMembership.deleteMany.mockResolvedValue({ count: 1 })
     const auditLog = { record: vi.fn() }
     const service = new TeamsService(
       prisma as never,
@@ -526,7 +540,7 @@ describe("TeamsService", () => {
     await expect(service.removeMember("manager-1", "owner-1", "203.0.113.21"))
       .rejects
       .toThrow("不能移除团队所有者。")
-    expect(prisma.teamMembership.delete).not.toHaveBeenCalled()
+    expect(prisma.teamMembership.deleteMany).not.toHaveBeenCalled()
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "manager@example.com",
       action: "team.member.remove.failure",
@@ -542,7 +556,7 @@ describe("TeamsService", () => {
     prisma.teamMembership.findUnique
       .mockResolvedValueOnce({ role: "member", teamId: "team-1", userId: "manager-1" })
       .mockResolvedValueOnce({ role: "member", teamId: "team-1", userId: "user-2" })
-    prisma.teamMembership.delete.mockResolvedValue({ id: "membership-2" })
+    prisma.teamMembership.deleteMany.mockResolvedValue({ count: 1 })
     const permissions = createPermissionsMock()
     permissions.getEffectivePermissions.mockResolvedValue(["team.member.manage"])
     const service = new TeamsService(
@@ -554,7 +568,24 @@ describe("TeamsService", () => {
     await expect(service.removeMember("manager-1", "user-2", "203.0.113.20")).resolves.toEqual({ ok: true })
 
     expect(permissions.getEffectivePermissions).toHaveBeenCalledWith("manager-1", "team-1")
-    expect(prisma.teamMembership.delete).toHaveBeenCalledWith({ where: { userId: "user-2" } })
+    expect(prisma.teamMembership.deleteMany).toHaveBeenCalledWith({ where: { userId: "user-2", teamId: "team-1" } })
+  })
+
+  it("returns a business error when member removal races with another deletion", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique
+      .mockResolvedValueOnce({ role: "owner", teamId: "team-1", userId: "owner-1" })
+      .mockResolvedValueOnce({ role: "member", teamId: "team-1", userId: "user-2" })
+    prisma.teamMembership.deleteMany.mockResolvedValue({ count: 0 })
+    const permissions = createPermissionsMock()
+    permissions.getEffectivePermissions.mockResolvedValue(["team.member.manage"])
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn() } as never,
+      permissions as never,
+    )
+
+    await expect(service.removeMember("owner-1", "user-2")).rejects.toThrow("成员不存在。")
   })
 
   it("rejects member removals without the RBAC member management permission", async () => {
@@ -573,7 +604,7 @@ describe("TeamsService", () => {
 
     await expect(service.removeMember("owner-1", "user-2", "203.0.113.22")).rejects.toThrow(ForbiddenException)
 
-    expect(prisma.teamMembership.delete).not.toHaveBeenCalled()
+    expect(prisma.teamMembership.deleteMany).not.toHaveBeenCalled()
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "owner@example.com",
       action: "team.member.remove.failure",
