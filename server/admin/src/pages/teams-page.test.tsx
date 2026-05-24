@@ -8,8 +8,10 @@ vi.mock("@/lib/api", () => ({
   adminApi: {
     listPermissions: vi.fn(),
     listTeams: vi.fn(),
+    listTeamAccessRoles: vi.fn(),
     listTeamEntitlements: vi.fn(),
     replaceTeamEntitlements: vi.fn(),
+    replaceTeamRolePermissions: vi.fn(),
   },
 }))
 
@@ -152,7 +154,21 @@ describe("TeamsPage", () => {
       },
     ])
     vi.mocked(adminApi.listTeamEntitlements).mockResolvedValue({ permissionKeys: ["database.use"] })
+    vi.mocked(adminApi.listTeamAccessRoles).mockResolvedValue([
+      {
+        id: "role-1",
+        name: "自定义成员",
+        description: null,
+        kind: "custom",
+        locked: false,
+        sortOrder: 2,
+        permissionKeys: ["database.use"],
+        createdAt: "2026-05-20T00:00:00.000Z",
+        updatedAt: "2026-05-22T00:00:00.000Z",
+      },
+    ])
     vi.mocked(adminApi.replaceTeamEntitlements).mockResolvedValue({ permissionKeys: ["database.use", "workflow.use"] })
+    vi.mocked(adminApi.replaceTeamRolePermissions).mockResolvedValue({ permissionKeys: ["database.use", "workflow.use"] })
 
     const result = await render(<TeamsPage />)
     cleanup = result.unmount
@@ -169,13 +185,20 @@ describe("TeamsPage", () => {
     await waitFor(() => {
       expect(adminApi.listPermissions).toHaveBeenCalledWith()
       expect(adminApi.listTeamEntitlements).toHaveBeenCalledWith("team-1")
+      expect(adminApi.listTeamAccessRoles).toHaveBeenCalledWith("team-1")
       expect(document.body.textContent).toContain("工作流")
+      expect(document.body.textContent).toContain("自定义成员")
     })
 
     const workflow = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button[role='checkbox']"))
       .find((checkbox) => checkbox.getAttribute("aria-label") === "开通 工作流")
     act(() => {
       workflow?.click()
+    })
+    const roleWorkflow = Array.from(document.body.querySelectorAll<HTMLButtonElement>("button[role='checkbox']"))
+      .find((checkbox) => checkbox.getAttribute("aria-label") === "角色 自定义成员 权限 工作流")
+    act(() => {
+      roleWorkflow?.click()
     })
     act(() => {
       Array.from(document.body.querySelectorAll("button"))
@@ -186,6 +209,11 @@ describe("TeamsPage", () => {
     await waitFor(() => {
       expect(adminApi.replaceTeamEntitlements).toHaveBeenCalledWith(
         "team-1",
+        ["database.use", "workflow.use"],
+      )
+      expect(adminApi.replaceTeamRolePermissions).toHaveBeenCalledWith(
+        "team-1",
+        "role-1",
         ["database.use", "workflow.use"],
       )
     })

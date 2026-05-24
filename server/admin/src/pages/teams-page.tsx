@@ -24,7 +24,13 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { useApiResource } from "@/hooks/use-api-resource"
-import { adminApi, type AdminTeamRow, type PaginatedResponse, type PermissionDefinition } from "@/lib/api"
+import {
+  adminApi,
+  type AdminTeamRow,
+  type PaginatedResponse,
+  type PermissionDefinition,
+  type TeamAccessRoleRow,
+} from "@/lib/api"
 import { formatDate } from "@/lib/format"
 import { formatTeamRole } from "@/lib/team-role"
 
@@ -67,6 +73,8 @@ export function TeamsPage() {
   const [editingTeam, setEditingTeam] = React.useState<AdminTeamRow | null>(null)
   const [permissions, setPermissions] = React.useState<PermissionDefinition[]>([])
   const [permissionKeys, setPermissionKeys] = React.useState<ReadonlySet<string>>(() => new Set())
+  const [accessRoles, setAccessRoles] = React.useState<TeamAccessRoleRow[]>([])
+  const [rolePermissionKeys, setRolePermissionKeys] = React.useState<Record<string, ReadonlySet<string>>>({})
   const [permissionLoading, setPermissionLoading] = React.useState(false)
   const [permissionSaving, setPermissionSaving] = React.useState(false)
   const [permissionError, setPermissionError] = React.useState<string | null>(null)
@@ -79,11 +87,16 @@ export function TeamsPage() {
     Promise.all([
       adminApi.listPermissions(),
       adminApi.listTeamEntitlements(editingTeam.id),
+      adminApi.listTeamAccessRoles(editingTeam.id),
     ])
-      .then(([nextPermissions, entitlements]) => {
+      .then(([nextPermissions, entitlements, roles]) => {
         if (!alive) return
         setPermissions(nextPermissions)
         setPermissionKeys(new Set(entitlements.permissionKeys))
+        setAccessRoles(roles)
+        setRolePermissionKeys(Object.fromEntries(
+          roles.map((role) => [role.id, new Set(role.permissionKeys)]),
+        ))
       })
       .catch((caught: unknown) => {
         if (!alive) return
@@ -98,11 +111,29 @@ export function TeamsPage() {
   }, [editingTeam])
 
   function updatePermissionKey(permissionKey: string, checked: boolean | "indeterminate") {
+    if (checked !== true) {
+      setRolePermissionKeys((previousRoles) => Object.fromEntries(
+        Object.entries(previousRoles).map(([roleId, keys]) => {
+          const nextKeys = new Set(keys)
+          nextKeys.delete(permissionKey)
+          return [roleId, nextKeys]
+        }),
+      ))
+    }
     setPermissionKeys((previous) => {
       const next = new Set(previous)
       if (checked === true) next.add(permissionKey)
       else next.delete(permissionKey)
       return next
+    })
+  }
+
+  function updateRolePermissionKey(roleId: string, permissionKey: string, checked: boolean | "indeterminate") {
+    setRolePermissionKeys((previous) => {
+      const nextKeys = new Set(previous[roleId] ?? [])
+      if (checked === true) nextKeys.add(permissionKey)
+      else nextKeys.delete(permissionKey)
+      return { ...previous, [roleId]: nextKeys }
     })
   }
 
@@ -115,6 +146,14 @@ export function TeamsPage() {
         .filter((permission) => permissionKeys.has(permission.key))
         .map((permission) => permission.key)
       const result = await adminApi.replaceTeamEntitlements(editingTeam.id, orderedKeys)
+      for (const role of accessRoles) {
+        if (role.locked) continue
+        const roleKeys = permissions
+          .filter((permission) => result.permissionKeys.includes(permission.key))
+          .filter((permission) => rolePermissionKeys[role.id]?.has(permission.key))
+          .map((permission) => permission.key)
+        await adminApi.replaceTeamRolePermissions(editingTeam.id, role.id, roleKeys)
+      }
       setPermissionKeys(new Set(result.permissionKeys))
       setEditingTeam(null)
     } catch (caught) {
@@ -134,6 +173,7 @@ export function TeamsPage() {
   if (!result || result.data.length === 0) return <PageState>暂无团队</PageState>
 
   const permissionGroups = groupPermissions(permissions)
+  const editableRoleCount = accessRoles.filter((role) => !role.locked).length
 
   return (
     <div className="flex flex-col gap-4">
@@ -197,33 +237,82 @@ export function TeamsPage() {
           {!permissionLoading && permissions.length === 0 ? <PageState>暂无权限</PageState> : null}
           {!permissionLoading && permissionGroups.length > 0 ? (
             <div className="max-h-96 overflow-y-auto">
-              <div className="grid gap-4">
-                {permissionGroups.map((group) => (
-                  <section key={group.group} className="grid gap-2">
-                    <h2 className="text-sm font-medium">{group.group}</h2>
-                    <div className="grid gap-2">
-                      {group.permissions.map((permission) => (
-                        <Label
-                          key={permission.key}
-                          className="flex items-start gap-3 rounded-md border p-3"
-                          htmlFor={`team-permission-${permission.key}`}
-                        >
-                          <Checkbox
-                            id={`team-permission-${permission.key}`}
-                            aria-label={`开通 ${permission.label}`}
-                            checked={permissionKeys.has(permission.key)}
-                            disabled={permissionSaving}
-                            onCheckedChange={(checked) => updatePermissionKey(permission.key, checked)}
-                          />
-                          <span className="grid gap-1">
-                            <span>{permission.label}</span>
-                            <span className="text-xs font-normal text-muted-foreground">{permission.key}</span>
-                          </span>
-                        </Label>
+              <div className="grid gap-5">
+                <section className="grid gap-3">
+                  <h2 className="text-sm font-medium">团队开通权限</h2>
+                  <div className="grid gap-4">
+                    {permissionGroups.map((group) => (
+                      <section key={group.group} className="grid gap-2">
+                        <h3 className="text-sm font-medium">{group.group}</h3>
+                        <div className="grid gap-2">
+                          {group.permissions.map((permission) => (
+                            <Label
+                              key={permission.key}
+                              className="flex items-start gap-3 rounded-md border p-3"
+                              htmlFor={`team-permission-${permission.key}`}
+                            >
+                              <Checkbox
+                                id={`team-permission-${permission.key}`}
+                                aria-label={`开通 ${permission.label}`}
+                                checked={permissionKeys.has(permission.key)}
+                                disabled={permissionSaving}
+                                onCheckedChange={(checked) => updatePermissionKey(permission.key, checked)}
+                              />
+                              <span className="grid gap-1">
+                                <span>{permission.label}</span>
+                                <span className="text-xs font-normal text-muted-foreground">{permission.key}</span>
+                              </span>
+                            </Label>
+                          ))}
+                        </div>
+                      </section>
+                    ))}
+                  </div>
+                </section>
+                {accessRoles.length > 0 ? (
+                  <section className="grid gap-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <h2 className="text-sm font-medium">角色权限</h2>
+                      {editableRoleCount === 0 ? <Badge variant="outline">只读</Badge> : null}
+                    </div>
+                    <div className="grid gap-3">
+                      {accessRoles.map((role) => (
+                        <section key={role.id} className="grid gap-2">
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-sm font-medium">{role.name}</h3>
+                            {role.locked ? <Badge variant="secondary">系统</Badge> : null}
+                          </div>
+                          <div className="grid gap-2">
+                            {permissions.map((permission) => {
+                              const enabledByTeam = permissionKeys.has(permission.key)
+                              return (
+                                <Label
+                                  key={`${role.id}-${permission.key}`}
+                                  className="flex items-start gap-3 rounded-md border p-3"
+                                  htmlFor={`role-permission-${role.id}-${permission.key}`}
+                                >
+                                  <Checkbox
+                                    id={`role-permission-${role.id}-${permission.key}`}
+                                    aria-label={`角色 ${role.name} 权限 ${permission.label}`}
+                                    checked={Boolean(enabledByTeam && rolePermissionKeys[role.id]?.has(permission.key))}
+                                    disabled={permissionSaving || role.locked || !enabledByTeam}
+                                    onCheckedChange={(checked) => {
+                                      updateRolePermissionKey(role.id, permission.key, checked)
+                                    }}
+                                  />
+                                  <span className="grid gap-1">
+                                    <span>{permission.label}</span>
+                                    <span className="text-xs font-normal text-muted-foreground">{permission.key}</span>
+                                  </span>
+                                </Label>
+                              )
+                            })}
+                          </div>
+                        </section>
                       ))}
                     </div>
                   </section>
-                ))}
+                ) : null}
               </div>
             </div>
           ) : null}
