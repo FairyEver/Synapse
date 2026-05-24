@@ -231,16 +231,13 @@ export function TeamsPage() {
     setMemberRoleSaving(true)
     setMemberRoleError(null)
     try {
-      for (const role of memberRoleOptions) {
-        const selected = memberRoleIds.has(role.id)
-        const initiallySelected = initialMemberRoleIds.has(role.id)
-        if (selected && !initiallySelected) {
-          await adminApi.assignMemberAccessRole(editingMemberRoles.team.id, editingMemberRoles.membership.id, role.id)
-        }
-        if (!selected && initiallySelected) {
-          await adminApi.removeMemberAccessRole(editingMemberRoles.team.id, editingMemberRoles.membership.id, role.id)
-        }
-      }
+      const next = await adminApi.replaceMemberAccessRoles(
+        editingMemberRoles.team.id,
+        editingMemberRoles.membership.id,
+        Array.from(memberRoleIds),
+      )
+      setInitialMemberRoleIds(new Set(next.roles.map((role) => role.id)))
+      setMemberRoleIds(new Set(next.roles.map((role) => role.id)))
       reload()
       setEditingMemberRoles(null)
     } catch (caught) {

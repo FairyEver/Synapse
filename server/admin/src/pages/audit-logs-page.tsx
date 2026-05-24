@@ -38,6 +38,7 @@ export const AUDIT_ACTION_FILTER_OPTIONS = [
   { value: "admin.team_entitlements.update", label: "admin.team_entitlements.update" },
   { value: "admin.team_permissions.update", label: "admin.team_permissions.update" },
   { value: "admin.team_role_permissions.update", label: "admin.team_role_permissions.update" },
+  { value: "admin.team_member_access_roles.replace", label: "admin.team_member_access_roles.replace" },
   { value: "admin.team_member_access_role.assign", label: "admin.team_member_access_role.assign" },
   { value: "admin.team_member_access_role.remove", label: "admin.team_member_access_role.remove" },
   { value: "user.register.success", label: "user.register.success" },

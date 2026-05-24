@@ -293,6 +293,32 @@ describe("AuditLogInterceptor", () => {
     })
   })
 
+  it("records failed team member access role replacements with the service audit action", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "PUT",
+        path: "/api/admin/teams/team-1/members/membership-1/access-roles",
+        params: { teamId: "team-1", membershipId: "membership-1" },
+        body: { roleIds: ["role-1"] },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => throwError(() => new Error("成员不存在。")) },
+    ))).rejects.toThrow("成员不存在。")
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        adminEmail: "current-admin@example.com",
+        action: "admin.team_member_access_roles.replace.failed",
+        targetType: "team_membership",
+        targetId: "membership-1",
+      }))
+    })
+  })
+
   it("records failed team member access role removals with the service audit action", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }

@@ -167,6 +167,9 @@ function resolveKnownAdminAuditTarget(
   if (method === "POST" && TEAM_MEMBER_ACCESS_ROLES_PATH_PATTERN.test(path)) {
     return { action: "admin.team_member_access_role.assign", targetType: "team_membership", targetId: params.membershipId ?? readId(responseBody) }
   }
+  if (method === "PUT" && TEAM_MEMBER_ACCESS_ROLES_PATH_PATTERN.test(path)) {
+    return { action: "admin.team_member_access_roles.replace", targetType: "team_membership", targetId: params.membershipId ?? readId(responseBody) }
+  }
   if (method === "DELETE" && TEAM_MEMBER_ACCESS_ROLE_PATH_PATTERN.test(path)) {
     return { action: "admin.team_member_access_role.remove", targetType: "team_membership", targetId: params.membershipId ?? readId(responseBody) }
   }

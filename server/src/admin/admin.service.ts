@@ -369,6 +369,31 @@ export class AdminService {
     return { roles }
   }
 
+  async replaceMemberAccessRoles(
+    teamId: string,
+    membershipId: string,
+    roleIds: readonly string[],
+    admin: { readonly id: string; readonly email: string },
+    ipAddress = "system",
+  ) {
+    await this.assertTeamExists(teamId)
+    const roles = await this.permissions.replaceMemberAccessRoles({
+      teamId,
+      teamMembershipId: membershipId,
+      roleIds,
+      assignedByUserId: admin.id,
+    })
+    await this.auditLog?.record({
+      adminEmail: admin.email,
+      action: "admin.team_member_access_roles.replace",
+      targetType: "team_membership",
+      targetId: membershipId,
+      detail: { teamId, roleIds: roles.map((role) => role.id) },
+      ipAddress,
+    })
+    return { roles }
+  }
+
   async removeMemberAccessRole(
     teamId: string,
     membershipId: string,

@@ -26,6 +26,14 @@ const teamManagementPermissions = [
 ] as const
 const teamManagementPermissionSet: ReadonlySet<string> = new Set(teamManagementPermissions)
 
+function normalizeStringIds(ids: readonly string[]): string[] {
+  const normalized = ids.map((id) => id.trim())
+  if (normalized.some((id) => id.length === 0)) {
+    throw new BadRequestException("ID 无效。")
+  }
+  return Array.from(new Set(normalized)).sort()
+}
+
 @Injectable()
 export class PermissionsService {
   readonly teamAdminRoleName = teamAdminRoleName
@@ -227,6 +235,37 @@ export class PermissionsService {
         },
       })
       if (result.count === 0) throw new BadRequestException("成员访问角色不存在。")
+    })
+    return this.listMemberAccessRoles(input.teamId, input.teamMembershipId)
+  }
+
+  async replaceMemberAccessRoles(input: {
+    readonly teamId: string
+    readonly teamMembershipId: string
+    readonly roleIds: readonly string[]
+    readonly assignedByUserId?: string
+  }) {
+    const roleIds = normalizeStringIds(input.roleIds)
+    await this.prisma.$transaction(async (tx) => {
+      await this.assertTeamMembership(input.teamId, input.teamMembershipId, tx)
+      for (const roleId of roleIds) {
+        await this.assertTeamAccessRole(input.teamId, roleId, tx)
+      }
+      await tx.teamMemberAccessRole.deleteMany({
+        where: {
+          teamId: input.teamId,
+          teamMembershipId: input.teamMembershipId,
+        },
+      })
+      if (roleIds.length === 0) return
+      await tx.teamMemberAccessRole.createMany({
+        data: roleIds.map((roleId) => ({
+          teamId: input.teamId,
+          teamMembershipId: input.teamMembershipId,
+          roleId,
+          ...(input.assignedByUserId ? { assignedByUserId: input.assignedByUserId } : {}),
+        })),
+      })
     })
     return this.listMemberAccessRoles(input.teamId, input.teamMembershipId)
   }

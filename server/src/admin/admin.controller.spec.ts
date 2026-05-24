@@ -393,6 +393,27 @@ describe("AdminController", () => {
     )
   })
 
+  it("replaces member access roles through the service", async () => {
+    const replaceMemberAccessRoles = vi.fn().mockResolvedValue({ roles: [{ id: "role-1" }] })
+    const controller = createController({ replaceMemberAccessRoles } as never)
+
+    await expect(controller.replaceMemberAccessRoles(
+      "team-1",
+      "membership-1",
+      { roleIds: ["role-1", "role-2"] },
+      { admin: { id: "admin-1", email: "admin@example.com" }, ip: "203.0.113.92" } as never,
+    ))
+      .resolves
+      .toEqual({ roles: [{ id: "role-1" }] })
+    expect(replaceMemberAccessRoles).toHaveBeenCalledWith(
+      "team-1",
+      "membership-1",
+      ["role-1", "role-2"],
+      { id: "admin-1", email: "admin@example.com" },
+      "203.0.113.92",
+    )
+  })
+
   it("removes member access roles through the service", async () => {
     const removeMemberAccessRole = vi.fn().mockResolvedValue({ roles: [] })
     const controller = createController({ removeMemberAccessRole } as never)
@@ -427,6 +448,21 @@ describe("AdminController", () => {
       .rejects
       .toThrow("成员访问角色无效。")
     expect(assignMemberAccessRole).not.toHaveBeenCalled()
+  })
+
+  it("rejects invalid member access role replacement bodies", async () => {
+    const replaceMemberAccessRoles = vi.fn()
+    const controller = createController({ replaceMemberAccessRoles } as never)
+
+    await expect(controller.replaceMemberAccessRoles(
+      "team-1",
+      "membership-1",
+      { roleIds: ["role-1", ""] },
+      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
+    ))
+      .rejects
+      .toThrow("成员访问角色无效。")
+    expect(replaceMemberAccessRoles).not.toHaveBeenCalled()
   })
 
   it("rejects invalid team entitlement bodies", async () => {

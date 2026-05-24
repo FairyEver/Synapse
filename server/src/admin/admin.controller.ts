@@ -32,6 +32,10 @@ const memberAccessRoleSchema = z.object({
   roleId: z.string().trim().min(1),
 }).strict()
 
+const memberAccessRolesSchema = z.object({
+  roleIds: z.array(z.string().trim().min(1)),
+}).strict()
+
 const userSortFields = ["createdAt", "updatedAt", "email", "status"] as const
 const teamSortFields = ["createdAt", "updatedAt", "name"] as const
 const invitationSortFields = ["createdAt", "expiresAt", "usedAt", "type"] as const
@@ -172,6 +176,18 @@ export class AdminController {
     const result = memberAccessRoleSchema.safeParse(body)
     if (!result.success) throw new BadRequestException("成员访问角色无效。")
     return this.admin.assignMemberAccessRole(teamId, membershipId, result.data.roleId, request.admin!, request.ip)
+  }
+
+  @Put("/teams/:teamId/members/:membershipId/access-roles")
+  async replaceMemberAccessRoles(
+    @Param("teamId") teamId: string,
+    @Param("membershipId") membershipId: string,
+    @Body() body: unknown,
+    @Req() request: AdminRequest,
+  ) {
+    const result = memberAccessRolesSchema.safeParse(body)
+    if (!result.success) throw new BadRequestException("成员访问角色无效。")
+    return this.admin.replaceMemberAccessRoles(teamId, membershipId, result.data.roleIds, request.admin!, request.ip)
   }
 
   @Delete("/teams/:teamId/members/:membershipId/access-roles/:roleId")

@@ -16,6 +16,7 @@ vi.mock("@/lib/api", () => ({
     replaceTeamRolePermissions: vi.fn(),
     assignMemberAccessRole: vi.fn(),
     removeMemberAccessRole: vi.fn(),
+    replaceMemberAccessRoles: vi.fn(),
   },
 }))
 
@@ -417,8 +418,19 @@ describe("TeamsPage", () => {
         },
       ],
     })
-    vi.mocked(adminApi.assignMemberAccessRole).mockResolvedValue({ roles: [] })
-    vi.mocked(adminApi.removeMemberAccessRole).mockResolvedValue({ roles: [] })
+    vi.mocked(adminApi.replaceMemberAccessRoles).mockResolvedValue({
+      roles: [
+        {
+          id: "admin-role",
+          name: "团队管理员",
+          description: null,
+          kind: "system",
+          locked: true,
+          sortOrder: 0,
+          assignedAt: "2026-05-22T00:00:00.000Z",
+        },
+      ],
+    })
 
     const result = await render(<TeamsPage />)
     cleanup = result.unmount
@@ -451,8 +463,9 @@ describe("TeamsPage", () => {
     })
 
     await waitFor(() => {
-      expect(adminApi.assignMemberAccessRole).toHaveBeenCalledWith("team-1", "membership-member", "admin-role")
-      expect(adminApi.removeMemberAccessRole).toHaveBeenCalledWith("team-1", "membership-member", "ordinary-role")
+      expect(adminApi.replaceMemberAccessRoles).toHaveBeenCalledWith("team-1", "membership-member", ["admin-role"])
+      expect(adminApi.assignMemberAccessRole).not.toHaveBeenCalled()
+      expect(adminApi.removeMemberAccessRole).not.toHaveBeenCalled()
     })
   })
 })

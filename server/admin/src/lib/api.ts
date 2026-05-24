@@ -366,6 +366,14 @@ export const adminApi = {
         body: JSON.stringify({ roleId }),
       },
     ),
+  replaceMemberAccessRoles: (teamId: string, membershipId: string, roleIds: readonly string[]) =>
+    request<MemberAccessRolesResponse>(
+      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}/access-roles`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ roleIds }),
+      },
+    ),
   removeMemberAccessRole: (teamId: string, membershipId: string, roleId: string) =>
     request<MemberAccessRolesResponse>(
       `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}/access-roles/${encodeURIComponent(roleId)}`,
