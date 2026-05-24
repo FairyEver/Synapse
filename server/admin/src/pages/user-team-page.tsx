@@ -97,6 +97,11 @@ export function UserTeamPage() {
   }
 
   async function leaveTeam() {
+    const members = membership?.team.memberships ?? []
+    if (membership?.role === "owner" && members.length > 1) {
+      setActionError("请先移除其他成员。")
+      return
+    }
     const message = membership?.role === "owner" ? "退出后团队将被解散。继续退出？" : "确定退出团队？"
     if (!window.confirm(message)) return
     setSubmitting(true)

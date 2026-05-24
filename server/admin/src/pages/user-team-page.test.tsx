@@ -43,6 +43,14 @@ const team: MyTeam = {
   },
 }
 
+const singleOwnerTeam: MyTeam = {
+  ...team,
+  team: {
+    ...team.team,
+    memberships: [team.team.memberships[0]],
+  },
+}
+
 describe("UserTeamPage", () => {
   let cleanup: (() => void) | null = null
 
@@ -53,9 +61,9 @@ describe("UserTeamPage", () => {
     vi.clearAllMocks()
   })
 
-  it("disables team leave while the request is pending", async () => {
+  it("asks for dissolution confirmation when the owner is the only member", async () => {
     vi.stubGlobal("confirm", vi.fn(() => true))
-    vi.mocked(userDashboardApi.getMyTeam).mockResolvedValue(team)
+    vi.mocked(userDashboardApi.getMyTeam).mockResolvedValue(singleOwnerTeam)
     vi.mocked(userDashboardApi.leaveTeam).mockImplementation(() => new Promise(() => undefined))
 
     const result = await render(<UserTeamPage />)
@@ -76,6 +84,27 @@ describe("UserTeamPage", () => {
     })
     leaveButton?.click()
     expect(userDashboardApi.leaveTeam).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not show dissolution confirmation while other members remain", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true))
+    vi.mocked(userDashboardApi.getMyTeam).mockResolvedValue(team)
+
+    const result = await render(<UserTeamPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("Core Team")
+    })
+    Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("退出团队"))
+      ?.click()
+
+    expect(window.confirm).not.toHaveBeenCalled()
+    expect(userDashboardApi.leaveTeam).not.toHaveBeenCalled()
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("请先移除其他成员。")
+    })
   })
 
   it("disables member removal while the request is pending", async () => {
@@ -105,7 +134,7 @@ describe("UserTeamPage", () => {
 
   it("does not leave the team when confirmation is cancelled", async () => {
     vi.stubGlobal("confirm", vi.fn(() => false))
-    vi.mocked(userDashboardApi.getMyTeam).mockResolvedValue(team)
+    vi.mocked(userDashboardApi.getMyTeam).mockResolvedValue(singleOwnerTeam)
 
     const result = await render(<UserTeamPage />)
     cleanup = result.unmount
