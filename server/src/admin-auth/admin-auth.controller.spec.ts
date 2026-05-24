@@ -61,7 +61,7 @@ describe("AdminAuthController", () => {
     })
   })
 
-  it("revokes dashboard user tokens without admin logout audit", async () => {
+  it("records dashboard user logout in audit logs", async () => {
     const auth = {
       revokeDashboardSession: vi.fn().mockResolvedValue(undefined),
       verifyDashboardSession: vi.fn().mockResolvedValue({ id: "user-1", email: "user@example.com", role: "user" }),
@@ -77,6 +77,12 @@ describe("AdminAuthController", () => {
     await controller.logout(response as never, request)
 
     expect(auth.revokeDashboardSession).toHaveBeenCalledWith("user-token")
-    expect(auditLog.record).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "user@example.com",
+      action: "user.dashboard_logout",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "203.0.113.12",
+    })
   })
 })

@@ -201,14 +201,21 @@ export class UserAuthService {
     return { accessToken: this.signAccessToken(session.user), refreshToken }
   }
 
-  async logout(input: { refreshToken: string }): Promise<{ ok: true }> {
+  async logout(input: { refreshToken: string }, ipAddress = "system"): Promise<{ ok: true }> {
     const session = await this.prisma.userSession.findUnique({
       where: { refreshTokenHash: hashToken(input.refreshToken) },
+      include: { user: { select: { id: true, email: true } } },
     })
     if (session && !session.revokedAt) {
       await this.prisma.userSession.update({
         where: { id: session.id },
         data: { revokedAt: new Date() },
+      })
+      await this.recordUserAudit({
+        adminEmail: session.user.email,
+        action: "user.logout.success",
+        targetId: session.user.id,
+        ipAddress,
       })
     }
     return { ok: true }

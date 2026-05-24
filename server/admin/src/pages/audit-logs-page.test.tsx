@@ -44,6 +44,8 @@ describe("AuditLogsPage", () => {
       { value: "admin.team_member_access_role.remove", label: "admin.team_member_access_role.remove" },
       { value: "dashboard.login.disabled", label: "dashboard.login.disabled" },
       { value: "user.login.disabled", label: "user.login.disabled" },
+      { value: "user.logout.success", label: "user.logout.success" },
+      { value: "user.dashboard_logout", label: "user.dashboard_logout" },
       { value: "team.create", label: "team.create" },
       { value: "backup.download", label: "backup.download" },
       { value: "backup.post.failed", label: "backup.post.failed" },

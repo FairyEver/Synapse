@@ -141,6 +141,46 @@ describe("UserAuthService", () => {
     })
   })
 
+  it("records logout audits with the request ip", async () => {
+    const prisma = createPrismaMock()
+    prisma.userSession.findUnique.mockResolvedValue({
+      id: "session-1",
+      revokedAt: null,
+      user: { id: "user-1", email: "u@example.com" },
+    })
+    prisma.userSession.update.mockResolvedValue({})
+    const auditLog = { record: vi.fn() }
+    const permissions = createPermissionsMock()
+    const service = new UserAuthService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
+      { accessMinutes: 15, refreshDays: 30 },
+      permissions as never,
+      auditLog as never,
+    )
+
+    await expect(service.logout({ refreshToken: "refresh-token" }, "203.0.113.25"))
+      .resolves
+      .toEqual({ ok: true })
+
+    expect(prisma.userSession.findUnique).toHaveBeenCalledWith({
+      where: { refreshTokenHash: hashToken("refresh-token") },
+      include: { user: { select: { id: true, email: true } } },
+    })
+    expect(prisma.userSession.update).toHaveBeenCalledWith({
+      where: { id: "session-1" },
+      data: { revokedAt: expect.any(Date) },
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.logout.success",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "203.0.113.25",
+    })
+  })
+
   it("records registration success audits with the request ip", async () => {
     const prisma = createPrismaMock()
     const auditLog = { record: vi.fn() }

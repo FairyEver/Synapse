@@ -56,4 +56,15 @@ describe("UserAuthController", () => {
 
     expect(auth.refresh).toHaveBeenCalledWith({ refreshToken: "refresh-token" }, "203.0.113.22")
   })
+
+  it("passes valid logout requests with the request ip to the service", () => {
+    const auth = {
+      logout: vi.fn().mockResolvedValue({ ok: true }),
+    }
+    const controller = new UserAuthController(auth as unknown as UserAuthService)
+
+    controller.logout({ refreshToken: "refresh-token" }, { ip: "203.0.113.23" } as never)
+
+    expect(auth.logout).toHaveBeenCalledWith({ refreshToken: "refresh-token" }, "203.0.113.23")
+  })
 })

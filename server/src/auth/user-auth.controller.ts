@@ -43,8 +43,8 @@ export class UserAuthController {
   }
 
   @Post("/logout")
-  logout(@Body() body: unknown) {
-    return this.auth.logout(parseBody(refreshSchema, body, "退出请求无效。"))
+  logout(@Body() body: unknown, @Req() request: Request) {
+    return this.auth.logout(parseBody(refreshSchema, body, "退出请求无效。"), request.ip)
   }
 
   @UseGuards(UserAuthGuard)

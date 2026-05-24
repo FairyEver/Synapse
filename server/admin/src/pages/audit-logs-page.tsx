@@ -45,6 +45,8 @@ export const AUDIT_ACTION_FILTER_OPTIONS = [
   { value: "user.login.success", label: "user.login.success" },
   { value: "user.login.failure", label: "user.login.failure" },
   { value: "user.login.disabled", label: "user.login.disabled" },
+  { value: "user.logout.success", label: "user.logout.success" },
+  { value: "user.dashboard_logout", label: "user.dashboard_logout" },
   { value: "team.create", label: "team.create" },
   { value: "team.invitation.create", label: "team.invitation.create" },
   { value: "team.join", label: "team.join" },

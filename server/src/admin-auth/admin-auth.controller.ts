@@ -49,11 +49,11 @@ export class AdminAuthController {
       await this.auth.revokeDashboardSession(token)
     }
     response.clearCookie(adminCookieName, adminCookieOptions())
-    if (session?.role === "admin") {
+    if (session) {
       await this.auditLog?.record({
         adminEmail: session.email,
-        action: "admin.logout",
-        targetType: "admin",
+        action: session.role === "admin" ? "admin.logout" : "user.dashboard_logout",
+        targetType: session.role === "admin" ? "admin" : "user",
         targetId: session.id,
         ipAddress: request.ip ?? "system",
       })
