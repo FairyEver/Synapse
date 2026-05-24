@@ -144,15 +144,22 @@ export class AdminService {
   }
 
   async deleteInvitations(ids: readonly string[], actorEmail = "system", ipAddress = "system") {
+    const uniqueIds = [...new Set(ids)]
+    const existingCount = await this.prisma.invitation.count({
+      where: { id: { in: uniqueIds } },
+    })
+    if (existingCount !== uniqueIds.length) {
+      throw new NotFoundException("邀请不存在。")
+    }
     const result = await this.prisma.invitation.deleteMany({
-      where: { id: { in: [...ids] } },
+      where: { id: { in: uniqueIds } },
     })
     await this.auditLog?.record({
       adminEmail: actorEmail,
       action: "admin.invitation.delete_many",
       targetType: "invitation",
       targetId: `batch:${result.count}`,
-      detail: { ids: [...ids], count: result.count },
+      detail: { ids: uniqueIds, count: result.count },
       ipAddress,
     })
     return { ok: true, count: result.count }

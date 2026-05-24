@@ -321,6 +321,7 @@ describe("AdminService", () => {
 
   it("deletes invitations in bulk and records an audit log", async () => {
     const prisma = createPrismaMock()
+    prisma.invitation.count.mockResolvedValue(2)
     prisma.invitation.deleteMany.mockResolvedValue({ count: 2 })
     const auditLog = { record: vi.fn() }
     const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
@@ -340,6 +341,20 @@ describe("AdminService", () => {
       detail: { ids: ["invite-1", "invite-2"], count: 2 },
       ipAddress: "203.0.113.30",
     })
+  })
+
+  it("rejects bulk invitation deletes when any id does not exist", async () => {
+    const prisma = createPrismaMock()
+    prisma.invitation.count.mockResolvedValue(1)
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
+
+    await expect(service.deleteInvitations(["invite-1", "missing-invite"], "admin@example.com", "203.0.113.31"))
+      .rejects
+      .toThrow("邀请不存在。")
+
+    expect(prisma.invitation.deleteMany).not.toHaveBeenCalled()
+    expect(auditLog.record).not.toHaveBeenCalled()
   })
 
   it("records user status update audit logs with the request IP", async () => {
