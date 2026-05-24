@@ -1,4 +1,5 @@
 import { BadRequestException, ForbiddenException } from "@nestjs/common"
+import { Prisma } from "@prisma/client"
 import { describe, expect, it, vi } from "vitest"
 import { TeamsService } from "./teams.service"
 
@@ -28,6 +29,13 @@ function createPrismaMock() {
       },
     })),
   }
+}
+
+function createUniqueConstraintError() {
+  return new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
+    code: "P2002",
+    clientVersion: "6.0.0",
+  })
 }
 
 function createPermissionsMock() {
@@ -120,6 +128,28 @@ describe("TeamsService", () => {
       detail: { reason: "already_in_team" },
       ipAddress: "203.0.113.11",
     })
+  })
+
+  it("returns the existing team error when concurrent team creation hits the user membership constraint", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue(null)
+    prisma.user.findUnique.mockResolvedValue({ email: "user@example.com" })
+    prisma.$transaction.mockRejectedValue(createUniqueConstraintError())
+    const auditLog = { record: vi.fn() }
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn(), consumeInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
+      auditLog as never,
+    )
+
+    await expect(service.createTeam("user-1", { name: "Team" }, "203.0.113.12"))
+      .rejects
+      .toThrow("账号已属于一个团队。")
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "team.create.failure",
+      detail: { reason: "already_in_team" },
+    }))
   })
 
   it("records team creation audits with the user email", async () => {
@@ -297,6 +327,28 @@ describe("TeamsService", () => {
       detail: { reason: "invalid_invitation" },
       ipAddress: "203.0.113.13",
     })
+  })
+
+  it("returns the existing team error when concurrent team joins hit the user membership constraint", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue(null)
+    prisma.user.findUnique.mockResolvedValue({ email: "user@example.com" })
+    prisma.$transaction.mockRejectedValue(createUniqueConstraintError())
+    const auditLog = { record: vi.fn() }
+    const service = new TeamsService(
+      prisma as never,
+      { consumeInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
+      auditLog as never,
+    )
+
+    await expect(service.joinTeam("user-1", { invitationToken: "team-token" }, "203.0.113.14"))
+      .rejects
+      .toThrow("账号已属于一个团队。")
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "team.join.failure",
+      detail: { reason: "already_in_team" },
+    }))
   })
 
   it("lets a member leave their team", async () => {

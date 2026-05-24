@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Optional } from "@nestjs/common"
-import type { Prisma } from "@prisma/client"
+import { Prisma } from "@prisma/client"
 import { AuditLogService } from "../common/audit-log.service"
 import { InvitationsService } from "../invitations/invitations.service"
 import { PermissionsService } from "../permissions/permissions.service"
@@ -42,6 +42,19 @@ export class TeamsService {
         client: tx,
       })
       return team
+    }).catch(async (error: unknown) => {
+      if (isUniqueConstraintError(error)) {
+        await this.recordTeamFailure({
+          actorUserId: userId,
+          action: "team.create.failure",
+          targetType: "team",
+          targetId: "unknown",
+          reason: "already_in_team",
+          ipAddress,
+        })
+        throw new BadRequestException("账号已属于一个团队。")
+      }
+      throw error
     })
     const actorEmail = await this.getAuditActorEmail(userId)
     await this.auditLog?.record({
@@ -129,6 +142,17 @@ export class TeamsService {
       })
       return { membership, teamId: invitation.teamId }
     }).catch(async (error: unknown) => {
+      if (isUniqueConstraintError(error)) {
+        await this.recordTeamFailure({
+          actorUserId: userId,
+          action: "team.join.failure",
+          targetType: "team",
+          targetId: "unknown",
+          reason: "already_in_team",
+          ipAddress,
+        })
+        throw new BadRequestException("账号已属于一个团队。")
+      }
       if (isBadRequestMessage(error, "邀请无效或已过期。")) {
         await this.recordTeamFailure({
           actorUserId: userId,
@@ -338,4 +362,8 @@ function isBadRequestMessage(error: unknown, message: string): boolean {
   const response = error.getResponse()
   if (typeof response === "string") return response === message
   return Boolean(response && typeof response === "object" && "message" in response && (response as { message: unknown }).message === message)
+}
+
+function isUniqueConstraintError(error: unknown): boolean {
+  return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
 }
