@@ -1,5 +1,6 @@
 import { type DragEvent, useCallback, useEffect, useMemo, useState } from "react"
 import {
+  ChevronDown,
   ChevronRight,
   FileText,
   Folder,
@@ -61,6 +62,7 @@ import type {
 } from "@/types/knowledge-base"
 
 const logger = createRendererLogger("knowledge-base.source-manager")
+type DirectoryTree = Record<string, SynapseKnowledgeBaseRawEntry[]>
 
 function readWindowPayload(): SynapseKnowledgeBaseOpenSourceManagerPayload | null {
   const params = new URLSearchParams(window.location.search)
@@ -112,10 +114,16 @@ function breadcrumbItems(directoryPath: string): Array<{ label: string; path: st
   ]
 }
 
+function directoriesOnly(entries: SynapseKnowledgeBaseRawEntry[]): SynapseKnowledgeBaseRawEntry[] {
+  return entries.filter((entry) => entry.kind === "directory")
+}
+
 function KnowledgeBaseSourceManagerWindow() {
   const payload = useMemo(readWindowPayload, [])
   const { error: showError, promise } = useAppNotifications()
   const [entries, setEntries] = useState<SynapseKnowledgeBaseRawEntry[]>([])
+  const [directoryTree, setDirectoryTree] = useState<DirectoryTree>({})
+  const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(() => new Set([""]))
   const [currentDirectory, setCurrentDirectory] = useState("")
   const [query, setQuery] = useState("")
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set())
@@ -139,6 +147,10 @@ function KnowledgeBaseSourceManagerWindow() {
         directoryPath: currentDirectory,
       })
       setEntries(result.entries)
+      setDirectoryTree((previous) => ({
+        ...previous,
+        [currentDirectory]: directoriesOnly(result.entries),
+      }))
     } catch (error) {
       logger.error("Failed to load knowledge base raw directory.", { error })
       showError("读取资料失败")
@@ -154,6 +166,42 @@ function KnowledgeBaseSourceManagerWindow() {
   useEffect(() => {
     setSelectedPaths(new Set())
   }, [currentDirectory])
+
+  const loadTreeDirectory = useCallback(async (directoryPath: string) => {
+    if (!payload || !bridge || directoryTree[directoryPath]) return
+    try {
+      const result = await bridge.knowledgeBase.listRawDirectory({
+        projectId: payload.projectId,
+        directoryPath,
+      })
+      setDirectoryTree((previous) => ({
+        ...previous,
+        [directoryPath]: directoriesOnly(result.entries),
+      }))
+    } catch (error) {
+      logger.error("Failed to load knowledge base raw tree directory.", { error })
+      showError("读取资料失败")
+    }
+  }, [bridge, directoryTree, payload, showError])
+
+  const openTreeDirectory = useCallback((directoryPath: string) => {
+    setCurrentDirectory(directoryPath)
+    setExpandedDirectories((previous) => new Set([...previous, directoryPath]))
+    void loadTreeDirectory(directoryPath)
+  }, [loadTreeDirectory])
+
+  const toggleTreeDirectory = useCallback((directoryPath: string) => {
+    setExpandedDirectories((previous) => {
+      const next = new Set(previous)
+      if (next.has(directoryPath)) {
+        next.delete(directoryPath)
+      } else {
+        next.add(directoryPath)
+        void loadTreeDirectory(directoryPath)
+      }
+      return next
+    })
+  }, [loadTreeDirectory])
 
   const visibleEntries = useMemo(
     () => entries.filter((entry) => matchesSearch(entry, query)),
@@ -320,6 +368,42 @@ function KnowledgeBaseSourceManagerWindow() {
     setRenameValue(entry.name)
   }, [])
 
+  const renderTreeItems = useCallback((items: SynapseKnowledgeBaseRawEntry[]) => (
+    <div className="ml-4 flex flex-col gap-1">
+      {items.map((entry) => {
+        const isExpanded = expandedDirectories.has(entry.relativePath)
+        const childItems = directoryTree[entry.relativePath] ?? []
+        return (
+          <div key={entry.relativePath} className="flex flex-col gap-1">
+            <div className="flex items-center gap-1">
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                onClick={() => toggleTreeDirectory(entry.relativePath)}
+                aria-label={`${isExpanded ? "折叠" : "展开"} ${entry.name}`}
+              >
+                {isExpanded ? <ChevronDown /> : <ChevronRight />}
+              </Button>
+              <Button
+                type="button"
+                variant={currentDirectory === entry.relativePath ? "secondary" : "ghost"}
+                size="sm"
+                className="min-w-0 flex-1 justify-start"
+                onClick={() => openTreeDirectory(entry.relativePath)}
+                aria-label={`打开树文件夹 ${entry.name}`}
+              >
+                <Folder data-icon="inline-start" />
+                <span className="truncate">{entry.name}</span>
+              </Button>
+            </div>
+            {isExpanded && childItems.length > 0 ? renderTreeItems(childItems) : null}
+          </div>
+        )
+      })}
+    </div>
+  ), [currentDirectory, directoryTree, expandedDirectories, openTreeDirectory, toggleTreeDirectory])
+
   if (!payload) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-background p-6 text-foreground">
@@ -337,7 +421,7 @@ function KnowledgeBaseSourceManagerWindow() {
   return (
     <main
       aria-label="资料文件"
-      className="flex h-screen flex-col bg-background text-foreground"
+      className="flex h-screen bg-background text-foreground"
       onDragOver={(event) => {
         event.preventDefault()
         setIsDragging(true)
@@ -345,53 +429,71 @@ function KnowledgeBaseSourceManagerWindow() {
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
     >
-      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border p-4">
-        <nav aria-label="当前位置" className="flex min-w-0 items-center gap-1 text-sm">
-          {breadcrumbs.map((item, index) => (
-            <div key={item.path || "root"} className="flex min-w-0 items-center gap-1">
-              {index > 0 ? <ChevronRight className="size-4 shrink-0 text-muted-foreground" /> : null}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="min-w-0"
-                onClick={() => setCurrentDirectory(item.path)}
-              >
-                <span className="truncate">{item.label}</span>
-              </Button>
-            </div>
-          ))}
-        </nav>
-        <div className="flex shrink-0 items-center gap-2">
-          <Input
-            className="w-44"
-            value={query}
-            onChange={(event) => setQuery(event.target.value)}
-            placeholder="搜索"
-          />
+      <aside aria-label="文件夹树" className="flex w-64 shrink-0 flex-col border-r border-border bg-muted/30 p-3">
+        <div className="px-2 py-2 text-sm font-semibold">资料</div>
+        <div className="flex flex-col gap-1">
           <Button
             type="button"
-            variant="outline"
-            onClick={() => {
-              setNewFolderName("")
-              setCreateFolderOpen(true)
-            }}
-            aria-label="新建文件夹"
+            variant={currentDirectory === "" ? "secondary" : "ghost"}
+            className="justify-start"
+            onClick={() => openTreeDirectory("")}
+            aria-label="打开树文件夹 资料"
           >
-            <FolderPlus data-icon="inline-start" />
-            新建文件夹
+            <Folder data-icon="inline-start" />
+            资料
           </Button>
-          <Button type="button" variant="outline" onClick={chooseFiles} aria-label="选择文件">
-            <Upload data-icon="inline-start" />
-            选择文件
-          </Button>
+          {renderTreeItems(directoryTree[""] ?? [])}
         </div>
-      </header>
+      </aside>
 
-      <section
-        aria-label="拖拽上传资料"
-        className={cn("min-h-0 flex-1 overflow-auto", isDragging && "bg-accent")}
-      >
+      <div className="flex min-w-0 flex-1 flex-col">
+        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border p-4">
+          <nav aria-label="当前位置" className="flex min-w-0 items-center gap-1 text-sm">
+            {breadcrumbs.map((item, index) => (
+              <div key={item.path || "root"} className="flex min-w-0 items-center gap-1">
+                {index > 0 ? <ChevronRight className="size-4 shrink-0 text-muted-foreground" /> : null}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  className="min-w-0"
+                  onClick={() => setCurrentDirectory(item.path)}
+                >
+                  <span className="truncate">{item.label}</span>
+                </Button>
+              </div>
+            ))}
+          </nav>
+          <div className="flex shrink-0 items-center gap-2">
+            <Input
+              className="w-44"
+              value={query}
+              onChange={(event) => setQuery(event.target.value)}
+              placeholder="搜索"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => {
+                setNewFolderName("")
+                setCreateFolderOpen(true)
+              }}
+              aria-label="新建文件夹"
+            >
+              <FolderPlus data-icon="inline-start" />
+              新建文件夹
+            </Button>
+            <Button type="button" variant="outline" onClick={chooseFiles} aria-label="上传">
+              <Upload data-icon="inline-start" />
+              上传
+            </Button>
+          </div>
+        </header>
+
+        <section
+          aria-label="拖拽上传资料"
+          className={cn("min-h-0 flex-1 overflow-auto", isDragging && "bg-accent")}
+        >
         <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
           <div className="text-sm text-muted-foreground">{selectedList.length > 0 ? `已选择 ${selectedList.length} 项` : "拖拽文件到窗口"}</div>
           <div className="flex items-center gap-2">
@@ -521,7 +623,8 @@ function KnowledgeBaseSourceManagerWindow() {
             ) : null}
           </TableBody>
         </Table>
-      </section>
+        </section>
+      </div>
 
       <Dialog open={createFolderOpen} onOpenChange={setCreateFolderOpen}>
         <DialogContent>

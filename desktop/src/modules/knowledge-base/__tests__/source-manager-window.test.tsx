@@ -84,7 +84,22 @@ function createBridgeMocks() {
               size: 24,
               modifiedAt: "2026-05-23T14:20:00.000Z",
             }]
+            : directoryPath === "2026"
+              ? [{
+                relativePath: "2026/05",
+                name: "05",
+                kind: "directory",
+                size: null,
+                modifiedAt: "2026-05-24T16:05:00.000Z",
+              }]
             : [
+              {
+                relativePath: "2026",
+                name: "2026",
+                kind: "directory",
+                size: null,
+                modifiedAt: "2026-05-24T16:05:00.000Z",
+              },
               {
                 relativePath: "客户",
                 name: "客户",
@@ -169,11 +184,14 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
 
     expect(document.querySelector('[aria-label="资料文件"]')).not.toBeNull()
+    expect(document.querySelector('[aria-label="文件夹树"]')).not.toBeNull()
     expect(document.body.textContent).toContain("资料")
     expect(document.body.textContent).toContain("客户")
+    expect(document.body.textContent).toContain("上传")
     expect(document.body.textContent).not.toContain("新文件")
     expect(document.body.textContent).not.toContain("已放入")
     expect(document.body.textContent).not.toContain("粘贴网页 URL")
+    expect(document.body.textContent).not.toContain("选择文件")
     expect(bridgeMocks.agent.createSession).not.toHaveBeenCalled()
     expect(bridgeMocks.agent.send).not.toHaveBeenCalled()
   })
@@ -198,6 +216,27 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       directoryPath: "客户",
     })
     expect(document.querySelector('[aria-label="当前位置"]')?.textContent).toContain("客户")
+  })
+
+  it("opens folders from the left file tree", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("客户")
+    })
+
+    await act(async () => {
+      buttonByLabel("打开树文件夹 客户").click()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("访谈.md")
+    })
+    expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenLastCalledWith({
+      projectId: "project-1",
+      directoryPath: "客户",
+    })
   })
 
   it("uploads dropped files to the current folder", async () => {
