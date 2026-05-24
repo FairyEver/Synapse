@@ -326,8 +326,27 @@ export class BackupService {
               },
             )
           })
+          await this.recordBackupCleanupAudit({
+            action: "backup.cleanup.delete",
+            targetId: item.filename,
+            detail: {
+              filename: item.filename,
+              createdAt: item.createdAt,
+              size: item.size,
+            },
+          })
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error)
+          await this.recordBackupCleanupAudit({
+            action: "backup.cleanup.failed",
+            targetId: item.filename,
+            detail: {
+              filename: item.filename,
+              createdAt: item.createdAt,
+              size: item.size,
+              error: message,
+            },
+          })
           this.logger.warn({ error: message, filename: item.filename }, "Failed to delete expired backup")
         }
       }
@@ -337,7 +356,36 @@ export class BackupService {
       }
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
+      await this.recordBackupCleanupAudit({
+        action: "backup.cleanup.failed",
+        targetId: "expired-scan",
+        detail: { error: message },
+      })
       this.logger.error({ error: message }, "Failed to clean expired backups")
+    }
+  }
+
+  private async recordBackupCleanupAudit(input: {
+    readonly action: "backup.cleanup.delete" | "backup.cleanup.failed"
+    readonly targetId: string
+    readonly detail: Record<string, unknown>
+  }): Promise<void> {
+    if (!this.auditLog) return
+    try {
+      await this.auditLog.record({
+        adminEmail: "system",
+        action: input.action,
+        targetType: "backup",
+        targetId: input.targetId,
+        detail: input.detail,
+        ipAddress: "system",
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      this.logger.warn(
+        { error: message, action: input.action, targetId: input.targetId },
+        "Failed to record backup cleanup audit",
+      )
     }
   }
 }

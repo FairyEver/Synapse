@@ -91,6 +91,7 @@ describe("BackupService", () => {
       else callback(null)
     })
     const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const service = createBackupService({
       deleteObject,
       getBucket: vi.fn((_options, callback) => callback(null, {
@@ -107,7 +108,7 @@ describe("BackupService", () => {
           },
         ],
       })),
-    }, logger)
+    }, logger, auditLog)
 
     await (service as unknown as { cleanExpiredBackups(): Promise<void> }).cleanExpiredBackups()
 
@@ -125,6 +126,51 @@ describe("BackupService", () => {
       { error: "delete failed", filename: "expired-a.tar.gz" },
       "Failed to delete expired backup",
     )
+    expect(auditLog.record).toHaveBeenNthCalledWith(1, {
+      adminEmail: "system",
+      action: "backup.cleanup.failed",
+      targetType: "backup",
+      targetId: "expired-a.tar.gz",
+      detail: {
+        filename: "expired-a.tar.gz",
+        createdAt: "2026-04-01T00:00:00.000Z",
+        size: 1,
+        error: "delete failed",
+      },
+      ipAddress: "system",
+    })
+    expect(auditLog.record).toHaveBeenNthCalledWith(2, {
+      adminEmail: "system",
+      action: "backup.cleanup.delete",
+      targetType: "backup",
+      targetId: "expired-b.tar.gz",
+      detail: {
+        filename: "expired-b.tar.gz",
+        createdAt: "2026-04-02T00:00:00.000Z",
+        size: 1,
+      },
+      ipAddress: "system",
+    })
+  })
+
+  it("records failed cleanup scans in audit logs", async () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const service = createBackupService({
+      getBucket: vi.fn((_options, callback) => callback(new Error("COS unavailable"))),
+    }, logger, auditLog)
+
+    await (service as unknown as { cleanExpiredBackups(): Promise<void> }).cleanExpiredBackups()
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "system",
+      action: "backup.cleanup.failed",
+      targetType: "backup",
+      targetId: "expired-scan",
+      detail: { error: "COS unavailable" },
+      ipAddress: "system",
+    })
+    expect(logger.error).toHaveBeenCalledWith({ error: "COS unavailable" }, "Failed to clean expired backups")
   })
 
   it("records scheduled backup results in audit logs", async () => {
