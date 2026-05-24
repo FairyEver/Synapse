@@ -181,6 +181,12 @@ export class AdminController {
     if (data.length > auditLogExportLimit) {
       throw new BadRequestException(`导出记录超过 ${auditLogExportLimit} 条，请缩小时间范围。`)
     }
+    const csv = toCsv(data as Record<string, unknown>[], [
+      "id", "adminEmail", "action", "targetType", "targetId", "detail", "ipAddress", "createdAt",
+    ])
+    response.setHeader("Content-Type", "text/csv; charset=utf-8")
+    response.setHeader("Content-Disposition", "attachment; filename=audit-logs.csv")
+    response.send(csv)
     await this.auditLog.record({
       adminEmail: request.admin!.email,
       action: "admin.audit_logs.export",
@@ -189,11 +195,5 @@ export class AdminController {
       detail: { filters, count: data.length },
       ipAddress: request.ip ?? "",
     })
-    const csv = toCsv(data as Record<string, unknown>[], [
-      "id", "adminEmail", "action", "targetType", "targetId", "detail", "ipAddress", "createdAt",
-    ])
-    response.setHeader("Content-Type", "text/csv; charset=utf-8")
-    response.setHeader("Content-Disposition", "attachment; filename=audit-logs.csv")
-    response.send(csv)
   }
 }

@@ -100,6 +100,39 @@ describe("AdminController", () => {
     })
     expect(response.send).toHaveBeenCalledWith(expect.stringContaining("detail"))
     expect(response.send).toHaveBeenCalledWith(expect.stringContaining(`""status"":""disabled""`))
+    expect(response.send.mock.invocationCallOrder[0]).toBeLessThan(record.mock.invocationCallOrder[0])
+  })
+
+  it("does not record audit log exports when sending the csv fails", async () => {
+    const listForExport = vi.fn().mockResolvedValue([
+      {
+        id: "audit-1",
+        adminEmail: "admin@example.com",
+        action: "users.patch",
+        targetType: "user",
+        targetId: "user-1",
+        detail: { status: "disabled" },
+        ipAddress: "127.0.0.1",
+        createdAt: "2026-05-22T00:00:00.000Z",
+      },
+    ])
+    const record = vi.fn().mockResolvedValue(undefined)
+    const response = {
+      setHeader: vi.fn(),
+      send: vi.fn(() => {
+        throw new Error("send failed")
+      }),
+    }
+    const controller = createController({}, { listForExport, record })
+
+    await expect(controller.exportAuditLogs(
+      {},
+      { admin: { email: "admin@example.com" } } as never,
+      response as never,
+    ))
+      .rejects
+      .toThrow("send failed")
+    expect(record).not.toHaveBeenCalled()
   })
 
   it("does not pass page size overrides to audit log export", async () => {
