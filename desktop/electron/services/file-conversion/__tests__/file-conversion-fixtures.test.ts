@@ -40,14 +40,14 @@ describe("file conversion fixture builders", () => {
 
     const fixtures = await buildFileConversionFixtures(root)
 
-    expect(fixtures.docxBasic.endsWith("docx/basic.docx")).toBe(true)
-    expect(fixtures.docxTable.endsWith("docx/table.docx")).toBe(true)
-    expect(fixtures.xlsxMultiSheet.endsWith("xlsx/multi-sheet.xlsx")).toBe(true)
-    expect(fixtures.xlsxWideSheet.endsWith("xlsx/wide-sheet.xlsx")).toBe(true)
-    expect(fixtures.pdfText.endsWith("pdf/text.pdf")).toBe(true)
-    expect(fixtures.pptxBasic.endsWith("pptx/basic.pptx")).toBe(true)
-    expect(fixtures.malformedDocx.endsWith("malformed/broken.docx")).toBe(true)
-    expect(fixtures.malformedPdf.endsWith("malformed/broken.pdf")).toBe(true)
+    expect(fixtures.docxBasic.endsWith(path.join("docx", "basic.docx"))).toBe(true)
+    expect(fixtures.docxTable.endsWith(path.join("docx", "table.docx"))).toBe(true)
+    expect(fixtures.xlsxMultiSheet.endsWith(path.join("xlsx", "multi-sheet.xlsx"))).toBe(true)
+    expect(fixtures.xlsxWideSheet.endsWith(path.join("xlsx", "wide-sheet.xlsx"))).toBe(true)
+    expect(fixtures.pdfText.endsWith(path.join("pdf", "text.pdf"))).toBe(true)
+    expect(fixtures.pptxBasic.endsWith(path.join("pptx", "basic.pptx"))).toBe(true)
+    expect(fixtures.malformedDocx.endsWith(path.join("malformed", "broken.docx"))).toBe(true)
+    expect(fixtures.malformedPdf.endsWith(path.join("malformed", "broken.pdf"))).toBe(true)
 
     const docxBasic = await expectSmallFile(fixtures.docxBasic)
     const docxTable = await expectSmallFile(fixtures.docxTable)

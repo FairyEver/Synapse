@@ -775,7 +775,7 @@ describe("AgentRuntimeService", () => {
       createSession: () => new ScriptedSession([
         { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
       ], "sdk-1"),
-      now: fixedNow,
+      now: fixedLocalNameNow,
     })
 
     const result = await service.sendScheduled({
@@ -807,7 +807,7 @@ describe("AgentRuntimeService", () => {
       createSession: () => new ScriptedSession([
         { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
       ], "sdk-1"),
-      now: fixedNow,
+      now: fixedLocalNameNow,
     })
 
     const result = await service.sendScheduled({
@@ -990,6 +990,10 @@ function baseMessage(content: string): AgentMessage {
 
 function fixedNow(): Date {
   return new Date("2026-04-26T00:00:00.000Z")
+}
+
+function fixedLocalNameNow(): Date {
+  return new Date(2026, 3, 26, 8, 0, 0, 0)
 }
 
 class FakeProviderService {

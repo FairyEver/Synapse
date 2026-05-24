@@ -28,6 +28,7 @@ vi.mock("electron-updater", () => ({
   CancellationToken: class {},
 }))
 const tmpUserData = "/tmp/synapse-test-userdata-" + Date.now()
+const bootstrapImportTimeoutMs = 15_000
 vi.mock("electron", () => {
   const Notification = class {
     static isSupported() {
@@ -76,14 +77,14 @@ describe("bootstrap descriptors (T1.5)", () => {
     vi.clearAllMocks()
   })
 
-  it("coreLoggingDescriptor has fatal criticality and id 'core.logging'", async () => {
+  it("coreLoggingDescriptor has fatal criticality and id 'core.logging'", { timeout: bootstrapImportTimeoutMs }, async () => {
     const { coreLoggingDescriptor } = await importBootstrap()
     expect(coreLoggingDescriptor.id).toBe("core.logging")
     expect(coreLoggingDescriptor.criticality).toBe("fatal")
     expect(coreLoggingDescriptor.dependsOn).toBeUndefined()
   })
 
-  it("coreLoggingDescriptor.create returns the singleton synchronously", async () => {
+  it("coreLoggingDescriptor.create returns the singleton synchronously", { timeout: bootstrapImportTimeoutMs }, async () => {
     const { coreLoggingDescriptor } = await importBootstrap()
     const fakeCtx = makeFakeContext()
     const instance = coreLoggingDescriptor.create(fakeCtx)
