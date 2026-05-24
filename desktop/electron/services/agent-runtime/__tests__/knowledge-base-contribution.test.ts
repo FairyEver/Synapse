@@ -195,7 +195,10 @@ describe("knowledge base Agent contribution", () => {
 
     expect(prepared?.content).toContain("Recent fact.")
     expect(prepared?.content).toContain("不要根据 wikilink 标题猜测文件路径。")
+    expect(prepared?.content).toContain("不要修改 `.raw/` 下的任何文件，包括 `.raw/.manifest.json`")
+    expect(prepared?.content).toContain("由 Synapse 根据导入回合报告写入")
     expect(prepared?.content).toContain("address_map")
+    expect(prepared?.content).not.toContain("除 `.raw/.manifest.json` 外")
     expect(unchanged?.content).toBe("What changed?")
   })
 

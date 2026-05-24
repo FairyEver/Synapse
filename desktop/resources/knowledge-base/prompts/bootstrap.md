@@ -3,8 +3,8 @@
 项目目录是兼容 Obsidian 的 Markdown 库。
 
 规则：
-- `.raw/` 存放用户维护的来源文件。除 `.raw/.manifest.json` 外，不要修改 `.raw/` 下的来源文件。
-- `.raw/.manifest.json` 使用 claude-obsidian 兼容格式：`version`、`created`、`description`、`sources`、`address_map`。
+- `.raw/` 存放用户维护的来源文件。不要修改 `.raw/` 下的任何文件，包括 `.raw/.manifest.json`。
+- `.raw/.manifest.json` 使用 claude-obsidian 兼容格式：`version`、`created`、`description`、`sources`、`address_map`，由 Synapse 根据导入回合报告写入。
 - `sources` 的 key 使用 `.raw/...`；`address_map` 维护 wiki 页面路径到稳定地址的映射。
 - `wiki/` 存放维护后的知识页面。
 - 先读取 `wiki/hot.md` 获取近期上下文。
