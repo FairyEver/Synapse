@@ -76,9 +76,16 @@ export const IPC_CHANNELS = {
   "knowledge-base": {
     "createManaged": "synapse:knowledge-base:create-managed",
     "listSources": "synapse:knowledge-base:list-sources",
+    "listRawDirectory": "synapse:knowledge-base:list-raw-directory",
     "uploadSources": "synapse:knowledge-base:upload-sources",
+    "uploadRawFiles": "synapse:knowledge-base:upload-raw-files",
+    "createRawFolder": "synapse:knowledge-base:create-raw-folder",
+    "renameRawEntry": "synapse:knowledge-base:rename-raw-entry",
+    "moveRawEntries": "synapse:knowledge-base:move-raw-entries",
+    "trashRawEntries": "synapse:knowledge-base:trash-raw-entries",
     "addUrlSource": "synapse:knowledge-base:add-url-source",
     "selectAndUploadSources": "synapse:knowledge-base:select-and-upload-sources",
+    "selectAndUploadRawFiles": "synapse:knowledge-base:select-and-upload-raw-files",
     "openSourceManager": "synapse:knowledge-base:open-source-manager",
   },
   "editor": {

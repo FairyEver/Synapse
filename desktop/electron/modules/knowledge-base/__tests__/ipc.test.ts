@@ -17,6 +17,9 @@ const electronMock = vi.hoisted(() => ({
   dialog: {
     showOpenDialog: vi.fn(),
   },
+  shell: {
+    trashItem: vi.fn(),
+  },
 }))
 
 const sourceManagerWindowServiceMock = vi.hoisted(() => ({
@@ -26,6 +29,7 @@ const sourceManagerWindowServiceMock = vi.hoisted(() => ({
 vi.mock("electron", () => ({
   app: electronMock.app,
   dialog: electronMock.dialog,
+  shell: electronMock.shell,
 }))
 
 vi.mock("../../../services/knowledge-base/source-manager-window-service", () => ({
@@ -279,6 +283,151 @@ describe("knowledgeBaseIpcModule", () => {
       actor: { kind: "user" },
       resource: "managed-knowledge-base:project-1",
       context: { source: "knowledgeBase.openSourceManager" },
+    })
+  })
+
+  it("lists raw directory entries through guarded read permission", async () => {
+    const listRawDirectory = vi.fn().mockResolvedValue({
+      projectId: "kb-1",
+      directoryPath: "client-a",
+      entries: [{
+        name: "brief.md",
+        relativePath: "client-a/brief.md",
+        kind: "file",
+        size: 12,
+        modifiedAt: "2026-05-24T00:00:00.000Z",
+      }],
+    })
+    const { harness, permissionGuard } = createHarness({ service: { listRawDirectory } })
+
+    const result = await harness.invoke("synapse:knowledge-base:list-raw-directory", {
+      projectId: "kb-1",
+      directoryPath: "client-a",
+    }) as { entries: unknown[] }
+
+    expect(listRawDirectory).toHaveBeenCalledWith({
+      projectId: "kb-1",
+      directoryPath: "client-a",
+    })
+    expect(result.entries).toHaveLength(1)
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base:kb-1",
+      context: { source: "knowledgeBase.listRawDirectory" },
+    })
+  })
+
+  it("uploads raw files through guarded write permission", async () => {
+    const uploadRawFiles = vi.fn().mockResolvedValue({
+      projectId: "kb-1",
+      entries: [{
+        name: "brief.md",
+        relativePath: "client-a/brief.md",
+        kind: "file",
+        size: 12,
+        modifiedAt: "2026-05-24T00:00:00.000Z",
+      }],
+      skipped: [],
+    })
+    const { harness, permissionGuard } = createHarness({ service: { uploadRawFiles } })
+
+    await harness.invoke("synapse:knowledge-base:upload-raw-files", {
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+      filePaths: ["/tmp/brief.md"],
+    })
+
+    expect(uploadRawFiles).toHaveBeenCalledWith({
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+      filePaths: ["/tmp/brief.md"],
+    })
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base:kb-1",
+      context: { source: "knowledgeBase.uploadRawFiles" },
+    })
+  })
+
+  it("selects raw files into the requested folder", async () => {
+    const uploadRawFiles = vi.fn().mockResolvedValue({
+      projectId: "kb-1",
+      entries: [],
+      skipped: [],
+    })
+    const { harness } = createHarness({ service: { uploadRawFiles } })
+
+    await harness.invoke("synapse:knowledge-base:select-and-upload-raw-files", {
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+    })
+
+    expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith(expect.objectContaining({
+      properties: ["openFile", "multiSelections"],
+    }))
+    expect(uploadRawFiles).toHaveBeenCalledWith({
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+      filePaths: ["/tmp/source.md"],
+    })
+  })
+
+  it("mutates raw entries through guarded write permission", async () => {
+    const createRawFolder = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
+    const renameRawEntry = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
+    const moveRawEntries = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
+    const trashRawEntries = vi.fn().mockResolvedValue({ projectId: "kb-1", entries: [], skipped: [] })
+    const { harness, permissionGuard } = createHarness({
+      service: { createRawFolder, renameRawEntry, moveRawEntries, trashRawEntries },
+    })
+
+    await harness.invoke("synapse:knowledge-base:create-raw-folder", {
+      projectId: "kb-1",
+      parentDirectoryPath: "",
+      name: "client-a",
+    })
+    await harness.invoke("synapse:knowledge-base:rename-raw-entry", {
+      projectId: "kb-1",
+      relativePath: "brief.md",
+      newName: "brief-renamed.md",
+    })
+    await harness.invoke("synapse:knowledge-base:move-raw-entries", {
+      projectId: "kb-1",
+      relativePaths: ["brief-renamed.md"],
+      targetDirectoryPath: "client-a",
+    })
+    await harness.invoke("synapse:knowledge-base:trash-raw-entries", {
+      projectId: "kb-1",
+      relativePaths: ["client-a/brief-renamed.md"],
+    })
+
+    expect(createRawFolder).toHaveBeenCalledWith({
+      projectId: "kb-1",
+      parentDirectoryPath: "",
+      name: "client-a",
+    })
+    expect(renameRawEntry).toHaveBeenCalledWith({
+      projectId: "kb-1",
+      relativePath: "brief.md",
+      newName: "brief-renamed.md",
+    })
+    expect(moveRawEntries).toHaveBeenCalledWith({
+      projectId: "kb-1",
+      relativePaths: ["brief-renamed.md"],
+      targetDirectoryPath: "client-a",
+    })
+    expect(trashRawEntries).toHaveBeenCalledWith({
+      projectId: "kb-1",
+      relativePaths: ["client-a/brief-renamed.md"],
+    })
+    expect(permissionGuard.check).toHaveBeenCalledTimes(4)
+    expect(permissionGuard.check).toHaveBeenLastCalledWith({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base:kb-1",
+      context: { source: "knowledgeBase.trashRawEntries" },
     })
   })
 

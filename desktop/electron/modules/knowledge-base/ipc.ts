@@ -37,9 +37,57 @@ const listSourcesResultSchema = z.object({
   sources: z.array(sourceEntrySchema),
 })
 
+const rawEntrySchema = z.object({
+  name: z.string(),
+  relativePath: z.string(),
+  kind: z.enum(["file", "directory"]),
+  size: z.number().nullable(),
+  modifiedAt: z.string(),
+})
+
+const listRawDirectoryPayloadSchema = z.object({
+  projectId: z.string().min(1),
+  directoryPath: z.string(),
+})
+
+const listRawDirectoryResultSchema = z.object({
+  projectId: z.string(),
+  directoryPath: z.string(),
+  entries: z.array(rawEntrySchema),
+})
+
 const uploadSourcesPayloadSchema = z.object({
   projectId: z.string().min(1),
   filePaths: z.array(z.string().min(1)),
+})
+
+const uploadRawFilesPayloadSchema = z.object({
+  projectId: z.string().min(1),
+  targetDirectoryPath: z.string(),
+  filePaths: z.array(z.string().min(1)),
+})
+
+const createRawFolderPayloadSchema = z.object({
+  projectId: z.string().min(1),
+  parentDirectoryPath: z.string(),
+  name: z.string().min(1),
+})
+
+const renameRawEntryPayloadSchema = z.object({
+  projectId: z.string().min(1),
+  relativePath: z.string().min(1),
+  newName: z.string().min(1),
+})
+
+const moveRawEntriesPayloadSchema = z.object({
+  projectId: z.string().min(1),
+  relativePaths: z.array(z.string().min(1)),
+  targetDirectoryPath: z.string(),
+})
+
+const trashRawEntriesPayloadSchema = z.object({
+  projectId: z.string().min(1),
+  relativePaths: z.array(z.string().min(1)),
 })
 
 const addUrlSourcePayloadSchema = z.object({
@@ -65,6 +113,15 @@ const uploadSourcesResultSchema = z.object({
   skipped: z.array(z.object({
     path: z.string(),
     reason: z.enum(["not-file", "read-error", "conversion-error"]),
+  })),
+})
+
+const rawMutationResultSchema = z.object({
+  projectId: z.string(),
+  entries: z.array(rawEntrySchema),
+  skipped: z.array(z.object({
+    path: z.string(),
+    reason: z.enum(["not-file", "not-directory", "read-error", "invalid-path", "collision", "trash-error"]),
   })),
 })
 
@@ -158,6 +215,19 @@ export const knowledgeBaseIpcModule: IpcModule = {
         run: () => service(ctx).listSources(request.projectId),
       }),
     },
+    listRawDirectory: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:list-raw-directory",
+      request: listRawDirectoryPayloadSchema,
+      response: listRawDirectoryResultSchema,
+      handler: (ctx, request: { projectId: string; directoryPath: string }) => runGuardedKnowledgeBaseOperation({
+        ctx,
+        action: "fs.read.outside-userdata",
+        resource: `managed-knowledge-base:${request.projectId}`,
+        source: "knowledgeBase.listRawDirectory",
+        run: () => service(ctx).listRawDirectory(request),
+      }),
+    },
     uploadSources: {
       kind: "invoke",
       channel: "synapse:knowledge-base:upload-sources",
@@ -169,6 +239,71 @@ export const knowledgeBaseIpcModule: IpcModule = {
         resource: `managed-knowledge-base:${request.projectId}`,
         source: "knowledgeBase.uploadSources",
         run: () => service(ctx).uploadSources(request),
+      }),
+    },
+    uploadRawFiles: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:upload-raw-files",
+      request: uploadRawFilesPayloadSchema,
+      response: rawMutationResultSchema,
+      handler: (ctx, request: { projectId: string; targetDirectoryPath: string; filePaths: string[] }) => runGuardedKnowledgeBaseOperation({
+        ctx,
+        action: "fs.write",
+        resource: `managed-knowledge-base:${request.projectId}`,
+        source: "knowledgeBase.uploadRawFiles",
+        run: () => service(ctx).uploadRawFiles(request),
+      }),
+    },
+    createRawFolder: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:create-raw-folder",
+      request: createRawFolderPayloadSchema,
+      response: rawMutationResultSchema,
+      handler: (ctx, request: { projectId: string; parentDirectoryPath: string; name: string }) => runGuardedKnowledgeBaseOperation({
+        ctx,
+        action: "fs.write",
+        resource: `managed-knowledge-base:${request.projectId}`,
+        source: "knowledgeBase.createRawFolder",
+        run: () => service(ctx).createRawFolder(request),
+      }),
+    },
+    renameRawEntry: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:rename-raw-entry",
+      request: renameRawEntryPayloadSchema,
+      response: rawMutationResultSchema,
+      handler: (ctx, request: { projectId: string; relativePath: string; newName: string }) => runGuardedKnowledgeBaseOperation({
+        ctx,
+        action: "fs.write",
+        resource: `managed-knowledge-base:${request.projectId}`,
+        source: "knowledgeBase.renameRawEntry",
+        run: () => service(ctx).renameRawEntry(request),
+      }),
+    },
+    moveRawEntries: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:move-raw-entries",
+      request: moveRawEntriesPayloadSchema,
+      response: rawMutationResultSchema,
+      handler: (ctx, request: { projectId: string; relativePaths: string[]; targetDirectoryPath: string }) => runGuardedKnowledgeBaseOperation({
+        ctx,
+        action: "fs.write",
+        resource: `managed-knowledge-base:${request.projectId}`,
+        source: "knowledgeBase.moveRawEntries",
+        run: () => service(ctx).moveRawEntries(request),
+      }),
+    },
+    trashRawEntries: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:trash-raw-entries",
+      request: trashRawEntriesPayloadSchema,
+      response: rawMutationResultSchema,
+      handler: (ctx, request: { projectId: string; relativePaths: string[] }) => runGuardedKnowledgeBaseOperation({
+        ctx,
+        action: "fs.write",
+        resource: `managed-knowledge-base:${request.projectId}`,
+        source: "knowledgeBase.trashRawEntries",
+        run: () => service(ctx).trashRawEntries(request),
       }),
     },
     addUrlSource: {
@@ -209,6 +344,34 @@ export const knowledgeBaseIpcModule: IpcModule = {
           }
           return service(ctx).uploadSources({
             projectId: request.projectId,
+            filePaths: result.filePaths,
+          })
+        },
+      }),
+    },
+    selectAndUploadRawFiles: {
+      kind: "invoke",
+      channel: "synapse:knowledge-base:select-and-upload-raw-files",
+      request: z.object({
+        projectId: z.string().min(1),
+        targetDirectoryPath: z.string(),
+      }),
+      response: rawMutationResultSchema,
+      handler: (ctx, request: { projectId: string; targetDirectoryPath: string }) => runGuardedKnowledgeBaseOperation({
+        ctx,
+        action: "fs.write",
+        resource: `managed-knowledge-base:${request.projectId}`,
+        source: "knowledgeBase.selectAndUploadRawFiles",
+        run: async () => {
+          const result = await dialog.showOpenDialog({
+            properties: ["openFile", "multiSelections"],
+          })
+          if (result.canceled || result.filePaths.length === 0) {
+            return { projectId: request.projectId, entries: [], skipped: [] }
+          }
+          return service(ctx).uploadRawFiles({
+            projectId: request.projectId,
+            targetDirectoryPath: request.targetDirectoryPath,
             filePaths: result.filePaths,
           })
         },

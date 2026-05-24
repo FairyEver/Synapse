@@ -103,9 +103,17 @@ import type {
 import type {
   SynapseKnowledgeBaseCreateManagedPayload,
   SynapseKnowledgeBaseCreateManagedResult,
+  SynapseKnowledgeBaseCreateRawFolderPayload,
   SynapseKnowledgeBaseListSourcesResult,
+  SynapseKnowledgeBaseListRawDirectoryPayload,
+  SynapseKnowledgeBaseListRawDirectoryResult,
+  SynapseKnowledgeBaseMoveRawEntriesPayload,
   SynapseKnowledgeBaseOpenSourceManagerPayload,
   SynapseKnowledgeBaseAddUrlSourcePayload,
+  SynapseKnowledgeBaseRawMutationResult,
+  SynapseKnowledgeBaseRenameRawEntryPayload,
+  SynapseKnowledgeBaseTrashRawEntriesPayload,
+  SynapseKnowledgeBaseUploadRawFilesPayload,
   SynapseKnowledgeBaseUploadSourcesPayload,
   SynapseKnowledgeBaseUploadSourcesResult,
 } from "./knowledge-base"
@@ -582,13 +590,34 @@ export type SynapseBridge = {
       payload: SynapseKnowledgeBaseCreateManagedPayload,
     ) => Promise<SynapseKnowledgeBaseCreateManagedResult>
     listSources: (projectId: string) => Promise<SynapseKnowledgeBaseListSourcesResult>
+    listRawDirectory: (
+      payload: SynapseKnowledgeBaseListRawDirectoryPayload,
+    ) => Promise<SynapseKnowledgeBaseListRawDirectoryResult>
     uploadSources: (
       payload: SynapseKnowledgeBaseUploadSourcesPayload,
     ) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
+    uploadRawFiles: (
+      payload: SynapseKnowledgeBaseUploadRawFilesPayload,
+    ) => Promise<SynapseKnowledgeBaseRawMutationResult>
+    createRawFolder: (
+      payload: SynapseKnowledgeBaseCreateRawFolderPayload,
+    ) => Promise<SynapseKnowledgeBaseRawMutationResult>
+    renameRawEntry: (
+      payload: SynapseKnowledgeBaseRenameRawEntryPayload,
+    ) => Promise<SynapseKnowledgeBaseRawMutationResult>
+    moveRawEntries: (
+      payload: SynapseKnowledgeBaseMoveRawEntriesPayload,
+    ) => Promise<SynapseKnowledgeBaseRawMutationResult>
+    trashRawEntries: (
+      payload: SynapseKnowledgeBaseTrashRawEntriesPayload,
+    ) => Promise<SynapseKnowledgeBaseRawMutationResult>
     addUrlSource: (
       payload: SynapseKnowledgeBaseAddUrlSourcePayload,
     ) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
     selectAndUploadSources: (projectId: string) => Promise<SynapseKnowledgeBaseUploadSourcesResult>
+    selectAndUploadRawFiles: (
+      payload: Omit<SynapseKnowledgeBaseUploadRawFilesPayload, "filePaths">,
+    ) => Promise<SynapseKnowledgeBaseRawMutationResult>
     openSourceManager: (payload: SynapseKnowledgeBaseOpenSourceManagerPayload) => Promise<void>
     filePathForDroppedFile: (file: File) => string | null
   }
