@@ -35,7 +35,13 @@ import {
   renderReferenceView,
   resolveLocalReference,
 } from "./references"
-import type { AgentProjectAfterTurnInput, AgentProjectAfterTurnOutput, AgentSdkPluginSpec } from "./project-contributions"
+import type {
+  AgentProjectAfterTurnInput,
+  AgentProjectAfterTurnOutput,
+  AgentSdkAgentDefinitions,
+  AgentSdkPluginSpec,
+  AgentSdkSubagentToolPolicies,
+} from "./project-contributions"
 import {
   AgentSessionRepository,
   conversationId,
@@ -94,6 +100,10 @@ export interface AgentRuntimeServiceDeps {
   readonly executionIsolation?: ProcessIsolationResolver
   readonly sdkPlugins?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
+  readonly sdkAgents?: (message: AgentMessage, conversation: ConversationEntryV1) =>
+    AgentSdkAgentDefinitions | Promise<AgentSdkAgentDefinitions>
+  readonly sdkSubagentToolPolicies?: (message: AgentMessage, conversation: ConversationEntryV1) =>
+    AgentSdkSubagentToolPolicies | Promise<AgentSdkSubagentToolPolicies>
   readonly prepareMessage?: (
     message: AgentMessage,
     context: {
@@ -152,6 +162,8 @@ export class AgentRuntimeService {
       now: deps.now,
       createSession: deps.createSession,
       sdkPlugins: deps.sdkPlugins,
+      sdkAgents: deps.sdkAgents,
+      sdkSubagentToolPolicies: deps.sdkSubagentToolPolicies,
     })
     this.sessionLifecycle = new SessionLifecycleManager({
       projectId: deps.projectId,

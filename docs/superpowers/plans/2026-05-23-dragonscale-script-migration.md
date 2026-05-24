@@ -2,6 +2,8 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Status update 2026-05-24:** `DragonScaleScriptRunner` has been retired. Vendored upstream scripts remain only as compatibility oracles / fixture references under Synapse resources; do not reintroduce a production script runner. Current production behavior must use `DragonScaleAddressService`, `DragonScaleBoundaryService`, and `DragonScaleTilingService`.
+
 **Goal:** Create the first production-safe DragonScale migration slice: vendor upstream scripts internally, add a guarded runner boundary, and replace address allocation with a Synapse service while keeping user vaults free of runnable scripts.
 
 **Architecture:** Upstream scripts live under Synapse resources as a compatibility oracle. Production address allocation runs through `DragonScaleAddressService` in `desktop/electron/services/knowledge-base/dragonscale/`, while `.vault-meta/address-counter.txt` remains in the user vault as data. Tests verify template cleanliness and address behavior.

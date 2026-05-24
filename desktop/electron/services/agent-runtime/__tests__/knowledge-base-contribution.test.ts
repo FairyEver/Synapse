@@ -74,6 +74,23 @@ describe("knowledge base Agent contribution", () => {
     expect(plugins).toEqual([])
   })
 
+  it("contributes the Knowledge Base ingest worker agent only to local renderer turns", async () => {
+    const projectPath = await tempDir()
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+
+    const agents = await contribution?.sdkAgents?.(baseMessage("汲取知识"))
+    const scheduledAgents = await contribution?.sdkAgents?.({
+      ...baseMessage("汲取知识"),
+      platform: "scheduled",
+    })
+
+    expect(agents).toHaveProperty("synapse-kb-ingest-worker")
+    expect(agents?.["synapse-kb-ingest-worker"]?.prompt).toContain("only the assigned")
+    expect(scheduledAgents).toEqual({})
+  })
+
   it("publishes knowledge base composer actions for knowledge base projects", async () => {
     const projectPath = await tempDir()
     const contribution = await createKnowledgeBaseAgentContribution({
@@ -178,6 +195,39 @@ describe("knowledge base Agent contribution", () => {
     })))
   })
 
+  it("publishes research action only through knowledge-base project contributions", async () => {
+    const projectPath = await tempDir()
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+    const plainContribution = await createKnowledgeBaseAgentContribution({
+      project: { id: "project-2", name: "Plain", path: await tempDir() },
+    })
+
+    expect(contribution?.publishedCommands?.some((command) => command.name === "wiki research")).toBe(true)
+    expect(plainContribution).toBeNull()
+  })
+
+  it("does not inject hot cache into scheduled messages", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, "wiki"), { recursive: true })
+    await writeFile(path.join(projectPath, "wiki", "hot.md"), "# Hot Cache\n\nPrivate recent fact.\n")
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+
+    const prepared = await contribution?.prepareMessage?.({
+      ...baseMessage("hello"),
+      platform: "scheduled",
+    }, {
+      isNewLiveSession: true,
+      conversationId: "conv-1",
+      turnId: "turn-1",
+    })
+
+    expect(prepared?.content).toBe("hello")
+  })
+
   it("adds wiki commands and hot cache bootstrap for knowledge base projects", async () => {
     const projectPath = await tempDir()
     await mkdir(path.join(projectPath, "wiki"), { recursive: true })
@@ -264,6 +314,61 @@ describe("knowledge base Agent contribution", () => {
     expect(reused?.content).toBe("What changed?")
   })
 
+  it("injects hot cache for a reused conversation when the cache changed", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, "wiki"), { recursive: true })
+    const hotCachePath = path.join(projectPath, "wiki", "hot.md")
+    await writeFile(hotCachePath, "# Hot Cache\n\nFirst fact.\n")
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+      nowMs: () => 1_000,
+    })
+
+    await contribution?.prepareMessage?.(baseMessage("first"), {
+      isNewLiveSession: true,
+      conversationId: "conv-1",
+      turnId: "turn-1",
+    })
+
+    await writeFile(hotCachePath, "# Hot Cache\n\nSecond fact.\n")
+    const prepared = await contribution?.prepareMessage?.(baseMessage("resume"), {
+      isNewLiveSession: false,
+      conversationId: "conv-1",
+      turnId: "turn-2",
+    })
+
+    expect(prepared?.content).toContain("Second fact.")
+    expect(prepared?.content).toContain("User message:")
+  })
+
+  it("injects hot cache for a reused conversation when prior injection is stale", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, "wiki"), { recursive: true })
+    await writeFile(path.join(projectPath, "wiki", "hot.md"), "# Hot Cache\n\nStale refresh fact.\n")
+    let now = 1_000
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+      nowMs: () => now,
+      hotCacheStaleAfterMs: 4 * 60 * 60 * 1000,
+    })
+
+    await contribution?.prepareMessage?.(baseMessage("first"), {
+      isNewLiveSession: true,
+      conversationId: "conv-1",
+      turnId: "turn-1",
+    })
+
+    now += 5 * 60 * 60 * 1000
+    const prepared = await contribution?.prepareMessage?.(baseMessage("afternoon"), {
+      isNewLiveSession: false,
+      conversationId: "conv-1",
+      turnId: "turn-2",
+    })
+
+    expect(prepared?.content).toContain("Stale refresh fact.")
+    expect(prepared?.content).toContain("afternoon")
+  })
+
   it("does not swallow non-missing hot cache read errors", async () => {
     const projectPath = await tempDir()
     await mkdir(path.join(projectPath, "wiki", "hot.md"), { recursive: true })
@@ -323,8 +428,111 @@ describe("knowledge base Agent contribution", () => {
     }, { isNewLiveSession: false, conversationId: "conv-1", turnId: "turn-1" }))
 
     expect(prepared?.content).toContain(".raw/note.md")
+    expect(prepared?.content).toContain("sha256")
     expect(prepared?.content).toContain("synapse_kb_ingest_report")
     expect((await contribution?.sdkPlugins?.(baseMessage("汲取知识")))?.[0]?.path.startsWith(projectPath)).toBe(false)
+  })
+
+  it("uses the parallel ingest runner for larger natural-language ingest requests", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{},\"address_map\":{}}\n")
+    await writeFile(path.join(projectPath, ".raw", "a.md"), "alpha\n")
+    await writeFile(path.join(projectPath, ".raw", "b.md"), "beta\n")
+    const prepareMergePrompt = vi.fn(async () => ({
+      status: "merge-ready" as const,
+      prompt: "parallel merge prompt",
+      failedSources: [],
+    }))
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+      parallelIngestRunner: { prepareMergePrompt },
+      parallelIngestSourceThreshold: 2,
+    })
+
+    const prepared = await Promise.resolve(contribution?.prepareMessage?.({
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local-renderer",
+      userId: "user-1",
+      content: "汲取知识",
+    }, { isNewLiveSession: false, conversationId: "conv-1", turnId: "turn-1" }))
+
+    expect(prepared?.content).toContain("User message:")
+    expect(prepared?.content).toContain("parallel merge prompt")
+    expect(prepareMergePrompt).toHaveBeenCalledWith(expect.objectContaining({
+      projectId: "project-1",
+      projectPath,
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      userId: "user-1",
+      manifestSources: {},
+      preflight: expect.objectContaining({
+        changedSources: expect.arrayContaining([
+          expect.objectContaining({ relativePath: ".raw/a.md" }),
+          expect.objectContaining({ relativePath: ".raw/b.md" }),
+        ]),
+      }),
+    }))
+  })
+
+  it("supports force preflight for natural-language ingest requests", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    const sourceContent = "alpha\n"
+    const sourceHash = createHash("sha256").update(sourceContent).digest("hex")
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), `${JSON.stringify({
+      version: 1,
+      sources: {
+        ".raw/note.md": {
+          hash: sourceHash,
+          ingested_at: "2026-05-24T00:00:00.000Z",
+          pages_created: [],
+          pages_updated: [],
+        },
+      },
+      address_map: {},
+    })}\n`)
+    await writeFile(path.join(projectPath, ".raw", "note.md"), sourceContent)
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+
+    const prepared = await Promise.resolve(contribution?.prepareMessage?.({
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local-renderer",
+      content: "强制汲取知识",
+    }, { isNewLiveSession: false, conversationId: "conv-1", turnId: "turn-1" }))
+
+    expect(prepared?.content).toContain(".raw/note.md")
+    expect(prepared?.content).toContain("sha256")
+    expect(prepared?.content).toContain("synapse_kb_ingest_report")
+    expect(prepared?.content).not.toContain("没有需要导入的来源")
+  })
+
+  it("keeps new-session bootstrap context when preparing natural-language ingest", async () => {
+    const projectPath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await mkdir(path.join(projectPath, "wiki"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{},\"address_map\":{}}\n")
+    await writeFile(path.join(projectPath, ".raw", "note.md"), "alpha\n")
+    await writeFile(path.join(projectPath, "wiki", "hot.md"), "# Hot Cache\n\nRecent fact.\n")
+    const contribution = await createKnowledgeBaseAgentContribution({
+      project: knowledgeBaseProject(projectPath),
+    })
+
+    const prepared = await Promise.resolve(contribution?.prepareMessage?.({
+      projectId: "project-1",
+      sessionKey: "s1",
+      platform: "local-renderer",
+      content: "汲取知识",
+    }, { isNewLiveSession: true, conversationId: "conv-1", turnId: "turn-1" }))
+
+    expect(prepared?.content).toContain("Recent fact.")
+    expect(prepared?.content).toContain("不要根据 wikilink 标题猜测文件路径。")
+    expect(prepared?.content).toContain(".raw/note.md")
+    expect(prepared?.content).toContain("synapse_kb_ingest_report")
   })
 
   it("does not inject knowledge-base prompts into scheduled agent turns", async () => {
@@ -477,7 +685,24 @@ describe("knowledge base Agent contribution", () => {
 
     await contribution?.afterTurn?.({
       message: baseMessage("/wiki research Graph databases"),
-      result: { conversationId: "conv-1", resultText: "done", events: [] },
+      result: {
+        conversationId: "conv-1",
+        resultText: [
+          "done",
+          "```synapse_kb_research_report",
+          JSON.stringify({
+            schema: "synapse.kb.research.report.v1",
+            topic: "Graph databases",
+            rounds: 1,
+            searches: 2,
+            pages_created: ["wiki/questions/research.md"],
+            pages_updated: ["wiki/index.md", "wiki/hot.md", "wiki/log.md"],
+            sources: ["wiki/sources/example.md"],
+          }),
+          "```",
+        ].join("\n"),
+        events: [],
+      },
       conversationId: "conv-1",
       turnId: "turn-1",
       isNewLiveSession: false,

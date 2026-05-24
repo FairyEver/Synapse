@@ -1,4 +1,7 @@
 import type {
+  HookCallbackMatcher,
+  HookInput,
+  HookJSONOutput,
   Options,
   PermissionMode,
   PermissionResult,
@@ -15,7 +18,11 @@ import {
   resolveCachedLoginShellPath,
 } from "../../runtime/process"
 import type { StructuredLogger } from "../../runtime/service-registry"
-import type { AgentSdkPluginSpec } from "./project-contributions"
+import type {
+  AgentSdkAgentDefinitions,
+  AgentSdkPluginSpec,
+  AgentSdkSubagentToolPolicies,
+} from "./project-contributions"
 import { bridgeSdkMessage, type AgentEventEnvelope } from "./sdk-event-bridge"
 import type {
   AgentEvent,
@@ -52,6 +59,9 @@ export interface ClaudeSDKSessionOptions {
   readonly model?: string
   readonly maxTurns?: number
   readonly plugins?: readonly AgentSdkPluginSpec[]
+  readonly agents?: AgentSdkAgentDefinitions
+  readonly subagentToolPolicies?: AgentSdkSubagentToolPolicies
+  readonly toolPolicy?: ClaudeSDKToolPolicy
   readonly abortSignal?: AbortSignal
   readonly queryFactory?: QueryFactory
   readonly logger?: Pick<StructuredLogger, "warn">
@@ -68,6 +78,12 @@ interface ForwardedAbortController {
   cleanup(): void
 }
 
+type CanUseToolContext = Parameters<NonNullable<Options["canUseTool"]>>[2]
+export type ClaudeSDKToolPolicy = (
+  toolName: string,
+  input: Record<string, unknown>,
+) => PermissionResult | undefined
+
 export class ClaudeSDKSession implements AgentLiveSession {
   readonly agentType = "claude-sdk"
 
@@ -79,11 +95,14 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private readonly eventQueue = new AsyncQueue<AgentEvent>()
   private readonly permissions = new Map<string, PendingPermission>()
   private readonly logger: Pick<StructuredLogger, "warn"> | undefined
+  private readonly subagentToolPolicies: AgentSdkSubagentToolPolicies
+  private readonly toolPolicy: ClaudeSDKToolPolicy | undefined
   private readonly query: QueryLike
   private readonly abortController: AbortController | undefined
   private readonly abortCleanup: (() => void) | undefined
   private readonly pumpPromise: Promise<void>
   private readonly toolNamesByUseId = new Map<string, string>()
+  private readonly subagentTypesById = new Map<string, string>()
   private closed = false
   private queryFinished = false
   get finished(): boolean {
@@ -99,6 +118,8 @@ export class ClaudeSDKSession implements AgentLiveSession {
     this.providerId = options.providerId
     this.sdkSessionId = options.sdkSessionId
     this.logger = options.logger
+    this.subagentToolPolicies = options.subagentToolPolicies ?? {}
+    this.toolPolicy = options.toolPolicy
     this.now = options.now ?? (() => new Date())
     const forwardedAbort = createForwardedAbortController(options.abortSignal)
     this.abortController = forwardedAbort?.controller
@@ -248,6 +269,10 @@ export class ClaudeSDKSession implements AgentLiveSession {
     if (options.model) queryOptions.model = options.model
     if (options.maxTurns !== undefined) queryOptions.maxTurns = options.maxTurns
     if (options.plugins?.length) queryOptions.plugins = [...options.plugins]
+    if (options.agents && Object.keys(options.agents).length > 0) queryOptions.agents = options.agents
+    if (Object.keys(this.subagentToolPolicies).length > 0) {
+      queryOptions.hooks = this.subagentTrackingHooks()
+    }
     if (options.sdkSessionId) queryOptions.resume = options.sdkSessionId
     if (this.abortController) queryOptions.abortController = this.abortController
 
@@ -265,10 +290,14 @@ export class ClaudeSDKSession implements AgentLiveSession {
   private async canUseTool(
     toolName: string,
     input: Record<string, unknown>,
-    context: { signal: AbortSignal },
+    context: CanUseToolContext,
   ): Promise<PermissionResult> {
     if (this.closed) return { behavior: "deny", message: "Session is closed." }
     if (context.signal.aborted) return permissionCancelledResult()
+    const toolPolicyResult = this.toolPolicy?.(toolName, input)
+    if (toolPolicyResult) return toolPolicyResult
+    const policyResult = this.evaluateSubagentToolPolicy(toolName, input, context)
+    if (policyResult) return policyResult
 
     const requestId = this.nextPermissionRequestId()
     const timestamp = this.now().toISOString()
@@ -299,6 +328,67 @@ export class ClaudeSDKSession implements AgentLiveSession {
       })
       if (context.signal.aborted) abort()
     })
+  }
+
+  private subagentTrackingHooks(): NonNullable<Options["hooks"]> {
+    const startHook: HookCallbackMatcher = {
+      hooks: [async (input: HookInput): Promise<HookJSONOutput> => {
+        if (input.hook_event_name === "SubagentStart") {
+          this.subagentTypesById.set(input.agent_id, input.agent_type)
+        }
+        return { continue: true }
+      }],
+    }
+    const stopHook: HookCallbackMatcher = {
+      hooks: [async (input: HookInput): Promise<HookJSONOutput> => {
+        if (input.hook_event_name === "SubagentStop") {
+          this.subagentTypesById.delete(input.agent_id)
+        }
+        return { continue: true }
+      }],
+    }
+    return {
+      SubagentStart: [startHook],
+      SubagentStop: [stopHook],
+    }
+  }
+
+  private evaluateSubagentToolPolicy(
+    toolName: string,
+    input: Record<string, unknown>,
+    context: CanUseToolContext,
+  ): PermissionResult | undefined {
+    if (!context.agentID || !isWriteTool(toolName)) return undefined
+    const agentType = this.subagentTypesById.get(context.agentID)
+    if (!agentType) return undefined
+    const policy = this.subagentToolPolicies[agentType]
+    if (!policy) return undefined
+    const writePath = writePathForToolInput(input)
+    if (!writePath) return {
+      behavior: "deny",
+      message: `Subagent ${agentType} write path could not be verified.`,
+    }
+    const normalizedPath = normalizeToolPath(writePath)
+    if (!normalizedPath) {
+      return {
+        behavior: "deny",
+        message: `Subagent ${agentType} write path is not allowed.`,
+      }
+    }
+    if (policy.deniedWritePaths?.some((denied) => pathMatchesPolicy(normalizedPath, denied))) {
+      return {
+        behavior: "deny",
+        message: allowedWriteRootsMessage(agentType, policy.allowedWriteRoots),
+      }
+    }
+    if (policy.allowedWriteRoots?.length
+      && !policy.allowedWriteRoots.some((allowed) => pathMatchesPolicy(normalizedPath, allowed))) {
+      return {
+        behavior: "deny",
+        message: allowedWriteRootsMessage(agentType, policy.allowedWriteRoots),
+      }
+    }
+    return undefined
   }
 
   private async pumpQueryEvents(): Promise<void> {
@@ -510,6 +600,36 @@ function toPermissionResult(decision: AgentPermissionDecision): PermissionResult
 
 function permissionCancelledResult(): PermissionResult {
   return { behavior: "deny", message: "Permission request was cancelled." }
+}
+
+function isWriteTool(toolName: string): boolean {
+  return toolName === "Write"
+    || toolName === "Edit"
+    || toolName === "MultiEdit"
+    || toolName === "NotebookEdit"
+}
+
+function writePathForToolInput(input: Record<string, unknown>): string | undefined {
+  if (typeof input.file_path === "string") return input.file_path
+  if (typeof input.notebook_path === "string") return input.notebook_path
+  return undefined
+}
+
+function normalizeToolPath(value: string): string | undefined {
+  const normalized = path.posix.normalize(value.split("\\").join("/"))
+  if (normalized === "." || normalized.startsWith("../") || path.posix.isAbsolute(normalized)) return undefined
+  return normalized
+}
+
+function pathMatchesPolicy(filePath: string, policyPath: string): boolean {
+  const normalizedPolicy = normalizeToolPath(policyPath)
+  if (!normalizedPolicy) return false
+  return filePath === normalizedPolicy || filePath.startsWith(`${normalizedPolicy.replace(/\/+$/, "")}/`)
+}
+
+function allowedWriteRootsMessage(agentType: string, allowedWriteRoots: readonly string[] | undefined): string {
+  const roots = allowedWriteRoots?.length ? allowedWriteRoots.join(", ") : "no paths"
+  return `Subagent ${agentType} may write only inside: ${roots}.`
 }
 
 function resolvePackagedClaudeExecutable(

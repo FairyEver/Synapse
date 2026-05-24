@@ -4,7 +4,10 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
-import { KnowledgeBaseManifestFinalizer } from "../manifest-finalizer"
+import {
+  KnowledgeBaseManifestFinalizer,
+  knowledgeBaseManifestLockPath,
+} from "../manifest-finalizer"
 import { readKnowledgeBaseManifest } from "../manifest"
 
 const roots: string[] = []
@@ -208,6 +211,155 @@ describe("KnowledgeBaseManifestFinalizer", () => {
 
     const manifest = await readKnowledgeBaseManifest(root)
     expect(Object.keys(manifest.manifest.sources).sort()).toEqual([".raw/a.md", ".raw/b.md"])
+  })
+
+  it("skips manifest writes when another process holds the project lock", async () => {
+    const root = await tempDir()
+    const lockRoot = await tempDir()
+    await writeManifest(root, { version: 1, sources: {}, address_map: {} })
+    await writeFile(path.join(root, ".raw", "a.md"), "Alpha\n")
+    await mkdir(path.join(root, "wiki", "sources"), { recursive: true })
+    await writeFile(path.join(root, "wiki", "sources", "a.md"), "# A\n")
+    await mkdir(knowledgeBaseManifestLockPath(root, { lockRoot }), { recursive: true })
+
+    const result = await new KnowledgeBaseManifestFinalizer({
+      now: () => "2026-05-24T00:00:00.000Z",
+      addressFinalizer: { finalize: vi.fn(async () => ({ assigned: [], reused: [], addressMap: {} })) },
+      lockRoot,
+      lockTimeoutMs: 20,
+      lockRetryMs: 1,
+    }).finalize({
+      projectPath: root,
+      conversationId: "conv-1",
+      turnId: "turn-1",
+      preflight: {
+        projectPath: root,
+        generatedAt: "2026-05-24T00:00:00.000Z",
+        force: false,
+        changedSources: [{ relativePath: ".raw/a.md", hash: sha256("Alpha\n"), state: "new" }],
+        skippedSources: [],
+        wikiBefore: { files: {} },
+      },
+      report: {
+        processedSources: [{ source: ".raw/a.md", pagesCreated: ["wiki/sources/a.md"], pagesUpdated: [] }],
+        skippedSources: [],
+      },
+    })
+
+    expect(result.writtenSources).toEqual([])
+    expect(result.warnings.map((warning) => warning.code)).toContain("manifest-lock-timeout")
+    await expect(readKnowledgeBaseManifest(root)).resolves.toMatchObject({ manifest: { sources: {} } })
+  })
+
+  it("finalizes a batch of reports under one manifest write", async () => {
+    const root = await tempDir()
+    await writeManifest(root, { version: 1, sources: {}, address_map: {} })
+    await writeFile(path.join(root, ".raw", "a.md"), "Alpha\n")
+    await writeFile(path.join(root, ".raw", "b.md"), "Beta\n")
+    await mkdir(path.join(root, "wiki", "sources"), { recursive: true })
+    await writeFile(path.join(root, "wiki", "sources", "a.md"), "# A\n")
+    await writeFile(path.join(root, "wiki", "sources", "b.md"), "# B\n")
+    const addressFinalizer = {
+      finalize: vi.fn(async () => ({
+        assigned: [],
+        reused: [],
+        addressMap: {
+          "wiki/sources/a.md": "c-000001",
+          "wiki/sources/b.md": "c-000002",
+        },
+      })),
+    }
+
+    const result = await new KnowledgeBaseManifestFinalizer({
+      now: () => "2026-05-24T00:00:00.000Z",
+      addressFinalizer,
+    }).finalizeBatch({
+      projectPath: root,
+      conversationId: "conv-1",
+      batchId: "batch-1",
+      items: [{
+        turnId: "turn-1",
+        preflight: {
+          projectPath: root,
+          generatedAt: "2026-05-24T00:00:00.000Z",
+          force: false,
+          changedSources: [{ relativePath: ".raw/a.md", hash: sha256("Alpha\n"), state: "new" }],
+          skippedSources: [],
+          wikiBefore: { files: {} },
+        },
+        report: {
+          processedSources: [{ source: ".raw/a.md", pagesCreated: ["wiki/sources/a.md"], pagesUpdated: [] }],
+          skippedSources: [],
+        },
+      }, {
+        turnId: "turn-2",
+        preflight: {
+          projectPath: root,
+          generatedAt: "2026-05-24T00:00:00.000Z",
+          force: false,
+          changedSources: [{ relativePath: ".raw/b.md", hash: sha256("Beta\n"), state: "new" }],
+          skippedSources: [],
+          wikiBefore: { files: {} },
+        },
+        report: {
+          processedSources: [{ source: ".raw/b.md", pagesCreated: ["wiki/sources/b.md"], pagesUpdated: [] }],
+          skippedSources: [],
+        },
+      }],
+    })
+
+    const manifest = await readKnowledgeBaseManifest(root)
+    expect(result.writtenSources).toEqual([".raw/a.md", ".raw/b.md"])
+    expect(addressFinalizer.finalize).toHaveBeenCalledTimes(1)
+    expect(Object.keys(manifest.manifest.sources).sort()).toEqual([".raw/a.md", ".raw/b.md"])
+    expect(manifest.manifest.address_map).toEqual({
+      "wiki/sources/a.md": "c-000001",
+      "wiki/sources/b.md": "c-000002",
+    })
+  })
+
+  it("warns about duplicate batch source and non-maintenance page ownership", async () => {
+    const root = await tempDir()
+    await writeManifest(root, { version: 1, sources: {}, address_map: {} })
+    await writeFile(path.join(root, ".raw", "a.md"), "Alpha\n")
+    await writeFile(path.join(root, ".raw", "b.md"), "Beta\n")
+    await mkdir(path.join(root, "wiki", "concepts"), { recursive: true })
+    await writeFile(path.join(root, "wiki", "concepts", "shared.md"), "# Shared\n")
+
+    const result = await new KnowledgeBaseManifestFinalizer({
+      addressFinalizer: { finalize: vi.fn(async () => ({ assigned: [], reused: [], addressMap: {} })) },
+    }).finalizeBatch({
+      projectPath: root,
+      conversationId: "conv-1",
+      batchId: "batch-1",
+      items: [{
+        turnId: "turn-1",
+        preflight: {
+          projectPath: root,
+          generatedAt: "2026-05-24T00:00:00.000Z",
+          force: false,
+          changedSources: [
+            { relativePath: ".raw/a.md", hash: sha256("Alpha\n"), state: "new" },
+            { relativePath: ".raw/b.md", hash: sha256("Beta\n"), state: "new" },
+          ],
+          skippedSources: [],
+          wikiBefore: { files: {} },
+        },
+        report: {
+          processedSources: [
+            { source: ".raw/a.md", pagesCreated: ["wiki/concepts/shared.md"], pagesUpdated: [] },
+            { source: ".raw/a.md", pagesCreated: ["wiki/concepts/shared.md"], pagesUpdated: [] },
+            { source: ".raw/b.md", pagesCreated: ["wiki/concepts/shared.md"], pagesUpdated: [] },
+          ],
+          skippedSources: [],
+        },
+      }],
+    })
+
+    expect(result.warnings.map((warning) => warning.code)).toEqual(expect.arrayContaining([
+      "source-duplicate",
+      "page-owned-by-multiple-sources",
+    ]))
   })
 
   it("does not run address finalization when no source entry is accepted", async () => {

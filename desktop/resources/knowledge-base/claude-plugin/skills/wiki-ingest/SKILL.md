@@ -16,9 +16,13 @@ Before ingest:
 
 During ingest:
 
-- Create or update source summaries under `wiki/sources/`.
-- Create or update concepts under `wiki/concepts/`.
-- Create or update entities under `wiki/entities/`.
+- The main conversation is the ingest coordinator.
+- If there are many prechecked sources, the coordinator may invoke `synapse-kb-ingest-worker`.
+- Give each worker a disjoint `.raw/...` source list.
+- Workers may create or update only assigned source summaries under `wiki/sources/`.
+- Workers must not edit `wiki/index.md`, `wiki/hot.md`, `wiki/log.md`, `wiki/concepts/`, `wiki/entities/`, or `wiki/questions/`.
+- The coordinator, not workers, creates or updates concepts under `wiki/concepts/`.
+- The coordinator, not workers, creates or updates entities under `wiki/entities/`.
 - Use frontmatter with `type`, `title`, `status`, and `tags`.
 - Use Obsidian wikilinks for cross-references.
 - Resolve existing pages through `wiki/index.md`, `Glob`, or `Grep` before assuming file paths.
@@ -30,6 +34,7 @@ After ingest:
 - Append a new entry near the top of `wiki/log.md`.
 - Do not edit `.raw/.manifest.json`; Synapse finalizes manifest `sources` and `address_map` after the turn.
 - Emit exactly one fenced `synapse_kb_ingest_report` JSON block using schema `synapse.kb.ingest.report.v1`.
+- Only the coordinator emits the final `synapse_kb_ingest_report`; workers return plain worker reports.
 - For each processed source, list the `.raw/...` source path plus `pages_created` and `pages_updated`.
 - Do not write hashes, `ingested_at`, or `address_map` yourself.
 - Do not edit `.vault-meta/address-counter.txt`.

@@ -14,7 +14,14 @@ import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { ServiceNotFoundError } from "../../runtime/service-registry"
 import type { ProcessIsolationResolver } from "../execution-isolation"
 import { configStore } from "../config-store"
+import { evaluateKnowledgeBaseWorkerToolPolicy } from "../knowledge-base/ingest-worker-policy"
+import { KnowledgeBaseWorkerSessionRunner } from "../knowledge-base/ingest-worker-session-runner"
+import { KnowledgeBaseParallelIngestRunner } from "../knowledge-base/parallel-ingest-runner"
 import { createKnowledgeBaseAgentContribution } from "../knowledge-base/agent-contribution"
+import {
+  KnowledgeBaseIngestTurnStore,
+  type KnowledgeBaseIngestTurnStoreEntry,
+} from "../knowledge-base/ingest-turn-store"
 import {
   createProviderServiceFromDataRepository,
 } from "../provider"
@@ -23,6 +30,7 @@ import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runti
 import { CustomCommandRegistry } from "./command-registry"
 import { mergeAgentProjectContributions, type AgentProjectContribution } from "./project-contributions"
 import { SkillRegistry } from "./skill-registry"
+import { ClaudeSDKSession } from "./claude-sdk-session"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
 
 export {
@@ -148,7 +156,7 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
       })
       let projectContributionPromise: Promise<AgentProjectContribution> | null = null
       const resolveProjectContributionForService = () => {
-        projectContributionPromise ??= resolveAgentProjectContribution(ctx.projectId, ctx.logger)
+        projectContributionPromise ??= resolveAgentProjectContribution(ctx.projectId, ctx.dataRepo, ctx.logger, providerService)
         return projectContributionPromise
       }
       const service = new AgentRuntimeService({
@@ -175,13 +183,17 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
           (await resolveProjectContributionForService()).publishedCommands ?? [],
         sdkPlugins: async (message) =>
           (await resolveProjectContributionForService()).sdkPlugins?.(message) ?? [],
+        sdkAgents: async (message) =>
+          (await resolveProjectContributionForService()).sdkAgents?.(message) ?? {},
+        sdkSubagentToolPolicies: async (message) =>
+          (await resolveProjectContributionForService()).sdkSubagentToolPolicies?.(message) ?? {},
         prepareMessage: async (message, context) => {
           const contribution = await resolveProjectContributionForService()
           return contribution.prepareMessage?.(message, context) ?? message
         },
         afterTurn: async (input) => {
           const contribution = await resolveProjectContributionForService()
-          await contribution.afterTurn?.(input)
+          return contribution.afterTurn?.(input)
         },
       })
       service.startIdleReclaim()
@@ -195,14 +207,67 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
 
 async function resolveAgentProjectContribution(
   projectId: string,
+  dataRepository: Pick<DataRepository, "namespace">,
   logger?: Parameters<typeof createKnowledgeBaseAgentContribution>[0]["logger"],
+  providerService?: ReturnType<typeof createProviderServiceFromDataRepository>,
 ) {
   const appConfig = await configStore.load()
   const project = appConfig.global.projects.find((item) => item.id === projectId)
+  const parallelIngestRunner = providerService
+    ? createKnowledgeBaseParallelIngestRunner(projectId, providerService, logger)
+    : undefined
   const contributions = [
-    project ? await createKnowledgeBaseAgentContribution({ project, logger }) : null,
+        project ? await createKnowledgeBaseAgentContribution({
+          project,
+          ingestTurnStore: new KnowledgeBaseIngestTurnStore({
+            namespace: dataRepository.namespace<KnowledgeBaseIngestTurnStoreEntry>("knowledge-base.ingest-turns"),
+          }),
+          parallelIngestRunner,
+          logger,
+        }) : null,
   ].filter((item): item is NonNullable<typeof item> => item !== null)
   return mergeAgentProjectContributions(contributions)
+}
+
+function createKnowledgeBaseParallelIngestRunner(
+  projectId: string,
+  providerService: ReturnType<typeof createProviderServiceFromDataRepository>,
+  logger?: Parameters<typeof createKnowledgeBaseAgentContribution>[0]["logger"],
+): KnowledgeBaseParallelIngestRunner {
+  const workerSessionRunner = new KnowledgeBaseWorkerSessionRunner({
+    createSession: (input) => new ClaudeSDKSession({
+      projectId: input.projectId,
+      conversationId: `${input.conversationId}:kb-worker:${input.targetPage}`,
+      providerId: input.providerId,
+      cwd: input.cwd,
+      env: input.env,
+      model: input.model,
+      mode: input.mode,
+      maxTurns: 8,
+      logger,
+      toolPolicy: (toolName, toolInput) => evaluateKnowledgeBaseWorkerToolPolicy(toolName, toolInput, {
+        targetPage: input.targetPage,
+      }),
+    }),
+  })
+  return new KnowledgeBaseParallelIngestRunner({
+    getProviderEnv: async (input) => {
+      const provider = await providerService.getActiveProvider()
+      if (!provider) {
+        throw new Error("Provider is required")
+      }
+      const env = await providerService.buildEnv(provider.id, {
+        actor: { kind: "user", id: input.userId },
+        projectId,
+      })
+      return {
+        providerId: provider.id,
+        env,
+        model: env.ANTHROPIC_MODEL,
+      }
+    },
+    runWorker: (input) => workerSessionRunner.run(input),
+  })
 }
 
 function optionalService<T>(registry: { get<U>(id: string): U }, id: string): T | undefined {

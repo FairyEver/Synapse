@@ -13,6 +13,26 @@ export type AgentSdkPluginSpec = {
   readonly path: string
 }
 
+export type AgentSdkAgentDefinition = {
+  readonly description: string
+  readonly prompt: string
+  readonly tools?: string[]
+  readonly disallowedTools?: string[]
+  readonly model?: string
+  readonly skills?: string[]
+  readonly maxTurns?: number
+  readonly background?: boolean
+}
+
+export type AgentSdkAgentDefinitions = Record<string, AgentSdkAgentDefinition>
+
+export type AgentSdkSubagentToolPolicy = {
+  readonly allowedWriteRoots?: readonly string[]
+  readonly deniedWritePaths?: readonly string[]
+}
+
+export type AgentSdkSubagentToolPolicies = Record<string, AgentSdkSubagentToolPolicy>
+
 export type AgentProjectAfterTurnInput = {
   readonly message: AgentMessage
   readonly result: AgentRuntimeTurnResult
@@ -29,6 +49,8 @@ export type AgentProjectContribution = {
   readonly commands: readonly RegisteredPromptCommand[]
   readonly publishedCommands?: readonly PublishedAgentCommand[]
   sdkPlugins?(message: AgentMessage): readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
+  sdkAgents?(message: AgentMessage): AgentSdkAgentDefinitions | Promise<AgentSdkAgentDefinitions>
+  sdkSubagentToolPolicies?(message: AgentMessage): AgentSdkSubagentToolPolicies | Promise<AgentSdkSubagentToolPolicies>
   prepareMessage?(
     message: AgentMessage,
     context: AgentProjectMessageContext,
@@ -46,6 +68,16 @@ export function mergeAgentProjectContributions(
       const plugins = await Promise.all(contributions.map((contribution) =>
         Promise.resolve(contribution.sdkPlugins?.(message) ?? [])))
       return plugins.flat()
+    },
+    async sdkAgents(message) {
+      const agents = await Promise.all(contributions.map((contribution) =>
+        Promise.resolve(contribution.sdkAgents?.(message) ?? {})))
+      return Object.assign({}, ...agents)
+    },
+    async sdkSubagentToolPolicies(message) {
+      const policies = await Promise.all(contributions.map((contribution) =>
+        Promise.resolve(contribution.sdkSubagentToolPolicies?.(message) ?? {})))
+      return Object.assign({}, ...policies)
     },
     async prepareMessage(message, context) {
       let next = message

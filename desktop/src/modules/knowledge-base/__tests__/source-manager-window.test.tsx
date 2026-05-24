@@ -206,4 +206,35 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       expect(bridgeMocks.agent.send).not.toHaveBeenCalled()
     })
   })
+
+  it("passes dropped image files to knowledge-base upload", async () => {
+    renderWindow()
+    bridgeMocks.knowledgeBase.filePathForDroppedFile.mockReturnValue("/tmp/diagram.png")
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("AI产品需求说明.md")
+    })
+
+    const dropTarget = document.querySelector<HTMLElement>('[aria-label="拖拽放入资料"]')
+    if (!dropTarget) throw new Error("Drop target not found.")
+
+    const event = new Event("drop", { bubbles: true, cancelable: true })
+    Object.defineProperty(event, "dataTransfer", {
+      value: {
+        files: [new File(["image"], "diagram.png", { type: "image/png" })],
+      },
+    })
+
+    await act(async () => {
+      dropTarget.dispatchEvent(event)
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.uploadSources).toHaveBeenCalledWith({
+        projectPath: "/Users/example/kb",
+        filePaths: ["/tmp/diagram.png"],
+      })
+    })
+  })
 })

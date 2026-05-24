@@ -30,6 +30,7 @@ const TEXT_SOURCE_EXTENSIONS = new Set([
 ])
 
 const CONVERTIBLE_EXTENSIONS = new Set([".doc", ".docx", ".xlsx", ".pdf", ".ppt", ".pptx"])
+const IMAGE_SOURCE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".avif"])
 
 export async function stageKnowledgeBaseSources(
   input: StageKnowledgeBaseSourcesInput,
@@ -48,6 +49,36 @@ export async function stageKnowledgeBaseSources(
       }
 
       const extension = path.extname(sourcePath).toLowerCase()
+      if (IMAGE_SOURCE_EXTENSIONS.has(extension)) {
+        const imageRelativeDir = path.join("_attachments", "images", ...datePathSegments(input.now()))
+        const imageDir = assertInside(projectPath, path.join(projectPath, imageRelativeDir))
+        await assertNoSymlinkInRelativePath(projectPath, imageRelativeDir)
+        await mkdir(imageDir, { recursive: true })
+        const imageTargetPath = await resolveCollisionPath(imageDir, path.basename(sourcePath))
+        await copyFile(sourcePath, imageTargetPath)
+        const imageRelativePath = normalizeRelativePath(path.relative(projectPath, imageTargetPath))
+
+        const rawRelativeDir = path.join(".raw", "images", ...datePathSegments(input.now()))
+        const rawDir = assertInside(projectPath, path.join(projectPath, rawRelativeDir))
+        await assertNoSymlinkInRelativePath(projectPath, rawRelativeDir)
+        await mkdir(rawDir, { recursive: true })
+        const intakePath = await resolveCollisionPath(rawDir, `${path.parse(sourcePath).name}.md`)
+        await writeFile(intakePath, imageIntakeMarkdown({
+          title: path.parse(sourcePath).name,
+          originalPath: filePath,
+          attachment: imageRelativePath,
+          format: extension.slice(1),
+          stagedAt: input.now().toISOString(),
+        }), "utf8")
+        uploaded.push({
+          originalPath: filePath,
+          relativePath: normalizeRelativePath(path.relative(projectPath, intakePath)),
+          originalRelativePath: imageRelativePath,
+          name: path.basename(intakePath),
+          size: sourceStat.size,
+        })
+        continue
+      }
       if (TEXT_SOURCE_EXTENSIONS.has(extension)) {
         const targetRelativeDir = path.join(".raw", ...datePathSegments(input.now()))
         const targetDir = assertInside(projectPath, path.join(projectPath, targetRelativeDir))
@@ -133,6 +164,32 @@ function rawDirectoryForKind(kind: FileConversionResult["kind"]): string {
   if (kind === "spreadsheet") return "spreadsheets"
   if (kind === "presentation") return "presentations"
   return "pdfs"
+}
+
+function imageIntakeMarkdown(input: {
+  readonly title: string
+  readonly originalPath: string
+  readonly attachment: string
+  readonly format: string
+  readonly stagedAt: string
+}): string {
+  return [
+    "---",
+    "source_type: image",
+    `title: "${input.title.replaceAll("\"", "\\\"")}"`,
+    `original_file: "${input.originalPath.replaceAll("\"", "\\\"")}"`,
+    `attachment: ${input.attachment}`,
+    `source_format: ${input.format}`,
+    `staged_at: ${input.stagedAt}`,
+    "---",
+    "",
+    `# Image Intake: ${input.title}`,
+    "",
+    `Attachment: ![[${input.attachment}]]`,
+    "",
+    "Synapse image intake record. During `/wiki ingest`, read the attachment image and create the durable visual/OCR description under `wiki/sources/`.",
+    "",
+  ].join("\n")
 }
 
 function normalizeRelativePath(value: string): string {

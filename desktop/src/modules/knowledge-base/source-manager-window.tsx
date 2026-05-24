@@ -243,6 +243,7 @@ function KnowledgeBaseSourceManagerWindow() {
 
       <aside aria-label="添加资料" className="flex h-screen w-80 shrink-0 flex-col border-l border-border bg-muted/30 p-4">
         <div
+          aria-label="拖拽放入资料"
           className={cn(
             "flex min-h-44 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-background p-5 text-center text-sm text-muted-foreground",
             isDragging && "bg-accent text-accent-foreground",

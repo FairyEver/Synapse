@@ -60,6 +60,7 @@ export function wikiNoIngestChangesCopy(input: {
 
 export function wikiIngestAppendixCopy(input: {
   readonly projectPath: string
+  readonly force: boolean
   readonly changedSources: readonly KnowledgeBaseSourceScanItem[]
   readonly skippedSources: readonly KnowledgeBaseSkippedSource[]
 }): string {
@@ -68,6 +69,12 @@ export function wikiIngestAppendixCopy(input: {
     "",
     `- \`${input.projectPath}\``,
     "- 所有相对路径都以该目录为根；不要使用其他硬编码路径。",
+    "",
+    "## 导入模式",
+    "",
+    input.force
+      ? "- 强制导入：包括 hash 未变化来源。"
+      : "- 增量导入：只处理新增或 hash 已变化来源。",
     "",
     "## 预检来源",
     "",
@@ -93,6 +100,7 @@ export function wikiIngestAppendixCopy(input: {
     "- 不要编辑 `.vault-meta/address-counter.txt`；地址计数器由 Synapse 内部服务维护。",
     "- 如果重写已有页面，保留页面中已有的 `address:` frontmatter。",
     "- 不要自行写入 hash、`ingested_at`、`address_map` 或 DragonScale 地址。",
+    "- 如果并行处理，只把互不重叠的来源交给 `synapse-kb-ingest-worker`；worker 只写 `wiki/sources/`，共享页面由本回合 coordinator 统一更新。",
   ].join("\n")
 }
 

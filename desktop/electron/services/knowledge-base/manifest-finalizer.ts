@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto"
-import { access, readFile } from "node:fs/promises"
+import { access, mkdir, readFile, rm } from "node:fs/promises"
+import os from "node:os"
 import path from "node:path"
 
 import type { KnowledgeBaseIngestReport } from "./ingest-report"
@@ -19,6 +20,19 @@ export interface KnowledgeBaseManifestFinalizerInput {
   readonly turnId: string
   readonly preflight: KnowledgeBaseIngestTurnState
   readonly report: KnowledgeBaseIngestReport
+}
+
+export interface KnowledgeBaseManifestFinalizerBatchItem {
+  readonly turnId: string
+  readonly preflight: KnowledgeBaseIngestTurnState
+  readonly report: KnowledgeBaseIngestReport
+}
+
+export interface KnowledgeBaseManifestFinalizerBatchInput {
+  readonly projectPath: string
+  readonly conversationId: string
+  readonly batchId: string
+  readonly items: readonly KnowledgeBaseManifestFinalizerBatchItem[]
 }
 
 export interface KnowledgeBaseManifestFinalizerResult {
@@ -41,17 +55,56 @@ const manifestFinalizerLocks = new Map<string, Promise<void>>()
 export class KnowledgeBaseManifestFinalizer {
   private readonly addressFinalizer: AddressFinalizerLike
   private readonly now: () => string
+  private readonly lockRoot: string | undefined
+  private readonly lockTimeoutMs: number
+  private readonly lockRetryMs: number
 
-  constructor(deps: { readonly addressFinalizer?: AddressFinalizerLike; readonly now?: () => string } = {}) {
+  constructor(deps: {
+    readonly addressFinalizer?: AddressFinalizerLike
+    readonly now?: () => string
+    readonly lockRoot?: string
+    readonly lockTimeoutMs?: number
+    readonly lockRetryMs?: number
+  } = {}) {
     this.addressFinalizer = deps.addressFinalizer ?? new DefaultAddressFinalizer()
     this.now = deps.now ?? (() => new Date().toISOString())
+    this.lockRoot = deps.lockRoot
+    this.lockTimeoutMs = deps.lockTimeoutMs ?? 30_000
+    this.lockRetryMs = deps.lockRetryMs ?? 50
   }
 
   async finalize(input: KnowledgeBaseManifestFinalizerInput): Promise<KnowledgeBaseManifestFinalizerResult> {
-    return withProjectManifestFinalizerLock(input.projectPath, () => this.finalizeLocked(input))
+    return this.finalizeBatch({
+      projectPath: input.projectPath,
+      conversationId: input.conversationId,
+      batchId: input.turnId,
+      items: [{
+        turnId: input.turnId,
+        preflight: input.preflight,
+        report: input.report,
+      }],
+    })
   }
 
-  private async finalizeLocked(input: KnowledgeBaseManifestFinalizerInput): Promise<KnowledgeBaseManifestFinalizerResult> {
+  async finalizeBatch(input: KnowledgeBaseManifestFinalizerBatchInput): Promise<KnowledgeBaseManifestFinalizerResult> {
+    try {
+      return await withProjectManifestFinalizerLock(input.projectPath, {
+        lockRoot: this.lockRoot,
+        timeoutMs: this.lockTimeoutMs,
+        retryMs: this.lockRetryMs,
+      }, () => this.finalizeBatchLocked(input))
+    } catch (error) {
+      if (error instanceof KnowledgeBaseManifestLockTimeoutError) {
+        return {
+          writtenSources: [],
+          warnings: [{ code: "manifest-lock-timeout", message: error.message }],
+        }
+      }
+      throw error
+    }
+  }
+
+  private async finalizeBatchLocked(input: KnowledgeBaseManifestFinalizerBatchInput): Promise<KnowledgeBaseManifestFinalizerResult> {
     const warnings: KnowledgeBaseManifestFinalizerWarning[] = []
     const readResult = await readKnowledgeBaseManifest(input.projectPath)
     if (readResult.status === "invalid") {
@@ -61,45 +114,56 @@ export class KnowledgeBaseManifestFinalizer {
       }
     }
 
-    const changedByPath = new Map(input.preflight.changedSources.map((source) => [source.relativePath, source]))
     const wikiAfter = await snapshotWikiMarkdown(input.projectPath)
-    const diff = diffWikiSnapshots(input.preflight.wikiBefore, wikiAfter)
     const writtenSources: string[] = []
     const nextSources: KnowledgeBaseManifest["sources"] = { ...readResult.manifest.sources }
+    const acceptedSources = new Set<string>()
+    const pageOwners = new Map<string, string>()
 
-    for (const source of input.report.processedSources) {
-      const sourcePath = normalizeRelativePath(source.source)
-      const preflightSource = changedByPath.get(sourcePath)
-      if (!preflightSource || !isRawSourcePath(sourcePath)) {
-        warnings.push({ code: "source-not-in-preflight", message: `Source was not in ingest preflight: ${source.source}` })
-        continue
-      }
-      const currentHash = await hashRawSource(input.projectPath, sourcePath)
-      if (currentHash !== preflightSource.hash) {
-        warnings.push({ code: "source-hash-changed", message: `Source changed after ingest preflight: ${sourcePath}` })
-        continue
-      }
+    for (const item of input.items) {
+      const changedByPath = new Map(item.preflight.changedSources.map((source) => [source.relativePath, source]))
+      const diff = diffWikiSnapshots(item.preflight.wikiBefore, wikiAfter)
+      for (const source of item.report.processedSources) {
+        const sourcePath = normalizeRelativePath(source.source)
+        if (acceptedSources.has(sourcePath)) {
+          warnings.push({ code: "source-duplicate", message: `Source appeared more than once in ingest reports: ${sourcePath}` })
+          continue
+        }
+        const preflightSource = changedByPath.get(sourcePath)
+        if (!preflightSource || !isRawSourcePath(sourcePath)) {
+          warnings.push({ code: "source-not-in-preflight", message: `Source was not in ingest preflight: ${source.source}` })
+          continue
+        }
+        const currentHash = await hashRawSource(input.projectPath, sourcePath)
+        if (currentHash !== preflightSource.hash) {
+          warnings.push({ code: "source-hash-changed", message: `Source changed after ingest preflight: ${sourcePath}` })
+          continue
+        }
 
-      const pagesCreated = await filterExistingWikiPages(
-        input.projectPath,
-        normalizePageList(source.pagesCreated, diff.created, "created", warnings),
-      )
-      const pagesUpdated = await filterExistingWikiPages(
-        input.projectPath,
-        normalizePageList(source.pagesUpdated, diff.updated, "updated", warnings),
-      )
-      if (pagesCreated.length === 0 && pagesUpdated.length === 0) {
-        warnings.push({ code: "source-no-valid-pages", message: `Source produced no validated wiki pages: ${sourcePath}` })
-        continue
-      }
+        const pagesCreated = await filterExistingWikiPages(
+          input.projectPath,
+          normalizePageList(source.pagesCreated, diff.created, "created", warnings),
+        )
+        const pagesUpdated = await filterExistingWikiPages(
+          input.projectPath,
+          normalizePageList(source.pagesUpdated, diff.updated, "updated", warnings),
+        )
+        if (pagesCreated.length === 0 && pagesUpdated.length === 0) {
+          warnings.push({ code: "source-no-valid-pages", message: `Source produced no validated wiki pages: ${sourcePath}` })
+          continue
+        }
 
-      nextSources[sourcePath] = {
-        hash: preflightSource.hash,
-        ingested_at: this.now(),
-        pages_created: pagesCreated,
-        pages_updated: pagesUpdated,
+        warnForDuplicatePageOwners(sourcePath, pagesCreated, pageOwners, warnings)
+        warnForDuplicatePageOwners(sourcePath, pagesUpdated, pageOwners, warnings)
+        acceptedSources.add(sourcePath)
+        nextSources[sourcePath] = {
+          hash: preflightSource.hash,
+          ingested_at: this.now(),
+          pages_created: pagesCreated,
+          pages_updated: pagesUpdated,
+        }
+        writtenSources.push(sourcePath)
       }
-      writtenSources.push(sourcePath)
     }
 
     if (writtenSources.length === 0) {
@@ -132,7 +196,31 @@ export class KnowledgeBaseManifestFinalizer {
   }
 }
 
-async function withProjectManifestFinalizerLock<T>(projectPath: string, work: () => Promise<T>): Promise<T> {
+function warnForDuplicatePageOwners(
+  sourcePath: string,
+  pages: readonly string[],
+  pageOwners: Map<string, string>,
+  warnings: KnowledgeBaseManifestFinalizerWarning[],
+): void {
+  for (const page of pages) {
+    if (isCanonicalMaintenancePage(page)) continue
+    const existingOwner = pageOwners.get(page)
+    if (existingOwner && existingOwner !== sourcePath) {
+      warnings.push({
+        code: "page-owned-by-multiple-sources",
+        message: `Page was claimed by multiple ingest sources: ${page}`,
+      })
+      continue
+    }
+    pageOwners.set(page, sourcePath)
+  }
+}
+
+async function withProjectManifestFinalizerLock<T>(
+  projectPath: string,
+  options: { readonly lockRoot?: string; readonly timeoutMs: number; readonly retryMs: number },
+  work: () => Promise<T>,
+): Promise<T> {
   const key = path.resolve(projectPath)
   const previous = manifestFinalizerLocks.get(key) ?? Promise.resolve()
   let release: () => void = () => undefined
@@ -142,14 +230,69 @@ async function withProjectManifestFinalizerLock<T>(projectPath: string, work: ()
   const queued = previous.catch(() => undefined).then(() => current)
   manifestFinalizerLocks.set(key, queued)
   await previous.catch(() => undefined)
+  const releaseFileLock = await acquireProjectManifestFileLock(projectPath, options)
   try {
     return await work()
   } finally {
-    release()
-    if (manifestFinalizerLocks.get(key) === queued) {
-      manifestFinalizerLocks.delete(key)
+    try {
+      await releaseFileLock()
+    } finally {
+      release()
+      if (manifestFinalizerLocks.get(key) === queued) {
+        manifestFinalizerLocks.delete(key)
+      }
     }
   }
+}
+
+export function knowledgeBaseManifestLockPath(
+  projectPath: string,
+  options: { readonly lockRoot?: string } = {},
+): string {
+  const lockRoot = options.lockRoot ?? path.join(os.tmpdir(), "synapse-kb-manifest-locks")
+  const key = createHash("sha256").update(path.resolve(projectPath)).digest("hex")
+  return path.join(lockRoot, `${key}.lock`)
+}
+
+class KnowledgeBaseManifestLockTimeoutError extends Error {
+  constructor(projectPath: string) {
+    super(`Timed out waiting for Knowledge Base manifest lock: ${projectPath}`)
+    this.name = "KnowledgeBaseManifestLockTimeoutError"
+  }
+}
+
+async function acquireProjectManifestFileLock(
+  projectPath: string,
+  options: { readonly lockRoot?: string; readonly timeoutMs: number; readonly retryMs: number },
+): Promise<() => Promise<void>> {
+  const lockPath = knowledgeBaseManifestLockPath(projectPath, { lockRoot: options.lockRoot })
+  await mkdir(path.dirname(lockPath), { recursive: true })
+  const startedAt = Date.now()
+  while (true) {
+    try {
+      await mkdir(lockPath)
+      return async () => {
+        await rm(lockPath, { recursive: true, force: true })
+      }
+    } catch (error) {
+      if (!isPathExistsError(error)) throw error
+      if (Date.now() - startedAt >= options.timeoutMs) {
+        throw new KnowledgeBaseManifestLockTimeoutError(projectPath)
+      }
+      await delay(options.retryMs)
+    }
+  }
+}
+
+function isPathExistsError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && (error as { readonly code?: unknown }).code === "EEXIST"
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
 function normalizePageList(

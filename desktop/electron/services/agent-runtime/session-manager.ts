@@ -2,7 +2,11 @@ import type { ConversationEntryV1 } from "../../runtime/data-repo"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ProviderService } from "../provider"
 import { ClaudeSDKSession } from "./claude-sdk-session"
-import type { AgentSdkPluginSpec } from "./project-contributions"
+import type {
+  AgentSdkAgentDefinitions,
+  AgentSdkPluginSpec,
+  AgentSdkSubagentToolPolicies,
+} from "./project-contributions"
 import type { AgentSessionRepository } from "./session-repository"
 import type {
   PendingPermissionState,
@@ -25,6 +29,8 @@ export interface CreateAgentLiveSessionInput {
   readonly model?: string
   readonly mode?: string
   readonly plugins?: readonly AgentSdkPluginSpec[]
+  readonly agents?: AgentSdkAgentDefinitions
+  readonly subagentToolPolicies?: AgentSdkSubagentToolPolicies
   readonly abortSignal?: AbortSignal
 }
 
@@ -49,6 +55,10 @@ export interface SessionManagerDeps {
   readonly createSession?: AgentLiveSessionFactory
   readonly sdkPlugins?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
+  readonly sdkAgents?: (message: AgentMessage, conversation: ConversationEntryV1) =>
+    AgentSdkAgentDefinitions | Promise<AgentSdkAgentDefinitions>
+  readonly sdkSubagentToolPolicies?: (message: AgentMessage, conversation: ConversationEntryV1) =>
+    AgentSdkSubagentToolPolicies | Promise<AgentSdkSubagentToolPolicies>
 }
 
 const IDLE_TIMEOUT_MS = 10 * 60 * 1000
@@ -71,6 +81,8 @@ export class SessionManager {
         model: input.model,
         mode: input.mode,
         plugins: input.plugins,
+        agents: input.agents,
+        subagentToolPolicies: input.subagentToolPolicies,
         abortSignal: input.abortSignal,
         logger: deps.logger,
         now: deps.now,
@@ -178,6 +190,10 @@ export class SessionManager {
       model: env.ANTHROPIC_MODEL,
       mode: modeOverride,
       plugins: await Promise.resolve(this.deps.sdkPlugins?.(input.message, input.conversation) ?? []),
+      agents: await Promise.resolve(this.deps.sdkAgents?.(input.message, input.conversation) ?? {}),
+      subagentToolPolicies: await Promise.resolve(
+        this.deps.sdkSubagentToolPolicies?.(input.message, input.conversation) ?? {},
+      ),
       abortSignal: input.abortSignal,
     })
     input.state.liveSession = liveSession
