@@ -16,18 +16,36 @@ function parseRecentLogLimit(limitStr?: string): number {
   return Math.min(Math.max(limit, 1), MAX_RECENT_LOG_LIMIT);
 }
 
+function parseLogDateQuery(value: string | undefined, name: string): string | undefined {
+  if (!value) return undefined;
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+    throw new BadRequestException(`${name} 参数必须为 YYYY-MM-DD 格式。`);
+  }
+  const parsed = new Date(`${value}T00:00:00.000Z`);
+  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== value) {
+    throw new BadRequestException(`${name} 参数必须为有效日期。`);
+  }
+  return value;
+}
+
 function parseCleanupBeforeDate(before: string | undefined): string {
-  if (!before || !/^\d{4}-\d{2}-\d{2}$/.test(before)) {
+  const parsed = parseLogDateQuery(before, "before");
+  if (!parsed) {
     throw new BadRequestException("before 参数必须为 YYYY-MM-DD 格式。");
   }
-  const parsed = new Date(`${before}T00:00:00.000Z`);
-  if (Number.isNaN(parsed.getTime()) || parsed.toISOString().slice(0, 10) !== before) {
-    throw new BadRequestException("before 参数必须为有效日期。");
-  }
-  if (before > new Date().toISOString().slice(0, 10)) {
+  if (parsed > new Date().toISOString().slice(0, 10)) {
     throw new BadRequestException("before 不能是未来日期。");
   }
-  return before;
+  return parsed;
+}
+
+function parseDownloadDateRange(from: string | undefined, to: string | undefined): { from?: string; to?: string } {
+  const parsedFrom = parseLogDateQuery(from, "from");
+  const parsedTo = parseLogDateQuery(to, "to");
+  if (parsedFrom && parsedTo && parsedFrom > parsedTo) {
+    throw new BadRequestException("from 不能晚于 to。");
+  }
+  return { from: parsedFrom, to: parsedTo };
 }
 
 @Controller("/api/admin/logs")
@@ -75,19 +93,20 @@ export class LogFileController {
     @Res() res: Response,
     @Req() request?: AdminRequest,
   ) {
-    const filename = from || to
-      ? `logs-${from ?? "start"}-${to ?? "now"}.zip`
+    const range = parseDownloadDateRange(from, to);
+    const filename = range.from || range.to
+      ? `logs-${range.from ?? "start"}-${range.to ?? "now"}.zip`
       : "logs-all.zip";
 
     res.set({
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${filename}"`,
     });
-    const result = await this.logFileService.streamZipTo(res, { from, to });
+    const result = await this.logFileService.streamZipTo(res, range);
     await this.recordLogAudit(request, {
       action: "logs.download",
       targetId: filename,
-      detail: { from, to, filename, bytes: result.bytes, fileCount: result.fileCount },
+      detail: { from: range.from, to: range.to, filename, bytes: result.bytes, fileCount: result.fileCount },
     });
   }
 

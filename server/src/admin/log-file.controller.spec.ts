@@ -171,4 +171,39 @@ describe("LogFileController", () => {
     });
     expect(response.send).not.toHaveBeenCalled();
   });
+
+  it("rejects invalid download dates before streaming logs", async () => {
+    const { controller, service, auditLog } = createController();
+    const response = { set: vi.fn(), send: vi.fn() };
+
+    await expect(controller.download("2026/05/01", undefined, response as never))
+      .rejects
+      .toThrow("from 参数必须为 YYYY-MM-DD 格式。");
+
+    expect(service.streamZipTo).not.toHaveBeenCalled();
+    expect(response.set).not.toHaveBeenCalled();
+    expect(auditLog.record).not.toHaveBeenCalled();
+  });
+
+  it("rejects impossible download dates before streaming logs", async () => {
+    const { controller, service } = createController();
+    const response = { set: vi.fn(), send: vi.fn() };
+
+    await expect(controller.download(undefined, "2026-02-31", response as never))
+      .rejects
+      .toThrow("to 参数必须为有效日期。");
+
+    expect(service.streamZipTo).not.toHaveBeenCalled();
+  });
+
+  it("rejects reversed download date ranges before streaming logs", async () => {
+    const { controller, service } = createController();
+    const response = { set: vi.fn(), send: vi.fn() };
+
+    await expect(controller.download("2026-05-23", "2026-05-01", response as never))
+      .rejects
+      .toThrow("from 不能晚于 to。");
+
+    expect(service.streamZipTo).not.toHaveBeenCalled();
+  });
 });
