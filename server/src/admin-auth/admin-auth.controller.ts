@@ -11,6 +11,16 @@ const loginSchema = z.object({
   password: z.string().min(1),
 })
 
+const adminCookieName = "synapse_admin"
+
+function adminCookieOptions() {
+  return {
+    httpOnly: true,
+    sameSite: "lax" as const,
+    secure: process.env.NODE_ENV === "production",
+  }
+}
+
 @Controller("/api/admin")
 export class AdminAuthController {
   constructor(
@@ -27,19 +37,15 @@ export class AdminAuthController {
     }
     const credentials = result.data
     const session = await this.auth.login(credentials.email, credentials.password, request.ip)
-    response.cookie("synapse_admin", session.token, {
-      httpOnly: true,
-      sameSite: "lax",
-      secure: process.env.NODE_ENV === "production",
-    })
+    response.cookie(adminCookieName, session.token, adminCookieOptions())
     return { email: session.email, role: session.role }
   }
 
   @Post("/logout")
   async logout(@Res({ passthrough: true }) response: Response, @Req() request: AdminRequest) {
-    const token = request.cookies?.synapse_admin
+    const token = request.cookies?.[adminCookieName]
     const admin = typeof token === "string" ? await this.auth.verify(token) : null
-    response.clearCookie("synapse_admin")
+    response.clearCookie(adminCookieName, adminCookieOptions())
     if (admin) {
       await this.auditLog?.record({
         adminEmail: admin.email,
@@ -54,7 +60,7 @@ export class AdminAuthController {
 
   @Get("/session")
   async getSession(@Req() request: AdminRequest) {
-    const token = request.cookies?.synapse_admin
+    const token = request.cookies?.[adminCookieName]
     const session = typeof token === "string" ? await this.auth.verifyDashboardSession(token) : null
     if (!session) {
       throw new ForbiddenException("未登录或登录已过期。")

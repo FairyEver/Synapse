@@ -3,6 +3,33 @@ import { AdminAuthController } from "./admin-auth.controller"
 import type { AdminRequest } from "./admin-auth.guard"
 
 describe("AdminAuthController", () => {
+  it("sets administrator session cookies with shared options", async () => {
+    const auth = {
+      login: vi.fn().mockResolvedValue({
+        email: "admin@example.com",
+        role: "admin",
+        token: "admin-token",
+      }),
+    }
+    const controller = new AdminAuthController(auth as never)
+    const response = { cookie: vi.fn() }
+    const request = { ip: "203.0.113.11" } as unknown as AdminRequest
+
+    await expect(controller.login({
+      email: "admin@example.com",
+      password: "secret",
+    }, request, response as never)).resolves.toEqual({
+      email: "admin@example.com",
+      role: "admin",
+    })
+
+    expect(response.cookie).toHaveBeenCalledWith("synapse_admin", "admin-token", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    })
+  })
+
   it("records administrator logout in audit logs", async () => {
     const auth = {
       verify: vi.fn().mockResolvedValue({ id: "admin-1", email: "admin@example.com" }),
@@ -17,7 +44,11 @@ describe("AdminAuthController", () => {
 
     await controller.logout(response as never, request)
 
-    expect(response.clearCookie).toHaveBeenCalledWith("synapse_admin")
+    expect(response.clearCookie).toHaveBeenCalledWith("synapse_admin", {
+      httpOnly: true,
+      sameSite: "lax",
+      secure: process.env.NODE_ENV === "production",
+    })
     expect(auth.verify).toHaveBeenCalledWith("admin-token")
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "admin@example.com",
