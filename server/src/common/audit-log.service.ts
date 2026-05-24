@@ -1,4 +1,4 @@
-import { Injectable, Optional } from "@nestjs/common"
+import { BadRequestException, Injectable, Optional } from "@nestjs/common"
 import { PinoLogger } from "nestjs-pino"
 import { PrismaService } from "../prisma/prisma.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse } from "./pagination"
@@ -27,10 +27,27 @@ function buildAuditLogWhere(options: AuditLogFilterOptions): Record<string, unkn
 
 function parseAuditDateBoundary(value: string, boundary: "start" | "end"): Date {
   const match = dateOnlyPattern.exec(value)
-  if (!match) return new Date(value)
+  if (!match) return parseAuditDate(value)
   const [, year, month, day] = match
-  const offsetDays = boundary === "end" ? 1 : 0
-  return new Date(Number(year), Number(month) - 1, Number(day) + offsetDays)
+  const parsedYear = Number(year)
+  const parsedMonth = Number(month)
+  const parsedDay = Number(day)
+  const date = new Date(parsedYear, parsedMonth - 1, parsedDay)
+  if (
+    date.getFullYear() !== parsedYear ||
+    date.getMonth() !== parsedMonth - 1 ||
+    date.getDate() !== parsedDay
+  ) {
+    throw new BadRequestException("日期参数无效。")
+  }
+  if (boundary === "end") date.setDate(date.getDate() + 1)
+  return date
+}
+
+function parseAuditDate(value: string): Date {
+  const date = new Date(value)
+  if (Number.isNaN(date.getTime())) throw new BadRequestException("日期参数无效。")
+  return date
 }
 
 @Injectable()

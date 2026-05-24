@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { BadRequestException } from "@nestjs/common"
 import type { PrismaService } from "../prisma/prisma.service"
 import { AuditLogService } from "./audit-log.service"
 
@@ -99,5 +100,21 @@ describe("AuditLogService", () => {
       if (previousTimezone === undefined) delete process.env.TZ
       else process.env.TZ = previousTimezone
     }
+  })
+
+  it("rejects invalid audit log date filters before querying Prisma", async () => {
+    const prisma = {
+      auditLog: {
+        findMany: vi.fn(),
+        count: vi.fn(),
+      },
+      $transaction: vi.fn(),
+    }
+    const service = new AuditLogService(prisma as unknown as PrismaService)
+
+    await expect(service.list({ from: "not-a-date", query: {} }))
+      .rejects
+      .toThrow(BadRequestException)
+    expect(prisma.$transaction).not.toHaveBeenCalled()
   })
 })
