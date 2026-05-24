@@ -27,7 +27,7 @@ describe("server dev scripts", () => {
     expect(workspacePackage.scripts?.dev).toBeUndefined()
   })
 
-  it("keeps the workspace server dev entrypoint on the backend stack script", () => {
+  it("keeps one workspace server dev entrypoint for the backend stack", () => {
     const workspacePackage = readPackageJson(join(process.cwd(), "../package.json"))
 
     expect(workspacePackage.scripts?.["dev:server"]).toContain(
@@ -36,8 +36,22 @@ describe("server dev scripts", () => {
     expect(workspacePackage.scripts?.["dev:server"]).toContain(
       "--filter @synapse/server run dev",
     )
-    expect(workspacePackage.scripts?.["dev:dashboard"]).toBe(
-      "pnpm --filter @synapse/dashboard run dev",
+    expect(workspacePackage.scripts?.["dev:server"]).toContain(
+      "--filter @synapse/dashboard run dev",
     )
+    expect(workspacePackage.scripts?.["dev:dashboard"]).toBeUndefined()
+    expect(workspacePackage.scripts?.["dev:server:full"]).toBeUndefined()
+  })
+
+  it("keeps one workspace server quit entrypoint for the backend stack", () => {
+    const workspacePackage = readPackageJson(join(process.cwd(), "../package.json"))
+
+    expect(workspacePackage.scripts?.["quit:server"]).toContain(
+      "node scripts/quit-processes.mjs dev:server",
+    )
+    expect(workspacePackage.scripts?.["quit:server"]).toContain(
+      "docker compose --env-file server/.env -f server/compose.yml down",
+    )
+    expect(workspacePackage.scripts?.["quit:docker"]).toBeUndefined()
   })
 })

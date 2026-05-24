@@ -26,10 +26,11 @@ const RELATIVE_DEV_COMMAND_MATCHERS = [
   /vitepress.*dev/u,
   /nest.*start.*--watch/u,
   /admin[/\\]vite\.config\.ts/u,
+  /max.*dev.*--port 3000/u,
   /nodemon/u,
   /electron[/\\]cli\.js \./u,
   /\belectron \./u,
-  /pnpm(?:\.cjs)?.*\bdev(?::(?:website|desktop|server|renderer|electron:build|electron:app|api|admin))?\b/u,
+  /pnpm(?:\.cjs)?.*\bdev(?::(?:website|desktop|server|renderer|electron:build|electron:app|api|admin|dashboard))?\b/u,
 ]
 
 const WORKSPACE_DEV_COMMAND_MATCHERS = [
@@ -61,10 +62,12 @@ const DEV_COMMAND_MATCHERS_BY_SCRIPT = {
     /scripts[/\\]run-with-server-env\.mjs.*run dev/u,
     /nest.*start.*--watch/u,
     /admin[/\\]vite\.config\.ts/u,
+    /max.*dev.*--port 3000/u,
     /nodemon/u,
     /server[/\\]dist[/\\]main(?:\s|$)/u,
     /pnpm(?:\.cjs)?.*@synapse[/\\]server.*\brun dev\b/u,
-    /pnpm(?:\.cjs)?.*\bdev:(?:server|api|admin)\b/u,
+    /pnpm(?:\.cjs)?.*@synapse[/\\]dashboard.*\brun dev\b/u,
+    /pnpm(?:\.cjs)?.*\bdev:(?:server|api|admin|dashboard)\b/u,
   ],
 }
 
