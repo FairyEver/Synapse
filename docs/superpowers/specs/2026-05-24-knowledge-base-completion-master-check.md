@@ -252,11 +252,11 @@ Expected: no ordinary Scheduler/Workflow/action package coupling to KB session i
 
 Updated: 2026-05-24
 
-This checklist has been executed in branch `codex/kb-completion-master` through commit `e8fc75f6`.
+This checklist has been executed in branch `codex/kb-completion-master` through commit `f5ad6d14`.
 
 Verification evidence:
 
-- Focused Vitest command passed: 24 test files, 173 tests.
+- Focused Vitest command passed: 28 test files, 203 tests.
 - `pnpm --filter @synapse/desktop run typecheck` passed.
 - `pnpm --filter @synapse/desktop run check:hard-constraints` passed.
 - `pnpm --filter @synapse/desktop run build:electron` passed.
@@ -264,6 +264,7 @@ Verification evidence:
 - Boundary scans for vault templates, Workflow/Scheduler/action package coupling, common file-conversion coupling, online OCR/fetch paths, and `git diff --check` passed with empty output.
 - macOS arm64 directory packaging passed when run with `CSC_IDENTITY_AUTO_DISCOVERY=false`; the exact signed command stalled at local `codesign`.
 - Packaging evidence and remaining release risks are recorded in `docs/superpowers/reports/2026-05-24-knowledge-base-completion-package-check.md`.
+- Final code review Important findings were addressed in `f5ad6d14`: manifest finalization now rejects processed sources with no wiki-page evidence, URL intake is wired through source manager -> IPC -> Knowledge Base service, and the Workflow file conversion node supports variable bindings for path interpolation.
 
 ## Final Verification Command Set
 
