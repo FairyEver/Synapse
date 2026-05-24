@@ -1,4 +1,4 @@
-import { app } from "electron"
+import { app, shell } from "electron"
 import { constants } from "node:fs"
 import type { Dirent } from "node:fs"
 import { access, copyFile, lstat, mkdir, readdir, readFile } from "node:fs/promises"
@@ -7,6 +7,14 @@ import type {
   SynapseKnowledgeBaseCreateManagedPayload,
   SynapseKnowledgeBaseCreateManagedResult,
   SynapseKnowledgeBaseAddUrlSourcePayload,
+  SynapseKnowledgeBaseCreateRawFolderPayload,
+  SynapseKnowledgeBaseListRawDirectoryPayload,
+  SynapseKnowledgeBaseListRawDirectoryResult,
+  SynapseKnowledgeBaseMoveRawEntriesPayload,
+  SynapseKnowledgeBaseRawMutationResult,
+  SynapseKnowledgeBaseRenameRawEntryPayload,
+  SynapseKnowledgeBaseTrashRawEntriesPayload,
+  SynapseKnowledgeBaseUploadRawFilesPayload,
   SynapseKnowledgeBaseListSourcesResult,
   SynapseKnowledgeBaseSourceEntry,
   SynapseKnowledgeBaseUploadSourcesPayload,
@@ -25,6 +33,7 @@ import {
   knowledgeBaseVirtualPath,
   resolveManagedKnowledgeBasePath,
 } from "./managed-path"
+import { KnowledgeBaseRawFileManager } from "./raw-file-manager"
 
 export const KNOWLEDGE_BASE_TEMPLATE_VERSION = "2026-05-21"
 
@@ -35,6 +44,7 @@ type KnowledgeBaseServiceDeps = {
   now?: () => Date
   fileConversionService?: Pick<FileConversionService, "convert">
   fetchUrl?: FetchUrl
+  rawFileManager?: KnowledgeBaseRawFileManager
 }
 
 export class KnowledgeBaseService {
@@ -44,6 +54,7 @@ export class KnowledgeBaseService {
   private readonly now: () => Date
   private readonly fileConversionService: Pick<FileConversionService, "convert">
   private readonly fetchUrl: FetchUrl
+  private readonly rawFileManager: KnowledgeBaseRawFileManager
 
   constructor(deps: KnowledgeBaseServiceDeps = {}) {
     this.managedTemplateRoot = deps.managedTemplateRoot ?? resolveManagedTemplateRoot()
@@ -52,6 +63,9 @@ export class KnowledgeBaseService {
     this.now = deps.now ?? (() => new Date())
     this.fileConversionService = deps.fileConversionService ?? createDefaultFileConversionService()
     this.fetchUrl = deps.fetchUrl ?? createGuardedFetchUrl()
+    this.rawFileManager = deps.rawFileManager ?? new KnowledgeBaseRawFileManager({
+      trashItem: (targetPath) => shell.trashItem(targetPath),
+    })
   }
 
   async createManaged(payload: SynapseKnowledgeBaseCreateManagedPayload): Promise<SynapseKnowledgeBaseCreateManagedResult> {
@@ -140,6 +154,48 @@ export class KnowledgeBaseService {
     return { projectId, uploaded: result.uploaded, skipped: result.skipped }
   }
 
+  async listRawDirectory(payload: SynapseKnowledgeBaseListRawDirectoryPayload): Promise<SynapseKnowledgeBaseListRawDirectoryResult> {
+    const projectPath = await this.resolveProjectPath(payload.projectId)
+    const rawRoot = await this.ensureRawRoot(projectPath)
+    const entries = await this.rawFileManager.list(rawRoot, payload.directoryPath)
+    return { projectId: payload.projectId, directoryPath: payload.directoryPath, entries }
+  }
+
+  async createRawFolder(payload: SynapseKnowledgeBaseCreateRawFolderPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
+    const projectPath = await this.resolveProjectPath(payload.projectId)
+    const rawRoot = await this.ensureRawRoot(projectPath)
+    const entry = await this.rawFileManager.createFolder(rawRoot, payload.parentDirectoryPath, payload.name)
+    return { projectId: payload.projectId, entries: [entry], skipped: [] }
+  }
+
+  async uploadRawFiles(payload: SynapseKnowledgeBaseUploadRawFilesPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
+    const projectPath = await this.resolveProjectPath(payload.projectId)
+    const rawRoot = await this.ensureRawRoot(projectPath)
+    const result = await this.rawFileManager.uploadFiles(rawRoot, payload.targetDirectoryPath, payload.filePaths)
+    return { projectId: payload.projectId, ...result }
+  }
+
+  async renameRawEntry(payload: SynapseKnowledgeBaseRenameRawEntryPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
+    const projectPath = await this.resolveProjectPath(payload.projectId)
+    const rawRoot = await this.ensureRawRoot(projectPath)
+    const entry = await this.rawFileManager.renameEntry(rawRoot, payload.relativePath, payload.newName)
+    return { projectId: payload.projectId, entries: [entry], skipped: [] }
+  }
+
+  async moveRawEntries(payload: SynapseKnowledgeBaseMoveRawEntriesPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
+    const projectPath = await this.resolveProjectPath(payload.projectId)
+    const rawRoot = await this.ensureRawRoot(projectPath)
+    const result = await this.rawFileManager.moveEntries(rawRoot, payload.relativePaths, payload.targetDirectoryPath)
+    return { projectId: payload.projectId, ...result }
+  }
+
+  async trashRawEntries(payload: SynapseKnowledgeBaseTrashRawEntriesPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
+    const projectPath = await this.resolveProjectPath(payload.projectId)
+    const rawRoot = await this.ensureRawRoot(projectPath)
+    const result = await this.rawFileManager.trashEntries(rawRoot, payload.relativePaths)
+    return { projectId: payload.projectId, ...result }
+  }
+
   private async resolveProjectPath(projectId: string): Promise<string> {
     const config = await this.loadConfig()
     const project = config.global.projects.find((item) => item.id === projectId)
@@ -150,6 +206,13 @@ export class KnowledgeBaseService {
       throw new Error("当前项目不是托管知识库。")
     }
     return resolveManagedKnowledgeBasePath(project, this.userDataPath)
+  }
+
+  private async ensureRawRoot(projectPath: string): Promise<string> {
+    const rawPath = assertInside(projectPath, path.join(projectPath, ".raw"))
+    await assertNoSymlinkInRequiredPath(projectPath, ".raw")
+    await mkdir(rawPath, { recursive: true })
+    return rawPath
   }
 }
 

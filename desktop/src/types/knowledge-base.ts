@@ -76,3 +76,62 @@ export type SynapseKnowledgeBaseUploadSourcesResult = {
     reason: "not-file" | "read-error" | "conversion-error"
   }>
 }
+
+export type SynapseKnowledgeBaseRawEntryKind = "file" | "directory"
+
+export type SynapseKnowledgeBaseRawEntry = {
+  name: string
+  relativePath: string
+  kind: SynapseKnowledgeBaseRawEntryKind
+  size: number | null
+  modifiedAt: string
+}
+
+export type SynapseKnowledgeBaseListRawDirectoryPayload = {
+  projectId: string
+  directoryPath: string
+}
+
+export type SynapseKnowledgeBaseListRawDirectoryResult = {
+  projectId: string
+  directoryPath: string
+  entries: SynapseKnowledgeBaseRawEntry[]
+}
+
+export type SynapseKnowledgeBaseCreateRawFolderPayload = {
+  projectId: string
+  parentDirectoryPath: string
+  name: string
+}
+
+export type SynapseKnowledgeBaseUploadRawFilesPayload = {
+  projectId: string
+  targetDirectoryPath: string
+  filePaths: string[]
+}
+
+export type SynapseKnowledgeBaseRawMutationResult = {
+  projectId: string
+  entries: SynapseKnowledgeBaseRawEntry[]
+  skipped: Array<{
+    path: string
+    reason: "not-file" | "not-directory" | "read-error" | "invalid-path" | "collision" | "trash-error"
+  }>
+}
+
+export type SynapseKnowledgeBaseRenameRawEntryPayload = {
+  projectId: string
+  relativePath: string
+  newName: string
+}
+
+export type SynapseKnowledgeBaseMoveRawEntriesPayload = {
+  projectId: string
+  relativePaths: string[]
+  targetDirectoryPath: string
+}
+
+export type SynapseKnowledgeBaseTrashRawEntriesPayload = {
+  projectId: string
+  relativePaths: string[]
+}

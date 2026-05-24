@@ -3,6 +3,7 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { KnowledgeBaseService } from "../knowledge-base-service"
+import { KnowledgeBaseRawFileManager } from "../raw-file-manager"
 import type { FileConversionResult } from "../../file-conversion"
 
 vi.mock("electron", () => ({
@@ -10,6 +11,9 @@ vi.mock("electron", () => ({
     isPackaged: false,
     getAppPath: () => process.cwd(),
     getPath: () => path.join(os.tmpdir(), "synapse-kb-userdata"),
+  },
+  shell: {
+    trashItem: vi.fn(),
   },
 }))
 
@@ -169,6 +173,125 @@ describe("KnowledgeBaseService", () => {
     })])
     await expect(readFile(path.join(projectPath, ".raw", "web", "2026", "05", "24", "article.md"), "utf8"))
       .resolves.toContain('source_url: "https://example.com/article"')
+  })
+
+  it("lists raw directory entries without source import statuses", async () => {
+    const { projectId, projectPath, service } = await managedFixture()
+    await mkdir(path.join(projectPath, ".raw", "projects"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", "brief.md"), "alpha\n")
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{}}\n")
+
+    const result = await service.listRawDirectory({
+      projectId,
+      directoryPath: "",
+    })
+
+    expect(result).toMatchObject({
+      projectId,
+      directoryPath: "",
+    })
+    expect(result.entries.map((entry) => ({
+      name: entry.name,
+      relativePath: entry.relativePath,
+      kind: entry.kind,
+      size: entry.size,
+    }))).toEqual([
+      { name: "projects", relativePath: "projects", kind: "directory", size: null },
+      { name: "brief.md", relativePath: "brief.md", kind: "file", size: 6 },
+    ])
+    expect(result.entries.some((entry) => entry.name === ".manifest.json")).toBe(false)
+  })
+
+  it("uploads raw files into the selected raw folder without conversion", async () => {
+    const sourcePath = path.join(await tempDir(), "report.docx")
+    await writeFile(sourcePath, "binary")
+    const { projectId, projectPath, service } = await managedFixture()
+    await mkdir(path.join(projectPath, ".raw", "client-a"), { recursive: true })
+
+    const result = await service.uploadRawFiles({
+      projectId,
+      targetDirectoryPath: "client-a",
+      filePaths: [sourcePath],
+    })
+
+    expect(result.entries).toEqual([expect.objectContaining({
+      name: "report.docx",
+      relativePath: "client-a/report.docx",
+      kind: "file",
+      size: 6,
+    })])
+    await expect(readFile(path.join(projectPath, ".raw", "client-a", "report.docx"), "utf8"))
+      .resolves.toBe("binary")
+  })
+
+  it("renames and moves raw entries without changing manifest or wiki files", async () => {
+    const { projectId, projectPath, service } = await managedFixture()
+    await mkdir(path.join(projectPath, ".raw", "client-a"), { recursive: true })
+    await mkdir(path.join(projectPath, ".raw", "archive"), { recursive: true })
+    await mkdir(path.join(projectPath, "wiki"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", "client-a", "brief.md"), "alpha\n")
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{\".raw/client-a/brief.md\":{}}}\n")
+    await writeFile(path.join(projectPath, "wiki", "brief.md"), "# Brief\n")
+
+    const renamed = await service.renameRawEntry({
+      projectId,
+      relativePath: "client-a/brief.md",
+      newName: "brief-renamed.md",
+    })
+    const moved = await service.moveRawEntries({
+      projectId,
+      relativePaths: ["client-a/brief-renamed.md"],
+      targetDirectoryPath: "archive",
+    })
+
+    expect(renamed.entries).toEqual([expect.objectContaining({
+      relativePath: "client-a/brief-renamed.md",
+      kind: "file",
+    })])
+    expect(moved.entries).toEqual([expect.objectContaining({
+      relativePath: "archive/brief-renamed.md",
+      kind: "file",
+    })])
+    await expect(readFile(path.join(projectPath, ".raw", "archive", "brief-renamed.md"), "utf8"))
+      .resolves.toBe("alpha\n")
+    await expect(readFile(path.join(projectPath, ".raw", ".manifest.json"), "utf8"))
+      .resolves.toBe("{\"version\":1,\"sources\":{\".raw/client-a/brief.md\":{}}}\n")
+    await expect(readFile(path.join(projectPath, "wiki", "brief.md"), "utf8"))
+      .resolves.toBe("# Brief\n")
+  })
+
+  it("trashes selected raw entries through the injected trash boundary", async () => {
+    const trashItem = vi.fn(async () => undefined)
+    const { projectId, projectPath, service } = await managedFixture({
+      rawFileManager: new KnowledgeBaseRawFileManager({ trashItem }),
+    })
+    await mkdir(path.join(projectPath, ".raw", "folder"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", "folder", "brief.md"), "alpha\n")
+
+    const result = await service.trashRawEntries({
+      projectId,
+      relativePaths: ["folder/brief.md"],
+    })
+
+    expect(result.entries).toEqual([expect.objectContaining({
+      relativePath: "folder/brief.md",
+      kind: "file",
+    })])
+    expect(trashItem).toHaveBeenCalledWith(path.join(projectPath, ".raw", "folder", "brief.md"))
+  })
+
+  it("rejects raw paths outside the raw directory", async () => {
+    const { projectId, service } = await managedFixture()
+
+    await expect(service.listRawDirectory({
+      projectId,
+      directoryPath: "../wiki",
+    })).rejects.toThrow("目标路径不在资料目录中。")
+    await expect(service.renameRawEntry({
+      projectId,
+      relativePath: "../wiki/index.md",
+      newName: "index.md",
+    })).rejects.toThrow("目标路径不在资料目录中。")
   })
 
   it("uploads convertible files as generated markdown sources", async () => {
