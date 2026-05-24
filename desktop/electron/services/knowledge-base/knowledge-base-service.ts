@@ -4,6 +4,8 @@ import type { Dirent } from "node:fs"
 import { access, copyFile, lstat, mkdir, readdir, readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type {
+  SynapseKnowledgeBaseCreateManagedPayload,
+  SynapseKnowledgeBaseCreateManagedResult,
   SynapseKnowledgeBaseInitializePayload,
   SynapseKnowledgeBaseInitializeResult,
   SynapseKnowledgeBaseAddUrlSourcePayload,
@@ -14,11 +16,13 @@ import type {
   SynapseKnowledgeBaseUploadSourcesPayload,
   SynapseKnowledgeBaseUploadSourcesResult,
 } from "../../../src/types/knowledge-base"
+import type { SynapseProjectConfig } from "../../../src/types/config"
 import { createDefaultFileConversionService, type FileConversionService } from "../file-conversion"
 import { scanKnowledgeBaseSources } from "./source-scan"
 import { stageKnowledgeBaseSources, stageKnowledgeBaseUrlSource } from "./source-staging"
 import { createGuardedFetchUrl } from "../source-acquisition/guarded-fetch-url"
 import type { FetchUrl } from "../source-acquisition/url-source"
+import { knowledgeBaseVirtualPath, resolveManagedKnowledgeBasePath } from "./managed-path"
 
 export const KNOWLEDGE_BASE_TEMPLATE_VERSION = "2026-05-21"
 
@@ -37,6 +41,8 @@ const REQUIRED_PATHS = [
 
 type KnowledgeBaseServiceDeps = {
   templateRoot?: string
+  managedTemplateRoot?: string
+  userDataPath?: string
   now?: () => Date
   fileConversionService?: Pick<FileConversionService, "convert">
   fetchUrl?: FetchUrl
@@ -44,12 +50,16 @@ type KnowledgeBaseServiceDeps = {
 
 export class KnowledgeBaseService {
   private readonly templateRoot: string
+  private readonly managedTemplateRoot: string
+  private readonly userDataPath: string
   private readonly now: () => Date
   private readonly fileConversionService: Pick<FileConversionService, "convert">
   private readonly fetchUrl: FetchUrl
 
   constructor(deps: KnowledgeBaseServiceDeps = {}) {
     this.templateRoot = deps.templateRoot ?? resolveTemplateRoot()
+    this.managedTemplateRoot = deps.managedTemplateRoot ?? resolveManagedTemplateRoot()
+    this.userDataPath = deps.userDataPath ?? app.getPath("userData")
     this.now = deps.now ?? (() => new Date())
     this.fileConversionService = deps.fileConversionService ?? createDefaultFileConversionService()
     this.fetchUrl = deps.fetchUrl ?? createGuardedFetchUrl()
@@ -111,6 +121,36 @@ export class KnowledgeBaseService {
       templateVersion: KNOWLEDGE_BASE_TEMPLATE_VERSION,
       createdFiles,
       existingFiles,
+    }
+  }
+
+  async createManaged(payload: SynapseKnowledgeBaseCreateManagedPayload): Promise<SynapseKnowledgeBaseCreateManagedResult> {
+    const project: SynapseProjectConfig = {
+      id: payload.projectId,
+      name: payload.name,
+      path: knowledgeBaseVirtualPath(payload.projectId),
+      capabilities: {
+        knowledgeBase: {
+          enabled: true,
+          schemaVersion: 1,
+          templateVersion: KNOWLEDGE_BASE_TEMPLATE_VERSION,
+          managed: true,
+          runtimeId: payload.projectId,
+        },
+      },
+    }
+    const runtimePath = resolveManagedKnowledgeBasePath(project, this.userDataPath)
+    if (await pathExists(runtimePath)) {
+      throw new Error("知识库已存在。")
+    }
+    await copyDirectoryContents(this.managedTemplateRoot, runtimePath)
+    const source = await readTemplateSource(this.managedTemplateRoot)
+    return {
+      projectId: payload.projectId,
+      projectPath: knowledgeBaseVirtualPath(payload.projectId),
+      runtimePath,
+      templateVersion: KNOWLEDGE_BASE_TEMPLATE_VERSION,
+      ...(source ? { templateSource: source } : undefined),
     }
   }
 
@@ -246,6 +286,23 @@ function resolveTemplateRoot(): string {
   return path.join(app.getAppPath(), "resources", "knowledge-base", "templates")
 }
 
+function resolveManagedTemplateRoot(): string {
+  if (process.env.SYNAPSE_KB_MANAGED_TEMPLATE_ROOT) {
+    return process.env.SYNAPSE_KB_MANAGED_TEMPLATE_ROOT
+  }
+
+  if (process.env.SYNAPSE_KB_TEMPLATE_ROOT) {
+    return process.env.SYNAPSE_KB_TEMPLATE_ROOT
+  }
+
+  if (app.isPackaged) {
+    const resourcesPath = (process as NodeJS.Process & { resourcesPath: string }).resourcesPath
+    return path.join(resourcesPath, "knowledge-base", "claude-obsidian-template")
+  }
+
+  return path.join(app.getAppPath(), "resources", "knowledge-base", "claude-obsidian-template")
+}
+
 function assertInside(rootPath: string, targetPath: string): string {
   const root = path.resolve(rootPath)
   const target = path.resolve(targetPath)
@@ -265,6 +322,26 @@ async function pathExists(targetPath: string): Promise<boolean> {
   }
 }
 
+async function copyDirectoryContents(sourceRoot: string, targetRoot: string): Promise<void> {
+  await mkdir(targetRoot, { recursive: true })
+  const entries = await readdir(sourceRoot, { withFileTypes: true })
+  for (const entry of entries) {
+    const sourcePath = path.join(sourceRoot, entry.name)
+    const targetPath = path.join(targetRoot, entry.name)
+    if (entry.isSymbolicLink()) {
+      continue
+    }
+    if (entry.isDirectory()) {
+      await copyDirectoryContents(sourcePath, targetPath)
+      continue
+    }
+    if (entry.isFile()) {
+      await mkdir(path.dirname(targetPath), { recursive: true })
+      await copyFile(sourcePath, targetPath)
+    }
+  }
+}
+
 async function assertNoSymlinkInRequiredPath(projectPath: string, relativePath: string): Promise<void> {
   let currentPath = projectPath
   for (const segment of relativePath.split(/[\\/]/)) {
@@ -280,6 +357,19 @@ async function assertNoSymlinkInRequiredPath(projectPath: string, relativePath: 
       }
       throw error
     }
+  }
+}
+
+async function readTemplateSource(templateRoot: string): Promise<SynapseKnowledgeBaseCreateManagedResult["templateSource"] | undefined> {
+  try {
+    const parsed = JSON.parse(await readFile(path.join(templateRoot, "SOURCE.json"), "utf8")) as Record<string, unknown>
+    return {
+      ...(typeof parsed.repo === "string" ? { repo: parsed.repo } : undefined),
+      ...(typeof parsed.commit === "string" ? { commit: parsed.commit } : undefined),
+      ...(typeof parsed.syncedAt === "string" ? { syncedAt: parsed.syncedAt } : undefined),
+    }
+  } catch {
+    return undefined
   }
 }
 

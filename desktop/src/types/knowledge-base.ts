@@ -12,6 +12,23 @@ export type SynapseKnowledgeBaseInitializeResult = {
   existingFiles: string[]
 }
 
+export type SynapseKnowledgeBaseCreateManagedPayload = {
+  projectId: string
+  name: string
+}
+
+export type SynapseKnowledgeBaseCreateManagedResult = {
+  projectId: string
+  projectPath: string
+  runtimePath: string
+  templateVersion: string
+  templateSource?: {
+    repo?: string
+    commit?: string
+    syncedAt?: string
+  }
+}
+
 export type SynapseKnowledgeBaseInspection = {
   projectPath: string
   isKnowledgeBase: boolean

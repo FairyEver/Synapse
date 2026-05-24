@@ -9,6 +9,7 @@ vi.mock("electron", () => ({
   app: {
     isPackaged: false,
     getAppPath: () => process.cwd(),
+    getPath: () => path.join(os.tmpdir(), "synapse-kb-userdata"),
   },
 }))
 
@@ -25,6 +26,30 @@ afterEach(async () => {
 })
 
 describe("KnowledgeBaseService", () => {
+  it("creates managed knowledge base runtime from template", async () => {
+    const templateRoot = await tempDir()
+    await mkdir(path.join(templateRoot, "wiki"), { recursive: true })
+    await mkdir(path.join(templateRoot, ".claude-plugin"), { recursive: true })
+    await writeFile(path.join(templateRoot, "wiki", "index.md"), "# Index\n", "utf8")
+    await writeFile(path.join(templateRoot, ".claude-plugin", "plugin.json"), "{\"name\":\"kb\"}\n", "utf8")
+    await writeFile(path.join(templateRoot, "SOURCE.json"), JSON.stringify({
+      repo: "https://github.com/AgriciDaniel/claude-obsidian",
+      commit: "75d3b6feb77b96c6bb16599c4550cc9703553d87",
+      syncedAt: "2026-05-24",
+    }), "utf8")
+
+    const userDataPath = await tempDir()
+    const service = new KnowledgeBaseService({ managedTemplateRoot: templateRoot, userDataPath })
+    const result = await service.createManaged({ projectId: "kb-1", name: "Knowledge" })
+
+    expect(result.projectId).toBe("kb-1")
+    expect(result.projectPath).toBe("synapse-kb://kb-1")
+    expect(result.runtimePath).toBe(path.join(userDataPath, "knowledge-bases", "kb-1"))
+    expect(result.templateSource?.commit).toBe("75d3b6feb77b96c6bb16599c4550cc9703553d87")
+    await expect(readFile(path.join(result.runtimePath, "wiki", "index.md"), "utf8")).resolves.toBe("# Index\n")
+    await expect(readFile(path.join(result.runtimePath, ".claude-plugin", "plugin.json"), "utf8")).resolves.toContain("kb")
+  })
+
   it("initializes the vault structure without runnable agent files", async () => {
     const targetPath = await tempDir()
     const service = new KnowledgeBaseService()
