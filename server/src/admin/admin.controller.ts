@@ -17,15 +17,21 @@ const bulkInvitationDeleteSchema = z.object({
   ids: z.array(z.string().min(1)).min(1),
 }).strict()
 
+const permissionKeysSchema = z.array(z.string().trim().min(1).refine(isActivePermissionKey))
+
 const teamEntitlementsSchema = z.object({
-  permissionKeys: z.array(z.string().trim().min(1).refine(isActivePermissionKey)),
+  permissionKeys: permissionKeysSchema.min(1),
 }).strict()
 
 const teamPermissionsSchema = teamEntitlementsSchema.extend({
   rolePermissions: z.array(z.object({
     roleId: z.string().trim().min(1),
-    permissionKeys: z.array(z.string().trim().min(1).refine(isActivePermissionKey)),
+    permissionKeys: permissionKeysSchema,
   }).strict()),
+}).strict()
+
+const rolePermissionsSchema = z.object({
+  permissionKeys: permissionKeysSchema,
 }).strict()
 
 const memberAccessRoleSchema = z.object({
@@ -153,7 +159,7 @@ export class AdminController {
     @Body() body: unknown,
     @Req() request: AdminRequest,
   ) {
-    const result = teamEntitlementsSchema.safeParse(body)
+    const result = rolePermissionsSchema.safeParse(body)
     if (!result.success) throw new BadRequestException("角色权限无效。")
     return this.admin.replaceRolePermissions(teamId, roleId, result.data.permissionKeys, request.admin!, request.ip)
   }
