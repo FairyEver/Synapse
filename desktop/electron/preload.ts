@@ -91,6 +91,7 @@ const IPC_CHANNELS = {
   "knowledge-base": {
     "inspect": "synapse:knowledge-base:inspect",
     "initialize": "synapse:knowledge-base:initialize",
+    "createManaged": "synapse:knowledge-base:create-managed",
     "listSources": "synapse:knowledge-base:list-sources",
     "uploadSources": "synapse:knowledge-base:upload-sources",
     "addUrlSource": "synapse:knowledge-base:add-url-source",

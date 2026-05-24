@@ -129,7 +129,6 @@ describe("knowledge base source staging", () => {
     })
 
     expect(result).toEqual({
-      projectPath,
       uploaded: [],
       skipped: [{ path: "javascript:alert(1)", reason: "read-error" }],
     })

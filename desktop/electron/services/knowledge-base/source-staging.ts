@@ -26,6 +26,8 @@ export interface StageKnowledgeBaseUrlSourceInput {
   readonly signal?: AbortSignal
 }
 
+type StageKnowledgeBaseSourcesResult = Omit<SynapseKnowledgeBaseUploadSourcesResult, "projectId">
+
 const TEXT_SOURCE_EXTENSIONS = new Set([
   ".md",
   ".markdown",
@@ -43,7 +45,7 @@ const IMAGE_SOURCE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".webp
 
 export async function stageKnowledgeBaseSources(
   input: StageKnowledgeBaseSourcesInput,
-): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
+): Promise<StageKnowledgeBaseSourcesResult> {
   const projectPath = path.resolve(input.projectPath)
   const uploaded: SynapseKnowledgeBaseUploadSourcesResult["uploaded"] = []
   const skipped: SynapseKnowledgeBaseUploadSourcesResult["skipped"] = []
@@ -172,12 +174,12 @@ export async function stageKnowledgeBaseSources(
     }
   }
 
-  return { projectPath, uploaded, skipped }
+  return { uploaded, skipped }
 }
 
 export async function stageKnowledgeBaseUrlSource(
   input: StageKnowledgeBaseUrlSourceInput,
-): Promise<SynapseKnowledgeBaseUploadSourcesResult> {
+): Promise<StageKnowledgeBaseSourcesResult> {
   const projectPath = path.resolve(input.projectPath)
   const result = await acquireUrlSource({
     url: input.url,
@@ -188,7 +190,6 @@ export async function stageKnowledgeBaseUrlSource(
 
   if (!result.ok) {
     return {
-      projectPath,
       uploaded: [],
       skipped: [urlAcquisitionFailure(input.url)],
     }
@@ -204,7 +205,6 @@ export async function stageKnowledgeBaseUrlSource(
   await writeFile(targetPath, result.source.markdown, "utf8")
 
   return {
-    projectPath,
     uploaded: [{
       originalPath: result.source.originalUrl,
       relativePath: normalizeRelativePath(path.relative(projectPath, targetPath)),
