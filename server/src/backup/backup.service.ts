@@ -105,7 +105,7 @@ export class BackupService {
     const result = await this.performBackup()
     await this.auditLog?.record({
       adminEmail: "system",
-      action: "backup.scheduled",
+      action: result.status === "failed" ? "backup.scheduled.failed" : "backup.scheduled",
       targetType: "backup",
       targetId: result.filename,
       detail: result,
