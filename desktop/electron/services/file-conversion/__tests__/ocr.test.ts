@@ -3,7 +3,13 @@ import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 
-import { FileConversionService, PdfExtractor, type LocalOcrEngine } from "../index"
+import {
+  createDefaultFileConversionService,
+  FileConversionService,
+  ImageExtractor,
+  PdfExtractor,
+  type LocalOcrEngine,
+} from "../index"
 
 const roots: string[] = []
 
@@ -29,7 +35,7 @@ describe("file conversion OCR", () => {
         metadata: { image: { width: 120, height: 80 } },
       }),
     }
-    const service = new FileConversionService({ extractors: [], localOcrEngine: ocrEngine })
+    const service = createDefaultFileConversionService({ localOcrEngine: ocrEngine })
 
     const result = await service.convert({ filePath })
 
@@ -56,8 +62,7 @@ describe("file conversion OCR", () => {
     const root = await tempDir()
     const filePath = path.join(root, "receipt.jpeg")
     await writeFile(filePath, "jpeg")
-    const service = new FileConversionService({
-      extractors: [],
+    const service = createDefaultFileConversionService({
       localOcrEngine: {
         recognize: async (input) => ({
           text: `OCR text from ${path.basename(input.filePath)} (${input.mimeType})`,
@@ -108,7 +113,7 @@ describe("file conversion OCR", () => {
     const root = await tempDir()
     const filePath = path.join(root, "scan.webp")
     await writeFile(filePath, "webp")
-    const service = new FileConversionService({ extractors: [] })
+    const service = createDefaultFileConversionService()
 
     const result = await service.convert({ filePath })
 
@@ -131,8 +136,7 @@ describe("file conversion OCR", () => {
     const root = await tempDir()
     const filePath = path.join(root, "photo.jpg")
     await writeFile(filePath, "jpeg")
-    const service = new FileConversionService({
-      extractors: [],
+    const service = createDefaultFileConversionService({
       localOcrEngine: {
         recognize: async () => ({
           text: "Meter reading 42",
@@ -154,5 +158,25 @@ describe("file conversion OCR", () => {
       },
     })
     expect(result.warnings).toEqual([{ code: "low_contrast", message: "Image contrast is low." }])
+  })
+
+  it("wraps image OCR failures as structured conversion errors", async () => {
+    const root = await tempDir()
+    const filePath = path.join(root, "receipt.png")
+    await writeFile(filePath, "png")
+    const service = new FileConversionService({
+      extractors: [new ImageExtractor({
+        localOcrEngine: {
+          recognize: async () => {
+            throw new Error("OCR engine failed")
+          },
+        },
+      })],
+    })
+
+    await expect(service.convert({ filePath })).rejects.toMatchObject({
+      code: "parse_failed",
+      message: expect.stringContaining("OCR engine failed"),
+    })
   })
 })
