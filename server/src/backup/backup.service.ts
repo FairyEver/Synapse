@@ -196,31 +196,15 @@ export class BackupService {
     }
   }
 
-  async downloadBackup(filename: string): Promise<Buffer> {
+  downloadBackup(filename: string): NodeJS.ReadableStream {
     const cos = this.getBackupCos()
     const key = buildBackupKey(this.prefix, filename)
 
-    const body = await new Promise<unknown>((resolve, reject) => {
-      cos.getObject(
-        {
-          Bucket: this.bucket,
-          Region: this.region,
-          Key: key,
-        },
-        (err, data) => {
-          if (err) {
-            reject(err)
-            return
-          }
-          resolve(data.Body)
-        },
-      )
-    })
-
-    if (Buffer.isBuffer(body)) return body
-    if (body instanceof Uint8Array) return Buffer.from(body)
-    if (typeof body === "string") return Buffer.from(body)
-    throw new Error("备份文件内容无效。")
+    return cos.getObjectStream({
+      Bucket: this.bucket,
+      Region: this.region,
+      Key: key,
+    }) as NodeJS.ReadableStream
   }
 
   async deleteBackup(filename: string): Promise<void> {

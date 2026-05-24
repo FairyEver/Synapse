@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest"
+import { Readable, Writable } from "node:stream"
 import { BackupController } from "./backup.controller"
 import type { BackupService } from "./backup.service"
 
@@ -34,25 +35,28 @@ describe("BackupController", () => {
   })
 
   it("sends backup downloads as attachments", async () => {
-    const buffer = Buffer.from("backup")
+    const stream = Readable.from(["backup"])
     const service = {
-      downloadBackup: vi.fn().mockResolvedValue(buffer),
+      downloadBackup: vi.fn().mockReturnValue(stream),
     }
-    const response = {
-      set: vi.fn(),
-      send: vi.fn(),
-    }
+    const chunks: Buffer[] = []
+    const response = new Writable({
+      write(chunk: Buffer, _encoding, callback) {
+        chunks.push(Buffer.from(chunk))
+        callback()
+      },
+    }) as Writable & { set: ReturnType<typeof vi.fn> }
+    response.set = vi.fn()
     const controller = new BackupController(service as unknown as BackupService)
 
-    await controller.downloadBackup("synapse-backup.tar.gz", response as never)
+    await controller.downloadBackup("synapse-backup.tar", response as never)
 
-    expect(service.downloadBackup).toHaveBeenCalledWith("synapse-backup.tar.gz")
+    expect(service.downloadBackup).toHaveBeenCalledWith("synapse-backup.tar")
     expect(response.set).toHaveBeenCalledWith({
-      "Content-Type": "application/gzip",
-      "Content-Disposition": "attachment; filename=\"synapse-backup.tar.gz\"; filename*=UTF-8''synapse-backup.tar.gz",
-      "Content-Length": buffer.length.toString(),
+      "Content-Type": "application/x-tar",
+      "Content-Disposition": "attachment; filename=\"synapse-backup.tar\"; filename*=UTF-8''synapse-backup.tar",
     })
-    expect(response.send).toHaveBeenCalledWith(buffer)
+    expect(Buffer.concat(chunks)).toEqual(Buffer.from("backup"))
   })
 
   it("deletes a backup file", async () => {

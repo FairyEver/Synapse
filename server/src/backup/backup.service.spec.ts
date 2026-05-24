@@ -206,6 +206,45 @@ describe("BackupService", () => {
     })
   })
 
+  it("marks failed scheduled backups with a failure action", async () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const service = createBackupService({}, logger, auditLog)
+    const result = {
+      filename: "synapse-backup-2026-05-23.tar.gz",
+      size: 0,
+      uploadedAt: "2026-05-23T03:00:00.000Z",
+      status: "failed" as const,
+      error: "pg_dump failed",
+    }
+    vi.spyOn(service, "performBackup").mockResolvedValue(result)
+
+    await service.scheduledBackup()
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "system",
+      action: "backup.scheduled.failed",
+      targetType: "backup",
+      targetId: "synapse-backup-2026-05-23.tar.gz",
+      detail: result,
+      ipAddress: "system",
+    })
+  })
+
+  it("returns a COS object stream for backup downloads", () => {
+    const stream = Readable.from(["backup"])
+    const getObjectStream = vi.fn().mockReturnValue(stream)
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService({ getObjectStream }, logger)
+
+    expect(service.downloadBackup("synapse-backup.tar.gz")).toBe(stream)
+    expect(getObjectStream).toHaveBeenCalledWith({
+      Bucket: "bucket",
+      Region: "ap-guangzhou",
+      Key: "backups/synapse-backup.tar.gz",
+    })
+  })
+
   it("streams backup archives to COS without buffering the whole file", async () => {
     const archiveStream = Readable.from(["archive"])
     const createReadStream = vi.mocked(fs.createReadStream).mockReturnValue(archiveStream as fs.ReadStream)

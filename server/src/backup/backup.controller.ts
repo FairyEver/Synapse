@@ -1,5 +1,6 @@
 import { Controller, Delete, Get, InternalServerErrorException, Param, Post, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
+import { pipeline } from "node:stream/promises"
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
 import { BackupService } from "./backup.service"
 
@@ -24,13 +25,12 @@ export class BackupController {
 
   @Get("download/:filename")
   async downloadBackup(@Param("filename") filename: string, @Res() response: Response) {
-    const buffer = await this.backupService.downloadBackup(filename)
+    const stream = this.backupService.downloadBackup(filename)
     response.set({
-      "Content-Type": "application/gzip",
+      "Content-Type": contentType(filename),
       "Content-Disposition": contentDisposition(filename),
-      "Content-Length": buffer.length.toString(),
     })
-    response.send(buffer)
+    await pipeline(stream, response)
   }
 
   @Delete(":filename")
@@ -38,6 +38,12 @@ export class BackupController {
     await this.backupService.deleteBackup(filename)
     return { ok: true }
   }
+}
+
+function contentType(filename: string): string {
+  if (filename.endsWith(".tar")) return "application/x-tar"
+  if (filename.endsWith(".gz")) return "application/gzip"
+  return "application/octet-stream"
 }
 
 function contentDisposition(filename: string): string {
