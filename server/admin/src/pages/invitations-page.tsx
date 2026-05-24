@@ -45,14 +45,6 @@ export function InvitationsPage() {
   const allVisibleSelected = invitations.length > 0 && invitations.every((invitation) => selectedIds.has(invitation.id))
   const someVisibleSelected = invitations.some((invitation) => selectedIds.has(invitation.id))
 
-  React.useEffect(() => {
-    const visibleIds = new Set(invitations.map((invitation) => invitation.id))
-    setSelectedIds((previous) => {
-      const next = new Set([...previous].filter((id) => visibleIds.has(id)))
-      return next.size === previous.size ? previous : next
-    })
-  }, [invitations])
-
   function toggleInvitation(id: string, checked: boolean | "indeterminate") {
     setSelectedIds((previous) => {
       const next = new Set(previous)
@@ -88,7 +80,7 @@ export function InvitationsPage() {
   }
 
   async function deleteSelectedInvitations() {
-    const ids = invitations.map((invitation) => invitation.id).filter((id) => selectedIds.has(id))
+    const ids = Array.from(selectedIds)
     if (ids.length === 0) return
     if (!window.confirm(`确定删除所选 ${ids.length} 个邀请？`)) return
     setActionError(null)

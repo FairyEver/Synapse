@@ -9,7 +9,7 @@ import { AdminAuthService } from "./admin-auth.service"
 const loginSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
-})
+}).strict()
 
 const adminCookieName = "synapse_admin"
 
@@ -41,6 +41,7 @@ export class AdminAuthController {
     return { email: session.email, role: session.role }
   }
 
+  @Throttle({ default: { ttl: 60000, limit: 5 } })
   @Post("/logout")
   async logout(@Res({ passthrough: true }) response: Response, @Req() request: AdminRequest) {
     const token = request.cookies?.[adminCookieName]

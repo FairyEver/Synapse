@@ -125,6 +125,46 @@ describe("LogsPage", () => {
     })
   })
 
+  it("keeps the latest refresh results when an older request finishes later", async () => {
+    const firstEntries = createDeferred<Awaited<ReturnType<typeof adminApi.fetchRecentLogs>>>()
+    const secondEntries = createDeferred<Awaited<ReturnType<typeof adminApi.fetchRecentLogs>>>()
+    const firstFiles = createDeferred<Awaited<ReturnType<typeof adminApi.listLogFiles>>>()
+    const secondFiles = createDeferred<Awaited<ReturnType<typeof adminApi.listLogFiles>>>()
+    vi.mocked(adminApi.fetchRecentLogs)
+      .mockReturnValueOnce(firstEntries.promise)
+      .mockReturnValueOnce(secondEntries.promise)
+    vi.mocked(adminApi.listLogFiles)
+      .mockReturnValueOnce(firstFiles.promise)
+      .mockReturnValueOnce(secondFiles.promise)
+
+    const result = await render(<LogsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(adminApi.fetchRecentLogs).toHaveBeenCalledTimes(1)
+    })
+    Array.from(result.container.querySelectorAll("button"))
+      .find((item) => item.textContent === "刷新")
+      ?.click()
+
+    await waitFor(() => {
+      expect(adminApi.fetchRecentLogs).toHaveBeenCalledTimes(2)
+    })
+    secondEntries.resolve([{ time: "2026-05-23T00:00:00.000Z", level: "error", msg: "latest" }])
+    secondFiles.resolve([{ name: "latest.log", size: 1, modifiedAt: "2026-05-23T00:00:00.000Z" }])
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("latest")
+      expect(result.container.textContent).toContain("latest.log")
+    })
+    firstEntries.resolve([{ time: "2026-05-22T00:00:00.000Z", level: "info", msg: "stale" }])
+    firstFiles.resolve([{ name: "stale.log", size: 1, modifiedAt: "2026-05-22T00:00:00.000Z" }])
+
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(result.container.textContent).toContain("latest")
+    expect(result.container.textContent).not.toContain("stale")
+  })
+
   it("shows download progress and errors", async () => {
     const download = createDeferred<void>()
     vi.mocked(adminApi.fetchRecentLogs).mockResolvedValue([])

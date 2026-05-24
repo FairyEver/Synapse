@@ -39,7 +39,7 @@ const memberAccessRoleSchema = z.object({
 }).strict()
 
 const memberAccessRolesSchema = z.object({
-  roleIds: z.array(z.string().trim().min(1)),
+  roleIds: z.array(z.string().trim().min(1)).min(1),
 }).strict()
 
 const userSortFields = ["createdAt", "updatedAt", "email", "status"] as const

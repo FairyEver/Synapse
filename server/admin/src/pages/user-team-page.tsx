@@ -169,10 +169,11 @@ export function UserTeamPage() {
   }
 
   const members = membership.team.memberships
-  const isOwner = membership.role === "owner"
   const currentTeam = data?.me.teams.find((team) => team.membershipId === membership.id)
   const currentRoles = currentTeam?.roles ?? []
   const effectivePermissions = currentTeam?.effectivePermissions ?? []
+  const canCreateInvitation = effectivePermissions.includes("team.invitation.manage")
+  const canManageMembers = effectivePermissions.includes("team.member.manage")
 
   return (
     <div className="flex flex-col gap-4">
@@ -190,7 +191,7 @@ export function UserTeamPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          {isOwner ? (
+          {canCreateInvitation ? (
             <Button type="button" disabled={submitting} onClick={() => void createInvitation()}>
               创建团队邀请
             </Button>
@@ -220,7 +221,7 @@ export function UserTeamPage() {
             <TableHead>邮箱</TableHead>
             <TableHead>角色</TableHead>
             <TableHead>加入时间</TableHead>
-            {isOwner ? <TableActionHead>操作</TableActionHead> : null}
+            {canManageMembers ? <TableActionHead>操作</TableActionHead> : null}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -238,9 +239,9 @@ export function UserTeamPage() {
                 </div>
               </TableCell>
               <TableCell>{formatDate(member.createdAt)}</TableCell>
-              {isOwner ? (
+              {canManageMembers ? (
                 <TableActionCell>
-                  {member.role === "member" ? (
+                  {member.role === "member" && member.userId !== membership.userId ? (
                     <Button
                       type="button"
                       size="sm"

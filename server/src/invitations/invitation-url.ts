@@ -28,8 +28,10 @@ function resolvePublicAppUrl(input: {
   const forwardedHost = readHeader(input.request.headers["x-forwarded-host"])
     .split(",")[0]
     .trim()
-  const host = forwardedHost || input.request.get("host") || readHeader(input.request.headers.host)
-  const protocol = forwardedProto || input.request.protocol || "http"
+  const requestHost = input.request.get("host") || readHeader(input.request.headers.host)
+  const useForwardedOrigin = Boolean(forwardedHost && (!requestHost || forwardedHost === requestHost))
+  const host = useForwardedOrigin ? forwardedHost : requestHost
+  const protocol = (useForwardedOrigin ? forwardedProto : "") || input.request.protocol || "http"
 
   return normalizePublicAppUrl(`${protocol}://${host}`)
 }

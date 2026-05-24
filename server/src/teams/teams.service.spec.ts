@@ -74,6 +74,31 @@ describe("TeamsService", () => {
     })
   })
 
+  it("lists team members with access roles", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique.mockResolvedValue({ id: "membership-1", teamId: "team-1" })
+    prisma.teamMembership.findMany.mockResolvedValue([])
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn(), consumeInvitation: vi.fn() } as never,
+      createPermissionsMock() as never,
+    )
+
+    await expect(service.listMembers("user-1")).resolves.toEqual([])
+
+    expect(prisma.teamMembership.findMany).toHaveBeenCalledWith({
+      where: { teamId: "team-1" },
+      include: {
+        user: { select: { id: true, email: true, status: true } },
+        accessRoles: {
+          select: { role: { select: { id: true, name: true } } },
+          orderBy: { assignedAt: "asc" },
+        },
+      },
+      orderBy: { createdAt: "asc" },
+    })
+  })
+
   it("rejects team creation when the user already belongs to a team", async () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findUnique.mockResolvedValue({ id: "membership-1" })
@@ -391,6 +416,25 @@ describe("TeamsService", () => {
       targetId: "user-2",
       ipAddress: "203.0.113.20",
     }))
+  })
+
+  it("returns a specific error when removing the team owner", async () => {
+    const prisma = createPrismaMock()
+    prisma.teamMembership.findUnique
+      .mockResolvedValueOnce({ role: "member", teamId: "team-1", userId: "manager-1" })
+      .mockResolvedValueOnce({ role: "owner", teamId: "team-1", userId: "owner-1" })
+    const permissions = createPermissionsMock()
+    permissions.getEffectivePermissions.mockResolvedValue(["team.member.manage"])
+    const service = new TeamsService(
+      prisma as never,
+      { createTeamInvitation: vi.fn() } as never,
+      permissions as never,
+    )
+
+    await expect(service.removeMember("manager-1", "owner-1"))
+      .rejects
+      .toThrow("不能移除团队所有者。")
+    expect(prisma.teamMembership.delete).not.toHaveBeenCalled()
   })
 
   it("allows member removals with the RBAC member management permission", async () => {

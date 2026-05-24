@@ -23,6 +23,7 @@ export function BackupPage() {
   const [backingUp, setBackingUp] = React.useState(false)
   const [downloadingFilename, setDownloadingFilename] = React.useState<string | null>(null)
   const [deletingFilename, setDeletingFilename] = React.useState<string | null>(null)
+  const [successMessage, setSuccessMessage] = React.useState<string | null>(null)
 
   const loadList = React.useCallback(async () => {
     setLoading(true)
@@ -43,9 +44,12 @@ export function BackupPage() {
 
   async function handleBackup() {
     setBackingUp(true)
+    setError(null)
+    setSuccessMessage(null)
     try {
-      await adminApi.triggerBackup()
+      const result = await adminApi.triggerBackup()
       await loadList()
+      setSuccessMessage(`已备份 ${result.filename}`)
     } catch (caught: unknown) {
       setError(caught instanceof Error ? caught.message : "备份失败")
     } finally {
@@ -58,6 +62,7 @@ export function BackupPage() {
       return
     }
     setError(null)
+    setSuccessMessage(null)
     setDeletingFilename(filename)
     try {
       await adminApi.deleteBackup(filename)
@@ -71,6 +76,7 @@ export function BackupPage() {
 
   async function handleDownload(filename: string) {
     setError(null)
+    setSuccessMessage(null)
     setDownloadingFilename(filename)
     try {
       await adminApi.downloadBackup(filename)
@@ -90,6 +96,7 @@ export function BackupPage() {
       </div>
       {loading ? <PageState>加载中</PageState> : null}
       {error ? <PageState>{error}</PageState> : null}
+      {successMessage ? <p className="text-sm text-muted-foreground">{successMessage}</p> : null}
       {!loading && !error && list.length === 0 ? (
         <PageState>暂无备份记录。配置腾讯云 COS 后将启用自动备份功能。</PageState>
       ) : null}

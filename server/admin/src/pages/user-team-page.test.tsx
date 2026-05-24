@@ -58,6 +58,26 @@ const userMe: UserMe = {
   }],
 }
 
+const delegatedUserMe: UserMe = {
+  user: { id: "member-admin", email: "delegated@example.com", status: "active" },
+  teams: [{
+    id: "team-1",
+    name: "Core Team",
+    membershipId: "membership-member",
+    membershipRole: "member",
+    roles: [{ id: "role-admin", name: "团队管理员" }],
+    effectivePermissions: ["team.invitation.manage", "team.member.manage"],
+  }],
+}
+
+const delegatedTeam: MyTeam = {
+  id: "membership-member",
+  teamId: "team-1",
+  userId: "member-admin",
+  role: "member",
+  team: team.team,
+}
+
 const singleOwnerTeam: MyTeam = {
   ...team,
   team: {
@@ -198,5 +218,23 @@ describe("UserTeamPage", () => {
       ?.click()
 
     expect(userDashboardApi.removeMember).not.toHaveBeenCalled()
+  })
+
+  it("shows team management actions for members with RBAC permissions", async () => {
+    vi.mocked(userDashboardApi.getMe).mockResolvedValue(delegatedUserMe)
+    vi.mocked(userDashboardApi.getMyTeam).mockResolvedValue(delegatedTeam)
+
+    const result = await render(<UserTeamPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("Core Team")
+      expect(Array.from(result.container.querySelectorAll("button")).some((button) => (
+        button.textContent?.includes("创建团队邀请")
+      ))).toBe(true)
+      expect(Array.from(result.container.querySelectorAll("button")).some((button) => (
+        button.textContent?.includes("移除")
+      ))).toBe(true)
+    })
   })
 })

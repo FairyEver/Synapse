@@ -125,7 +125,13 @@ export class TeamsService {
     if (!membership) throw new ForbiddenException()
     return this.prisma.teamMembership.findMany({
       where: { teamId: membership.teamId },
-      include: { user: { select: { id: true, email: true, status: true } } },
+      include: {
+        user: { select: { id: true, email: true, status: true } },
+        accessRoles: {
+          select: { role: { select: { id: true, name: true } } },
+          orderBy: { assignedAt: "asc" },
+        },
+      },
       orderBy: { createdAt: "asc" },
     })
   }
@@ -137,8 +143,11 @@ export class TeamsService {
     }
 
     const targetMembership = await this.prisma.teamMembership.findUnique({ where: { userId: targetUserId } })
-    if (!targetMembership || targetMembership.teamId !== actorMembership.teamId || targetMembership.role === "owner") {
+    if (!targetMembership || targetMembership.teamId !== actorMembership.teamId) {
       throw new BadRequestException("成员不存在。")
+    }
+    if (targetMembership.role === "owner") {
+      throw new BadRequestException("不能移除团队所有者。")
     }
 
     await this.prisma.teamMembership.delete({ where: { userId: targetUserId } })

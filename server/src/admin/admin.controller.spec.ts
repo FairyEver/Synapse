@@ -333,6 +333,21 @@ describe("AdminController", () => {
     expect(replaceTeamPermissions).not.toHaveBeenCalled()
   })
 
+  it("rejects empty member access role replacements", async () => {
+    const replaceMemberAccessRoles = vi.fn()
+    const controller = createController({ replaceMemberAccessRoles } as never)
+
+    await expect(controller.replaceMemberAccessRoles(
+      "team-1",
+      "membership-1",
+      { roleIds: [] },
+      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
+    ))
+      .rejects
+      .toThrow("成员访问角色无效。")
+    expect(replaceMemberAccessRoles).not.toHaveBeenCalled()
+  })
+
   it("lists team access roles through the service", async () => {
     const listTeamAccessRoles = vi.fn().mockResolvedValue([{ id: "role-1", permissionKeys: ["database.use"] }])
     const controller = createController({ listTeamAccessRoles } as never)

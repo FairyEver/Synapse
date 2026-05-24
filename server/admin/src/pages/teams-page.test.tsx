@@ -13,7 +13,6 @@ vi.mock("@/lib/api", () => ({
     listMemberAccessRoles: vi.fn(),
     replaceTeamEntitlements: vi.fn(),
     replaceTeamPermissions: vi.fn(),
-    replaceTeamRolePermissions: vi.fn(),
     assignMemberAccessRole: vi.fn(),
     removeMemberAccessRole: vi.fn(),
     replaceMemberAccessRoles: vi.fn(),
@@ -294,7 +293,6 @@ describe("TeamsPage", () => {
         },
       )
       expect(adminApi.replaceTeamEntitlements).not.toHaveBeenCalled()
-      expect(adminApi.replaceTeamRolePermissions).not.toHaveBeenCalled()
       expect(adminApi.listTeams).toHaveBeenCalledTimes(2)
     })
   })

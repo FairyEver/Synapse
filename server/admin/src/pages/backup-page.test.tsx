@@ -42,7 +42,12 @@ describe("BackupPage", () => {
         },
       ])
       .mockRejectedValueOnce(new Error("COS 不可用"))
-    vi.mocked(adminApi.triggerBackup).mockResolvedValue(undefined)
+    vi.mocked(adminApi.triggerBackup).mockResolvedValue({
+      filename: "synapse-backup-new.tar.gz",
+      size: 2048,
+      uploadedAt: "2026-05-23T00:00:00.000Z",
+      status: "success",
+    })
 
     const result = await render(<BackupPage />)
     cleanup = result.unmount
@@ -65,7 +70,12 @@ describe("BackupPage", () => {
     vi.mocked(adminApi.listBackups)
       .mockResolvedValueOnce([])
       .mockReturnValueOnce(refresh.promise)
-    vi.mocked(adminApi.triggerBackup).mockResolvedValue(undefined)
+    vi.mocked(adminApi.triggerBackup).mockResolvedValue({
+      filename: "synapse-backup-new.tar.gz",
+      size: 2048,
+      uploadedAt: "2026-05-23T00:00:00.000Z",
+      status: "success",
+    })
 
     const result = await render(<BackupPage />)
     cleanup = result.unmount
@@ -95,6 +105,38 @@ describe("BackupPage", () => {
       expect(result.container.textContent).toContain("synapse-backup-new.tar.gz")
       expect(backupButton?.disabled).toBe(false)
       expect(backupButton?.textContent).toBe("立即备份")
+    })
+  })
+
+  it("shows the successful backup filename after manual backup", async () => {
+    vi.mocked(adminApi.listBackups)
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([
+        {
+          filename: "synapse-backup-new.tar.gz",
+          size: 2048,
+          createdAt: "2026-05-23T00:00:00.000Z",
+        },
+      ])
+    vi.mocked(adminApi.triggerBackup).mockResolvedValue({
+      filename: "synapse-backup-new.tar.gz",
+      size: 2048,
+      uploadedAt: "2026-05-23T00:00:00.000Z",
+      status: "success",
+    })
+
+    const result = await render(<BackupPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("暂无备份记录")
+    })
+    Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "立即备份")
+      ?.click()
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("已备份 synapse-backup-new.tar.gz")
     })
   })
 

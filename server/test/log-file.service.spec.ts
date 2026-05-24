@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { mkdirSync, writeFileSync, rmSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { Writable } from "node:stream";
 import { LogFileService } from "../src/admin/log-file.service";
 
 const TEST_LOG_DIR = join(process.cwd(), "test-logs");
@@ -71,23 +72,23 @@ describe("LogFileService", () => {
     });
   });
 
-  describe("downloadAsZip", () => {
-    it("creates a zip buffer with matching files", async () => {
+  describe("streamZipTo", () => {
+    it("streams a zip archive with matching files", async () => {
       writeTestLog("server.2026-05-01.log", [{ time: 1, level: 30, msg: "a" }]);
       writeTestLog("server.2026-05-03.log", [{ time: 2, level: 30, msg: "b" }]);
 
-      const buffer = await service.downloadAsZip({ from: "2026-05-01", to: "2026-05-03" });
-      expect(buffer).toBeInstanceOf(Buffer);
-      expect(buffer.length).toBeGreaterThan(0);
+      const result = await service.streamZipTo(createWritable(), { from: "2026-05-01", to: "2026-05-03" });
+      expect(result.bytes).toBeGreaterThan(0);
+      expect(result.fileCount).toBe(2);
     });
 
     it("includes all files when no date range specified", async () => {
       writeTestLog("server.2026-05-01.log", [{ time: 1, level: 30, msg: "a" }]);
       writeTestLog("server.2026-05-02.log", [{ time: 2, level: 30, msg: "b" }]);
 
-      const buffer = await service.downloadAsZip({});
-      expect(buffer).toBeInstanceOf(Buffer);
-      expect(buffer.length).toBeGreaterThan(0);
+      const result = await service.streamZipTo(createWritable(), {});
+      expect(result.bytes).toBeGreaterThan(0);
+      expect(result.fileCount).toBe(2);
     });
   });
 
@@ -103,3 +104,11 @@ describe("LogFileService", () => {
     });
   });
 });
+
+function createWritable(): Writable {
+  return new Writable({
+    write(_chunk, _encoding, callback) {
+      callback();
+    },
+  });
+}

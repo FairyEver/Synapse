@@ -330,6 +330,88 @@ describe("InvitationsPage", () => {
     })
   })
 
+  it("deletes invitations selected across pages", async () => {
+    vi.stubGlobal("confirm", vi.fn(() => true))
+    vi.mocked(adminApi.listInvitations)
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: "invite-1",
+            type: "user_signup",
+            expiresAt: "2026-06-10T00:00:00.000Z",
+            usedAt: null,
+            acceptedByUser: null,
+            createdByAdmin: { email: "admin@example.com" },
+            createdByUser: null,
+            team: null,
+            createdAt: "2026-05-20T00:00:00.000Z",
+          },
+        ],
+        total: 21,
+        page: 1,
+        pageSize: 20,
+      } as never)
+      .mockResolvedValueOnce({
+        data: [
+          {
+            id: "invite-21",
+            type: "team_join",
+            expiresAt: "2026-06-11T00:00:00.000Z",
+            usedAt: null,
+            acceptedByUser: null,
+            createdByAdmin: null,
+            createdByUser: { email: "owner@example.com" },
+            team: { name: "研发组" },
+            createdAt: "2026-05-21T00:00:00.000Z",
+          },
+        ],
+        total: 21,
+        page: 2,
+        pageSize: 20,
+      } as never)
+      .mockResolvedValueOnce({
+        data: [],
+        total: 19,
+        page: 2,
+        pageSize: 20,
+      } as never)
+    vi.mocked(adminApi.deleteInvitations).mockResolvedValue({ ok: true, count: 2 })
+
+    const result = await render(<InvitationsPage />)
+    cleanup = result.unmount
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("invite-1")
+    })
+    result.container.querySelector<HTMLButtonElement>("[aria-label='选择邀请 invite-1']")?.click()
+    await waitFor(() => {
+      expect(Array.from(result.container.querySelectorAll("button"))
+        .find((button) => button.textContent === "删除所选")
+        ?.disabled).toBe(false)
+    })
+    Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "下一页")
+      ?.click()
+
+    await waitFor(() => {
+      expect(result.container.textContent).toContain("invite-21")
+    })
+    result.container.querySelector<HTMLButtonElement>("[aria-label='选择邀请 invite-21']")?.click()
+    await waitFor(() => {
+      expect(result.container.querySelector<HTMLButtonElement>("[aria-label='选择邀请 invite-21']")?.dataset.state)
+        .toBe("checked")
+    })
+    Array.from(result.container.querySelectorAll("button"))
+      .find((button) => button.textContent === "删除所选")
+      ?.click()
+
+    await waitFor(() => {
+      expect(window.confirm).toHaveBeenCalledWith("确定删除所选 2 个邀请？")
+      expect(adminApi.deleteInvitations).toHaveBeenCalledWith(["invite-1", "invite-21"])
+      expect(result.container.textContent).toContain("暂无邀请")
+    })
+  })
+
   it("shows an action error when bulk deletion fails", async () => {
     vi.stubGlobal("confirm", vi.fn(() => true))
     vi.mocked(adminApi.listInvitations).mockResolvedValue({

@@ -30,7 +30,7 @@ describe("BackupController", () => {
     }
     const controller = new BackupController(service as unknown as BackupService)
 
-    await expect(controller.triggerBackup()).rejects.toThrow("备份失败。")
+    await expect(controller.triggerBackup()).rejects.toThrow("备份失败：COS 未配置")
   })
 
   it("sends backup downloads as attachments", async () => {
@@ -49,7 +49,7 @@ describe("BackupController", () => {
     expect(service.downloadBackup).toHaveBeenCalledWith("synapse-backup.tar.gz")
     expect(response.set).toHaveBeenCalledWith({
       "Content-Type": "application/gzip",
-      "Content-Disposition": 'attachment; filename="synapse-backup.tar.gz"',
+      "Content-Disposition": "attachment; filename=\"synapse-backup.tar.gz\"; filename*=UTF-8''synapse-backup.tar.gz",
       "Content-Length": buffer.length.toString(),
     })
     expect(response.send).toHaveBeenCalledWith(buffer)

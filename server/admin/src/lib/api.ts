@@ -142,6 +142,14 @@ export interface BackupFile {
   readonly createdAt: string
 }
 
+export interface BackupResult {
+  readonly filename: string
+  readonly size: number
+  readonly uploadedAt: string
+  readonly status: "success" | "failed"
+  readonly error?: string
+}
+
 export interface UserRegisterInput {
   readonly invitationToken: string
   readonly email: string
@@ -368,14 +376,6 @@ export const adminApi = {
     }),
   listTeamAccessRoles: (teamId: string) =>
     request<TeamAccessRoleRow[]>(`${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/access-roles`),
-  replaceTeamRolePermissions: (teamId: string, roleId: string, permissionKeys: readonly string[]) =>
-    request<TeamEntitlementsResponse>(
-      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/access-roles/${encodeURIComponent(roleId)}/permissions`,
-      {
-        method: "PUT",
-        body: JSON.stringify({ permissionKeys }),
-      },
-    ),
   listMemberAccessRoles: (teamId: string, membershipId: string) =>
     request<MemberAccessRolesResponse>(
       `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}/access-roles`,
@@ -403,7 +403,7 @@ export const adminApi = {
     ),
   listBackups: () => request<BackupFile[]>(`${adminApiBasePath}/backup/list`),
   triggerBackup: () =>
-    request<void>(`${adminApiBasePath}/backup`, {
+    request<BackupResult>(`${adminApiBasePath}/backup`, {
       method: "POST",
     }),
   downloadBackup: (filename: string) =>

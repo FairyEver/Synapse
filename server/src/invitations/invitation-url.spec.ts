@@ -42,11 +42,25 @@ describe("invitation URL helpers", () => {
         headers: {
           "x-forwarded-proto": "https",
           "x-forwarded-host": "synapse.example.com",
-          host: "127.0.0.1:3000",
         },
-        get: (name: string) => name.toLowerCase() === "host" ? "127.0.0.1:3000" : undefined,
+        get: () => undefined,
       },
     })).toBe("https://synapse.example.com")
+  })
+
+  it("does not let mismatched forwarded host override the request host", () => {
+    expect(resolvePublicAppUrl({
+      configuredPublicAppUrl: "",
+      request: {
+        protocol: "http",
+        headers: {
+          "x-forwarded-proto": "https",
+          "x-forwarded-host": "evil.example.com",
+          host: "app.example.com",
+        },
+        get: (name: string) => name.toLowerCase() === "host" ? "app.example.com" : undefined,
+      },
+    })).toBe("http://app.example.com")
   })
 
   it("parses tokens from signup invite URLs", () => {

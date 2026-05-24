@@ -1,8 +1,19 @@
+import "reflect-metadata"
 import { describe, expect, it, vi } from "vitest"
 import { AdminAuthController } from "./admin-auth.controller"
 import type { AdminRequest } from "./admin-auth.guard"
 
+const throttleLimitMetadata = "THROTTLER:LIMITdefault"
+const throttleTtlMetadata = "THROTTLER:TTLdefault"
+
 describe("AdminAuthController", () => {
+  it("applies stricter throttling to admin login and logout", () => {
+    expect(Reflect.getMetadata(throttleLimitMetadata, AdminAuthController.prototype.login)).toBe(5)
+    expect(Reflect.getMetadata(throttleTtlMetadata, AdminAuthController.prototype.login)).toBe(60000)
+    expect(Reflect.getMetadata(throttleLimitMetadata, AdminAuthController.prototype.logout)).toBe(5)
+    expect(Reflect.getMetadata(throttleTtlMetadata, AdminAuthController.prototype.logout)).toBe(60000)
+  })
+
   it("sets administrator session cookies with shared options", async () => {
     const auth = {
       login: vi.fn().mockResolvedValue({
@@ -28,6 +39,22 @@ describe("AdminAuthController", () => {
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
     })
+  })
+
+  it("rejects admin login bodies with unknown fields", async () => {
+    const auth = {
+      login: vi.fn(),
+    }
+    const controller = new AdminAuthController(auth as never)
+
+    await expect(controller.login({
+      email: "admin@example.com",
+      password: "secret",
+      extraField: "ignored",
+    }, { ip: "203.0.113.11" } as unknown as AdminRequest, { cookie: vi.fn() } as never))
+      .rejects
+      .toThrow("登录请求无效。")
+    expect(auth.login).not.toHaveBeenCalled()
   })
 
   it("records administrator logout in audit logs", async () => {

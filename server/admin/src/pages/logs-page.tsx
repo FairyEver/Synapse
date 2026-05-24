@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { adminApi, type LogEntry, type LogFileInfo } from "../lib/api";
 import { PageState } from "../components/page-state";
 import { Badge } from "../components/ui/badge";
@@ -56,8 +56,11 @@ export function LogsPage() {
   const [cleanupBefore, setCleanupBefore] = useState("");
   const [cleaning, setCleaning] = useState(false);
   const [downloading, setDownloading] = useState<"range" | "all" | null>(null);
+  const fetchRequestIdRef = useRef(0);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    const requestId = fetchRequestIdRef.current + 1;
+    fetchRequestIdRef.current = requestId;
     setLoading(true);
     setError(null);
     setEntriesError(null);
@@ -71,6 +74,8 @@ export function LogsPage() {
       adminApi.listLogFiles(),
     ]);
 
+    if (requestId !== fetchRequestIdRef.current) return;
+
     if (logEntries.status === "fulfilled") {
       setEntries(logEntries.value);
     } else {
@@ -82,11 +87,11 @@ export function LogsPage() {
       setFilesError(logFiles.reason instanceof Error ? logFiles.reason.message : "加载失败");
     }
     setLoading(false);
-  };
+  }, [level]);
 
   useEffect(() => {
     fetchData();
-  }, [level]);
+  }, [fetchData]);
 
   const handleCleanup = async () => {
     if (!cleanupBefore || !window.confirm(`确定清理 ${cleanupBefore} 之前的日志？`)) return;

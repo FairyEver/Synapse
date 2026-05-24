@@ -9,6 +9,7 @@ import {
   conversationsSchema,
   coreConfigSchema,
   coreIdentitySchema,
+  knowledgeBaseIngestTurnsSchema,
   opsDiagnosticsSchema,
   outboxSchema,
   projectsSchema,
@@ -39,6 +40,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "conversations",
         "core.config",
         "core.identity",
+        "knowledge-base.ingest-turns",
         "ops.diagnostics",
         "outbox",
         "projects",
@@ -90,6 +92,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(relayRunsSchema.backend).toBe("sqlite")
     expect(agentCompressStateSchema.backend).toBe("json")
     expect(agentEventsSchema.backend).toBe("sqlite")
+    expect(knowledgeBaseIngestTurnsSchema.backend).toBe("sqlite")
     expect(opsDiagnosticsSchema.backend).toBe("jsonl")
   })
 
@@ -187,6 +190,16 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         eventType: "assistant",
         payload: { type: "assistant" },
         createdAt: "2026-05-13T00:00:00.000Z",
+      }),
+    ).toBe(true)
+    expect(
+      knowledgeBaseIngestTurnsSchema.validate({
+        id: "turn:turn-1",
+        schemaVersion: 1,
+        projectId: "project-1",
+        entryType: "turn",
+        turnId: "turn-1",
+        record: { kind: "no-finalize", reason: "direct-result" },
       }),
     ).toBe(true)
     expect(

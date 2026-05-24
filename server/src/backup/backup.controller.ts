@@ -12,7 +12,7 @@ export class BackupController {
   async triggerBackup() {
     const result = await this.backupService.performBackup()
     if (result.status === "failed") {
-      throw new InternalServerErrorException("备份失败。")
+      throw new InternalServerErrorException(result.error ? `备份失败：${result.error}` : "备份失败。")
     }
     return result
   }
@@ -27,7 +27,7 @@ export class BackupController {
     const buffer = await this.backupService.downloadBackup(filename)
     response.set({
       "Content-Type": "application/gzip",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": contentDisposition(filename),
       "Content-Length": buffer.length.toString(),
     })
     response.send(buffer)
@@ -38,4 +38,14 @@ export class BackupController {
     await this.backupService.deleteBackup(filename)
     return { ok: true }
   }
+}
+
+function contentDisposition(filename: string): string {
+  const asciiFilename = filename.replace(/[^\x20-\x7E]|["\\;,\r\n]/g, "_")
+  return `attachment; filename="${asciiFilename}"; filename*=UTF-8''${encodeRFC5987ValueChars(filename)}`
+}
+
+function encodeRFC5987ValueChars(value: string): string {
+  return encodeURIComponent(value)
+    .replace(/['()*]/g, (char) => `%${char.charCodeAt(0).toString(16).toUpperCase()}`)
 }
