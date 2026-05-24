@@ -48,7 +48,7 @@ The product promise is:
 - Ordinary projects must not load Knowledge Base plugin, skill, hook, command, prompt, or template files.
 - Scheduler and Workflow Agent launches must not automatically receive Knowledge Base runtime behavior.
 - SDK runtime injection used only to hide Agent assets from visible user vaults should be removed from the new path.
-- Developer template sync tooling is allowed, but it must be repo/developer tooling only and must not run in user workspaces.
+- Developer template sync tooling is allowed, but it must be exposed through a root `package.json` developer command only and must not run in user workspaces.
 
 ## User Model
 
@@ -122,13 +122,25 @@ Later export can generate a clean portable vault from this runtime. Export outpu
 
 ## Template Sync Tooling
 
-Add a developer-only sync script in the repository, for example:
+Add a developer-only sync command to the root workspace `package.json`.
+
+Recommended command name:
+
+```json
+{
+  "scripts": {
+    "kb:sync-template": "node scripts/sync-claude-obsidian-template.mjs"
+  }
+}
+```
+
+The command should run a repository script, for example:
 
 ```text
 scripts/sync-claude-obsidian-template.mjs
 ```
 
-The script downloads or checks out:
+The script behind the command downloads or checks out:
 
 ```text
 https://github.com/AgriciDaniel/claude-obsidian
@@ -163,7 +175,7 @@ with fields such as:
 }
 ```
 
-The sync script is not a user feature. It should be run by developers when intentionally updating the embedded template. The script must preserve upstream license and attribution files.
+The `kb:sync-template` command is not a user feature. It should be run by developers when intentionally updating the embedded template. The script must preserve upstream license and attribution files.
 
 ## Agent Runtime
 
