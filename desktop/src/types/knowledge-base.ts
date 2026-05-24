@@ -58,16 +58,20 @@ export type SynapseKnowledgeBaseUploadSourcesPayload = {
   filePaths: string[]
 }
 
+export type SynapseKnowledgeBaseFileConversionWarning = {
+  readonly code: string
+  readonly message: string
+}
+
 export type SynapseKnowledgeBaseUploadedSource = {
   originalPath: string
   relativePath: string
   name: string
   size: number
-  originalRelativePath?: string
-  conversionWarnings?: Array<{
-    code: string
-    message: string
-  }>
+  readonly sourceKind?: "file" | "url"
+  readonly sourceUrl?: string
+  readonly originalRelativePath?: string
+  readonly conversionWarnings?: readonly SynapseKnowledgeBaseFileConversionWarning[]
 }
 
 export type SynapseKnowledgeBaseUploadSourcesResult = {

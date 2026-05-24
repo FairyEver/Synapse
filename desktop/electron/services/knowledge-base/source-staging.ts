@@ -3,12 +3,12 @@ import { access, copyFile, lstat, mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { SynapseKnowledgeBaseUploadSourcesResult } from "../../../src/types/knowledge-base"
-import type { FileConversionResult } from "../file-conversion"
+import type { FileConversionInput, FileConversionResult } from "../file-conversion"
 import { sourceFrontmatter } from "../file-conversion/markdown"
 import { acquireUrlSource, type FetchUrl } from "../source-acquisition/url-source"
 
 type SourceConverter = {
-  convert(input: { readonly filePath: string }): Promise<FileConversionResult>
+  convert(input: FileConversionInput): Promise<FileConversionResult>
 }
 
 export interface StageKnowledgeBaseSourcesInput {
@@ -38,7 +38,7 @@ const TEXT_SOURCE_EXTENSIONS = new Set([
   ".xml",
 ])
 
-const CONVERTIBLE_EXTENSIONS = new Set([".doc", ".docx", ".xlsx", ".pdf", ".ppt", ".pptx"])
+const CONVERTIBLE_EXTENSIONS = new Set([".doc", ".docx", ".xlsx", ".pdf", ".ppt", ".pptx", ".png", ".jpg", ".jpeg", ".webp"])
 
 export async function stageKnowledgeBaseSources(
   input: StageKnowledgeBaseSourcesInput,
@@ -69,6 +69,7 @@ export async function stageKnowledgeBaseSources(
           relativePath: normalizeRelativePath(path.relative(projectPath, targetPath)),
           name: path.basename(targetPath),
           size: sourceStat.size,
+          sourceKind: "file",
         })
         continue
       }
@@ -85,6 +86,7 @@ export async function stageKnowledgeBaseSources(
           relativePath: normalizeRelativePath(path.relative(projectPath, targetPath)),
           name: path.basename(targetPath),
           size: sourceStat.size,
+          sourceKind: "file",
         })
         continue
       }
@@ -99,8 +101,12 @@ export async function stageKnowledgeBaseSources(
 
       let converted: FileConversionResult
       try {
-        converted = await input.converter.convert({ filePath: sourcePath })
+        converted = await input.converter.convert({ filePath: sourcePath, ocr: { enabled: true } })
       } catch {
+        skipped.push({ path: filePath, reason: "conversion-error" })
+        continue
+      }
+      if (hasOcrUnavailableWarning(converted)) {
         skipped.push({ path: filePath, reason: "conversion-error" })
         continue
       }
@@ -127,6 +133,7 @@ export async function stageKnowledgeBaseSources(
         originalRelativePath,
         name: path.basename(markdownPath),
         size: sourceStat.size,
+        sourceKind: "file",
         conversionWarnings: [...converted.warnings],
       })
     } catch {
@@ -172,6 +179,8 @@ export async function stageKnowledgeBaseUrlSource(
       relativePath: normalizeRelativePath(path.relative(projectPath, targetPath)),
       name: path.basename(targetPath),
       size: Buffer.byteLength(result.source.markdown, "utf8"),
+      sourceKind: "url",
+      sourceUrl: result.source.originalUrl,
     }],
     skipped: [],
   }
@@ -181,7 +190,12 @@ function rawDirectoryForKind(kind: FileConversionResult["kind"]): string {
   if (kind === "document") return "documents"
   if (kind === "spreadsheet") return "spreadsheets"
   if (kind === "presentation") return "presentations"
+  if (kind === "image") return "images"
   return "pdfs"
+}
+
+function hasOcrUnavailableWarning(result: FileConversionResult): boolean {
+  return result.warnings.some((warning) => warning.code === "ocr_unavailable")
 }
 
 function urlAcquisitionFailure(url: string): SynapseKnowledgeBaseUploadSourcesResult["skipped"][number] {

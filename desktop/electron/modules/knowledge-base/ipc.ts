@@ -58,6 +58,8 @@ const uploadSourcesResultSchema = z.object({
     relativePath: z.string(),
     name: z.string(),
     size: z.number(),
+    sourceKind: z.enum(["file", "url"]).optional(),
+    sourceUrl: z.string().optional(),
     originalRelativePath: z.string().optional(),
     conversionWarnings: z.array(z.object({
       code: z.string(),
