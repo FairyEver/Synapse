@@ -398,6 +398,10 @@ describe("AdminService", () => {
       .resolves
       .toEqual({ permissionKeys: ["module.database"] })
 
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      select: { id: true },
+    })
     expect(permissions.replaceUserModulePermissions).toHaveBeenCalledWith({
       userId: "user-1",
       permissionKeys: ["module.database"],
@@ -414,5 +418,25 @@ describe("AdminService", () => {
       },
       ipAddress: "203.0.113.60",
     })
+  })
+
+  it("reports a missing user when replacing user module permissions", async () => {
+    const permissions = createPermissionsMock()
+    const prisma = createPrismaMock()
+    prisma.user.findUnique.mockResolvedValue(null)
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
+
+    await expect(service.replaceUserModulePermissions(
+      "missing-user",
+      ["module.database"],
+      { id: "admin-1", email: "admin@example.com" },
+      "203.0.113.60",
+    ))
+      .rejects
+      .toThrow("用户不存在。")
+
+    expect(permissions.replaceUserModulePermissions).not.toHaveBeenCalled()
+    expect(auditLog.record).not.toHaveBeenCalled()
   })
 })

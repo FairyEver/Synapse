@@ -235,6 +235,7 @@ export class AdminService {
     admin: { readonly id: string; readonly email: string },
     ipAddress = "system",
   ) {
+    await this.assertUserExists(userId)
     const result = await this.permissions.replaceUserModulePermissions({
       userId,
       permissionKeys,

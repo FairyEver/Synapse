@@ -319,4 +319,18 @@ describe("AdminController", () => {
       .toThrow("用户模块权限无效。")
     expect(replaceUserModulePermissions).not.toHaveBeenCalled()
   })
+
+  it("rejects extra fields in user module permission bodies", async () => {
+    const replaceUserModulePermissions = vi.fn()
+    const controller = createController({ replaceUserModulePermissions } as never)
+
+    await expect(controller.replaceUserModulePermissions(
+      "user-1",
+      { permissionKeys: ["module.database"], roleIds: ["role-1"] },
+      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
+    ))
+      .rejects
+      .toThrow("用户模块权限无效。")
+    expect(replaceUserModulePermissions).not.toHaveBeenCalled()
+  })
 })
