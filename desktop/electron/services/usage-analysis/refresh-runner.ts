@@ -45,10 +45,7 @@ export function refreshUsageInWorker(input: UsageRefreshWorkerInput): Promise<Us
 }
 
 export function resolveUsageRefreshWorkerPath(baseDir: string): string {
-  const asarSegment = `${path.sep}app.asar${path.sep}`
-  const workerBaseDir = baseDir.includes(asarSegment)
-    ? baseDir.replace(asarSegment, `${path.sep}app.asar.unpacked${path.sep}`)
-    : baseDir
+  const workerBaseDir = baseDir.replace(/([\\/])app\.asar(?=[\\/])/, "$1app.asar.unpacked")
   return path.join(workerBaseDir, "refresh-worker.js")
 }
 

@@ -14,4 +14,10 @@ describe("usage analysis refresh runner", () => {
       path.join("/Applications/Synapse.app/Contents/Resources/app.asar.unpacked/dist-electron/electron/services/usage-analysis", "refresh-worker.js"),
     )
   })
+
+  it("uses the unpacked worker script when the base path uses Windows separators", () => {
+    const baseDir = "C:\\Program Files\\Synapse\\resources\\app.asar\\dist-electron\\electron\\services\\usage-analysis"
+
+    expect(resolveUsageRefreshWorkerPath(baseDir)).toContain("app.asar.unpacked")
+  })
 })
