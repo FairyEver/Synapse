@@ -74,13 +74,16 @@ async function runPendingPushFlow(deps: BeforeQuitDeps): Promise<void> {
   let quitRequested = false
   let quitTimeout: ReturnType<typeof setTimeout> | null = null
 
+  const clearQuitTimeout = () => {
+    if (!quitTimeout) return
+    clearTimeout(quitTimeout)
+    quitTimeout = null
+  }
+
   const requestQuit = () => {
     if (quitRequested) return
     quitRequested = true
-    if (quitTimeout) {
-      clearTimeout(quitTimeout)
-      quitTimeout = null
-    }
+    clearQuitTimeout()
     deps.setAllowQuit(true)
     app.quit()
   }
@@ -98,6 +101,7 @@ async function runPendingPushFlow(deps: BeforeQuitDeps): Promise<void> {
       coordinator = deps.registry.get<RepositorySyncCoordinator>("repo.sync-coordinator")
     } catch (error) {
       logger.error("Repository sync coordinator is unavailable during before-quit flow.", error)
+      clearQuitTimeout()
       const result = await dialog.showMessageBox({
         type: "warning",
         title: "同步服务不可用",
@@ -110,9 +114,6 @@ async function runPendingPushFlow(deps: BeforeQuitDeps): Promise<void> {
 
       if (result.response === 0) {
         requestQuit()
-      } else if (quitTimeout) {
-        clearTimeout(quitTimeout)
-        quitTimeout = null
       }
       return
     }
@@ -140,6 +141,7 @@ async function runPendingPushFlow(deps: BeforeQuitDeps): Promise<void> {
       cancelId: 1,
     }
 
+    clearQuitTimeout()
     const result = ownerWindow
       ? await dialog.showMessageBox(ownerWindow, messageBoxOptions)
       : await dialog.showMessageBox(messageBoxOptions)

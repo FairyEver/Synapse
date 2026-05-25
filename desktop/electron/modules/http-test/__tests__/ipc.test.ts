@@ -92,7 +92,7 @@ describe("sendHttpTestRequest", () => {
       permissionGuard: guard,
       auditSink: audit,
       sendRequest,
-    })).rejects.toThrow("network failed token=sk-secret")
+    })).rejects.toThrow("network failed token=[redacted]")
 
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "network.connect",

@@ -147,7 +147,7 @@ export class ProviderService {
     for (const candidateSource of sources) {
       try {
         await this.assertCanReadCcSwitchSource(candidateSource, context)
-        const result = await this.readCcSwitchClaudeProviders(candidateSource)
+        const result = await this.readCcSwitchClaudeProvidersWithAudit(candidateSource, context)
         if (!source && result.providers.length === 0) continue
         return {
           source: candidateSource,
@@ -173,7 +173,7 @@ export class ProviderService {
     if (selectedIds.size === 0) return { imported: [], skipped: [] }
 
     await this.assertCanReadCcSwitchSource(input.source, context)
-    const result = await this.readCcSwitchClaudeProviders(input.source)
+    const result = await this.readCcSwitchClaudeProvidersWithAudit(input.source, context)
     const existingIds = new Set((await this.listProviders()).map((provider) => provider.id))
     const preview = buildCcSwitchClaudeImportPreview(result.providers, existingIds)
     const previewById = new Map(preview.items.map((item) => [item.id, item]))
@@ -585,6 +585,18 @@ export class ProviderService {
     })
   }
 
+  private async readCcSwitchClaudeProvidersWithAudit(
+    source: CcSwitchImportSource,
+    context: BuildProviderEnvContext,
+  ): ReturnType<ProviderService["readCcSwitchClaudeProviders"]> {
+    try {
+      return await this.readCcSwitchClaudeProviders(source)
+    } catch (error) {
+      this.recordCcSwitchReadFailed(source, context, error)
+      throw error
+    }
+  }
+
   private async assertCanReadCcSwitchSource(
     source: CcSwitchImportSource,
     context: BuildProviderEnvContext,
@@ -624,6 +636,25 @@ export class ProviderService {
       resource: source.path,
       outcome: "allowed",
       metadata,
+    })
+  }
+
+  private recordCcSwitchReadFailed(
+    source: CcSwitchImportSource,
+    context: BuildProviderEnvContext,
+    error: unknown,
+  ): void {
+    this.auditSink?.record({
+      action: "fs.read.outside-userdata",
+      actor: context.actor ?? { kind: "user" },
+      resource: source.path,
+      outcome: "failed",
+      metadata: removeUndefined({
+        projectId: context.projectId,
+        sourceKind: source.kind,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: String(error).length,
+      }),
     })
   }
 

@@ -682,6 +682,65 @@ describe("AutomationIngressService", () => {
     await service.stop()
   })
 
+  it("returns a fixed internal error when webhook config loading fails during a request", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const logger = structuredLogger()
+    const config: WebhookConfigEntryV1 = {
+      id: "webhook:default",
+      schemaVersion: 1,
+      enabled: true,
+      bindAddress: "127.0.0.1",
+      path: "/hook",
+      token: "token",
+      maxBodyBytes: 256 * 1024,
+      rateLimitPerMinute: 60,
+      createdAt: "2026-05-25T00:00:00.000Z",
+      updatedAt: "2026-05-25T00:00:00.000Z",
+    }
+    await configs.upsert(config)
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "not used" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      logger,
+    })
+
+    await service.start()
+    const status = await service.getStatus()
+    vi.spyOn(configs, "get")
+      .mockRejectedValueOnce(new Error("config read failed at /Users/test/synapse token=sk-secret"))
+    const response = await fetch(`http://${status.bindAddress}:${String(status.assignedPort)}/not-hook`, {
+      method: "GET",
+    })
+
+    expect(response.status).toBe(500)
+    expect(await response.json()).toEqual({
+      ok: false,
+      error: {
+        code: "internal_error",
+        message: "internal error",
+      },
+    })
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Webhook request failed before dispatch.",
+      expect.objectContaining({
+        boundary: "webhook.request",
+        path: "/not-hook",
+        method: "GET",
+        errorName: "Error",
+        errorLength: "config read failed at /Users/test/synapse token=sk-secret".length,
+      }),
+    )
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("/Users/test")
+
+    await service.stop()
+  })
+
   it("redacts exec shell errors from processRunner in persisted lastError", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")

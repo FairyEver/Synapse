@@ -169,6 +169,48 @@ describe("attachBeforeQuitHandler", () => {
     expect(electronMock.app.quit).toHaveBeenCalledTimes(1)
   })
 
+  it("does not force quit while the pending-push confirmation dialog is open", async () => {
+    vi.useFakeTimers()
+    const { attachBeforeQuitHandler } = await import("../before-quit")
+    const coordinator = {
+      countAllPending: vi.fn(async () => 1),
+      requestPush: vi.fn(async () => undefined),
+    }
+    let resolveDialog: (value: { response: number }) => void = () => {}
+    const dialogPromise = new Promise<{ response: number }>((resolve) => {
+      resolveDialog = resolve
+    })
+    electronMock.showMessageBox.mockReturnValueOnce(dialogPromise as never)
+    let allowQuit = false
+
+    attachBeforeQuitHandler({
+      state: { current: null },
+      registry: {
+        get: vi.fn(() => coordinator),
+        stopAll: vi.fn(async () => {}),
+      } as never,
+      setAllowQuit: (value) => {
+        allowQuit = value
+      },
+      isAllowedToQuit: () => allowQuit,
+    })
+    const beforeQuitHandler = electronMock.app.on.mock.calls.find(
+      ([eventName]) => eventName === "before-quit",
+    )?.[1] as (event: { preventDefault: () => void }) => Promise<void>
+
+    await beforeQuitHandler({ preventDefault: vi.fn() })
+    await vi.runAllTimersAsync()
+    vi.advanceTimersByTime(15_000)
+    await vi.runAllTimersAsync()
+
+    expect(electronMock.showMessageBox).toHaveBeenCalled()
+    expect(electronMock.app.quit).not.toHaveBeenCalled()
+    expect(allowQuit).toBe(false)
+
+    resolveDialog({ response: 1 })
+    await vi.runAllTimersAsync()
+  })
+
   it("shows a fallback prompt when the sync coordinator is unavailable", async () => {
     const { attachBeforeQuitHandler } = await import("../before-quit")
     electronMock.showMessageBox.mockResolvedValueOnce({ response: 0 } as never)

@@ -682,6 +682,42 @@ describe("ProviderService", () => {
       }),
     ])
   })
+
+  it("records failed audit when CC Switch source reading fails", async () => {
+    const source = ccSwitchSource("/Users/test/.cc-switch/cc-switch.db")
+    const auditSink = new InMemoryAuditSink()
+    const { service } = makeProviderService({
+      auditSink,
+      ccSwitchImportSources: () => [source],
+      readCcSwitchClaudeProviders: async () => {
+        throw new Error("sqlite read failed token=sk-secret")
+      },
+    })
+
+    await expect(service.previewCcSwitchClaudeProviders(source, {
+      actor: { kind: "agent", id: "agent-1" },
+      projectId: "project-1",
+    })).rejects.toThrow("sqlite read failed token=sk-secret")
+
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        outcome: "allowed",
+        resource: source.path,
+      }),
+      expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        outcome: "failed",
+        resource: source.path,
+        metadata: expect.objectContaining({
+          projectId: "project-1",
+          sourceKind: "sqlite",
+          errorName: "Error",
+          errorLength: "Error: sqlite read failed token=sk-secret".length,
+        }),
+      }),
+    ])
+  })
 })
 
 function makeProviderService(deps: {

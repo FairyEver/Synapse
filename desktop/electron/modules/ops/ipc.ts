@@ -221,16 +221,31 @@ export const opsIpcModule: IpcModule = {
           })
           throw new Error(permission.reason)
         }
-        auditSink.record({
-          action: "fs.read.outside-userdata",
-          actor: { kind: "user" },
-          resource: logPath,
-          outcome: "allowed",
-          metadata: { source: "ops.openLogDirectory" },
-        })
-        const openError = await shell.openPath(logPath)
-        if (openError) {
-          throw new Error(`打开日志目录失败：${openError}`)
+        try {
+          const openError = await shell.openPath(logPath)
+          if (openError) {
+            throw new Error(`打开日志目录失败：${openError}`)
+          }
+          auditSink.record({
+            action: "fs.read.outside-userdata",
+            actor: { kind: "user" },
+            resource: logPath,
+            outcome: "allowed",
+            metadata: { source: "ops.openLogDirectory" },
+          })
+        } catch (error) {
+          auditSink.record({
+            action: "fs.read.outside-userdata",
+            actor: { kind: "user" },
+            resource: logPath,
+            outcome: "failed",
+            metadata: {
+              source: "ops.openLogDirectory",
+              errorName: error instanceof Error ? error.name : typeof error,
+              errorLength: String(error).length,
+            },
+          })
+          throw error
         }
         return { ok: true }
       },

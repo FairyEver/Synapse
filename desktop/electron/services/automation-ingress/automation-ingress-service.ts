@@ -242,22 +242,22 @@ export class AutomationIngressService {
   }
 
   private async handleHttp(request: LocalHttpRequest): Promise<LocalHttpResponse> {
-    const config = await this.getOrCreateConfig()
     const url = new URL(request.url, "http://127.0.0.1")
-    if (url.pathname !== config.path) {
-      return jsonResponse(404, false, undefined, "not_found", "not found")
-    }
-    if (request.method !== "POST") {
-      return jsonResponse(405, false, undefined, "method_not_allowed", "POST only")
-    }
-    if (!this.authenticated(request, url, config.token)) {
-      this.recordAudit("denied", `webhook:${config.path}`, { reason: "unauthorized" })
-      return jsonResponse(401, false, undefined, "unauthorized", "unauthorized")
-    }
-    if (!this.consumeRateLimit(request, config.rateLimitPerMinute)) {
-      return jsonResponse(429, false, undefined, "rate_limited", "rate limited")
-    }
     try {
+      const config = await this.getOrCreateConfig()
+      if (url.pathname !== config.path) {
+        return jsonResponse(404, false, undefined, "not_found", "not found")
+      }
+      if (request.method !== "POST") {
+        return jsonResponse(405, false, undefined, "method_not_allowed", "POST only")
+      }
+      if (!this.authenticated(request, url, config.token)) {
+        this.recordAudit("denied", `webhook:${config.path}`, { reason: "unauthorized" })
+        return jsonResponse(401, false, undefined, "unauthorized", "unauthorized")
+      }
+      if (!this.consumeRateLimit(request, config.rateLimitPerMinute)) {
+        return jsonResponse(429, false, undefined, "rate_limited", "rate limited")
+      }
       const body = parseJsonBody(request.body)
       const mode = stringValue(body.replyMode) === "wait" ? "wait" : "async"
       const prepared = await this.prepareWebhook(body)
@@ -297,6 +297,14 @@ export class AutomationIngressService {
         })
         return jsonResponse(error.status, false, undefined, error.code, error.message)
       }
+      this.deps.logger?.warn("Webhook request failed before dispatch.", {
+        boundary: "webhook.request",
+        path: url.pathname,
+        method: request.method,
+        source: remoteSource(request),
+        bodyLength: request.body.length,
+        ...errorDiagnostic(error),
+      })
       return jsonResponse(500, false, undefined, "internal_error", "internal error")
     }
   }

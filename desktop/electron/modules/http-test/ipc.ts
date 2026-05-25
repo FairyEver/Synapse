@@ -97,6 +97,7 @@ export async function sendHttpTestRequest(
     })
     return toHttpTestResponse(response, startedAt)
   } catch (error) {
+    const safeMessage = sanitizeError(error instanceof Error ? error.message : String(error))
     deps.auditSink.record({
       action: "network.connect",
       actor: { kind: "user" },
@@ -104,10 +105,10 @@ export async function sendHttpTestRequest(
       outcome: "failed",
       metadata: {
         source: "http-test",
-        error: sanitizeError(error instanceof Error ? error.message : String(error)),
+        error: safeMessage,
       },
     })
-    throw error
+    throw new Error(safeMessage)
   }
 }
 

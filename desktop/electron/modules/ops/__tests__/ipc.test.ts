@@ -1,3 +1,4 @@
+import { shell } from "electron"
 import { describe, expect, it, vi } from "vitest"
 
 import type { SynapseDiagnosticsReport } from "../../../../src/types/diagnostics"
@@ -5,6 +6,7 @@ import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
 import { configStore } from "../../../services/config-store"
 import { opsIpcModule } from "../ipc"
+import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 
 const logMocks = vi.hoisted(() => ({
   mainLogger: {
@@ -94,6 +96,42 @@ describe("opsIpcModule diagnostics", () => {
       ok: true,
       receivedAt: expect.any(String),
     })
+  })
+
+  it("records failed audit when opening the log directory fails", async () => {
+    const auditEvents: Parameters<AuditSink["record"]>[0][] = []
+    const permissionGuard: PermissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const auditSink: AuditSink = {
+      record: (event) => {
+        auditEvents.push(event)
+      },
+      list: () => [],
+      clearForTests: vi.fn(),
+    }
+    vi.mocked(shell.openPath).mockResolvedValueOnce("open failed")
+    const harness = createHarness({
+      collect: vi.fn(),
+      exportBundle: vi.fn(),
+    }, { permissionGuard, auditSink })
+
+    await expect(harness.invoke("synapse:ops:open-log-directory", undefined))
+      .rejects
+      .toThrow("打开日志目录失败：open failed")
+
+    expect(auditEvents).toEqual([
+      expect.objectContaining({
+        action: "fs.read.outside-userdata",
+        resource: "/logs",
+        outcome: "failed",
+        metadata: expect.objectContaining({
+          source: "ops.openLogDirectory",
+          errorName: "Error",
+        }),
+      }),
+    ])
   })
 
   it("opens repository-backed projects for compression state", async () => {
@@ -204,11 +242,15 @@ function createHarness(diagnostics: {
   }>
 }, services: {
   readonly projectContainers?: Pick<ProjectContainerRegistry, "open">
+  readonly permissionGuard?: PermissionGuard
+  readonly auditSink?: AuditSink
 } = {}) {
   const harness = createInMemoryHarness()
   const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
     if (serviceId === "core.diagnostics") return diagnostics as T
     if (serviceId === "core.project-containers" && services.projectContainers) return services.projectContainers as T
+    if (serviceId === "core.permission-guard" && services.permissionGuard) return services.permissionGuard as T
+    if (serviceId === "core.audit-sink" && services.auditSink) return services.auditSink as T
     throw new Error(`Unknown service: ${serviceId}`)
   }
   harness.registry.register(opsIpcModule, { moduleId: "ops", resolve })
