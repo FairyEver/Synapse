@@ -3,7 +3,6 @@ import {
   FileSearchIcon,
   FileTextIcon,
   GaugeIcon,
-  MailIcon,
   ShieldIcon,
   UsersIcon,
 } from 'lucide-react';
@@ -15,7 +14,7 @@ export type RouteItem = {
   icon: ComponentType<SVGProps<SVGSVGElement>>;
 };
 
-export const routeItems: RouteItem[] = [
+export const adminRouteItems: RouteItem[] = [
   {
     title: '系统',
     path: '/system',
@@ -30,11 +29,6 @@ export const routeItems: RouteItem[] = [
     title: '团队',
     path: '/teams',
     icon: ShieldIcon,
-  },
-  {
-    title: '邀请',
-    path: '/invitations',
-    icon: MailIcon,
   },
   {
     title: '审计日志',
@@ -52,3 +46,18 @@ export const routeItems: RouteItem[] = [
     icon: FileTextIcon,
   },
 ];
+
+export const userRouteItems: RouteItem[] = [
+  {
+    title: '账号',
+    path: '/me',
+    icon: UsersIcon,
+  },
+  {
+    title: '设置',
+    path: '/settings',
+    icon: GaugeIcon,
+  },
+];
+
+export const routeItems = adminRouteItems;

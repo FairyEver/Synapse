@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from 'react';
-import { Link, useNavigate, useSearchParams } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -15,11 +15,7 @@ import { Label } from '@/components/ui/label';
 import { userApi } from '@/lib/api';
 
 export function SignupPage() {
-  const [searchParams] = useSearchParams();
   const navigate = useNavigate();
-  const [invitationToken, setInvitationToken] = useState(
-    searchParams.get('invite') ?? '',
-  );
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -31,7 +27,7 @@ export function SignupPage() {
     setIsSubmitting(true);
 
     try {
-      await userApi.register({ invitationToken, email, password });
+      await userApi.register({ email, password });
       navigate('/login', { replace: true });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '注册失败');
@@ -54,15 +50,6 @@ export function SignupPage() {
         <form onSubmit={onSubmit}>
           <CardContent>
             <div className="flex flex-col gap-6">
-              <div className="grid gap-2">
-                <Label htmlFor="invitationToken">邀请码</Label>
-                <Input
-                  id="invitationToken"
-                  value={invitationToken}
-                  onChange={(event) => setInvitationToken(event.target.value)}
-                  required
-                />
-              </div>
               <div className="grid gap-2">
                 <Label htmlFor="email">邮箱</Label>
                 <Input

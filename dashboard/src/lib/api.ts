@@ -10,10 +10,7 @@ export type SystemOverview = {
     users: number;
     teams: number;
     invitations: number;
-    teamEntitlements: number;
-    teamAccessRoles: number;
-    teamAccessRolePermissions: number;
-    teamMemberAccessRoles: number;
+    userModulePermissions: number;
   };
 };
 
@@ -43,8 +40,8 @@ export type AdminUserRow = {
     id?: string;
     role: 'owner' | 'member';
     team: { id: string; name: string };
-    accessRoles: Array<{ role: { id: string; name: string } }>;
   }>;
+  modulePermissions: Array<{ permissionKey: string }>;
   createdAt: string;
   updatedAt: string;
 };
@@ -57,57 +54,31 @@ export type AdminTeamRow = {
     id: string;
     role: 'owner' | 'member';
     user: { id?: string; email: string };
-    accessRoles: Array<{ role: { id: string; name: string } }>;
     createdAt: string;
   }>;
   createdAt: string;
   updatedAt: string;
 };
 
-export type PermissionDefinition = {
+export type ModulePermissionDefinition = {
   key: string;
   label: string;
-  description?: string;
   group: string;
-  level: 'module' | 'action' | 'management';
-  status: 'active' | 'deprecated';
-  clientVisibility: 'visible' | 'hidden';
-};
-
-export type TeamEntitlementsResponse = {
-  permissionKeys: string[];
-};
-
-export type DeletedRolePermission = {
-  roleId: string;
-  permissionKey: string;
-};
-
-export type ReplaceTeamEntitlementsResponse = TeamEntitlementsResponse & {
-  deletedRolePermissions: DeletedRolePermission[];
-};
-
-export type TeamAccessRoleRow = {
-  id: string;
-  name: string;
-  description: string | null;
-  kind: 'system' | 'custom';
-  locked: boolean;
   sortOrder: number;
-  permissionKeys: string[];
-  createdAt: string;
-  updatedAt: string;
+  status: 'active' | 'deprecated';
 };
 
-export type MemberAccessRolesResponse = {
-  roles: Array<{
+export type DashboardMe = {
+  user: {
+    id: string;
+    email: string;
+    status: 'active' | 'disabled';
+  };
+  teams: Array<{
     id: string;
     name: string;
-    description: string | null;
-    kind: 'system' | 'custom';
-    locked: boolean;
-    sortOrder: number;
-    assignedAt: string;
+    membershipId: string;
+    membershipRole: 'owner' | 'member';
   }>;
 };
 
@@ -166,6 +137,7 @@ export type UserTokenPair = {
 
 type RequestOptions = RequestInit;
 
+const dashboardApiBasePath = '/api/dashboard';
 const adminApiBasePath = '/api/admin';
 const authExpiredListeners = new Set<() => void>();
 
@@ -243,11 +215,13 @@ function notifyAuthExpired() {
 
 function shouldNotifyAuthExpired(path: string, status: number) {
   if (status !== 401) return false;
-  if (!path.startsWith(adminApiBasePath)) return false;
+  if (!path.startsWith(adminApiBasePath) && !path.startsWith(dashboardApiBasePath)) {
+    return false;
+  }
   return ![
-    `${adminApiBasePath}/login`,
-    `${adminApiBasePath}/logout`,
-    `${adminApiBasePath}/session`,
+    `${dashboardApiBasePath}/login`,
+    `${dashboardApiBasePath}/logout`,
+    `${dashboardApiBasePath}/session`,
   ].includes(path);
 }
 
@@ -291,15 +265,19 @@ async function downloadFile(path: string, filename: string) {
   }
 }
 
-export const adminApi = {
-  getSession: () => request<AdminSession>(`${adminApiBasePath}/session`),
+export const dashboardApi = {
+  getSession: () => request<AdminSession>(`${dashboardApiBasePath}/session`),
   login: (credentials: { email: string; password: string }) =>
-    request<AdminSession>(`${adminApiBasePath}/login`, {
+    request<AdminSession>(`${dashboardApiBasePath}/login`, {
       method: 'POST',
       body: JSON.stringify(credentials),
     }),
   logout: () =>
-    request<{ ok: true }>(`${adminApiBasePath}/logout`, { method: 'POST' }),
+    request<{ ok: true }>(`${dashboardApiBasePath}/logout`, { method: 'POST' }),
+  getMe: () => request<DashboardMe>(`${dashboardApiBasePath}/me`),
+};
+
+export const adminApi = {
   getSystemOverview: () =>
     request<SystemOverview>(`${adminApiBasePath}/system`),
   createSignupInvitation: () =>
@@ -330,86 +308,19 @@ export const adminApi = {
     request<PaginatedResponse<AdminTeamRow>>(
       `${adminApiBasePath}/teams${paginationSuffix(options)}`,
     ),
-  listPermissions: () =>
-    request<PermissionDefinition[]>(`${adminApiBasePath}/permissions`),
-  listTeamEntitlements: (teamId: string) =>
-    request<TeamEntitlementsResponse>(
-      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/entitlements`,
+  listModulePermissions: () =>
+    request<ModulePermissionDefinition[]>(`${adminApiBasePath}/module-permissions`),
+  listUserModulePermissions: (id: string) =>
+    request<{ permissionKeys: string[] }>(
+      `${adminApiBasePath}/users/${encodeURIComponent(id)}/module-permissions`,
     ),
-  replaceTeamEntitlements: (teamId: string, permissionKeys: string[]) =>
-    request<ReplaceTeamEntitlementsResponse>(
-      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/entitlements`,
+  replaceUserModulePermissions: (id: string, permissionKeys: string[]) =>
+    request<{ permissionKeys: string[] }>(
+      `${adminApiBasePath}/users/${encodeURIComponent(id)}/module-permissions`,
       {
         method: 'PUT',
         body: JSON.stringify({ permissionKeys }),
       },
-    ),
-  replaceTeamPermissions: (
-    teamId: string,
-    input: {
-      permissionKeys: string[];
-      rolePermissions: Array<{ roleId: string; permissionKeys: string[] }>;
-    },
-  ) =>
-    request<{
-      permissionKeys: string[];
-      rolePermissions: Array<{ roleId: string; permissionKeys: string[] }>;
-    }>(`${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/permissions`, {
-      method: 'PUT',
-      body: JSON.stringify(input),
-    }),
-  listTeamAccessRoles: (teamId: string) =>
-    request<TeamAccessRoleRow[]>(
-      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/access-roles`,
-    ),
-  replaceRolePermissions: (
-    teamId: string,
-    roleId: string,
-    permissionKeys: string[],
-  ) =>
-    request<TeamEntitlementsResponse>(
-      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/access-roles/${encodeURIComponent(roleId)}/permissions`,
-      {
-        method: 'PUT',
-        body: JSON.stringify({ permissionKeys }),
-      },
-    ),
-  listMemberAccessRoles: (teamId: string, membershipId: string) =>
-    request<MemberAccessRolesResponse>(
-      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}/access-roles`,
-    ),
-  assignMemberAccessRole: (
-    teamId: string,
-    membershipId: string,
-    roleId: string,
-  ) =>
-    request<MemberAccessRolesResponse>(
-      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}/access-roles`,
-      {
-        method: 'POST',
-        body: JSON.stringify({ roleId }),
-      },
-    ),
-  replaceMemberAccessRoles: (
-    teamId: string,
-    membershipId: string,
-    roleIds: string[],
-  ) =>
-    request<MemberAccessRolesResponse>(
-      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}/access-roles`,
-      {
-        method: 'PUT',
-        body: JSON.stringify({ roleIds }),
-      },
-    ),
-  removeMemberAccessRole: (
-    teamId: string,
-    membershipId: string,
-    roleId: string,
-  ) =>
-    request<MemberAccessRolesResponse>(
-      `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(membershipId)}/access-roles/${encodeURIComponent(roleId)}`,
-      { method: 'DELETE' },
     ),
   listBackups: () => request<BackupFile[]>(`${adminApiBasePath}/backup/list`),
   triggerBackup: () =>
@@ -463,11 +374,7 @@ export const adminApi = {
 };
 
 export const userApi = {
-  register: (input: {
-    invitationToken: string;
-    email: string;
-    password: string;
-  }) =>
+  register: (input: { email: string; password: string }) =>
     request<UserTokenPair>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(input),

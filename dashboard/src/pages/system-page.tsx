@@ -10,10 +10,7 @@ const countRows = [
   { label: '用户', key: 'users' },
   { label: '团队', key: 'teams' },
   { label: '邀请', key: 'invitations' },
-  { label: '团队许可', key: 'teamEntitlements' },
-  { label: '访问角色', key: 'teamAccessRoles' },
-  { label: '角色权限', key: 'teamAccessRolePermissions' },
-  { label: '成员角色', key: 'teamMemberAccessRoles' },
+  { label: '模块权限', key: 'userModulePermissions' },
 ] as const;
 
 export function SystemPage() {

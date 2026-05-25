@@ -14,11 +14,11 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { routeItems } from '@/routes';
+import { adminRouteItems, userRouteItems } from '@/routes';
 
 export function DashboardLayout() {
   const location = useLocation();
-  const activeRoute = routeItems.find(
+  const activeRoute = [...adminRouteItems, ...userRouteItems].find(
     (item) => item.path === location.pathname,
   );
 

@@ -14,13 +14,14 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/use-auth';
-import { routeItems } from '@/routes';
-
-const mainRoutes = routeItems.slice(0, 5);
-const operationRoutes = routeItems.slice(5);
+import { adminRouteItems, userRouteItems } from '@/routes';
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { session } = useAuth();
+  const routes = session?.role === 'user' ? userRouteItems : adminRouteItems;
+  const mainRoutes = routes.slice(0, 5);
+  const operationRoutes = routes.slice(5);
+  const homePath = session?.role === 'user' ? '/me' : '/system';
 
   return (
     <Sidebar variant="inset" {...props}>
@@ -28,7 +29,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
-              <Link to="/system">
+              <Link to={homePath}>
                 <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
                   <TerminalIcon className="size-4" />
                 </div>

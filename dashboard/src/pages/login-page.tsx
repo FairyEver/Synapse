@@ -1,12 +1,11 @@
 import { type FormEvent, useState } from 'react';
-import { Link, Navigate, useLocation, useNavigate } from 'react-router';
+import { Link, Navigate, useNavigate } from 'react-router';
 
 import { Button } from '@/components/ui/button';
 import {
   Card,
   CardAction,
   CardContent,
-  CardDescription,
   CardFooter,
   CardHeader,
   CardTitle,
@@ -17,20 +16,15 @@ import { useAuth } from '@/hooks/use-auth';
 import { ApiError } from '@/lib/api';
 
 export function LoginPage() {
-  const { isAuthenticated, login } = useAuth();
-  const location = useLocation();
+  const { isAuthenticated, login, session } = useAuth();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const from =
-    (location.state as { from?: { pathname?: string } } | null)?.from
-      ?.pathname ?? '/system';
-
   if (isAuthenticated) {
-    return <Navigate to={from} replace />;
+    return <Navigate to={session?.role === 'user' ? '/me' : '/system'} replace />;
   }
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -39,8 +33,10 @@ export function LoginPage() {
     setIsSubmitting(true);
 
     try {
-      await login({ email, password });
-      navigate(from, { replace: true });
+      const nextSession = await login({ email, password });
+      navigate(nextSession.role === 'admin' ? '/system' : '/me', {
+        replace: true,
+      });
     } catch (nextError) {
       setError(nextError instanceof ApiError ? nextError.message : '登录失败');
     } finally {
@@ -53,7 +49,6 @@ export function LoginPage() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>登录</CardTitle>
-          <CardDescription>使用管理员账号登录。</CardDescription>
           <CardAction>
             <Button asChild variant="link">
               <Link to="/signup">注册</Link>

@@ -10,7 +10,7 @@ import {
 import {
   type AdminSession,
   ApiError,
-  adminApi,
+  dashboardApi,
   subscribeAuthExpired,
 } from '@/lib/api';
 
@@ -18,7 +18,7 @@ type AuthContextValue = {
   isAuthenticated: boolean;
   isLoading: boolean;
   session: AdminSession | null;
-  login: (credentials: { email: string; password: string }) => Promise<void>;
+  login: (credentials: { email: string; password: string }) => Promise<AdminSession>;
   logout: () => Promise<void>;
 };
 
@@ -31,11 +31,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     let isMounted = true;
 
-    adminApi
+    dashboardApi
       .getSession()
       .then((nextSession) => {
         if (isMounted) {
-          setSession(nextSession.role === 'admin' ? nextSession : null);
+          setSession(nextSession);
         }
       })
       .catch((error: unknown) => {
@@ -58,18 +58,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(
     async (credentials: { email: string; password: string }) => {
-      const nextSession = await adminApi.login(credentials);
-      if (nextSession.role !== 'admin') {
-        throw new ApiError('需要管理员权限。', 403);
-      }
+      const nextSession = await dashboardApi.login(credentials);
       setSession(nextSession);
+      return nextSession;
     },
     [],
   );
 
   const logout = useCallback(async () => {
     try {
-      await adminApi.logout();
+      await dashboardApi.logout();
     } finally {
       setSession(null);
     }
