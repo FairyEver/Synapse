@@ -263,18 +263,18 @@ export class SideChannelService implements ReplyTargetRuntime {
         message: "not found",
       })
     }
-    if (!this.consumeRateLimit(request, url.pathname)) {
-      this.recordIngressAudit("denied", url.pathname, { reason: "rate_limited" })
-      return jsonResponse(429, false, undefined, {
-        code: "rate_limited",
-        message: "rate limited",
-      })
-    }
     if (!this.authenticated(request, url)) {
       this.recordIngressAudit("denied", url.pathname, { reason: "unauthorized" })
       return jsonResponse(401, false, undefined, {
         code: "unauthorized",
         message: "unauthorized",
+      })
+    }
+    if (!this.consumeRateLimit(request, url.pathname)) {
+      this.recordIngressAudit("denied", url.pathname, { reason: "rate_limited" })
+      return jsonResponse(429, false, undefined, {
+        code: "rate_limited",
+        message: "rate limited",
       })
     }
     if (request.method !== "POST") {
@@ -315,7 +315,7 @@ export class SideChannelService implements ReplyTargetRuntime {
   private consumeRateLimit(request: LocalHttpRequest, path: string): boolean {
     const limit = this.deps.rateLimitPerMinute ?? DEFAULT_RATE_LIMIT_PER_MINUTE
     if (limit <= 0) return true
-    const key = `${firstHeader(request.headers["x-forwarded-for"]) ?? "local"}:${path}`
+    const key = `${request.remoteAddress ?? "local"}:${path}`
     const now = Date.now()
     const cutoff = now - 60_000
     const values = (this.rateLimiter.get(key) ?? []).filter((value) => value >= cutoff)

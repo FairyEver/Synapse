@@ -85,6 +85,93 @@ describe("SideChannelService", () => {
     await service.stop()
   })
 
+  it("does not let unauthorized requests consume the authenticated rate limit", async () => {
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const service = new SideChannelService({
+      projectContainers: fakeProjectContainers(),
+      networkRegistry: createNetworkServiceRegistry(),
+      dataRepository: fakeDataRepository(outbox),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      rateLimitPerMinute: 1,
+      token: "tok",
+    })
+    await service.start()
+    const env = service.getAgentEnv("project-1", "bridge:s1")
+    const dispatcher = new FakeDispatcher()
+    service.registerDispatcher("bridge", dispatcher)
+    service.rememberReplyTarget(bridgeTarget())
+
+    for (let attempt = 0; attempt < 3; attempt += 1) {
+      const unauthorized = await fetch(env?.SYNAPSE_SIDE_CHANNEL_URL ?? "", {
+        method: "POST",
+        headers: { Connection: "close" },
+        body: JSON.stringify({ project: "project-1", sessionKey: "bridge:s1", message: "blocked" }),
+      })
+      expect(unauthorized.status).toBe(401)
+      await unauthorized.text()
+    }
+
+    const allowed = await fetch(env?.SYNAPSE_SIDE_CHANNEL_URL ?? "", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env?.SYNAPSE_SIDE_CHANNEL_TOKEN ?? ""}`,
+        Connection: "close",
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ project: "project-1", sessionKey: "bridge:s1", message: "allowed" }),
+    })
+
+    expect(allowed.status).toBe(200)
+    await allowed.text()
+    expect(dispatcher.sideChannelPayloads).toEqual([
+      expect.objectContaining({ message: "allowed" }),
+    ])
+    await service.stop()
+  })
+
+  it("uses the socket address instead of x-forwarded-for for rate limiting", async () => {
+    const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
+    const service = new SideChannelService({
+      projectContainers: fakeProjectContainers(),
+      networkRegistry: createNetworkServiceRegistry(),
+      dataRepository: fakeDataRepository(outbox),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      rateLimitPerMinute: 1,
+      token: "tok",
+    })
+    await service.start()
+    const env = service.getAgentEnv("project-1", "bridge:s1")
+    service.registerDispatcher("bridge", new FakeDispatcher())
+    service.rememberReplyTarget(bridgeTarget())
+
+    const first = await fetch(env?.SYNAPSE_SIDE_CHANNEL_URL ?? "", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env?.SYNAPSE_SIDE_CHANNEL_TOKEN ?? ""}`,
+        Connection: "close",
+        "Content-Type": "application/json",
+        "x-forwarded-for": "203.0.113.1",
+      },
+      body: JSON.stringify({ project: "project-1", sessionKey: "bridge:s1", message: "first" }),
+    })
+    const second = await fetch(env?.SYNAPSE_SIDE_CHANNEL_URL ?? "", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env?.SYNAPSE_SIDE_CHANNEL_TOKEN ?? ""}`,
+        Connection: "close",
+        "Content-Type": "application/json",
+        "x-forwarded-for": "203.0.113.2",
+      },
+      body: JSON.stringify({ project: "project-1", sessionKey: "bridge:s1", message: "second" }),
+    })
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(429)
+    await first.text()
+    await second.text()
+    await service.stop()
+  })
+
   it("records muted side-channel sends without dispatching externally", async () => {
     const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
     const auditSink = new InMemoryAuditSink()
