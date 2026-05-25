@@ -2,7 +2,6 @@ import { BadRequestException, ForbiddenException, Injectable, Optional } from "@
 import { Prisma } from "@prisma/client"
 import { AuditLogService } from "../common/audit-log.service"
 import { InvitationsService } from "../invitations/invitations.service"
-import { PermissionsService } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
 
 @Injectable()
@@ -10,7 +9,6 @@ export class TeamsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly invitations: InvitationsService,
-    private readonly permissions: PermissionsService,
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
@@ -32,14 +30,8 @@ export class TeamsService {
       const team = await tx.team.create({
         data: { name: input.name.trim(), createdByUserId: userId },
       })
-      const membership = await tx.teamMembership.create({
+      await tx.teamMembership.create({
         data: { teamId: team.id, userId, role: "owner" },
-      })
-      await this.permissions.ensureDefaultTeamAccess({
-        teamId: team.id,
-        ownerMembershipId: membership.id,
-        ownerUserId: userId,
-        client: tx,
       })
       return team
     }).catch(async (error: unknown) => {
@@ -76,10 +68,6 @@ export class TeamsService {
             memberships: {
               include: {
                 user: { select: { id: true, email: true, status: true } },
-                accessRoles: {
-                  select: { role: { select: { id: true, name: true } } },
-                  orderBy: { assignedAt: "asc" },
-                },
               },
               orderBy: { createdAt: "asc" },
             },
@@ -90,7 +78,7 @@ export class TeamsService {
   }
 
   async createInvitation(userId: string, publicAppUrl: string, ipAddress = "system") {
-    const membership = await this.requireTeamPermission(userId, "team.invitation.manage")
+    const membership = await this.requireTeamOwner(userId)
     const invitation = await this.invitations.createTeamInvitation({ userId, teamId: membership.teamId, publicAppUrl })
     const actorEmail = await this.getAuditActorEmail(userId)
     await this.auditLog?.record({
@@ -128,17 +116,7 @@ export class TeamsService {
         data: { teamId: invitation.teamId, userId, role: "member" },
         include: {
           user: { select: { id: true, email: true, status: true } },
-          accessRoles: {
-            select: { role: { select: { id: true, name: true } } },
-            orderBy: { assignedAt: "asc" },
-          },
         },
-      })
-      await this.permissions.assignOrdinaryMemberRole({
-        teamId: invitation.teamId,
-        teamMembershipId: membership.id,
-        assignedByUserId: userId,
-        client: tx,
       })
       return { membership, teamId: invitation.teamId }
     }).catch(async (error: unknown) => {
@@ -183,10 +161,6 @@ export class TeamsService {
       where: { teamId: membership.teamId },
       include: {
         user: { select: { id: true, email: true, status: true } },
-        accessRoles: {
-          select: { role: { select: { id: true, name: true } } },
-          orderBy: { assignedAt: "asc" },
-        },
       },
       orderBy: { createdAt: "asc" },
     })
@@ -195,7 +169,7 @@ export class TeamsService {
   async removeMember(actorUserId: string, targetUserId: string, ipAddress = "system") {
     let actorMembership: NonNullable<Awaited<ReturnType<typeof this.getMembership>>>
     try {
-      actorMembership = await this.requireTeamPermission(actorUserId, "team.member.manage")
+      actorMembership = await this.requireTeamOwner(actorUserId)
     } catch (error) {
       if (error instanceof ForbiddenException) {
         await this.recordTeamFailure({
@@ -324,11 +298,9 @@ export class TeamsService {
     })
   }
 
-  private async requireTeamPermission(userId: string, permissionKey: string) {
+  private async requireTeamOwner(userId: string) {
     const membership = await this.getMembership(userId)
-    if (!membership) throw new ForbiddenException()
-    const permissionKeys = await this.permissions.getEffectivePermissions(userId, membership.teamId)
-    if (!permissionKeys.includes(permissionKey)) throw new ForbiddenException()
+    if (!membership || membership.role !== "owner") throw new ForbiddenException()
     return membership
   }
 
