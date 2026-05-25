@@ -11,6 +11,7 @@ import type { DragonScaleBoundaryScoreResult } from "../dragonscale/boundary-typ
 
 const execFileAsync = promisify(execFile)
 const roots: string[] = []
+const compatibilityTestTimeoutMs = process.platform === "win32" ? 30_000 : 5_000
 
 async function tempDir(): Promise<string> {
   const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-kb-boundary-compat-"))
@@ -34,11 +35,13 @@ async function hasPython3(): Promise<boolean> {
 }
 
 afterEach(async () => {
-  await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
+  await Promise.all(roots.splice(0).map((dir) => (
+    rm(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+  )))
 })
 
 describe("DragonScaleBoundaryService upstream compatibility", () => {
-  it("matches vendored boundary-score.py JSON output for a representative fixture", async () => {
+  it("matches vendored boundary-score.py JSON output for a representative fixture", { timeout: compatibilityTestTimeoutMs }, async () => {
     if (!await hasPython3()) {
       console.warn("python3 not available; skipping boundary-score.py compatibility assertion.")
       return

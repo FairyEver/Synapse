@@ -28,7 +28,7 @@ vi.mock("electron-updater", () => ({
   CancellationToken: class {},
 }))
 const tmpUserData = "/tmp/synapse-test-userdata-" + Date.now()
-const bootstrapImportTimeoutMs = 15_000
+const bootstrapImportTimeoutMs = process.platform === "win32" ? 30_000 : 15_000
 vi.mock("electron", () => {
   const Notification = class {
     static isSupported() {
