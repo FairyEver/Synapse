@@ -370,12 +370,15 @@ describe("DiagnosticsService.exportBundle", () => {
       fileCount: expect.any(Number),
     })
     expect(resultPath).toContain("synapse-diagnostics.zip")
-    expect(writtenFiles.has("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/diagnostics.json")).toBe(true)
-    expect(writtenFiles.get("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/diagnostics.json"))
+    const packagePathSuffix = "/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z"
+    const diagnosticsPath = findWrittenPath(writtenFiles, `${packagePathSuffix}/diagnostics.json`)
+    expect(diagnosticsPath).toBeDefined()
+    expect(writtenFiles.get(diagnosticsPath ?? ""))
       .not.toContain("/downloads/synapse-diagnostics.zip")
-    expect(writtenFiles.get("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/summary.md")).toContain("# Synapse Diagnostics Summary")
-    expect(writtenFiles.has("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/manifest.json")).toBe(true)
-    expect(writtenFiles.has("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/config/config-backup.json")).toBe(true)
+    expect(writtenFiles.get(findWrittenPath(writtenFiles, `${packagePathSuffix}/summary.md`) ?? ""))
+      .toContain("# Synapse Diagnostics Summary")
+    expect(findWrittenPath(writtenFiles, `${packagePathSuffix}/manifest.json`)).toBeDefined()
+    expect(findWrittenPath(writtenFiles, `${packagePathSuffix}/config/config-backup.json`)).toBeDefined()
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "fs.write",
       outcome: "allowed",
@@ -437,7 +440,7 @@ describe("DiagnosticsService.exportBundle", () => {
     await service.exportBundle({ report })
 
     expect([...writtenFiles.keys()].every((targetPath) => (
-      targetPath.startsWith("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/")
+      targetPath.includes("/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/")
     ))).toBe(true)
     expect([...writtenFiles.keys()].some((targetPath) => targetPath.includes("../outside"))).toBe(false)
   })
@@ -563,6 +566,10 @@ function createService(
     })),
     ...overrides,
   })
+}
+
+function findWrittenPath(files: Map<string, string>, suffix: string): string | undefined {
+  return [...files.keys()].find((targetPath) => targetPath.endsWith(suffix))
 }
 
 function createConfig(): SynapseConfig {

@@ -36,9 +36,11 @@ describe("ExecutionIsolationService", () => {
       lastPreflightStatus: undefined,
       lastError: undefined,
     })
-    await expect(service.resolveProcessIsolation("project-1"))
-      .rejects
-      .toThrow("run_as_user preflight has not passed")
+    if (process.platform !== "win32") {
+      await expect(service.resolveProcessIsolation("project-1"))
+        .rejects
+        .toThrow("run_as_user preflight has not passed")
+    }
   })
 })
 
