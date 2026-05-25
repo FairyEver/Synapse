@@ -9,7 +9,7 @@ const logStoreMock = vi.hoisted(() => ({
   },
 }))
 
-import type { ConversationEntryV1, DataRepository } from "../../../runtime/data-repo"
+import type { ConversationEntryV1, DataNamespace, DataRepository } from "../../../runtime/data-repo"
 import type { IpcHandlerContext } from "../../../runtime/ipc"
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
 import { AGENT_RUNTIME_SERVICE_ID } from "../../../services/agent-runtime"
@@ -140,6 +140,35 @@ describe("agent session IPC methods", () => {
     expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain("message body")
   })
 
+  it("deletes an archived orphan session after its project was removed", async () => {
+    vi.mocked(configStore.load).mockResolvedValue({
+      repositories: [],
+      global: {
+        themeMode: "system",
+        projects: [],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+    } as never)
+    const conversations = createConversationNamespace([
+      storedConversation({ id: "orphan-conv", projectId: "removed-project" }),
+    ])
+    const ctx = createContext({
+      agent: {},
+      dataRepo: {
+        namespace: vi.fn(() => conversations),
+      } as unknown as DataRepository,
+    })
+
+    await expect(sessionMethods.deleteSession.handler(ctx, {
+      projectId: "removed-project",
+      conversationId: "orphan-conv",
+    })).resolves.toEqual({ ok: true })
+
+    expect(await conversations.get("orphan-conv")).toBeNull()
+  })
+
   it("logs session rename failures without recording the requested title", async () => {
     const renameSession = vi.fn().mockRejectedValue(new Error("write failed"))
     const ctx = createContext({
@@ -202,7 +231,7 @@ function createContext(overrides: {
   }
 }
 
-function storedConversation(): ConversationEntryV1 {
+function storedConversation(overrides: Partial<ConversationEntryV1> = {}): ConversationEntryV1 {
   return {
     id: "conv-1",
     schemaVersion: 1,
@@ -214,5 +243,26 @@ function storedConversation(): ConversationEntryV1 {
     history: [],
     createdAt: "2026-05-13T00:00:00.000Z",
     updatedAt: "2026-05-13T00:00:00.000Z",
+    ...overrides,
+  }
+}
+
+function createConversationNamespace(items: ConversationEntryV1[]): DataNamespace<ConversationEntryV1> {
+  const store = new Map(items.map((item) => [item.id, item]))
+  return {
+    name: "conversations",
+    schemaVersion: 1,
+    backend: "sqlite",
+    getSingleton: vi.fn().mockResolvedValue(null),
+    setSingleton: vi.fn().mockResolvedValue(undefined),
+    list: vi.fn(async () => Array.from(store.values())),
+    get: vi.fn(async (id: string) => store.get(id) ?? null),
+    upsert: vi.fn(async (item: ConversationEntryV1) => {
+      store.set(item.id, item)
+    }),
+    remove: vi.fn(async (id: string) => {
+      store.delete(id)
+    }),
+    onChange: vi.fn(() => () => undefined),
   }
 }

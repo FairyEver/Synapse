@@ -201,6 +201,21 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
         const { agent } = await resolveProjectAgent(ctx.resolve, request.projectId)
         return { ok: await agent.deleteSession(request.conversationId) }
       } catch (rawError) {
+        if (isProjectMissingError(rawError)) {
+          try {
+            return {
+              ok: await deleteOrphanSession(ctx.resolve, request),
+            }
+          } catch (fallbackError) {
+            logger.warn("Agent orphan session deletion failed.", {
+              projectId: request.projectId,
+              conversationId: request.conversationId,
+              boundary: "agent.ipc.delete-orphan-session",
+              ...errorDiagnostic(fallbackError),
+            })
+            throw new Error("删除 Agent 会话失败。", { cause: fallbackError })
+          }
+        }
         logger.warn("Agent session deletion failed.", {
           projectId: request.projectId,
           conversationId: request.conversationId,
@@ -231,6 +246,24 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
       }
     },
   },
+}
+
+async function deleteOrphanSession(
+  resolve: <T>(serviceId: string) => T,
+  request: DeleteSessionRequest,
+): Promise<boolean> {
+  const dataRepo = resolve<DataRepository>("core.data-repository")
+  const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
+  const conversation = await conversations.get(request.conversationId)
+  if (!conversation || conversation.projectId !== request.projectId) {
+    return false
+  }
+  await conversations.remove(conversation.id)
+  return true
+}
+
+function isProjectMissingError(rawError: unknown): boolean {
+  return rawError instanceof Error && rawError.message.includes("找不到当前项目")
 }
 
 function errorDiagnostic(rawError: unknown): Record<string, unknown> {
