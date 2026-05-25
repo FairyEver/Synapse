@@ -552,6 +552,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               sending={chat.sending}
               cancelPhase={chat.cancelPhase}
               permissionMode={selectedPermissionMode}
+              quickInputs={config.global.quickInputs}
               onPermissionModeChange={(mode) => chat.setPermissionMode(mode)}
               onCreatePermissionModeSession={(mode) => {
                 const projectId = chat.selectedProjectId ?? chat.activeProjectId

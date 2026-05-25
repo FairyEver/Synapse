@@ -661,6 +661,99 @@ describe("AgentComposer", () => {
     expect(onInputKeyDown).not.toHaveBeenCalled()
   })
 
+  it("does not render the quick input menu when no quick inputs exist", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        quickInputs={[]}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    expect(html).not.toContain("快速输入")
+  })
+
+  it("renders the quick input menu before knowledge base actions", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        quickInputs={[{ id: "quick-1", content: "常用输入" }]}
+        knowledgeBaseActions={[{
+          label: "查询知识库",
+          description: "插入查询指令，继续输入要检索的问题。",
+          action: "insert",
+          commandText: "/wiki query ",
+        }]}
+        onKnowledgeBaseCommand={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    expect(html.indexOf("快速输入")).toBeGreaterThan(-1)
+    expect(html.indexOf("知识库")).toBeGreaterThan(html.indexOf("快速输入"))
+  })
+
+  it("inserts a quick input at the current cursor position without sending", async () => {
+    const onDraftChange = vi.fn()
+    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault())
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft="请 "
+          disabled={false}
+          canSend={true}
+          sending={false}
+          cancelPhase="idle"
+          quickInputs={[{ id: "quick-1", content: "整理这段内容\n保留关键结论" }]}
+          onDraftChange={onDraftChange}
+          onInputKeyDown={vi.fn()}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+    textarea!.focus()
+    textarea!.setSelectionRange(2, 2)
+    openQuickInputMenu(container)
+    const item = Array.from(document.querySelectorAll('[role="menuitem"]'))
+      .find((node) => node.textContent === "整理这段内容") as HTMLElement
+    expect(item).toBeTruthy()
+
+    await act(async () => {
+      item.click()
+      await wait(0)
+    })
+
+    expect(onDraftChange).toHaveBeenCalledWith("请 整理这段内容\n保留关键结论")
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(document.activeElement?.tagName).toBe("TEXTAREA")
+  })
+
   it("does not render the knowledge base action button without actions", () => {
     const html = renderToStaticMarkup(
       <AgentComposer
@@ -1070,6 +1163,15 @@ function openPermissionMenu(container: HTMLElement) {
 
 function openKnowledgeBaseMenu(container: HTMLElement) {
   const trigger = container.querySelector('button[aria-label="知识库"]')
+  expect(trigger).toBeTruthy()
+  act(() => {
+    trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
+    trigger?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+  })
+}
+
+function openQuickInputMenu(container: HTMLElement) {
+  const trigger = container.querySelector('button[aria-label="快速输入"]')
   expect(trigger).toBeTruthy()
   act(() => {
     trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))
