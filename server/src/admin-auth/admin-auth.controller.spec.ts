@@ -20,6 +20,7 @@ describe("AdminAuthController", () => {
         email: "user@example.com",
         role: "user",
         token: "dashboard-token",
+        modulePermissions: ["module.database"],
       }),
     }
     const controller = new AdminAuthController(auth as never)
@@ -32,6 +33,7 @@ describe("AdminAuthController", () => {
     }, request, response as never)).resolves.toEqual({
       email: "user@example.com",
       role: "user",
+      modulePermissions: ["module.database"],
     })
 
     expect(response.cookie).toHaveBeenCalledWith("synapse_admin", "dashboard-token", {

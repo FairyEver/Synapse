@@ -14,11 +14,14 @@ import {
   SidebarMenuItem,
 } from '@/components/ui/sidebar';
 import { useAuth } from '@/hooks/use-auth';
-import { adminRouteItems, userRouteItems } from '@/routes';
+import { adminRouteItems, getUserRouteItems } from '@/routes';
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { session } = useAuth();
-  const routes = session?.role === 'user' ? userRouteItems : adminRouteItems;
+  const routes =
+    session?.role === 'user'
+      ? getUserRouteItems(session.modulePermissions)
+      : adminRouteItems;
   const mainRoutes = routes.slice(0, 5);
   const operationRoutes = routes.slice(5);
   const homePath = session?.role === 'user' ? '/me' : '/system';

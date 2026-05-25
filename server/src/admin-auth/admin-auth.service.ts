@@ -19,9 +19,15 @@ export interface DashboardSession {
   readonly id: string
   readonly email: string
   readonly role: DashboardRole
+  readonly modulePermissions: readonly string[]
 }
 
 const dashboardJwtExpiresIn = "8h"
+const userModulePermissionSelect = { permissionKey: true } as const
+
+function getDashboardModulePermissions(user: { modulePermissions?: readonly { permissionKey: string }[] }): string[] {
+  return user.modulePermissions?.map((item) => item.permissionKey) ?? []
+}
 
 @Injectable()
 export class AdminAuthService {
@@ -36,7 +42,7 @@ export class AdminAuthService {
     return admin?.email ?? ""
   }
 
-  async login(email: string, password: string, ipAddress = "system"): Promise<{ email: string; token: string; role: DashboardRole }> {
+  async login(email: string, password: string, ipAddress = "system"): Promise<{ email: string; token: string; role: DashboardRole; modulePermissions: readonly string[] }> {
     const normalizedEmail = email.trim().toLowerCase()
     const admin = await this.prisma.adminUser.findFirst({ orderBy: { createdAt: "asc" } })
     const matchedAdmin = admin && normalizedEmail === admin.email ? admin : null
@@ -50,7 +56,7 @@ export class AdminAuthService {
         targetId: matchedAdmin.id,
         ipAddress,
       })
-      return { email: matchedAdmin.email, token, role: "admin" }
+      return { email: matchedAdmin.email, token, role: "admin", modulePermissions: [] }
     }
     if (matchedAdmin) {
       const adminLoginFailureAction = matchedAdmin.status === "active"
@@ -66,7 +72,10 @@ export class AdminAuthService {
       throw new UnauthorizedException("邮箱或密码错误。")
     }
 
-    const user = await this.prisma.user.findUnique({ where: { email: normalizedEmail } })
+    const user = await this.prisma.user.findUnique({
+      where: { email: normalizedEmail },
+      include: { modulePermissions: { select: userModulePermissionSelect } },
+    })
     const userPasswordMatches = user ? await verifyPassword(password, user.passwordHash) : false
     if (user && user.status === "active" && userPasswordMatches) {
       const token = this.signDashboardToken({ sub: user.id, email: user.email, type: "user" })
@@ -77,7 +86,12 @@ export class AdminAuthService {
         targetId: user.id,
         ipAddress,
       })
-      return { email: user.email, token, role: "user" }
+      return {
+        email: user.email,
+        token,
+        role: "user",
+        modulePermissions: getDashboardModulePermissions(user),
+      }
     }
     if (user && user.status !== "active" && userPasswordMatches) {
       await this.auditLog?.record({
@@ -115,13 +129,21 @@ export class AdminAuthService {
       })
       if (revoked) return null
       if (payload.type === "user") {
-        const user = await this.prisma.user.findUnique({ where: { id: payload.sub } })
+        const user = await this.prisma.user.findUnique({
+          where: { id: payload.sub },
+          include: { modulePermissions: { select: userModulePermissionSelect } },
+        })
         if (!user || user.status !== "active" || user.email !== payload.email) return null
-        return { id: user.id, email: user.email, role: "user" }
+        return {
+          id: user.id,
+          email: user.email,
+          role: "user",
+          modulePermissions: getDashboardModulePermissions(user),
+        }
       }
       const admin = await this.prisma.adminUser.findUnique({ where: { id: payload.sub } })
       if (!admin || admin.status !== "active" || admin.email !== payload.email) return null
-      return { id: admin.id, email: admin.email, role: "admin" }
+      return { id: admin.id, email: admin.email, role: "admin", modulePermissions: [] }
     } catch {
       return null
     }

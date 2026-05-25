@@ -4,15 +4,18 @@ import { DashboardLayout } from '@/components/dashboard-layout';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { AuditLogsPage } from '@/pages/audit-logs-page';
 import { BackupPage } from '@/pages/backup-page';
+import { InvitationsPage } from '@/pages/invitations-page';
 import { LoginPage } from '@/pages/login-page';
 import { LogsPage } from '@/pages/logs-page';
 import { MePage } from '@/pages/me-page';
+import { ModulePage } from '@/pages/module-page';
 import { SettingsPage } from '@/pages/settings-page';
 import { SignupPage } from '@/pages/signup-page';
 import { SystemPage } from '@/pages/system-page';
 import { TeamInvitePage } from '@/pages/team-invite-page';
 import { TeamsPage } from '@/pages/teams-page';
 import { UsersPage } from '@/pages/users-page';
+import { moduleRouteItems } from '@/routes';
 
 function ProtectedRoute({ roles }: { roles: Array<'admin' | 'user'> }) {
   const { isAuthenticated, isLoading, session } = useAuth();
@@ -46,6 +49,7 @@ export default function App() {
             <Route path="system" element={<SystemPage />} />
             <Route path="users" element={<UsersPage />} />
             <Route path="teams" element={<TeamsPage />} />
+            <Route path="invitations" element={<InvitationsPage />} />
             <Route path="audit-logs" element={<AuditLogsPage />} />
             <Route path="backup" element={<BackupPage />} />
             <Route path="logs" element={<LogsPage />} />
@@ -55,6 +59,18 @@ export default function App() {
           <Route element={<DashboardLayout />}>
             <Route path="me" element={<MePage />} />
             <Route path="settings" element={<SettingsPage />} />
+            {moduleRouteItems.map((item) => (
+              <Route
+                key={item.permissionKey}
+                path={item.path.slice(1)}
+                element={
+                  <ModulePage
+                    permissionKey={item.permissionKey}
+                    title={item.title}
+                  />
+                }
+              />
+            ))}
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />

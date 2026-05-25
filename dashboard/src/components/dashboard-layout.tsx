@@ -14,13 +14,17 @@ import {
   SidebarTrigger,
 } from '@/components/ui/sidebar';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { adminRouteItems, userRouteItems } from '@/routes';
+import { useAuth } from '@/hooks/use-auth';
+import { adminRouteItems, getUserRouteItems } from '@/routes';
 
 export function DashboardLayout() {
   const location = useLocation();
-  const activeRoute = [...adminRouteItems, ...userRouteItems].find(
-    (item) => item.path === location.pathname,
-  );
+  const { session } = useAuth();
+  const routes =
+    session?.role === 'user'
+      ? getUserRouteItems(session.modulePermissions)
+      : adminRouteItems;
+  const activeRoute = routes.find((item) => item.path === location.pathname);
 
   return (
     <TooltipProvider>

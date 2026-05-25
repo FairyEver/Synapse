@@ -141,7 +141,7 @@ export function AuditLogsPage() {
         open={selectedLog !== null}
         onOpenChange={(open) => !open && setSelectedLog(null)}
       >
-        <SheetContent>
+        <SheetContent aria-describedby={undefined}>
           <SheetHeader>
             <SheetTitle>{selectedLog?.action ?? '详情'}</SheetTitle>
           </SheetHeader>

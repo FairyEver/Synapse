@@ -220,7 +220,10 @@ export function UsersPage() {
         open={selectedUser !== null}
         onOpenChange={(open) => !open && setSelectedUser(null)}
       >
-        <SheetContent className="overflow-y-auto sm:max-w-xl">
+        <SheetContent
+          aria-describedby={undefined}
+          className="overflow-y-auto sm:max-w-xl"
+        >
           <SheetHeader>
             <SheetTitle>{selectedUser?.email ?? '模块权限'}</SheetTitle>
           </SheetHeader>

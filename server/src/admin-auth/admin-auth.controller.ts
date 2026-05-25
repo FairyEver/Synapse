@@ -38,7 +38,7 @@ export class AdminAuthController {
     const credentials = result.data
     const session = await this.auth.login(credentials.email, credentials.password, request.ip)
     response.cookie(adminCookieName, session.token, adminCookieOptions())
-    return { email: session.email, role: session.role }
+    return { email: session.email, role: session.role, modulePermissions: session.modulePermissions }
   }
 
   @Throttle({ default: { ttl: 60000, limit: 5 } })
@@ -72,6 +72,6 @@ export class AdminAuthController {
     if (!session) {
       throw new UnauthorizedException("未登录或登录已过期。")
     }
-    return { email: session.email, role: session.role }
+    return { email: session.email, role: session.role, modulePermissions: session.modulePermissions }
   }
 }

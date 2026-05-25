@@ -177,7 +177,34 @@ describe("AdminAuthService", () => {
 
     expect(result.email).toBe("user@example.com")
     expect(result.role).toBe("user")
+    expect(result.modulePermissions).toEqual([])
     expect(result.token.length).toBeGreaterThan(20)
+  })
+
+  it("returns dashboard module permissions for normal user login", async () => {
+    const { service, prisma } = await createTestService()
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: "user-1",
+      email: "user@example.com",
+      passwordHash: await hashPassword("user-password"),
+      status: "active",
+      modulePermissions: [
+        { permissionKey: "module.workflow" },
+        { permissionKey: "module.database" },
+      ],
+    })
+
+    await expect(service.login("user@example.com", "user-password"))
+      .resolves
+      .toMatchObject({
+        email: "user@example.com",
+        role: "user",
+        modulePermissions: ["module.workflow", "module.database"],
+      })
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { email: "user@example.com" },
+      include: { modulePermissions: { select: { permissionKey: true } } },
+    })
   })
 
   it("records disabled dashboard user login attempts separately from wrong passwords", async () => {
@@ -233,6 +260,27 @@ describe("AdminAuthService", () => {
       id: "user-1",
       email: "user@example.com",
       role: "user",
+      modulePermissions: [],
+    })
+  })
+
+  it("returns dashboard module permissions for verified normal user sessions", async () => {
+    const { service, prisma } = await createTestService()
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      email: "user@example.com",
+      passwordHash: await hashPassword("user-password"),
+      status: "active",
+      modulePermissions: [{ permissionKey: "module.workflow" }],
+    })
+
+    const result = await service.login("user@example.com", "user-password")
+
+    await expect(service.verifyDashboardSession(result.token)).resolves.toEqual({
+      id: "user-1",
+      email: "user@example.com",
+      role: "user",
+      modulePermissions: ["module.workflow"],
     })
   })
 

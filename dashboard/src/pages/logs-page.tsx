@@ -26,6 +26,16 @@ import { filterControlClass } from '@/lib/layout';
 
 const levels = ['all', 'error', 'fatal', 'warn', 'info', 'debug'];
 
+function logEntryKey(
+  entry: LogEntry,
+  occurrences: Map<string, number>,
+) {
+  const baseKey = `${entry.time}-${entry.level}-${entry.msg}`;
+  const count = occurrences.get(baseKey) ?? 0;
+  occurrences.set(baseKey, count + 1);
+  return count === 0 ? baseKey : `${baseKey}-${count}`;
+}
+
 export function LogsPage() {
   const [entries, setEntries] = useState<LogEntry[]>([]);
   const [files, setFiles] = useState<LogFileInfo[]>([]);
@@ -89,6 +99,8 @@ export function LogsPage() {
     }
   }
 
+  const logEntryOccurrences = new Map<string, number>();
+
   return (
     <main className="flex min-w-0 flex-1 flex-col gap-6 overflow-x-hidden overflow-y-auto p-4 pt-0">
       <div className="flex flex-wrap items-center gap-2">
@@ -125,7 +137,7 @@ export function LogsPage() {
             </TableHeader>
             <TableBody>
               {entries.map((entry) => (
-                <TableRow key={`${entry.time}-${entry.level}-${entry.msg}`}>
+                <TableRow key={logEntryKey(entry, logEntryOccurrences)}>
                   <TableCell>{formatDate(entry.time)}</TableCell>
                   <TableCell>
                     <Badge variant="outline">{entry.level}</Badge>

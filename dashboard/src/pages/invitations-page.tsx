@@ -4,6 +4,7 @@ import { EmptyState, ErrorState, LoadingState } from '@/components/page-state';
 import { PaginationFooter } from '@/components/pagination-footer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import {
   Table,
   TableBody,
@@ -32,6 +33,25 @@ function creator(invitation: AdminInvitationRow) {
   );
 }
 
+async function writeClipboardText(value: string) {
+  try {
+    await navigator.clipboard.writeText(value);
+    return true;
+  } catch {
+    const textarea = document.createElement('textarea');
+    textarea.value = value;
+    textarea.readOnly = true;
+    textarea.className = 'fixed -left-full top-0 opacity-0';
+    document.body.append(textarea);
+    textarea.select();
+    try {
+      return document.execCommand('copy');
+    } finally {
+      textarea.remove();
+    }
+  }
+}
+
 export function InvitationsPage() {
   const loader = useCallback(
     (options: { page: number; pageSize: number }) =>
@@ -41,14 +61,20 @@ export function InvitationsPage() {
   const { error, isLoading, page, pageSize, refresh, rows, setPage, total } =
     useAdminList(loader);
   const [feedback, setFeedback] = useState('');
+  const [manualCopyUrl, setManualCopyUrl] = useState('');
   const [deletingIds, setDeletingIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
 
   async function copyInvitation(invitation: AdminInvitationRow) {
     if (!invitation.inviteUrl) return;
-    await navigator.clipboard.writeText(invitation.inviteUrl);
-    setFeedback('邀请链接已复制');
+    setManualCopyUrl('');
+    if (await writeClipboardText(invitation.inviteUrl)) {
+      setFeedback('邀请链接已复制');
+      return;
+    }
+    setFeedback('复制失败');
+    setManualCopyUrl(invitation.inviteUrl);
   }
 
   async function deleteInvitation(invitation: AdminInvitationRow) {
@@ -76,6 +102,9 @@ export function InvitationsPage() {
   return (
     <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 pt-0">
       {feedback ? <p className="text-sm text-muted-foreground">{feedback}</p> : null}
+      {manualCopyUrl ? (
+        <Input aria-label="邀请链接" readOnly value={manualCopyUrl} />
+      ) : null}
       {isLoading ? <LoadingState /> : null}
       {error ? <ErrorState message={error} onRetry={refresh} /> : null}
       {!isLoading && !error ? (
