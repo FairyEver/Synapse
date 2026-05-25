@@ -29,6 +29,7 @@
 - 不做未确认的破坏性操作，不静默覆盖用户数据。
 - 生产代码禁止用 `console.log` 当日志；错误必须显式处理、结构化记录或带上下文向上抛出。
 - 完成用户可感知或发版相关改动后，必须更新根目录 `RELEASE_NOTES_PENDING.md`。记录要面向后续发版说明，口语化说明用户得到什么、什么行为变了、修了什么问题；不要写代码路径、提交号或实现流水账。纯内部整理、版本 bump、无产品影响的文档规划通常不需要记录。
+- 修改 Electron 打包边界时必须把 `app.asar` 当成启动关键路径处理。凡是改动 `desktop/package.json` 的 `files`、`asarUnpack`、`extraResources`，或新增/移动 Electron worker、原生模块、可执行文件、运行时资源，都必须同步确认 sourcemap、unpacked 文件和 packed 文件不会错位；不要只把 `.js` 加入 `asarUnpack` 而忽略同目录产物如 `.js.map`。发版前必须用 `pnpm --filter @synapse/desktop run check:packaged-asar` 或等价校验证明 `package.json`、主进程入口、packed hash 和 unpacked 文件存在性正常。
 
 ### 模块硬边界摘要
 
@@ -256,4 +257,5 @@
 - 确保命名明确且一致。
 - 行为变化时，同步更新类型、校验和错误处理。
 - 判断本次任务是否需要待发布说明；如果涉及用户可感知变化、问题修复、功能优化、兼容性、稳定性、打包或发版风险，更新根目录 `RELEASE_NOTES_PENDING.md`。
+- 如果改动 Electron 打包配置、worker、原生依赖、可执行资源、`dist-electron` 输出结构或发布流程，完成前必须验证正式包结构，至少运行 `pnpm --filter @synapse/desktop run check:packaged-asar`；若本地重新打包，优先对新生成的 `desktop/release` 产物验证，不要只依赖源码 typecheck。
 - 确保另一位工程师无需反向推理隐藏抽象，也能继续扩展代码。
