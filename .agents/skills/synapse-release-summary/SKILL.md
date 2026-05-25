@@ -18,6 +18,7 @@ This skill is only for `/Users/liyang/Documents/code/github/Synapse`.
 - Release workflow: `Release`
 - Source working directory: `/Users/liyang/Documents/code/github/Synapse`
 - Output directory: `/Users/liyang/Desktop`
+- Archived release notes directory: `/Users/liyang/Documents/code/github/Synapse/docs/releases`
 
 This is a read-only analysis workflow. Do not run version bump, release, push, build, dev server, browser preview, or runtime debugging commands.
 
@@ -28,10 +29,11 @@ When the user asks for "整理发版总结" or similar:
 1. Find the latest successful release package.
 2. Find the previous successful release package.
 3. Resolve each release version to the corresponding source commit.
-4. Analyze source commits between those two commits.
-5. Group the changes into user-facing feature updates, bug fixes, and technical changes.
-6. Save a standard Markdown report to the Desktop.
-7. Briefly tell the user the file path and the versions compared.
+4. Read archived release notes for the latest version when available.
+5. Analyze source commits between those two commits.
+6. Group the changes into user-facing feature updates, bug fixes, and technical changes.
+7. Save a standard Markdown report to the Desktop.
+8. Briefly tell the user the file path and the versions compared.
 
 If the user explicitly names versions, compare those versions instead of the latest pair.
 
@@ -106,6 +108,19 @@ git show --patch --minimal <sha> -- <relevant-path>
 Use design or plan docs inside `docs/superpowers/specs/` and `docs/superpowers/plans/` as supporting context, but do not let docs-only commits dominate the release summary.
 
 Ignore version bump commits as product changes unless they also contain meaningful fixes.
+
+### 4. Read archived release notes
+
+Before writing the summary, check whether the latest tag has archived notes:
+
+```bash
+ARCHIVED_NOTES="/Users/liyang/Documents/code/github/Synapse/docs/releases/<latest-tag>.md"
+test -f "$ARCHIVED_NOTES" && sed -n '1,240p' "$ARCHIVED_NOTES"
+```
+
+If the archived notes file exists, use it as the primary product-context source for release wording. Still inspect commits and changed files to validate the notes, catch missing changes, and avoid carrying over stale or incorrect statements.
+
+If the archived notes file does not exist, fall back to commit and diff analysis plus relevant design/plan docs.
 
 ## Classification Rules
 
