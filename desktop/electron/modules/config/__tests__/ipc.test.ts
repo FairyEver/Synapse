@@ -144,6 +144,7 @@ function configFixture(agent: SynapseConfig["agent"]): SynapseConfig {
     global: {
       themeMode: "light",
       projects: [],
+      quickInputs: [],
       favorites: { rule: [], skill: [], prompt: [] },
       recentlyViewed: { rule: [], skill: [], prompt: [] },
       contentSortOrder: "modified-desc",

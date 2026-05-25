@@ -43,6 +43,7 @@ async function managedFixture(options: KnowledgeBaseServiceOptions = {}) {
         favorites: { rule: [], skill: [], prompt: [] },
         recentlyViewed: { rule: [], skill: [], prompt: [] },
         contentSortOrder: "modified-desc",
+        quickInputs: [],
         projects: [{
           id: projectId,
           name: "Knowledge",

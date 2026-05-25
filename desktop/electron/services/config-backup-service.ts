@@ -8,7 +8,7 @@ import type {
   SynapseConfigBackupImportResult,
 } from "../../src/types/backup"
 import { SYNAPSE_THEME_MODE_OPTIONS } from "../../src/types/config"
-import type { SynapseFavorites } from "../../src/types/config"
+import type { SynapseFavorites, SynapseQuickInput } from "../../src/types/config"
 import type { SynapseContentType } from "../../src/types/content"
 import { configStore } from "./config-store"
 import { createMainLogger } from "./log-store"
@@ -162,6 +162,53 @@ function validateRepository(
   }
 }
 
+function validateQuickInputs(rawValue: unknown, errors: string[]): SynapseQuickInput[] {
+  if (rawValue === undefined) {
+    return []
+  }
+
+  if (!Array.isArray(rawValue)) {
+    errors.push("config.global.quickInputs 必须是数组。")
+    return []
+  }
+
+  const seenIds = new Set<string>()
+  const quickInputs: SynapseQuickInput[] = []
+
+  rawValue.forEach((item, index) => {
+    const itemPath = `config.global.quickInputs[${index}]`
+    if (!isRecord(item)) {
+      errors.push(`${itemPath} 必须是对象。`)
+      return
+    }
+
+    const id = item.id
+    const content = item.content
+    if (!isNonEmptyString(id)) {
+      errors.push(`${itemPath}.id 必须是非空字符串。`)
+      return
+    }
+    if (typeof content !== "string" || content.trim().length === 0) {
+      errors.push(`${itemPath}.content 必须是非空字符串。`)
+      return
+    }
+
+    const normalizedId = id.trim()
+    if (seenIds.has(normalizedId)) {
+      errors.push(`${itemPath}.id 重复。`)
+      return
+    }
+
+    seenIds.add(normalizedId)
+    quickInputs.push({
+      id: normalizedId,
+      content,
+    })
+  })
+
+  return quickInputs
+}
+
 function validateConfig(
   rawValue: unknown,
   errors: string[],
@@ -211,6 +258,7 @@ function validateConfig(
 
   const themeMode = readRequiredField(global, "themeMode", "config.global", errors)
   const projects = readRequiredField(global, "projects", "config.global", errors)
+  const quickInputs = validateQuickInputs(global.quickInputs, errors)
 
   if (
     typeof themeMode !== "string"
@@ -274,6 +322,7 @@ function validateConfig(
     global: {
       themeMode: themeMode as SynapseConfigBackup["config"]["global"]["themeMode"],
       projects: normalizedProjects,
+      quickInputs,
       favorites: {
         rule: [],
         skill: [],

@@ -219,6 +219,7 @@ describe("knowledgeBaseIpcModule", () => {
           favorites: { rule: [], skill: [], prompt: [] },
           recentlyViewed: { rule: [], skill: [], prompt: [] },
           contentSortOrder: "modified-desc",
+          quickInputs: [],
           projects: [{
             id: "kb-1",
             name: "Knowledge",

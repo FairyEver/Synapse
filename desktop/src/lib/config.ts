@@ -4,6 +4,7 @@ import {
   DEFAULT_CONTENT_SORT_ORDER,
   DEFAULT_FAVORITES,
   DEFAULT_GLOBAL_CONFIG,
+  DEFAULT_QUICK_INPUTS,
   DEFAULT_RECENTLY_VIEWED,
   DEFAULT_REPOSITORY_CONTENT_DIRECTORIES,
   DEFAULT_THEME_MODE,
@@ -25,6 +26,7 @@ import type {
   SynapseFavorites,
   SynapseGlobalConfig,
   SynapseProjectConfig,
+  SynapseQuickInput,
   SynapseRecentlyViewed,
   SynapseRepositoryConfig,
   SynapseThemeMode,
@@ -226,6 +228,10 @@ function hasGlobalConfigFormatError(value: unknown): boolean {
     return true
   }
 
+  if (hasOwnKey(value, "quickInputs") && !Array.isArray(value.quickInputs)) {
+    return true
+  }
+
   if (!hasOwnKey(value, "projects")) {
     return false
   }
@@ -387,6 +393,34 @@ function normalizeProjects(value: unknown): SynapseProjectConfig[] {
   )
 }
 
+function normalizeQuickInput(value: unknown): SynapseQuickInput | null {
+  if (!isRecord(value)) {
+    return null
+  }
+
+  const id = asTrimmedString(value.id)
+
+  if (!id || typeof value.content !== "string" || value.content.trim().length === 0) {
+    return null
+  }
+
+  return {
+    id,
+    content: value.content,
+  }
+}
+
+function normalizeQuickInputs(value: unknown): SynapseQuickInput[] {
+  if (!Array.isArray(value)) {
+    return structuredClone(DEFAULT_QUICK_INPUTS)
+  }
+
+  return dedupeByKey(
+    value.map(normalizeQuickInput).filter(isDefined),
+    (quickInput) => quickInput.id,
+  )
+}
+
 function normalizeRepositories(value: unknown): SynapseRepositoryConfig[] {
   if (!Array.isArray(value)) {
     return structuredClone(DEFAULT_CONFIG.repositories)
@@ -438,6 +472,7 @@ function normalizeGlobalConfig(value: unknown): SynapseGlobalConfig {
   return {
     themeMode: normalizeThemeMode(value.themeMode, DEFAULT_THEME_MODE),
     projects: normalizeProjects(value.projects),
+    quickInputs: normalizeQuickInputs(value.quickInputs),
     favorites: normalizeFavorites(value.favorites),
     recentlyViewed: normalizeRecentlyViewed(value.recentlyViewed),
     contentSortOrder: isSynapseContentSortOrder(value.contentSortOrder)
