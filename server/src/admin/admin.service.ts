@@ -275,10 +275,10 @@ export class AdminService {
       action: "admin.team_entitlements.update",
       targetType: "team",
       targetId: teamId,
-      detail: { permissionKeys: next },
+      detail: next,
       ipAddress,
     })
-    return { permissionKeys: next }
+    return next
   }
 
   async replaceTeamPermissions(

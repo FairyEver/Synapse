@@ -1,13 +1,18 @@
-import { Controller, Delete, Get, InternalServerErrorException, Param, Post, Res, UseGuards } from "@nestjs/common"
+import { Controller, Delete, Get, InternalServerErrorException, Optional, Param, Post, Req, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { pipeline } from "node:stream/promises"
+import type { AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AdminAuthGuard } from "../admin-auth/admin-auth.guard"
+import { AuditLogService } from "../common/audit-log.service"
 import { BackupService } from "./backup.service"
 
 @Controller("/api/admin/backup")
 @UseGuards(AdminAuthGuard)
 export class BackupController {
-  constructor(private readonly backupService: BackupService) {}
+  constructor(
+    private readonly backupService: BackupService,
+    @Optional() private readonly auditLog?: AuditLogService,
+  ) {}
 
   @Post()
   async triggerBackup() {
@@ -24,15 +29,21 @@ export class BackupController {
   }
 
   @Get("download/:filename")
-  async downloadBackup(@Param("filename") filename: string, @Res() response: Response) {
-    const stream = this.backupService.downloadBackup(filename)
-    response.set({
-      "Content-Type": contentType(filename),
-      "Content-Disposition": contentDisposition(filename),
-    })
+  async downloadBackup(
+    @Param("filename") filename: string,
+    @Res() response: Response,
+    @Req() request?: AdminRequest,
+  ) {
     try {
+      const stream = this.backupService.downloadBackup(filename)
+      response.set({
+        "Content-Type": contentType(filename),
+        "Content-Disposition": contentDisposition(filename),
+      })
       await pipeline(stream, response)
+      await this.recordDownloadAudit(filename, request)
     } catch (error: unknown) {
+      await this.recordDownloadAudit(filename, request, error)
       if (!response.headersSent) throw error
     }
   }
@@ -42,6 +53,24 @@ export class BackupController {
     await this.backupService.deleteBackup(filename)
     return { ok: true }
   }
+
+  private recordDownloadAudit(filename: string, request: AdminRequest | undefined, error?: unknown) {
+    return this.auditLog?.record({
+      adminEmail: request?.admin?.email ?? "",
+      action: error ? "backup.download.failed" : "backup.download",
+      targetType: "backup",
+      targetId: filename,
+      detail: {
+        filename,
+        ...(error ? { error: formatError(error) } : {}),
+      },
+      ipAddress: request?.ip ?? "",
+    })
+  }
+}
+
+function formatError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error)
 }
 
 function contentType(filename: string): string {

@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Optional } from "@nestjs/common"
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
 import type { Request } from "express"
 import { AuditLogService } from "../common/audit-log.service"
 import { recordAuthGuardFailure } from "../common/auth-guard-audit"
@@ -26,10 +26,10 @@ export class AdminAuthGuard implements CanActivate {
         request,
         token,
       })
-      throw new ForbiddenException("未登录或登录已过期。")
+      throw new UnauthorizedException("未登录或登录已过期。")
     }
     if (session.role !== "admin") {
-      throw new ForbiddenException("未登录或登录已过期。")
+      throw new ForbiddenException("需要管理员权限。")
     }
     request.admin = { id: session.id, email: session.email }
     return true

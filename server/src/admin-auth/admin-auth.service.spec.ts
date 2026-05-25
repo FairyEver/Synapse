@@ -108,7 +108,7 @@ describe("AdminAuthService", () => {
     })
   })
 
-  it("allows a same-email user to log in when the matching administrator is disabled", async () => {
+  it("rejects a same-email user login when the matching administrator is disabled", async () => {
     const auditLog = { record: vi.fn() }
     const { service, prisma } = await createTestService(auditLog)
     const sharedPasswordHash = await hashPassword("shared-password")
@@ -125,21 +125,17 @@ describe("AdminAuthService", () => {
       status: "active",
     })
 
-    const result = await service.login("admin@d2.com", "shared-password", "203.0.113.12")
+    await expect(service.login("admin@d2.com", "shared-password", "203.0.113.12"))
+      .rejects
+      .toThrow("邮箱或密码错误。")
 
-    expect(result).toMatchObject({ email: "admin@d2.com", role: "user" })
+    expect(prisma.user.findUnique).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledTimes(1)
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "admin@d2.com",
       action: "dashboard.login.disabled",
       targetType: "admin",
       targetId: "admin-1",
-      ipAddress: "203.0.113.12",
-    })
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "admin@d2.com",
-      action: "user.dashboard_login.success",
-      targetType: "user",
-      targetId: "user-1",
       ipAddress: "203.0.113.12",
     })
   })

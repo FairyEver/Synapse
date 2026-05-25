@@ -230,38 +230,52 @@ export class BackupService {
     const tmpDir = os.tmpdir()
     const dumpFile = path.join(tmpDir, `synapse-dump-${Date.now()}.sql`)
     const gzFile = `${dumpFile}.gz`
+    let completed = false
 
-    const pgDump = buildPgDumpOptions(this.env.databaseUrl, dumpFile)
-    await execFileAsync("pg_dump", pgDump.args, { env: pgDump.env })
+    try {
+      const pgDump = buildPgDumpOptions(this.env.databaseUrl, dumpFile)
+      await execFileAsync("pg_dump", pgDump.args, { env: pgDump.env })
 
-    const readStream = fs.createReadStream(dumpFile)
-    const writeStream = fs.createWriteStream(gzFile)
-    const gzip = createGzip()
+      const readStream = fs.createReadStream(dumpFile)
+      const writeStream = fs.createWriteStream(gzFile)
+      const gzip = createGzip()
 
-    await pipeline(readStream, gzip, writeStream)
+      await pipeline(readStream, gzip, writeStream)
 
-    fs.unlinkSync(dumpFile)
-
-    return gzFile
+      completed = true
+      return gzFile
+    } finally {
+      fs.rmSync(dumpFile, { force: true })
+      if (!completed) {
+        fs.rmSync(gzFile, { force: true })
+      }
+    }
   }
 
   private async packFiles(dbPath: string): Promise<string> {
     const tmpDir = os.tmpdir()
     const workDir = path.join(tmpDir, `synapse-backup-${Date.now()}`)
     const archivePath = path.join(tmpDir, `synapse-backup-${Date.now()}.tar`)
+    let completed = false
 
-    fs.mkdirSync(workDir, { recursive: true })
+    try {
+      fs.mkdirSync(workDir, { recursive: true })
 
-    fs.copyFileSync(dbPath, path.join(workDir, "database.sql.gz"))
+      fs.copyFileSync(dbPath, path.join(workDir, "database.sql.gz"))
 
-    await tar.create(
-      { gzip: false, file: archivePath, cwd: workDir },
-      ["database.sql.gz"],
-    )
+      await tar.create(
+        { gzip: false, file: archivePath, cwd: workDir },
+        ["database.sql.gz"],
+      )
 
-    fs.rmSync(workDir, { recursive: true, force: true })
-
-    return archivePath
+      completed = true
+      return archivePath
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+      if (!completed) {
+        fs.rmSync(archivePath, { force: true })
+      }
+    }
   }
 
   private async uploadToCos(filePath: string, filename: string): Promise<void> {

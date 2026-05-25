@@ -16,6 +16,16 @@ export interface TeamRolePermissionsInput {
   readonly permissionKeys: readonly string[]
 }
 
+export interface DeletedRolePermission {
+  readonly roleId: string
+  readonly permissionKey: string
+}
+
+export interface ReplaceTeamEntitlementsResult {
+  readonly permissionKeys: string[]
+  readonly deletedRolePermissions: DeletedRolePermission[]
+}
+
 export const teamAdminRoleName = "团队管理员"
 export const ordinaryMemberRoleName = "普通成员"
 
@@ -62,16 +72,16 @@ export class PermissionsService {
     readonly permissionKeys: readonly string[]
     readonly grantedByAdminId?: string
     readonly source: TeamEntitlementSourceInput
-  }): Promise<string[]> {
+  }): Promise<ReplaceTeamEntitlementsResult> {
     const keys = normalizePermissionKeys(input.permissionKeys)
-    await this.prisma.$transaction(async (tx) => {
-      await this.replaceTeamEntitlementsOnClient({
+    const deletedRolePermissions = await this.prisma.$transaction(async (tx) => {
+      return this.replaceTeamEntitlementsOnClient({
         ...input,
         permissionKeys: keys,
         client: tx,
       })
     })
-    return keys
+    return { permissionKeys: keys, deletedRolePermissions }
   }
 
   async replaceTeamPermissions(input: {
@@ -334,10 +344,14 @@ export class PermissionsService {
     readonly grantedByAdminId?: string
     readonly source: TeamEntitlementSourceInput
     readonly client: PrismaClientLike
-  }): Promise<void> {
+  }): Promise<DeletedRolePermission[]> {
     await input.client.teamEntitlement.deleteMany({ where: { teamId: input.teamId } })
-    await this.deleteRolePermissionsOutsideTeamEntitlements(input.teamId, input.permissionKeys, input.client)
-    if (input.permissionKeys.length === 0) return
+    const deletedRolePermissions = await this.deleteRolePermissionsOutsideTeamEntitlements(
+      input.teamId,
+      input.permissionKeys,
+      input.client,
+    )
+    if (input.permissionKeys.length === 0) return deletedRolePermissions
     await input.client.teamEntitlement.createMany({
       data: input.permissionKeys.map((permissionKey) => ({
         teamId: input.teamId,
@@ -346,6 +360,7 @@ export class PermissionsService {
         source: input.source,
       })),
     })
+    return deletedRolePermissions
   }
 
   private async replaceRolePermissionsOnClient(input: {
@@ -443,12 +458,20 @@ export class PermissionsService {
     teamId: string,
     permissionKeys: readonly string[],
     client: PrismaClientLike,
-  ): Promise<void> {
-    await client.teamAccessRolePermission.deleteMany({
-      where: {
-        role: { teamId },
-        ...(permissionKeys.length > 0 ? { permissionKey: { notIn: [...permissionKeys] } } : {}),
-      },
+  ): Promise<DeletedRolePermission[]> {
+    const where = {
+      role: { teamId },
+      ...(permissionKeys.length > 0 ? { permissionKey: { notIn: [...permissionKeys] } } : {}),
+    }
+    const deletedRolePermissions = await client.teamAccessRolePermission.findMany({
+      where,
+      select: { roleId: true, permissionKey: true },
+      orderBy: [{ roleId: "asc" }, { permissionKey: "asc" }],
     })
+    if (deletedRolePermissions.length === 0) return []
+    await client.teamAccessRolePermission.deleteMany({
+      where,
+    })
+    return deletedRolePermissions
   }
 }

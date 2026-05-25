@@ -172,6 +172,48 @@ describe("LogFileController", () => {
     expect(response.send).not.toHaveBeenCalled();
   });
 
+  it("records failed downloads without rethrowing after headers are sent", async () => {
+    const { controller, auditLog, service } = createController();
+    const error = new Error("zip stream failed");
+    service.streamZipTo.mockRejectedValueOnce(error);
+    const response = {
+      set: vi.fn(),
+      headersSent: true,
+    };
+
+    await expect(controller.download("2026-05-01", "2026-05-23", response as never, {
+      admin: { email: "admin@example.com" },
+      ip: "203.0.113.10",
+    } as never)).resolves.toBeUndefined();
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "logs.download.failed",
+      targetType: "logs",
+      targetId: "logs-2026-05-01-2026-05-23.zip",
+      detail: {
+        from: "2026-05-01",
+        to: "2026-05-23",
+        filename: "logs-2026-05-01-2026-05-23.zip",
+        error: "zip stream failed",
+      },
+      ipAddress: "203.0.113.10",
+    });
+  });
+
+  it("rethrows download stream errors before headers are sent", async () => {
+    const { controller, service } = createController();
+    service.streamZipTo.mockRejectedValueOnce(new Error("zip stream failed"));
+    const response = {
+      set: vi.fn(),
+      headersSent: false,
+    };
+
+    await expect(controller.download("2026-05-01", "2026-05-23", response as never))
+      .rejects
+      .toThrow("zip stream failed");
+  });
+
   it("rejects invalid download dates before streaming logs", async () => {
     const { controller, service, auditLog } = createController();
     const response = { set: vi.fn(), send: vi.fn() };

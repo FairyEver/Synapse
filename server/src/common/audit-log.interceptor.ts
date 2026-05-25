@@ -111,10 +111,7 @@ function resolveAuditPolicy(method: string, path: string, hasAuthenticatedAdmin:
 function shouldAuditBackupRequest(method: string, path: string): boolean {
   if (method === "POST" && path === "/api/admin/backup") return true
   if (method === "DELETE" && path.startsWith("/api/admin/backup/")) return true
-  return method === "GET" && (
-    path === "/api/admin/backup/list" ||
-    path.startsWith("/api/admin/backup/download/")
-  )
+  return method === "GET" && path === "/api/admin/backup/list"
 }
 
 function resolveAuditTarget(

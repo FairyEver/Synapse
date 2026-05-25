@@ -105,8 +105,21 @@ export function TeamsPage() {
       const result = await adminApi.replaceTeamEntitlements(selectedTeam.id, [
         ...entitlementKeys,
       ]);
-      setEntitlementKeys(new Set(result.permissionKeys));
-      setPermissionFeedback('团队权限已保存');
+      const nextEntitlementKeys = new Set(result.permissionKeys);
+      setEntitlementKeys(nextEntitlementKeys);
+      setAccessRoles((current) =>
+        current.map((role) => ({
+          ...role,
+          permissionKeys: role.permissionKeys.filter((key) =>
+            nextEntitlementKeys.has(key),
+          ),
+        })),
+      );
+      setPermissionFeedback(
+        result.deletedRolePermissions.length > 0
+          ? `团队权限已保存，已同步 ${result.deletedRolePermissions.length} 个角色权限`
+          : '团队权限已保存',
+      );
     } catch (nextError) {
       setPermissionError(
         nextError instanceof Error ? nextError.message : '保存失败',

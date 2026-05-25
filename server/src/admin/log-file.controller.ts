@@ -102,7 +102,23 @@ export class LogFileController {
       "Content-Type": "application/zip",
       "Content-Disposition": `attachment; filename="${filename}"`,
     });
-    const result = await this.logFileService.streamZipTo(res, range);
+    let result: Awaited<ReturnType<LogFileService["streamZipTo"]>>;
+    try {
+      result = await this.logFileService.streamZipTo(res, range);
+    } catch (error) {
+      if (!res.headersSent) throw error;
+      await this.recordLogAudit(request, {
+        action: "logs.download.failed",
+        targetId: filename,
+        detail: {
+          from: range.from,
+          to: range.to,
+          filename,
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
+      return;
+    }
     await this.recordLogAudit(request, {
       action: "logs.download",
       targetId: filename,

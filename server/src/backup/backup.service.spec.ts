@@ -290,6 +290,30 @@ describe("BackupService", () => {
       fs.rmSync(archivePath, { force: true })
     }
   })
+
+  it("removes the backup work directory when packing fails", async () => {
+    const logger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const service = createBackupService({}, logger)
+    const now = 1_777_777_777_000
+    const workDir = path.join(os.tmpdir(), `synapse-backup-${now}`)
+    const archivePath = path.join(os.tmpdir(), `synapse-backup-${now}.tar`)
+    const nowSpy = vi.spyOn(Date, "now").mockReturnValue(now)
+
+    try {
+      await expect((service as unknown as {
+        packFiles(dbPath: string): Promise<string>
+      }).packFiles(path.join(os.tmpdir(), "missing-synapse-db.sql.gz")))
+        .rejects
+        .toThrow()
+
+      expect(fs.existsSync(workDir)).toBe(false)
+      expect(fs.existsSync(archivePath)).toBe(false)
+    } finally {
+      nowSpy.mockRestore()
+      fs.rmSync(workDir, { recursive: true, force: true })
+      fs.rmSync(archivePath, { force: true })
+    }
+  })
 })
 
 function createBackupService(cos: unknown, logger: {

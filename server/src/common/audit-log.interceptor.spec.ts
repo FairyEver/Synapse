@@ -116,7 +116,7 @@ describe("AuditLogInterceptor", () => {
     expect(auth.getEmail).not.toHaveBeenCalled()
   })
 
-  it("records backup downloads because backup contents are sensitive", async () => {
+  it("leaves backup download audit records to the streaming controller", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }
     const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
@@ -130,13 +130,7 @@ describe("AuditLogInterceptor", () => {
       { handle: () => of(Buffer.from("backup")) },
     ))
 
-    await vi.waitFor(() => {
-      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
-        action: "backup.download",
-        targetType: "backup",
-        targetId: "synapse-backup.tar.gz",
-      }))
-    })
+    expect(auditLog.record).not.toHaveBeenCalled()
   })
 
   it("uses backup result filenames as backup trigger audit targets", async () => {

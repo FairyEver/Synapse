@@ -39,6 +39,9 @@ describe("BackupController", () => {
     const service = {
       downloadBackup: vi.fn().mockReturnValue(stream),
     }
+    const auditLog = {
+      record: vi.fn().mockResolvedValue(undefined),
+    }
     const chunks: Buffer[] = []
     const response = new Writable({
       write(chunk: Buffer, _encoding, callback) {
@@ -47,9 +50,12 @@ describe("BackupController", () => {
       },
     }) as Writable & { set: ReturnType<typeof vi.fn> }
     response.set = vi.fn()
-    const controller = new BackupController(service as unknown as BackupService)
+    const controller = new BackupController(service as unknown as BackupService, auditLog as never)
 
-    await controller.downloadBackup("synapse-backup.tar", response as never)
+    await controller.downloadBackup("synapse-backup.tar", response as never, {
+      admin: { email: "admin@example.com" },
+      ip: "203.0.113.80",
+    } as never)
 
     expect(service.downloadBackup).toHaveBeenCalledWith("synapse-backup.tar")
     expect(response.set).toHaveBeenCalledWith({
@@ -57,6 +63,14 @@ describe("BackupController", () => {
       "Content-Disposition": "attachment; filename=\"synapse-backup.tar\"; filename*=UTF-8''synapse-backup.tar",
     })
     expect(Buffer.concat(chunks)).toEqual(Buffer.from("backup"))
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "backup.download",
+      targetType: "backup",
+      targetId: "synapse-backup.tar",
+      detail: { filename: "synapse-backup.tar" },
+      ipAddress: "203.0.113.80",
+    })
   })
 
   it("rethrows backup stream errors before sending headers", async () => {
@@ -76,9 +90,17 @@ describe("BackupController", () => {
     }) as Writable & { set: ReturnType<typeof vi.fn>; headersSent: boolean }
     response.set = vi.fn()
     Object.defineProperty(response, "headersSent", { value: false })
-    const controller = new BackupController(service as unknown as BackupService)
+    const auditLog = {
+      record: vi.fn().mockResolvedValue(undefined),
+    }
+    const controller = new BackupController(service as unknown as BackupService, auditLog as never)
 
     await expect(controller.downloadBackup("synapse-backup.tar", response as never)).rejects.toThrow(error)
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "backup.download.failed",
+      targetId: "synapse-backup.tar",
+      detail: { filename: "synapse-backup.tar", error: "COS stream failed" },
+    }))
   })
 
   it("does not rethrow backup stream errors after headers are sent", async () => {
@@ -104,9 +126,17 @@ describe("BackupController", () => {
     let headersSent = false
     response.set = vi.fn()
     Object.defineProperty(response, "headersSent", { get: () => headersSent })
-    const controller = new BackupController(service as unknown as BackupService)
+    const auditLog = {
+      record: vi.fn().mockResolvedValue(undefined),
+    }
+    const controller = new BackupController(service as unknown as BackupService, auditLog as never)
 
     await expect(controller.downloadBackup("synapse-backup.tar", response as never)).resolves.toBeUndefined()
+    expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "backup.download.failed",
+      targetId: "synapse-backup.tar",
+      detail: { filename: "synapse-backup.tar", error: "COS stream failed" },
+    }))
   })
 
   it("deletes a backup file", async () => {

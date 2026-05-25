@@ -7,7 +7,10 @@ function createPermissionsMock() {
   return {
     listPermissionDefinitions: vi.fn().mockReturnValue([{ key: "database.use" }]),
     listTeamEntitlements: vi.fn().mockResolvedValue(["database.use"]),
-    replaceTeamEntitlements: vi.fn().mockResolvedValue(["agent.chat.use", "database.use"]),
+    replaceTeamEntitlements: vi.fn().mockResolvedValue({
+      permissionKeys: ["agent.chat.use", "database.use"],
+      deletedRolePermissions: [{ roleId: "role-1", permissionKey: "workflow.use" }],
+    }),
     replaceTeamPermissions: vi.fn().mockResolvedValue({
       permissionKeys: ["agent.chat.use", "database.use"],
       rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
@@ -424,7 +427,10 @@ describe("AdminService", () => {
       "203.0.113.60",
     ))
       .resolves
-      .toEqual({ permissionKeys: ["agent.chat.use", "database.use"] })
+      .toEqual({
+        permissionKeys: ["agent.chat.use", "database.use"],
+        deletedRolePermissions: [{ roleId: "role-1", permissionKey: "workflow.use" }],
+      })
 
     expect(prisma.team.findUnique).toHaveBeenCalledWith({
       where: { id: "team-1" },
@@ -441,7 +447,10 @@ describe("AdminService", () => {
       action: "admin.team_entitlements.update",
       targetType: "team",
       targetId: "team-1",
-      detail: { permissionKeys: ["agent.chat.use", "database.use"] },
+      detail: {
+        permissionKeys: ["agent.chat.use", "database.use"],
+        deletedRolePermissions: [{ roleId: "role-1", permissionKey: "workflow.use" }],
+      },
       ipAddress: "203.0.113.60",
     })
   })

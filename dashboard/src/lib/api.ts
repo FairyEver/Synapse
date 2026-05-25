@@ -78,6 +78,15 @@ export type TeamEntitlementsResponse = {
   permissionKeys: string[];
 };
 
+export type DeletedRolePermission = {
+  roleId: string;
+  permissionKey: string;
+};
+
+export type ReplaceTeamEntitlementsResponse = TeamEntitlementsResponse & {
+  deletedRolePermissions: DeletedRolePermission[];
+};
+
 export type TeamAccessRoleRow = {
   id: string;
   name: string;
@@ -233,7 +242,7 @@ function notifyAuthExpired() {
 }
 
 function shouldNotifyAuthExpired(path: string, status: number) {
-  if (status !== 401 && status !== 403) return false;
+  if (status !== 401) return false;
   if (!path.startsWith(adminApiBasePath)) return false;
   return ![
     `${adminApiBasePath}/login`,
@@ -328,7 +337,7 @@ export const adminApi = {
       `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/entitlements`,
     ),
   replaceTeamEntitlements: (teamId: string, permissionKeys: string[]) =>
-    request<TeamEntitlementsResponse>(
+    request<ReplaceTeamEntitlementsResponse>(
       `${adminApiBasePath}/teams/${encodeURIComponent(teamId)}/entitlements`,
       {
         method: 'PUT',

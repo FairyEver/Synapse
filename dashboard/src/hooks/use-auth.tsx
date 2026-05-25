@@ -35,11 +35,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .getSession()
       .then((nextSession) => {
         if (isMounted) {
-          setSession(nextSession);
+          setSession(nextSession.role === 'admin' ? nextSession : null);
         }
       })
       .catch((error: unknown) => {
-        if (error instanceof ApiError && error.status === 403) {
+        if (error instanceof ApiError && error.status === 401) {
           return;
         }
       })
@@ -58,7 +58,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const login = useCallback(
     async (credentials: { email: string; password: string }) => {
-      setSession(await adminApi.login(credentials));
+      const nextSession = await adminApi.login(credentials);
+      if (nextSession.role !== 'admin') {
+        throw new ApiError('需要管理员权限。', 403);
+      }
+      setSession(nextSession);
     },
     [],
   );

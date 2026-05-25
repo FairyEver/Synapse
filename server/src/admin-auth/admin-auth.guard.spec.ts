@@ -1,5 +1,5 @@
 import type { ExecutionContext } from "@nestjs/common"
-import { ForbiddenException } from "@nestjs/common"
+import { ForbiddenException, UnauthorizedException } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
 import { AdminAuthGuard } from "./admin-auth.guard"
 
@@ -22,7 +22,7 @@ describe("AdminAuthGuard", () => {
       path: "/api/admin/system",
       ip: "203.0.113.30",
       cookies: { synapse_admin: "invalid-token" },
-    }))).rejects.toThrow(ForbiddenException)
+    }))).rejects.toThrow(UnauthorizedException)
 
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "unknown",
@@ -38,7 +38,7 @@ describe("AdminAuthGuard", () => {
     })
   })
 
-  it("rejects dashboard user cookies without recording admin auth failure", async () => {
+  it("rejects dashboard user cookies as forbidden without recording admin auth failure", async () => {
     const auth = {
       verifyDashboardSession: vi.fn().mockResolvedValue({
         id: "user-1",

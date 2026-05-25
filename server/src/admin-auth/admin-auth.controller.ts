@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, ForbiddenException, Get, Optional, Post, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Get, Optional, Post, Req, Res, UnauthorizedException, UseGuards } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Response } from "express"
 import { z } from "zod"
@@ -70,7 +70,7 @@ export class AdminAuthController {
     const token = request.cookies?.[adminCookieName]
     const session = typeof token === "string" ? await this.auth.verifyDashboardSession(token) : null
     if (!session) {
-      throw new ForbiddenException("未登录或登录已过期。")
+      throw new UnauthorizedException("未登录或登录已过期。")
     }
     return { email: session.email, role: session.role }
   }
