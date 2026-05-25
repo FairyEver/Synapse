@@ -1,4 +1,4 @@
-import { dialog } from "electron"
+import { app, dialog } from "electron"
 import { z } from "zod"
 
 import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
@@ -30,6 +30,10 @@ const listToolsResultSchema = z.object({
 const fileConversionPayloadSchema = z.object({
   filePaths: z.array(z.string().min(1)).min(1),
   outputDirectory: z.string().min(1),
+})
+
+const fileConversionOutputDirectoryRequestSchema = z.object({
+  defaultPath: z.string().min(1).optional(),
 })
 
 const fileConversionResultSchema = z.object({
@@ -119,12 +123,22 @@ export const toolsIpcModule: IpcModule = {
     selectFileConversionOutputDirectory: {
       kind: "invoke",
       channel: "synapse:tools:file-conversion:select-output-directory",
-      request: z.object({}),
+      request: fileConversionOutputDirectoryRequestSchema,
       response: z.object({ directoryPath: z.string().nullable() }),
-      handler: async () => {
-        const result = await dialog.showOpenDialog({ properties: ["openDirectory"] })
+      handler: async (_ctx, request: { defaultPath?: string }) => {
+        const result = await dialog.showOpenDialog({
+          properties: ["openDirectory"],
+          ...(request.defaultPath ? { defaultPath: request.defaultPath } : {}),
+        })
         return { directoryPath: result.canceled ? null : result.filePaths[0] ?? null }
       },
+    },
+    getDefaultFileConversionOutputDirectory: {
+      kind: "invoke",
+      channel: "synapse:tools:file-conversion:get-default-output-directory",
+      request: z.object({}),
+      response: z.object({ directoryPath: z.string() }),
+      handler: () => ({ directoryPath: app.getPath("downloads") }),
     },
     convertFiles: {
       kind: "invoke",

@@ -213,6 +213,7 @@ export const IPC_CHANNELS = {
     "openTool": "synapse:tools:open",
     "selectFileConversionInputFiles": "synapse:tools:file-conversion:select-input-files",
     "selectFileConversionOutputDirectory": "synapse:tools:file-conversion:select-output-directory",
+    "getDefaultFileConversionOutputDirectory": "synapse:tools:file-conversion:get-default-output-directory",
     "convertFiles": "synapse:tools:file-conversion:convert",
   },
   "usage-analysis": {

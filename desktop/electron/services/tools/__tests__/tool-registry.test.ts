@@ -14,6 +14,7 @@ describe("tool registry", () => {
         id: "file-conversion",
         label: "文件转换",
         supportedExtensions: [".docx", ".xlsx", ".pdf", ".pptx"],
+        bounds: { width: 760, height: 560, minWidth: 560, minHeight: 420 },
       }),
     ])
     expect(getToolDefinition("file-conversion")?.windowTitle).toBe("文件转换")

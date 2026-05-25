@@ -3,8 +3,19 @@ import type {
   SynapseFileConversionSuccess,
 } from "@/types/tools"
 
+const SUPPORTED_FILE_EXTENSIONS = [".docx", ".xlsx", ".pdf", ".pptx"] as const
+
 export function fileNameFromPath(filePath: string): string {
   return filePath.split(/[\\/]/).filter(Boolean).at(-1) ?? filePath
+}
+
+export function isSupportedConversionFile(filePath: string): boolean {
+  const lowerPath = filePath.toLowerCase()
+  return SUPPORTED_FILE_EXTENSIONS.some((extension) => lowerPath.endsWith(extension))
+}
+
+export function supportedConversionExtensionsLabel(): string {
+  return SUPPORTED_FILE_EXTENSIONS.map((extension) => extension.slice(1)).join("、")
 }
 
 export function summarizeConversionResult(result: {

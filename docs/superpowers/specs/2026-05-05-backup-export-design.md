@@ -49,7 +49,7 @@ Docker 重置或 volume 丢失会导致 PostgreSQL 中的激活码、License、�
 
 | 变量 | 用途 | 示例 | 必填 |
 |------|------|------|------|
-| `COS_SECRET_ID` | 腾讯云 API 密钥 ID | `AKIDxxxx` | 可选 |
+| `COS_SECRET_ID` | 腾讯云 API 密钥 ID | `your-cos-secret-id` | 可选 |
 | `COS_SECRET_KEY` | 腾讯云 API 密钥 Key | `xxxxx` | 可选 |
 | `COS_BUCKET` | 存储桶名称 | `synapse-backup-1250000000` | 可选 |
 | `COS_REGION` | 地域 | `ap-guangzhou` | 可选 |
@@ -96,7 +96,7 @@ COS 相关变量全部留空时，自动备份不启用，管理后台备份功�
 
 ```bash
 # server/.env 追加
-COS_SECRET_ID=AKIDxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+COS_SECRET_ID=your-cos-secret-id
 COS_SECRET_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 COS_BUCKET=synapse-backup-1250000000
 COS_REGION=ap-guangzhou

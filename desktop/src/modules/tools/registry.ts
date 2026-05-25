@@ -8,10 +8,10 @@ export const FALLBACK_TOOL_DEFINITIONS = [
     description: "转为 Markdown",
     supportedExtensions: [".docx", ".xlsx", ".pdf", ".pptx"],
     bounds: {
-      width: 920,
-      height: 680,
-      minWidth: 720,
-      minHeight: 520,
+      width: 760,
+      height: 560,
+      minWidth: 560,
+      minHeight: 420,
     },
   },
 ] as const satisfies readonly SynapseToolDefinition[]

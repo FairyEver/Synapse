@@ -228,6 +228,7 @@ const IPC_CHANNELS = {
     "openTool": "synapse:tools:open",
     "selectFileConversionInputFiles": "synapse:tools:file-conversion:select-input-files",
     "selectFileConversionOutputDirectory": "synapse:tools:file-conversion:select-output-directory",
+    "getDefaultFileConversionOutputDirectory": "synapse:tools:file-conversion:get-default-output-directory",
     "convertFiles": "synapse:tools:file-conversion:convert",
   },
   "usage-analysis": {
@@ -708,8 +709,11 @@ const synapseBridge: SynapseBridge = {
     fileConversion: {
       selectInputFiles: () =>
         invoke(IPC_CHANNELS.tools.selectFileConversionInputFiles)({}),
-      selectOutputDirectory: () =>
-        invoke(IPC_CHANNELS.tools.selectFileConversionOutputDirectory)({}),
+      selectOutputDirectory: (payload = {}) =>
+        invoke(IPC_CHANNELS.tools.selectFileConversionOutputDirectory)(payload),
+      getDefaultOutputDirectory: () =>
+        invoke(IPC_CHANNELS.tools.getDefaultFileConversionOutputDirectory)({}),
+      filePathForDroppedFile: (file: File) => webUtils.getPathForFile(file) || null,
       convert: (payload) => invoke(IPC_CHANNELS.tools.convertFiles)(payload),
     },
   },

@@ -5,18 +5,23 @@ import type { AuditSink, PermissionGuard, PermissionResult } from "../../../runt
 import { toolsIpcModule } from "../ipc"
 
 const electronMock = vi.hoisted(() => ({
+  app: {
+    getPath: vi.fn(),
+  },
   dialog: {
     showOpenDialog: vi.fn(),
   },
 }))
 
 vi.mock("electron", () => ({
+  app: electronMock.app,
   dialog: electronMock.dialog,
 }))
 
 describe("toolsIpcModule", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    electronMock.app.getPath.mockReturnValue("/Users/test/Downloads")
     electronMock.dialog.showOpenDialog.mockResolvedValue({
       canceled: false,
       filePaths: ["/tmp/report.docx"],
@@ -62,6 +67,35 @@ describe("toolsIpcModule", () => {
     const result = await harness.invoke("synapse:tools:file-conversion:select-output-directory", {})
 
     expect(result).toEqual({ directoryPath: "/tmp/out" })
+    expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith({
+      properties: ["openDirectory"],
+    })
+  })
+
+  it("uses the current directory as the output directory dialog default", async () => {
+    electronMock.dialog.showOpenDialog.mockResolvedValueOnce({
+      canceled: false,
+      filePaths: ["/tmp/out"],
+    })
+    const { harness } = createHarness()
+
+    await harness.invoke("synapse:tools:file-conversion:select-output-directory", {
+      defaultPath: "/Users/test/Downloads",
+    })
+
+    expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith({
+      properties: ["openDirectory"],
+      defaultPath: "/Users/test/Downloads",
+    })
+  })
+
+  it("returns downloads as the default file conversion output directory", async () => {
+    const { harness } = createHarness()
+
+    const result = await harness.invoke("synapse:tools:file-conversion:get-default-output-directory", {})
+
+    expect(result).toEqual({ directoryPath: "/Users/test/Downloads" })
+    expect(electronMock.app.getPath).toHaveBeenCalledWith("downloads")
   })
 
   it("runs conversion through guarded read and write permissions", async () => {

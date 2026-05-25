@@ -87,7 +87,7 @@ function createBridgeMocks() {
           windowTitle: "文件转换",
           description: "转为 Markdown",
           supportedExtensions: [".docx", ".xlsx", ".pdf", ".pptx"],
-          bounds: { width: 920, height: 680, minWidth: 720, minHeight: 520 },
+          bounds: { width: 760, height: 560, minWidth: 560, minHeight: 420 },
         }],
       })),
       openTool: vi.fn(async () => undefined),
