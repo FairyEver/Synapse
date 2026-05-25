@@ -11,7 +11,10 @@ import {
   PROVIDER_SERVICE_ID,
 } from "../../services/provider"
 import { configStore } from "../../services/config-store"
-import { resolveProjectWorkspacePath } from "../../services/knowledge-base/managed-path"
+import {
+  isManagedKnowledgeBaseProject,
+  resolveProjectWorkspacePath,
+} from "../../services/knowledge-base/managed-path"
 import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
 
@@ -169,6 +172,7 @@ export async function resolveProjectAgent(
   readonly agent: AgentRuntimeService
   readonly providerService: ProviderService
   readonly project: { readonly uuid: string; readonly name: string; readonly localPath: string }
+  readonly managedKnowledgeBase?: boolean
 }> {
   const config = await configStore.load()
   const project = resolveAgentProjectConfig(config, projectId)
@@ -180,6 +184,7 @@ export async function resolveProjectAgent(
   const container = await containers.open(project.uuid, {
     name: project.name,
     workspacePath: project.localPath,
+    managedKnowledgeBase: project.managedKnowledgeBase,
   })
   return {
     agent: container.get<AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID),
@@ -191,7 +196,12 @@ export async function resolveProjectAgent(
 function resolveAgentProjectConfig(
   config: Awaited<ReturnType<typeof configStore.load>>,
   projectId: string,
-): { readonly uuid: string; readonly name: string; readonly localPath: string } | null {
+): {
+  readonly uuid: string
+  readonly name: string
+  readonly localPath: string
+  readonly managedKnowledgeBase?: boolean
+} | null {
   const repository = config.repositories.find((item) => item.uuid === projectId)
   if (repository) {
     return repository
@@ -204,6 +214,7 @@ function resolveAgentProjectConfig(
     uuid: project.id,
     name: project.name,
     localPath: resolveProjectWorkspacePath(project),
+    ...(isManagedKnowledgeBaseProject(project) ? { managedKnowledgeBase: true } : undefined),
   }
 }
 

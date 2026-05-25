@@ -27,6 +27,7 @@ export interface ProjectMetadata {
   readonly id: string
   readonly name: string
   readonly workspacePath?: string
+  readonly managedKnowledgeBase?: boolean
   readonly createdAt: string
 }
 

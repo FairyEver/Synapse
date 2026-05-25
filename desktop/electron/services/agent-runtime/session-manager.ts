@@ -29,6 +29,7 @@ export interface CreateAgentLiveSessionInput {
   readonly model?: string
   readonly mode?: string
   readonly plugins?: readonly AgentSdkPluginSpec[]
+  readonly allowPluginHooks?: boolean
   readonly agents?: AgentSdkAgentDefinitions
   readonly subagentToolPolicies?: AgentSdkSubagentToolPolicies
   readonly abortSignal?: AbortSignal
@@ -55,6 +56,8 @@ export interface SessionManagerDeps {
   readonly createSession?: AgentLiveSessionFactory
   readonly sdkPlugins?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
+  readonly allowPluginHooks?: (message: AgentMessage, conversation: ConversationEntryV1) =>
+    boolean | Promise<boolean>
   readonly sdkAgents?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     AgentSdkAgentDefinitions | Promise<AgentSdkAgentDefinitions>
   readonly sdkSubagentToolPolicies?: (message: AgentMessage, conversation: ConversationEntryV1) =>
@@ -81,6 +84,7 @@ export class SessionManager {
         model: input.model,
         mode: input.mode,
         plugins: input.plugins,
+        allowPluginHooks: input.allowPluginHooks,
         agents: input.agents,
         subagentToolPolicies: input.subagentToolPolicies,
         abortSignal: input.abortSignal,
@@ -190,6 +194,9 @@ export class SessionManager {
       model: env.ANTHROPIC_MODEL,
       mode: modeOverride,
       plugins: await Promise.resolve(this.deps.sdkPlugins?.(input.message, input.conversation) ?? []),
+      allowPluginHooks: await Promise.resolve(
+        this.deps.allowPluginHooks?.(input.message, input.conversation) ?? false,
+      ),
       agents: await Promise.resolve(this.deps.sdkAgents?.(input.message, input.conversation) ?? {}),
       subagentToolPolicies: await Promise.resolve(
         this.deps.sdkSubagentToolPolicies?.(input.message, input.conversation) ?? {},

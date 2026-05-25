@@ -76,6 +76,7 @@ export class ProjectContainerRegistryImpl implements ProjectContainerRegistry {
       id: projectId,
       name: metadata.name ?? projectId,
       workspacePath: metadata.workspacePath,
+      managedKnowledgeBase: metadata.managedKnowledgeBase,
       createdAt: metadata.createdAt ?? new Date().toISOString(),
     }
     const ctx: ProjectContext = {

@@ -150,7 +150,7 @@ describe("createAgentRuntimeProjectService", () => {
     }
   })
 
-  it("does not inject SDK plugins for managed knowledge base runtime sessions", async () => {
+  it("keeps ordinary project sessions isolated from knowledge base plugin runtime", async () => {
     createdSessionInputs.values = []
     const serviceFactory = createAgentRuntimeProjectService()
     const ctx = createRunnableProjectContext()
@@ -171,6 +171,7 @@ describe("createAgentRuntimeProjectService", () => {
       expect(createdSessionInputs.values.at(-1)).toEqual(expect.objectContaining({
         cwd: "/workspace/project-1",
         plugins: [],
+        allowPluginHooks: false,
         agents: {},
         subagentToolPolicies: {},
       }))
@@ -178,9 +179,102 @@ describe("createAgentRuntimeProjectService", () => {
       service.stopIdleReclaim()
     }
   })
+
+  it("loads managed knowledge base backing directory as a local plugin for renderer sessions", async () => {
+    createdSessionInputs.values = []
+    const serviceFactory = createAgentRuntimeProjectService()
+    const ctx = createRunnableProjectContext({
+      workspacePath: "/workspace/knowledge-bases/kb-1",
+      managedKnowledgeBase: true,
+    })
+    const service = await serviceFactory.create(ctx)
+
+    try {
+      const result = await service.send({
+        projectId: "project-1",
+        sessionKey: "s1",
+        platform: "local-renderer",
+        userId: "user-1",
+        content: "hello",
+      })
+
+      expect(result.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "result", content: "done" }),
+      ]))
+      expect(createdSessionInputs.values.at(-1)).toEqual(expect.objectContaining({
+        cwd: "/workspace/knowledge-bases/kb-1",
+        plugins: [{ type: "local", path: "/workspace/knowledge-bases/kb-1" }],
+        allowPluginHooks: true,
+      }))
+    } finally {
+      service.stopIdleReclaim()
+    }
+  })
+
+  it("does not load knowledge base plugin runtime for scheduled sends", async () => {
+    createdSessionInputs.values = []
+    const serviceFactory = createAgentRuntimeProjectService()
+    const ctx = createRunnableProjectContext({
+      workspacePath: "/workspace/knowledge-bases/kb-1",
+      managedKnowledgeBase: true,
+    })
+    const service = await serviceFactory.create(ctx)
+
+    try {
+      const result = await service.send({
+        projectId: "project-1",
+        sessionKey: "s1",
+        platform: "scheduled",
+        userId: "user-1",
+        content: "hello",
+      })
+
+      expect(result.events).toEqual(expect.arrayContaining([
+        expect.objectContaining({ type: "result", content: "done" }),
+      ]))
+      expect(createdSessionInputs.values.at(-1)).toEqual(expect.objectContaining({
+        plugins: [],
+        allowPluginHooks: false,
+      }))
+    } finally {
+      service.stopIdleReclaim()
+    }
+  })
+
+  it("passes managed knowledge base slash commands through to the SDK for renderer sessions", async () => {
+    createdSessionInputs.values = []
+    const serviceFactory = createAgentRuntimeProjectService()
+    const ctx = createRunnableProjectContext({
+      workspacePath: "/workspace/knowledge-bases/kb-1",
+      managedKnowledgeBase: true,
+    })
+    const service = await serviceFactory.create(ctx)
+
+    try {
+      for (const content of ["/wiki", "/save summarize this", "/canvas", "/autoresearch topic"]) {
+        const result = await service.send({
+          projectId: "project-1",
+          sessionKey: content,
+          platform: "local-renderer",
+          userId: "user-1",
+          content,
+        })
+
+        expect(result.events).toEqual(expect.arrayContaining([
+          expect.objectContaining({ type: "result", content: "done" }),
+        ]))
+      }
+      expect(createdSessionInputs.values).toHaveLength(4)
+    } finally {
+      service.stopIdleReclaim()
+    }
+  })
 })
 
-function createRunnableProjectContext(): ProjectContext {
+function createRunnableProjectContext(options: {
+  readonly workspacePath?: string
+  readonly managedKnowledgeBase?: boolean
+} = {}): ProjectContext {
   const dataRepository = createMemoryDataRepository()
   const permissionGuard = createPermissionGuard()
   const auditSink = createAuditSink()
@@ -191,7 +285,8 @@ function createRunnableProjectContext(): ProjectContext {
     projectMeta: {
       id: "project-1",
       name: "Project 1",
-      workspacePath: "/workspace/project-1",
+      workspacePath: options.workspacePath ?? "/workspace/project-1",
+      managedKnowledgeBase: options.managedKnowledgeBase,
       createdAt: "2026-05-13T00:00:00.000Z",
     },
     logger,

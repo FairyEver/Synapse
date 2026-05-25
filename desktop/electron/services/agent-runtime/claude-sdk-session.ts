@@ -59,6 +59,7 @@ export interface ClaudeSDKSessionOptions {
   readonly model?: string
   readonly maxTurns?: number
   readonly plugins?: readonly AgentSdkPluginSpec[]
+  readonly allowPluginHooks?: boolean
   readonly agents?: AgentSdkAgentDefinitions
   readonly subagentToolPolicies?: AgentSdkSubagentToolPolicies
   readonly toolPolicy?: ClaudeSDKToolPolicy
@@ -250,11 +251,13 @@ export class ClaudeSDKSession implements AgentLiveSession {
     const sdkEnv = mergeEnvironmentWithPath(hostEnv, options.env)
     const queryOptions: Partial<Options> = {
       cwd: options.cwd,
-      settingSources: ["user", "project", "local"],
+      settingSources: options.allowPluginHooks === true
+        ? ["project", "local"]
+        : ["user", "project", "local"],
       skills: "all",
       settings: {
         enableAllProjectMcpServers: true,
-        disableAllHooks: true,
+        disableAllHooks: options.allowPluginHooks === true ? false : true,
         env: options.env,
       },
       env: sdkEnv,

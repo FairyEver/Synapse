@@ -92,6 +92,21 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("allows plugin hooks only when explicitly requested", () => {
+    const { factory, getOptions } = createQueryFactory()
+    createSession(factory, {
+      plugins: [{ type: "local", path: "/Applications/Synapse/resources/example-plugin" }],
+      allowPluginHooks: true,
+    })
+
+    expect(getOptions()).toMatchObject({
+      settingSources: ["project", "local"],
+      settings: {
+        disableAllHooks: false,
+      },
+    })
+  })
+
   it("passes programmatic SDK agents to Claude Agent SDK", () => {
     const { factory, getOptions } = createQueryFactory()
     createSession(factory, {

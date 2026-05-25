@@ -26,7 +26,8 @@ The product promise is:
 - Prevent the normal user path from exposing the backing directory as a folder they can open directly in Claude Code.
 - Reuse the upstream `AgriciDaniel/claude-obsidian` structure as an internal template instead of reimplementing its behavior in Synapse services.
 - Remove the old requirement that runnable Agent files must not exist inside the knowledge base runtime directory.
-- Remove SDK runtime injection from the normal Knowledge Base Agent launch path.
+- Remove the old temporary SDK runtime injection that assembled hidden assets for visible user vaults.
+- For managed Knowledge Base Agent sessions, load the backing directory itself as a Claude Code SDK local plugin so the embedded `claude-obsidian` plugin, skills, commands, and approved hooks are actually active.
 - Keep existing useful Synapse UI affordances for knowledge bases: special project detection, quick commands, maintenance/source management entry points, and file conversion.
 - Keep Knowledge Base-specific logic isolated from ordinary Agent conversations, Scheduler, Workflow, and other Agent entry points.
 
@@ -36,7 +37,8 @@ The product promise is:
 - No import/export in the first implementation slice.
 - No attempt to make the managed backing directory cryptographically inaccessible to advanced users with local filesystem knowledge.
 - No rewrite of upstream `claude-obsidian` behavior into Synapse-owned coordinator/finalizer code unless a behavior cannot be handled by the template runtime.
-- No SDK-level temporary plugin, skill, hook, or command injection for the knowledge base runtime.
+- No SDK-level temporary plugin, skill, hook, or command injection that copies or synthesizes extra runtime assets for the knowledge base.
+- Loading the managed backing directory as a SDK local plugin is allowed because the backing directory is the committed internal runtime template, not an injected temporary overlay.
 - No change to ordinary project Agent conversations.
 
 ## Hard Rules
@@ -48,6 +50,7 @@ The product promise is:
 - Ordinary projects must not load Knowledge Base plugin, skill, hook, command, prompt, or template files.
 - Scheduler and Workflow Agent launches must not automatically receive Knowledge Base runtime behavior.
 - SDK runtime injection used only to hide Agent assets from visible user vaults should be removed from the new path.
+- Managed Knowledge Base Agent sessions must load only their own backing directory as a local SDK plugin; ordinary projects, Scheduler runs, and Workflow runs must not receive Knowledge Base plugin behavior implicitly.
 - Developer template sync tooling is allowed, but it must be exposed through a root `package.json` developer command only and must not run in user workspaces.
 
 ## User Model
@@ -181,7 +184,17 @@ The `kb:sync-template` command is not a user feature. It should be run by develo
 
 For managed knowledge base projects, Agent launch should use the backing directory as the working directory.
 
-Because the backing directory already contains the required Claude/Agent runtime files from the template, Synapse does not need to inject temporary SDK plugin, skill, hook, command, or prompt assets at session start.
+Because the backing directory already contains the required Claude/Agent runtime files from the template, Synapse must not inject temporary SDK plugin, skill, hook, command, or prompt assets at session start.
+
+However, `claude-obsidian` is a Claude Code plugin layout: its `skills/`, `commands/`, `hooks/`, and `.claude-plugin/plugin.json` live at the plugin root, not under `.claude/skills` or `.claude/commands`. Setting only `cwd = backingPath` is therefore insufficient to activate the upstream runtime. Managed Knowledge Base sessions should pass:
+
+```ts
+plugins: [{ type: "local", path: backingPath }]
+```
+
+to the Claude Code SDK for local renderer Agent conversations that are explicitly bound to a managed Knowledge Base project.
+
+Plugin hooks require an explicit Knowledge Base policy. Synapse currently disables hooks globally for SDK sessions; that is incompatible with expecting upstream hot-cache behavior from `claude-obsidian`. The implementation must either allow a reviewed subset of Knowledge Base plugin hooks for managed Knowledge Base sessions, or document and replace those behaviors with Synapse-owned services. When enabling Knowledge Base plugin hooks, the SDK session should avoid loading user-level hook settings; the intended scope is the managed backing directory and its local plugin. The product should not claim automatic hot-cache restoration while `disableAllHooks` prevents the plugin hooks from running.
 
 Agent conversation flow:
 
@@ -190,11 +203,12 @@ User opens Agent conversation
 -> selects managed knowledge base project
 -> Synapse resolves project id to hidden backingPath
 -> Agent runs with cwd = backingPath
+-> Synapse passes backingPath as a local SDK plugin for this managed Knowledge Base session
 -> claude-obsidian template files provide wiki behavior
 -> Synapse renderer shows knowledge-base-specific quick actions
 ```
 
-The only Knowledge Base-specific Agent handling that should remain in the shared Agent path is project resolution and UI capability metadata. Runtime behavior should come from the managed directory template.
+The only Knowledge Base-specific Agent handling that should remain in the shared Agent path is project resolution, scoped local-plugin activation for managed Knowledge Base projects, hook policy, slash-command passthrough/allowlist, and UI capability metadata. Runtime behavior should come from the managed directory template.
 
 ## UI Behavior
 
@@ -249,7 +263,7 @@ Retain code that serves the managed design:
 
 Remove or retire code whose only purpose was the old visible-vault design:
 
-- SDK runtime injection for Knowledge Base plugins, skills, hooks, commands, or prompts.
+- Temporary SDK runtime injection for Knowledge Base plugins, skills, hooks, commands, or prompts.
 - Logic that exists only to keep runnable Agent assets out of a user-visible vault.
 - Complex Synapse-owned reimplementations of upstream `claude-obsidian` behavior when the managed template can provide it directly.
 - Project capability contribution code that injects Knowledge Base runtime behavior into otherwise normal project Agent sessions.
@@ -280,9 +294,12 @@ Focused tests should cover:
 - Renderer project data does not expose the backing path.
 - Agent launch resolves the managed project to its backing path.
 - Ordinary projects do not load Knowledge Base runtime behavior.
+- Managed Knowledge Base Agent sessions pass the backing path as a local SDK plugin.
+- Managed Knowledge Base slash commands such as `/wiki`, `/save`, `/canvas`, and `/autoresearch` are passed through or allowlisted instead of being rejected by Synapse's slash router.
+- Managed Knowledge Base hook behavior is covered by an explicit policy: either reviewed plugin hooks are enabled for this project type, or replacement Synapse-owned behavior is tested.
 - Knowledge Base quick commands appear only for managed knowledge base projects.
 - Source manager copies files into the managed backing path through Synapse APIs.
-- No SDK runtime injection is called for managed knowledge base Agent sessions.
+- No temporary SDK runtime injection is called for managed knowledge base Agent sessions.
 - Template sync metadata records upstream repository and commit.
 
 ## Migration Notes

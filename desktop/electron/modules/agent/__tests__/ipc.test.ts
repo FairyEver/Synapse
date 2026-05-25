@@ -149,6 +149,7 @@ describe("agentIpcModule", () => {
     expect(harness.projectContainers.open).toHaveBeenCalledWith("kb-1", {
       name: "Knowledge",
       workspacePath: expect.stringContaining(path.join("knowledge-bases", "kb-1")),
+      managedKnowledgeBase: true,
     })
   })
 

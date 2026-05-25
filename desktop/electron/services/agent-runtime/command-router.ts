@@ -29,6 +29,7 @@ export interface AgentCommandRouterDeps {
   readonly providerService: ProviderService
   readonly registeredPromptCommands?: RegisteredPromptCommandSource
   readonly agentNativeSlashAllowlist?: readonly string[]
+  allowAgentNativeSlash?(name: string, message: AgentMessage): boolean
   readonly unknownSlashBehavior?: "reject" | "passthrough"
   readonly customCommands?: CustomCommandRegistry
   readonly skills?: SkillRegistry
@@ -188,6 +189,9 @@ export class AgentCommandRouter {
 
     const allowlist = this.deps.agentNativeSlashAllowlist ?? []
     if (allowlist.some((allowed) => allowed.toLowerCase() === name)) {
+      return null
+    }
+    if (this.deps.allowAgentNativeSlash?.(name, message)) {
       return null
     }
 

@@ -93,6 +93,7 @@ export interface AgentRuntimeServiceDeps {
   readonly registeredPromptCommands?: RegisteredPromptCommandSource
   readonly publishedProjectCommands?: PublishedProjectCommandSource
   readonly agentNativeSlashAllowlist?: readonly string[]
+  allowAgentNativeSlash?(name: string, message: AgentMessage): boolean
   readonly unknownSlashBehavior?: "reject" | "passthrough"
   readonly customCommands?: CustomCommandRegistry
   readonly skills?: SkillRegistry
@@ -100,6 +101,8 @@ export interface AgentRuntimeServiceDeps {
   readonly executionIsolation?: ProcessIsolationResolver
   readonly sdkPlugins?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
+  readonly allowPluginHooks?: (message: AgentMessage, conversation: ConversationEntryV1) =>
+    boolean | Promise<boolean>
   readonly sdkAgents?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     AgentSdkAgentDefinitions | Promise<AgentSdkAgentDefinitions>
   readonly sdkSubagentToolPolicies?: (message: AgentMessage, conversation: ConversationEntryV1) =>
@@ -162,6 +165,7 @@ export class AgentRuntimeService {
       now: deps.now,
       createSession: deps.createSession,
       sdkPlugins: deps.sdkPlugins,
+      allowPluginHooks: deps.allowPluginHooks,
       sdkAgents: deps.sdkAgents,
       sdkSubagentToolPolicies: deps.sdkSubagentToolPolicies,
     })
@@ -181,6 +185,7 @@ export class AgentRuntimeService {
       providerService: deps.providerService,
       registeredPromptCommands: deps.registeredPromptCommands,
       agentNativeSlashAllowlist: deps.agentNativeSlashAllowlist,
+      allowAgentNativeSlash: deps.allowAgentNativeSlash,
       unknownSlashBehavior: deps.unknownSlashBehavior,
       customCommands: deps.customCommands,
       skills: deps.skills,

@@ -21,6 +21,21 @@ import { AgentRuntimeService, type AgentRuntimeServiceDeps } from "./agent-runti
 import { CustomCommandRegistry } from "./command-registry"
 import { SkillRegistry } from "./skill-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
+import type { AgentMessage } from "./types"
+
+const MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS = new Set([
+  "autoresearch",
+  "canvas",
+  "defuddle",
+  "obsidian-bases",
+  "obsidian-markdown",
+  "save",
+  "wiki",
+  "wiki-fold",
+  "wiki-ingest",
+  "wiki-lint",
+  "wiki-query",
+])
 
 export {
   AgentRuntimeService,
@@ -143,6 +158,12 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         workspacePath: ctx.projectMeta.workspacePath,
         logger: ctx.logger,
       })
+      const isManagedKnowledgeBase = ctx.projectMeta.managedKnowledgeBase === true
+      const isManagedKnowledgeBaseRendererMessage = (message: AgentMessage) =>
+        isManagedKnowledgeBase
+        && message.platform === "local-renderer"
+        && typeof ctx.projectMeta.workspacePath === "string"
+        && ctx.projectMeta.workspacePath.length > 0
       const service = new AgentRuntimeService({
         projectId: ctx.projectId,
         workDir: ctx.projectMeta.workspacePath,
@@ -163,7 +184,13 @@ export function createAgentRuntimeProjectService(): ProjectScopedService<AgentRu
         commandRunner: runner,
         registeredPromptCommands: async () => [],
         publishedProjectCommands: async () => [],
-        sdkPlugins: async () => [],
+        sdkPlugins: async (message) => isManagedKnowledgeBaseRendererMessage(message)
+          ? [{ type: "local", path: ctx.projectMeta.workspacePath as string }]
+          : [],
+        allowPluginHooks: async (message) => isManagedKnowledgeBaseRendererMessage(message),
+        allowAgentNativeSlash: (name, message) =>
+          isManagedKnowledgeBaseRendererMessage(message)
+          && MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS.has(name),
         sdkAgents: async () => ({}),
         sdkSubagentToolPolicies: async () => ({}),
       })
