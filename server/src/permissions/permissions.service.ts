@@ -1,7 +1,11 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common"
 import type { Prisma } from "@prisma/client"
 import { PrismaService } from "../prisma/prisma.service"
-import { modulePermissionDefinitions, normalizeModulePermissionKeys } from "./permission-registry"
+import {
+  isActiveModulePermissionKey,
+  modulePermissionDefinitions,
+  normalizeModulePermissionKeys,
+} from "./permission-registry"
 
 type PrismaClientLike = PrismaService | Prisma.TransactionClient
 
@@ -23,7 +27,9 @@ export class PermissionsService {
       where: { userId },
       select: { permissionKey: true },
     })
-    return normalizeModulePermissionKeys(rows.map((row) => row.permissionKey))
+    return normalizeModulePermissionKeys(rows
+      .map((row) => row.permissionKey)
+      .filter(isActiveModulePermissionKey))
   }
 
   async replaceUserModulePermissions(input: {
@@ -45,12 +51,10 @@ export class PermissionsService {
       })
       if (!user) throw new NotFoundException("用户不存在。")
 
+      await this.lockUserForPermissionChange(tx, input.userId)
       const before = await this.listUserModulePermissions(input.userId, tx)
       await tx.userModulePermission.deleteMany({
-        where: {
-          userId: input.userId,
-          permissionKey: { notIn: nextKeys },
-        },
+        where: { userId: input.userId },
       })
       if (nextKeys.length > 0) {
         await tx.userModulePermission.createMany({
@@ -64,5 +68,9 @@ export class PermissionsService {
       }
       return { before, after: nextKeys }
     })
+  }
+
+  private async lockUserForPermissionChange(tx: Prisma.TransactionClient, userId: string): Promise<void> {
+    await tx.$executeRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`
   }
 }

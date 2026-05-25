@@ -52,6 +52,7 @@ function createPermissionPrismaMock() {
       deleteMany: vi.fn(),
       createMany: vi.fn(),
     },
+    $executeRaw: vi.fn(),
     $transaction: vi.fn((callback) => callback(createPermissionPrismaMock())),
   }
 }
@@ -96,10 +97,7 @@ describe("PermissionsService", () => {
     })
 
     expect(tx.userModulePermission.deleteMany).toHaveBeenCalledWith({
-      where: {
-        userId: "user-1",
-        permissionKey: { notIn: ["module.skill", "module.workflow"] },
-      },
+      where: { userId: "user-1" },
     })
     expect(tx.userModulePermission.createMany).toHaveBeenCalledWith({
       data: [
@@ -108,6 +106,47 @@ describe("PermissionsService", () => {
       ],
       skipDuplicates: true,
     })
+    expect(tx.$executeRaw).toHaveBeenCalledTimes(1)
+  })
+
+  it("ignores stale stored permission keys when listing", async () => {
+    const prisma = createPermissionPrismaMock()
+    prisma.userModulePermission.findMany.mockResolvedValue([
+      { permissionKey: "module.workflow" },
+      { permissionKey: "workflow.use" },
+      { permissionKey: "module.skill" },
+    ])
+    const service = new PermissionsService(prisma as never)
+
+    await expect(service.listUserModulePermissions("user-1")).resolves.toEqual([
+      "module.skill",
+      "module.workflow",
+    ])
+  })
+
+  it("deletes all user module permissions when replacing with none", async () => {
+    const prisma = createPermissionPrismaMock()
+    const tx = createPermissionPrismaMock()
+    prisma.$transaction.mockImplementationOnce((callback) => callback(tx))
+    tx.user.findUnique.mockResolvedValue({ id: "user-1" })
+    tx.userModulePermission.findMany.mockResolvedValue([
+      { permissionKey: "module.database" },
+    ])
+    const service = new PermissionsService(prisma as never)
+
+    await expect(service.replaceUserModulePermissions({
+      userId: "user-1",
+      permissionKeys: [],
+      grantedByAdminId: "admin-1",
+    })).resolves.toEqual({
+      before: ["module.database"],
+      after: [],
+    })
+
+    expect(tx.userModulePermission.deleteMany).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+    })
+    expect(tx.userModulePermission.createMany).not.toHaveBeenCalled()
   })
 
   it("throws when replacing permissions for a missing user", async () => {
@@ -122,6 +161,11 @@ describe("PermissionsService", () => {
       permissionKeys: ["module.skill"],
       grantedByAdminId: "admin-1",
     })).rejects.toThrow(NotFoundException)
+
+    expect(tx.$executeRaw).not.toHaveBeenCalled()
+    expect(tx.userModulePermission.findMany).not.toHaveBeenCalled()
+    expect(tx.userModulePermission.deleteMany).not.toHaveBeenCalled()
+    expect(tx.userModulePermission.createMany).not.toHaveBeenCalled()
   })
 
   it("rejects unknown module permission keys", async () => {
