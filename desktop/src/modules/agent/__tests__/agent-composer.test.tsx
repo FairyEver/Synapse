@@ -678,7 +678,7 @@ describe("AgentComposer", () => {
       />,
     )
 
-    expect(html).not.toContain("快速输入")
+    expect(html).not.toContain("片段")
   })
 
   it("renders the quick input menu before knowledge base actions", () => {
@@ -689,7 +689,7 @@ describe("AgentComposer", () => {
         canSend={false}
         sending={false}
         cancelPhase="idle"
-        quickInputs={[{ id: "quick-1", content: "常用输入" }]}
+        quickInputs={[{ id: "quick-1", content: "常用输入", directSend: false }]}
         knowledgeBaseActions={[{
           label: "查询知识库",
           description: "插入查询指令，继续输入要检索的问题。",
@@ -705,8 +705,8 @@ describe("AgentComposer", () => {
       />,
     )
 
-    expect(html.indexOf("快速输入")).toBeGreaterThan(-1)
-    expect(html.indexOf("知识库")).toBeGreaterThan(html.indexOf("快速输入"))
+    expect(html.indexOf("片段")).toBeGreaterThan(-1)
+    expect(html.indexOf("知识库")).toBeGreaterThan(html.indexOf("片段"))
   })
 
   it("inserts a quick input at the current cursor position without sending", async () => {
@@ -725,7 +725,7 @@ describe("AgentComposer", () => {
           canSend={true}
           sending={false}
           cancelPhase="idle"
-          quickInputs={[{ id: "quick-1", content: "整理这段内容\n保留关键结论" }]}
+          quickInputs={[{ id: "quick-1", content: "整理这段内容\n保留关键结论", directSend: false }]}
           onDraftChange={onDraftChange}
           onInputKeyDown={vi.fn()}
           onSubmit={onSubmit}
@@ -752,6 +752,81 @@ describe("AgentComposer", () => {
     expect(onDraftChange).toHaveBeenCalledWith("请 整理这段内容\n保留关键结论")
     expect(onSubmit).not.toHaveBeenCalled()
     expect(document.activeElement?.tagName).toBe("TEXTAREA")
+  })
+
+  it("direct sends a quick input without changing the current draft", async () => {
+    const onDraftChange = vi.fn()
+    const onDirectSend = vi.fn()
+    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault())
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft="用户正在输入"
+          disabled={false}
+          canSend={true}
+          sending={false}
+          cancelPhase="idle"
+          quickInputs={[{ id: "quick-1", content: "继续", directSend: true }]}
+          onDraftChange={onDraftChange}
+          onQuickInputDirectSend={onDirectSend}
+          onInputKeyDown={vi.fn()}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    openQuickInputMenu(container)
+    const item = document.querySelector('[role="menuitem"][aria-label="直接发送片段：继续"]') as HTMLElement | null
+    expect(item).toBeTruthy()
+
+    await act(async () => {
+      item?.click()
+      await wait(0)
+    })
+
+    expect(onDirectSend).toHaveBeenCalledWith("继续")
+    expect(onDraftChange).not.toHaveBeenCalled()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it("truncates quick input menu labels and marks insert snippets with an icon label", async () => {
+    const longContent = "这是一段非常长的片段内容，用来验证菜单中只显示预览"
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          quickInputs={[{ id: "quick-1", content: longContent, directSend: false }]}
+          onDraftChange={vi.fn()}
+          onQuickInputDirectSend={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    openQuickInputMenu(container)
+    const item = document.querySelector('[role="menuitem"][aria-label^="插入片段："]') as HTMLElement | null
+    expect(item).toBeTruthy()
+    expect(item?.textContent).toBe("这是一段非常长的片段内容，用来验证菜单中只显示预…")
+    expect(item?.querySelector('[aria-hidden="true"][data-quick-input-action="insert"]')).toBeTruthy()
   })
 
   it("does not render the knowledge base action button without actions", () => {
@@ -1171,7 +1246,7 @@ function openKnowledgeBaseMenu(container: HTMLElement) {
 }
 
 function openQuickInputMenu(container: HTMLElement) {
-  const trigger = container.querySelector('button[aria-label="快速输入"]')
+  const trigger = container.querySelector('button[aria-label="片段"]')
   expect(trigger).toBeTruthy()
   act(() => {
     trigger?.dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, button: 0 }))

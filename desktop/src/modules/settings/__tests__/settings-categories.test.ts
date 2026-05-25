@@ -36,9 +36,19 @@ describe("settingsCategories", () => {
     expect(ids).toContain("projects")
   })
 
-  it("includes quick inputs as a top-level settings category", () => {
-    const quickInputs = settingsCategories.find((category) => category.id === "quick-inputs")
+  it("uses clear user-facing category names", () => {
+    const labels = new Map(settingsCategories.map((category) => [category.id, category.label]))
 
-    expect(quickInputs?.label).toBe("快速输入")
+    expect(labels.get("general")).toBe("基础设置")
+    expect(labels.get("repositories")).toBe("本地仓库")
+    expect(labels.get("projects")).toBe("本地项目")
+    expect(labels.get("quick-inputs")).toBe("片段")
+    expect(labels.get("tools")).toBe("编辑器")
+    expect(labels.get("claude-code")).toBe("模型与供应商")
+    expect(labels.get("variables")).toBe("变量替换")
+    expect(labels.get("services")).toBe("数据服务")
+    expect(labels.get("troubleshooting")).toBe("诊断日志")
+    expect(labels.get("about")).toBe("关于 Synapse")
+    expect(labels.get("admin")).toBe("仓库维护")
   })
 })

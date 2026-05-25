@@ -203,6 +203,7 @@ function validateQuickInputs(rawValue: unknown, errors: string[]): SynapseQuickI
     quickInputs.push({
       id: normalizedId,
       content,
+      directSend: typeof item.directSend === "boolean" ? item.directSend : false,
     })
   })
 

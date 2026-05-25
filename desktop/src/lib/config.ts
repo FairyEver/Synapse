@@ -407,6 +407,7 @@ function normalizeQuickInput(value: unknown): SynapseQuickInput | null {
   return {
     id,
     content: value.content,
+    directSend: typeof value.directSend === "boolean" ? value.directSend : false,
   }
 }
 

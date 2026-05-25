@@ -307,7 +307,47 @@ describe("Synapse quick inputs config", () => {
     })
 
     expect(config.global.quickInputs).toEqual([
-      { id: "quick-1", content: "第一行\n第二行" },
+      { id: "quick-1", content: "第一行\n第二行", directSend: false },
+    ])
+  })
+
+  it("preserves direct send quick input settings", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [],
+        quickInputs: [
+          { id: "quick-1", content: "继续", directSend: true },
+          { id: "quick-2", content: "插入这段", directSend: false },
+        ],
+      },
+    })
+
+    expect(config.global.quickInputs).toEqual([
+      { id: "quick-1", content: "继续", directSend: true },
+      { id: "quick-2", content: "插入这段", directSend: false },
+    ])
+  })
+
+  it("defaults missing or malformed quick input direct send settings to false", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [],
+        quickInputs: [
+          { id: "quick-1", content: "旧片段" },
+          { id: "quick-2", content: "错误开关", directSend: "yes" },
+        ],
+      },
+    })
+
+    expect(config.global.quickInputs).toEqual([
+      { id: "quick-1", content: "旧片段", directSend: false },
+      { id: "quick-2", content: "错误开关", directSend: false },
     ])
   })
 
@@ -330,7 +370,7 @@ describe("Synapse quick inputs config", () => {
     })
 
     expect(config.global.quickInputs).toEqual([
-      { id: "quick-1", content: "有效内容" },
+      { id: "quick-1", content: "有效内容", directSend: false },
     ])
   })
 
@@ -346,13 +386,13 @@ describe("Synapse quick inputs config", () => {
     })
     const next = applySynapseConfigPatch(current, {
       global: {
-        quickInputs: [{ id: "quick-1", content: "复用这段话" }],
+        quickInputs: [{ id: "quick-1", content: "复用这段话", directSend: true }],
       },
     })
 
     expect(next.global.projects).toEqual(current.global.projects)
     expect(next.global.quickInputs).toEqual([
-      { id: "quick-1", content: "复用这段话" },
+      { id: "quick-1", content: "复用这段话", directSend: true },
     ])
   })
 })

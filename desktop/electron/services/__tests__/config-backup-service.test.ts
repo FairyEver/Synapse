@@ -61,7 +61,7 @@ describe("ConfigBackupService quick inputs", () => {
 
   it("preserves valid multi-line quick inputs when importing a backup", async () => {
     const filePath = await writeBackupFile({
-      quickInputs: [{ id: "quick-1", content: "第一行\n第二行" }],
+      quickInputs: [{ id: "quick-1", content: "第一行\n第二行", directSend: true }],
     })
 
     try {
@@ -69,7 +69,7 @@ describe("ConfigBackupService quick inputs", () => {
 
       expect(configStore.replace).toHaveBeenCalledWith(expect.objectContaining({
         global: expect.objectContaining({
-          quickInputs: [{ id: "quick-1", content: "第一行\n第二行" }],
+          quickInputs: [{ id: "quick-1", content: "第一行\n第二行", directSend: true }],
         }),
       }))
     } finally {
@@ -86,6 +86,24 @@ describe("ConfigBackupService quick inputs", () => {
       expect(configStore.replace).toHaveBeenCalledWith(expect.objectContaining({
         global: expect.objectContaining({
           quickInputs: [],
+        }),
+      }))
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
+  it("imports legacy quick inputs without direct send as insert snippets", async () => {
+    const filePath = await writeBackupFile({
+      quickInputs: [{ id: "quick-1", content: "第一行\n第二行" }],
+    })
+
+    try {
+      await configBackupService.readImport(filePath)
+
+      expect(configStore.replace).toHaveBeenCalledWith(expect.objectContaining({
+        global: expect.objectContaining({
+          quickInputs: [{ id: "quick-1", content: "第一行\n第二行", directSend: false }],
         }),
       }))
     } finally {
@@ -113,7 +131,7 @@ describe("ConfigBackupService quick inputs", () => {
       ...createDefaultConfig(),
       global: {
         ...createDefaultConfig().global,
-        quickInputs: [{ id: "quick-1", content: "第一行\n第二行" }],
+        quickInputs: [{ id: "quick-1", content: "第一行\n第二行", directSend: true }],
       },
     }
     vi.mocked(configStore.load).mockResolvedValue(config)
@@ -121,7 +139,7 @@ describe("ConfigBackupService quick inputs", () => {
     const backup = await createConfigBackupPayload(new Date("2026-05-25T00:00:00.000Z"))
 
     expect(backup.config.global.quickInputs).toEqual([
-      { id: "quick-1", content: "第一行\n第二行" },
+      { id: "quick-1", content: "第一行\n第二行", directSend: true },
     ])
   })
 })

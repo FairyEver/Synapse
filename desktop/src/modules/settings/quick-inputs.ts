@@ -16,10 +16,11 @@ function quickInputPreview(content: string): string {
     ?? content.trim()
 }
 
-function createQuickInput(content: string): SynapseQuickInput {
+function createQuickInput(content: string, directSend = true): SynapseQuickInput {
   return {
     id: createQuickInputId(),
     content,
+    directSend,
   }
 }
 
@@ -27,8 +28,17 @@ function updateQuickInput(
   items: readonly SynapseQuickInput[],
   id: string,
   content: string,
+  directSend: boolean,
 ): SynapseQuickInput[] {
-  return items.map((item) => item.id === id ? { ...item, content } : item)
+  return items.map((item) => item.id === id ? { ...item, content, directSend } : item)
+}
+
+function updateQuickInputDirectSend(
+  items: readonly SynapseQuickInput[],
+  id: string,
+  directSend: boolean,
+): SynapseQuickInput[] {
+  return items.map((item) => item.id === id ? { ...item, directSend } : item)
 }
 
 function deleteQuickInput(
@@ -60,4 +70,5 @@ export {
   pinQuickInputToTop,
   quickInputPreview,
   updateQuickInput,
+  updateQuickInputDirectSend,
 }

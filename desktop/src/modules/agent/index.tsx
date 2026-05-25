@@ -235,15 +235,22 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     ])
   }
 
-  const submitContent = async (content: string) => {
+  const submitContent = async (content: string, options: { preserveDraft?: boolean } = {}) => {
     if (!content || !selectedTarget) return
-    setDraft("")
+    const preserveDraft = options.preserveDraft === true
+    if (!preserveDraft) {
+      setDraft("")
+    }
     stick.forcePin()
     if (chat.sending) {
       queueMessage(content, selectedTarget)
       return
     }
     const sent = await chat.sendMessage(content, selectedTarget)
+    if (!sent && preserveDraft) {
+      toast.error("发送失败")
+      return
+    }
     if (!sent) {
       setDraft(content)
     }
@@ -560,6 +567,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                 void chat.createSession(projectId, selectedSession?.providerId, mode)
               }}
               onDraftChange={setDraft}
+              onQuickInputDirectSend={(content) => void submitContent(content, { preserveDraft: true })}
               slashCandidates={slashCandidates}
               knowledgeBaseActions={knowledgeBaseActions}
               onKnowledgeBaseCommand={sendComposerCommand}

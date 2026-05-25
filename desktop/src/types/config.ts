@@ -37,6 +37,7 @@ export type SynapseProjectConfig = {
 export type SynapseQuickInput = {
   id: string
   content: string
+  directSend: boolean
 }
 
 export type SynapseFavorites = {

@@ -60,6 +60,7 @@ function AgentComposer({
   quickInputs = [],
   knowledgeBaseActions = [],
   onKnowledgeBaseCommand,
+  onQuickInputDirectSend,
 }: {
   readonly draft: string
   readonly disabled: boolean
@@ -83,6 +84,7 @@ function AgentComposer({
   readonly onRemovePendingMessage?: (id: string) => void
   readonly onRetryPendingMessage?: (id: string) => void
   readonly onKnowledgeBaseCommand?: (commandText: string) => void
+  readonly onQuickInputDirectSend?: (content: string) => void
 }) {
   const formRef = useRef<HTMLFormElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -362,6 +364,7 @@ function AgentComposer({
                 quickInputs={quickInputs}
                 disabled={disabled}
                 onInsert={insertComposerText}
+                onDirectSend={(content) => onQuickInputDirectSend?.(content)}
               />
               <KnowledgeBaseActionMenu
                 actions={knowledgeBaseActions}

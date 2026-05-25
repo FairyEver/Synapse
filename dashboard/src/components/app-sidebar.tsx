@@ -1,6 +1,6 @@
-import { TerminalIcon } from 'lucide-react';
 import type * as React from 'react';
 import { Link } from 'react-router';
+import { BrandIcon } from '@/components/brand-icon';
 import { NavMain } from '@/components/nav-main';
 import { NavProjects } from '@/components/nav-projects';
 import { NavUser } from '@/components/nav-user';
@@ -33,9 +33,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           <SidebarMenuItem>
             <SidebarMenuButton size="lg" asChild>
               <Link to={homePath}>
-                <div className="flex aspect-square size-8 items-center justify-center rounded-lg bg-sidebar-primary text-sidebar-primary-foreground">
-                  <TerminalIcon className="size-4" />
-                </div>
+                <BrandIcon />
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <span className="truncate font-medium">Synapse</span>
                   <span className="truncate text-xs">Dashboard</span>
