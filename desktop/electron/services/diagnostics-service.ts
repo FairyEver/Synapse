@@ -319,7 +319,6 @@ class DiagnosticsService {
         ...payload.report,
         bundle: {
           lastExportedAt: exportedAt,
-          lastExportPath: outputPath,
         },
       }
 

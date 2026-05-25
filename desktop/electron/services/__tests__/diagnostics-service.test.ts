@@ -371,6 +371,8 @@ describe("DiagnosticsService.exportBundle", () => {
     })
     expect(resultPath).toContain("synapse-diagnostics.zip")
     expect(writtenFiles.has("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/diagnostics.json")).toBe(true)
+    expect(writtenFiles.get("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/diagnostics.json"))
+      .not.toContain("/downloads/synapse-diagnostics.zip")
     expect(writtenFiles.get("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/summary.md")).toContain("# Synapse Diagnostics Summary")
     expect(writtenFiles.has("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/manifest.json")).toBe(true)
     expect(writtenFiles.has("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/config/config-backup.json")).toBe(true)

@@ -17,6 +17,7 @@ export interface DataRepositoryAuditSinkDeps {
 }
 
 const MAX_MEMORY_EVENTS = 10_000
+const POSIX_PATH_PATTERN = /(?:\/Users|\/home|\/Volumes|\/private|\/tmp)\/[^\s"'`<>),;]+/g
 
 export class DataRepositoryAuditSink implements AuditSink {
   private readonly audit: DataNamespace<AuditEntryV1>
@@ -134,6 +135,9 @@ function sanitizeValue(value: unknown): unknown {
   }
   if (typeof value === "object" && value !== null) {
     return sanitizeRecord(value as Record<string, unknown>)
+  }
+  if (typeof value === "string") {
+    return value.replace(POSIX_PATH_PATTERN, "[path]")
   }
   return value
 }

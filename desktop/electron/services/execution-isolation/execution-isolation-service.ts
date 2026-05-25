@@ -60,17 +60,25 @@ export class ExecutionIsolationService implements ProcessIsolationResolver {
   async updateConfig(input: RunAsConfigUpdate): Promise<RunAsConfigView> {
     const existing = await this.getOrCreateConfig(input.projectId)
     const supported = isRunAsUserSupported()
+    const nextUser = input.user === undefined ? existing.user : input.user.trim() || undefined
+    const nextEnvAllowlist = input.envAllowlist === undefined
+      ? existing.envAllowlist
+      : normalizeAllowlist(input.envAllowlist)
+    const nextRequirePreflight = input.requirePreflight ?? existing.requirePreflight
+    const preflightBoundaryChanged = nextUser !== existing.user
+      || !sameStringArray(nextEnvAllowlist, existing.envAllowlist)
+      || nextRequirePreflight !== existing.requirePreflight
     const next: RunAsConfigEntryV1 = {
       ...existing,
       enabled: supported ? input.enabled ?? existing.enabled : false,
-      user: input.user === undefined ? existing.user : input.user.trim() || undefined,
-      envAllowlist: input.envAllowlist === undefined
-        ? existing.envAllowlist
-        : normalizeAllowlist(input.envAllowlist),
-      requirePreflight: input.requirePreflight ?? existing.requirePreflight,
+      user: nextUser,
+      envAllowlist: nextEnvAllowlist,
+      requirePreflight: nextRequirePreflight,
       lastError: !supported && input.enabled
         ? "run_as_user is not supported on Windows"
-        : existing.lastError,
+        : preflightBoundaryChanged ? undefined : existing.lastError,
+      lastPreflightAt: preflightBoundaryChanged ? undefined : existing.lastPreflightAt,
+      lastPreflightStatus: preflightBoundaryChanged ? undefined : existing.lastPreflightStatus,
       updatedAt: this.isoNow(),
     }
     await this.deps.configs.upsert(next)
@@ -392,6 +400,11 @@ function isRunAsUserSupported(): boolean {
 
 function normalizeAllowlist(values: readonly string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))]
+}
+
+function sameStringArray(left: readonly string[], right: readonly string[]): boolean {
+  if (left.length !== right.length) return false
+  return left.every((value, index) => value === right[index])
 }
 
 function parseProbeOutput(output: string): Record<string, unknown> {
