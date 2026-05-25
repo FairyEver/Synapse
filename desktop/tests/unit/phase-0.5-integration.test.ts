@@ -38,7 +38,7 @@ describe("Phase 0.5 integration (T5.7)", () => {
     expect(ctx.container).toBe(container)
   })
 
-  it("bootstrap('headless') and bootstrap('cli') succeed (Phase 0 stubs)", async () => {
+  it("bootstrap('headless') succeeds as a Phase 0 stub", async () => {
     const registry = createServiceRegistry()
     const container = createProjectContainerRegistry({
       globalRegistry: registry,
@@ -47,7 +47,6 @@ describe("Phase 0.5 integration (T5.7)", () => {
       buildLogger: () => noopLogger(),
     })
     expect((await bootstrap("headless", { registry, container })).mode).toBe("headless")
-    expect((await bootstrap("cli", { registry, container })).mode).toBe("cli")
   })
 
   it("ProjectContainer + ProcessRuntime cooperation: project-scoped service spawns a process", async () => {

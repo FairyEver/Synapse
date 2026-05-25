@@ -5,18 +5,16 @@
  * `bootstrap("gui")` is what main.ts will call eventually (Phase 0.6 wires
  * everything end-to-end). `bootstrap("headless")` builds the same registry +
  * container set without creating any BrowserWindow; WindowManager.broadcast
- * degrades to a no-op. `bootstrap("cli")` is reserved for future
- * `synapse agent run <task>` kind of commands.
+ * degrades to a no-op.
  *
- * Phase 0.5 lands the contract + the GUI default. Headless / CLI dispatchers
- * are stubs that throw with explicit "not implemented in Phase 0" so it's
- * obvious where to extend.
+ * Phase 0.5 lands the contract + the GUI default. Headless wiring remains a
+ * stub until M4+ implements GUI-less runtime support.
  */
 
 import type { ServiceRegistry } from "./service-registry/types"
 import type { ProjectContainerRegistry } from "./project-container/types"
 
-export type RuntimeMode = "gui" | "headless" | "cli"
+export type RuntimeMode = "gui" | "headless"
 
 export interface RuntimeContext {
   readonly mode: RuntimeMode
@@ -37,7 +35,6 @@ export async function bootstrap(
     case "gui":
       return { mode, registry: deps.registry, container: deps.container }
     case "headless":
-    case "cli":
       // Phase 0.5 publishes the contract; runtimes that need actual GUI-less
       // wiring will land when M4+ does headless.
       return { mode, registry: deps.registry, container: deps.container }
