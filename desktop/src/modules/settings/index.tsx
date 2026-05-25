@@ -26,6 +26,7 @@ import { SettingsCategorySidebar } from "@/modules/settings/components/settings-
 import { ServicesPanel } from "@/modules/settings/components/services-panel"
 import { RepositoryListEditor } from "@/modules/settings/components/repository-list-editor"
 import { ProjectListEditor } from "@/modules/settings/components/project-list-editor"
+import { QuickInputsPanel } from "@/modules/settings/components/quick-inputs-panel"
 import { TroubleshootingPanel } from "@/modules/settings/components/troubleshooting-panel"
 import { VariablesPanel } from "@/modules/settings/components/variables-panel"
 import type { SettingItem, SettingsCategoryId } from "@/modules/settings/types"
@@ -180,6 +181,20 @@ function SettingsModule() {
     [applyPatch],
   )
 
+  const handleSaveQuickInputs = useCallback(
+    async (quickInputs: typeof config.global.quickInputs) => {
+      logger.info("Saving quick inputs from settings.", {
+        quickInputCount: quickInputs.length,
+      })
+      return applyPatch({
+        global: {
+          quickInputs,
+        },
+      })
+    },
+    [applyPatch],
+  )
+
   return (
     <SidebarContentLayout
       contentClassName="bg-surface"
@@ -259,6 +274,13 @@ function SettingsModule() {
 
         {isReady && activeCategory === "projects" ? (
           <ProjectListEditor projects={config.global.projects} onSave={handleSaveProjects} />
+        ) : null}
+
+        {isReady && activeCategory === "quick-inputs" ? (
+          <QuickInputsPanel
+            quickInputs={config.global.quickInputs}
+            onSave={handleSaveQuickInputs}
+          />
         ) : null}
 
         {isReady && activeCategory === "tools" ? <ToolsPanel /> : null}

@@ -19,12 +19,27 @@ Use this skill only for release/publish commands in `/Users/liyang/Documents/cod
 - Commit command: `pnpm bump:commit:push`
 - Maximum loop count: `10`
 - Working directory: `/Users/liyang/Documents/code/github/Synapse/desktop`
+- Pending notes file: `/Users/liyang/Documents/code/github/Synapse/RELEASE_NOTES_PENDING.md`
+- Release notes archive directory: `/Users/liyang/Documents/code/github/Synapse/docs/releases`
 
 ## Release Loop
 
 Track the current loop number, latest `EXPECTED_TAG`, `CI_RUN_ID`, `RELEASE_RUN_ID`, and the most recent failure summary.
 
-### 1. Commit And Record Version
+### 1. Collect Pending Release Notes
+
+Before bumping the version, read `/Users/liyang/Documents/code/github/Synapse/RELEASE_NOTES_PENDING.md` from the repository root and record whether it contains meaningful bullets under any of these sections:
+
+- `新增功能`
+- `功能优化`
+- `问题修复`
+- `技术调整`
+
+Keep the original pending notes content as the release-note input for this release attempt. If the file is missing, report that the pending release notes file is missing and stop before bumping the version. If the file exists but has no meaningful bullets, continue the release and state that no pending release notes were found.
+
+Do not modify, clear, reset, or archive `RELEASE_NOTES_PENDING.md` at this stage.
+
+### 2. Commit And Record Version
 
 From `/Users/liyang/Documents/code/github/Synapse/desktop`, run:
 
@@ -42,7 +57,7 @@ EXPECTED_TAG="v${VERSION}"
 echo "本轮版本: $EXPECTED_TAG"
 ```
 
-### 2. Find This Push's Workflow Runs
+### 3. Find This Push's Workflow Runs
 
 Wait 5 seconds, then list recent push runs:
 
@@ -56,7 +71,7 @@ Pick the newest runs named `CI` and `Release`, and record their `databaseId` val
 
 If the newest CI run is not `in_progress`, `queued`, or `pending`, wait 10 seconds and retry up to 3 times. If CI is still missing, report `CI 未被触发，请检查分支和触发条件` and stop.
 
-### 3. Watch CI
+### 4. Watch CI
 
 ```bash
 gh run watch "$CI_RUN_ID" --repo FairyEver/Synapse --exit-status
@@ -80,7 +95,7 @@ If `conclusion` is `success`, continue to Release. If `conclusion` is `failure`,
 gh run cancel "$RELEASE_RUN_ID" --repo FairyEver/Synapse
 ```
 
-### 4. Collect Failure Logs
+### 5. Collect Failure Logs
 
 From the CI jobs JSON, find every job whose `conclusion` is `failure`, then fetch the last 200 log lines for each failed job:
 
@@ -90,7 +105,7 @@ gh run view "$CI_RUN_ID" --repo FairyEver/Synapse --log --job="<JOB_ID>" 2>&1 | 
 
 Summarize each failed job before editing. Prioritize the earliest root failure.
 
-### 5. Fix With Test Discipline
+### 6. Fix With Test Discipline
 
 Before changing tests, decide whether the failure is caused by stale tests or a real code bug:
 
@@ -111,7 +126,9 @@ Do not use `pnpm dlx vitest`.
 
 After fixing, run `pnpm bump:commit:push`, update `EXPECTED_TAG`, and return to workflow discovery. Stop after 10 total loops and report the last failure summary.
 
-### 6. Watch Release
+Pending release notes must remain unchanged while fixing CI or Release failures. Do not archive or clear `RELEASE_NOTES_PENDING.md` until a final target release succeeds and the GitHub Release body is updated successfully.
+
+### 7. Watch Release
 
 After CI succeeds, watch the same round's Release workflow:
 
@@ -128,7 +145,7 @@ gh run view "$RELEASE_RUN_ID" --repo FairyEver/Synapse --log --job="<JOB_ID>" 2>
 
 Analyze, fix, commit, and return to workflow discovery.
 
-### 7. Fetch Download Links
+### 8. Fetch Download Links
 
 After Release succeeds, wait up to 3 minutes for the matching release in `FairyEver/SynapseAppRelease`:
 
@@ -158,9 +175,82 @@ Extract links from `assets`:
 
 Final report must include the release version and every found download link. If a platform asset is missing, say which one was not found.
 
+### 9. Publish And Consume Pending Release Notes
+
+Only run this section after:
+
+- CI succeeded.
+- Release succeeded.
+- The matching GitHub Release for `EXPECTED_TAG` was found in `FairyEver/SynapseAppRelease`.
+
+Do not publish, archive, reset, or clear pending notes when the download-link lookup fell back to the latest release because the matching `EXPECTED_TAG` release was unavailable. In that case, report that pending notes were left untouched for retry.
+
+If pending release notes contain meaningful bullets, generate a product-facing Markdown release body using this structure. Omit empty sections:
+
+```markdown
+## 新增功能
+
+- ...
+
+## 功能优化
+
+- ...
+
+## 问题修复
+
+- ...
+
+## 技术调整
+
+- ...
+```
+
+Use concise user-facing wording. Do not include source paths, commit hashes, branch names, raw command output, or implementation details unless they are needed to explain compatibility or release risk.
+
+Write the generated notes to a temporary file, then update the release body:
+
+```bash
+gh release edit "$EXPECTED_TAG" \
+  --repo FairyEver/SynapseAppRelease \
+  --notes-file <generated-notes-file>
+```
+
+If `gh release edit` fails, do not clear or archive `RELEASE_NOTES_PENDING.md`. Report the generated notes file path and stop after the normal release link report.
+
+After `gh release edit` succeeds:
+
+1. Create `/Users/liyang/Documents/code/github/Synapse/docs/releases` if needed.
+2. Copy the consumed pending notes to `/Users/liyang/Documents/code/github/Synapse/docs/releases/$EXPECTED_TAG.md`.
+3. Reset `/Users/liyang/Documents/code/github/Synapse/RELEASE_NOTES_PENDING.md` to the empty template:
+
+   ```markdown
+   # Pending Release Notes
+
+   ## 新增功能
+
+   ## 功能优化
+
+   ## 问题修复
+
+   ## 技术调整
+   ```
+
+4. Commit and push only the archive/reset files with a skip-CI message:
+
+   ```bash
+   cd /Users/liyang/Documents/code/github/Synapse
+   git add RELEASE_NOTES_PENDING.md "docs/releases/$EXPECTED_TAG.md"
+   git commit -m "docs: consume release notes for $EXPECTED_TAG [skip ci]"
+   git push
+   ```
+
+This consume commit must happen after the package release succeeds. It must not be folded into the version bump commit that triggers the release. If archive, reset, commit, or push fails, report the exact state and do not claim the pending notes were consumed.
+
+If pending release notes were empty at release start, skip archive/reset and say that no pending release notes were consumed.
+
 ## Exit Conditions
 
-- Success: CI and Release both pass, release assets are found or explicitly missing, and the final response includes version and download links.
+- Success: CI and Release both pass, release assets are found or explicitly missing, pending release notes are either published and consumed or explicitly empty, and the final response includes version and download links.
 - Loop limit: after 10 loops, stop and report unresolved status plus the latest failure summary.
 - Commit failure: if `pnpm bump:commit:push` fails, report the command output and stop.
-
+- Release notes failure: if GitHub Release body update, archive, reset, commit, or push fails after the package release succeeds, report the failure and do not clear pending notes unless the successful state can be proven.

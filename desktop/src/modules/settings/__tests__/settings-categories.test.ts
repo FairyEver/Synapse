@@ -10,6 +10,7 @@ describe("settingsCategories", () => {
       "general",
       "repositories",
       "projects",
+      "quick-inputs",
       "tools",
       "claude-code",
       "variables",
@@ -33,5 +34,11 @@ describe("settingsCategories", () => {
 
     expect(ids).toContain("repositories")
     expect(ids).toContain("projects")
+  })
+
+  it("includes quick inputs as a top-level settings category", () => {
+    const quickInputs = settingsCategories.find((category) => category.id === "quick-inputs")
+
+    expect(quickInputs?.label).toBe("快速输入")
   })
 })

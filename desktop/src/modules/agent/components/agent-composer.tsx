@@ -13,6 +13,8 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { track } from "@/lib/ui-tracking"
 import type { SynapseAgentPermissionMode } from "@/types/agent"
+import type { SynapseQuickInput } from "@/types/config"
+import { insertTextAtComposerSelection } from "../composer-insert"
 import { getPermissionModeCapability } from "../permission-mode-capability"
 import { permissionModeConfirmationText, permissionModeLabels } from "../permission-mode-options"
 import type { PendingMessage } from "../pending-message-queue"
@@ -21,6 +23,7 @@ import {
   KnowledgeBaseActionMenu,
   type KnowledgeBaseComposerAction,
 } from "./knowledge-base-action-menu"
+import { QuickInputMenu } from "./quick-input-menu"
 import { AgentPermissionModeMenu } from "./permission-mode-menu"
 import { AgentSlashMenu } from "./agent-slash-menu"
 import {
@@ -54,6 +57,7 @@ function AgentComposer({
   onRetryPendingMessage,
   onJumpToBottom,
   slashCandidates = [],
+  quickInputs = [],
   knowledgeBaseActions = [],
   onKnowledgeBaseCommand,
 }: {
@@ -66,6 +70,7 @@ function AgentComposer({
   readonly pendingMessages?: readonly PendingMessage[]
   readonly showJumpToBottom?: boolean
   readonly slashCandidates?: readonly AgentSlashCandidate[]
+  readonly quickInputs?: readonly SynapseQuickInput[]
   readonly knowledgeBaseActions?: readonly KnowledgeBaseComposerAction[]
   readonly onDraftChange: (value: string) => void
   readonly onInputKeyDown: (event: KeyboardEvent<HTMLTextAreaElement>) => void
@@ -193,24 +198,26 @@ function AgentComposer({
     })
   }
 
-  const insertKnowledgeBaseCommand = (commandText: string) => {
+  const insertComposerText = (text: string) => {
     const el = textareaRef.current
-    const start = el?.selectionStart ?? draft.length
-    const end = el?.selectionEnd ?? draft.length
-    const prefix = draft.slice(0, start)
-    const suffix = draft.slice(end)
-    const needsLeadingSpace = prefix.length > 0 && !/\s$/.test(prefix)
-    const insertion = `${needsLeadingSpace ? " " : ""}${commandText}`
-    const nextValue = `${prefix}${insertion}${suffix}`
-    const cursor = prefix.length + insertion.length
-    onDraftChange(nextValue)
+    const next = insertTextAtComposerSelection({
+      draft,
+      selectionStart: el?.selectionStart ?? draft.length,
+      selectionEnd: el?.selectionEnd ?? draft.length,
+      text,
+    })
+    onDraftChange(next.value)
     window.setTimeout(() => {
       const nextEl = textareaRef.current
       if (!nextEl) return
       nextEl.focus()
-      nextEl.setSelectionRange(cursor, cursor)
-      setSelectionStart(cursor)
+      nextEl.setSelectionRange(next.cursor, next.cursor)
+      setSelectionStart(next.cursor)
     }, 0)
+  }
+
+  const insertKnowledgeBaseCommand = (commandText: string) => {
+    insertComposerText(commandText)
   }
 
   const handleTextareaKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -350,12 +357,19 @@ function AgentComposer({
             />
           )}
           leadingActions={(
-            <KnowledgeBaseActionMenu
-              actions={knowledgeBaseActions}
-              disabled={disabled}
-              onSend={(commandText) => onKnowledgeBaseCommand?.(commandText)}
-              onInsert={insertKnowledgeBaseCommand}
-            />
+            <>
+              <QuickInputMenu
+                quickInputs={quickInputs}
+                disabled={disabled}
+                onInsert={insertComposerText}
+              />
+              <KnowledgeBaseActionMenu
+                actions={knowledgeBaseActions}
+                disabled={disabled}
+                onSend={(commandText) => onKnowledgeBaseCommand?.(commandText)}
+                onInsert={insertKnowledgeBaseCommand}
+              />
+            </>
           )}
           trailingActions={(
             <>

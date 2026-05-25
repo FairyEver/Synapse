@@ -34,6 +34,11 @@ export type SynapseProjectConfig = {
   capabilities?: SynapseProjectCapabilities
 }
 
+export type SynapseQuickInput = {
+  id: string
+  content: string
+}
+
 export type SynapseFavorites = {
   rule: string[]
   skill: string[]
@@ -65,6 +70,7 @@ export type SynapseRepositoryConfig = {
 export type SynapseGlobalConfig = {
   themeMode: SynapseThemeMode
   projects: SynapseProjectConfig[]
+  quickInputs: SynapseQuickInput[]
   favorites: SynapseFavorites
   recentlyViewed: SynapseRecentlyViewed
   contentSortOrder: SynapseContentSortOrder
@@ -87,6 +93,7 @@ export type SynapseConfigPatch = {
   repositories?: SynapseRepositoryConfig[]
   global?: Partial<SynapseGlobalConfig> & {
     projects?: SynapseProjectConfig[]
+    quickInputs?: SynapseQuickInput[]
   }
   agent?: Partial<SynapseAgentGlobalConfig>
 }

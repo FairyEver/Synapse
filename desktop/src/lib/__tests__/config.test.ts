@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   applySynapseConfigPatch,
   createDefaultConfig,
+  hasRecoverableSynapseConfigFormatError,
   sanitizeSynapseConfig,
 } from "../config"
 
@@ -255,5 +256,103 @@ describe("Synapse project capabilities", () => {
     expect(next.global.projects).toHaveLength(1)
     expect(next.global.projects[0]?.name).toBe("KB")
     expect(next.global.projects[0]?.capabilities?.knowledgeBase?.managed).toBe(true)
+  })
+})
+
+describe("Synapse quick inputs config", () => {
+  it("treats non-array quick input containers as recoverable format errors", () => {
+    expect(hasRecoverableSynapseConfigFormatError({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [],
+        quickInputs: "invalid",
+      },
+    })).toBe(true)
+  })
+
+  it("allows malformed quick input entries to be sanitized when the container is an array", () => {
+    expect(hasRecoverableSynapseConfigFormatError({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [],
+        quickInputs: [
+          { id: "quick-1", content: "有效内容" },
+          { id: "quick-2", content: "   " },
+          { id: "", content: "缺少 ID" },
+          "invalid",
+        ],
+      },
+    })).toBe(false)
+  })
+
+  it("defaults quick inputs to an empty list", () => {
+    expect(createDefaultConfig().global.quickInputs).toEqual([])
+  })
+
+  it("preserves valid multi-line quick input content", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [],
+        quickInputs: [
+          { id: "quick-1", content: "第一行\n第二行" },
+        ],
+      },
+    })
+
+    expect(config.global.quickInputs).toEqual([
+      { id: "quick-1", content: "第一行\n第二行" },
+    ])
+  })
+
+  it("filters malformed and blank quick inputs", () => {
+    const config = sanitizeSynapseConfig({
+      activeRepoUuid: null,
+      repositories: [],
+      global: {
+        themeMode: "light",
+        projects: [],
+        quickInputs: [
+          { id: "quick-1", content: "有效内容" },
+          { id: "quick-2", content: "   " },
+          { id: "", content: "缺少 ID" },
+          { id: "quick-3", content: 123 },
+          "invalid",
+          { id: "quick-1", content: "重复 ID" },
+        ],
+      },
+    })
+
+    expect(config.global.quickInputs).toEqual([
+      { id: "quick-1", content: "有效内容" },
+    ])
+  })
+
+  it("applies quick input patches without changing existing projects", () => {
+    const current = applySynapseConfigPatch(createDefaultConfig(), {
+      global: {
+        projects: [{
+          id: "project-1",
+          name: "Project",
+          path: "/Users/example/project",
+        }],
+      },
+    })
+    const next = applySynapseConfigPatch(current, {
+      global: {
+        quickInputs: [{ id: "quick-1", content: "复用这段话" }],
+      },
+    })
+
+    expect(next.global.projects).toEqual(current.global.projects)
+    expect(next.global.quickInputs).toEqual([
+      { id: "quick-1", content: "复用这段话" },
+    ])
   })
 })
