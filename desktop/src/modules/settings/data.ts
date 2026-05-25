@@ -9,6 +9,7 @@ import {
   Server,
   Settings2,
   Shield,
+  TextCursorInput,
 } from "lucide-react"
 import {
   DEFAULT_GLOBAL_CONFIG,
@@ -34,6 +35,12 @@ const settingsCategories: SettingsCategory[] = [
     icon: FolderOpen,
     label: "项目",
     description: "本地项目。",
+  },
+  {
+    id: "quick-inputs",
+    icon: TextCursorInput,
+    label: "快速输入",
+    description: "常用输入片段。",
   },
   {
     id: "tools",
