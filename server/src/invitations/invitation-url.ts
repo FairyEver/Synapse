@@ -36,15 +36,6 @@ function resolvePublicAppUrl(input: {
   return normalizePublicAppUrl(`${protocol}://${host}`)
 }
 
-function buildSignupInviteUrl(input: {
-  readonly publicAppUrl: string
-  readonly token: string
-}): string {
-  const url = new URL("/dashboard/signup", `${normalizePublicAppUrl(input.publicAppUrl)}/`)
-  url.searchParams.set("invite", input.token)
-  return url.toString()
-}
-
 function buildTeamInviteUrl(input: {
   readonly publicAppUrl: string
   readonly token: string
@@ -60,9 +51,7 @@ function parseInviteTokenInput(value: string): string {
 
   try {
     const url = new URL(trimmed)
-    const queryToken = url.searchParams.get("invite")
-      ?? url.searchParams.get("token")
-      ?? url.searchParams.get("invitationToken")
+    const queryToken = url.searchParams.get("token")
     if (queryToken) return queryToken.trim()
   } catch {
     return trimmed
@@ -71,4 +60,4 @@ function parseInviteTokenInput(value: string): string {
   return trimmed
 }
 
-export { buildSignupInviteUrl, buildTeamInviteUrl, parseInviteTokenInput, resolvePublicAppUrl }
+export { buildTeamInviteUrl, parseInviteTokenInput, resolvePublicAppUrl }

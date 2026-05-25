@@ -54,7 +54,7 @@ describe("UserAuthController", () => {
     const controller = new UserAuthController(auth as unknown as UserAuthService)
 
     expect(() => controller.register({
-      invitationToken: "invite-token",
+      inviteToken: "invite-token",
       email: "user@example.com",
       password: "password",
     }, { ip: "203.0.113.21" } as never))

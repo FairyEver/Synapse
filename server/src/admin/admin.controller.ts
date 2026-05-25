@@ -1,11 +1,10 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
 import { AuditLogService, auditLogExportLimit } from "../common/audit-log.service"
 import { toCsv } from "../common/csv-export"
 import { parsePagination } from "../common/pagination"
-import { resolvePublicAppUrl } from "../invitations/invitation-url"
 import { isActiveModulePermissionKey } from "../permissions/permission-registry"
 import { AdminService } from "./admin.service"
 
@@ -48,18 +47,6 @@ export class AdminController {
   @Get("/system")
   getSystemOverview() {
     return this.admin.getSystemOverview()
-  }
-
-  @Post("/invitations")
-  createSignupInvitation(@Req() request: AdminRequest) {
-    return this.admin.createSignupInvitation(
-      request.admin!,
-      resolvePublicAppUrl({
-        configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
-        request,
-      }),
-      request.ip,
-    )
   }
 
   @Get("/invitations")

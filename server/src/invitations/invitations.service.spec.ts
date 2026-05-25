@@ -11,44 +11,12 @@ function createPrismaMock() {
       }),
       findUnique: vi.fn(),
       updateMany: vi.fn(),
-      update: vi.fn(),
     },
   }
 }
 
 describe("InvitationsService", () => {
-  it("creates a signup invitation with a returned plaintext token", async () => {
-    const prisma = createPrismaMock()
-    const service = new InvitationsService(prisma as never)
-
-    const result = await service.createSignupInvitation({
-      adminId: "admin-1",
-      publicAppUrl: "https://app.example.com",
-    })
-
-    expect(result.token.length).toBeGreaterThanOrEqual(40)
-    expect(prisma.invitation.create).toHaveBeenCalledWith({
-      data: expect.objectContaining({
-        type: "user_signup",
-        createdByAdminId: "admin-1",
-        inviteUrl: `https://app.example.com/dashboard/signup?invite=${result.token}`,
-      }),
-    })
-  })
-
-  it("returns a dashboard signup invite URL", async () => {
-    const prisma = createPrismaMock()
-    const service = new InvitationsService(prisma as never)
-
-    const result = await service.createSignupInvitation({
-      adminId: "admin-1",
-      publicAppUrl: "https://app.example.com/",
-    })
-
-    expect(result.inviteUrl).toBe(`https://app.example.com/dashboard/signup?invite=${result.token}`)
-  })
-
-  it("returns a separate team invite URL", async () => {
+  it("returns a team invite URL", async () => {
     const prisma = createPrismaMock()
     const service = new InvitationsService(prisma as never)
 
@@ -74,35 +42,35 @@ describe("InvitationsService", () => {
 
     await expect(service.consumeInvitation({
       token: "missing",
-      type: "user_signup",
+      type: "team_join",
       acceptedByUserId: "user-1",
     })).rejects.toThrow(BadRequestException)
   })
 
-  it("consumes invitation tokens with a conditional update", async () => {
+  it("consumes team invitation tokens with a conditional update", async () => {
     const prisma = createPrismaMock()
     prisma.invitation.updateMany.mockResolvedValue({ count: 1 })
     prisma.invitation.findUnique.mockResolvedValue({
       id: "invite-1",
-      type: "user_signup",
+      type: "team_join",
       tokenHash: "hash",
       expiresAt: new Date("2026-05-28T00:00:00.000Z"),
       usedAt: new Date("2026-05-21T00:00:00.000Z"),
-      teamId: null,
+      teamId: "team-1",
       acceptedByUserId: "user-1",
     })
     const service = new InvitationsService(prisma as never)
 
     await service.consumeInvitation({
       token: "plain-token",
-      type: "user_signup",
+      type: "team_join",
       acceptedByUserId: "user-1",
     })
 
     expect(prisma.invitation.updateMany).toHaveBeenCalledWith({
       where: {
         tokenHash: expect.any(String),
-        type: "user_signup",
+        type: "team_join",
         usedAt: null,
         expiresAt: { gt: expect.any(Date) },
       },
@@ -113,23 +81,23 @@ describe("InvitationsService", () => {
     })
   })
 
-  it("accepts dashboard signup URLs when consuming invitations", async () => {
+  it("accepts dashboard team invite URLs when consuming invitations", async () => {
     const prisma = createPrismaMock()
     prisma.invitation.updateMany.mockResolvedValue({ count: 1 })
     prisma.invitation.findUnique.mockResolvedValue({
       id: "invite-1",
-      type: "user_signup",
+      type: "team_join",
       tokenHash: "hash",
       expiresAt: new Date("2026-05-28T00:00:00.000Z"),
       usedAt: new Date("2026-05-21T00:00:00.000Z"),
-      teamId: null,
+      teamId: "team-1",
       acceptedByUserId: "user-1",
     })
     const service = new InvitationsService(prisma as never)
 
     await service.consumeInvitation({
-      token: "https://app.example.com/dashboard/signup?invite=plain-token",
-      type: "user_signup",
+      token: "https://app.example.com/dashboard/team-invite?token=plain-token",
+      type: "team_join",
       acceptedByUserId: "user-1",
     })
 

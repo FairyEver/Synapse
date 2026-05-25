@@ -174,27 +174,6 @@ describe("AdminController", () => {
     expect(response.send).not.toHaveBeenCalled()
   })
 
-  it("creates signup invitations through the service", async () => {
-    vi.stubEnv("APP_PUBLIC_URL", "")
-    const createSignupInvitation = vi.fn().mockResolvedValue({ token: "plain-token" })
-    const controller = createController({ createSignupInvitation } as never)
-
-    await expect(controller.createSignupInvitation({
-      admin: { id: "admin-1", email: "admin@example.com" },
-      ip: "203.0.113.10",
-      headers: { host: "app.example.com" },
-      protocol: "https",
-      get: (name: string) => name.toLowerCase() === "host" ? "app.example.com" : undefined,
-    } as never))
-      .resolves
-      .toEqual({ token: "plain-token" })
-    expect(createSignupInvitation).toHaveBeenCalledWith(
-      { id: "admin-1", email: "admin@example.com" },
-      "https://app.example.com",
-      "203.0.113.10",
-    )
-  })
-
   it("deletes invitations through the service", async () => {
     const deleteInvitation = vi.fn().mockResolvedValue({ ok: true })
     const controller = createController({ deleteInvitation } as never)

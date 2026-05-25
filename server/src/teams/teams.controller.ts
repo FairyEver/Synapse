@@ -9,7 +9,7 @@ const createTeamSchema = z.object({
 }).strict()
 
 const joinTeamSchema = z.object({
-  invitationToken: z.string().min(1),
+  token: z.string().min(1),
 }).strict()
 
 @UseGuards(TeamsAuthGuard)

@@ -1,26 +1,12 @@
 import { describe, expect, it } from "vitest"
-import { buildSignupInviteUrl, buildTeamInviteUrl, parseInviteTokenInput, resolvePublicAppUrl } from "./invitation-url"
+import { buildTeamInviteUrl, parseInviteTokenInput, resolvePublicAppUrl } from "./invitation-url"
 
 describe("invitation URL helpers", () => {
-  it("builds signup invite URLs under the dashboard signup route", () => {
-    expect(buildSignupInviteUrl({
-      publicAppUrl: "https://app.example.com/",
-      token: "plain-token",
-    })).toBe("https://app.example.com/dashboard/signup?invite=plain-token")
-  })
-
-  it("encodes signup invite tokens in the invite query parameter", () => {
-    expect(buildSignupInviteUrl({
-      publicAppUrl: "https://app.example.com",
-      token: "plain token+value",
-    })).toBe("https://app.example.com/dashboard/signup?invite=plain+token%2Bvalue")
-  })
-
-  it("keeps team invite URL under the dashboard team invite route", () => {
+  it("builds team invite URLs only", () => {
     expect(buildTeamInviteUrl({
-      publicAppUrl: "https://app.example.com/",
-      token: "plain-token",
-    })).toBe("https://app.example.com/dashboard/team-invite?token=plain-token")
+      publicAppUrl: "https://app.example.com",
+      token: "plain token",
+    })).toBe("https://app.example.com/dashboard/team-invite?token=plain+token")
   })
 
   it("prefers the configured public app URL over request origin", () => {
@@ -63,18 +49,8 @@ describe("invitation URL helpers", () => {
     })).toBe("http://app.example.com")
   })
 
-  it("parses tokens from signup invite URLs", () => {
-    expect(parseInviteTokenInput("https://app.example.com/dashboard/signup?invite=plain-token"))
-      .toBe("plain-token")
-  })
-
   it("parses tokens from token query URLs", () => {
     expect(parseInviteTokenInput("https://app.example.com/dashboard/team-invite?token=plain-token"))
-      .toBe("plain-token")
-  })
-
-  it("parses tokens from invitationToken query URLs", () => {
-    expect(parseInviteTokenInput("https://app.example.com/register?invitationToken=plain-token"))
       .toBe("plain-token")
   })
 

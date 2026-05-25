@@ -73,7 +73,6 @@ describe("AdminService", () => {
     })
     const service = new AdminService(
       prisma as unknown as PrismaService,
-      {} as never,
       createPermissionsMock() as never,
     )
 
@@ -92,7 +91,7 @@ describe("AdminService", () => {
 
   it("loads users without exposing password hashes", async () => {
     const prisma = createPrismaMock()
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never)
+    const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never)
 
     await service.listUsers()
 
@@ -122,7 +121,7 @@ describe("AdminService", () => {
 
   it("disables a user without returning the password hash", async () => {
     const prisma = createPrismaMock()
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never)
+    const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never)
 
     await service.updateUserStatus("user-1", { status: "disabled" })
 
@@ -157,7 +156,7 @@ describe("AdminService", () => {
     prisma.user.findUnique.mockResolvedValue(null)
     prisma.user.update.mockRejectedValue(createNotFoundError())
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never, auditLog as never)
 
     await expect(service.updateUserStatus("missing-user", { status: "disabled" }))
       .rejects
@@ -170,7 +169,7 @@ describe("AdminService", () => {
     prisma.teamMembership.findMany.mockResolvedValue([{ teamId: "team-1" }])
     prisma.teamMembership.findFirst.mockResolvedValue(null)
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never, auditLog as never)
 
     await expect(service.updateUserStatus("user-1", { status: "disabled" }))
       .rejects
@@ -184,7 +183,7 @@ describe("AdminService", () => {
     const prisma = createPrismaMock()
     prisma.teamMembership.findMany.mockResolvedValue([{ teamId: "team-1" }])
     prisma.teamMembership.findFirst.mockResolvedValue({ id: "membership-2" })
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never)
+    const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never)
 
     await service.updateUserStatus("user-1", { status: "disabled" })
 
@@ -208,7 +207,7 @@ describe("AdminService", () => {
 
   it("loads teams without exposing internal membership scalar fields", async () => {
     const prisma = createPrismaMock()
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never)
+    const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never)
 
     await service.listTeams()
 
@@ -241,7 +240,7 @@ describe("AdminService", () => {
         findMany: vi.fn(),
       },
     }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never)
+    const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never)
 
     await service.listInvitations()
 
@@ -267,7 +266,7 @@ describe("AdminService", () => {
     const prisma = createPrismaMock()
     prisma.invitation.delete.mockResolvedValue({ id: "invite-1" })
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never, auditLog as never)
 
     await service.deleteInvitation("invite-1", "admin@example.com", "203.0.113.20")
 
@@ -285,7 +284,7 @@ describe("AdminService", () => {
     const prisma = createPrismaMock()
     prisma.invitation.delete.mockRejectedValue(createNotFoundError())
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never, auditLog as never)
 
     await expect(service.deleteInvitation("missing-invite", "admin@example.com", "203.0.113.50"))
       .rejects
@@ -298,7 +297,7 @@ describe("AdminService", () => {
     prisma.invitation.count.mockResolvedValue(2)
     prisma.invitation.deleteMany.mockResolvedValue({ count: 2 })
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never, auditLog as never)
 
     await expect(service.deleteInvitations(["invite-1", "invite-2"], "admin@example.com", "203.0.113.30"))
       .resolves
@@ -321,7 +320,7 @@ describe("AdminService", () => {
     const prisma = createPrismaMock()
     prisma.invitation.count.mockResolvedValue(1)
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never, auditLog as never)
 
     await expect(service.deleteInvitations(["invite-1", "missing-invite"], "admin@example.com", "203.0.113.31"))
       .rejects
@@ -334,7 +333,7 @@ describe("AdminService", () => {
   it("records user status update audit logs with the request IP", async () => {
     const prisma = createPrismaMock()
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, createPermissionsMock() as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never, auditLog as never)
 
     await service.updateUserStatus("user-1", { status: "disabled" }, "admin@example.com", "203.0.113.40")
 
@@ -350,7 +349,7 @@ describe("AdminService", () => {
 
   it("lists module permission definitions", () => {
     const permissions = createPermissionsMock()
-    const service = new AdminService(createPrismaMock() as unknown as PrismaService, {} as never, permissions as never)
+    const service = new AdminService(createPrismaMock() as unknown as PrismaService, permissions as never)
 
     expect(service.listModulePermissions()).toEqual([{ key: "module.database" }])
     expect(permissions.listModulePermissionDefinitions).toHaveBeenCalledWith()
@@ -359,7 +358,7 @@ describe("AdminService", () => {
   it("lists user module permissions", async () => {
     const permissions = createPermissionsMock()
     const prisma = createPrismaMock()
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never)
+    const service = new AdminService(prisma as unknown as PrismaService, permissions as never)
 
     await expect(service.listUserModulePermissions("user-1"))
       .resolves
@@ -375,7 +374,7 @@ describe("AdminService", () => {
     const permissions = createPermissionsMock()
     const prisma = createPrismaMock()
     prisma.user.findUnique.mockResolvedValue(null)
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never)
+    const service = new AdminService(prisma as unknown as PrismaService, permissions as never)
 
     await expect(service.listUserModulePermissions("missing-user"))
       .rejects
@@ -387,7 +386,7 @@ describe("AdminService", () => {
     const permissions = createPermissionsMock()
     const prisma = createPrismaMock()
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, permissions as never, auditLog as never)
 
     await expect(service.replaceUserModulePermissions(
       "user-1",
@@ -425,7 +424,7 @@ describe("AdminService", () => {
     const prisma = createPrismaMock()
     prisma.user.findUnique.mockResolvedValue(null)
     const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
+    const service = new AdminService(prisma as unknown as PrismaService, permissions as never, auditLog as never)
 
     await expect(service.replaceUserModulePermissions(
       "missing-user",

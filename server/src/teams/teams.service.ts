@@ -91,7 +91,7 @@ export class TeamsService {
     return invitation
   }
 
-  async joinTeam(userId: string, input: { invitationToken: string }, ipAddress = "system") {
+  async joinTeam(userId: string, input: { token: string }, ipAddress = "system") {
     const existing = await this.getMembership(userId)
     if (existing) {
       await this.recordTeamFailure({
@@ -107,7 +107,7 @@ export class TeamsService {
 
     const result = await this.prisma.$transaction(async (tx) => {
       const invitation = await this.invitations.consumeInvitation({
-        token: input.invitationToken,
+        token: input.token,
         type: "team_join",
         acceptedByUserId: userId,
       }, tx)

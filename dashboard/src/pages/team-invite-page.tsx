@@ -16,9 +16,7 @@ import { userApi } from '@/lib/api';
 
 export function TeamInvitePage() {
   const [searchParams] = useSearchParams();
-  const [invitationToken, setInvitationToken] = useState(
-    searchParams.get('token') ?? '',
-  );
+  const [token, setToken] = useState(searchParams.get('token') ?? '');
   const [feedback, setFeedback] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -30,7 +28,7 @@ export function TeamInvitePage() {
     setIsSubmitting(true);
 
     try {
-      await userApi.joinTeam({ invitationToken });
+      await userApi.joinTeam({ token });
       setFeedback('已加入团队');
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '加入失败');
@@ -54,11 +52,11 @@ export function TeamInvitePage() {
           <CardContent>
             <div className="flex flex-col gap-6">
               <div className="grid gap-2">
-                <Label htmlFor="teamInvitationToken">邀请码</Label>
+                <Label htmlFor="teamInviteToken">邀请码</Label>
                 <Input
-                  id="teamInvitationToken"
-                  value={invitationToken}
-                  onChange={(event) => setInvitationToken(event.target.value)}
+                  id="teamInviteToken"
+                  value={token}
+                  onChange={(event) => setToken(event.target.value)}
                   required
                 />
               </div>

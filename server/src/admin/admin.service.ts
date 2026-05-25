@@ -1,7 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common"
 import { Prisma, type UserStatus } from "@prisma/client"
 import { AuditLogService } from "../common/audit-log.service"
-import { InvitationsService } from "../invitations/invitations.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
 import { PermissionsService } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
@@ -53,7 +52,6 @@ function isRecordNotFoundError(error: unknown): boolean {
 export class AdminService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly invitations: InvitationsService,
     private readonly permissions: PermissionsService,
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
@@ -83,18 +81,6 @@ export class AdminService {
         userModulePermissions,
       },
     }
-  }
-
-  async createSignupInvitation(admin: { readonly id: string; readonly email: string }, publicAppUrl: string, ipAddress = "system") {
-    const invitation = await this.invitations.createSignupInvitation({ adminId: admin.id, publicAppUrl })
-    await this.auditLog?.record({
-      adminEmail: admin.email,
-      action: "admin.invitation.create",
-      targetType: "invitation",
-      targetId: invitation.id,
-      ipAddress,
-    })
-    return invitation
   }
 
   async deleteInvitation(id: string, actorEmail = "system", ipAddress = "system") {

@@ -205,7 +205,7 @@ describe("TeamsService", () => {
     }
     const service = new TeamsService(prisma as never, invitations as never)
 
-    await expect(service.joinTeam("user-2", { invitationToken: "team-token" })).resolves.toEqual(member)
+    await expect(service.joinTeam("user-2", { token: "team-token" })).resolves.toEqual(member)
     expect(createMembership).toHaveBeenCalledWith({
       data: { teamId: "team-1", userId: "user-2", role: "member" },
       include: {
@@ -226,7 +226,7 @@ describe("TeamsService", () => {
       auditLog as never,
     )
 
-    await expect(service.joinTeam("user-1", { invitationToken: "bad-token" }, "203.0.113.13"))
+    await expect(service.joinTeam("user-1", { token: "bad-token" }, "203.0.113.13"))
       .rejects
       .toThrow("邀请无效或已过期。")
     expect(auditLog.record).toHaveBeenCalledWith({
@@ -251,7 +251,7 @@ describe("TeamsService", () => {
       auditLog as never,
     )
 
-    await expect(service.joinTeam("user-1", { invitationToken: "team-token" }, "203.0.113.14"))
+    await expect(service.joinTeam("user-1", { token: "team-token" }, "203.0.113.14"))
       .rejects
       .toThrow("账号已属于一个团队。")
     expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({

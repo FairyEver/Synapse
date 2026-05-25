@@ -2,7 +2,7 @@ import { BadRequestException, Injectable } from "@nestjs/common"
 import { Prisma, type InvitationType } from "@prisma/client"
 import { createOpaqueToken, hashToken } from "../auth/token"
 import { PrismaService } from "../prisma/prisma.service"
-import { buildSignupInviteUrl, buildTeamInviteUrl, parseInviteTokenInput } from "./invitation-url"
+import { buildTeamInviteUrl, parseInviteTokenInput } from "./invitation-url"
 
 const invitationDays = 7
 
@@ -15,26 +15,6 @@ function addDays(date: Date, days: number): Date {
 @Injectable()
 export class InvitationsService {
   constructor(private readonly prisma: PrismaService) {}
-
-  async createSignupInvitation(input: { readonly adminId: string; readonly publicAppUrl: string }) {
-    const token = createOpaqueToken()
-    const inviteUrl = buildSignupInviteUrl({ publicAppUrl: input.publicAppUrl, token })
-    const invitation = await this.prisma.invitation.create({
-      data: {
-        type: "user_signup",
-        tokenHash: hashToken(token),
-        inviteUrl,
-        expiresAt: addDays(new Date(), invitationDays),
-        createdByAdminId: input.adminId,
-      },
-    })
-    return {
-      id: invitation.id,
-      token,
-      inviteUrl,
-      expiresAt: invitation.expiresAt,
-    }
-  }
 
   async createTeamInvitation(input: { readonly userId: string; readonly teamId: string; readonly publicAppUrl: string }) {
     const token = createOpaqueToken()

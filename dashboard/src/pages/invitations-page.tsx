@@ -17,7 +17,7 @@ import { type AdminInvitationRow, adminApi } from '@/lib/api';
 import { formatDate } from '@/lib/format';
 
 function invitationType(type: AdminInvitationRow['type']) {
-  return type === 'team_join' ? '团队加入' : '用户注册';
+  return type === 'team_join' ? '团队加入' : '-';
 }
 
 function invitationStatus(invitation: AdminInvitationRow) {
@@ -44,18 +44,6 @@ export function InvitationsPage() {
   const [deletingIds, setDeletingIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
-
-  async function createInvitation() {
-    setFeedback('');
-    try {
-      const result = await adminApi.createSignupInvitation();
-      await navigator.clipboard.writeText(result.inviteUrl);
-      setFeedback('邀请链接已复制');
-      await refresh();
-    } catch (nextError) {
-      setFeedback(nextError instanceof Error ? nextError.message : '创建失败');
-    }
-  }
 
   async function copyInvitation(invitation: AdminInvitationRow) {
     if (!invitation.inviteUrl) return;
@@ -87,10 +75,7 @@ export function InvitationsPage() {
 
   return (
     <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 pt-0">
-      <div className="flex items-center justify-between gap-4">
-        <p className="text-sm text-muted-foreground">{feedback}</p>
-        <Button onClick={createInvitation}>创建邀请</Button>
-      </div>
+      {feedback ? <p className="text-sm text-muted-foreground">{feedback}</p> : null}
       {isLoading ? <LoadingState /> : null}
       {error ? <ErrorState message={error} onRetry={refresh} /> : null}
       {!isLoading && !error ? (

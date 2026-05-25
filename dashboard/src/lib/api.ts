@@ -84,7 +84,7 @@ export type DashboardMe = {
 
 export type AdminInvitationRow = {
   id: string;
-  type: 'user_signup' | 'team_join';
+  type: 'team_join';
   inviteUrl: string | null;
   expiresAt: string;
   usedAt: string | null;
@@ -93,13 +93,6 @@ export type AdminInvitationRow = {
   team: { name: string } | null;
   acceptedByUser: { email: string } | null;
   createdAt: string;
-};
-
-export type CreateSignupInvitationResponse = {
-  id: string;
-  token: string;
-  inviteUrl: string;
-  expiresAt: string;
 };
 
 export type BackupFile = {
@@ -280,10 +273,6 @@ export const dashboardApi = {
 export const adminApi = {
   getSystemOverview: () =>
     request<SystemOverview>(`${adminApiBasePath}/system`),
-  createSignupInvitation: () =>
-    request<CreateSignupInvitationResponse>(`${adminApiBasePath}/invitations`, {
-      method: 'POST',
-    }),
   listInvitations: (options: { page?: number; pageSize?: number } = {}) =>
     request<PaginatedResponse<AdminInvitationRow>>(
       `${adminApiBasePath}/invitations${paginationSuffix(options)}`,
@@ -379,7 +368,7 @@ export const userApi = {
       method: 'POST',
       body: JSON.stringify(input),
     }),
-  joinTeam: (input: { invitationToken: string }) =>
+  joinTeam: (input: { token: string }) =>
     request<unknown>('/api/teams/join', {
       method: 'POST',
       body: JSON.stringify(input),
