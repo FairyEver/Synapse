@@ -58,7 +58,7 @@ describe("ToolsModule", () => {
     })
 
     await act(async () => {
-      buttonByText("打开").click()
+      buttonByLabel("打开文件转换").click()
       await Promise.resolve()
     })
 
@@ -95,10 +95,9 @@ function createBridgeMocks() {
   }
 }
 
-function buttonByText(text: string): HTMLButtonElement {
-  const button = Array.from(document.querySelectorAll("button"))
-    .find((item) => item.textContent?.includes(text))
-  if (!button) throw new Error(`Button not found: ${text}`)
+function buttonByLabel(label: string): HTMLButtonElement {
+  const button = document.querySelector<HTMLButtonElement>(`button[aria-label="${label}"]`)
+  if (!button) throw new Error(`Button not found: ${label}`)
   return button
 }
 

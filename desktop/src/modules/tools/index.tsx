@@ -5,12 +5,14 @@ import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import {
-  Card,
-  CardAction,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card"
+  Item,
+  ItemActions,
+  ItemContent,
+  ItemDescription,
+  ItemGroup,
+  ItemMedia,
+  ItemTitle,
+} from "@/components/ui/item"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
 import type { SynapseToolDefinition } from "@/types/tools"
@@ -67,30 +69,49 @@ export function ToolsModule() {
         <h2 className="text-sm font-semibold">工具</h2>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-        <div className="grid gap-2 px-2 pb-2 md:grid-cols-2 xl:grid-cols-3">
+        <ItemGroup className="px-2 pb-2">
           {tools.map((tool) => (
-            <Card key={tool.id} size="sm">
-              <CardHeader>
-                <div className="flex items-center gap-2">
-                  <Wrench className="size-4 text-muted-foreground" />
-                  <CardTitle>{tool.label}</CardTitle>
-                </div>
-                <CardDescription>{tool.description}</CardDescription>
-                <CardAction>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={openingToolId !== null}
-                    onClick={() => void handleOpenTool(tool)}
-                  >
-                    <ExternalLink data-icon="inline-start" />
-                    打开
-                  </Button>
-                </CardAction>
-              </CardHeader>
-            </Card>
+            <Item
+              key={tool.id}
+              size="sm"
+              className="grid cursor-pointer grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 bg-card"
+              tabIndex={0}
+              role="button"
+              onClick={() => void handleOpenTool(tool)}
+              onKeyDown={(event) => {
+                if (event.key !== "Enter" && event.key !== " ") return
+                if (event.target !== event.currentTarget) return
+                event.preventDefault()
+                void handleOpenTool(tool)
+              }}
+            >
+              <ItemMedia variant="icon" className="text-muted-foreground">
+                <Wrench />
+              </ItemMedia>
+              <ItemContent className="min-w-0">
+                <ItemTitle className="w-full min-w-0">
+                  <span className="min-w-0 truncate">{tool.label}</span>
+                </ItemTitle>
+                <ItemDescription>{tool.description}</ItemDescription>
+              </ItemContent>
+              <ItemActions className="justify-end">
+                <Button
+                  type="button"
+                  size="icon-sm"
+                  variant="ghost"
+                  aria-label={`打开${tool.label}`}
+                  disabled={openingToolId !== null}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void handleOpenTool(tool)
+                  }}
+                >
+                  <ExternalLink />
+                </Button>
+              </ItemActions>
+            </Item>
           ))}
-        </div>
+        </ItemGroup>
       </ScrollArea>
     </div>
   )
