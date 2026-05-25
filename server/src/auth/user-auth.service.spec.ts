@@ -1,4 +1,4 @@
-import { BadRequestException, UnauthorizedException } from "@nestjs/common"
+import { UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { Prisma } from "@prisma/client"
 import { describe, expect, it, vi } from "vitest"
@@ -7,15 +7,20 @@ import { hashToken } from "./token"
 import { UserAuthService, type UserMeResponse } from "./user-auth.service"
 
 function createPrismaMock() {
+  const tx = {
+    user: {
+      create: vi.fn().mockResolvedValue({ id: "user-1", email: "u@example.com", status: "active" }),
+    },
+    userSession: {
+      create: vi.fn().mockResolvedValue({ id: "session-1" }),
+    },
+  }
   return {
-    $transaction: vi.fn((callback) => callback({
-      user: {
-        create: vi.fn().mockResolvedValue({ id: "user-1", email: "u@example.com", status: "active" }),
-      },
-      userSession: {
-        create: vi.fn().mockResolvedValue({ id: "session-1" }),
-      },
-    })),
+    $transaction: vi.fn((callback) => callback(tx)),
+    __tx: tx,
+    adminUser: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
     user: {
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
@@ -30,12 +35,6 @@ function createPrismaMock() {
   }
 }
 
-function createPermissionsMock() {
-  return {
-    getEffectivePermissions: vi.fn(),
-  }
-}
-
 function createUniqueConstraintError() {
   return new Prisma.PrismaClientKnownRequestError("Unique constraint failed", {
     code: "P2002",
@@ -43,18 +42,20 @@ function createUniqueConstraintError() {
   })
 }
 
+function createService(prisma: ReturnType<typeof createPrismaMock>, auditLog?: { record: ReturnType<typeof vi.fn> }) {
+  return new UserAuthService(
+    prisma as never,
+    new JwtService({ secret: "user-secret-at-least-32-characters!" }),
+    { accessMinutes: 15, refreshDays: 30 },
+    auditLog as never,
+  )
+}
+
 describe("UserAuthService", () => {
   it("rejects login for unknown users", async () => {
     const prisma = createPrismaMock()
     prisma.user.findUnique.mockResolvedValue(null)
-    const permissions = createPermissionsMock()
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-    )
+    const service = createService(prisma)
 
     await expect(service.login({ email: "missing@example.com", password: "x" }))
       .rejects
@@ -70,15 +71,7 @@ describe("UserAuthService", () => {
       status: "disabled",
     })
     const auditLog = { record: vi.fn() }
-    const permissions = createPermissionsMock()
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-      auditLog as never,
-    )
+    const service = createService(prisma, auditLog)
 
     await expect(service.login({ email: "u@example.com", password: "StrongPassword123!" }, "203.0.113.22"))
       .rejects
@@ -96,15 +89,7 @@ describe("UserAuthService", () => {
     const prisma = createPrismaMock()
     prisma.user.findUnique.mockResolvedValue(null)
     const auditLog = { record: vi.fn() }
-    const permissions = createPermissionsMock()
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-      auditLog as never,
-    )
+    const service = createService(prisma, auditLog)
 
     await expect(service.login({ email: "missing@example.com", password: "x" }, "203.0.113.23"))
       .rejects
@@ -128,15 +113,7 @@ describe("UserAuthService", () => {
       status: "active",
     })
     const auditLog = { record: vi.fn() }
-    const permissions = createPermissionsMock()
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-      auditLog as never,
-    )
+    const service = createService(prisma, auditLog)
 
     await service.login({ email: "u@example.com", password: "StrongPassword123!" }, "203.0.113.24")
 
@@ -158,15 +135,7 @@ describe("UserAuthService", () => {
     })
     prisma.userSession.update.mockResolvedValue({})
     const auditLog = { record: vi.fn() }
-    const permissions = createPermissionsMock()
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-      auditLog as never,
-    )
+    const service = createService(prisma, auditLog)
 
     await expect(service.logout({ refreshToken: "refresh-token" }, "203.0.113.25"))
       .resolves
@@ -189,25 +158,33 @@ describe("UserAuthService", () => {
     })
   })
 
-  it("records registration success audits with the request ip", async () => {
+  it("registers users without an invitation and records success audits with the request ip", async () => {
     const prisma = createPrismaMock()
     const auditLog = { record: vi.fn() }
-    const permissions = createPermissionsMock()
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-      auditLog as never,
-    )
+    const service = createService(prisma, auditLog)
 
     await service.register({
-      invitationToken: "invite-token",
       email: "U@example.com",
       password: "StrongPassword123!",
     }, "203.0.113.25")
 
+    expect(prisma.adminUser.findUnique).toHaveBeenCalledWith({
+      where: { email: "u@example.com" },
+      select: { id: true },
+    })
+    expect(prisma.__tx.user.create).toHaveBeenCalledWith({
+      data: {
+        email: "u@example.com",
+        passwordHash: expect.any(String),
+      },
+    })
+    expect(prisma.__tx.userSession.create).toHaveBeenCalledWith({
+      data: {
+        userId: "user-1",
+        refreshTokenHash: expect.any(String),
+        expiresAt: expect.any(Date),
+      },
+    })
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "u@example.com",
       action: "user.register.success",
@@ -217,22 +194,37 @@ describe("UserAuthService", () => {
     })
   })
 
+  it("rejects admin emails during registration and records duplicate email audits", async () => {
+    const prisma = createPrismaMock()
+    prisma.adminUser.findUnique.mockResolvedValue({ id: "admin-1" })
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog)
+
+    await expect(service.register({
+      email: "Admin@example.com",
+      password: "StrongPassword123!",
+    }, "203.0.113.26"))
+      .rejects
+      .toThrow("邮箱已注册。")
+
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "user.register.failure",
+      targetType: "user",
+      targetId: "unknown",
+      detail: { reason: "duplicate_email" },
+      ipAddress: "203.0.113.26",
+    })
+    expect(prisma.$transaction).not.toHaveBeenCalled()
+  })
+
   it("records duplicate registration attempts", async () => {
     const prisma = createPrismaMock()
     prisma.$transaction.mockRejectedValue(createUniqueConstraintError())
     const auditLog = { record: vi.fn() }
-    const permissions = createPermissionsMock()
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-      auditLog as never,
-    )
+    const service = createService(prisma, auditLog)
 
     await expect(service.register({
-      invitationToken: "invite-token",
       email: "U@example.com",
       password: "StrongPassword123!",
     }, "203.0.113.26"))
@@ -246,38 +238,6 @@ describe("UserAuthService", () => {
       targetId: "unknown",
       detail: { reason: "duplicate_email" },
       ipAddress: "203.0.113.26",
-    })
-  })
-
-  it("records invalid invitation registration attempts", async () => {
-    const prisma = createPrismaMock()
-    prisma.$transaction.mockRejectedValue(new BadRequestException("邀请无效或已过期。"))
-    const auditLog = { record: vi.fn() }
-    const permissions = createPermissionsMock()
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-      auditLog as never,
-    )
-
-    await expect(service.register({
-      invitationToken: "invalid-token",
-      email: "u@example.com",
-      password: "StrongPassword123!",
-    }, "203.0.113.27"))
-      .rejects
-      .toThrow("邀请无效或已过期。")
-
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "u@example.com",
-      action: "user.register.failure",
-      targetType: "user",
-      targetId: "unknown",
-      detail: { reason: "invalid_invitation" },
-      ipAddress: "203.0.113.27",
     })
   })
 
@@ -296,15 +256,7 @@ describe("UserAuthService", () => {
     })
     prisma.userSession.updateMany.mockResolvedValue({ count: 0 })
     const auditLog = { record: vi.fn() }
-    const permissions = createPermissionsMock()
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-      auditLog as never,
-    )
+    const service = createService(prisma, auditLog)
 
     await expect(service.refresh({ refreshToken: "refresh-token" }, "203.0.113.27"))
       .rejects
@@ -330,15 +282,7 @@ describe("UserAuthService", () => {
     const prisma = createPrismaMock()
     prisma.userSession.findUnique.mockResolvedValue(null)
     const auditLog = { record: vi.fn() }
-    const permissions = createPermissionsMock()
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-      auditLog as never,
-    )
+    const service = createService(prisma, auditLog)
 
     await expect(service.refresh({ refreshToken: "invalid-token" }, "203.0.113.28"))
       .rejects
@@ -368,15 +312,7 @@ describe("UserAuthService", () => {
       },
     })
     const auditLog = { record: vi.fn() }
-    const permissions = createPermissionsMock()
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-      auditLog as never,
-    )
+    const service = createService(prisma, auditLog)
 
     await expect(service.refresh({ refreshToken: "refresh-token" }, "203.0.113.29"))
       .rejects
@@ -406,15 +342,7 @@ describe("UserAuthService", () => {
       },
     })
     const auditLog = { record: vi.fn() }
-    const permissions = createPermissionsMock()
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-      auditLog as never,
-    )
+    const service = createService(prisma, auditLog)
 
     await expect(service.refresh({ refreshToken: "refresh-token" }, "203.0.113.30"))
       .rejects
@@ -444,15 +372,7 @@ describe("UserAuthService", () => {
       },
     })
     const auditLog = { record: vi.fn() }
-    const permissions = createPermissionsMock()
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-      auditLog as never,
-    )
+    const service = createService(prisma, auditLog)
 
     await expect(service.refresh({ refreshToken: "refresh-token" }, "203.0.113.26"))
       .rejects
@@ -471,14 +391,7 @@ describe("UserAuthService", () => {
   it("cleans expired and stale revoked sessions", async () => {
     const prisma = createPrismaMock()
     prisma.userSession.deleteMany.mockResolvedValue({ count: 3 })
-    const permissions = createPermissionsMock()
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-    )
+    const service = createService(prisma)
     const now = new Date("2026-05-23T12:00:00.000Z")
 
     await expect(service.cleanupExpiredSessions(now)).resolves.toBe(3)
@@ -493,7 +406,7 @@ describe("UserAuthService", () => {
     })
   })
 
-  it("returns team roles and effective permissions for the current user", async () => {
+  it("returns the current user and team membership shape without roles or permissions", async () => {
     const prisma = createPrismaMock()
     prisma.user.findUniqueOrThrow.mockResolvedValue({
       id: "user-1",
@@ -502,37 +415,17 @@ describe("UserAuthService", () => {
       memberships: [
         {
           id: "membership-1",
-          teamId: "team-1",
           role: "owner",
-          accessRoles: [
-            { role: { id: "role-1", name: "团队管理员" } },
-            { role: { id: "role-2", name: "普通成员" } },
-          ],
           team: { id: "team-1", name: "Team One" },
         },
         {
           id: "membership-2",
-          teamId: "team-2",
           role: "member",
-          accessRoles: [
-            { role: { id: "role-3", name: "普通成员" } },
-          ],
           team: { id: "team-2", name: "Team Two" },
         },
       ],
     })
-    const permissions = createPermissionsMock()
-    permissions.getEffectivePermissions.mockImplementation(async (_userId: string, teamId: string) => {
-      if (teamId === "team-1") return ["database.use", "team.member.manage"]
-      return ["agent.chat.use"]
-    })
-    const service = new UserAuthService(
-      prisma as never,
-      { consumeInvitation: vi.fn() } as never,
-      new JwtService({ secret: "user-secret-at-least-32-characters!" }),
-      { accessMinutes: 15, refreshDays: 30 },
-      permissions as never,
-    )
+    const service = createService(prisma)
 
     const expected: UserMeResponse = {
       user: { id: "user-1", email: "u@example.com", status: "active" },
@@ -542,19 +435,12 @@ describe("UserAuthService", () => {
           name: "Team One",
           membershipId: "membership-1",
           membershipRole: "owner",
-          roles: [
-            { id: "role-1", name: "团队管理员" },
-            { id: "role-2", name: "普通成员" },
-          ],
-          effectivePermissions: ["database.use", "team.member.manage"],
         },
         {
           id: "team-2",
           name: "Team Two",
           membershipId: "membership-2",
           membershipRole: "member",
-          roles: [{ id: "role-3", name: "普通成员" }],
-          effectivePermissions: ["agent.chat.use"],
         },
       ],
     }
@@ -570,21 +456,12 @@ describe("UserAuthService", () => {
         memberships: {
           select: {
             id: true,
-            teamId: true,
             role: true,
-            accessRoles: {
-              select: {
-                role: { select: { id: true, name: true } },
-              },
-              orderBy: { assignedAt: "asc" },
-            },
             team: { select: { id: true, name: true } },
           },
           orderBy: { createdAt: "asc" },
         },
       },
     })
-    expect(permissions.getEffectivePermissions).toHaveBeenNthCalledWith(1, "user-1", "team-1")
-    expect(permissions.getEffectivePermissions).toHaveBeenNthCalledWith(2, "user-1", "team-2")
   })
 })

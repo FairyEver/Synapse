@@ -6,7 +6,6 @@ import { AuthenticatedUserRequest, UserAuthGuard } from "./user-auth.guard"
 import { UserAuthService } from "./user-auth.service"
 
 const registerSchema = z.object({
-  invitationToken: z.string().min(1),
   email: z.string().email(),
   password: z.string().min(8),
 }).strict()

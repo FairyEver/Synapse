@@ -3,8 +3,6 @@ import { JwtModule } from "@nestjs/jwt"
 import { AdminAuthModule } from "../admin-auth/admin-auth.module"
 import { AuditLogService } from "../common/audit-log.service"
 import { loadEnv } from "../config/env"
-import { InvitationsModule } from "../invitations/invitations.module"
-import { PermissionsModule } from "../permissions/permissions.module"
 import { PrismaModule } from "../prisma/prisma.module"
 import { UserAuthController } from "./user-auth.controller"
 import { UserAuthGuard } from "./user-auth.guard"
@@ -14,8 +12,6 @@ import { UserAuthService, userAuthOptionsToken } from "./user-auth.service"
   imports: [
     PrismaModule,
     AdminAuthModule,
-    InvitationsModule,
-    PermissionsModule,
     JwtModule.registerAsync({
       useFactory: () => {
         const env = loadEnv(process.env)

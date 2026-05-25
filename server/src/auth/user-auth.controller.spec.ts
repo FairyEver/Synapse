@@ -1,4 +1,5 @@
 import "reflect-metadata"
+import { BadRequestException } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
 import { UserAuthController } from "./user-auth.controller"
 import type { UserAuthService } from "./user-auth.service"
@@ -36,16 +37,29 @@ describe("UserAuthController", () => {
     const controller = new UserAuthController(auth as unknown as UserAuthService)
 
     controller.register({
-      invitationToken: "invite-token",
       email: "user@example.com",
       password: "password",
     }, { ip: "203.0.113.21" } as never)
 
     expect(auth.register).toHaveBeenCalledWith({
-      invitationToken: "invite-token",
       email: "user@example.com",
       password: "password",
     }, "203.0.113.21")
+  })
+
+  it("rejects register requests with invitation tokens", () => {
+    const auth = {
+      register: vi.fn(),
+    }
+    const controller = new UserAuthController(auth as unknown as UserAuthService)
+
+    expect(() => controller.register({
+      invitationToken: "invite-token",
+      email: "user@example.com",
+      password: "password",
+    }, { ip: "203.0.113.21" } as never))
+      .toThrow(BadRequestException)
+    expect(auth.register).not.toHaveBeenCalled()
   })
 
   it("passes valid refresh requests with the request ip to the service", () => {

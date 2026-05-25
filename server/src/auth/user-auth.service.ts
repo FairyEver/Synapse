@@ -1,12 +1,10 @@
 import { BadRequestException, Inject, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { Cron } from "@nestjs/schedule"
-import { Prisma, type TeamAccessRole, type TeamMembership, type TeamRole, type User } from "@prisma/client"
+import { Prisma, type TeamMembership, type TeamRole, type User } from "@prisma/client"
 import { AuditLogService } from "../common/audit-log.service"
 import { hashPassword, verifyPassword } from "./password"
 import { createOpaqueToken, hashToken } from "./token"
-import { InvitationsService } from "../invitations/invitations.service"
-import { PermissionsService } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
 
 export const userAuthOptionsToken = "USER_AUTH_OPTIONS"
@@ -21,18 +19,11 @@ export interface UserTokenPair {
   readonly refreshToken: string
 }
 
-export interface UserMeAccessRole {
-  readonly id: TeamAccessRole["id"]
-  readonly name: TeamAccessRole["name"]
-}
-
 export interface UserMeTeam {
   readonly id: string
   readonly name: string
   readonly membershipId: TeamMembership["id"]
   readonly membershipRole: TeamRole
-  readonly roles: readonly UserMeAccessRole[]
-  readonly effectivePermissions: readonly string[]
 }
 
 export interface UserMeResponse {
@@ -57,15 +48,26 @@ const revokedSessionRetentionMs = 7 * 24 * 60 * 60 * 1000
 export class UserAuthService {
   constructor(
     private readonly prisma: PrismaService,
-    private readonly invitations: InvitationsService,
     private readonly jwt: JwtService,
     @Inject(userAuthOptionsToken) private readonly options: UserAuthOptions,
-    private readonly permissions: PermissionsService,
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
-  async register(input: { invitationToken: string; email: string; password: string }, ipAddress = "system"): Promise<UserTokenPair> {
+  async register(input: { email: string; password: string }, ipAddress = "system"): Promise<UserTokenPair> {
     const email = input.email.trim().toLowerCase()
+    const existingAdmin = await this.prisma.adminUser.findUnique({
+      where: { email },
+      select: { id: true },
+    })
+    if (existingAdmin) {
+      await this.recordUserRegistrationFailure({
+        adminEmail: email,
+        reason: "duplicate_email",
+        ipAddress,
+      })
+      throw new BadRequestException("邮箱已注册。")
+    }
+
     try {
       const result = await this.prisma.$transaction(async (tx) => {
         const user = await tx.user.create({
@@ -74,11 +76,6 @@ export class UserAuthService {
             passwordHash: await hashPassword(input.password),
           },
         })
-        await this.invitations.consumeInvitation({
-          token: input.invitationToken,
-          type: "user_signup",
-          acceptedByUserId: user.id,
-        }, tx)
         const tokens = await this.issueTokenPair(user, tx)
         return { tokens, user }
       })
@@ -98,13 +95,6 @@ export class UserAuthService {
           ipAddress,
         })
         throw new BadRequestException("邮箱已注册。")
-      }
-      if (isBadRequestMessage(error, "邀请无效或已过期。")) {
-        await this.recordUserRegistrationFailure({
-          adminEmail: email,
-          reason: "invalid_invitation",
-          ipAddress,
-        })
       }
       throw error
     }
@@ -263,14 +253,7 @@ export class UserAuthService {
         memberships: {
           select: {
             id: true,
-            teamId: true,
             role: true,
-            accessRoles: {
-              select: {
-                role: { select: { id: true, name: true } },
-              },
-              orderBy: { assignedAt: "asc" },
-            },
             team: { select: { id: true, name: true } },
           },
           orderBy: { createdAt: "asc" },
@@ -278,14 +261,12 @@ export class UserAuthService {
       },
     })
 
-    const teams = await Promise.all(user.memberships.map(async (membership) => ({
+    const teams = user.memberships.map((membership) => ({
       id: membership.team.id,
       name: membership.team.name,
       membershipId: membership.id,
       membershipRole: membership.role,
-      roles: membership.accessRoles.map((item) => item.role),
-      effectivePermissions: await this.permissions.getEffectivePermissions(user.id, membership.teamId),
-    })))
+    }))
 
     return {
       user: { id: user.id, email: user.email, status: user.status },
@@ -330,7 +311,7 @@ export class UserAuthService {
 
   private async recordUserRegistrationFailure(input: {
     readonly adminEmail: string
-    readonly reason: "duplicate_email" | "invalid_invitation"
+    readonly reason: "duplicate_email"
     readonly ipAddress: string
   }): Promise<void> {
     await this.auditLog?.record({
@@ -361,11 +342,4 @@ export class UserAuthService {
 
 function isUniqueConstraintError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002"
-}
-
-function isBadRequestMessage(error: unknown, message: string): boolean {
-  if (!(error instanceof BadRequestException)) return false
-  const response = error.getResponse()
-  if (typeof response === "string") return response === message
-  return Boolean(response && typeof response === "object" && "message" in response && (response as { message: unknown }).message === message)
 }
