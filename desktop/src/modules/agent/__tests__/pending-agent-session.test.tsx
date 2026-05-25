@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => {
     } | null,
     sidebarProps: null as {
       projects?: Array<{ id: string; name: string; path: string }>
+      sourceFilter?: string
     } | null,
     configProjects: [{ id: "project-1", name: "Project One", path: "/repo" }],
     activeRepository: { uuid: "project-1", name: "Project One", localPath: "/repo" },
@@ -98,7 +99,10 @@ vi.mock("@/components/sidebar-content-layout", () => ({
 }))
 
 vi.mock("../components/agent-session-sidebar", () => ({
-  AgentSessionSidebar: (props: { projects?: Array<{ id: string; name: string; path: string }> }) => {
+  AgentSessionSidebar: (props: {
+    projects?: Array<{ id: string; name: string; path: string }>
+    sourceFilter?: string
+  }) => {
     mocks.sidebarProps = props
     return <aside />
   },
@@ -338,6 +342,40 @@ describe("AgentModule pending prompt sessions", () => {
     expect(mocks.timelineProps).toBeNull()
     expect(container.textContent).toContain("请创建新的会话")
     expect(container.textContent).not.toContain("claudecode")
+  })
+
+  it("does not render a selected session excluded by the active source filter", async () => {
+    mocks.chat = createChatState({
+      sessions: [{
+        ...targetSession,
+        platform: "workflow",
+        name: "Workflow Run",
+      }],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+      timeline: [{
+        id: "stale-message",
+        kind: "message",
+        role: "assistant",
+        content: "stale content",
+        timestamp: "2026-05-14T00:00:00.000Z",
+      }],
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    expect(mocks.sidebarProps?.sourceFilter).toBe("user")
+    expect(mocks.timelineProps).toBeNull()
+    expect(container.textContent).toContain("请创建新的会话")
+    expect(container.textContent).not.toContain("Workflow Run")
+    expect(container.textContent).not.toContain("stale content")
   })
 
   it("logs pending session handoff failures without consuming the prompt", async () => {

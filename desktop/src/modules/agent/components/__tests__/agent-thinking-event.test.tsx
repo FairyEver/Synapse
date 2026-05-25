@@ -102,7 +102,7 @@ describe("AgentThinkingEvent", () => {
     expect(html).toContain("visible thinking")
   })
 
-  it("constrains the thinking viewport so long content scrolls internally", () => {
+  it("renders long thinking content without an internal height cap", () => {
     const html = renderToStaticMarkup(<AgentThinkingEvent
       item={{
         id: "thinking-scroll",
@@ -117,7 +117,8 @@ describe("AgentThinkingEvent", () => {
 
     const viewport = container.querySelector('[data-slot="scroll-area-viewport"]')
 
-    expect(viewport?.className).toContain("max-h-60")
+    expect(viewport).toBeNull()
+    expect(html).not.toContain("max-h-60")
   })
 
   it("logs thinking copy failures without recording thinking content", async () => {

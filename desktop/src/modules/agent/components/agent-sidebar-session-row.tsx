@@ -1,4 +1,4 @@
-import type { ReactNode } from "react"
+import type { KeyboardEvent, MouseEvent, ReactNode } from "react"
 import { cn } from "@/lib/utils"
 import { extractLabel, track } from "@/lib/ui-tracking"
 
@@ -19,34 +19,39 @@ function AgentSidebarSessionRow({
   trailing,
   trackValue,
 }: AgentSidebarSessionRowProps) {
+  function handleSelect(event: MouseEvent<HTMLDivElement> | KeyboardEvent<HTMLDivElement>) {
+    track({
+      component: "module-sidebar-item",
+      name: extractLabel(event.currentTarget) ?? "agent-session-select",
+      action: "select",
+      value: trackValue,
+    })
+    onSelect()
+  }
+
   return (
     <div
+      role="button"
+      tabIndex={0}
       data-track="agent-session-select"
       aria-current={active ? "page" : undefined}
+      onClick={handleSelect}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return
+        event.preventDefault()
+        handleSelect(event)
+      }}
       className={cn(
         "group/item flex h-8 w-full min-w-0 items-center rounded-lg px-3 text-sm font-medium text-foreground/80 transition-colors outline-none",
         "hover:bg-muted/60 hover:text-foreground",
-        "focus-within:ring-3 focus-within:ring-inset focus-within:ring-ring/50",
+        "focus-visible:ring-3 focus-visible:ring-inset focus-visible:ring-ring/50",
         active && "bg-secondary text-secondary-foreground hover:bg-secondary",
       )}
     >
-      <button
-        type="button"
-        data-track="agent-session-select"
-        onClick={(event) => {
-          track({
-            component: "module-sidebar-item",
-            name: extractLabel(event.currentTarget) ?? "agent-session-select",
-            action: "select",
-            value: trackValue,
-          })
-          onSelect()
-        }}
-        className="flex min-w-0 flex-1 items-center gap-1.5 rounded-sm text-left text-xs font-normal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/50"
-      >
+      <span className="flex min-w-0 flex-1 items-center gap-1.5 text-left text-xs font-normal">
         {icon}
         <span className="block min-w-0 flex-1 truncate">{children}</span>
-      </button>
+      </span>
       <span className="ml-2 flex shrink-0 items-center">{trailing}</span>
     </div>
   )

@@ -7,6 +7,7 @@ import { renderToStaticMarkup } from "react-dom/server"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { AgentSessionSidebar } from "../components/agent-session-sidebar"
+import { AgentSidebarSessionRow } from "../components/agent-sidebar-session-row"
 
 const rendererLogger = vi.hoisted(() => ({
   debug: vi.fn(),
@@ -65,8 +66,10 @@ describe("AgentSessionSidebar", () => {
         projects={[{ id: "project-1", name: "Synapse", path: "/tmp/synapse" }]}
         selectedProjectId="project-1"
         selectedConversationId="workflow-conv"
+        sourceFilter="user"
         unreadByConversationId={{ "project-1:workflow-conv": 1 }}
         onCreateSession={vi.fn()}
+        onSourceFilterChange={vi.fn()}
         onSelect={vi.fn()}
         onDelete={vi.fn()}
         onDeleteOthers={vi.fn()}
@@ -99,7 +102,36 @@ describe("AgentSessionSidebar", () => {
     const row = wrapper.querySelector('[data-track="agent-session-select"][aria-current="page"]')
     expect(row?.className).toContain("w-full")
     expect(row?.className).toContain("min-w-0")
-    expect(row?.querySelector("button")?.className).toContain("flex-1")
+    expect(row?.getAttribute("role")).toBe("button")
+    expect(row?.querySelector("span")?.className).toContain("flex-1")
+  })
+
+  it("selects a session when clicking the row trailing area", async () => {
+    const onSelect = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentSidebarSessionRow
+          active={false}
+          trailing={<span data-testid="session-trailing">1 小时</span>}
+          trackValue="project-1:conversation-1"
+          onSelect={onSelect}
+        >
+          新会话 08:32 PM
+        </AgentSidebarSessionRow>,
+      )
+    })
+
+    await act(async () => {
+      container.querySelector<HTMLElement>("[data-testid='session-trailing']")
+        ?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onSelect).toHaveBeenCalledTimes(1)
   })
 
   it("defaults to user conversations and filters by source", async () => {
@@ -107,8 +139,9 @@ describe("AgentSessionSidebar", () => {
     document.body.appendChild(container)
     const root = createRoot(container)
     roots.push(root)
+    let sourceFilter: "user" | "workflow" = "user"
 
-    await act(async () => {
+    const renderSidebar = () => {
       root.render(
         <AgentSessionSidebar
           sessions={[
@@ -150,14 +183,23 @@ describe("AgentSessionSidebar", () => {
           projects={[{ id: "project-1", name: "Project One", path: "/tmp/project-one" }]}
           selectedProjectId="project-1"
           selectedConversationId="workflow-conv"
+          sourceFilter={sourceFilter}
           unreadByConversationId={{}}
           onCreateSession={vi.fn()}
+          onSourceFilterChange={(next) => {
+            sourceFilter = next as typeof sourceFilter
+            renderSidebar()
+          }}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
           onDeleteOthers={vi.fn()}
           onRename={vi.fn()}
         />,
       )
+    }
+
+    await act(async () => {
+      renderSidebar()
     })
 
     expect(document.body.textContent).toContain("用户对话")
@@ -213,8 +255,10 @@ describe("AgentSessionSidebar", () => {
         projects={[{ id: "project-1", name: "Test Project", path: "/tmp/test" }]}
         selectedProjectId="project-local"
         selectedConversationId="local-conv"
+        sourceFilter="user"
         unreadByConversationId={{ "project-1:external-conv": 2 }}
         onCreateSession={vi.fn()}
+        onSourceFilterChange={vi.fn()}
         onSelect={vi.fn()}
         onDelete={vi.fn()}
         onDeleteOthers={vi.fn()}
@@ -273,8 +317,10 @@ describe("AgentSessionSidebar", () => {
           projects={[{ id: "project-1", name: "Test Project", path: "/tmp/test" }]}
           selectedProjectId="project-1"
           selectedConversationId={undefined}
+          sourceFilter="user"
           unreadByConversationId={{}}
           onCreateSession={onCreateSession}
+          onSourceFilterChange={vi.fn()}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
           onDeleteOthers={vi.fn()}
@@ -355,8 +401,10 @@ describe("AgentSessionSidebar", () => {
           projects={[{ id: "project-1", name: "Test Project", path: "/tmp/test" }]}
           selectedProjectId="project-1"
           selectedConversationId={undefined}
+          sourceFilter="user"
           unreadByConversationId={{}}
           onCreateSession={onCreateSession}
+          onSourceFilterChange={vi.fn()}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
           onDeleteOthers={vi.fn()}
@@ -411,8 +459,10 @@ describe("AgentSessionSidebar", () => {
           projects={[{ id: "project-1", name: "Test Project", path: "/tmp/test" }]}
           selectedProjectId="project-1"
           selectedConversationId={undefined}
+          sourceFilter="user"
           unreadByConversationId={{}}
           onCreateSession={onCreateSession}
+          onSourceFilterChange={vi.fn()}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
           onDeleteOthers={vi.fn()}
@@ -487,8 +537,10 @@ describe("AgentSessionSidebar", () => {
           ]}
           selectedProjectId="project-1"
           selectedConversationId={undefined}
+          sourceFilter="user"
           unreadByConversationId={{}}
           onCreateSession={onCreateSession}
+          onSourceFilterChange={vi.fn()}
           onSelect={vi.fn()}
           onDelete={vi.fn()}
           onDeleteOthers={vi.fn()}

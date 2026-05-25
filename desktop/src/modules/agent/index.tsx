@@ -34,6 +34,10 @@ import {
 import type { PendingMessage, PendingMessageTarget } from "./pending-message-queue"
 import { resolveAgentProjectScope } from "./project-resolution"
 import {
+  filterSessionsBySource,
+  type ConversationSourceFilter,
+} from "./conversation-source"
+import {
   agentCliLabel,
   formatAgentTranscript,
   sessionLabel,
@@ -85,6 +89,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     resolveAgentProjectScope(activeRepository, config.global.projects, platform),
   [activeRepository, config.global.projects, platform])
   const [draft, setDraft] = useState("")
+  const [sourceFilter, setSourceFilter] = useState<ConversationSourceFilter>("user")
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([])
   const pendingSessionRefreshKeyRef = useRef<string | null>(null)
@@ -109,7 +114,11 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       path: project.path,
     })),
   [config.global.projects])
-  const selectedSession = chat.sessions.find((session) =>
+  const visibleSessions = useMemo(
+    () => filterSessionsBySource(chat.sessions, sourceFilter),
+    [chat.sessions, sourceFilter],
+  )
+  const selectedSession = visibleSessions.find((session) =>
     session.projectId === chat.selectedProjectId && session.id === chat.selectedConversationId)
   const selectedProjectId = chat.selectedProjectId ?? chat.activeProjectId
   const selectedProject = selectedProjectId
@@ -271,6 +280,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   }
 
   const handleCopyTranscript = async () => {
+    if (!selectedSession) return
     const projectId = chat.selectedProjectId ?? chat.activeProjectId
     if (!projectId || chat.timeline.length === 0) return
     try {
@@ -402,8 +412,10 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       projects={projectOptions}
       selectedProjectId={chat.selectedProjectId}
       selectedConversationId={chat.selectedConversationId}
+      sourceFilter={sourceFilter}
       unreadByConversationId={chat.unreadByConversationId}
       onCreateSession={(projectId, selection) => void chat.createSession(projectId, selection.providerId, undefined, selection.modelTier)}
+      onSourceFilterChange={setSourceFilter}
       onSelect={(session) => void chat.selectSession(session)}
       onDelete={(session) => void chat.deleteSession(session)}
       onDeleteOthers={async (keep) => {
@@ -496,7 +508,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                     type="button"
                     variant="ghost"
                     size="icon"
-                    disabled={!chat.activeProjectId || chat.timeline.length === 0}
+                    disabled={!selectedSession || !chat.activeProjectId || chat.timeline.length === 0}
                     onClick={() => void handleCopyTranscript()}
                     aria-label="复制对话"
                   >

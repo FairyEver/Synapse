@@ -45,8 +45,10 @@ type AgentSessionSidebarProps = {
   projects: ProjectOption[]
   selectedProjectId?: string
   selectedConversationId?: string
+  sourceFilter: ConversationSourceFilter
   unreadByConversationId: Record<string, number>
   onCreateSession: (projectId: string, selection: ProviderModelSelection) => void
+  onSourceFilterChange: (sourceFilter: ConversationSourceFilter) => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
   onDeleteOthers: (session: SynapseAgentSessionSummary) => void
@@ -59,8 +61,10 @@ function AgentSessionSidebar({
   projects,
   selectedProjectId,
   selectedConversationId,
+  sourceFilter,
   unreadByConversationId,
   onCreateSession,
+  onSourceFilterChange,
   onSelect,
   onDelete,
   onDeleteOthers,
@@ -68,7 +72,6 @@ function AgentSessionSidebar({
 }: AgentSessionSidebarProps) {
   const { config } = useAppConfig()
   const [createProject, setCreateProject] = useState<ProjectOption | null>(null)
-  const [sourceFilter, setSourceFilter] = useState<ConversationSourceFilter>("user")
   const visibleSessions = filterSessionsBySource(sessions, sourceFilter)
   const visibleArchivedSessions = filterSessionsBySource(archivedSessions, sourceFilter)
   const sessionsByProject = groupSessionsByProject(visibleSessions)
@@ -83,7 +86,7 @@ function AgentSessionSidebar({
           <Select
             data-track="agent-session-source-filter"
             value={sourceFilter}
-            onValueChange={(value) => setSourceFilter(value as ConversationSourceFilter)}
+            onValueChange={(value) => onSourceFilterChange(value as ConversationSourceFilter)}
           >
             <SelectTrigger aria-label="会话来源" className="w-full min-w-0" size="sm">
               <SelectValue />

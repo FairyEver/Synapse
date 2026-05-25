@@ -3,7 +3,6 @@ import { Check, ChevronDown, Clipboard, Sparkles, X } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { track } from "@/lib/ui-tracking"
 import {
   Collapsible,
@@ -90,11 +89,11 @@ function AgentThinkingEvent({
         </CollapsibleTrigger>
         <CollapsibleContent>
           <div className="group relative pb-2 pt-1">
-            <ScrollArea className="max-h-60 rounded bg-muted/50 px-2 py-1.5" viewportClassName="max-h-60" scrollbars="both">
+            <div className="rounded bg-muted/50 px-2 py-1.5">
               <pre data-allow-select="true" className="whitespace-pre-wrap break-words text-xs leading-5 text-muted-foreground">
                 {item.content}
               </pre>
-            </ScrollArea>
+            </div>
             <Button
               type="button"
               variant="ghost"
