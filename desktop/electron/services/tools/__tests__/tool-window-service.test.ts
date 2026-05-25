@@ -41,10 +41,10 @@ describe("createToolWindowService", () => {
     await service.open("file-conversion")
 
     expect(createWindow).toHaveBeenCalledWith(expect.objectContaining({
-      width: 920,
-      height: 680,
-      minWidth: 720,
-      minHeight: 520,
+      width: 760,
+      height: 560,
+      minWidth: 560,
+      minHeight: 420,
       resizable: true,
       title: "文件转换",
       webPreferences: expect.objectContaining({

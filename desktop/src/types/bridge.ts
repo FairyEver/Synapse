@@ -141,6 +141,7 @@ import type {
   ScheduledTaskUpdateInput,
 } from "./task-scheduler"
 import type {
+  SynapseFileConversionDefaultOutputDirectoryResult,
   SynapseFileConversionInputSelectionResult,
   SynapseFileConversionOutputDirectoryResult,
   SynapseFileConversionPayload,
@@ -734,7 +735,11 @@ export type SynapseBridge = {
     openTool: (toolId: SynapseToolId) => Promise<void>
     fileConversion: {
       selectInputFiles: () => Promise<SynapseFileConversionInputSelectionResult>
-      selectOutputDirectory: () => Promise<SynapseFileConversionOutputDirectoryResult>
+      selectOutputDirectory: (
+        payload?: { defaultPath?: string },
+      ) => Promise<SynapseFileConversionOutputDirectoryResult>
+      getDefaultOutputDirectory: () => Promise<SynapseFileConversionDefaultOutputDirectoryResult>
+      filePathForDroppedFile: (file: File) => string | null
       convert: (payload: SynapseFileConversionPayload) => Promise<SynapseFileConversionResult>
     }
   }

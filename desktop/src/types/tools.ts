@@ -58,3 +58,7 @@ export type SynapseFileConversionInputSelectionResult = {
 export type SynapseFileConversionOutputDirectoryResult = {
   readonly directoryPath: string | null
 }
+
+export type SynapseFileConversionDefaultOutputDirectoryResult = {
+  readonly directoryPath: string
+}
