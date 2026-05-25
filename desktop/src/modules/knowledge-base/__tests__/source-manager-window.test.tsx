@@ -176,7 +176,7 @@ function changeInput(input: HTMLInputElement, value: string): void {
 }
 
 describe("KnowledgeBaseSourceManagerWindow", () => {
-  it("renders raw files as a file browser without import statuses", async () => {
+  it("renders raw files as a lightweight file browser without import statuses", async () => {
     renderWindow()
 
     await waitForExpectation(() => {
@@ -185,6 +185,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
 
     expect(document.querySelector('[aria-label="资料文件"]')).not.toBeNull()
     expect(document.querySelector('[aria-label="文件夹树"]')).not.toBeNull()
+    expect(document.querySelector('[aria-label="资料列表"]')).not.toBeNull()
     expect(document.body.textContent).toContain("资料")
     expect(document.body.textContent).toContain("客户")
     expect(document.body.textContent).toContain("上传")
@@ -192,8 +193,32 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(document.body.textContent).not.toContain("已放入")
     expect(document.body.textContent).not.toContain("粘贴网页 URL")
     expect(document.body.textContent).not.toContain("选择文件")
+    expect(document.body.textContent).not.toContain("大小")
+    expect(document.body.textContent).not.toContain("更新时间")
+    expect(document.body.textContent).not.toContain("拖拽文件到这里上传")
+    expect(document.body.textContent).not.toContain("拖拽文件到窗口")
+    expect(document.body.textContent).not.toContain("已选择")
     expect(bridgeMocks.agent.createSession).not.toHaveBeenCalled()
     expect(bridgeMocks.agent.send).not.toHaveBeenCalled()
+  })
+
+  it("shows batch actions only after selecting entries", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    expect(document.body.textContent).not.toContain("已选择")
+    expect(document.querySelector('button[aria-label="移动所选"]')).toBeNull()
+
+    await act(async () => {
+      buttonByLabel("选择 brief.md").click()
+    })
+
+    expect(document.body.textContent).toContain("已选择 1 项")
+    expect(buttonByLabel("移动所选")).not.toBeDisabled()
+    expect(buttonByLabel("移到废纸篓")).not.toBeDisabled()
   })
 
   it("opens folders and updates breadcrumbs", async () => {
