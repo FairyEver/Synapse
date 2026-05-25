@@ -88,15 +88,6 @@ type DatabaseLike = {
 
 type MaybePromise<T> = T | Promise<T>
 
-type CliDebugInfo = Record<string, unknown> & {
-  installPathCandidates?: unknown
-  installedPath?: unknown
-  preferredInstallPath?: unknown
-  status?: {
-    available?: boolean
-  }
-}
-
 type McpHttpProbeResult = {
   ok: boolean
   method: string
@@ -116,7 +107,6 @@ type DiagnosticsServiceDeps = {
     resolve: ServiceResolver,
     request?: { projectId?: string },
   ) => Promise<SynapseOpsDiagnostics>
-  getCliDebugInfo: () => Promise<CliDebugInfo>
   getMcpHttpStatus: () => DatabaseMcpHttpStatus
   getMcpServers: () => MaybePromise<DatabaseMcpServerInfo[]>
   probeMcpHttp: (url: string) => Promise<McpHttpProbeResult>
@@ -724,23 +714,6 @@ class DiagnosticsService {
       return health.quickCheck === "ok"
         ? this.ok("database.integrity", "Database", "完整性", "数据库完整", details)
         : this.failed("database.integrity", "Database", "完整性", "数据库完整性检查失败", details)
-    })
-
-    await this.capture(checks, "database.cli", "Database", "CLI", async () => {
-      const debugInfo = await this.deps.getCliDebugInfo()
-      const available = debugInfo.status?.available === true
-      const pathAnalysis = analyzeCliPaths(debugInfo)
-      const details = { ...debugInfo, pathAnalysis }
-
-      if (!available) {
-        return this.degraded("database.cli", "Database", "CLI", "CLI 不可用", details)
-      }
-
-      return pathAnalysis.installedPath
-        && pathAnalysis.preferredInstallPath
-        && pathAnalysis.installedPath !== pathAnalysis.preferredInstallPath
-        ? this.degraded("database.cli", "Database", "CLI", "CLI 可用，命中路径不是推荐位置", details)
-        : this.ok("database.cli", "Database", "CLI", "CLI 可用", details)
     })
 
     await this.capture(checks, "database.mcp", "Database", "MCP", async () => {
@@ -1378,29 +1351,6 @@ function parseLogTimestamp(line: string): LogTimestamp | null {
   if (Number.isNaN(ms)) return null
 
   return { iso: new Date(ms).toISOString(), ms }
-}
-
-function analyzeCliPaths(debugInfo: CliDebugInfo): {
-  installedPath: string | null
-  preferredInstallPath: string | null
-  candidateCount: number
-} {
-  const installedPath = typeof debugInfo.installedPath === "string" && debugInfo.installedPath
-    ? debugInfo.installedPath
-    : null
-  const preferredInstallPath =
-    typeof debugInfo.preferredInstallPath === "string" && debugInfo.preferredInstallPath
-      ? debugInfo.preferredInstallPath
-      : null
-  const candidates = Array.isArray(debugInfo.installPathCandidates)
-    ? new Set(debugInfo.installPathCandidates.filter((item): item is string => typeof item === "string"))
-    : new Set<string>()
-
-  return {
-    installedPath,
-    preferredInstallPath,
-    candidateCount: candidates.size,
-  }
 }
 
 export {

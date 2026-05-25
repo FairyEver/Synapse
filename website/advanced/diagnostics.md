@@ -8,7 +8,7 @@ Diagnostics 位于设置中的诊断面板。该面板支持运行诊断、展�
 
 诊断报告包含生成时间、整体状态、通过/异常/失败/跳过数量、本机信息、应用信息、当前上下文和检查列表。面板按检查分组展示状态、消息和详情，并额外展示 Windows 兼容性和 macOS 兼容性信息。
 
-诊断服务检查系统进程、应用版本、临时目录写入、仓库路径、项目路径、日志文件、近期日志、启动与重启信号、Windows 兼容日志、Database 状态、Database 完整性、Database CLI、Database MCP、服务注册表、DataRepository 和运行状态。此外，渲染进程追加一次 Renderer-Main IPC 往返检查。
+诊断服务检查系统进程、应用版本、临时目录写入、仓库路径、项目路径、日志文件、近期日志、启动与重启信号、Windows 兼容日志、Database 状态、Database 完整性、Database MCP、服务注册表、DataRepository 和运行状态。此外，渲染进程追加一次 Renderer-Main IPC 往返检查。
 
 ## 使用方式
 

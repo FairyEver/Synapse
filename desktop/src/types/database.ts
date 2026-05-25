@@ -105,45 +105,6 @@ type DatabaseTableImportInspection = {
   sourcePath: string
 }
 
-type DatabaseCliStatus = {
-  installed: boolean
-  path: string
-  executable: boolean
-  pathInShell: boolean
-  runtimeExists: boolean
-  bundledScriptExists: boolean
-  shimCurrent: boolean
-  available: boolean
-}
-
-type DatabaseCliDebugInfo = {
-  checkedAt: string
-  platform: string
-  shell: string
-  isPackaged: boolean
-  processExecPath: string
-  runtimePath: string
-  bundledScriptPath: string
-  cliBinName: string
-  testCommand: string
-  installedPath: string | null
-  preferredInstallPath: string
-  knownInstallDirs: string[]
-  installPathCandidates: string[]
-  processPathEntries: string[]
-  shellPathEntries: string[]
-  combinedPathEntries: string[]
-  environment: {
-    home: string
-    processPath: string
-    shellPath: string
-    localAppData: string
-    appData: string
-    userProfile: string
-  }
-  status: DatabaseCliStatus
-}
-
 type DatabaseMcpStatus = Record<string, boolean>
 
 type DatabaseMcpTarget = string & { readonly __brand?: "DatabaseMcpTarget" }
@@ -170,8 +131,6 @@ type DatabaseChangeEvent = {
 
 export type {
   DatabaseChangeEvent,
-  DatabaseCliDebugInfo,
-  DatabaseCliStatus,
   DatabaseFolder,
   DatabaseMcpHttpStatus,
   DatabaseMcpServerInfo,

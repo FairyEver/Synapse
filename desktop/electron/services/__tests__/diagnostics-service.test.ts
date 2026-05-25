@@ -44,12 +44,12 @@ describe("summarizeDiagnosticsChecks", () => {
 
   it("marks a report degraded when warnings exist without failures", () => {
     const checks: SynapseDiagnosticsCheck[] = [{
-      id: "database.cli",
+      id: "database.mcp",
       group: "Database",
-      name: "CLI",
+      name: "MCP",
       status: "degraded",
       severity: "warning",
-      message: "CLI 不可用",
+      message: "MCP HTTP 未运行",
     }]
 
     expect(summarizeDiagnosticsChecks(checks).overallStatus).toBe("degraded")
@@ -162,7 +162,7 @@ describe("DiagnosticsService.collect", () => {
     )
   })
 
-  it("surfaces recent log warnings, cli path mismatch, database health, and mcp probe", async () => {
+  it("surfaces recent log warnings, database health, and mcp probe", async () => {
     const service = createService({
       logStore: {
         getLogDirectory: () => "/logs",
@@ -170,12 +170,6 @@ describe("DiagnosticsService.collect", () => {
         readLogsByNames: vi.fn(async () => "[2026-04-29T03:11:18.063Z] [WARN ] AgentRuntime queued turn failed."),
         flush: vi.fn(async () => undefined),
       },
-      getCliDebugInfo: vi.fn(async () => ({
-        installedPath: "/other/bin/synapse",
-        preferredInstallPath: "/preferred/bin/synapse",
-        installPathCandidates: ["/other/bin/synapse", "/preferred/bin/synapse"],
-        status: { available: true },
-      })),
       getMcpHttpStatus: vi.fn(() => ({
         running: true,
         port: 23578,
@@ -203,10 +197,6 @@ describe("DiagnosticsService.collect", () => {
       expect.objectContaining({
         id: "database.integrity",
         status: "ok",
-      }),
-      expect.objectContaining({
-        id: "database.cli",
-        status: "degraded",
       }),
       expect.objectContaining({
         id: "database.mcp",
@@ -500,9 +490,6 @@ function createService(
       appVersion: "0.2.49",
       singleInstanceLocked: true,
       logPath: "/logs",
-    })),
-    getCliDebugInfo: vi.fn(async () => ({
-      status: { available: true },
     })),
     getMcpHttpStatus: vi.fn(() => ({
       running: false,

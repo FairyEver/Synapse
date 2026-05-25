@@ -3,7 +3,6 @@ import path from "node:path"
 import { DATABASE_IPC_CHANNELS } from "./channels"
 import { databaseService } from "./service"
 import { getHttpPort } from "./http-server"
-import { getCliDebugInfo, installCli, getCliStatus } from "./cli-installer"
 import { getMcpServers, getMcpStatus, openMcpSettings, registerMcp } from "./mcp-installer"
 import { getMcpServerPort, isMcpServerRunning, getMcpServerUrl } from "./mcp-server"
 import { handleValidatedIpc } from "../ipc/validated-ipc"
@@ -404,18 +403,6 @@ function registerDatabaseHandlers(): void {
       recordAudit(event, "import", sourcePath, "failed", error instanceof Error ? error.message : String(error))
       throw error
     }
-  })
-
-  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseCliInstall, async () => {
-    return installCli()
-  })
-
-  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseCliStatusGet, async () => {
-    return getCliStatus()
-  })
-
-  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseCliDebugInfoGet, async () => {
-    return getCliDebugInfo()
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseMcpHttpStatusGet, async () => {

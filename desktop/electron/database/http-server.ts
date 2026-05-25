@@ -127,7 +127,7 @@ async function handleRequest(req: IncomingMessage, res: ServerResponse): Promise
 
   try {
     const sourceHeader = req.headers["x-synapse-client"]
-    const source = sourceHeader === "cli" || sourceHeader === "mcp-stdio" ? sourceHeader : "api"
+    const source = sourceHeader === "mcp-stdio" ? sourceHeader : "api"
     const result = await actionRouterForRequest().dispatch(action, params, { source })
     sendJson(res, 200, result)
   } catch (error) {
@@ -199,7 +199,7 @@ function startHttpServer(router: SynapseActionRouter): Promise<number> {
       } catch (error) {
         logger.error("Failed to write server info file.", { error })
         s.close()
-        reject(new Error("Failed to write data-server.json: CLI/MCP will not be able to connect"))
+        reject(new Error("Failed to write data-server.json: MCP will not be able to connect"))
         return
       }
 

@@ -36,10 +36,6 @@ function toPascalToken(token: string): string {
     .join("")
 }
 
-function toKebabToken(token: string): string {
-  return token.replaceAll("_", "-")
-}
-
 export function isCanonicalCapabilityId(id: string): id is CapabilityId {
   const parts = splitCapabilityId(id)
   if (parts.length < 3) return false
@@ -64,10 +60,6 @@ export function getCapabilityAction(id: CapabilityId): CapabilityAction {
 
 export function capabilityIdToMcpTool(id: CapabilityId): string {
   return id.replaceAll(".", "_")
-}
-
-export function capabilityIdToCliCommand(id: CapabilityId): string {
-  return splitCapabilityId(id).map(toKebabToken).join(" ")
 }
 
 export function capabilityIdToServiceMethod(id: CapabilityId): string {

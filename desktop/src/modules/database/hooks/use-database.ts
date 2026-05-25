@@ -9,8 +9,6 @@ import {
   type DatabaseSchemaState,
 } from "@/modules/database/utils"
 import type {
-  DatabaseCliDebugInfo,
-  DatabaseCliStatus,
   Column,
   DatabaseMcpHttpStatus,
   DatabaseMcpServerInfo,
@@ -234,18 +232,6 @@ async function databaseTableImport(sourcePath: string): Promise<{ success: boole
   return requireSynapseBridge().database.databaseTableImport(sourcePath)
 }
 
-async function databaseCliInstall(): Promise<{ success: boolean; path?: string; error?: string }> {
-  return requireSynapseBridge().database.databaseCliInstall()
-}
-
-async function databaseCliStatusGet(): Promise<DatabaseCliStatus> {
-  return requireSynapseBridge().database.databaseCliStatusGet()
-}
-
-async function databaseCliDebugInfoGet(): Promise<DatabaseCliDebugInfo> {
-  return requireSynapseBridge().database.databaseCliDebugInfoGet()
-}
-
 async function databaseMcpHttpStatusGet(): Promise<DatabaseMcpHttpStatus> {
   return requireSynapseBridge().database.databaseMcpHttpStatusGet()
 }
@@ -273,8 +259,6 @@ export {
   databaseTableDelete,
   databaseExport,
   databaseTableExport,
-  databaseCliDebugInfoGet,
-  databaseCliStatusGet,
   databaseChoiceUsageGet,
   databaseMcpServersGet,
   databaseMcpHttpStatusGet,
@@ -283,7 +267,6 @@ export {
   databaseTableImport,
   databaseTableImportInspect,
   databaseRowCreate,
-  databaseCliInstall,
   databaseMcpSettingsOpen,
   databaseMcpRegister,
   databaseTableUpdate,

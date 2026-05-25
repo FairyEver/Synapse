@@ -1,11 +1,8 @@
 import { readFileSync } from "node:fs"
 import { describe, expect, it } from "vitest"
-import { DATABASE_CAPABILITIES, getCliDataCommands } from "../../database/shared/capability-registry"
+import { DATABASE_CAPABILITIES } from "../../database/shared/capability-registry"
 import { MCP_TOOL_ACTIONS, buildTools } from "../../database/shared/mcp-tools"
-import {
-  capabilityIdToCliCommand,
-  capabilityIdToMcpTool,
-} from "../../synapse-capabilities/shared/naming"
+import { capabilityIdToMcpTool } from "../../synapse-capabilities/shared/naming"
 
 function extractDispatcherActions(): string[] {
   const source = readFileSync(new URL("../../electron/database/dispatcher.ts", import.meta.url), "utf-8")
@@ -32,11 +29,5 @@ describe("Database capability parity", () => {
     expect(mappedToolNames).toEqual(registryToolNames)
     expect(toolNames).toEqual(registryToolNames)
     expect(mappedActions).toEqual(registryActions)
-  })
-
-  it("keeps CLI data commands registered", () => {
-    expect(getCliDataCommands().sort()).toEqual(
-      DATABASE_CAPABILITIES.map((capability) => capabilityIdToCliCommand(capability.id)).sort(),
-    )
   })
 })

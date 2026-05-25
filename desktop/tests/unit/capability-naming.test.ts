@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest"
 import {
-  capabilityIdToCliCommand,
   capabilityIdToMcpTool,
   capabilityIdToServiceMethod,
   getCapabilityAction,
@@ -19,7 +18,6 @@ describe("capability naming", () => {
 
   it("derives public names from canonical ids", () => {
     expect(capabilityIdToMcpTool("database.table.list")).toBe("database_table_list")
-    expect(capabilityIdToCliCommand("database.choice_usage.get")).toBe("database choice-usage get")
     expect(capabilityIdToServiceMethod("scheduler.runtime.inspect")).toBe("schedulerRuntimeInspect")
   })
 

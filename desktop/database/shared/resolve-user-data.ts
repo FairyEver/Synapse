@@ -9,7 +9,7 @@ type ServerInfo = {
   startedAt: string
 }
 
-type DatabaseApiClientSource = "cli" | "mcp-stdio"
+type DatabaseApiClientSource = "mcp-stdio"
 
 function getUserDataPath(): string {
   switch (process.platform) {
@@ -46,7 +46,7 @@ async function apiCall(
   info: ServerInfo,
   action: string,
   params: Record<string, unknown> = {},
-  source: DatabaseApiClientSource = "cli",
+  source: DatabaseApiClientSource = "mcp-stdio",
 ): Promise<unknown> {
   const url = `http://127.0.0.1:${info.port}/api`
   const controller = new AbortController()

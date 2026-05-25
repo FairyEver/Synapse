@@ -1,7 +1,5 @@
 import type {
   DatabaseChangeEvent,
-  DatabaseCliDebugInfo,
-  DatabaseCliStatus,
   DatabaseFolder,
   DatabaseMcpHttpStatus,
   DatabaseMcpServerInfo,
@@ -700,9 +698,6 @@ export type SynapseBridge = {
       | ({ success: true } & DatabaseTableImportInspection)
     >
     databaseTableImport: (sourcePath: string) => Promise<{ success: boolean; tableName?: string }>
-    databaseCliInstall: () => Promise<{ success: boolean; path?: string; error?: string }>
-    databaseCliStatusGet: () => Promise<DatabaseCliStatus>
-    databaseCliDebugInfoGet: () => Promise<DatabaseCliDebugInfo>
     databaseMcpHttpStatusGet: () => Promise<DatabaseMcpHttpStatus>
     databaseMcpStatusGet: () => Promise<DatabaseMcpStatus>
     databaseMcpServersGet: () => Promise<DatabaseMcpServerInfo[]>

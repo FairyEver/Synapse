@@ -1,5 +1,4 @@
 import {
-  capabilityIdToCliCommand,
   capabilityIdToMcpTool,
 } from "../../synapse-capabilities/shared/naming"
 import type { CapabilityDefinition, CapabilityDomainDefinition } from "../../synapse-capabilities/shared/types"
@@ -51,10 +50,6 @@ function buildMcpToolActions(): Record<string, string> {
   )
 }
 
-function getCliDataCommands(): string[] {
-  return DATABASE_CAPABILITIES.map((capability) => capabilityIdToCliCommand(capability.id))
-}
-
 function getMutatingActions(): string[] {
   return DATABASE_CAPABILITIES
     .filter((capability) => capability.mutates)
@@ -65,6 +60,5 @@ export {
   DATABASE_CAPABILITIES,
   DATABASE_DOMAIN,
   buildMcpToolActions,
-  getCliDataCommands,
   getMutatingActions,
 }

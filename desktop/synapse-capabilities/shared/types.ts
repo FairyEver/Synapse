@@ -1,6 +1,6 @@
 import type { CapabilityId } from "./naming"
 
-export type SynapseActionSource = "api" | "cli" | "mcp-stdio" | "mcp-http"
+export type SynapseActionSource = "api" | "mcp-stdio" | "mcp-http"
 
 export type DispatchContext = {
   readonly source?: SynapseActionSource

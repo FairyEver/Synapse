@@ -104,7 +104,6 @@ import type { ProjectContainerRegistry } from "../runtime/project-container"
 import { createProjectContainerRegistry } from "../runtime/project-container"
 import { databaseService } from "../database/service"
 import { getHttpPort } from "../database/http-server"
-import { getCliDebugInfo } from "../database/cli-installer"
 import { getMcpServers } from "../database/mcp-installer"
 import { getMcpServerPort, getMcpServerUrl, isMcpServerRunning } from "../database/mcp-server"
 import { collectOpsStatus } from "../modules/ops/status"
@@ -818,7 +817,6 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
         }
       },
       collectOpsStatus,
-      getCliDebugInfo,
       getMcpHttpStatus: () => ({
         running: isMcpServerRunning(),
         port: getMcpServerPort(),

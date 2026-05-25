@@ -391,7 +391,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "database_log_list",
-      description: "Return recent Database mutation operations. Use this when the user asks what an Agent or CLI recently changed.",
+      description: "Return recent Database mutation operations. Use this when the user asks what an Agent or MCP client recently changed.",
       inputSchema: {
         type: "object",
         properties: {

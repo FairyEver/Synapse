@@ -128,7 +128,6 @@ function buildDiagnosticsSummary(report: SynapseDiagnosticsReport): string {
     "windows.configured-paths",
     "database.status",
     "database.integrity",
-    "database.cli",
     "database.mcp",
   ]
     .map((id) => report.checks.find((check) => check.id === id))

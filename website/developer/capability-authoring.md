@@ -1,10 +1,10 @@
 # MCP 能力维护指南
 
-<!-- Sources: desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/synapse-capabilities/shared/types.ts; desktop/database/shared/capability-registry.ts; desktop/database/shared/mcp-tools.ts; desktop/electron/database/dispatcher.ts; desktop/database/cli/database.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/electron/services/task-scheduler/external-capabilities.ts; desktop/database/cli/scheduler.ts; desktop/electron/capabilities/action-router.ts -->
+<!-- Sources: desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/synapse-capabilities/shared/types.ts; desktop/database/shared/capability-registry.ts; desktop/database/shared/mcp-tools.ts; desktop/electron/database/dispatcher.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/synapse-capabilities/shared/workflow-domain.ts; desktop/synapse-capabilities/shared/content-domain.ts; desktop/electron/capabilities/action-router.ts -->
 
-新增或修改通过本地 HTTP API、MCP 工具、CLI 命令、服务方法暴露的 Synapse MCP 能力时，使用这份指南。
+新增或修改通过 MCP 工具、本地 HTTP API、服务方法暴露的 Synapse MCP 能力时，使用这份指南。
 
-能力清单是事实来源。参考文档只记录当前公开入口，不单独定义行为。
+能力清单是事实来源。参考文档只记录当前入口，不单独定义行为。
 
 ## 当前源文件
 
@@ -19,13 +19,21 @@ Database 领域：
 - `desktop/database/shared/capability-registry.ts`
 - `desktop/database/shared/mcp-tools.ts`
 - `desktop/electron/database/dispatcher.ts`
-- `desktop/database/cli/database.ts`
 
 Scheduler 领域：
 
 - `desktop/synapse-capabilities/shared/scheduler-domain.ts`
 - `desktop/electron/services/task-scheduler/external-capabilities.ts`
-- `desktop/database/cli/scheduler.ts`
+
+Workflow 领域：
+
+- `desktop/synapse-capabilities/shared/workflow-domain.ts`
+- `desktop/electron/services/workflow/external-capabilities.ts`
+
+Content 领域：
+
+- `desktop/synapse-capabilities/shared/content-domain.ts`
+- `desktop/electron/services/content/external-capabilities.ts`
 
 Routing and transport:
 
@@ -48,7 +56,6 @@ Routing and transport:
 | Helper | Output |
 | --- | --- |
 | `capabilityIdToMcpTool("database.table.list")` | `database_table_list` |
-| `capabilityIdToCliCommand("database.choice_usage.get")` | `database choice-usage get` |
 | `capabilityIdToServiceMethod("scheduler.runtime.inspect")` | `schedulerRuntimeInspect` |
 
 规则：
@@ -56,6 +63,8 @@ Routing and transport:
 - domain 和 resource 这两个 token 使用完整英文词。
 - Database 能力使用 `database` 领域。
 - Scheduler 能力使用 `scheduler` 领域。
+- Workflow 能力使用 `workflow` 领域。
+- Content 能力使用 `content` 领域。
 - 默认使用单数 resource；只有语义需要时使用复数，例如 `database.rows.update`。
 - 一个 token 内的多词使用 snake_case，例如 `choice_usage`。
 - action 使用 `CAPABILITY_ACTIONS` 中的受控词。
@@ -63,21 +72,20 @@ Routing and transport:
 - 会修改数据的能力必须标记 `mutates: true`。
 - 高风险执行类能力必须标记 `risk: "high"`。
 
-公开 JSON 字段使用 camelCase。CLI flag 使用 kebab-case。
+公开 JSON 字段使用 camelCase。
 
 ## 新增同领域能力
 
 1. 在所属领域添加能力清单条目。
 2. 确认 ID 通过 `isCanonicalCapabilityId`。
-3. 确认 MCP、CLI、服务方法名称均由规范能力 ID 派生。
+3. 确认 MCP 工具、HTTP action、服务方法名称均由规范能力 ID 派生。
 4. 新增或更新 MCP 工具 schema。
 5. 新增或更新所属领域 dispatcher。
-6. 若需要 CLI 暴露，新增或更新 CLI 命令。
-7. HTTP routing 保持使用规范 action ID。
-8. 更新 [能力矩阵](/developer/capability-naming-matrix)。
-9. 运行相关单测。
+6. HTTP routing 保持使用规范 action ID。
+7. 更新 [能力矩阵](/developer/capability-naming-matrix)。
+8. 运行相关单测。
 
-领域行为留在所属领域内。Database 能力不应导入 Scheduler 业务内部实现；Scheduler 能力不应导入 Database 业务内部实现。
+领域行为留在所属领域内。跨领域能力应通过 shared action router 连接，不要直接导入其他领域内部实现。
 
 ## 新增未来领域
 
@@ -88,7 +96,6 @@ Routing and transport:
 - 领域自有 dispatcher
 - 服务所有权边界
 - MCP 工具定义或生成路径
-- 需要 CLI 暴露时的 CLI namespace
 - 通过 shared action router 完成的 HTTP action routing
 - 结果归一化规则
 - 涉及敏感操作时的权限与审计处理
@@ -104,6 +111,7 @@ MCP 工具名称从规范能力 ID 派生：
 ```text
 database.row.create -> database_row_create
 scheduler.task.enable -> scheduler_task_enable
+workflow.definition.inspect -> workflow_definition_inspect
 ```
 
 MCP schema 应满足：
@@ -114,31 +122,9 @@ MCP schema 应满足：
 - 除非产品决策明确批准，不暴露破坏性操作。
 - 字段名与 HTTP action 参数保持一致。
 
-## CLI 规则
-
-CLI 命令路径从规范能力 ID 派生，并暴露在 `synapse` binary 下。
-
-```bash
-synapse database row create tasks --data '{"title":"Ship"}'
-synapse scheduler run list task:1 --limit 5
-```
-
-清晰的资源标识使用位置参数：
-
-- `tableName`
-- `columnName`
-- `rowId`
-- `taskId`
-
-结构化数据使用 JSON flag：
-
-- `--data`
-- `--where-json`
-- `--params`
-
 ## HTTP Action 规则
 
-本地 HTTP API 在顶层 `action` 字段接收规范能力 ID。其他顶层字段作为参数。
+本地 HTTP API 是内部 transport，在顶层 `action` 字段接收规范能力 ID。其他顶层字段作为参数。
 
 ```json
 {
@@ -173,18 +159,6 @@ MCP 工具:
 
 ```text
 database_table_list
-```
-
-MCP 参数:
-
-```json
-{}
-```
-
-CLI:
-
-```bash
-synapse database table list
 ```
 
 HTTP body:
@@ -224,12 +198,6 @@ MCP 参数:
     "title": "Ship"
   }
 }
-```
-
-CLI:
-
-```bash
-synapse database row create tasks --data '{"title":"Ship"}'
 ```
 
 HTTP body:
@@ -273,12 +241,6 @@ MCP 参数:
 }
 ```
 
-CLI:
-
-```bash
-synapse scheduler task list --enabled --limit 20
-```
-
 HTTP body:
 
 ```json
@@ -295,49 +257,33 @@ HTTP body:
 schedulerTaskList
 ```
 
-### Scheduler 运行记录列表
+### Workflow 定义检查
 
 规范能力 ID:
 
 ```text
-scheduler.run.list
+workflow.definition.inspect
 ```
 
 MCP 工具:
 
 ```text
-scheduler_run_list
-```
-
-MCP 参数:
-
-```json
-{
-  "taskId": "task:1",
-  "limit": 5
-}
-```
-
-CLI:
-
-```bash
-synapse scheduler run list task:1 --limit 5
+workflow_definition_inspect
 ```
 
 HTTP body:
 
 ```json
 {
-  "action": "scheduler.run.list",
-  "taskId": "task:1",
-  "limit": 5
+  "action": "workflow.definition.inspect",
+  "workflowId": "workflow:1"
 }
 ```
 
 服务方法:
 
 ```text
-schedulerRunList
+workflowDefinitionInspect
 ```
 
 ## Review Checklist
@@ -346,9 +292,8 @@ schedulerRunList
 
 - 规范能力 ID 符合 `<domain>.<resource>.<action>`。
 - 领域拥有对应行为。
-- MCP 工具、CLI 命令、服务方法均由规范能力 ID 派生。
+- MCP 工具、HTTP action、服务方法均由规范能力 ID 派生。
 - input schema 使用 camelCase 公开 JSON 字段。
-- CLI flag 使用 kebab-case。
 - mutating 与 high-risk metadata 正确。
 - hidden 或 destructive operation 没有被意外暴露。
 - [能力矩阵](/developer/capability-naming-matrix) 已更新。
@@ -357,7 +302,7 @@ schedulerRunList
 相关测试：
 
 ```bash
-pnpm --filter @synapse/desktop run test -- tests/unit/capability-naming.test.ts tests/unit/synapse-capabilities.test.ts tests/unit/database-capability-parity.test.ts tests/unit/database-mcp-tools.test.ts tests/unit/cli-database.test.ts tests/unit/cli-scheduler.test.ts
+pnpm --filter @synapse/desktop exec vitest run tests/unit/capability-naming.test.ts tests/unit/synapse-capabilities.test.ts tests/unit/database-capability-parity.test.ts tests/unit/api-mcp-capability-surface.test.ts
 ```
 
 ## 防漂移

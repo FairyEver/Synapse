@@ -52,7 +52,7 @@ type DatabaseBulkMutationResult = {
   dryRun?: true
 }
 
-type DatabaseOperationSource = "api" | "cli" | "mcp-stdio" | "mcp-http" | "ipc"
+type DatabaseOperationSource = "api" | "mcp-stdio" | "mcp-http" | "ipc"
 
 type DatabaseOperationLogEntry = {
   id: number

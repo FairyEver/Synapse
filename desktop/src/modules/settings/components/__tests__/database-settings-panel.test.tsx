@@ -8,7 +8,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { DatabaseSettingsPanel } from "../database-settings-panel"
 
 const mocks = vi.hoisted(() => ({
-  databaseCliStatusGet: vi.fn(),
   error: vi.fn(),
   loggerError: vi.fn(),
   loggerInfo: vi.fn(),
@@ -35,9 +34,6 @@ vi.mock("@/app-shell/notifications", () => ({
 }))
 
 vi.mock("@/modules/database/hooks/use-database", () => ({
-  databaseCliDebugInfoGet: vi.fn(),
-  databaseCliInstall: vi.fn(),
-  databaseCliStatusGet: mocks.databaseCliStatusGet,
   databaseExport: vi.fn(),
   databaseImport: vi.fn(),
   useDatabaseStatus: mocks.useDatabaseStatus,
@@ -48,16 +44,6 @@ vi.mock("@/modules/database/hooks/use-database", () => ({
 let roots: Root[] = []
 
 beforeEach(() => {
-  mocks.databaseCliStatusGet.mockResolvedValue({
-    available: false,
-    bundledScriptExists: false,
-    executable: false,
-    installed: false,
-    path: "",
-    pathInShell: false,
-    runtimeExists: false,
-    shimCurrent: false,
-  })
   mocks.error.mockReset()
   mocks.loggerError.mockReset()
   mocks.loggerInfo.mockReset()
@@ -97,6 +83,14 @@ afterEach(() => {
 })
 
 describe("DatabaseSettingsPanel", () => {
+  it("does not render the retired Synapse CLI controls", () => {
+    renderPanel()
+
+    expect(document.body.textContent).not.toContain("CLI")
+    expect(document.body.textContent).not.toContain("安装 CLI")
+    expect(document.body.textContent).not.toContain("测试 CLI")
+  })
+
   it("notifies when opening the database directory fails", async () => {
     mocks.showItemInFolder.mockRejectedValue(new Error("permission denied"))
 

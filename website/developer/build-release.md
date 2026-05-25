@@ -19,7 +19,7 @@ pnpm --filter @synapse/desktop run build:electron
 pnpm --filter @synapse/desktop run build:database
 ```
 
-构建先生成 definitions registry，再执行 renderer、Electron 和 database 构建。`build:renderer` 使用 Vite 构建 renderer。`build:electron` 生成 IPC 代码并编译 Electron TypeScript。`build:database` 使用 esbuild 打包 database 的 CLI 和 MCP 入口。
+构建先生成 definitions registry，再执行 renderer、Electron 和 database 构建。`build:renderer` 使用 Vite 构建 renderer。`build:electron` 生成 IPC 代码并编译 Electron TypeScript。`build:database` 使用 esbuild 打包 database 的 MCP bridge 入口。
 
 ## 本地打包
 
