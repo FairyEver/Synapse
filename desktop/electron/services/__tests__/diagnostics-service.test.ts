@@ -421,6 +421,26 @@ describe("DiagnosticsService.exportBundle", () => {
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("/Users/example/private")
   })
+
+  it("does not use renderer-provided generatedAt for staging paths", { timeout: 15_000 }, async () => {
+    const writtenFiles = new Map<string, string>()
+    const service = createService({
+      writeTextFile: vi.fn(async (targetPath: string, content: string) => {
+        writtenFiles.set(targetPath.replace(/\\/g, "/"), content)
+      }),
+    })
+    const report = {
+      ...(await service.collect()),
+      generatedAt: "../outside",
+    }
+
+    await service.exportBundle({ report })
+
+    expect([...writtenFiles.keys()].every((targetPath) => (
+      targetPath.startsWith("/tmp/synapse-diagnostics-test/synapse-diagnostics-2026-04-29T03-31-20-000Z/")
+    ))).toBe(true)
+    expect([...writtenFiles.keys()].some((targetPath) => targetPath.includes("../outside"))).toBe(false)
+  })
 })
 
 function createService(

@@ -83,15 +83,26 @@ export class JsonLinesNamespace<T extends Record<string, unknown> & { id: string
     }
 
     const lines = content.split("\n")
+    const lastRecoverableLine = content.endsWith("\n") ? -1 : lines.length
+    let recoverToOffset: number | null = null
     let lineNo = 0
+    let lineStartOffset = 0
     for (const line of lines) {
       lineNo++
       const trimmed = line.trim()
-      if (!trimmed) continue
+      const nextLineStartOffset = lineStartOffset + line.length + 1
+      if (!trimmed) {
+        lineStartOffset = nextLineStartOffset
+        continue
+      }
       let parsed: unknown
       try {
         parsed = JSON.parse(trimmed)
       } catch (err) {
+        if (lineNo === lastRecoverableLine) {
+          recoverToOffset = lineStartOffset
+          break
+        }
         throw new InvalidNamespaceDataError(
           this.name,
           `line ${lineNo} is not valid JSON: ${(err as Error).message}`,
@@ -99,6 +110,7 @@ export class JsonLinesNamespace<T extends Record<string, unknown> & { id: string
       }
       if (lineNo === 1 && isHeader(parsed)) {
         this.headerWritten = true
+        lineStartOffset = nextLineStartOffset
         continue
       }
       if (!isRecordWithId(parsed)) {
@@ -114,6 +126,10 @@ export class JsonLinesNamespace<T extends Record<string, unknown> & { id: string
         )
       }
       cache.set(parsed.id, parsed as T)
+      lineStartOffset = nextLineStartOffset
+    }
+    if (recoverToOffset !== null) {
+      await writeTextFileAtomic(this.filePath, content.slice(0, recoverToOffset))
     }
     this.cache = cache
     return cache

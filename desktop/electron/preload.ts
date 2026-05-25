@@ -251,7 +251,7 @@ const EVENT_CHANNELS = {
     event: "synapse:events:agent",
   },
   workflow: {
-    event: "synapse:workflow:event",
+    event: "synapse:events:workflow",
   },
   installStatus: {
     changed: "synapse:events:install-status",
@@ -783,7 +783,7 @@ const synapseBridge: SynapseBridge = {
     importPackage: (packagePath: string, mappings) =>
       invoke(IPC_CHANNELS.workflow.importPackage)({ packagePath, mappings }),
     onEvent: (listener) =>
-      subscribe("synapse:events:workflow")((domainEvent) => {
+      subscribe(EVENT_CHANNELS.workflow.event)((domainEvent) => {
         listener((domainEvent as DomainEvent).payload as WorkflowEvent)
       }),
     onDefinitionUpdated: createDomainEventPayloadSubscription<{ workflowId: string; source: string; versionHash: string }>(

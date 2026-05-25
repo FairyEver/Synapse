@@ -74,6 +74,26 @@ describe("Local network host", () => {
     ws.close()
     await registry.unregister("local-ws-test")
   })
+
+  it("sets a default Content-Type for string HTTP responses", async () => {
+    const port = await getFreePort()
+    const registry = createNetworkServiceRegistry()
+    await registry.register({
+      id: "local-http-content-type-test",
+      role: "http",
+      preferredPort: port,
+      handler: { handle: () => "ok" },
+      start: (binding) => createLocalNetworkHostLifecycle(binding, {
+        handleHttp: () => ({ status: 200, body: "ok" }),
+      }),
+    })
+
+    const response = await fetch(`http://127.0.0.1:${String(port)}/plain`)
+
+    expect(response.headers.get("content-type")).toBe("text/plain; charset=utf-8")
+    expect(await response.text()).toBe("ok")
+    await registry.unregister("local-http-content-type-test")
+  })
 })
 
 async function getFreePort(): Promise<number> {

@@ -278,7 +278,8 @@ class DiagnosticsService {
   }
 
   async exportBundle(payload: { report: SynapseDiagnosticsReport }): Promise<SynapseDiagnosticsBundleExportResult> {
-    const folderName = createDiagnosticsFolderName(payload.report.generatedAt)
+    const exportedAt = this.now().toISOString()
+    const folderName = createDiagnosticsFolderName(exportedAt)
     const defaultFileName = `${folderName}.zip`
     const outputPath = await this.chooseSavePath(defaultFileName)
     if (!outputPath) return { success: false }
@@ -305,10 +306,12 @@ class DiagnosticsService {
     }
 
     const stagingRoot = await this.makeTempDir("synapse-diagnostics-")
-    const packageRoot = path.join(stagingRoot, folderName)
+    const packageRoot = path.resolve(stagingRoot, folderName)
+    if (!isPathInsideDirectory(packageRoot, stagingRoot)) {
+      throw new Error("Diagnostics staging path is outside the staging root.")
+    }
     const included: string[] = []
     const skipped: Array<{ path: string; reason: string }> = []
-    const exportedAt = this.now().toISOString()
 
     try {
       await mkdir(path.join(packageRoot, "logs"), { recursive: true })
@@ -1084,6 +1087,11 @@ function resolveActiveProject(config: SynapseConfig, projectId?: string) {
 
 function createDiagnosticsFolderName(generatedAt: string): string {
   return `synapse-diagnostics-${generatedAt.replace(/[:.]/g, "-")}`
+}
+
+function isPathInsideDirectory(targetPath: string, directoryPath: string): boolean {
+  const relative = path.relative(path.resolve(directoryPath), path.resolve(targetPath))
+  return relative.length > 0 && !relative.startsWith("..") && !path.isAbsolute(relative)
 }
 
 function createEmptyConfig(): SynapseConfig {

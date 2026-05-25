@@ -189,6 +189,37 @@ describe("JsonLinesNamespace (T2.4)", () => {
     }
   })
 
+  it("recovers a malformed trailing line before appending new records", async () => {
+    const dir = await tempDir()
+    const file = path.join(dir, "audit.jsonl")
+    try {
+      await writeFile(
+        file,
+        '{"__synapse_jsonl__":1,"schemaVersion":1}\n{"id":"good","action":"x","outcome":"allowed"}\n{"id":"partial"',
+        "utf8",
+      )
+      const ns = new JsonLinesNamespace<AuditEvent>({
+        name: "audit",
+        schemaVersion: 1,
+        backend: "jsonl",
+        filePath: file,
+      })
+
+      await ns.upsert({ id: "new", action: "y", outcome: "denied" })
+
+      expect((await ns.list()).map((event) => event.id)).toEqual(["good", "new"])
+      const text = await readFile(file, "utf8")
+      expect(text).not.toContain("partial")
+      expect(text.trim().split("\n").map((line) => JSON.parse(line) as unknown)).toEqual([
+        { __synapse_jsonl__: 1, schemaVersion: 1 },
+        { id: "good", action: "x", outcome: "allowed" },
+        { id: "new", action: "y", outcome: "denied" },
+      ])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("missing id field on a non-header line is rejected", async () => {
     const dir = await tempDir()
     const file = path.join(dir, "audit.jsonl")

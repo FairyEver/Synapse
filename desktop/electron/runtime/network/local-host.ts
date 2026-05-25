@@ -157,13 +157,22 @@ function writeResponse(res: ServerResponse, response: LocalHttpResponse): void {
     return
   }
   if (typeof body === "string" || Buffer.isBuffer(body)) {
+    if (!hasHeader(headers, "content-type")) {
+      res.setHeader("Content-Type", "text/plain; charset=utf-8")
+    }
     res.writeHead(response.status)
     res.end(body)
     return
   }
-  res.setHeader("Content-Type", headers["Content-Type"] ?? "application/json")
+  if (!hasHeader(headers, "content-type")) {
+    res.setHeader("Content-Type", "application/json")
+  }
   res.writeHead(response.status)
   res.end(JSON.stringify(body))
+}
+
+function hasHeader(headers: Record<string, string | number | readonly string[]>, name: string): boolean {
+  return Object.keys(headers).some((key) => key.toLowerCase() === name)
 }
 
 async function closeWebSocketServer(server: WebSocketServer | undefined): Promise<void> {
