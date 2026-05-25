@@ -75,11 +75,26 @@ function createLogger() {
   return logger
 }
 
+function createPermissionGuard() {
+  return {
+    registerPolicy: vi.fn(() => () => {}),
+    check: vi.fn(async () => ({ allowed: true })),
+  }
+}
+
+function createAuditSink() {
+  return {
+    record: vi.fn(),
+    list: vi.fn(() => []),
+    clearForTests: vi.fn(),
+  }
+}
+
 function createProjectContext(failingServiceId: string): ProjectContext {
   const namespace = vi.fn(() => ({}))
   const dataRepository = { namespace }
-  const permissionGuard = {}
-  const auditSink = {}
+  const permissionGuard = createPermissionGuard()
+  const auditSink = createAuditSink()
   const logger = createLogger()
 
   return {
@@ -167,8 +182,8 @@ describe("createAgentRuntimeProjectService", () => {
 
 function createRunnableProjectContext(): ProjectContext {
   const dataRepository = createMemoryDataRepository()
-  const permissionGuard = {}
-  const auditSink = {}
+  const permissionGuard = createPermissionGuard()
+  const auditSink = createAuditSink()
   const logger = createLogger()
 
   return {
