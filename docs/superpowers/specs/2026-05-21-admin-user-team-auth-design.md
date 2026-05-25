@@ -1,5 +1,8 @@
 # Admin User Team Auth Design
 
+> Partially superseded on 2026-05-25 by `docs/superpowers/specs/2026-05-25-personal-module-permissions-design.md`.
+> Keep the administrator, normal user, session, team, and team invitation foundation. Replace administrator-issued user signup invitations and team-based permission design with open registration and personal `module.*` permissions.
+
 Date: 2026-05-21
 Scope: `/Users/liyang/Documents/code/github/Synapse/server`
 

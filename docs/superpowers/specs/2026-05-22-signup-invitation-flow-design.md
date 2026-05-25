@@ -1,5 +1,8 @@
 # Signup Invitation Flow Design
 
+> Superseded on 2026-05-25 by `docs/superpowers/specs/2026-05-25-personal-module-permissions-design.md`.
+> Normal user registration is now open registration. User signup invitations are no longer part of the product flow.
+
 Date: 2026-05-22
 Scope: `/Users/liyang/Documents/code/github/Synapse/server`
 

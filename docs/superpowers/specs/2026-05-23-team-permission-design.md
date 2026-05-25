@@ -1,5 +1,8 @@
 # Team Permission and Desktop Login Design
 
+> Superseded on 2026-05-25 by `docs/superpowers/specs/2026-05-25-personal-module-permissions-design.md`.
+> Team-based permissions are no longer the product direction. Product access is granted directly to individual users through `module.*` permissions.
+
 ## Context
 
 Synapse already has a server-side account system with user signup invitations, user login, refresh tokens, teams, team invitations, and an Admin dashboard. The desktop app currently relies on a local identity gate for repository authorship and local workspace identity, but it does not require a server account before use and does not consume server-managed product permissions.
