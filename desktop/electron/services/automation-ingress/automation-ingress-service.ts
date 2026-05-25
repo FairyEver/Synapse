@@ -34,6 +34,25 @@ const DEFAULT_RATE_LIMIT_PER_MINUTE = 60
 const DEFAULT_WAIT_MS = 30_000
 const NETWORK_SERVICE_ID = "automation.webhook"
 const MAX_REPLY_CHARS = 3000
+const SAFE_WEBHOOK_REQUEST_METADATA_KEYS = new Set([
+  "correlationId",
+  "correlation_id",
+  "event",
+  "label",
+  "messageId",
+  "message_id",
+  "requestId",
+  "request_id",
+  "source",
+  "traceId",
+  "trace_id",
+])
+const SAFE_WEBHOOK_RUN_METADATA_KEYS = new Set([
+  ...SAFE_WEBHOOK_REQUEST_METADATA_KEYS,
+  "conversationId",
+  "sdkSessionId",
+])
+const SENSITIVE_METADATA_KEY = /token|secret|authorization|cookie|password|credential|api[-_]?key|session[-_]?key/i
 
 export interface AutomationIngressProjectSummary {
   readonly projectId: string
@@ -218,7 +237,8 @@ export class AutomationIngressService {
 
   async listRuns(projectId?: string): Promise<readonly WebhookRunEntryV1[]> {
     const runs = await this.deps.runs.list()
-    return projectId ? runs.filter((run) => run.projectId === projectId) : runs
+    const filteredRuns = projectId ? runs.filter((run) => run.projectId === projectId) : runs
+    return filteredRuns.map(sanitizeWebhookRunForDisplay)
   }
 
   private async handleHttp(request: LocalHttpRequest): Promise<LocalHttpResponse> {
@@ -293,9 +313,7 @@ export class AutomationIngressService {
       projectId: project.projectId,
       kind: prompt ? "prompt" : "exec",
       source: remoteSource(request),
-      sessionKey,
-      workspacePath: stringValue(body.workspacePath) ?? stringValue(body.workDir),
-      metadata: recordValue(body.metadata),
+      metadata: sanitizeWebhookRequestMetadata(recordValue(body.metadata)),
     })
     try {
       const result = prompt
@@ -324,7 +342,6 @@ export class AutomationIngressService {
           runId: run.id,
           projectId: project.projectId,
           kind: run.kind,
-          sessionKey: run.sessionKey,
           ...resultCorrelation,
           status: finalStatus,
           boundary: resultBoundary,
@@ -356,7 +373,6 @@ export class AutomationIngressService {
         runId: run.id,
         projectId: project.projectId,
         kind: run.kind,
-        sessionKey: run.sessionKey,
         ...(run.kind === "prompt" ? { messageId: webhookAgentMessageId(body, run.id) } : {}),
         boundary: run.kind === "prompt" ? "agent-runtime" : "process-runner",
         ...diagnostic,
@@ -378,7 +394,7 @@ export class AutomationIngressService {
     body: Record<string, unknown>,
     prompt: string,
   ): Promise<Record<string, unknown>> {
-    const sessionKey = run.sessionKey ?? stringValue(body.sessionKey) ?? stringValue(body.session_key)
+    const sessionKey = stringValue(body.sessionKey) ?? stringValue(body.session_key)
     if (!sessionKey) throw new WebhookError("session_required", "sessionKey is required", 400)
     const container = await this.deps.projectContainers.open(project.projectId, {
       name: project.name,
@@ -450,7 +466,6 @@ export class AutomationIngressService {
         source: "webhook",
         projectId: project.projectId,
         runId: run.id,
-        sessionKey: run.sessionKey,
         shell: shell.shell,
       },
     })
@@ -544,8 +559,6 @@ export class AutomationIngressService {
     readonly projectId: string
     readonly kind: "prompt" | "exec"
     readonly source: string
-    readonly sessionKey?: string
-    readonly workspacePath?: string
     readonly metadata?: Record<string, unknown>
   }): Promise<WebhookRunEntryV1> {
     const now = this.isoNow()
@@ -557,12 +570,12 @@ export class AutomationIngressService {
       kind: input.kind,
       status: "running",
       source: input.source,
-      sessionKey: input.sessionKey,
-      workspacePath: input.workspacePath,
       startedAt: now,
-      metadata: input.metadata,
       createdAt: now,
       updatedAt: now,
+    }
+    if (input.metadata) {
+      run.metadata = input.metadata
     }
     await this.deps.runs.upsert(run)
     return run
@@ -577,25 +590,45 @@ export class AutomationIngressService {
       readonly metadata?: Record<string, unknown>
     },
   ): Promise<void> {
-    await this.deps.runs.upsert({
+    const metadata = sanitizeWebhookRunMetadata(patch.metadata ? { ...run.metadata, ...patch.metadata } : run.metadata)
+    const nextRun: WebhookRunEntryV1 = {
       ...run,
       status,
       resultText: patch.resultText ? truncate(patch.resultText) : undefined,
       lastError: patch.lastError,
-      metadata: patch.metadata ? { ...run.metadata, ...patch.metadata } : run.metadata,
       finishedAt: this.isoNow(),
       updatedAt: this.isoNow(),
-    })
+    }
+    if (metadata) {
+      nextRun.metadata = metadata
+    } else {
+      delete nextRun.metadata
+    }
+    await this.deps.runs.upsert(nextRun)
   }
 
   private async checkListenPermission(config: WebhookConfigEntryV1): Promise<void> {
+    const resource = `${config.bindAddress}:${String(config.preferredPort ?? 0)}${config.path}`
     const permission = await this.deps.permissionGuard?.check({
       action: "network.listen",
       actor: { kind: "user" },
-      resource: `${config.bindAddress}:${String(config.preferredPort ?? 0)}${config.path}`,
+      resource,
       context: { serviceId: NETWORK_SERVICE_ID },
     })
-    if (permission && !permission.allowed) throw new Error(permission.reason)
+    if (permission && !permission.allowed) {
+      this.deps.auditSink?.record({
+        action: "network.listen",
+        actor: { kind: "user" },
+        resource,
+        outcome: "denied",
+        metadata: {
+          serviceId: NETWORK_SERVICE_ID,
+          reason: permission.reason,
+          policyId: permission.policyId,
+        },
+      })
+      throw new Error(permission.reason)
+    }
   }
 
   private recordAudit(
@@ -632,6 +665,52 @@ function statusFromConfig(
     serviceRestartRequired: config.serviceRestartRequired,
     lastError: config.lastError,
   }
+}
+
+function sanitizeWebhookRunForDisplay(run: WebhookRunEntryV1): WebhookRunEntryV1 {
+  const safeRun = { ...run }
+  delete safeRun.sessionKey
+  delete safeRun.workspacePath
+  const metadata = sanitizeWebhookRunMetadata(run.metadata)
+  if (metadata) {
+    safeRun.metadata = metadata
+  } else {
+    delete safeRun.metadata
+  }
+  return safeRun
+}
+
+function sanitizeWebhookRequestMetadata(
+  metadata: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  return sanitizeMetadata(metadata, SAFE_WEBHOOK_REQUEST_METADATA_KEYS)
+}
+
+function sanitizeWebhookRunMetadata(
+  metadata: Record<string, unknown> | undefined,
+): Record<string, unknown> | undefined {
+  return sanitizeMetadata(metadata, SAFE_WEBHOOK_RUN_METADATA_KEYS)
+}
+
+function sanitizeMetadata(
+  metadata: Record<string, unknown> | undefined,
+  allowedKeys: ReadonlySet<string>,
+): Record<string, unknown> | undefined {
+  if (!metadata) return undefined
+
+  const sanitized: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(metadata)) {
+    if (!allowedKeys.has(key) || SENSITIVE_METADATA_KEY.test(key)) continue
+    if (typeof value === "string") {
+      sanitized[key] = truncate(value)
+      continue
+    }
+    if (typeof value === "number" || typeof value === "boolean" || value === null) {
+      sanitized[key] = value
+    }
+  }
+
+  return Object.keys(sanitized).length > 0 ? sanitized : undefined
 }
 
 function appendPayloadContext(prompt: string, payload: unknown): string {

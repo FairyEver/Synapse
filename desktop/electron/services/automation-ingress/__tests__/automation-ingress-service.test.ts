@@ -15,6 +15,61 @@ import { AGENT_RUNTIME_SERVICE_ID } from "../../agent-runtime"
 import { AutomationIngressService } from "../automation-ingress-service"
 
 describe("AutomationIngressService", () => {
+  it("records denied audit when persisted webhook listener restore is blocked", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const auditEvents: Parameters<AuditSink["record"]>[0][] = []
+    const permissionGuard: PermissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: false, reason: "denied by startup policy", policyId: "deny-startup" })),
+    }
+    await configs.upsert({
+      id: "webhook:default",
+      schemaVersion: 1,
+      enabled: true,
+      bindAddress: "0.0.0.0",
+      preferredPort: 4567,
+      path: "/hook",
+      token: "token",
+      maxBodyBytes: 256 * 1024,
+      rateLimitPerMinute: 60,
+      createdAt: "2026-05-25T00:00:00.000Z",
+      updatedAt: "2026-05-25T00:00:00.000Z",
+    })
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "not used" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      permissionGuard,
+      auditSink: {
+        record: (event) => {
+          auditEvents.push(event)
+        },
+        list: () => [],
+        clearForTests: () => {},
+      },
+    })
+
+    await expect(service.start()).rejects.toThrow("denied by startup policy")
+
+    expect(auditEvents).toEqual([
+      expect.objectContaining({
+        action: "network.listen",
+        actor: { kind: "user" },
+        resource: "0.0.0.0:4567/hook",
+        outcome: "denied",
+        metadata: expect.objectContaining({
+          serviceId: "automation.webhook",
+          reason: "denied by startup policy",
+          policyId: "deny-startup",
+        }),
+      }),
+    ])
+  })
+
   it("rejects webhook listener updates when permission is denied before persisting", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
@@ -217,6 +272,87 @@ describe("AutomationIngressService", () => {
     await service.stop()
   })
 
+  it("does not persist or return webhook session credentials or unsafe metadata", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "ok" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+    })
+    const config = await service.updateConfig({ enabled: true, resetToken: true })
+    await service.start()
+    const status = await service.getStatus()
+
+    const response = await fetch(`http://${status.bindAddress}:${String(status.assignedPort)}${status.path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.token ?? ""}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        project: "project-1",
+        sessionKey: "local:automation-secret",
+        workspacePath: "/Users/alice/private/repo",
+        messageId: "message-webhook-safe",
+        metadata: {
+          traceId: "trace-1",
+          source: "ci",
+          token: "sk-webhook-secret",
+          sessionKey: "metadata-session-secret",
+          nested: { credential: "hidden" },
+        },
+        prompt: "run",
+        replyMode: "wait",
+      }),
+    })
+
+    expect(response.status).toBe(200)
+    const persistedRuns = await runs.list()
+    expect(JSON.stringify(persistedRuns)).not.toContain("local:automation-secret")
+    expect(JSON.stringify(persistedRuns)).not.toContain("/Users/alice/private/repo")
+    expect(JSON.stringify(persistedRuns)).not.toContain("sk-webhook-secret")
+    expect(JSON.stringify(persistedRuns)).not.toContain("metadata-session-secret")
+    expect(persistedRuns[0]?.metadata).toEqual(expect.objectContaining({
+      messageId: "message-webhook-safe",
+      source: "ci",
+      traceId: "trace-1",
+    }))
+
+    await runs.upsert({
+      id: "webhook-run:legacy",
+      schemaVersion: 1,
+      requestId: "legacy-request",
+      projectId: "project-1",
+      kind: "prompt",
+      status: "success",
+      source: "local",
+      sessionKey: "legacy-session-secret",
+      workspacePath: "/Users/alice/private/legacy",
+      startedAt: "2026-05-25T00:00:00.000Z",
+      metadata: {
+        conversationId: "conversation-legacy",
+        token: "legacy-token-secret",
+        traceId: "legacy-trace",
+      },
+      createdAt: "2026-05-25T00:00:00.000Z",
+      updatedAt: "2026-05-25T00:00:00.000Z",
+    })
+    const safeRuns = await service.listRuns()
+    expect(JSON.stringify(safeRuns)).not.toContain("legacy-session-secret")
+    expect(JSON.stringify(safeRuns)).not.toContain("/Users/alice/private/legacy")
+    expect(JSON.stringify(safeRuns)).not.toContain("legacy-token-secret")
+    expect(safeRuns.find((run) => run.id === "webhook-run:legacy")?.metadata).toEqual({
+      conversationId: "conversation-legacy",
+      traceId: "legacy-trace",
+    })
+
+    await service.stop()
+  })
+
   it("records webhook prompt agent errors as failed runs with redacted diagnostics", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
@@ -294,7 +430,6 @@ describe("AutomationIngressService", () => {
       expect.objectContaining({
         projectId: "project-1",
         kind: "prompt",
-        sessionKey: "local:automation",
         messageId: "message-webhook-1",
         conversationId: "conversation-webhook-1",
         sdkSessionId: "sdk-webhook-1",
@@ -378,17 +513,16 @@ describe("AutomationIngressService", () => {
     expect(run).toEqual(expect.objectContaining({
       kind: "prompt",
       projectId: "project-1",
-      sessionKey: "local:automation",
       status: "failed",
       lastError: safeErrorText,
     }))
+    expect(run?.sessionKey).toBeUndefined()
     expect(logger.warn).toHaveBeenCalledWith(
       "Webhook run threw.",
       expect.objectContaining({
         runId: run?.id,
         projectId: "project-1",
         kind: "prompt",
-        sessionKey: "local:automation",
         boundary: "agent-runtime",
         errorName: "Error",
         errorLength: errorText.length,
@@ -588,9 +722,9 @@ describe("AutomationIngressService", () => {
     expect(run).toEqual(expect.objectContaining({
       kind: "exec",
       projectId: "project-1",
-      sessionKey: "local:automation",
       status: "failed",
     }))
+    expect(run?.sessionKey).toBeUndefined()
     expect(run?.lastError).toBeDefined()
     expect(run?.lastError).not.toContain("sk-ant-test5678")
     expect(run?.lastError).not.toContain("/Users/alice/.ssh/id_rsa")

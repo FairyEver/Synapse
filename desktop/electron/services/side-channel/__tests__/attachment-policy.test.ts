@@ -78,4 +78,17 @@ describe("side-channel attachment policy", () => {
       workspacePath: workspace,
     })).rejects.toMatchObject({ code: "attachment_too_large" })
   })
+
+  it("rejects oversized inline attachments from the base64 size estimate", async () => {
+    const decodedBytes = 10 * 1024 * 1024 + 1
+    const oversizedBase64 = "A".repeat(Math.ceil(decodedBytes / 3) * 4)
+
+    await expect(prepareSideChannelAttachments({
+      files: [{
+        data: oversizedBase64,
+        fileName: "large.txt",
+        mimeType: "text/plain",
+      }],
+    })).rejects.toMatchObject({ code: "attachment_too_large" })
+  })
 })

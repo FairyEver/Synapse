@@ -12,6 +12,7 @@ import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage } from "./git-error-utils"
 import { pendingPushesService } from "./pending-pushes-service"
 import { repositoryStore } from "./repository-store"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import {
   parseUserProfile,
   resolveUserProfilePath,
@@ -24,6 +25,12 @@ const SYNAPSE_BOT_EMAIL = "bot@synapse.local"
 import { isFileNotFoundError } from "./fs-utils"
 
 const logger = createMainLogger("service.user-profile")
+
+type UserProfileWriteSecurityDeps = {
+  actor: ActorIdentity
+  auditSink: AuditSink
+  permissionGuard: PermissionGuard
+}
 
 function createUserProfile(userId: string, displayName: string): SynapseUserProfile {
   return {
@@ -121,6 +128,52 @@ async function writeJsonFileAtomically(filePath: string, value: unknown): Promis
   await rename(temporaryPath, filePath)
 }
 
+async function checkProfileWritePermission(
+  deps: UserProfileWriteSecurityDeps | undefined,
+  profilePath: string,
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  if (!deps) return
+
+  const permission = await deps.permissionGuard.check({
+    action: "fs.write",
+    actor: deps.actor,
+    context: metadata,
+    resource: profilePath,
+  })
+
+  if (permission.allowed) return
+
+  deps.auditSink.record({
+    action: "fs.write",
+    actor: deps.actor,
+    metadata: {
+      ...metadata,
+      policyId: permission.policyId,
+      reason: permission.reason,
+    },
+    outcome: "denied",
+    resource: profilePath,
+  })
+
+  throw new Error(permission.reason)
+}
+
+function recordProfileWriteAudit(
+  deps: UserProfileWriteSecurityDeps | undefined,
+  profilePath: string,
+  outcome: "allowed" | "failed",
+  metadata: Record<string, unknown>,
+): void {
+  deps?.auditSink.record({
+    action: "fs.write",
+    actor: deps.actor,
+    metadata,
+    outcome,
+    resource: profilePath,
+  })
+}
+
 async function readProfileFile(
   repository: SynapseRepositoryConfig,
   userId: string,
@@ -189,6 +242,7 @@ class UserProfileService {
     repoId: string,
     userId: string,
     displayName: string,
+    security?: UserProfileWriteSecurityDeps,
   ): Promise<SynapseUserProfile> {
     const nextDisplayName = displayName.trim()
 
@@ -204,6 +258,14 @@ class UserProfileService {
     }
 
     const existingProfile = await readProfileFile(repository, userId)
+    const profilePath = resolveUserProfilePath(repository.localPath, userId)
+    const auditMetadata = {
+      operation: "user-profile.updateDisplayName",
+      repoId,
+      userId,
+    }
+
+    await checkProfileWritePermission(security, profilePath, auditMetadata)
 
     if (repositoryState.isGitRepository) {
       if (existingProfile) {
@@ -214,9 +276,18 @@ class UserProfileService {
     }
 
     const profile = createUserProfile(userId, nextDisplayName)
-    const profilePath = resolveUserProfilePath(repository.localPath, userId)
 
-    await writeJsonFileAtomically(profilePath, profile)
+    try {
+      await writeJsonFileAtomically(profilePath, profile)
+      recordProfileWriteAudit(security, profilePath, "allowed", auditMetadata)
+    } catch (error) {
+      recordProfileWriteAudit(security, profilePath, "failed", {
+        ...auditMetadata,
+        errorLength: String(error).length,
+        errorName: error instanceof Error ? error.name : typeof error,
+      })
+      throw error
+    }
 
     if (repositoryState.isGitRepository) {
       const gitRootPath = repositoryState.gitRootPath ?? repository.localPath

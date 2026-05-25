@@ -11,6 +11,7 @@ import { configStore } from "../../services/config-store"
 import { contentIndexService } from "../../services/content-index-service"
 import { userIdentityService } from "../../services/user-identity-service"
 import { userProfileService } from "../../services/user-profile-service"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
 
 // Schemas
 const userProfileSchema = z.object({
@@ -71,7 +72,7 @@ export const userProfileIpcModule: IpcModule = {
       channel: "synapse:user-profile:update-display-name",
       request: updateDisplayNameRequestSchema,
       response: userProfileSchema,
-      handler: async (_ctx, request: { repoId: string; displayName: string }) => {
+      handler: async (ctx, request: { repoId: string; displayName: string }) => {
         const localIdentityState = await userIdentityService.loadLocalIdentity()
 
         if (localIdentityState.status !== "ready") {
@@ -82,6 +83,11 @@ export const userProfileIpcModule: IpcModule = {
           request.repoId,
           localIdentityState.identity.userId,
           request.displayName,
+          {
+            actor: { kind: "user", id: localIdentityState.identity.userId },
+            auditSink: ctx.resolve<AuditSink>("core.audit-sink"),
+            permissionGuard: ctx.resolve<PermissionGuard>("core.permission-guard"),
+          },
         )
         const config = await configStore.load()
         const repository = config.repositories.find((item: { uuid: string }) => item.uuid === request.repoId)

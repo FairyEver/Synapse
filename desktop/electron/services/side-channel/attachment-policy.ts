@@ -91,7 +91,7 @@ async function readAttachmentInput(
   const inline = input.dataBase64 ?? input.data
   if (inline !== undefined) {
     return {
-      bytes: decodeInlineAttachment(inline),
+      bytes: decodeInlineAttachment(inline, currentTotal),
       fileName: sanitizeAttachmentFileName(input.fileName ?? input.file_name),
     }
   }
@@ -227,12 +227,20 @@ function normalizeMimeType(value: string): string {
   return value.split(";")[0]?.trim().toLowerCase() || "application/octet-stream"
 }
 
-function decodeInlineAttachment(value: string): Buffer {
+function decodeInlineAttachment(value: string, currentTotal: number): Buffer {
   const normalized = value.replace(/\s+/g, "")
   if (!isValidBase64(normalized)) {
     throw new AttachmentPolicyError("invalid_attachment_data", "attachment data must be valid base64")
   }
+  const decodedLength = base64DecodedLength(normalized)
+  assertSingleSize(decodedLength)
+  assertTotalSize(currentTotal + decodedLength)
   return Buffer.from(normalized, "base64")
+}
+
+function base64DecodedLength(value: string): number {
+  const padding = value.match(/=+$/)?.[0].length ?? 0
+  return Math.floor((value.length * 3) / 4) - padding
 }
 
 function isValidBase64(value: string): boolean {
