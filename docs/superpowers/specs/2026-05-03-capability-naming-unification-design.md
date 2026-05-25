@@ -1,5 +1,7 @@
 # Capability Naming Unification Design
 
+> Superseded note: Synapse-owned CLI capability entrypoints were retired after this document was written. Current capability access is MCP for external agents and local HTTP `/api` only as internal transport for the stdio MCP bridge.
+
 ## Context
 
 Synapse currently exposes agent-facing local capabilities through one shared surface:

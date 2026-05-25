@@ -1,5 +1,7 @@
 # Capability Naming Unification Implementation Plan
 
+> Superseded note: Synapse-owned CLI capability entrypoints were retired after this document was written. Current capability access is MCP for external agents and local HTTP `/api` only as internal transport for the stdio MCP bridge.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Rename Synapse external capabilities around canonical ids such as `database.table.list`, then derive matching API actions, MCP tool names, CLI commands, and public service method names from one manifest.

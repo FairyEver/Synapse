@@ -1,5 +1,7 @@
 # Scheduler MCP External Capabilities Design
 
+> Superseded note: Synapse-owned CLI capability entrypoints were retired after this document was written. Current capability access is MCP for external agents and local HTTP `/api` only as internal transport for the stdio MCP bridge.
+
 ## Context
 
 Synapse already exposes one local MCP server for Database tools and first-phase Scheduler tools. The first Scheduler MCP phase added external list, get, create, enable, and disable actions.

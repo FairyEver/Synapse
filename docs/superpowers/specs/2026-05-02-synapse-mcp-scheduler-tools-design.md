@@ -1,5 +1,7 @@
 # Synapse MCP Scheduler Tools Design
 
+> Superseded note: Synapse-owned CLI capability entrypoints were retired after this document was written. Current capability access is MCP for external agents and local HTTP `/api` only as internal transport for the stdio MCP bridge.
+
 ## Context
 
 Synapse currently exposes Database capabilities through one local MCP server. That server already supports HTTP MCP and stdio MCP, and its existing database tools are stable.
