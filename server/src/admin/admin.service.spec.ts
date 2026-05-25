@@ -5,21 +5,12 @@ import { AdminService } from "./admin.service"
 
 function createPermissionsMock() {
   return {
-    listPermissionDefinitions: vi.fn().mockReturnValue([{ key: "database.use" }]),
-    listTeamEntitlements: vi.fn().mockResolvedValue(["database.use"]),
-    replaceTeamEntitlements: vi.fn().mockResolvedValue({
-      permissionKeys: ["agent.chat.use", "database.use"],
-      deletedRolePermissions: [{ roleId: "role-1", permissionKey: "workflow.use" }],
+    listModulePermissionDefinitions: vi.fn().mockReturnValue([{ key: "module.database" }]),
+    listUserModulePermissions: vi.fn().mockResolvedValue(["module.database"]),
+    replaceUserModulePermissions: vi.fn().mockResolvedValue({
+      before: ["module.skill"],
+      after: ["module.database"],
     }),
-    replaceTeamPermissions: vi.fn().mockResolvedValue({
-      permissionKeys: ["agent.chat.use", "database.use"],
-      rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
-    }),
-    replaceRolePermissions: vi.fn().mockResolvedValue(["database.use"]),
-    listMemberAccessRoles: vi.fn().mockResolvedValue([{ id: "role-1", name: "普通成员" }]),
-    assignAccessRole: vi.fn().mockResolvedValue([{ id: "role-1", name: "普通成员" }]),
-    replaceMemberAccessRoles: vi.fn().mockResolvedValue([{ id: "role-2", name: "团队管理员" }]),
-    removeAccessRole: vi.fn().mockResolvedValue([]),
   }
 }
 
@@ -35,10 +26,7 @@ function createPrismaMock(counts: {
   readonly users?: number
   readonly teams?: number
   readonly invitations?: number
-  readonly teamEntitlements?: number
-  readonly teamAccessRoles?: number
-  readonly teamAccessRolePermissions?: number
-  readonly teamMemberAccessRoles?: number
+  readonly userModulePermissions?: number
 } = {}) {
   const prisma = {
     $executeRaw: vi.fn(),
@@ -49,10 +37,7 @@ function createPrismaMock(counts: {
         counts.users ?? 0,
         counts.teams ?? 0,
         counts.invitations ?? 0,
-        counts.teamEntitlements ?? 0,
-        counts.teamAccessRoles ?? 0,
-        counts.teamAccessRolePermissions ?? 0,
-        counts.teamMemberAccessRoles ?? 0,
+        counts.userModulePermissions ?? 0,
       ])
     }),
     auditLog: { count: vi.fn() },
@@ -71,10 +56,7 @@ function createPrismaMock(counts: {
       findMany: vi.fn(),
       findUnique: vi.fn().mockResolvedValue({ id: "team-1" }),
     },
-    teamAccessRole: { count: vi.fn(), findMany: vi.fn() },
-    teamAccessRolePermission: { count: vi.fn() },
-    teamEntitlement: { count: vi.fn() },
-    teamMemberAccessRole: { count: vi.fn() },
+    userModulePermission: { count: vi.fn() },
     invitation: { count: vi.fn(), delete: vi.fn(), deleteMany: vi.fn() },
   }
   return prisma
@@ -87,10 +69,7 @@ describe("AdminService", () => {
       users: 3,
       teams: 1,
       invitations: 4,
-      teamEntitlements: 14,
-      teamAccessRoles: 2,
-      teamAccessRolePermissions: 25,
-      teamMemberAccessRoles: 3,
+      userModulePermissions: 14,
     })
     const service = new AdminService(
       prisma as unknown as PrismaService,
@@ -105,16 +84,10 @@ describe("AdminService", () => {
       users: 3,
       teams: 1,
       invitations: 4,
-      teamEntitlements: 14,
-      teamAccessRoles: 2,
-      teamAccessRolePermissions: 25,
-      teamMemberAccessRoles: 3,
+      userModulePermissions: 14,
     })
     expect(prisma.invitation.count).toHaveBeenCalledWith()
-    expect(prisma.teamEntitlement.count).toHaveBeenCalledWith()
-    expect(prisma.teamAccessRole.count).toHaveBeenCalledWith()
-    expect(prisma.teamAccessRolePermission.count).toHaveBeenCalledWith()
-    expect(prisma.teamMemberAccessRole.count).toHaveBeenCalledWith()
+    expect(prisma.userModulePermission.count).toHaveBeenCalledWith()
   })
 
   it("loads users without exposing password hashes", async () => {
@@ -134,11 +107,11 @@ describe("AdminService", () => {
             role: true,
             createdAt: true,
             team: { select: { id: true, name: true } },
-            accessRoles: {
-              select: { role: { select: { id: true, name: true } } },
-              orderBy: { assignedAt: "asc" },
-            },
           },
+        },
+        modulePermissions: {
+          select: { permissionKey: true },
+          orderBy: { permissionKey: "asc" },
         },
         createdAt: true,
         updatedAt: true,
@@ -166,11 +139,11 @@ describe("AdminService", () => {
             role: true,
             createdAt: true,
             team: { select: { id: true, name: true } },
-            accessRoles: {
-              select: { role: { select: { id: true, name: true } } },
-              orderBy: { assignedAt: "asc" },
-            },
           },
+        },
+        modulePermissions: {
+          select: { permissionKey: true },
+          orderBy: { permissionKey: "asc" },
         },
         createdAt: true,
         updatedAt: true,
@@ -250,10 +223,6 @@ describe("AdminService", () => {
             role: true,
             createdAt: true,
             user: { select: { email: true } },
-            accessRoles: {
-              select: { role: { select: { id: true, name: true } } },
-              orderBy: { assignedAt: "asc" },
-            },
           },
           orderBy: { createdAt: "asc" },
         },
@@ -379,316 +348,71 @@ describe("AdminService", () => {
     })
   })
 
-  it("lists permission definitions", () => {
+  it("lists module permission definitions", () => {
     const permissions = createPermissionsMock()
     const service = new AdminService(createPrismaMock() as unknown as PrismaService, {} as never, permissions as never)
 
-    expect(service.listPermissions()).toEqual([{ key: "database.use" }])
-    expect(permissions.listPermissionDefinitions).toHaveBeenCalledWith()
+    expect(service.listModulePermissions()).toEqual([{ key: "module.database" }])
+    expect(permissions.listModulePermissionDefinitions).toHaveBeenCalledWith()
   })
 
-  it("lists team entitlements", async () => {
+  it("lists user module permissions", async () => {
     const permissions = createPermissionsMock()
     const prisma = createPrismaMock()
     const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never)
 
-    await expect(service.listTeamEntitlements("team-1"))
+    await expect(service.listUserModulePermissions("user-1"))
       .resolves
-      .toEqual({ permissionKeys: ["database.use"] })
-    expect(prisma.team.findUnique).toHaveBeenCalledWith({
-      where: { id: "team-1" },
+      .toEqual({ permissionKeys: ["module.database"] })
+    expect(prisma.user.findUnique).toHaveBeenCalledWith({
+      where: { id: "user-1" },
       select: { id: true },
     })
-    expect(permissions.listTeamEntitlements).toHaveBeenCalledWith("team-1")
+    expect(permissions.listUserModulePermissions).toHaveBeenCalledWith("user-1")
   })
 
-  it("reports a missing team when listing team entitlements", async () => {
+  it("reports a missing user when listing user module permissions", async () => {
     const permissions = createPermissionsMock()
     const prisma = createPrismaMock()
-    prisma.team.findUnique.mockResolvedValue(null)
+    prisma.user.findUnique.mockResolvedValue(null)
     const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never)
 
-    await expect(service.listTeamEntitlements("missing-team"))
+    await expect(service.listUserModulePermissions("missing-user"))
       .rejects
-      .toThrow("团队不存在。")
-    expect(permissions.listTeamEntitlements).not.toHaveBeenCalled()
+      .toThrow("用户不存在。")
+    expect(permissions.listUserModulePermissions).not.toHaveBeenCalled()
   })
 
-  it("replaces team entitlements and records an audit log", async () => {
+  it("replaces user module permissions and records an audit log", async () => {
     const permissions = createPermissionsMock()
     const prisma = createPrismaMock()
     const auditLog = { record: vi.fn() }
     const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
 
-    await expect(service.replaceTeamEntitlements(
-      "team-1",
-      ["database.use", "agent.chat.use"],
+    await expect(service.replaceUserModulePermissions(
+      "user-1",
+      ["module.database"],
       { id: "admin-1", email: "admin@example.com" },
       "203.0.113.60",
     ))
       .resolves
-      .toEqual({
-        permissionKeys: ["agent.chat.use", "database.use"],
-        deletedRolePermissions: [{ roleId: "role-1", permissionKey: "workflow.use" }],
-      })
+      .toEqual({ permissionKeys: ["module.database"] })
 
-    expect(prisma.team.findUnique).toHaveBeenCalledWith({
-      where: { id: "team-1" },
-      select: { id: true },
-    })
-    expect(permissions.replaceTeamEntitlements).toHaveBeenCalledWith({
-      teamId: "team-1",
-      permissionKeys: ["database.use", "agent.chat.use"],
+    expect(permissions.replaceUserModulePermissions).toHaveBeenCalledWith({
+      userId: "user-1",
+      permissionKeys: ["module.database"],
       grantedByAdminId: "admin-1",
-      source: "manual",
     })
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "admin@example.com",
-      action: "admin.team_entitlements.update",
-      targetType: "team",
-      targetId: "team-1",
+      action: "admin.user_module_permissions.replace",
+      targetType: "user",
+      targetId: "user-1",
       detail: {
-        permissionKeys: ["agent.chat.use", "database.use"],
-        deletedRolePermissions: [{ roleId: "role-1", permissionKey: "workflow.use" }],
+        before: ["module.skill"],
+        after: ["module.database"],
       },
       ipAddress: "203.0.113.60",
-    })
-  })
-
-  it("reports a missing team before replacing team entitlements", async () => {
-    const permissions = createPermissionsMock()
-    const prisma = createPrismaMock()
-    prisma.team.findUnique.mockResolvedValue(null)
-    const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
-
-    await expect(service.replaceTeamEntitlements(
-      "missing-team",
-      ["database.use"],
-      { id: "admin-1", email: "admin@example.com" },
-      "203.0.113.70",
-    ))
-      .rejects
-      .toThrow("团队不存在。")
-
-    expect(permissions.replaceTeamEntitlements).not.toHaveBeenCalled()
-    expect(auditLog.record).not.toHaveBeenCalled()
-  })
-
-  it("replaces team permissions atomically and records an audit log", async () => {
-    const permissions = createPermissionsMock()
-    const prisma = createPrismaMock()
-    const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
-
-    await expect(service.replaceTeamPermissions(
-      "team-1",
-      {
-        permissionKeys: ["database.use", "agent.chat.use"],
-        rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
-      },
-      { id: "admin-1", email: "admin@example.com" },
-      "203.0.113.75",
-    ))
-      .resolves
-      .toEqual({
-        permissionKeys: ["agent.chat.use", "database.use"],
-        rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
-      })
-
-    expect(permissions.replaceTeamPermissions).toHaveBeenCalledWith({
-      teamId: "team-1",
-      permissionKeys: ["database.use", "agent.chat.use"],
-      rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
-      grantedByAdminId: "admin-1",
-      source: "manual",
-    })
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "admin@example.com",
-      action: "admin.team_permissions.update",
-      targetType: "team",
-      targetId: "team-1",
-      detail: {
-        permissionKeys: ["agent.chat.use", "database.use"],
-        rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
-      },
-      ipAddress: "203.0.113.75",
-    })
-  })
-
-  it("lists team access roles with flattened permission keys", async () => {
-    const permissions = createPermissionsMock()
-    const prisma = createPrismaMock()
-    prisma.teamAccessRole.findMany.mockResolvedValue([
-      {
-        id: "role-1",
-        name: "普通成员",
-        description: null,
-        kind: "system",
-        locked: true,
-        sortOrder: 1,
-        permissions: [{ permissionKey: "database.use" }],
-        createdAt: new Date("2026-05-23T00:00:00.000Z"),
-        updatedAt: new Date("2026-05-23T00:00:00.000Z"),
-      },
-    ])
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never)
-
-    await expect(service.listTeamAccessRoles("team-1"))
-      .resolves
-      .toEqual([
-        expect.objectContaining({
-          id: "role-1",
-          name: "普通成员",
-          permissionKeys: ["database.use"],
-        }),
-      ])
-    expect(prisma.team.findUnique).toHaveBeenCalledWith({
-      where: { id: "team-1" },
-      select: { id: true },
-    })
-    expect(prisma.teamAccessRole.findMany).toHaveBeenCalledWith(expect.objectContaining({
-      where: { teamId: "team-1" },
-    }))
-  })
-
-  it("replaces role permissions and records an audit log", async () => {
-    const permissions = createPermissionsMock()
-    const prisma = createPrismaMock()
-    const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
-
-    await expect(service.replaceRolePermissions(
-      "team-1",
-      "role-1",
-      ["database.use"],
-      { id: "admin-1", email: "admin@example.com" },
-      "203.0.113.80",
-    ))
-      .resolves
-      .toEqual({ permissionKeys: ["database.use"] })
-
-    expect(permissions.replaceRolePermissions).toHaveBeenCalledWith({
-      teamId: "team-1",
-      roleId: "role-1",
-      permissionKeys: ["database.use"],
-    })
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "admin@example.com",
-      action: "admin.team_role_permissions.update",
-      targetType: "team_access_role",
-      targetId: "role-1",
-      detail: { teamId: "team-1", permissionKeys: ["database.use"] },
-      ipAddress: "203.0.113.80",
-    })
-  })
-
-  it("lists member access roles through the permissions service", async () => {
-    const permissions = createPermissionsMock()
-    const prisma = createPrismaMock()
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never)
-
-    await expect(service.listMemberAccessRoles("team-1", "membership-1"))
-      .resolves
-      .toEqual({ roles: [{ id: "role-1", name: "普通成员" }] })
-
-    expect(prisma.team.findUnique).toHaveBeenCalledWith({
-      where: { id: "team-1" },
-      select: { id: true },
-    })
-    expect(permissions.listMemberAccessRoles).toHaveBeenCalledWith("team-1", "membership-1")
-  })
-
-  it("assigns member access roles and records an audit log", async () => {
-    const permissions = createPermissionsMock()
-    const prisma = createPrismaMock()
-    const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
-
-    await expect(service.assignMemberAccessRole(
-      "team-1",
-      "membership-1",
-      "role-1",
-      { id: "admin-1", email: "admin@example.com" },
-      "203.0.113.90",
-    ))
-      .resolves
-      .toEqual({ roles: [{ id: "role-1", name: "普通成员" }] })
-
-    expect(permissions.assignAccessRole).toHaveBeenCalledWith({
-      teamId: "team-1",
-      teamMembershipId: "membership-1",
-      roleId: "role-1",
-    })
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "admin@example.com",
-      action: "admin.team_member_access_role.assign",
-      targetType: "team_membership",
-      targetId: "membership-1",
-      detail: { teamId: "team-1", roleId: "role-1" },
-      ipAddress: "203.0.113.90",
-    })
-  })
-
-  it("replaces member access roles and records an audit log", async () => {
-    const permissions = createPermissionsMock()
-    const prisma = createPrismaMock()
-    const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
-
-    await expect(service.replaceMemberAccessRoles(
-      "team-1",
-      "membership-1",
-      ["role-2", "role-1"],
-      { id: "admin-1", email: "admin@example.com" },
-      "203.0.113.92",
-    ))
-      .resolves
-      .toEqual({ roles: [{ id: "role-2", name: "团队管理员" }] })
-
-    expect(permissions.replaceMemberAccessRoles).toHaveBeenCalledWith({
-      teamId: "team-1",
-      teamMembershipId: "membership-1",
-      roleIds: ["role-2", "role-1"],
-    })
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "admin@example.com",
-      action: "admin.team_member_access_roles.replace",
-      targetType: "team_membership",
-      targetId: "membership-1",
-      detail: { teamId: "team-1", roleIds: ["role-2"] },
-      ipAddress: "203.0.113.92",
-    })
-  })
-
-  it("removes member access roles and records an audit log", async () => {
-    const permissions = createPermissionsMock()
-    const prisma = createPrismaMock()
-    const auditLog = { record: vi.fn() }
-    const service = new AdminService(prisma as unknown as PrismaService, {} as never, permissions as never, auditLog as never)
-
-    await expect(service.removeMemberAccessRole(
-      "team-1",
-      "membership-1",
-      "role-1",
-      { id: "admin-1", email: "admin@example.com" },
-      "203.0.113.91",
-    ))
-      .resolves
-      .toEqual({ roles: [] })
-
-    expect(permissions.removeAccessRole).toHaveBeenCalledWith({
-      teamId: "team-1",
-      teamMembershipId: "membership-1",
-      roleId: "role-1",
-    })
-    expect(auditLog.record).toHaveBeenCalledWith({
-      adminEmail: "admin@example.com",
-      action: "admin.team_member_access_role.remove",
-      targetType: "team_membership",
-      targetId: "membership-1",
-      detail: { teamId: "team-1", roleId: "role-1" },
-      ipAddress: "203.0.113.91",
     })
   })
 })

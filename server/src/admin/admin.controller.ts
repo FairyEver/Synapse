@@ -6,7 +6,7 @@ import { AuditLogService, auditLogExportLimit } from "../common/audit-log.servic
 import { toCsv } from "../common/csv-export"
 import { parsePagination } from "../common/pagination"
 import { resolvePublicAppUrl } from "../invitations/invitation-url"
-import { isActivePermissionKey } from "../permissions/permission-registry"
+import { isActiveModulePermissionKey } from "../permissions/permission-registry"
 import { AdminService } from "./admin.service"
 
 const userStatusSchema = z.object({
@@ -17,30 +17,10 @@ const bulkInvitationDeleteSchema = z.object({
   ids: z.array(z.string().min(1)).min(1),
 }).strict()
 
-const permissionKeysSchema = z.array(z.string().trim().min(1).refine(isActivePermissionKey))
+const modulePermissionKeysSchema = z.array(z.string().trim().min(1).refine(isActiveModulePermissionKey))
 
-const teamEntitlementsSchema = z.object({
-  permissionKeys: permissionKeysSchema,
-}).strict()
-
-const teamPermissionsSchema = z.object({
-  permissionKeys: permissionKeysSchema.min(1),
-  rolePermissions: z.array(z.object({
-    roleId: z.string().trim().min(1),
-    permissionKeys: permissionKeysSchema,
-  }).strict()),
-}).strict()
-
-const rolePermissionsSchema = z.object({
-  permissionKeys: permissionKeysSchema,
-}).strict()
-
-const memberAccessRoleSchema = z.object({
-  roleId: z.string().trim().min(1),
-}).strict()
-
-const memberAccessRolesSchema = z.object({
-  roleIds: z.array(z.string().trim().min(1)).min(1),
+const userModulePermissionsSchema = z.object({
+  permissionKeys: modulePermissionKeysSchema,
 }).strict()
 
 const userSortFields = ["createdAt", "updatedAt", "email", "status"] as const
@@ -116,95 +96,25 @@ export class AdminController {
     return this.admin.listTeams(parsePagination(query, { allowedSortFields: teamSortFields }))
   }
 
-  @Get("/permissions")
-  listPermissions() {
-    return this.admin.listPermissions()
+  @Get("/module-permissions")
+  listModulePermissions() {
+    return this.admin.listModulePermissions()
   }
 
-  @Get("/teams/:teamId/entitlements")
-  listTeamEntitlements(@Param("teamId") teamId: string) {
-    return this.admin.listTeamEntitlements(teamId)
+  @Get("/users/:id/module-permissions")
+  listUserModulePermissions(@Param("id") id: string) {
+    return this.admin.listUserModulePermissions(id)
   }
 
-  @Put("/teams/:teamId/permissions")
-  async replaceTeamPermissions(
-    @Param("teamId") teamId: string,
+  @Put("/users/:id/module-permissions")
+  async replaceUserModulePermissions(
+    @Param("id") id: string,
     @Body() body: unknown,
     @Req() request: AdminRequest,
   ) {
-    const result = teamPermissionsSchema.safeParse(body)
-    if (!result.success) throw new BadRequestException("团队权限无效。")
-    return this.admin.replaceTeamPermissions(teamId, result.data, request.admin!, request.ip)
-  }
-
-  @Put("/teams/:teamId/entitlements")
-  async replaceTeamEntitlements(
-    @Param("teamId") teamId: string,
-    @Body() body: unknown,
-    @Req() request: AdminRequest,
-  ) {
-    const result = teamEntitlementsSchema.safeParse(body)
-    if (!result.success) throw new BadRequestException("团队权限无效。")
-    return this.admin.replaceTeamEntitlements(teamId, result.data.permissionKeys, request.admin!, request.ip)
-  }
-
-  @Get("/teams/:teamId/access-roles")
-  listTeamAccessRoles(@Param("teamId") teamId: string) {
-    return this.admin.listTeamAccessRoles(teamId)
-  }
-
-  @Put("/teams/:teamId/access-roles/:roleId/permissions")
-  async replaceRolePermissions(
-    @Param("teamId") teamId: string,
-    @Param("roleId") roleId: string,
-    @Body() body: unknown,
-    @Req() request: AdminRequest,
-  ) {
-    const result = rolePermissionsSchema.safeParse(body)
-    if (!result.success) throw new BadRequestException("角色权限无效。")
-    return this.admin.replaceRolePermissions(teamId, roleId, result.data.permissionKeys, request.admin!, request.ip)
-  }
-
-  @Get("/teams/:teamId/members/:membershipId/access-roles")
-  listMemberAccessRoles(
-    @Param("teamId") teamId: string,
-    @Param("membershipId") membershipId: string,
-  ) {
-    return this.admin.listMemberAccessRoles(teamId, membershipId)
-  }
-
-  @Post("/teams/:teamId/members/:membershipId/access-roles")
-  async assignMemberAccessRole(
-    @Param("teamId") teamId: string,
-    @Param("membershipId") membershipId: string,
-    @Body() body: unknown,
-    @Req() request: AdminRequest,
-  ) {
-    const result = memberAccessRoleSchema.safeParse(body)
-    if (!result.success) throw new BadRequestException("成员访问角色无效。")
-    return this.admin.assignMemberAccessRole(teamId, membershipId, result.data.roleId, request.admin!, request.ip)
-  }
-
-  @Put("/teams/:teamId/members/:membershipId/access-roles")
-  async replaceMemberAccessRoles(
-    @Param("teamId") teamId: string,
-    @Param("membershipId") membershipId: string,
-    @Body() body: unknown,
-    @Req() request: AdminRequest,
-  ) {
-    const result = memberAccessRolesSchema.safeParse(body)
-    if (!result.success) throw new BadRequestException("成员访问角色无效。")
-    return this.admin.replaceMemberAccessRoles(teamId, membershipId, result.data.roleIds, request.admin!, request.ip)
-  }
-
-  @Delete("/teams/:teamId/members/:membershipId/access-roles/:roleId")
-  removeMemberAccessRole(
-    @Param("teamId") teamId: string,
-    @Param("membershipId") membershipId: string,
-    @Param("roleId") roleId: string,
-    @Req() request: AdminRequest,
-  ) {
-    return this.admin.removeMemberAccessRole(teamId, membershipId, roleId, request.admin!, request.ip)
+    const result = userModulePermissionsSchema.safeParse(body)
+    if (!result.success) throw new BadRequestException("用户模块权限无效。")
+    return this.admin.replaceUserModulePermissions(id, result.data.permissionKeys, request.admin!, request.ip)
   }
 
   @Get("/audit-logs/export")

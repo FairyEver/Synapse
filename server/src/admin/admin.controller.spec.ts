@@ -236,330 +236,87 @@ describe("AdminController", () => {
       .toThrow("用户状态无效。")
   })
 
-  it("lists permission definitions through the service", () => {
-    const listPermissions = vi.fn().mockReturnValue([{ key: "database.use" }])
-    const controller = createController({ listPermissions } as never)
+  it("lists module permission definitions through the service", () => {
+    const listModulePermissions = vi.fn().mockReturnValue([{ key: "module.database" }])
+    const controller = createController({ listModulePermissions } as never)
 
-    expect(controller.listPermissions()).toEqual([{ key: "database.use" }])
-    expect(listPermissions).toHaveBeenCalledWith()
+    expect(controller.listModulePermissions()).toEqual([{ key: "module.database" }])
+    expect(listModulePermissions).toHaveBeenCalledWith()
   })
 
-  it("lists team entitlements through the service", async () => {
-    const listTeamEntitlements = vi.fn().mockResolvedValue({ permissionKeys: ["database.use"] })
-    const controller = createController({ listTeamEntitlements } as never)
+  it("lists user module permissions through the service", async () => {
+    const listUserModulePermissions = vi.fn().mockResolvedValue({ permissionKeys: ["module.database"] })
+    const controller = createController({ listUserModulePermissions } as never)
 
-    await expect(controller.listTeamEntitlements("team-1"))
+    await expect(controller.listUserModulePermissions("user-1"))
       .resolves
-      .toEqual({ permissionKeys: ["database.use"] })
-    expect(listTeamEntitlements).toHaveBeenCalledWith("team-1")
+      .toEqual({ permissionKeys: ["module.database"] })
+    expect(listUserModulePermissions).toHaveBeenCalledWith("user-1")
   })
 
-  it("replaces team entitlements through the service", async () => {
-    const replaceTeamEntitlements = vi.fn().mockResolvedValue({ permissionKeys: ["database.use"] })
-    const controller = createController({ replaceTeamEntitlements } as never)
+  it("replaces user module permissions through the service", async () => {
+    const replaceUserModulePermissions = vi.fn().mockResolvedValue({ permissionKeys: ["module.database"] })
+    const controller = createController({ replaceUserModulePermissions } as never)
 
-    await expect(controller.replaceTeamEntitlements(
-      "team-1",
-      { permissionKeys: ["database.use"] },
-      { admin: { id: "admin-1", email: "admin@example.com" }, ip: "203.0.113.70" } as never,
-    ))
-      .resolves
-      .toEqual({ permissionKeys: ["database.use"] })
-    expect(replaceTeamEntitlements).toHaveBeenCalledWith(
-      "team-1",
-      ["database.use"],
-      { id: "admin-1", email: "admin@example.com" },
-      "203.0.113.70",
-    )
-  })
-
-  it("replaces team permissions through the service", async () => {
-    const replaceTeamPermissions = vi.fn().mockResolvedValue({
-      permissionKeys: ["database.use"],
-      rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
-    })
-    const controller = createController({ replaceTeamPermissions } as never)
-
-    await expect(controller.replaceTeamPermissions(
-      "team-1",
-      {
-        permissionKeys: ["database.use"],
-        rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
-      },
+    await expect(controller.replaceUserModulePermissions(
+      "user-1",
+      { permissionKeys: ["module.database"] },
       { admin: { id: "admin-1", email: "admin@example.com" }, ip: "203.0.113.75" } as never,
     ))
       .resolves
-      .toEqual({
-        permissionKeys: ["database.use"],
-        rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
-      })
-    expect(replaceTeamPermissions).toHaveBeenCalledWith(
-      "team-1",
-      {
-        permissionKeys: ["database.use"],
-        rolePermissions: [{ roleId: "role-1", permissionKeys: ["database.use"] }],
-      },
+      .toEqual({ permissionKeys: ["module.database"] })
+    expect(replaceUserModulePermissions).toHaveBeenCalledWith(
+      "user-1",
+      ["module.database"],
       { id: "admin-1", email: "admin@example.com" },
       "203.0.113.75",
     )
   })
 
-  it("rejects invalid team permission bodies", async () => {
-    const replaceTeamPermissions = vi.fn()
-    const controller = createController({ replaceTeamPermissions } as never)
+  it("allows empty user module permission replacements", async () => {
+    const replaceUserModulePermissions = vi.fn().mockResolvedValue({ permissionKeys: [] })
+    const controller = createController({ replaceUserModulePermissions } as never)
 
-    await expect(controller.replaceTeamPermissions(
-      "team-1",
-      {
-        permissionKeys: ["database.use"],
-        rolePermissions: [{ roleId: "role-1", permissionKeys: ["unknown.permission"] }],
-      },
-      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
-    ))
-      .rejects
-      .toThrow("团队权限无效。")
-    expect(replaceTeamPermissions).not.toHaveBeenCalled()
-  })
-
-  it("rejects empty atomic team permission replacements", async () => {
-    const replaceTeamPermissions = vi.fn()
-    const controller = createController({ replaceTeamPermissions } as never)
-
-    await expect(controller.replaceTeamPermissions(
-      "team-1",
-      {
-        permissionKeys: [],
-        rolePermissions: [],
-      },
-      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
-    ))
-      .rejects
-      .toThrow("团队权限无效。")
-    expect(replaceTeamPermissions).not.toHaveBeenCalled()
-  })
-
-  it("rejects empty member access role replacements", async () => {
-    const replaceMemberAccessRoles = vi.fn()
-    const controller = createController({ replaceMemberAccessRoles } as never)
-
-    await expect(controller.replaceMemberAccessRoles(
-      "team-1",
-      "membership-1",
-      { roleIds: [] },
-      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
-    ))
-      .rejects
-      .toThrow("成员访问角色无效。")
-    expect(replaceMemberAccessRoles).not.toHaveBeenCalled()
-  })
-
-  it("lists team access roles through the service", async () => {
-    const listTeamAccessRoles = vi.fn().mockResolvedValue([{ id: "role-1", permissionKeys: ["database.use"] }])
-    const controller = createController({ listTeamAccessRoles } as never)
-
-    await expect(controller.listTeamAccessRoles("team-1"))
-      .resolves
-      .toEqual([{ id: "role-1", permissionKeys: ["database.use"] }])
-    expect(listTeamAccessRoles).toHaveBeenCalledWith("team-1")
-  })
-
-  it("replaces role permissions through the service", async () => {
-    const replaceRolePermissions = vi.fn().mockResolvedValue({ permissionKeys: ["database.use"] })
-    const controller = createController({ replaceRolePermissions } as never)
-
-    await expect(controller.replaceRolePermissions(
-      "team-1",
-      "role-1",
-      { permissionKeys: ["database.use"] },
-      { admin: { id: "admin-1", email: "admin@example.com" }, ip: "203.0.113.80" } as never,
-    ))
-      .resolves
-      .toEqual({ permissionKeys: ["database.use"] })
-    expect(replaceRolePermissions).toHaveBeenCalledWith(
-      "team-1",
-      "role-1",
-      ["database.use"],
-      { id: "admin-1", email: "admin@example.com" },
-      "203.0.113.80",
-    )
-  })
-
-  it("rejects invalid role permission bodies", async () => {
-    const replaceRolePermissions = vi.fn()
-    const controller = createController({ replaceRolePermissions } as never)
-
-    await expect(controller.replaceRolePermissions(
-      "team-1",
-      "role-1",
-      { permissionKeys: ["unknown.permission"] },
-      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
-    ))
-      .rejects
-      .toThrow("角色权限无效。")
-    expect(replaceRolePermissions).not.toHaveBeenCalled()
-  })
-
-  it("lists member access roles through the service", async () => {
-    const listMemberAccessRoles = vi.fn().mockResolvedValue({ roles: [{ id: "role-1" }] })
-    const controller = createController({ listMemberAccessRoles } as never)
-
-    await expect(controller.listMemberAccessRoles("team-1", "membership-1"))
-      .resolves
-      .toEqual({ roles: [{ id: "role-1" }] })
-    expect(listMemberAccessRoles).toHaveBeenCalledWith("team-1", "membership-1")
-  })
-
-  it("assigns member access roles through the service", async () => {
-    const assignMemberAccessRole = vi.fn().mockResolvedValue({ roles: [{ id: "role-1" }] })
-    const controller = createController({ assignMemberAccessRole } as never)
-
-    await expect(controller.assignMemberAccessRole(
-      "team-1",
-      "membership-1",
-      { roleId: "role-1" },
-      { admin: { id: "admin-1", email: "admin@example.com" }, ip: "203.0.113.90" } as never,
-    ))
-      .resolves
-      .toEqual({ roles: [{ id: "role-1" }] })
-    expect(assignMemberAccessRole).toHaveBeenCalledWith(
-      "team-1",
-      "membership-1",
-      "role-1",
-      { id: "admin-1", email: "admin@example.com" },
-      "203.0.113.90",
-    )
-  })
-
-  it("replaces member access roles through the service", async () => {
-    const replaceMemberAccessRoles = vi.fn().mockResolvedValue({ roles: [{ id: "role-1" }] })
-    const controller = createController({ replaceMemberAccessRoles } as never)
-
-    await expect(controller.replaceMemberAccessRoles(
-      "team-1",
-      "membership-1",
-      { roleIds: ["role-1", "role-2"] },
-      { admin: { id: "admin-1", email: "admin@example.com" }, ip: "203.0.113.92" } as never,
-    ))
-      .resolves
-      .toEqual({ roles: [{ id: "role-1" }] })
-    expect(replaceMemberAccessRoles).toHaveBeenCalledWith(
-      "team-1",
-      "membership-1",
-      ["role-1", "role-2"],
-      { id: "admin-1", email: "admin@example.com" },
-      "203.0.113.92",
-    )
-  })
-
-  it("removes member access roles through the service", async () => {
-    const removeMemberAccessRole = vi.fn().mockResolvedValue({ roles: [] })
-    const controller = createController({ removeMemberAccessRole } as never)
-
-    await expect(controller.removeMemberAccessRole(
-      "team-1",
-      "membership-1",
-      "role-1",
-      { admin: { id: "admin-1", email: "admin@example.com" }, ip: "203.0.113.91" } as never,
-    ))
-      .resolves
-      .toEqual({ roles: [] })
-    expect(removeMemberAccessRole).toHaveBeenCalledWith(
-      "team-1",
-      "membership-1",
-      "role-1",
-      { id: "admin-1", email: "admin@example.com" },
-      "203.0.113.91",
-    )
-  })
-
-  it("rejects invalid member access role bodies", async () => {
-    const assignMemberAccessRole = vi.fn()
-    const controller = createController({ assignMemberAccessRole } as never)
-
-    await expect(controller.assignMemberAccessRole(
-      "team-1",
-      "membership-1",
-      { roleId: "   " },
-      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
-    ))
-      .rejects
-      .toThrow("成员访问角色无效。")
-    expect(assignMemberAccessRole).not.toHaveBeenCalled()
-  })
-
-  it("rejects invalid member access role replacement bodies", async () => {
-    const replaceMemberAccessRoles = vi.fn()
-    const controller = createController({ replaceMemberAccessRoles } as never)
-
-    await expect(controller.replaceMemberAccessRoles(
-      "team-1",
-      "membership-1",
-      { roleIds: ["role-1", ""] },
-      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
-    ))
-      .rejects
-      .toThrow("成员访问角色无效。")
-    expect(replaceMemberAccessRoles).not.toHaveBeenCalled()
-  })
-
-  it("rejects invalid team entitlement bodies", async () => {
-    const replaceTeamEntitlements = vi.fn()
-    const controller = createController({ replaceTeamEntitlements } as never)
-
-    await expect(controller.replaceTeamEntitlements(
-      "team-1",
-      { permissionKeys: [""] },
-      { admin: { id: "admin-1", email: "admin@example.com" } } as never,
-    ))
-      .rejects
-      .toThrow("团队权限无效。")
-    expect(replaceTeamEntitlements).not.toHaveBeenCalled()
-  })
-
-  it("allows empty team entitlement replacements", async () => {
-    const replaceTeamEntitlements = vi.fn().mockResolvedValue({ permissionKeys: [] })
-    const controller = createController({ replaceTeamEntitlements } as never)
-
-    await expect(controller.replaceTeamEntitlements(
-      "team-1",
+    await expect(controller.replaceUserModulePermissions(
+      "user-1",
       { permissionKeys: [] },
       { admin: { id: "admin-1", email: "admin@example.com" } } as never,
     ))
       .resolves
       .toEqual({ permissionKeys: [] })
-    expect(replaceTeamEntitlements).toHaveBeenCalledWith(
-      "team-1",
+    expect(replaceUserModulePermissions).toHaveBeenCalledWith(
+      "user-1",
       [],
       { id: "admin-1", email: "admin@example.com" },
       undefined,
     )
   })
 
-  it("rejects unknown team entitlement permission keys", async () => {
-    const replaceTeamEntitlements = vi.fn()
-    const controller = createController({ replaceTeamEntitlements } as never)
+  it("rejects invalid user module permission bodies", async () => {
+    const replaceUserModulePermissions = vi.fn()
+    const controller = createController({ replaceUserModulePermissions } as never)
 
-    await expect(controller.replaceTeamEntitlements(
-      "team-1",
-      { permissionKeys: ["page.database"] },
+    await expect(controller.replaceUserModulePermissions(
+      "user-1",
+      { permissionKeys: ["database.use"] },
       { admin: { id: "admin-1", email: "admin@example.com" } } as never,
     ))
       .rejects
-      .toThrow("团队权限无效。")
-    expect(replaceTeamEntitlements).not.toHaveBeenCalled()
+      .toThrow("用户模块权限无效。")
+    expect(replaceUserModulePermissions).not.toHaveBeenCalled()
   })
 
-  it("rejects whitespace-only team entitlement permission keys", async () => {
-    const replaceTeamEntitlements = vi.fn()
-    const controller = createController({ replaceTeamEntitlements } as never)
+  it("rejects whitespace-only user module permission keys", async () => {
+    const replaceUserModulePermissions = vi.fn()
+    const controller = createController({ replaceUserModulePermissions } as never)
 
-    await expect(controller.replaceTeamEntitlements(
-      "team-1",
+    await expect(controller.replaceUserModulePermissions(
+      "user-1",
       { permissionKeys: ["   "] },
       { admin: { id: "admin-1", email: "admin@example.com" } } as never,
     ))
       .rejects
-      .toThrow("团队权限无效。")
-    expect(replaceTeamEntitlements).not.toHaveBeenCalled()
+      .toThrow("用户模块权限无效。")
+    expect(replaceUserModulePermissions).not.toHaveBeenCalled()
   })
 })

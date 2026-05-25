@@ -3,7 +3,7 @@ import { Prisma, type UserStatus } from "@prisma/client"
 import { AuditLogService } from "../common/audit-log.service"
 import { InvitationsService } from "../invitations/invitations.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
-import { PermissionsService, type TeamRolePermissionsInput } from "../permissions/permissions.service"
+import { PermissionsService } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
 
 type AdminPrismaClient = PrismaService | Prisma.TransactionClient
@@ -18,11 +18,11 @@ const adminUserSelect = {
       role: true,
       createdAt: true,
       team: { select: { id: true, name: true } },
-      accessRoles: {
-        select: { role: { select: { id: true, name: true } } },
-        orderBy: { assignedAt: "asc" },
-      },
     },
+  },
+  modulePermissions: {
+    select: { permissionKey: true },
+    orderBy: { permissionKey: "asc" },
   },
   createdAt: true,
   updatedAt: true,
@@ -38,27 +38,8 @@ const adminTeamSelect = {
       role: true,
       createdAt: true,
       user: { select: { email: true } },
-      accessRoles: {
-        select: { role: { select: { id: true, name: true } } },
-        orderBy: { assignedAt: "asc" },
-      },
     },
     orderBy: { createdAt: "asc" },
-  },
-  createdAt: true,
-  updatedAt: true,
-} as const
-
-const adminTeamAccessRoleSelect = {
-  id: true,
-  name: true,
-  description: true,
-  kind: true,
-  locked: true,
-  sortOrder: true,
-  permissions: {
-    select: { permissionKey: true },
-    orderBy: { permissionKey: "asc" },
   },
   createdAt: true,
   updatedAt: true,
@@ -83,19 +64,13 @@ export class AdminService {
       users,
       teams,
       invitations,
-      teamEntitlements,
-      teamAccessRoles,
-      teamAccessRolePermissions,
-      teamMemberAccessRoles,
+      userModulePermissions,
     ] = await this.prisma.$transaction([
       this.prisma.auditLog.count(),
       this.prisma.user.count(),
       this.prisma.team.count(),
       this.prisma.invitation.count(),
-      this.prisma.teamEntitlement.count(),
-      this.prisma.teamAccessRole.count(),
-      this.prisma.teamAccessRolePermission.count(),
-      this.prisma.teamMemberAccessRole.count(),
+      this.prisma.userModulePermission.count(),
     ])
 
     return {
@@ -105,10 +80,7 @@ export class AdminService {
         users,
         teams,
         invitations,
-        teamEntitlements,
-        teamAccessRoles,
-        teamAccessRolePermissions,
-        teamMemberAccessRoles,
+        userModulePermissions,
       },
     }
   }
@@ -248,183 +220,43 @@ export class AdminService {
     return { data, total, page: page.page, pageSize: page.pageSize }
   }
 
-  listPermissions() {
-    return this.permissions.listPermissionDefinitions()
+  listModulePermissions() {
+    return this.permissions.listModulePermissionDefinitions()
   }
 
-  async listTeamEntitlements(teamId: string) {
-    await this.assertTeamExists(teamId)
-    return { permissionKeys: await this.permissions.listTeamEntitlements(teamId) }
+  async listUserModulePermissions(userId: string) {
+    await this.assertUserExists(userId)
+    return { permissionKeys: await this.permissions.listUserModulePermissions(userId) }
   }
 
-  async replaceTeamEntitlements(
-    teamId: string,
+  async replaceUserModulePermissions(
+    userId: string,
     permissionKeys: readonly string[],
     admin: { readonly id: string; readonly email: string },
     ipAddress = "system",
   ) {
-    await this.assertTeamExists(teamId)
-    const next = await this.permissions.replaceTeamEntitlements({
-      teamId,
+    const result = await this.permissions.replaceUserModulePermissions({
+      userId,
       permissionKeys,
       grantedByAdminId: admin.id,
-      source: "manual",
     })
     await this.auditLog?.record({
       adminEmail: admin.email,
-      action: "admin.team_entitlements.update",
-      targetType: "team",
-      targetId: teamId,
-      detail: next,
+      action: "admin.user_module_permissions.replace",
+      targetType: "user",
+      targetId: userId,
+      detail: result,
       ipAddress,
     })
-    return next
+    return { permissionKeys: result.after }
   }
 
-  async replaceTeamPermissions(
-    teamId: string,
-    input: {
-      readonly permissionKeys: readonly string[]
-      readonly rolePermissions: readonly TeamRolePermissionsInput[]
-    },
-    admin: { readonly id: string; readonly email: string },
-    ipAddress = "system",
-  ) {
-    await this.assertTeamExists(teamId)
-    const next = await this.permissions.replaceTeamPermissions({
-      teamId,
-      permissionKeys: input.permissionKeys,
-      rolePermissions: input.rolePermissions,
-      grantedByAdminId: admin.id,
-      source: "manual",
-    })
-    await this.auditLog?.record({
-      adminEmail: admin.email,
-      action: "admin.team_permissions.update",
-      targetType: "team",
-      targetId: teamId,
-      detail: next,
-      ipAddress,
-    })
-    return next
-  }
-
-  async listTeamAccessRoles(teamId: string) {
-    await this.assertTeamExists(teamId)
-    const roles = await this.prisma.teamAccessRole.findMany({
-      where: { teamId },
-      select: adminTeamAccessRoleSelect,
-      orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-    })
-    return roles.map(({ permissions, ...role }) => ({
-      ...role,
-      permissionKeys: permissions.map((permission) => permission.permissionKey),
-    }))
-  }
-
-  async replaceRolePermissions(
-    teamId: string,
-    roleId: string,
-    permissionKeys: readonly string[],
-    admin: { readonly id: string; readonly email: string },
-    ipAddress = "system",
-  ) {
-    await this.assertTeamExists(teamId)
-    const next = await this.permissions.replaceRolePermissions({ teamId, roleId, permissionKeys })
-    await this.auditLog?.record({
-      adminEmail: admin.email,
-      action: "admin.team_role_permissions.update",
-      targetType: "team_access_role",
-      targetId: roleId,
-      detail: { teamId, permissionKeys: next },
-      ipAddress,
-    })
-    return { permissionKeys: next }
-  }
-
-  async listMemberAccessRoles(teamId: string, membershipId: string) {
-    await this.assertTeamExists(teamId)
-    return { roles: await this.permissions.listMemberAccessRoles(teamId, membershipId) }
-  }
-
-  async assignMemberAccessRole(
-    teamId: string,
-    membershipId: string,
-    roleId: string,
-    admin: { readonly id: string; readonly email: string },
-    ipAddress = "system",
-  ) {
-    await this.assertTeamExists(teamId)
-    const roles = await this.permissions.assignAccessRole({
-      teamId,
-      teamMembershipId: membershipId,
-      roleId,
-    })
-    await this.auditLog?.record({
-      adminEmail: admin.email,
-      action: "admin.team_member_access_role.assign",
-      targetType: "team_membership",
-      targetId: membershipId,
-      detail: { teamId, roleId },
-      ipAddress,
-    })
-    return { roles }
-  }
-
-  async replaceMemberAccessRoles(
-    teamId: string,
-    membershipId: string,
-    roleIds: readonly string[],
-    admin: { readonly id: string; readonly email: string },
-    ipAddress = "system",
-  ) {
-    await this.assertTeamExists(teamId)
-    const roles = await this.permissions.replaceMemberAccessRoles({
-      teamId,
-      teamMembershipId: membershipId,
-      roleIds,
-    })
-    await this.auditLog?.record({
-      adminEmail: admin.email,
-      action: "admin.team_member_access_roles.replace",
-      targetType: "team_membership",
-      targetId: membershipId,
-      detail: { teamId, roleIds: roles.map((role) => role.id) },
-      ipAddress,
-    })
-    return { roles }
-  }
-
-  async removeMemberAccessRole(
-    teamId: string,
-    membershipId: string,
-    roleId: string,
-    admin: { readonly id: string; readonly email: string },
-    ipAddress = "system",
-  ) {
-    await this.assertTeamExists(teamId)
-    const roles = await this.permissions.removeAccessRole({
-      teamId,
-      teamMembershipId: membershipId,
-      roleId,
-    })
-    await this.auditLog?.record({
-      adminEmail: admin.email,
-      action: "admin.team_member_access_role.remove",
-      targetType: "team_membership",
-      targetId: membershipId,
-      detail: { teamId, roleId },
-      ipAddress,
-    })
-    return { roles }
-  }
-
-  private async assertTeamExists(teamId: string): Promise<void> {
-    const team = await this.prisma.team.findUnique({
-      where: { id: teamId },
+  private async assertUserExists(userId: string): Promise<void> {
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
       select: { id: true },
     })
-    if (!team) throw new NotFoundException("团队不存在。")
+    if (!user) throw new NotFoundException("用户不存在。")
   }
 
   async listInvitations(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {
