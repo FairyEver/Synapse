@@ -1,4 +1,4 @@
-import { type DragEvent, useCallback, useEffect, useMemo, useState } from "react"
+import { type DragEvent, type ReactNode, useCallback, useEffect, useMemo, useState } from "react"
 import {
   ChevronDown,
   ChevronRight,
@@ -63,6 +63,23 @@ import type {
 
 const logger = createRendererLogger("knowledge-base.source-manager")
 type DirectoryTree = Record<string, SynapseKnowledgeBaseRawEntry[]>
+type TreeRenderer = (items: SynapseKnowledgeBaseRawEntry[]) => ReactNode
+
+type SourceManagerSidebarProps = {
+  currentDirectory: string
+  rootItems: SynapseKnowledgeBaseRawEntry[]
+  renderTreeItems: TreeRenderer
+  onOpenRoot: () => void
+}
+
+type SourceManagerToolbarProps = {
+  breadcrumbs: Array<{ label: string; path: string }>
+  query: string
+  onQueryChange: (query: string) => void
+  onNavigate: (path: string) => void
+  onCreateFolder: () => void
+  onUpload: () => void
+}
 
 function readWindowPayload(): SynapseKnowledgeBaseOpenSourceManagerPayload | null {
   const params = new URLSearchParams(window.location.search)
@@ -116,6 +133,78 @@ function breadcrumbItems(directoryPath: string): Array<{ label: string; path: st
 
 function directoriesOnly(entries: SynapseKnowledgeBaseRawEntry[]): SynapseKnowledgeBaseRawEntry[] {
   return entries.filter((entry) => entry.kind === "directory")
+}
+
+function SourceManagerSidebar({
+  currentDirectory,
+  rootItems,
+  renderTreeItems,
+  onOpenRoot,
+}: SourceManagerSidebarProps) {
+  return (
+    <aside aria-label="文件夹树" className="flex w-64 shrink-0 flex-col border-r border-border bg-muted/30 p-3">
+      <div className="px-2 py-2 text-sm font-semibold">资料</div>
+      <div className="flex flex-col gap-1">
+        <Button
+          type="button"
+          variant={currentDirectory === "" ? "secondary" : "ghost"}
+          className="justify-start"
+          onClick={onOpenRoot}
+          aria-label="打开树文件夹 资料"
+        >
+          <Folder data-icon="inline-start" />
+          资料
+        </Button>
+        {renderTreeItems(rootItems)}
+      </div>
+    </aside>
+  )
+}
+
+function SourceManagerToolbar({
+  breadcrumbs,
+  query,
+  onQueryChange,
+  onNavigate,
+  onCreateFolder,
+  onUpload,
+}: SourceManagerToolbarProps) {
+  return (
+    <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
+      <nav aria-label="当前位置" className="flex min-w-0 items-center gap-1 text-sm">
+        {breadcrumbs.map((item, index) => (
+          <div key={item.path || "root"} className="flex min-w-0 items-center gap-1">
+            {index > 0 ? <ChevronRight className="size-4 shrink-0 text-muted-foreground" /> : null}
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              className="min-w-0"
+              onClick={() => onNavigate(item.path)}
+            >
+              <span className="truncate">{item.label}</span>
+            </Button>
+          </div>
+        ))}
+      </nav>
+      <div className="flex shrink-0 items-center gap-2">
+        <Input
+          className="w-48"
+          value={query}
+          onChange={(event) => onQueryChange(event.target.value)}
+          placeholder="搜索当前文件夹"
+        />
+        <Button type="button" variant="outline" onClick={onCreateFolder} aria-label="新建文件夹">
+          <FolderPlus data-icon="inline-start" />
+          新建文件夹
+        </Button>
+        <Button type="button" onClick={onUpload} aria-label="上传">
+          <Upload data-icon="inline-start" />
+          上传
+        </Button>
+      </div>
+    </header>
+  )
 }
 
 function KnowledgeBaseSourceManagerWindow() {
@@ -468,66 +557,25 @@ function KnowledgeBaseSourceManagerWindow() {
       onDragLeave={() => setIsDragging(false)}
       onDrop={handleDrop}
     >
-      <aside aria-label="文件夹树" className="flex w-64 shrink-0 flex-col border-r border-border bg-muted/30 p-3">
-        <div className="px-2 py-2 text-sm font-semibold">资料</div>
-        <div className="flex flex-col gap-1">
-          <Button
-            type="button"
-            variant={currentDirectory === "" ? "secondary" : "ghost"}
-            className="justify-start"
-            onClick={() => openTreeDirectory("")}
-            aria-label="打开树文件夹 资料"
-          >
-            <Folder data-icon="inline-start" />
-            资料
-          </Button>
-          {renderTreeItems(directoryTree[""] ?? [])}
-        </div>
-      </aside>
+      <SourceManagerSidebar
+        currentDirectory={currentDirectory}
+        rootItems={directoryTree[""] ?? []}
+        renderTreeItems={renderTreeItems}
+        onOpenRoot={() => openTreeDirectory("")}
+      />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border p-4">
-          <nav aria-label="当前位置" className="flex min-w-0 items-center gap-1 text-sm">
-            {breadcrumbs.map((item, index) => (
-              <div key={item.path || "root"} className="flex min-w-0 items-center gap-1">
-                {index > 0 ? <ChevronRight className="size-4 shrink-0 text-muted-foreground" /> : null}
-                <Button
-                  type="button"
-                  variant="ghost"
-                  size="sm"
-                  className="min-w-0"
-                  onClick={() => setCurrentDirectory(item.path)}
-                >
-                  <span className="truncate">{item.label}</span>
-                </Button>
-              </div>
-            ))}
-          </nav>
-          <div className="flex shrink-0 items-center gap-2">
-            <Input
-              className="w-44"
-              value={query}
-              onChange={(event) => setQuery(event.target.value)}
-              placeholder="搜索"
-            />
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => {
-                setNewFolderName("")
-                setCreateFolderOpen(true)
-              }}
-              aria-label="新建文件夹"
-            >
-              <FolderPlus data-icon="inline-start" />
-              新建文件夹
-            </Button>
-            <Button type="button" variant="outline" onClick={chooseFiles} aria-label="上传">
-              <Upload data-icon="inline-start" />
-              上传
-            </Button>
-          </div>
-        </header>
+        <SourceManagerToolbar
+          breadcrumbs={breadcrumbs}
+          query={query}
+          onQueryChange={setQuery}
+          onNavigate={setCurrentDirectory}
+          onCreateFolder={() => {
+            setNewFolderName("")
+            setCreateFolderOpen(true)
+          }}
+          onUpload={chooseFiles}
+        />
 
         <section
           aria-label="拖拽上传资料"
