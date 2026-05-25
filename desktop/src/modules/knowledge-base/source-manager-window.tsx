@@ -39,19 +39,10 @@ import {
 } from "@/components/ui/dropdown-menu"
 import {
   Empty,
-  EmptyDescription,
   EmptyHeader,
   EmptyTitle,
 } from "@/components/ui/empty"
 import { Input } from "@/components/ui/input"
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { createRendererLogger } from "@/app-shell/logging"
 import { getSynapseBridge } from "@/lib/electron-bridge"
@@ -81,6 +72,24 @@ type SourceManagerToolbarProps = {
   onUpload: () => void
 }
 
+type SourceSelectionBarProps = {
+  selectedCount: number
+  onMove: () => void
+  onTrash: () => void
+}
+
+type SourceEntryListProps = {
+  entries: SynapseKnowledgeBaseRawEntry[]
+  isLoading: boolean
+  query: string
+  selectedPaths: Set<string>
+  onToggleSelected: (relativePath: string, checked: boolean) => void
+  onOpenDirectory: (relativePath: string) => void
+  onRename: (entry: SynapseKnowledgeBaseRawEntry) => void
+  onMoveEntry: (entry: SynapseKnowledgeBaseRawEntry) => void
+  onTrashEntry: (entry: SynapseKnowledgeBaseRawEntry) => void
+}
+
 function readWindowPayload(): SynapseKnowledgeBaseOpenSourceManagerPayload | null {
   const params = new URLSearchParams(window.location.search)
   const projectId = params.get("projectId")
@@ -107,6 +116,11 @@ function formatModifiedAt(value: string): string {
     hour: "2-digit",
     minute: "2-digit",
   }).format(date)
+}
+
+function formatEntryMeta(entry: SynapseKnowledgeBaseRawEntry): string {
+  const primary = entry.kind === "directory" ? "文件夹" : formatBytes(entry.size)
+  return `${primary} · ${formatModifiedAt(entry.modifiedAt)}`
 }
 
 function matchesSearch(entry: SynapseKnowledgeBaseRawEntry, keyword: string): boolean {
@@ -204,6 +218,118 @@ function SourceManagerToolbar({
         </Button>
       </div>
     </header>
+  )
+}
+
+function SourceSelectionBar({ selectedCount, onMove, onTrash }: SourceSelectionBarProps) {
+  if (selectedCount === 0) return null
+  return (
+    <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
+      <div className="text-sm text-muted-foreground">已选择 {selectedCount} 项</div>
+      <div className="flex items-center gap-2">
+        <Button type="button" variant="outline" size="sm" onClick={onMove} aria-label="移动所选">
+          <MoveRight data-icon="inline-start" />
+          移动
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={onTrash} aria-label="移到废纸篓">
+          <Trash2 data-icon="inline-start" />
+          删除
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function SourceEntryList({
+  entries,
+  isLoading,
+  query,
+  selectedPaths,
+  onToggleSelected,
+  onOpenDirectory,
+  onRename,
+  onMoveEntry,
+  onTrashEntry,
+}: SourceEntryListProps) {
+  if (entries.length === 0) {
+    return (
+      <Empty className="border-0 py-16">
+        <EmptyHeader>
+          <EmptyTitle>{isLoading ? "读取中" : query ? "没有匹配项" : "没有文件"}</EmptyTitle>
+        </EmptyHeader>
+      </Empty>
+    )
+  }
+
+  return (
+    <div role="list" aria-label="资料列表" className="divide-y divide-border">
+      {entries.map((entry) => {
+        const selected = selectedPaths.has(entry.relativePath)
+        return (
+          <div
+            key={entry.relativePath}
+            role="listitem"
+            className="grid min-h-14 grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-3 px-1 py-2"
+          >
+            <Checkbox
+              aria-label={`选择 ${entry.name}`}
+              checked={selected}
+              onCheckedChange={(checked) => onToggleSelected(entry.relativePath, checked === true)}
+            />
+            <div className="flex min-w-0 items-center gap-3">
+              {entry.kind === "directory" ? (
+                <Folder className="size-4 shrink-0 text-muted-foreground" />
+              ) : (
+                <FileText className="size-4 shrink-0 text-muted-foreground" />
+              )}
+              <div className="min-w-0">
+                {entry.kind === "directory" ? (
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    className="h-auto min-w-0 justify-start px-0 py-0 font-medium"
+                    onClick={() => onOpenDirectory(entry.relativePath)}
+                    aria-label={`打开文件夹 ${entry.name}`}
+                  >
+                    <span className="truncate">{entry.name}</span>
+                  </Button>
+                ) : (
+                  <div className="truncate text-sm font-medium">{entry.name}</div>
+                )}
+                <div className="truncate text-xs text-muted-foreground">{formatEntryMeta(entry)}</div>
+              </div>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button type="button" variant="ghost" size="icon" aria-label={`更多 ${entry.name}`}>
+                  <MoreHorizontal />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                {entry.kind === "directory" ? (
+                  <DropdownMenuItem onSelect={() => onOpenDirectory(entry.relativePath)}>
+                    <Folder />
+                    打开
+                  </DropdownMenuItem>
+                ) : null}
+                <DropdownMenuItem onSelect={() => onRename(entry)}>
+                  <Pencil />
+                  重命名
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onMoveEntry(entry)}>
+                  <MoveRight />
+                  移动
+                </DropdownMenuItem>
+                <DropdownMenuItem variant="destructive" onSelect={() => onTrashEntry(entry)}>
+                  <Trash2 />
+                  删除
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
+        )
+      })}
+    </div>
   )
 }
 
@@ -581,135 +707,31 @@ function KnowledgeBaseSourceManagerWindow() {
           aria-label="拖拽上传资料"
           className={cn("min-h-0 flex-1 overflow-auto", isDragging && "bg-accent")}
         >
-        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-2">
-          <div className="text-sm text-muted-foreground">{selectedList.length > 0 ? `已选择 ${selectedList.length} 项` : "拖拽文件到窗口"}</div>
-          <div className="flex items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={selectedList.length === 0}
-              onClick={() => {
+          <div className="space-y-2 p-4">
+            <SourceSelectionBar
+              selectedCount={selectedList.length}
+              onMove={() => {
                 setMoveTargetPath("")
                 setMoveOpen(true)
               }}
-              aria-label="移动所选"
-            >
-              <MoveRight data-icon="inline-start" />
-              移动
-            </Button>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={selectedList.length === 0}
-              onClick={() => setTrashPaths(selectedList)}
-              aria-label="移到废纸篓"
-            >
-              <Trash2 data-icon="inline-start" />
-              删除
-            </Button>
+              onTrash={() => setTrashPaths(selectedList)}
+            />
+            <SourceEntryList
+              entries={visibleEntries}
+              isLoading={isLoading}
+              query={query}
+              selectedPaths={selectedPaths}
+              onToggleSelected={toggleSelected}
+              onOpenDirectory={setCurrentDirectory}
+              onRename={openRenameDialog}
+              onMoveEntry={(entry) => {
+                setSelectedPaths(new Set([entry.relativePath]))
+                setMoveTargetPath(parentPath(entry.relativePath))
+                setMoveOpen(true)
+              }}
+              onTrashEntry={(entry) => setTrashPaths([entry.relativePath])}
+            />
           </div>
-        </div>
-
-        <Table className="table-fixed">
-          <colgroup>
-            <col className="w-12" />
-            <col />
-            <col className="w-28" />
-            <col className="w-36" />
-            <col className="w-14" />
-          </colgroup>
-          <TableHeader>
-            <TableRow>
-              <TableHead />
-              <TableHead>名称</TableHead>
-              <TableHead className="text-right">大小</TableHead>
-              <TableHead className="text-right">更新时间</TableHead>
-              <TableHead />
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {visibleEntries.map((entry) => (
-              <TableRow key={entry.relativePath}>
-                <TableCell>
-                  <Checkbox
-                    aria-label={`选择 ${entry.name}`}
-                    checked={selectedPaths.has(entry.relativePath)}
-                    onCheckedChange={(checked) => toggleSelected(entry.relativePath, checked === true)}
-                  />
-                </TableCell>
-                <TableCell className="max-w-0 overflow-hidden">
-                  {entry.kind === "directory" ? (
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="h-auto min-w-0 justify-start px-0 font-medium"
-                      onClick={() => setCurrentDirectory(entry.relativePath)}
-                      aria-label={`打开文件夹 ${entry.name}`}
-                    >
-                      <Folder data-icon="inline-start" />
-                      <span className="truncate">{entry.name}</span>
-                    </Button>
-                  ) : (
-                    <div className="flex min-w-0 items-center gap-2 font-medium">
-                      <FileText className="size-4 shrink-0 text-muted-foreground" />
-                      <span className="truncate">{entry.name}</span>
-                    </div>
-                  )}
-                  <div className="truncate text-xs text-muted-foreground">{entry.relativePath}</div>
-                </TableCell>
-                <TableCell className="text-right tabular-nums">{formatBytes(entry.size)}</TableCell>
-                <TableCell className="text-right text-muted-foreground">{formatModifiedAt(entry.modifiedAt)}</TableCell>
-                <TableCell className="text-right">
-                  <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                      <Button type="button" variant="ghost" size="icon" aria-label={`更多 ${entry.name}`}>
-                        <MoreHorizontal />
-                      </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                      {entry.kind === "directory" ? (
-                        <DropdownMenuItem onSelect={() => setCurrentDirectory(entry.relativePath)}>
-                          <Folder />
-                          打开
-                        </DropdownMenuItem>
-                      ) : null}
-                      <DropdownMenuItem onSelect={() => openRenameDialog(entry)}>
-                        <Pencil />
-                        重命名
-                      </DropdownMenuItem>
-                      <DropdownMenuItem onSelect={() => {
-                        setSelectedPaths(new Set([entry.relativePath]))
-                        setMoveTargetPath(parentPath(entry.relativePath))
-                        setMoveOpen(true)
-                      }}>
-                        <MoveRight />
-                        移动
-                      </DropdownMenuItem>
-                      <DropdownMenuItem variant="destructive" onSelect={() => setTrashPaths([entry.relativePath])}>
-                        <Trash2 />
-                        删除
-                      </DropdownMenuItem>
-                    </DropdownMenuContent>
-                  </DropdownMenu>
-                </TableCell>
-              </TableRow>
-            ))}
-            {visibleEntries.length === 0 ? (
-              <TableRow>
-                <TableCell colSpan={5}>
-                  <Empty className="border-0">
-                    <EmptyHeader>
-                      <EmptyTitle>{isLoading ? "读取中" : query ? "没有匹配项" : "暂无资料"}</EmptyTitle>
-                      <EmptyDescription>拖拽文件到窗口</EmptyDescription>
-                    </EmptyHeader>
-                  </Empty>
-                </TableCell>
-              </TableRow>
-            ) : null}
-          </TableBody>
-        </Table>
         </section>
       </div>
 

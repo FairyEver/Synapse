@@ -217,8 +217,8 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
 
     expect(document.body.textContent).toContain("已选择 1 项")
-    expect(buttonByLabel("移动所选")).not.toBeDisabled()
-    expect(buttonByLabel("移到废纸篓")).not.toBeDisabled()
+    expect(buttonByLabel("移动所选").disabled).toBe(false)
+    expect(buttonByLabel("移到废纸篓").disabled).toBe(false)
   })
 
   it("opens folders and updates breadcrumbs", async () => {
