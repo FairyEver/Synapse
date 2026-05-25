@@ -54,6 +54,7 @@ function QuickInputMenu({ quickInputs, disabled, onInsert, onDirectSend }: Quick
       </DropdownMenuTrigger>
       <DropdownMenuContent
         align="start"
+        className="w-96"
         onCloseAutoFocus={(event) => event.preventDefault()}
       >
         {quickInputs.map((item) => (
