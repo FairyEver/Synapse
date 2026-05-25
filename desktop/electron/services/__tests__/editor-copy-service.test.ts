@@ -13,6 +13,22 @@ vi.mock("electron", () => ({
   },
 }))
 
+const logStoreMock = vi.hoisted(() => ({
+  logger: {
+    trace: vi.fn(),
+    debug: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+    error: vi.fn(),
+    fatal: vi.fn(),
+    child: vi.fn(),
+  },
+}))
+
+vi.mock("../log-store", () => ({
+  createMainLogger: () => logStoreMock.logger,
+}))
+
 import { EditorCopyService } from "../editor-copy-service"
 import type { SynapseEditorCopySource } from "../../../src/types/editor-copy"
 import { createDefaultConfig } from "../../../src/lib/config"
@@ -53,6 +69,7 @@ function mockConfiguredProjects(paths: string[]): void {
 describe("EditorCopyService", () => {
   afterEach(async () => {
     vi.restoreAllMocks()
+    logStoreMock.logger.info.mockClear()
     await Promise.all(tempRoots.splice(0).map((root) => rm(root, { recursive: true, force: true })))
   })
 
@@ -141,6 +158,17 @@ describe("EditorCopyService", () => {
     })
 
     await expect(readFile(targetPath, "utf8")).resolves.toContain("Review carefully.")
+    const copyLog = logStoreMock.logger.info.mock.calls.find(([message]) =>
+      message === "Copied scan item to editor target.")
+    expect(copyLog).toEqual([
+      "Copied scan item to editor target.",
+      expect.objectContaining({
+        sourceName: "review-rule.md",
+        targetName: "review-rule.mdc",
+      }),
+    ])
+    expect(JSON.stringify(copyLog)).not.toContain(sourcePath)
+    expect(JSON.stringify(copyLog)).not.toContain(targetPath)
   })
 
   it("records an allowed fs.write audit after copying to an editor target", async () => {

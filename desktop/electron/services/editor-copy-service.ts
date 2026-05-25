@@ -261,9 +261,9 @@ class EditorCopyService {
     logger.info("Copied scan item to editor target.", {
       contentType: payload.source.itemType,
       sourceEditorId: payload.source.editorId,
-      sourcePath: payload.source.itemPath,
+      sourceName: path.basename(payload.source.itemPath),
       targetEditorId: payload.targetEditorId,
-      targetPath: target.targetPath,
+      targetName: path.basename(target.targetPath),
       targetScope: payload.targetScope,
     })
 

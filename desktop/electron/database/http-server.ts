@@ -1,6 +1,6 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http"
 import { randomBytes } from "node:crypto"
-import { readFileSync, writeFileSync, unlinkSync } from "node:fs"
+import { chmodSync, readFileSync, writeFileSync, unlinkSync } from "node:fs"
 import path from "node:path"
 import { app } from "electron"
 import type { SynapseActionRouter } from "../capabilities/action-router"
@@ -193,7 +193,9 @@ function startHttpServer(router: SynapseActionRouter): Promise<number> {
       }
 
       try {
-        writeFileSync(getServerInfoPath(), JSON.stringify(serverInfo, null, 2), { mode: 0o600 })
+        const serverInfoPath = getServerInfoPath()
+        writeFileSync(serverInfoPath, JSON.stringify(serverInfo, null, 2), { mode: 0o600 })
+        chmodSync(serverInfoPath, 0o600)
       } catch (error) {
         logger.error("Failed to write server info file.", { error })
         s.close()
