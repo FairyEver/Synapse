@@ -8,6 +8,7 @@ import { AdminModule } from "./admin/admin.module"
 import { AdminAuthModule } from "./admin-auth/admin-auth.module"
 import { UserAuthModule } from "./auth/user-auth.module"
 import { BackupModule } from "./backup/backup.module"
+import { DashboardModule } from "./dashboard/dashboard.module"
 import { HealthModule } from "./health/health.module"
 import { InvitationsModule } from "./invitations/invitations.module"
 import { PermissionsModule } from "./permissions/permissions.module"
@@ -50,6 +51,7 @@ import { AuditLogInterceptor } from "./common/audit-log.interceptor"
     UserAuthModule,
     TeamsModule,
     AdminAuthModule,
+    DashboardModule,
     AdminModule,
     BackupModule,
     HealthModule,

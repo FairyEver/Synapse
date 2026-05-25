@@ -7,19 +7,19 @@ const throttleLimitMetadata = "THROTTLER:LIMITdefault"
 const throttleTtlMetadata = "THROTTLER:TTLdefault"
 
 describe("AdminAuthController", () => {
-  it("applies stricter throttling to admin login and logout", () => {
+  it("applies stricter throttling to dashboard login and logout", () => {
     expect(Reflect.getMetadata(throttleLimitMetadata, AdminAuthController.prototype.login)).toBe(5)
     expect(Reflect.getMetadata(throttleTtlMetadata, AdminAuthController.prototype.login)).toBe(60000)
     expect(Reflect.getMetadata(throttleLimitMetadata, AdminAuthController.prototype.logout)).toBe(5)
     expect(Reflect.getMetadata(throttleTtlMetadata, AdminAuthController.prototype.logout)).toBe(60000)
   })
 
-  it("sets administrator session cookies with shared options", async () => {
+  it("sets dashboard session cookies with shared options", async () => {
     const auth = {
       login: vi.fn().mockResolvedValue({
-        email: "admin@example.com",
-        role: "admin",
-        token: "admin-token",
+        email: "user@example.com",
+        role: "user",
+        token: "dashboard-token",
       }),
     }
     const controller = new AdminAuthController(auth as never)
@@ -27,14 +27,14 @@ describe("AdminAuthController", () => {
     const request = { ip: "203.0.113.11" } as unknown as AdminRequest
 
     await expect(controller.login({
-      email: "admin@example.com",
+      email: "user@example.com",
       password: "secret",
     }, request, response as never)).resolves.toEqual({
-      email: "admin@example.com",
-      role: "admin",
+      email: "user@example.com",
+      role: "user",
     })
 
-    expect(response.cookie).toHaveBeenCalledWith("synapse_admin", "admin-token", {
+    expect(response.cookie).toHaveBeenCalledWith("synapse_admin", "dashboard-token", {
       httpOnly: true,
       sameSite: "lax",
       secure: process.env.NODE_ENV === "production",
