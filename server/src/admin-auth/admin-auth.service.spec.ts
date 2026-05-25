@@ -53,6 +53,30 @@ describe("AdminAuthService", () => {
       .toThrow("邮箱或密码错误。")
   })
 
+  it("rejects active administrator email fallback to same-email user credentials", async () => {
+    const auditLog = { record: vi.fn() }
+    const { service, prisma } = await createTestService(auditLog)
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: "user-1",
+      email: "admin@d2.com",
+      passwordHash: await hashPassword("user-password"),
+      status: "active",
+    })
+
+    await expect(service.login("admin@d2.com", "user-password", "203.0.113.13"))
+      .rejects
+      .toThrow("邮箱或密码错误。")
+
+    expect(prisma.user.findUnique).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@d2.com",
+      action: "admin.login.failure",
+      targetType: "admin",
+      targetId: "admin-1",
+      ipAddress: "203.0.113.13",
+    })
+  })
+
   it("does not attribute unknown email login failures to the first admin", async () => {
     const auditLog = { record: vi.fn() }
     const { service } = await createTestService(auditLog)

@@ -7,6 +7,7 @@ import { BackupPage } from '@/pages/backup-page';
 import { LoginPage } from '@/pages/login-page';
 import { LogsPage } from '@/pages/logs-page';
 import { MePage } from '@/pages/me-page';
+import { SettingsPage } from '@/pages/settings-page';
 import { SignupPage } from '@/pages/signup-page';
 import { SystemPage } from '@/pages/system-page';
 import { TeamInvitePage } from '@/pages/team-invite-page';
@@ -53,7 +54,7 @@ export default function App() {
         <Route element={<ProtectedRoute roles={['user']} />}>
           <Route element={<DashboardLayout />}>
             <Route path="me" element={<MePage />} />
-            <Route path="settings" element={<SystemPage />} />
+            <Route path="settings" element={<SettingsPage />} />
           </Route>
         </Route>
         <Route path="*" element={<Navigate to="/login" replace />} />

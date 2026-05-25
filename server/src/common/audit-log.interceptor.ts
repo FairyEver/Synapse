@@ -13,11 +13,6 @@ import { AuditLogService } from "./audit-log.service"
 const SENSITIVE_BODY_KEY_PATTERN = /password|token|secret|credential/i
 const REDACTED_VALUE = "[REDACTED]"
 const USER_STATUS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/status$/
-const TEAM_ENTITLEMENTS_PATH_PATTERN = /^\/api\/admin\/teams\/[^/]+\/entitlements$/
-const TEAM_PERMISSIONS_PATH_PATTERN = /^\/api\/admin\/teams\/[^/]+\/permissions$/
-const TEAM_ROLE_PERMISSIONS_PATH_PATTERN = /^\/api\/admin\/teams\/[^/]+\/access-roles\/[^/]+\/permissions$/
-const TEAM_MEMBER_ACCESS_ROLES_PATH_PATTERN = /^\/api\/admin\/teams\/[^/]+\/members\/[^/]+\/access-roles$/
-const TEAM_MEMBER_ACCESS_ROLE_PATH_PATTERN = /^\/api\/admin\/teams\/[^/]+\/members\/[^/]+\/access-roles\/[^/]+$/
 
 interface AuditPolicy {
   readonly success: boolean
@@ -140,9 +135,6 @@ function resolveKnownAdminAuditTarget(
   params: Record<string, string>,
   responseBody: unknown,
 ): { action: string; targetType: string; targetId: string } | null {
-  if (method === "POST" && path === "/api/admin/invitations") {
-    return { action: "admin.invitation.create", targetType: "invitation", targetId: readId(responseBody) }
-  }
   if (method === "DELETE" && path === "/api/admin/invitations") {
     return { action: "admin.invitation.delete_many", targetType: "invitation", targetId: readId(responseBody) }
   }
@@ -151,24 +143,6 @@ function resolveKnownAdminAuditTarget(
   }
   if (method === "PATCH" && USER_STATUS_PATH_PATTERN.test(path)) {
     return { action: "admin.user.status_update", targetType: "user", targetId: params.id ?? readId(responseBody) }
-  }
-  if (method === "PUT" && TEAM_ENTITLEMENTS_PATH_PATTERN.test(path)) {
-    return { action: "admin.team_entitlements.update", targetType: "team", targetId: params.teamId ?? readId(responseBody) }
-  }
-  if (method === "PUT" && TEAM_PERMISSIONS_PATH_PATTERN.test(path)) {
-    return { action: "admin.team_permissions.update", targetType: "team", targetId: params.teamId ?? readId(responseBody) }
-  }
-  if (method === "PUT" && TEAM_ROLE_PERMISSIONS_PATH_PATTERN.test(path)) {
-    return { action: "admin.team_role_permissions.update", targetType: "team_access_role", targetId: params.roleId ?? readId(responseBody) }
-  }
-  if (method === "POST" && TEAM_MEMBER_ACCESS_ROLES_PATH_PATTERN.test(path)) {
-    return { action: "admin.team_member_access_role.assign", targetType: "team_membership", targetId: params.membershipId ?? readId(responseBody) }
-  }
-  if (method === "PUT" && TEAM_MEMBER_ACCESS_ROLES_PATH_PATTERN.test(path)) {
-    return { action: "admin.team_member_access_roles.replace", targetType: "team_membership", targetId: params.membershipId ?? readId(responseBody) }
-  }
-  if (method === "DELETE" && TEAM_MEMBER_ACCESS_ROLE_PATH_PATTERN.test(path)) {
-    return { action: "admin.team_member_access_role.remove", targetType: "team_membership", targetId: params.membershipId ?? readId(responseBody) }
   }
   if (method === "GET" && path === "/api/admin/audit-logs/export") {
     return { action: "admin.audit_logs.export", targetType: "audit_log", targetId: "export" }

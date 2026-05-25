@@ -52,10 +52,13 @@ export class AdminAuthService {
       })
       return { email: matchedAdmin.email, token, role: "admin" }
     }
-    if (matchedAdmin && matchedAdmin.status !== "active" && passwordMatches) {
+    if (matchedAdmin) {
+      const adminLoginFailureAction = matchedAdmin.status === "active"
+        ? "admin.login.failure"
+        : "dashboard.login.disabled"
       await this.auditLog?.record({
         adminEmail: matchedAdmin.email,
-        action: "dashboard.login.disabled",
+        action: adminLoginFailureAction,
         targetType: "admin",
         targetId: matchedAdmin.id,
         ipAddress,
@@ -91,7 +94,7 @@ export class AdminAuthService {
       adminEmail: normalizedEmail,
       action: "dashboard.login.failure",
       targetType: "account",
-      targetId: matchedAdmin?.id ?? user?.id ?? "unknown",
+      targetId: user?.id ?? "unknown",
       ipAddress,
     })
     throw new UnauthorizedException("邮箱或密码错误。")

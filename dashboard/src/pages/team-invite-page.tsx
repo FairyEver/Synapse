@@ -1,5 +1,5 @@
 import { type FormEvent, useState } from 'react';
-import { Link, useSearchParams } from 'react-router';
+import { Link, Navigate, useSearchParams } from 'react-router';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -12,9 +12,11 @@ import {
 } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { useAuth } from '@/hooks/use-auth';
 import { userApi } from '@/lib/api';
 
 export function TeamInvitePage() {
+  const { isAuthenticated, isLoading, session } = useAuth();
   const [searchParams] = useSearchParams();
   const [token, setToken] = useState(searchParams.get('token') ?? '');
   const [feedback, setFeedback] = useState('');
@@ -35,6 +37,18 @@ export function TeamInvitePage() {
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  if (isLoading) {
+    return (
+      <main className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">
+        加载中
+      </main>
+    );
+  }
+
+  if (!isAuthenticated || !session) {
+    return <Navigate to="/login" replace />;
   }
 
   return (
