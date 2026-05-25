@@ -280,6 +280,18 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     const dropTarget = document.querySelector<HTMLElement>('[aria-label="拖拽上传资料"]')
     if (!dropTarget) throw new Error("Drop target not found.")
 
+    expect(dropTarget.textContent).not.toContain("拖拽文件到这里上传")
+    expect(dropTarget.textContent).not.toContain("拖拽文件到窗口")
+
+    const dragOverEvent = new Event("dragover", { bubbles: true, cancelable: true })
+
+    await act(async () => {
+      dropTarget.dispatchEvent(dragOverEvent)
+      await Promise.resolve()
+    })
+
+    expect(dropTarget.textContent).toContain("松开上传")
+
     const event = new Event("drop", { bubbles: true, cancelable: true })
     Object.defineProperty(event, "dataTransfer", {
       value: {

@@ -705,7 +705,7 @@ function KnowledgeBaseSourceManagerWindow() {
 
         <section
           aria-label="拖拽上传资料"
-          className={cn("min-h-0 flex-1 overflow-auto", isDragging && "bg-accent")}
+          className={cn("relative min-h-0 flex-1 overflow-auto", isDragging && "bg-accent/50")}
         >
           <div className="space-y-2 p-4">
             <SourceSelectionBar
@@ -732,6 +732,11 @@ function KnowledgeBaseSourceManagerWindow() {
               onTrashEntry={(entry) => setTrashPaths([entry.relativePath])}
             />
           </div>
+          {isDragging ? (
+            <div className="pointer-events-none absolute inset-4 flex items-center justify-center rounded-lg border border-dashed border-border bg-background/80 text-sm text-muted-foreground">
+              松开上传
+            </div>
+          ) : null}
         </section>
       </div>
 
