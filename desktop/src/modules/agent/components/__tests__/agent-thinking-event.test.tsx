@@ -102,6 +102,24 @@ describe("AgentThinkingEvent", () => {
     expect(html).toContain("visible thinking")
   })
 
+  it("constrains the thinking viewport so long content scrolls internally", () => {
+    const html = renderToStaticMarkup(<AgentThinkingEvent
+      item={{
+        id: "thinking-scroll",
+        kind: "thinking",
+        timestamp: "2026-05-13T00:00:00.000Z",
+        content: `${"long thinking line\n".repeat(80)}`,
+      }}
+      profile={{ ...profile, thinkingDefaultCollapsed: false }}
+    />)
+    const container = document.createElement("div")
+    container.innerHTML = html
+
+    const viewport = container.querySelector('[data-slot="scroll-area-viewport"]')
+
+    expect(viewport?.className).toContain("max-h-60")
+  })
+
   it("logs thinking copy failures without recording thinking content", async () => {
     vi.mocked(window.navigator.clipboard.writeText).mockRejectedValue(
       new DOMException("Permission denied for secret thinking", "NotAllowedError"),

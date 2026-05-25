@@ -1,9 +1,16 @@
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
+import { app } from "electron"
 import { USAGE_ANALYSIS_CHANNELS } from "./channels"
 import { handleValidatedIpc } from "../ipc/validated-ipc"
-import { getUsageAnalysisDb, CcUsageAnalysisService, CodexUsageAnalysisService } from "../services/usage-analysis"
+import {
+  getUsageAnalysisDb,
+  getUsageAnalysisDbPath,
+  CcUsageAnalysisService,
+  CodexUsageAnalysisService,
+  refreshUsageInWorker,
+} from "../services/usage-analysis"
 import type { UsageDetailInput, UsageRangeInput } from "../services/usage-analysis"
 
 let registered = false
@@ -115,23 +122,28 @@ function pathForPlatform(platform: NodeJS.Platform): typeof path.posix {
 
 export function registerUsageAnalysisHandlers(): void {
   if (registered) return
-  const db = getUsageAnalysisDb()
+  const userDataPath = app.getPath("userData")
+  const db = getUsageAnalysisDb(userDataPath)
+  const dbPath = getUsageAnalysisDbPath(userDataPath)
   const home = os.homedir()
+  const ccRoots = resolveClaudeUsageRoots({ home })
   const cc = new CcUsageAnalysisService({
     db,
-    roots: resolveClaudeUsageRoots({ home }),
+    roots: ccRoots,
   })
   const codexHome = process.env.CODEX_HOME || path.join(home, ".codex")
+  const codexRoots = [path.join(codexHome, "sessions"), path.join(codexHome, "archived_sessions")]
   const codex = new CodexUsageAnalysisService({
     db,
-    roots: [path.join(codexHome, "sessions"), path.join(codexHome, "archived_sessions")],
+    roots: codexRoots,
   })
 
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRefresh, async () => {
-    return new CcUsageAnalysisService({
-      db,
-      roots: resolveClaudeUsageRoots({ home }),
-    }).refresh()
+    return refreshUsageInWorker({
+      dbPath,
+      prefix: "cc",
+      roots: ccRoots,
+    })
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccOverview, async (_event, range?: UsageRangeInput) => cc.getOverview(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccTime, async (_event, range?: UsageRangeInput) => cc.getTime(normalizeUsageRangeForIpc(range)))
@@ -140,7 +152,11 @@ export function registerUsageAnalysisHandlers(): void {
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccTools, async (_event, range?: UsageRangeInput) => cc.getTools(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccDetails, async (_event, range?: UsageDetailInput) => cc.getDetails(normalizeDetailsRange(range)))
 
-  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexRefresh, async () => codex.refresh())
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexRefresh, async () => refreshUsageInWorker({
+    dbPath,
+    prefix: "cx",
+    roots: codexRoots,
+  }))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexOverview, async (_event, range?: UsageRangeInput) => codex.getOverview(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexTime, async (_event, range?: UsageRangeInput) => codex.getTime(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexModels, async (_event, range?: UsageRangeInput) => codex.getModels(normalizeUsageRangeForIpc(range)))

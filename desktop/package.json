@@ -138,7 +138,8 @@
     ],
     "asarUnpack": [
       "node_modules/@anthropic-ai/claude-agent-sdk-*/claude",
-      "node_modules/@anthropic-ai/claude-agent-sdk-*/claude.exe"
+      "node_modules/@anthropic-ai/claude-agent-sdk-*/claude.exe",
+      "dist-electron/electron/services/usage-analysis/refresh-worker.js"
     ],
     "extraMetadata": {
       "main": "dist-electron/electron/main.js"
