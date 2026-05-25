@@ -4,6 +4,8 @@ import { WebSocketServer, type WebSocket } from "ws"
 
 import type { ResolvedNetworkBinding, NetworkServiceLifecycle } from "./registry"
 
+const SERVER_CLOSE_TIMEOUT_MS = 3000
+
 export interface LocalHttpRequest {
   readonly method: string
   readonly url: string
@@ -178,10 +180,12 @@ function hasHeader(headers: Record<string, string | number | readonly string[]>,
 async function closeWebSocketServer(server: WebSocketServer | undefined): Promise<void> {
   if (!server) return
   for (const client of server.clients) {
-    client.close()
+    client.terminate()
   }
   await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(resolve, SERVER_CLOSE_TIMEOUT_MS)
     server.close((error) => {
+      clearTimeout(timeout)
       if (error) reject(error)
       else resolve()
     })
@@ -190,7 +194,12 @@ async function closeWebSocketServer(server: WebSocketServer | undefined): Promis
 
 async function closeServer(server: Server): Promise<void> {
   await new Promise<void>((resolve, reject) => {
+    const timeout = setTimeout(() => {
+      server.closeAllConnections()
+      resolve()
+    }, SERVER_CLOSE_TIMEOUT_MS)
     server.close((error) => {
+      clearTimeout(timeout)
       if (error) reject(error)
       else resolve()
     })

@@ -116,7 +116,13 @@ export class AutomationIngressService {
         })
       },
       onPortAssigned: (port) => {
-        void this.updateAssignedPort(port)
+        void this.updateAssignedPort(port).catch((error: unknown) => {
+          const message = error instanceof Error ? error.message : String(error)
+          this.deps.logger?.warn("Webhook assigned port persistence failed.", {
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorLength: message.length,
+          })
+        })
       },
       start: (binding) => createLocalNetworkHostLifecycle(binding, {
         maxBodyBytes: config.maxBodyBytes,
@@ -670,7 +676,7 @@ function statusFromConfig(
     assignedPort: binding?.port ?? config.assignedPort,
     maxBodyBytes: config.maxBodyBytes,
     rateLimitPerMinute: config.rateLimitPerMinute,
-    serviceRestartRequired: config.serviceRestartRequired,
+    serviceRestartRequired: binding ? false : config.serviceRestartRequired,
     lastError: config.lastError,
   }
 }

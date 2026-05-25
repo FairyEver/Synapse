@@ -59,6 +59,29 @@ describe("sendOutboundHttpRequest", () => {
     )
   })
 
+  it("redacts sensitive response headers before returning them", async () => {
+    const fetchImpl = vi.fn(async () => new Response("ok", {
+      status: 200,
+      headers: {
+        "content-type": "application/json",
+        "set-cookie": "sid=secret",
+        "x-api-key": "key-secret",
+      },
+    }))
+
+    const response = await sendOutboundHttpRequest({
+      method: "GET",
+      url: "https://example.com/api",
+      fetchImpl,
+    })
+
+    expect(response.headers).toEqual({
+      "content-type": "application/json",
+      "set-cookie": "[redacted]",
+      "x-api-key": "[redacted]",
+    })
+  })
+
   it("logs network errors and rethrows them", async () => {
     const logger = { info: vi.fn(), warn: vi.fn(), error: vi.fn() }
     const failure = new Error("offline")

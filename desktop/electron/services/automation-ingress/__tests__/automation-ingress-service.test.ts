@@ -132,6 +132,53 @@ describe("AutomationIngressService", () => {
     ])
   })
 
+  it("does not keep restart-required status when assigned port persistence fails after binding", async () => {
+    const configs = new FailingAssignedPortNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const logger = structuredLogger()
+    await configs.seed({
+      id: "webhook:default",
+      schemaVersion: 1,
+      enabled: true,
+      bindAddress: "127.0.0.1",
+      path: "/hook",
+      token: "token",
+      maxBodyBytes: 256 * 1024,
+      rateLimitPerMinute: 60,
+      serviceRestartRequired: true,
+      createdAt: "2026-05-25T00:00:00.000Z",
+      updatedAt: "2026-05-25T00:00:00.000Z",
+    })
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "not used" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      logger,
+    })
+
+    await service.start()
+    await waitFor(() => logger.warn.mock.calls.length > 0)
+    const status = await service.getStatus()
+
+    expect(status.enabled).toBe(true)
+    expect(status.assignedPort).toEqual(expect.any(Number))
+    expect(status.serviceRestartRequired).toBe(false)
+    expect(logger.warn).toHaveBeenCalledWith(
+      "Webhook assigned port persistence failed.",
+      expect.objectContaining({
+        errorName: "Error",
+        errorLength: "persist failed at /Users/test token=sk-secret".length,
+      }),
+    )
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("/Users/test")
+
+    await service.stop()
+  })
+
   it("audits allowed webhook listener updates and token resets without exposing tokens", async () => {
     const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
     const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
@@ -877,6 +924,19 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
 
   onChange(_listener: DataChangeListener<T>): () => void {
     return () => {}
+  }
+}
+
+class FailingAssignedPortNamespace<T extends WebhookConfigEntryV1> extends MemoryNamespace<T> {
+  async seed(item: T): Promise<void> {
+    await super.upsert(item)
+  }
+
+  override async upsert(item: T): Promise<void> {
+    if (typeof item.assignedPort === "number") {
+      throw new Error("persist failed at /Users/test token=sk-secret")
+    }
+    await super.upsert(item)
   }
 }
 

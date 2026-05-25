@@ -56,7 +56,7 @@ export async function sendOutboundHttpRequest(
     return {
       status: response.status,
       statusText: response.statusText,
-      headers: Object.fromEntries(response.headers.entries()),
+      headers: sanitizeHeaders(Object.fromEntries(response.headers.entries())) ?? {},
       body,
     }
   } catch (error) {
