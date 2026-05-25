@@ -55,21 +55,15 @@ export class UserAuthService {
 
   async register(input: { email: string; password: string }, ipAddress = "system"): Promise<UserTokenPair> {
     const email = input.email.trim().toLowerCase()
-    const existingAdmin = await this.prisma.adminUser.findUnique({
-      where: { email },
-      select: { id: true },
-    })
-    if (existingAdmin) {
-      await this.recordUserRegistrationFailure({
-        adminEmail: email,
-        reason: "duplicate_email",
-        ipAddress,
-      })
-      throw new BadRequestException("邮箱已注册。")
-    }
-
     try {
       const result = await this.prisma.$transaction(async (tx) => {
+        await this.lockAdminEmailsForRegistration(tx)
+        const existingAdmin = await tx.adminUser.findUnique({
+          where: { email },
+          select: { id: true },
+        })
+        if (existingAdmin) return { registered: false as const }
+
         const user = await tx.user.create({
           data: {
             email,
@@ -77,8 +71,16 @@ export class UserAuthService {
           },
         })
         const tokens = await this.issueTokenPair(user, tx)
-        return { tokens, user }
+        return { registered: true as const, tokens, user }
       })
+      if (!result.registered) {
+        await this.recordUserRegistrationFailure({
+          adminEmail: email,
+          reason: "duplicate_email",
+          ipAddress,
+        })
+        throw new BadRequestException("邮箱已注册。")
+      }
       await this.auditLog?.record({
         adminEmail: result.user.email,
         action: "user.register.success",
@@ -292,6 +294,10 @@ export class UserAuthService {
       { sub: user.id, email: user.email } satisfies UserJwtPayload,
       { expiresIn: `${this.options.accessMinutes}m` },
     )
+  }
+
+  private async lockAdminEmailsForRegistration(tx: Prisma.TransactionClient): Promise<void> {
+    await tx.$executeRaw`LOCK TABLE "AdminUser" IN SHARE MODE`
   }
 
   private async recordUserAudit(input: {

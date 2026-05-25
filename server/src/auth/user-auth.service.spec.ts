@@ -8,12 +8,16 @@ import { UserAuthService, type UserMeResponse } from "./user-auth.service"
 
 function createPrismaMock() {
   const tx = {
+    adminUser: {
+      findUnique: vi.fn().mockResolvedValue(null),
+    },
     user: {
       create: vi.fn().mockResolvedValue({ id: "user-1", email: "u@example.com", status: "active" }),
     },
     userSession: {
       create: vi.fn().mockResolvedValue({ id: "session-1" }),
     },
+    $executeRaw: vi.fn(),
   }
   return {
     $transaction: vi.fn((callback) => callback(tx)),
@@ -168,7 +172,8 @@ describe("UserAuthService", () => {
       password: "StrongPassword123!",
     }, "203.0.113.25")
 
-    expect(prisma.adminUser.findUnique).toHaveBeenCalledWith({
+    expect(prisma.__tx.$executeRaw).toHaveBeenCalledTimes(1)
+    expect(prisma.__tx.adminUser.findUnique).toHaveBeenCalledWith({
       where: { email: "u@example.com" },
       select: { id: true },
     })
@@ -196,7 +201,7 @@ describe("UserAuthService", () => {
 
   it("rejects admin emails during registration and records duplicate email audits", async () => {
     const prisma = createPrismaMock()
-    prisma.adminUser.findUnique.mockResolvedValue({ id: "admin-1" })
+    prisma.__tx.adminUser.findUnique.mockResolvedValue({ id: "admin-1" })
     const auditLog = { record: vi.fn() }
     const service = createService(prisma, auditLog)
 
@@ -215,7 +220,8 @@ describe("UserAuthService", () => {
       detail: { reason: "duplicate_email" },
       ipAddress: "203.0.113.26",
     })
-    expect(prisma.$transaction).not.toHaveBeenCalled()
+    expect(prisma.__tx.user.create).not.toHaveBeenCalled()
+    expect(prisma.__tx.userSession.create).not.toHaveBeenCalled()
   })
 
   it("records duplicate registration attempts", async () => {
