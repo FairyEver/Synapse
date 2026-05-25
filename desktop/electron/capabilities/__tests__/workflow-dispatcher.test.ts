@@ -62,6 +62,114 @@ describe("createWorkflowDispatcher", () => {
     expect(result.data).toEqual({ id: "wf-new", versionHash: "v_new" })
   })
 
+  it("checks permission and audits allowed workflow mutations", async () => {
+    const auditSink = {
+      record: vi.fn(),
+      list: () => [],
+      clearForTests: vi.fn(),
+    }
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const deps = makeDeps({ permissionGuard, auditSink })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const result = await dispatcher.dispatch("workflow.definition.create", {}, { source: "mcp-http" })
+
+    expect(result.ok).toBe(true)
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "workflow.mutate",
+      actor: { kind: "user", id: "workflow-dispatch:mcp-http" },
+      resource: "workflow:workflow.definition.create",
+      context: {
+        source: "mcp-http",
+        workflowAction: "workflow.definition.create",
+      },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "workflow.mutate",
+      actor: { kind: "user", id: "workflow-dispatch:mcp-http" },
+      resource: "workflow:workflow.definition.create",
+      outcome: "allowed",
+      metadata: expect.objectContaining({
+        source: "mcp-http",
+        workflowAction: "workflow.definition.create",
+      }),
+    }))
+  })
+
+  it("denies workflow mutations before calling the workflow service", async () => {
+    const auditSink = {
+      record: vi.fn(),
+      list: () => [],
+      clearForTests: vi.fn(),
+    }
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: false as const, reason: "workflow denied", policyId: "deny-workflow" })),
+    }
+    const deps = makeDeps({ permissionGuard, auditSink })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    await expect(dispatcher.dispatch("workflow.definition.delete", { workflowId: "wf-1" }, { source: "mcp-http" }))
+      .rejects
+      .toThrow("workflow denied")
+
+    expect(deps.workflowService.delete).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "workflow.mutate",
+      resource: "workflow:wf-1",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        source: "mcp-http",
+        workflowAction: "workflow.definition.delete",
+        workflowId: "wf-1",
+        policyId: "deny-workflow",
+      }),
+    }))
+  })
+
+  it("records failed audit when an authorized workflow mutation throws", async () => {
+    const auditSink = {
+      record: vi.fn(),
+      list: () => [],
+      clearForTests: vi.fn(),
+    }
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const deps = makeDeps({
+      permissionGuard,
+      auditSink,
+      workflowService: {
+        ...makeDeps().workflowService,
+        create: vi.fn(async () => {
+          throw new Error("create failed with secret prompt")
+        }),
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    await expect(dispatcher.dispatch("workflow.definition.create", {}, { source: "mcp-http" }))
+      .rejects
+      .toThrow("create failed with secret prompt")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "workflow.mutate",
+      resource: "workflow:workflow.definition.create",
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        source: "mcp-http",
+        workflowAction: "workflow.definition.create",
+        errorName: "Error",
+        errorLength: "Error: create failed with secret prompt".length,
+      }),
+    }))
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("secret prompt")
+  })
+
   it("workflow.definition.create accepts workflow default project, provider, model tier, and timeout", async () => {
     const created = {
       id: "wf-new", name: "新工作流", description: "", version: "v_new",

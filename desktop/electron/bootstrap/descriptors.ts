@@ -440,6 +440,8 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
       },
       getRunStatus: async (runId: string) => runStatuses.get(runId) ?? null,
       listProviders: () => providerService.listProviders(),
+      permissionGuard,
+      auditSink,
     })
     const contentDispatcher = createContentCapabilityDispatcher({
       contentReader: contentService,

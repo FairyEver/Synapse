@@ -9,6 +9,7 @@ import { validateWorkflow } from "../services/workflow/workflow-validator"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import { createMainLogger } from "../services/log-store"
 import { layoutWorkflowNodes } from "../../src/lib/workflow-auto-layout"
+import type { AuditSink, PermissionGuard } from "../runtime/security"
 
 const logger = createMainLogger("capability.workflow-dispatcher")
 const workflowMutationChains = new WeakMap<WorkflowDispatchDeps, Map<string, Promise<void>>>()
@@ -23,6 +24,8 @@ export type WorkflowDispatchDeps = {
   cancelRunsForWorkflow: (workflowId: string) => Promise<void>
   getRunStatus: (runId: string) => Promise<WorkflowRunStatus | null>
   listProviders?: () => Promise<readonly { id: string; name: string; model?: string; haikuModel?: string; sonnetModel?: string; opusModel?: string }[]>
+  permissionGuard?: PermissionGuard
+  auditSink?: AuditSink
 }
 
 function requireString(params: Record<string, unknown>, key: string): string {
@@ -378,6 +381,21 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   },
 }
 
+const MUTATING_WORKFLOW_ACTIONS = new Set([
+  "workflow.definition.create",
+  "workflow.definition.update",
+  "workflow.definition.delete",
+  "workflow.run.execute",
+  "workflow.run.disable",
+  "workflow.node.create",
+  "workflow.node.update",
+  "workflow.node.delete",
+  "workflow.edge.create",
+  "workflow.edge.delete",
+  "workflow.param.update",
+  "workflow.layout.update",
+])
+
 function dispatchCorrelation(params: Record<string, unknown>): Record<string, unknown> {
   const correlation: Record<string, unknown> = {}
   if (typeof params.workflowId === "string") correlation.workflowId = params.workflowId
@@ -410,15 +428,39 @@ function dispatchErrorDiagnostic(error: unknown): {
 
 export function createWorkflowDispatcher(deps: WorkflowDispatchDeps) {
   return {
-    async dispatch(action: string, params: Record<string, unknown>, _context: DispatchContext): Promise<DispatchResult> {
+    async dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult> {
       const handler = ACTION_HANDLERS[action]
       if (!handler) throw new Error(`Unknown workflow action: ${action}`)
       logger.info("workflow mcp dispatch", { action, ...dispatchCorrelation(params) })
+      const security = workflowMutationSecurity(action, params, context)
+      if (security) await authorizeWorkflowMutation(deps, security)
       try {
         const result = await handler(params, deps)
+        if (security) {
+          deps.auditSink?.record({
+            action: "workflow.mutate",
+            actor: security.actor,
+            resource: security.resource,
+            outcome: "allowed",
+            metadata: security.metadata,
+          })
+        }
         logger.info("workflow mcp dispatch succeeded", { action, ...dispatchCorrelation(params) })
         return result
       } catch (error) {
+        if (security) {
+          deps.auditSink?.record({
+            action: "workflow.mutate",
+            actor: security.actor,
+            resource: security.resource,
+            outcome: "failed",
+            metadata: {
+              ...security.metadata,
+              errorName: error instanceof Error ? error.name : typeof error,
+              errorLength: String(error).length,
+            },
+          })
+        }
         logger.warn("workflow mcp dispatch failed", {
           action,
           ...dispatchCorrelation(params),
@@ -427,5 +469,63 @@ export function createWorkflowDispatcher(deps: WorkflowDispatchDeps) {
         throw error
       }
     },
+  }
+}
+
+function workflowMutationSecurity(
+  action: string,
+  params: Record<string, unknown>,
+  context: DispatchContext,
+): {
+  readonly actor: { kind: "user"; id: string }
+  readonly resource: string
+  readonly metadata: Record<string, unknown>
+} | null {
+  if (!MUTATING_WORKFLOW_ACTIONS.has(action)) return null
+  const source = context.source ?? "api"
+  const correlation = dispatchCorrelation(params)
+  const targetId = typeof correlation.workflowId === "string"
+    ? correlation.workflowId
+    : typeof correlation.runId === "string"
+      ? correlation.runId
+      : action
+  return {
+    actor: { kind: "user", id: `workflow-dispatch:${source}` },
+    resource: `workflow:${targetId}`,
+    metadata: {
+      source,
+      workflowAction: action,
+      ...correlation,
+    },
+  }
+}
+
+async function authorizeWorkflowMutation(
+  deps: WorkflowDispatchDeps,
+  security: {
+    readonly actor: { kind: "user"; id: string }
+    readonly resource: string
+    readonly metadata: Record<string, unknown>
+  },
+): Promise<void> {
+  const permission = await deps.permissionGuard?.check({
+    action: "workflow.mutate",
+    actor: security.actor,
+    resource: security.resource,
+    context: security.metadata,
+  })
+  if (permission && !permission.allowed) {
+    deps.auditSink?.record({
+      action: "workflow.mutate",
+      actor: security.actor,
+      resource: security.resource,
+      outcome: "denied",
+      metadata: {
+        ...security.metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    throw new Error(permission.reason)
   }
 }

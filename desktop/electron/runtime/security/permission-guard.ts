@@ -21,6 +21,7 @@ export type PermissionAction =
   | "agent.spawn"
   | "secret.read"
   | "secret.write"
+  | "workflow.mutate"
 
 export type ActorIdentity =
   | { kind: "user"; id?: string; display?: string }
