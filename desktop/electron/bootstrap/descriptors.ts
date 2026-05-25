@@ -38,6 +38,8 @@ import { logStore, createMainLogger } from "../services/log-store"
 import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
 import { KnowledgeBaseService } from "../services/knowledge-base"
+import { convertFilesInWorker } from "../services/tools/file-conversion-runner"
+import { toolWindowService, type ToolWindowService } from "../services/tools/tool-window-service"
 import { initDatabase, shutdownDatabase } from "../database"
 import { dispatchDatabaseAction } from "../database/dispatcher"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
@@ -217,6 +219,22 @@ export const coreKnowledgeBaseDescriptor: ServiceDescriptor<KnowledgeBaseService
   criticality: "degraded",
   create() {
     return new KnowledgeBaseService()
+  },
+}
+
+export const coreToolsWindowDescriptor: ServiceDescriptor<ToolWindowService> = {
+  id: "tools.window-service",
+  criticality: "degraded",
+  create() {
+    return toolWindowService
+  },
+}
+
+export const coreToolsFileConversionRunnerDescriptor: ServiceDescriptor<typeof convertFilesInWorker> = {
+  id: "tools.file-conversion-runner",
+  criticality: "degraded",
+  create() {
+    return convertFilesInWorker
   },
 }
 

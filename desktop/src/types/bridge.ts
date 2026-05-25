@@ -140,6 +140,14 @@ import type {
   ScheduledTaskRun,
   ScheduledTaskUpdateInput,
 } from "./task-scheduler"
+import type {
+  SynapseFileConversionInputSelectionResult,
+  SynapseFileConversionOutputDirectoryResult,
+  SynapseFileConversionPayload,
+  SynapseFileConversionResult,
+  SynapseToolDefinition,
+  SynapseToolId,
+} from "./tools"
 import type { WorkflowDefinition, WorkflowMeta, ValidationError, ValidationResult, WorkflowRunSnapshot, WorkflowEvent, WorkflowRunStatus } from "./workflow"
 
 export type SynapseOpsDiagnostics = {
@@ -720,6 +728,15 @@ export type SynapseBridge = {
     listRuns: (taskId: string, options?: { limit?: number }) => Promise<ScheduledTaskRun[]>
     exportTasksToFile: (json: string) => Promise<{ success: boolean; path?: string }>
     importTasksFromFile: () => Promise<{ success: boolean; content?: string }>
+  }
+  tools: {
+    listTools: () => Promise<{ tools: readonly SynapseToolDefinition[] }>
+    openTool: (toolId: SynapseToolId) => Promise<void>
+    fileConversion: {
+      selectInputFiles: () => Promise<SynapseFileConversionInputSelectionResult>
+      selectOutputDirectory: () => Promise<SynapseFileConversionOutputDirectoryResult>
+      convert: (payload: SynapseFileConversionPayload) => Promise<SynapseFileConversionResult>
+    }
   }
   agent: {
     status: (projectId: string) => Promise<SynapseAgentStatus>

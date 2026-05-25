@@ -208,6 +208,13 @@ export const IPC_CHANNELS = {
     "checkCanSync": "synapse:workflow:check-can-sync",
     "event": "synapse:workflow:event",
   },
+  "tools": {
+    "listTools": "synapse:tools:list",
+    "openTool": "synapse:tools:open",
+    "selectFileConversionInputFiles": "synapse:tools:file-conversion:select-input-files",
+    "selectFileConversionOutputDirectory": "synapse:tools:file-conversion:select-output-directory",
+    "convertFiles": "synapse:tools:file-conversion:convert",
+  },
   "usage-analysis": {
     "ccRefresh": "synapse:usage-analysis:cc:refresh",
     "ccOverview": "synapse:usage-analysis:cc:overview",

@@ -223,6 +223,13 @@ const IPC_CHANNELS = {
     "importPackage": "synapse:workflow:import-package",
     "event": "synapse:workflow:event",
   },
+  "tools": {
+    "listTools": "synapse:tools:list",
+    "openTool": "synapse:tools:open",
+    "selectFileConversionInputFiles": "synapse:tools:file-conversion:select-input-files",
+    "selectFileConversionOutputDirectory": "synapse:tools:file-conversion:select-output-directory",
+    "convertFiles": "synapse:tools:file-conversion:convert",
+  },
   "usage-analysis": {
     "ccRefresh": "synapse:usage-analysis:cc:refresh",
     "ccOverview": "synapse:usage-analysis:cc:overview",
@@ -694,6 +701,17 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["task-scheduler"].listRuns)({ taskId, limit: options?.limit }),
     exportTasksToFile: (json) => invoke(IPC_CHANNELS["task-scheduler"].exportTasksToFile)({ json }),
     importTasksFromFile: () => invoke(IPC_CHANNELS["task-scheduler"].importTasksFromFile)(),
+  },
+  tools: {
+    listTools: () => invoke(IPC_CHANNELS.tools.listTools)({}),
+    openTool: (toolId) => invoke(IPC_CHANNELS.tools.openTool)({ toolId }),
+    fileConversion: {
+      selectInputFiles: () =>
+        invoke(IPC_CHANNELS.tools.selectFileConversionInputFiles)({}),
+      selectOutputDirectory: () =>
+        invoke(IPC_CHANNELS.tools.selectFileConversionOutputDirectory)({}),
+      convert: (payload) => invoke(IPC_CHANNELS.tools.convertFiles)(payload),
+    },
   },
   agent: {
     status: (projectId) => invoke(IPC_CHANNELS.agent.status)({ projectId }),

@@ -61,6 +61,32 @@ void (async () => {
         </AppErrorBoundary>
       </StrictMode>,
     )
+  } else if (windowType === "tool") {
+    const toolId = new URLSearchParams(window.location.search).get("toolId")
+    if (toolId === "file-conversion") {
+      const { FileConversionWindow } = await import("@/modules/tools/file-conversion/file-conversion-window")
+      createRoot(document.getElementById("root")!).render(
+        <StrictMode>
+          <AppErrorBoundary>
+            <AppNotificationsProvider>
+              <FileConversionWindow />
+            </AppNotificationsProvider>
+          </AppErrorBoundary>
+        </StrictMode>,
+      )
+      return
+    }
+    createRoot(document.getElementById("root")!).render(
+      <StrictMode>
+        <AppErrorBoundary>
+          <AppNotificationsProvider>
+            <div className="flex h-full items-center justify-center bg-background text-sm text-muted-foreground">
+              工具不可用
+            </div>
+          </AppNotificationsProvider>
+        </AppErrorBoundary>
+      </StrictMode>,
+    )
   } else {
     createRoot(document.getElementById("root")!).render(
       <StrictMode>

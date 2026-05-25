@@ -44,9 +44,10 @@ import { AgentModule } from "@/modules/agent"
 import { TaskSchedulerModule } from "@/modules/task-scheduler"
 import { CcUsageAnalysisModule, CodexUsageAnalysisModule } from "@/modules/usage-analysis"
 import { WorkflowModule } from "@/modules/workflow"
+import { ToolsModule } from "@/modules/tools"
 import type { SynapseContentType } from "@/types/content"
 
-type AppTabId = SynapseContentType | "agent" | "database" | "task-scheduler" | "editor-scan" | "usage-cc" | "usage-codex" | "workflow" | "settings"
+type AppTabId = SynapseContentType | "agent" | "database" | "task-scheduler" | "editor-scan" | "usage-cc" | "usage-codex" | "workflow" | "tools" | "settings"
 type DialogKind = "install"
 type ContentDialogState = Record<DialogKind, boolean>
 type ContentDialogStateMap = Record<SynapseContentType, ContentDialogState>
@@ -150,6 +151,7 @@ function MainApp() {
       { id: "agent" as const, label: "对话" },
       { id: "database" as const, label: "数据" },
       { id: "task-scheduler" as const, label: "定时" },
+      { id: "tools" as const, label: "工具" },
       { id: "editor-scan" as const, label: "本机" },
       { id: "usage-cc" as const, label: "CC" },
       { id: "usage-codex" as const, label: "Codex" },
@@ -383,6 +385,11 @@ function MainApp() {
           {activeTab === "task-scheduler" ? (
             <ErrorBoundary fallbackTitle="定时任务模块出现问题">
               <TaskSchedulerModule />
+            </ErrorBoundary>
+          ) : null}
+          {activeTab === "tools" ? (
+            <ErrorBoundary fallbackTitle="工具模块出现问题">
+              <ToolsModule />
             </ErrorBoundary>
           ) : null}
           {activeTab === "editor-scan" ? (
