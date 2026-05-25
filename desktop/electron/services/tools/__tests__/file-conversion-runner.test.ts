@@ -40,8 +40,9 @@ describe("convertFilesInWorker", () => {
 
   it("maps app.asar paths to app.asar.unpacked worker paths", () => {
     const baseDir = path.join("/Applications/Synapse.app/Contents/Resources/app.asar/electron/services/tools")
+    const workerPath = resolveFileConversionWorkerPath(baseDir).replace(/\\/g, "/")
 
-    expect(resolveFileConversionWorkerPath(baseDir)).toContain("app.asar.unpacked")
-    expect(resolveFileConversionWorkerPath(baseDir)).toContain("workers/file-conversion-worker.js")
+    expect(workerPath).toContain("app.asar.unpacked")
+    expect(workerPath).toContain("workers/file-conversion-worker.js")
   })
 })
