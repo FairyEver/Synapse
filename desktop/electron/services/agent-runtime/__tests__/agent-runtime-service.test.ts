@@ -70,6 +70,59 @@ describe("AgentRuntimeService", () => {
     })
   })
 
+  it("checks agent.spawn before creating a renderer session and audits denial", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: false, reason: "blocked by policy", policyId: "policy-1" })),
+    }
+    const auditSink = { record: vi.fn() }
+    const createSession = vi.fn(() => new ScriptedSession([
+      { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+    ], "sdk-1"))
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession,
+      permissionGuard: permissionGuard as never,
+      auditSink: auditSink as never,
+      now: fixedNow,
+    })
+
+    const result = await service.send({ ...baseMessage("hello"), platform: "local-renderer" })
+
+    expect(result.error).toBe("Agent spawn denied by permission policy.")
+    expect(createSession).not.toHaveBeenCalled()
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "agent.spawn",
+      actor: { kind: "user", id: "user-1" },
+      resource: "local-renderer:project-1:s1",
+      context: expect.objectContaining({
+        projectId: "project-1",
+        sessionKey: "s1",
+        conversationId: conversationId("local-renderer", "s1", "active"),
+        platform: "local-renderer",
+        providerId: "anthropic",
+      }),
+    })
+    expect(auditSink.record).toHaveBeenCalledWith({
+      action: "agent.spawn",
+      actor: { kind: "user", id: "user-1" },
+      resource: "local-renderer:project-1:s1",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        projectId: "project-1",
+        sessionKey: "s1",
+        conversationId: conversationId("local-renderer", "s1", "active"),
+        platform: "local-renderer",
+        providerId: "anthropic",
+        reason: "blocked by policy",
+        policyId: "policy-1",
+      }),
+    })
+  })
+
   it("resolves registered prompt commands dynamically for listing and routing", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const session = new ScriptedSession([

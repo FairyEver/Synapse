@@ -13,6 +13,62 @@ import type { AgentRuntimeService } from "../../agent-runtime"
 import { AgentRelayService } from "../agent-relay-service"
 
 describe("AgentRelayService", () => {
+  it("checks agent.spawn before starting the target Agent and audits denial", async () => {
+    const runs = new MemoryNamespace<RelayRunEntryV1>("relay.runs")
+    const auditSink = new InMemoryAuditSink()
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: false, reason: "blocked by policy", policyId: "policy-1" })),
+    }
+    const agent = successAgent("done")
+    const service = new AgentRelayService({
+      projectContainers: fakeProjectContainers(agent),
+      bindings: new MemoryNamespace<RelayBindingEntryV1>("relay.bindings"),
+      runs,
+      listProjects: async () => [
+        { projectId: "source", name: "Source" },
+        { projectId: "target", name: "Target" },
+      ],
+      permissionGuard: permissionGuard as never,
+      auditSink,
+      now: () => new Date("2026-05-14T00:00:00.000Z"),
+    })
+
+    await expect(service.send({
+      sourceProjectId: "source",
+      sourceSessionKey: "bridge:s1",
+      targetProjectId: "target",
+      message: "user prompt body",
+    })).rejects.toThrow("Agent relay spawn denied by permission policy")
+
+    expect(await runs.list()).toEqual([])
+    expect(agent.sendSideSessionWithTimeout).not.toHaveBeenCalled()
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "agent.spawn",
+      actor: { kind: "agent", id: "relay" },
+      resource: "relay:target:relay:source:bridge:s1",
+      context: expect.objectContaining({
+        sourceProjectId: "source",
+        sourceSessionKey: "bridge:s1",
+        targetProjectId: "target",
+        targetSessionKey: "relay:source:bridge:s1",
+      }),
+    })
+    expect(auditSink.list()[0]).toMatchObject({
+      action: "agent.spawn",
+      actor: { kind: "agent", id: "relay" },
+      resource: "relay:target:relay:source:bridge:s1",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        sourceProjectId: "source",
+        sourceSessionKey: "bridge:s1",
+        targetProjectId: "target",
+        targetSessionKey: "relay:source:bridge:s1",
+        reason: "blocked by policy",
+        policyId: "policy-1",
+      }),
+    })
+  })
+
   it("logs relay Agent runtime failures with correlation context without persisting raw error text", async () => {
     const runs = new MemoryNamespace<RelayRunEntryV1>("relay.runs")
     const auditSink = new InMemoryAuditSink()
@@ -178,14 +234,15 @@ function failingAgent(message: string): Pick<AgentRuntimeService, "sendSideSessi
 }
 
 function successAgent(resultText: string): Pick<AgentRuntimeService, "sendSideSessionWithTimeout"> {
+  const sendSideSessionWithTimeout = vi.fn(async () => ({
+    conversationId: "conversation-relay-1",
+    events: [],
+    resultText,
+    partialText: undefined,
+    timedOut: false,
+  }))
   return {
-    sendSideSessionWithTimeout: async () => ({
-      conversationId: "conversation-relay-1",
-      events: [],
-      resultText,
-      partialText: undefined,
-      timedOut: false,
-    }),
+    sendSideSessionWithTimeout,
   }
 }
 

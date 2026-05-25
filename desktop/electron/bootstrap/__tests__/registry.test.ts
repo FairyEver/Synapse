@@ -175,6 +175,7 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.project-containers",
       "core.side-channel",
       "core.data-repository",
+      "core.permission-guard",
       "core.audit-sink",
     ])
     expect(byId.get("core.automation-ingress")?.dependsOn).toEqual([

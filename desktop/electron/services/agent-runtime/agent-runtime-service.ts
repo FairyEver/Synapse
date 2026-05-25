@@ -212,6 +212,8 @@ export class AgentRuntimeService {
         replyTargets: deps.replyTargets,
         agentEvents: deps.agentEvents,
         now: deps.now,
+        permissionGuard: deps.permissionGuard,
+        auditSink: deps.auditSink,
         prepareMessage: deps.prepareMessage,
         afterTurn: deps.afterTurn,
       },

@@ -1027,6 +1027,7 @@ export const coreRelayDescriptor: ServiceDescriptor<AgentRelayService> = {
     "core.project-containers",
     "core.side-channel",
     "core.data-repository",
+    "core.permission-guard",
     "core.audit-sink",
   ],
   create(ctx) {
@@ -1038,6 +1039,7 @@ export const coreRelayDescriptor: ServiceDescriptor<AgentRelayService> = {
       runs: dataRepository.namespace("relay.runs"),
       sideChannel,
       listProjects: listConfiguredProjects,
+      permissionGuard: ctx.registry.get<PermissionGuard>("core.permission-guard"),
       auditSink: ctx.registry.get<AuditSink>("core.audit-sink"),
       logger: ctx.logger.child("relay"),
     })
@@ -1346,7 +1348,7 @@ function createHttpSendHandler(deps: {
   }
 }
 
-const SENSITIVE_WORKFLOW_HTTP_PARAM_NAMES = new Set(["token", "key", "secret", "password", "auth", "api_key", "apikey", "access_token"])
+const SENSITIVE_WORKFLOW_HTTP_PARAM_PATTERN = /token|secret|authorization|api[_-]?key|password|bearer|auth/i
 
 function sanitizeWorkflowHttpAuditResource(raw: string): string {
   try {
@@ -1354,7 +1356,7 @@ function sanitizeWorkflowHttpAuditResource(raw: string): string {
     url.username = ""
     url.password = ""
     for (const param of url.searchParams.keys()) {
-      if (SENSITIVE_WORKFLOW_HTTP_PARAM_NAMES.has(param.toLowerCase())) {
+      if (SENSITIVE_WORKFLOW_HTTP_PARAM_PATTERN.test(param)) {
         url.searchParams.set(param, "[REDACTED]")
       }
     }

@@ -384,17 +384,17 @@ describe("bootstrap descriptors (T1.5)", () => {
 
     await expect(engine.runtimeDeps.sendHttpRequest({
       method: "GET",
-      url: "https://user:pass@example.test/hook?token=secret&ok=1",
+      url: "https://user:pass@example.test/hook?client_secret=secret&refresh_token=refresh-secret&id_token=id-secret&ok=1",
       fetchImpl: vi.fn(),
     })).rejects.toThrow("HTTP request denied by workflow engine: blocked by policy")
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "https://example.test/hook?token=%5BREDACTED%5D&ok=1",
+      resource: "https://example.test/hook?client_secret=%5BREDACTED%5D&refresh_token=%5BREDACTED%5D&id_token=%5BREDACTED%5D&ok=1",
     }))
     expect(auditSink.record).toHaveBeenCalledWith({
       action: "network.connect",
       actor: { kind: "system" },
-      resource: "https://example.test/hook?token=%5BREDACTED%5D&ok=1",
+      resource: "https://example.test/hook?client_secret=%5BREDACTED%5D&refresh_token=%5BREDACTED%5D&id_token=%5BREDACTED%5D&ok=1",
       outcome: "denied",
       metadata: {
         source: "workflow",
@@ -403,7 +403,9 @@ describe("bootstrap descriptors (T1.5)", () => {
       },
     })
     const serialized = JSON.stringify(auditSink.record.mock.calls)
-    expect(serialized).not.toContain("secret")
+    expect(serialized).not.toContain("=secret")
+    expect(serialized).not.toContain("refresh-secret")
+    expect(serialized).not.toContain("id-secret")
     expect(serialized).not.toContain("user:pass")
   })
 

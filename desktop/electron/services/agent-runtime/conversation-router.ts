@@ -6,6 +6,7 @@ import type {
   DataNamespace,
 } from "../../runtime/data-repo"
 import type { ScopedEventBus } from "../../runtime/project-container"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ReplyOutboxService, ReplyTarget } from "../reply-target"
 import type { AgentCommandRouter, AgentCommandRouterResult } from "./command-router"
@@ -41,6 +42,8 @@ export interface ConversationRouterDeps {
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
   readonly now?: () => Date
   readonly permissionTimeoutMs?: number
+  readonly permissionGuard?: PermissionGuard
+  readonly auditSink?: AuditSink
   readonly prepareMessage?: (
     message: AgentMessage,
     context: {
@@ -369,6 +372,7 @@ export class ConversationRouter {
       }
 
       try {
+        await this.checkRendererAgentSpawn(message, conversation)
         const sessionHandle = await this.sessionManager.getOrCreateSession({
           state,
           conversation,
@@ -427,6 +431,70 @@ export class ConversationRouter {
     } finally {
       state.activeTurns = Math.max(0, state.activeTurns - 1)
       state.lastActivity = Date.now()
+    }
+  }
+
+  private async checkRendererAgentSpawn(
+    message: AgentMessage,
+    conversation: ConversationEntryV1,
+  ): Promise<void> {
+    if (!this.deps.permissionGuard || !isRendererAgentPlatform(message.platform)) return
+
+    const actor = rendererAgentActor(message)
+    const resource = `${message.platform}:${message.projectId}:${message.sessionKey}`
+    const metadata = {
+      projectId: message.projectId,
+      sessionKey: message.sessionKey,
+      conversationId: conversation.id,
+      providerId: message.providerId ?? conversation.providerId,
+      platform: message.platform,
+      agentType: message.agentType ?? conversation.agentType,
+      modelTier: message.modelTier ?? conversation.agentConfig?.modelTier,
+    }
+
+    try {
+      const permission = await this.deps.permissionGuard.check({
+        action: "agent.spawn",
+        actor,
+        resource,
+        context: metadata,
+      })
+      if (!permission.allowed) {
+        this.deps.auditSink?.record({
+          action: "agent.spawn",
+          actor,
+          resource,
+          outcome: "denied",
+          metadata: {
+            ...metadata,
+            reason: permission.reason,
+            policyId: permission.policyId,
+          },
+        })
+        throw new Error("Agent spawn denied by permission policy.")
+      }
+      this.deps.auditSink?.record({
+        action: "agent.spawn",
+        actor,
+        resource,
+        outcome: "allowed",
+        metadata,
+      })
+    } catch (error) {
+      if (error instanceof Error && error.message === "Agent spawn denied by permission policy.") {
+        throw error
+      }
+      this.deps.auditSink?.record({
+        action: "agent.spawn",
+        actor,
+        resource,
+        outcome: "failed",
+        metadata: {
+          ...metadata,
+          ...errorMetadata(error),
+        },
+      })
+      throw new Error("Agent spawn permission check failed.")
     }
   }
 
@@ -1031,6 +1099,16 @@ function replyCtxRecord(value: unknown): Record<string, unknown> | undefined {
 
 function shouldSuppressReply(message: AgentMessage): boolean {
   return replyCtxRecord(message.replyCtx)?.muted === true
+}
+
+function isRendererAgentPlatform(platform: string): boolean {
+  return platform === "local-renderer"
+}
+
+function rendererAgentActor(message: AgentMessage): ActorIdentity {
+  return message.userId
+    ? { kind: "user", id: message.userId }
+    : { kind: "user" }
 }
 
 function replyTargetFromMessage(

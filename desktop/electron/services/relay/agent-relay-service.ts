@@ -6,7 +6,7 @@ import type {
   RelayRunEntryV1,
 } from "../../runtime/data-repo"
 import type { ProjectContainerRegistry } from "../../runtime/project-container"
-import type { AuditSink } from "../../runtime/security"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import {
   AgentRuntimeService,
@@ -26,6 +26,7 @@ export interface AgentRelayServiceDeps {
   readonly runs: DataNamespace<RelayRunEntryV1>
   readonly listProjects: () => Promise<readonly RelayProjectSummary[]>
   readonly sideChannel?: SideChannelService
+  readonly permissionGuard?: PermissionGuard
   readonly auditSink?: AuditSink
   readonly logger?: StructuredLogger
   readonly now?: () => Date
@@ -42,6 +43,7 @@ export class AgentRelayService {
     const source = await this.resolveProject(request.sourceProjectId)
     const target = await this.resolveProject(request.targetProjectId)
     const targetSessionKey = relaySessionKey(request.sourceProjectId, request.sourceSessionKey)
+    await this.checkSpawnPermission(request, target.projectId, targetSessionKey)
     const run = await this.createRun(request, targetSessionKey)
     try {
       const container = await this.deps.projectContainers.open(target.projectId, {
@@ -94,7 +96,7 @@ export class AgentRelayService {
         partialText: result.partialText,
         lastError: failure?.summary,
       })
-      this.recordAudit(status === "success" ? "allowed" : "failed", request, run.id, failure?.summary)
+      this.recordAudit(status === "success" ? "allowed" : "failed", request, run.id, targetSessionKey, failure?.summary)
       return {
         ok: true,
         runId: run.id,
@@ -119,7 +121,7 @@ export class AgentRelayService {
         errorLength: failure.errorLength,
       })
       await this.finishRun(run, "failed", { lastError: failure.summary })
-      this.recordAudit("failed", request, run.id, failure.summary)
+      this.recordAudit("failed", request, run.id, targetSessionKey, failure.summary)
       if (request.visible) {
         const sourceTarget = this.deps.sideChannel?.getReplyTarget(
           request.sourceProjectId,
@@ -255,6 +257,7 @@ export class AgentRelayService {
     outcome: "allowed" | "failed",
     request: RelaySendRequest,
     runId: string,
+    targetSessionKey: string,
     error?: string,
   ): void {
     this.deps.auditSink?.record({
@@ -267,10 +270,66 @@ export class AgentRelayService {
         sourceProjectId: request.sourceProjectId,
         sourceSessionKey: request.sourceSessionKey,
         targetProjectId: request.targetProjectId,
+        targetSessionKey,
         visible: request.visible,
         error,
       },
     })
+  }
+
+  private async checkSpawnPermission(
+    request: RelaySendRequest,
+    targetProjectId: string,
+    targetSessionKey: string,
+  ): Promise<void> {
+    if (!this.deps.permissionGuard) return
+    const actor = { kind: "agent" as const, id: "relay" }
+    const resource = relayAuditResource(targetProjectId, targetSessionKey)
+    const metadata = {
+      sourceProjectId: request.sourceProjectId,
+      sourceSessionKey: request.sourceSessionKey,
+      targetProjectId,
+      targetSessionKey,
+      visible: request.visible,
+    }
+    try {
+      const permission = await this.deps.permissionGuard.check({
+        action: "agent.spawn",
+        actor,
+        resource,
+        context: metadata,
+      })
+      if (!permission.allowed) {
+        this.deps.auditSink?.record({
+          action: "agent.spawn",
+          actor,
+          resource,
+          outcome: "denied",
+          metadata: {
+            ...metadata,
+            reason: permission.reason,
+            policyId: permission.policyId,
+          },
+        })
+        throw new Error("Agent relay spawn denied by permission policy")
+      }
+    } catch (error) {
+      if (error instanceof Error && error.message === "Agent relay spawn denied by permission policy") {
+        throw error
+      }
+      const failure = relayFailureMetadata(error)
+      this.deps.auditSink?.record({
+        action: "agent.spawn",
+        actor,
+        resource,
+        outcome: "failed",
+        metadata: {
+          ...metadata,
+          error: failure.summary,
+        },
+      })
+      throw new Error("Agent relay spawn permission check failed")
+    }
   }
 
   private isoNow(): string {
@@ -280,6 +339,10 @@ export class AgentRelayService {
 
 function relaySessionKey(sourceProjectId: string, sourceSessionKey: string): string {
   return `relay:${sourceProjectId}:${sourceSessionKey}`
+}
+
+function relayAuditResource(targetProjectId: string, targetSessionKey: string): string {
+  return `relay:${targetProjectId}:${targetSessionKey}`
 }
 
 function truncate(value: string): string {
