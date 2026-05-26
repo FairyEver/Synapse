@@ -851,8 +851,8 @@ class RepositoryManager {
     for (const subscriber of this.repositorySubscribers) {
       try {
         subscriber()
-      } catch {
-        // 忽略订阅者错误
+      } catch (error) {
+        logger.warn("repository.subscriber-failed", { error: String(error) })
       }
     }
   }
@@ -876,8 +876,11 @@ class RepositoryManager {
     for (const subscriber of subscribers) {
       try {
         subscriber()
-      } catch {
-        // 忽略订阅者错误
+      } catch (error) {
+        logger.warn("repository.content-subscriber-failed", {
+          contentType,
+          error: String(error),
+        })
       }
     }
   }
@@ -889,8 +892,11 @@ class RepositoryManager {
     for (const subscriber of subscribers) {
       try {
         subscriber(state)
-      } catch {
-        // 忽略订阅者错误
+      } catch (error) {
+        logger.warn("repository.operation-subscriber-failed", {
+          error: String(error),
+          uuid,
+        })
       }
     }
   }
