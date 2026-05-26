@@ -238,6 +238,21 @@ describe("contentIpcModule sync ownership", () => {
     expect(mocks.coordinator.requestPush).toHaveBeenCalledWith(mocks.repository, "content-saved")
   })
 
+  it("does not log user-provided titles when creating content", async () => {
+    const { contentIpcModule } = await import("../ipc")
+    const secretTitle = "客户 Alpha 事故复盘"
+
+    await contentIpcModule.methods.create.handler(createContext() as never, {
+      contentType: "prompt",
+      payload: { title: secretTitle },
+    } as never)
+
+    expect(mocks.logger.info).toHaveBeenCalledWith("Handling content.create request.", {
+      contentType: "prompt",
+    })
+    expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain(secretTitle)
+  })
+
   it("emits legacy push completion events after coordinator push succeeds", async () => {
     const { contentIpcModule } = await import("../ipc")
     const push = createDeferred<undefined>()

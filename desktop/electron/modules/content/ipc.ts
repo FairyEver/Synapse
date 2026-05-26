@@ -366,7 +366,7 @@ export const contentIpcModule: IpcModule = {
       request: unknownRequestSchema,
       response: contentMutationResultSchema,
       handler: async (ctx, request: SynapseCreateContentRequest) => {
-        logger.info(`Handling content.create request. contentType: ${request.contentType}, title: ${request.payload?.title}`)
+        logger.info("Handling content.create request.", { contentType: request.contentType })
 
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const result = await contentSubmissionService.createContent(request)
