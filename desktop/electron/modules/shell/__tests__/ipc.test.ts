@@ -44,6 +44,29 @@ describe("shellIpcModule", () => {
     }))
   })
 
+  it("redacts external link credentials in PermissionGuard and audit records", async () => {
+    const { harness, auditSink, permissionGuard } = createHarness()
+    electronMock.shell.openExternal.mockResolvedValue(undefined)
+    const rawUrl = "https://user:pass@example.com/path?token=secret-value&query=ok&code=oauth-code"
+    const redactedUrl = "https://%5Bredacted%5D:%5Bredacted%5D@example.com/path?token=%5Bredacted%5D&query=ok&code=%5Bredacted%5D"
+
+    await harness.invoke("synapse:shell:open-external", { url: rawUrl })
+
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "shell.exec",
+      actor: { kind: "user" },
+      resource: redactedUrl,
+      context: { source: "shell.openExternal" },
+    })
+    expect(electronMock.shell.openExternal).toHaveBeenCalledWith(rawUrl)
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      resource: redactedUrl,
+      outcome: "allowed",
+    }))
+    expect(JSON.stringify(vi.mocked(permissionGuard.check).mock.calls)).not.toContain("secret-value")
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("oauth-code")
+  })
+
   it("rejects non-web external links", async () => {
     const { harness, permissionGuard, auditSink } = createHarness()
 

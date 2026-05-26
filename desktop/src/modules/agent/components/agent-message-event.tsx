@@ -6,6 +6,7 @@ import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import { MARKDOWN_BODY_CLASSNAME } from "@/components/markdown-viewer"
 import { requireBridgeDomain } from "@/lib/electron-bridge"
+import { sanitizeUrl } from "@/lib/url-sanitize"
 import type {
   SynapseAgentDisplayProfile,
   SynapseAgentMessageTimelineItem,
@@ -168,7 +169,8 @@ function AssistantMessageBody({
             boundary: "renderer.agent.external-link",
             messageId: item.id,
             role: item.role,
-            href,
+            url: sanitizeUrl(href),
+            hrefLength: href.length,
             ...errorLogMeta(error),
           })
           toast.error("无法打开外部链接")

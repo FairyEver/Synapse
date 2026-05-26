@@ -9,6 +9,7 @@ import { z } from "zod"
 import { shell } from "electron"
 import type { IpcModule } from "../../runtime/ipc/types"
 import { runGuardedShellOperation } from "./guarded-shell"
+import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 
 export const shellIpcModule: IpcModule = {
   id: "shell",
@@ -23,12 +24,13 @@ export const shellIpcModule: IpcModule = {
         if (url.protocol !== "http:" && url.protocol !== "https:") {
           throw new Error("Only http and https links can be opened.")
         }
-        const resource = url.toString()
+        const externalUrl = url.toString()
+        const resource = sanitizeUrl(externalUrl)
         await runGuardedShellOperation({
           ctx,
           resource,
           source: "shell.openExternal",
-          run: () => shell.openExternal(resource),
+          run: () => shell.openExternal(externalUrl),
         })
       },
     },

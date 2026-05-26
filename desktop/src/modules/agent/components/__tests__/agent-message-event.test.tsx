@@ -8,7 +8,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { SynapseAgentDisplayProfile } from "@/types/agent"
 import { AgentMessageEvent, wrapLocalReferences } from "../agent-message-event"
 
-const { rendererLogger, track } = vi.hoisted(() => ({
+const { rendererLogger, shellBridge, track } = vi.hoisted(() => ({
+  shellBridge: {
+    openExternal: vi.fn(),
+  },
   rendererLogger: {
     debug: vi.fn(),
     info: vi.fn(),
@@ -18,8 +21,18 @@ const { rendererLogger, track } = vi.hoisted(() => ({
   track: vi.fn(),
 }))
 
+vi.mock("sonner", () => ({
+  toast: {
+    error: vi.fn(),
+  },
+}))
+
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => rendererLogger,
+}))
+
+vi.mock("@/lib/electron-bridge", () => ({
+  requireBridgeDomain: () => shellBridge,
 }))
 
 vi.mock("@/lib/ui-tracking", () => ({
@@ -359,6 +372,51 @@ describe("AgentMessageEvent", () => {
       },
     })
     expect(JSON.stringify(track.mock.calls)).not.toContain("./private/secret-file.ts")
+  })
+
+  it("does not log raw external link credentials when opening fails", async () => {
+    shellBridge.openExternal.mockRejectedValue(new Error("denied"))
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+    const href = "https://user:pass@example.com/path?token=secret-value&query=ok&code=oauth-code"
+
+    await act(async () => {
+      root.render(
+        <AgentMessageEvent
+          item={{
+            id: "message-link",
+            kind: "message",
+            role: "assistant",
+            content: `[Open link](${href})`,
+            timestamp: "2026-04-27T03:15:00.000Z",
+          }}
+          profile={profile}
+          onOpenReference={vi.fn()}
+        />,
+      )
+    })
+
+    const link = container.querySelector<HTMLAnchorElement>("a")
+    expect(link).not.toBeNull()
+
+    await act(async () => {
+      link?.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+
+    expect(shellBridge.openExternal).toHaveBeenCalledWith(href)
+    expect(rendererLogger.warn).toHaveBeenCalledWith(
+      "agent.external-link.open.failed",
+      expect.objectContaining({
+        hrefLength: href.length,
+        url: "https://%5Bredacted%5D:%5Bredacted%5D@example.com/path?token=%5Bredacted%5D&query=ok&code=%5Bredacted%5D",
+      }),
+    )
+    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("secret-value")
+    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("oauth-code")
+    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("user:pass")
   })
 
   it("does not log code content when streamdown code copy fails", async () => {
