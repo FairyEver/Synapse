@@ -1,6 +1,6 @@
 # auto
 
-本地 Codex 并行运行控制台。启动后打开一个网页，在页面里编辑 Prompt、并行 Agent 数、间隔、超时和 Codex 参数，然后按批次并行运行 `codex exec`。
+本地 Codex 连续并行运行控制台。启动后打开一个网页，在页面里编辑 Prompt、并行 Slot 数、超时和运行参数。开始后会保持最多 N 个 worker 同时运行；任意 worker 完成后，该 slot 会立刻补启动下一次任务。
 
 ## 前置条件
 
@@ -46,14 +46,13 @@ state/ui-config.json
 
 - 工作目录
 - 并行 Agent 数
-- 批次间隔
 - 单 worker 超时
 - 日志保留数量
 - Codex command / model / sandbox / approval policy / MCP 开关
 
 ## 并行行为
 
-每一批会同时启动多个 `codex exec` 进程。所有 worker 使用同一个工作目录和当前选中的 Prompt。
+运行中会保持最多 N 个 `codex exec` 进程。所有 worker 使用同一个工作目录和当前选中的 Prompt。
 
 每个 worker 的 Prompt 前会追加运行约束：
 
@@ -67,21 +66,21 @@ runner 不做文件锁、不建 worktree、不自动合并冲突，也不禁止�
 
 ## 停止
 
-页面里的 `Stop after current` 会让当前批次继续跑完，然后不再启动下一批。
+页面里的 `当前任务后停止` 会停止补新任务，已经运行中的 worker 会继续跑完。所有 slot 都空闲后，本次运行停止。
 
 ## 日志
 
-日志按批次写入：
+日志按运行 session 写入：
 
 ```text
 logs/
-  2026-05-13T12-00-00/
+  2026-05-26T12-00-00/
     summary.md
-    worker-1.md
-    worker-2.md
+    slot-1-run-0001.md
+    slot-2-run-0002.md
 ```
 
-`summary.md` 记录批次结果；`worker-N.md` 记录对应 worker 的 stdout、stderr、Codex JSONL 事件和退出状态。
+`summary.md` 记录运行结果；`slot-N-run-MMMM.md` 记录对应 worker 的 stdout、stderr、Codex JSONL 事件和退出状态。
 
 ## 验证
 

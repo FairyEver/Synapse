@@ -4,7 +4,7 @@
 
 ## auto 是什么
 
-`auto` 是本地 Codex 并行运行控制台。它会按页面或保存配置启动 `codex exec`，把同一个 Prompt 分发给多个 worker，并按批次循环运行。
+`auto` 是本地 Codex 连续并行运行控制台。它会按页面或保存配置启动 `codex exec`，把同一个 Prompt 分发给多个 worker，并持续补位运行。
 
 它适合做：
 
@@ -27,10 +27,11 @@
 - 每个 worker 会收到自己的编号，例如 `worker 1/5`。
 - 每个 worker 都可以读写工作区文件，并运行 Prompt 允许的命令。
 - `auto` 不创建 git worktree，不做文件锁，不自动合并冲突。
-- `auto` 不理解任务语义，只负责启动进程、传入 Prompt、收集日志和按间隔继续下一批。
-- 一批结束后，scheduler 可能等待配置的 interval，然后再次启动下一批。
-- 页面里的 `Stop after current` 只会阻止下一批，当前批次会继续跑完。
-- worker 日志会写入 `auto/logs/<batch>/worker-N.md`，批次摘要写入 `summary.md`。
+- `auto` 会保持最多 N 个 slot 同时运行；某个 slot 完成后，会立即补启动下一次 worker。
+- `auto` 不再按批次等待所有 worker 结束，也没有循环间隔。
+- `auto` 不理解任务语义，只负责启动进程、传入 Prompt、收集日志和补位运行。
+- 页面里的 `当前任务后停止` 只会阻止补新任务，当前正在运行的 worker 会继续跑完。
+- worker 日志会写入 `auto/logs/<session>/slot-<slot>-run-<sequence>.md`，运行摘要写入 `summary.md`。
 
 runner 会自动在用户 Prompt 前追加基础并行约束，包括：
 
