@@ -253,6 +253,61 @@ describe("contentIpcModule sync ownership", () => {
     expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain(secretTitle)
   })
 
+  it("validates mutating content IPC request shapes with Zod schemas", async () => {
+    const { contentIpcModule } = await import("../ipc")
+    const contentPayload = {
+      category: "General",
+      content: "body",
+      description: "description",
+      icon: "FileText",
+      iconBg: "default",
+      iconImage: "",
+      iconType: "icon",
+      title: "Rule",
+    }
+
+    expect(contentIpcModule.methods.create.request.safeParse({
+      contentType: "rule",
+      payload: { ...contentPayload, name: "rule-name" },
+    }).success).toBe(true)
+    expect(contentIpcModule.methods.create.request.safeParse({
+      contentType: "rule",
+      payload: { title: "missing required fields" },
+    }).success).toBe(false)
+    expect(contentIpcModule.methods.update.request.safeParse({
+      contentType: "rule",
+      payload: { ...contentPayload, baseHistoryDirname: "history", id: "rule-1", name: "rule-name" },
+    }).success).toBe(true)
+    expect(contentIpcModule.methods.update.request.safeParse({
+      contentType: "rule",
+      payload: { ...contentPayload, name: "rule-name" },
+    }).success).toBe(false)
+    expect(contentIpcModule.methods.deleteContent.request.safeParse({
+      baseHistoryDirname: "history",
+      id: "rule-1",
+      type: "rule",
+    }).success).toBe(true)
+    expect(contentIpcModule.methods.restore.request.safeParse({
+      id: "rule-1",
+      type: "rule",
+    }).success).toBe(false)
+    expect(contentIpcModule.methods.openDetailWindow.request.safeParse({
+      contentType: "rule",
+      id: "rule-1",
+      title: "Rule",
+      viewMode: "rendered",
+    }).success).toBe(true)
+    expect(contentIpcModule.methods.installToEditor.request.safeParse({
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "codex",
+      scope: "project",
+    }).success).toBe(true)
+    expect(contentIpcModule.methods.readEditorInstallFormValues.request.safeParse({
+      editorId: "codex",
+    }).success).toBe(false)
+  })
+
   it("emits legacy push completion events after coordinator push succeeds", async () => {
     const { contentIpcModule } = await import("../ipc")
     const push = createDeferred<undefined>()
