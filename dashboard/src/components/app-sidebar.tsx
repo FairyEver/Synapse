@@ -20,7 +20,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const { session } = useAuth();
   const routes =
     session?.role === 'user'
-      ? getUserRouteItems(session.modulePermissions)
+      ? getUserRouteItems()
       : adminRouteItems;
   const mainRoutes = routes.slice(0, 5);
   const operationRoutes = routes.slice(5);

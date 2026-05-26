@@ -22,7 +22,7 @@ export function DashboardLayout() {
   const { session } = useAuth();
   const routes =
     session?.role === 'user'
-      ? getUserRouteItems(session.modulePermissions)
+      ? getUserRouteItems()
       : adminRouteItems;
   const activeRoute = routes.find((item) => item.path === location.pathname);
 
