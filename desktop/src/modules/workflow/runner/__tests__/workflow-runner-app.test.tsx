@@ -5,7 +5,7 @@ import { act } from "react"
 import type { ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { WorkflowDefinition } from "@/types/workflow"
+import type { WorkflowDefinition, WorkflowEvent } from "@/types/workflow"
 
 const rendererLogger = vi.hoisted(() => ({
   error: vi.fn(),
@@ -253,6 +253,43 @@ describe("WorkflowRunnerApp", () => {
     expect(resultPanel?.getAttribute("data-min-size")).toBe("320")
   })
 
+  it("keeps an opened historical run when the same workflow starts another run", async () => {
+    let emitWorkflowEvent: ((event: WorkflowEvent) => void) | null = null
+    const runStatus = vi.fn(async () => ({
+      definition: workflowDefinition(),
+      params: {},
+    }))
+    installWorkflowBridge({
+      runStatus,
+      onEvent: vi.fn((listener) => {
+        emitWorkflowEvent = listener
+        return vi.fn()
+      }),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowRunnerApp />)
+      await Promise.resolve()
+    })
+
+    expect(runStatus).toHaveBeenCalledTimes(1)
+    expect(runStatus).toHaveBeenCalledWith("run-1")
+    expect(emitWorkflowEvent).toBeInstanceOf(Function)
+
+    await act(async () => {
+      emitWorkflowEvent?.({ type: "workflow:started", workflowId: "workflow-1", runId: "run-2" })
+      await Promise.resolve()
+    })
+
+    expect(runStatus).toHaveBeenCalledTimes(1)
+    expect(runStatus).not.toHaveBeenCalledWith("run-2")
+  })
+
   it("copies the whole workflow run report from the toolbar", async () => {
     installWorkflowBridge({
       runStatus: vi.fn(async () => ({
@@ -360,6 +397,7 @@ describe("WorkflowRunnerApp", () => {
 function installWorkflowBridge(overrides: {
   readonly cancel?: (runId: string) => Promise<unknown>
   readonly get?: (workflowId: string) => Promise<unknown>
+  readonly onEvent?: (listener: (event: WorkflowEvent) => void) => () => void
   readonly runStatus?: (runId: string) => Promise<unknown>
 }): void {
   ;(window as unknown as { synapse: { workflow: Record<string, unknown> } }).synapse = {
@@ -375,7 +413,7 @@ function installWorkflowBridge(overrides: {
         params: {},
       })),
       get: overrides.get ?? vi.fn(),
-      onEvent: vi.fn(() => vi.fn()),
+      onEvent: overrides.onEvent ?? vi.fn(() => vi.fn()),
       onRunnerSwitchRun: vi.fn(() => vi.fn()),
       cancel: overrides.cancel ?? vi.fn(),
       rerun: vi.fn(),

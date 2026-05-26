@@ -125,7 +125,7 @@ export function WorkflowRunnerApp() {
     if (!workflowId) return
     const unsubEvent = window.synapse?.workflow.onEvent((event) => {
       if (event.type === "workflow:started" && event.workflowId === workflowId) {
-        if (runIdRef.current !== event.runId) {
+        if (!runIdRef.current) {
           logger.info("workflow:started in runner — switching to new run", { newRunId: event.runId })
           setRunId(event.runId)
           setRunState("running")
