@@ -1,16 +1,14 @@
+import {
+  OPEN_AGENT_SESSION_EVENT,
+  type OpenAgentSessionPayload,
+} from "@/types/agent-navigation"
+
 const OPEN_SETTINGS_TAB_EVENT = "synapse:open-settings-tab"
 const OPEN_SETTINGS_ABOUT_EVENT = "synapse:open-settings-about"
 const OPEN_SETTINGS_STORAGE_EVENT = "synapse:open-settings-storage"
 const APP_TAB_CHANGED_EVENT = "synapse:app-tab-changed"
-const OPEN_AGENT_SESSION_EVENT = "synapse:open-agent-session"
 const WATCH_NEXT_AGENT_SESSION_EVENT = "synapse:watch-next-agent-session"
 const CANCEL_WATCH_NEXT_AGENT_SESSION_EVENT = "synapse:cancel-watch-next-agent-session"
-
-type OpenAgentSessionPayload = {
-  projectId: string
-  conversationId: string
-  prompt?: string
-}
 
 type WatchNextAgentSessionPayload = {
   projectId: string

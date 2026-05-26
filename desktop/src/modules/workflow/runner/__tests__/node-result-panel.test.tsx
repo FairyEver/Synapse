@@ -284,6 +284,48 @@ describe("NodeResultPanel", () => {
     })
   })
 
+  it("opens the Agent conversation attached to the selected node result", async () => {
+    const target = {
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "workflow:project-1:123",
+      platform: "workflow" as const,
+    }
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const onOpenAgentConversation = vi.fn()
+
+    await act(async () => {
+      root.render(
+        <NodeResultPanel
+          result={{
+            ...nodeResult(),
+            outputs: { agentConversation: target },
+          }}
+          nodeName="Prompt node"
+          onClose={vi.fn()}
+          onOpenAgentConversation={onOpenAgentConversation}
+        />,
+      )
+    })
+
+    const openButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("打开对话"))
+    expect(openButton).toBeInstanceOf(HTMLButtonElement)
+    expect(container.textContent).not.toContain("agentConversation")
+
+    await act(async () => {
+      openButton?.click()
+    })
+
+    expect(onOpenAgentConversation).toHaveBeenCalledWith(target)
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
+
   it("renders token usage when present", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

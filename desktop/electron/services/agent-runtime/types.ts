@@ -1,4 +1,5 @@
 import type { ActorIdentity } from "../../runtime/security"
+import type { SynapseAgentConversationTarget } from "../../../src/types/agent-navigation"
 
 export const AGENT_RUNTIME_SERVICE_ID = "agent.runtime"
 
@@ -267,6 +268,7 @@ export type ScheduledAgentSendInput = {
   readonly modelTier?: string
   readonly sourcePlatform?: ScheduledAgentSourcePlatform
   readonly userMeta?: Record<string, unknown>
+  readonly onConversationCreated?: (target: SynapseAgentConversationTarget) => void
 }
 
 export type CancelTurnResult = {
@@ -275,6 +277,7 @@ export type CancelTurnResult = {
 
 export type ScheduledAgentSendResult = {
   readonly conversationId: string
+  readonly sessionKey: string
   readonly status: "success" | "error" | "timeout"
   readonly summary?: string
   readonly error?: string

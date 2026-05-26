@@ -734,6 +734,76 @@ describe("AgentRuntimeService", () => {
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain("done from sensitive prompt")
   })
 
+  it("returns scheduled agent sessionKey with the conversation id", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+      now: fixedNow,
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "plan",
+      prompt: "scheduled prompt",
+      sessionPolicy: "fresh",
+      timeoutMs: 120_000,
+    })
+
+    expect(result.status).toBe("success")
+    expect(result.conversationId).toBeTruthy()
+    expect(result.sessionKey).toMatch(/^scheduled:project-1:/)
+    const session = await conversations.get(result.conversationId)
+    expect(session?.sessionKey).toBe(result.sessionKey)
+  })
+
+  it("notifies workflow conversation targets when the conversation is created", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const onConversationCreated = vi.fn()
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+      ], "sdk-1"),
+      now: fixedNow,
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "bypassPermissions",
+      prompt: "workflow prompt",
+      sessionPolicy: "fresh",
+      timeoutMs: 120_000,
+      sourcePlatform: "workflow",
+      userMeta: {
+        source: "workflow",
+        workflowId: "wf-1",
+        workflowRunId: "run-1",
+        workflowNodeId: "node-1",
+      },
+      onConversationCreated,
+    })
+
+    expect(result.status).toBe("success")
+    expect(onConversationCreated).toHaveBeenCalledTimes(1)
+    expect(onConversationCreated).toHaveBeenCalledWith({
+      projectId: "project-1",
+      conversationId: result.conversationId,
+      sessionKey: result.sessionKey,
+      platform: "workflow",
+    })
+  })
+
   it("returns scheduled agent usage and cost from the terminal SDK result", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const service = new AgentRuntimeService({

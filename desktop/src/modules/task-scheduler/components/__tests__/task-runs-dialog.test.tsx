@@ -10,11 +10,16 @@ import { TaskRunsDialog } from "../task-runs-dialog"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
-const mocks = vi.hoisted(() => ({
-  listRuns: vi.fn(),
-  track: vi.fn(),
-  warn: vi.fn(),
-}))
+const mocks = vi.hoisted(() => {
+  const toast = Object.assign(vi.fn(), { error: vi.fn() })
+  return {
+    listRuns: vi.fn(),
+    openConversation: vi.fn(),
+    toast,
+    track: vi.fn(),
+    warn: vi.fn(),
+  }
+})
 
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => ({
@@ -23,6 +28,10 @@ vi.mock("@/app-shell/logging", () => ({
     warn: mocks.warn,
     error: vi.fn(),
   }),
+}))
+
+vi.mock("sonner", () => ({
+  toast: mocks.toast,
 }))
 
 vi.mock("@/lib/ui-tracking", async () => {
@@ -64,6 +73,7 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  delete (window as unknown as { synapse?: unknown }).synapse
   vi.clearAllMocks()
 })
 
@@ -252,6 +262,109 @@ describe("TaskRunsDialog", () => {
       },
     })
     expect(JSON.stringify(mocks.track.mock.calls)).not.toContain("prompt")
+  })
+
+  it("opens the scheduled Agent conversation from a run history item", async () => {
+    mocks.openConversation.mockResolvedValue({ opened: true })
+    ;(window as unknown as { synapse?: unknown }).synapse = {
+      agent: { openConversation: mocks.openConversation },
+    }
+    mocks.listRuns.mockResolvedValue([{
+      ...createRun(),
+      result: {
+        status: "success",
+        summary: "done",
+        outputs: {
+          conversationId: "conversation-1",
+          sessionKey: "scheduled:project-1:123",
+          projectId: "project-1",
+          platform: "scheduled",
+        },
+      },
+    }])
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <TaskRunsDialog
+          open
+          busy={false}
+          task={createTask()}
+          onOpenChange={vi.fn()}
+          onStopRun={vi.fn()}
+        />,
+      )
+      await Promise.resolve()
+    })
+
+    const openButton = Array.from(document.body.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("打开对话"))
+    expect(openButton).toBeInstanceOf(HTMLButtonElement)
+
+    await act(async () => {
+      openButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mocks.openConversation).toHaveBeenCalledWith({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "scheduled:project-1:123",
+      platform: "scheduled",
+    })
+  })
+
+  it("shows a message when the scheduled Agent conversation was deleted", async () => {
+    mocks.openConversation.mockResolvedValue({ opened: false, reason: "not-found" })
+    ;(window as unknown as { synapse?: unknown }).synapse = {
+      agent: { openConversation: mocks.openConversation },
+    }
+    mocks.listRuns.mockResolvedValue([{
+      ...createRun(),
+      result: {
+        status: "success",
+        summary: "done",
+        outputs: {
+          conversationId: "conversation-1",
+          sessionKey: "scheduled:project-1:123",
+          projectId: "project-1",
+          platform: "scheduled",
+        },
+      },
+    }])
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <TaskRunsDialog
+          open
+          busy={false}
+          task={createTask()}
+          onOpenChange={vi.fn()}
+          onStopRun={vi.fn()}
+        />,
+      )
+      await Promise.resolve()
+    })
+
+    const openButton = Array.from(document.body.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("打开对话"))
+    expect(openButton).toBeInstanceOf(HTMLButtonElement)
+
+    await act(async () => {
+      openButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(mocks.toast.error).toHaveBeenCalledWith("对话不存在或已删除")
   })
 })
 

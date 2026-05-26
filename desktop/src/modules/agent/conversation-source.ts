@@ -1,13 +1,7 @@
 import type { SynapseAgentSessionSummary } from "@/types/agent"
+import type { SynapseAgentConversationSourceFilter } from "@/types/agent-navigation"
 
-type ConversationSourceFilter =
-  | "user"
-  | "scheduled"
-  | "workflow"
-  | "webhook"
-  | "relay"
-  | "bridge"
-  | "all"
+type ConversationSourceFilter = SynapseAgentConversationSourceFilter
 
 const CONVERSATION_SOURCE_OPTIONS: Array<{ value: ConversationSourceFilter; label: string }> = [
   { value: "user", label: "用户对话" },

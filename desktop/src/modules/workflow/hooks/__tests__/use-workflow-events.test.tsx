@@ -188,14 +188,55 @@ describe("useWorkflowEvents", () => {
 
     expect(onSnapshotSaveFailed).toHaveBeenCalledWith("completed")
   })
+
+  it("notifies live Agent conversation targets", async () => {
+    const target = {
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "workflow:project-1:123",
+      platform: "workflow" as const,
+    }
+    const onNodeAgentConversation = vi.fn()
+    const root = createRoot(document.createElement("div"))
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe
+          onFailed={vi.fn()}
+          onNodeAgentConversation={onNodeAgentConversation}
+        />,
+      )
+    })
+
+    await act(async () => {
+      workflowListener?.({
+        type: "node:agent-conversation",
+        runId: "run-1",
+        nodeId: "node-1",
+        target,
+      })
+      await Promise.resolve()
+    })
+
+    expect(onNodeAgentConversation).toHaveBeenCalledWith("node-1", target)
+  })
 })
 
 function HookProbe({
   onFailed,
+  onNodeAgentConversation,
 }: {
   readonly onFailed: (error: string, nodeResults?: Record<string, NodeRunResult>) => void
+  readonly onNodeAgentConversation?: (
+    nodeId: string,
+    target: NonNullable<NodeRunResult["outputs"]>["agentConversation"],
+  ) => void
 }): ReactNode {
-  const callbacks = useMemo(() => ({ onFailed }), [onFailed])
+  const callbacks = useMemo(() => ({ onFailed, onNodeAgentConversation }), [
+    onFailed,
+    onNodeAgentConversation,
+  ])
   useWorkflowEvents("run-1", callbacks)
   return null
 }

@@ -3,8 +3,14 @@ import { z } from "zod"
 import type { IpcMethodDescriptor } from "../../runtime/ipc/types"
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { ConversationEntryV1, DataRepository } from "../../runtime/data-repo"
+import type { WindowManager } from "../../runtime/window"
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
+import {
+  OPEN_AGENT_SESSION_EVENT,
+  type SynapseAgentConversationTarget,
+  type SynapseOpenAgentConversationResult,
+} from "../../../src/types/agent-navigation"
 import {
   DEFAULT_LOCAL_SESSION_KEY,
   LOCAL_RENDERER_PLATFORM,
@@ -45,6 +51,13 @@ const renameSessionRequestSchema = projectRequestSchema.extend({
   name: z.string().min(1),
 })
 
+const openConversationRequestSchema = z.object({
+  projectId: z.string().min(1),
+  conversationId: z.string().min(1),
+  sessionKey: z.string().min(1),
+  platform: z.enum(["workflow", "scheduled"]),
+})
+
 // ─── Response schemas ─────────────────────────────────────────────────────────
 
 const statusSchema = z.object({
@@ -65,6 +78,11 @@ const renameSessionResultSchema = z.object({
   ok: z.boolean(),
 })
 
+const openConversationResultSchema = z.discriminatedUnion("opened", [
+  z.object({ opened: z.literal(true) }),
+  z.object({ opened: z.literal(false), reason: z.literal("not-found") }),
+])
+
 // ─── Types ────────────────────────────────────────────────────────────────────
 
 type ProjectRequest = z.infer<typeof projectRequestSchema>
@@ -73,6 +91,7 @@ type CreateSessionRequest = z.infer<typeof createSessionRequestSchema>
 type SwitchSessionRequest = z.infer<typeof switchSessionRequestSchema>
 type DeleteSessionRequest = z.infer<typeof deleteSessionRequestSchema>
 type RenameSessionRequest = z.infer<typeof renameSessionRequestSchema>
+type OpenConversationRequest = z.infer<typeof openConversationRequestSchema>
 
 function resolveCreateSessionMode(
   requestedMode: CreateSessionRequest["mode"],
@@ -120,6 +139,34 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
       return allSessions
         .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
         .map((session) => sessionSummary(session))
+    },
+  },
+  openConversation: {
+    kind: "invoke",
+    channel: "synapse:agent:open-conversation",
+    request: openConversationRequestSchema,
+    response: openConversationResultSchema,
+    handler: async (ctx, request: OpenConversationRequest): Promise<SynapseOpenAgentConversationResult> => {
+      const dataRepo = ctx.resolve<DataRepository>("core.data-repository")
+      const conversations = dataRepo.namespace<ConversationEntryV1>("conversations")
+      const conversation = await conversations.get(request.conversationId)
+      if (!isRequestedConversation(conversation, request)) {
+        return { opened: false, reason: "not-found" }
+      }
+
+      const windowManager = ctx.resolve<WindowManager>("core.window-manager")
+      windowManager.open("main")
+      windowManager.broadcast(
+        OPEN_AGENT_SESSION_EVENT,
+        {
+          projectId: request.projectId,
+          conversationId: request.conversationId,
+          sessionKey: request.sessionKey,
+          sourceFilter: request.platform,
+        },
+        (window) => window.role === "main",
+      )
+      return { opened: true }
     },
   },
   createSession: {
@@ -246,6 +293,17 @@ export const sessionMethods: Record<string, IpcMethodDescriptor> = {
       }
     },
   },
+}
+
+function isRequestedConversation(
+  conversation: ConversationEntryV1 | null,
+  request: SynapseAgentConversationTarget,
+): conversation is ConversationEntryV1 {
+  return Boolean(conversation)
+    && conversation?.projectId === request.projectId
+    && conversation.id === request.conversationId
+    && conversation.sessionKey === request.sessionKey
+    && conversation.platform === request.platform
 }
 
 async function deleteOrphanSession(

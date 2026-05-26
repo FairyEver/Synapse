@@ -1,6 +1,7 @@
 import type { LucideIcon } from "lucide-react"
 import type { ZodType } from "zod"
 import type { ActorIdentity } from "../electron/runtime/security"
+import type { SynapseAgentConversationTarget } from "../src/types/agent-navigation"
 
 export interface PortDefinition { id: string; label: string }
 export interface ConfigFieldDescriptor {
@@ -47,6 +48,7 @@ export interface AgentSendDeps {
     workflowRunId?: string
     workflowNodeId?: string
     workflowNodeName?: string
+    onConversationCreated?: (target: SynapseAgentConversationTarget) => void
   }) => Promise<{
     status: "success" | "failed"
     response: string
@@ -54,6 +56,7 @@ export interface AgentSendDeps {
     durationMs: number
     usage?: Record<string, unknown>
     costUsd?: number
+    agentConversation?: SynapseAgentConversationTarget
   }>
 }
 
@@ -81,6 +84,7 @@ export interface NodeExecutionInput<TConfig> {
   agentDeps: AgentSendDeps
   runtimeDeps?: NodeRuntimeDeps
   onProgress?: (phase: string, label: string) => void
+  onAgentConversation?: (target: SynapseAgentConversationTarget) => void
 }
 
 export interface NodeExecutionResult {
@@ -92,6 +96,7 @@ export interface NodeExecutionResult {
   durationMs: number
   usage?: Record<string, unknown>
   costUsd?: number
+  agentConversation?: SynapseAgentConversationTarget
 }
 
 export interface NodeExecutor<TConfig = unknown> {

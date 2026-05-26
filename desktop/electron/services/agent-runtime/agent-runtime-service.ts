@@ -66,6 +66,7 @@ import type {
 } from "./types"
 import type { SkillRegistry } from "./skill-registry"
 import { sanitizeError } from "../error-sanitize"
+import type { SynapseAgentConversationTarget } from "../../../src/types/agent-navigation"
 
 interface CommandExecutionRunner {
   run(request: ControlledProcessRunRequest): Promise<ControlledProcessResult>
@@ -278,6 +279,7 @@ export class AgentRuntimeService {
       const durationMs = Date.now() - startMs
       const result: ScheduledAgentSendResult = {
         conversationId: "",
+        sessionKey,
         status: "error",
         error: "Aborted before execution",
         durationMs,
@@ -323,6 +325,7 @@ export class AgentRuntimeService {
           })
           return {
             conversationId: "",
+            sessionKey,
             status: "error",
             error: "Agent spawn not permitted for scheduled execution",
             durationMs: Date.now() - startMs,
@@ -343,12 +346,22 @@ export class AgentRuntimeService {
       }
 
       let result: AgentRuntimeTurnResult
+      let conversationTarget: SynapseAgentConversationTarget | undefined
+      const captureConversationTarget = (
+        conversation: Pick<ConversationEntryV1, "id" | "projectId" | "sessionKey" | "platform">,
+      ) => {
+        const target = scheduledConversationTarget(conversation, sourcePlatform)
+        if (!target) return
+        conversationTarget = target
+        input.onConversationCreated?.(target)
+      }
 
       if (input.sessionPolicy === "fresh" || !input.lastConversationId) {
         const name = formatScheduledSessionName(input, this.deps.now?.() ?? new Date())
         result = await this.conversationRouter.sendNewSession(message, name, {
           abortSignal: ac.signal,
           liveEventTimeoutMs: scheduledLiveEventTimeoutMs(input.timeoutMs),
+          onConversationCreated: captureConversationTarget,
         })
       } else {
         try {
@@ -365,14 +378,19 @@ export class AgentRuntimeService {
           result = await this.conversationRouter.sendNewSession(message, name, {
             abortSignal: ac.signal,
             liveEventTimeoutMs: scheduledLiveEventTimeoutMs(input.timeoutMs),
+            onConversationCreated: captureConversationTarget,
           })
         }
       }
 
+      const resultSessionKey = conversationTarget?.sessionKey
+        ?? (result.conversationId ? (await this.repository.get(result.conversationId))?.sessionKey : undefined)
+        ?? sessionKey
       const timedOut = ac.signal.aborted && !externalSignal?.aborted
       if (timedOut) {
         const scheduledResult: ScheduledAgentSendResult = {
           conversationId: result.conversationId,
+          sessionKey: resultSessionKey,
           status: "timeout",
           error: `Execution exceeded ${input.timeoutMs}ms timeout`,
           durationMs: Date.now() - startMs,
@@ -385,6 +403,7 @@ export class AgentRuntimeService {
 
       const scheduledResult: ScheduledAgentSendResult = {
         conversationId: result.conversationId,
+        sessionKey: resultSessionKey,
         status: result.error ? "error" : "success",
         summary: result.resultText || undefined,
         error: result.error ? sanitizeError(result.error) : undefined,
@@ -404,6 +423,7 @@ export class AgentRuntimeService {
       const errorLength = isTimeout ? undefined : errorMessageText.length
       const scheduledResult: ScheduledAgentSendResult = {
         conversationId: "",
+        sessionKey,
         status: isTimeout ? "timeout" : "error",
         error: isTimeout
           ? `Execution exceeded ${input.timeoutMs}ms timeout`
@@ -1239,6 +1259,19 @@ function errorMessage(error: unknown): string {
 
 function scheduledLiveEventTimeoutMs(timeoutMs: number): number | undefined {
   return timeoutMs > 0 ? undefined : 0
+}
+
+function scheduledConversationTarget(
+  conversation: Pick<ConversationEntryV1, "id" | "projectId" | "sessionKey">,
+  platform: SynapseAgentConversationTarget["platform"],
+): SynapseAgentConversationTarget | null {
+  if (!conversation.id || !conversation.projectId || !conversation.sessionKey) return null
+  return {
+    projectId: conversation.projectId,
+    conversationId: conversation.id,
+    sessionKey: conversation.sessionKey,
+    platform,
+  }
 }
 
 async function resolvePublishedProjectCommands(

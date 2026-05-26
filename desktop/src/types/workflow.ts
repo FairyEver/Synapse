@@ -1,3 +1,5 @@
+import type { SynapseAgentConversationTarget } from "./agent-navigation"
+
 export interface WorkflowParam {
   name: string; type: "text" | "number"; default: string | number | null; description?: string
 }
@@ -59,7 +61,11 @@ export interface NodeRunResult {
   nodeId: string
   status: "pending" | "running" | "success" | "failed" | "cancelled" | "skipped"
   input: { variables: Record<string, string>; prompt?: string }
-  output?: string; outputs?: Record<string, unknown>; activeBranch?: string; error?: string
+  output?: string
+  outputs?: Record<string, unknown> & {
+    readonly agentConversation?: SynapseAgentConversationTarget
+  }
+  activeBranch?: string; error?: string
   startedAt?: number; endedAt?: number; durationMs?: number
   progressLabel?: string
   usage?: Record<string, unknown>
@@ -87,6 +93,7 @@ export type WorkflowEvent =
   | { type: "workflow:started"; runId: string; workflowId: string }
   | { type: "node:started"; runId: string; nodeId: string; startedAt?: number; result?: NodeRunResult }
   | { type: "node:progress"; runId: string; nodeId: string; phase: string; label: string }
+  | { type: "node:agent-conversation"; runId: string; nodeId: string; target: SynapseAgentConversationTarget }
   | { type: "node:completed"; runId: string; nodeId: string; output: unknown; result?: NodeRunResult }
   | { type: "node:failed"; runId: string; nodeId: string; error: string; result?: NodeRunResult }
   | { type: "node:skipped"; runId: string; nodeId: string; result?: NodeRunResult }

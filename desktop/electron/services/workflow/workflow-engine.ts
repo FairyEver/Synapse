@@ -1,4 +1,5 @@
 import type { WorkflowDefinition, WorkflowRunResult, WorkflowEvent, NodeRunResult } from "../../../src/types/workflow"
+import type { SynapseAgentConversationTarget } from "../../../src/types/agent-navigation"
 import type { AgentSendDeps, NodeRuntimeDeps } from "../../../workflow-nodes/types"
 import type { ActorIdentity } from "../../runtime/security"
 import { nodeTypeRegistry } from "../../../workflow-nodes/registry"
@@ -41,6 +42,17 @@ function errorDiagnostic(error: unknown): { readonly errorName: string; readonly
 
 function normalizeOptionalString(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
+function mergeAgentConversationOutput(
+  outputs: Record<string, unknown> | undefined,
+  agentConversation: SynapseAgentConversationTarget | undefined,
+): NodeRunResult["outputs"] {
+  if (!agentConversation) return outputs as NodeRunResult["outputs"]
+  return {
+    ...(outputs ?? {}),
+    agentConversation,
+  }
 }
 
 type EventCallback = (event: WorkflowEvent) => void
@@ -215,6 +227,15 @@ export class WorkflowEngine {
             onProgress: (phase, label) => {
               emit({ type: "node:progress", runId, nodeId, phase, label })
             },
+            onAgentConversation: (target) => {
+              const existing = nodeResults[nodeId]
+                ?? { nodeId, status: "running" as const, input: { variables: {} } }
+              nodeResults[nodeId] = {
+                ...existing,
+                outputs: mergeAgentConversationOutput(existing.outputs, target),
+              }
+              emit({ type: "node:agent-conversation", runId, nodeId, target })
+            },
           })
 
           if (effectiveAbortSignal.aborted) {
@@ -223,9 +244,11 @@ export class WorkflowEngine {
 
           return {
             nodeId, status: execResult.status, output: execResult.output,
-            outputs: execResult.outputs, activeBranch: execResult.activeBranch,
+            outputs: mergeAgentConversationOutput(execResult.outputs, execResult.agentConversation),
+            activeBranch: execResult.activeBranch,
             error: execResult.error, durationMs: execResult.durationMs,
             usage: execResult.usage, costUsd: execResult.costUsd,
+            agentConversation: execResult.agentConversation,
           }
         } catch (err) {
           if (effectiveAbortSignal.aborted) {
@@ -267,7 +290,10 @@ export class WorkflowEngine {
         }
         nr.status = outcome.status
         nr.output = outcome.output
-        nr.outputs = outcome.outputs
+        nr.outputs = mergeAgentConversationOutput(
+          outcome.outputs,
+          outcome.agentConversation ?? nr.outputs?.agentConversation,
+        )
         nr.activeBranch = outcome.activeBranch
         nr.error = outcome.error
         nr.usage = outcome.usage

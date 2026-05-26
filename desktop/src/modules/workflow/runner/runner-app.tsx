@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { WorkflowDefinition, NodeRunResult, WorkflowRunStatus } from "@/types/workflow"
+import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
 import { createRendererLogger } from "@/app-shell/logging"
 import "../../../../workflow-nodes/register.renderer"
 import { useWorkflowEvents } from "../hooks/use-workflow-events"
@@ -26,6 +27,7 @@ import { sanitizeError } from "@/lib/error-sanitize"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { toast } from "sonner"
 import { formatNodeRunReport, formatWorkflowRunReport } from "./run-report"
+import { openAgentConversationTarget } from "@/lib/agent-conversation-target"
 
 const logger = createRendererLogger("workflow.runner")
 
@@ -179,6 +181,22 @@ export function WorkflowRunnerApp() {
       ...r,
       [nodeId]: result ?? { nodeId, input: { variables: {} }, status: "skipped" as const },
     })),
+    onNodeAgentConversation: (nodeId, target) => {
+      if (!target) return
+      setNodeResults((r) => {
+        const existing = r[nodeId] ?? { nodeId, input: { variables: {} }, status: "running" as const }
+        return {
+          ...r,
+          [nodeId]: {
+            ...existing,
+            outputs: {
+              ...(existing.outputs ?? {}),
+              agentConversation: target,
+            },
+          },
+        }
+      })
+    },
     onCompleted: (results) => { setRunState("completed"); setRunError(null); setNodeResults(results) },
     onFailed: (error, results) => {
       setRunState("failed"); setRunError(error)
@@ -295,6 +313,25 @@ export function WorkflowRunnerApp() {
       setRunError("打开工作流失败，请重试")
     })
   }, [workflowId])
+
+  const handleOpenAgentConversation = useCallback(async (target: SynapseAgentConversationTarget) => {
+    try {
+      const result = await openAgentConversationTarget(target)
+      if (!result.opened) {
+        toast.error("对话不存在或已删除")
+      }
+    } catch (err) {
+      logger.warn("workflow runner Agent conversation open failed", {
+        runId,
+        workflowId,
+        conversationId: target.conversationId,
+        platform: target.platform,
+        boundary: "renderer.workflow.runner.open-agent-conversation",
+        ...errorDiagnostic(err),
+      })
+      toast.error("打开失败")
+    }
+  }, [runId, workflowId])
 
   const handleRetry = useCallback(() => {
     logger.info("retry loading run", { runId, workflowId })
@@ -424,6 +461,7 @@ export function WorkflowRunnerApp() {
               nodeResults={nodeResults}
               selectedNodeId={selectedNodeId}
               onNodeSelect={setSelectedNodeId}
+              onOpenAgentConversation={handleOpenAgentConversation}
             />
           )}
         </ResizablePanel>
@@ -442,6 +480,7 @@ export function WorkflowRunnerApp() {
                 definition={definition}
                 onClose={() => setSelectedNodeId(null)}
                 onCopyNodeReport={handleCopyNodeReport}
+                onOpenAgentConversation={handleOpenAgentConversation}
               />
             </ResizablePanel>
           </>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react"
-import { Clock, Play, RotateCcw, Square } from "lucide-react"
+import { Clock, MessageSquare, Play, RotateCcw, Square } from "lucide-react"
+import { toast } from "sonner"
 
 import { ActionResultView } from "@/action-runtime/action-result-view"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
@@ -16,7 +17,9 @@ import {
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
 import { createRendererLogger } from "@/app-shell/logging"
+import { agentConversationTargetFromOutputs, openAgentConversationTarget } from "@/lib/agent-conversation-target"
 import { track } from "@/lib/ui-tracking"
+import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
 import type { ScheduledTask, ScheduledTaskRun } from "@/types/task-scheduler"
 import { formatRunStatus, formatTaskDate } from "../utils"
 import { listRuns } from "../hooks/use-task-scheduler"
@@ -160,6 +163,9 @@ function RunItem({
   readonly onStop: (run: ScheduledTaskRun) => void
 }) {
   const hasOutput = run.result || run.error
+  const agentConversation = task?.action.type === "builtin.agent"
+    ? agentConversationTargetFromOutputs(run.result?.outputs)
+    : null
   const statusVariant = run.status === "failed" || run.status === "timeout" ? "destructive" : "secondary"
   const triggerIcon = run.triggeredBy === "manual"
     ? <Play className="size-3" />
@@ -183,6 +189,18 @@ function RunItem({
             <span className="text-xs text-muted-foreground">
               {formatDuration(run.result.metrics.durationMs)}
             </span>
+          ) : null}
+          {agentConversation ? (
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => {
+                void handleOpenAgentConversation(agentConversation, run, task)
+              }}
+            >
+              <MessageSquare data-icon="inline-start" />
+              打开对话
+            </Button>
           ) : null}
           {run.status === "running" ? (
             <Button
@@ -217,6 +235,30 @@ function RunItem({
       ) : null}
     </div>
   )
+}
+
+async function handleOpenAgentConversation(
+  target: SynapseAgentConversationTarget,
+  run: ScheduledTaskRun,
+  task: ScheduledTask | null,
+): Promise<void> {
+  try {
+    const result = await openAgentConversationTarget(target)
+    if (!result.opened) {
+      toast.error("对话不存在或已删除")
+    }
+  } catch (error) {
+    logger.warn("Task run Agent conversation open failed.", {
+      taskId: task?.id,
+      runId: run.id,
+      actionType: task?.action.type,
+      conversationId: target.conversationId,
+      platform: target.platform,
+      boundary: "renderer.task-scheduler.runs.open-agent-conversation",
+      ...errorDiagnostic(error),
+    })
+    toast.error("打开失败")
+  }
 }
 
 function RunResult({

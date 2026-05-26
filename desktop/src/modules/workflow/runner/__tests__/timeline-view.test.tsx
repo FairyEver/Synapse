@@ -11,6 +11,7 @@ import { TimelineView } from "../timeline-view"
 const track = vi.hoisted(() => vi.fn())
 
 vi.mock("@/lib/ui-tracking", () => ({
+  extractLabel: () => "button",
   track,
 }))
 
@@ -69,6 +70,50 @@ describe("TimelineView", () => {
       },
     })
     expect(JSON.stringify(track.mock.calls)).not.toContain("secret output")
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
+
+  it("opens the Agent conversation attached to a node result", async () => {
+    const target = {
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "workflow:project-1:123",
+      platform: "workflow" as const,
+    }
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    const onOpenAgentConversation = vi.fn()
+
+    await act(async () => {
+      root.render(
+        <TimelineView
+          definition={definition()}
+          nodeResults={{
+            "node-1": {
+              ...nodeResult(),
+              outputs: { agentConversation: target },
+            },
+          }}
+          selectedNodeId={null}
+          onNodeSelect={vi.fn()}
+          onOpenAgentConversation={onOpenAgentConversation}
+        />,
+      )
+    })
+
+    const openButton = Array.from(container.querySelectorAll("button"))
+      .find((button) => button.textContent?.includes("打开对话"))
+    expect(openButton).toBeInstanceOf(HTMLButtonElement)
+
+    await act(async () => {
+      openButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onOpenAgentConversation).toHaveBeenCalledWith(target)
 
     await act(async () => {
       root.unmount()

@@ -364,6 +364,15 @@ function handleRunEvent(options: {
     nextNodeResults[event.nodeId] = event.result ?? { ...(nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, input: { variables: {} } }), status: "running", startedAt: event.startedAt ?? Date.now() }
   } else if (event.type === "node:progress") {
     nextNodeResults[event.nodeId] = { ...(nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, input: { variables: {} }, status: "running" }), progressLabel: event.label }
+  } else if (event.type === "node:agent-conversation") {
+    const existing = nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, input: { variables: {} }, status: "running" as const }
+    nextNodeResults[event.nodeId] = {
+      ...existing,
+      outputs: {
+        ...(existing.outputs ?? {}),
+        agentConversation: event.target,
+      },
+    }
   } else if (event.type === "node:completed" || event.type === "node:failed" || event.type === "node:skipped") {
     nextNodeResults[event.nodeId] = event.result ?? nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: event.type === "node:skipped" ? "skipped" : "failed", input: { variables: {} } }
   }

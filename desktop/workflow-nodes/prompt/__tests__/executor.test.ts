@@ -117,6 +117,42 @@ describe("promptNodeExecutor", () => {
     })
   })
 
+  it("returns and reports the Agent conversation target", async () => {
+    const target = {
+      projectId: "p1",
+      conversationId: "conversation-1",
+      sessionKey: "workflow:p1:123",
+      platform: "workflow" as const,
+    }
+    const onAgentConversation = vi.fn()
+    const sendToAgent = vi.fn(async (
+      input: { onConversationCreated?: (conversationTarget: typeof target) => void },
+    ) => {
+      input.onConversationCreated?.(target)
+      return {
+        status: "success" as const,
+        response: "answer",
+        durationMs: 5,
+        agentConversation: target,
+      }
+    })
+
+    const r = await promptNodeExecutor.execute({
+      config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "test" },
+      resolvedVariables: {},
+      context: ctx,
+      agentDeps: { sendToAgent },
+      onAgentConversation,
+    })
+
+    expect(r).toMatchObject({
+      status: "success",
+      output: "answer",
+      agentConversation: target,
+    })
+    expect(onAgentConversation).toHaveBeenCalledWith(target)
+  })
+
   it("returns sanitized Agent error for UI display — redacts secrets and paths", async () => {
     const error = "SDK failed with token=sk-secret from /Users/liyang/private"
     const r = await promptNodeExecutor.execute({

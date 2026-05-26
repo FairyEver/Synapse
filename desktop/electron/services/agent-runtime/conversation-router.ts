@@ -117,7 +117,11 @@ export class ConversationRouter {
   async sendNewSession(
     message: AgentMessage,
     name: string,
-    options: { readonly abortSignal?: AbortSignal; readonly liveEventTimeoutMs?: number } = {},
+    options: {
+      readonly abortSignal?: AbortSignal
+      readonly liveEventTimeoutMs?: number
+      readonly onConversationCreated?: (conversation: ConversationEntryV1) => void
+    } = {},
   ): Promise<AgentRuntimeTurnResult> {
     this.assertProject(message)
     const providerId = await this.resolveNewConversationProviderId(message)
@@ -135,6 +139,7 @@ export class ConversationRouter {
       userMeta: userMetaFromMessage(message),
       resumePolicy: "fresh",
     })
+    options.onConversationCreated?.(conversation)
     return this.enqueueTurn({ ...message, providerId }, conversation, options)
   }
 

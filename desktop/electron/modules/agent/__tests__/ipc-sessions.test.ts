@@ -12,6 +12,7 @@ const logStoreMock = vi.hoisted(() => ({
 import type { ConversationEntryV1, DataNamespace, DataRepository } from "../../../runtime/data-repo"
 import type { IpcHandlerContext } from "../../../runtime/ipc"
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
+import type { WindowManager } from "../../../runtime/window"
 import { AGENT_RUNTIME_SERVICE_ID } from "../../../services/agent-runtime"
 import { configStore } from "../../../services/config-store"
 import { PROVIDER_SERVICE_ID } from "../../../services/provider"
@@ -169,6 +170,68 @@ describe("agent session IPC methods", () => {
     expect(await conversations.get("orphan-conv")).toBeNull()
   })
 
+  it("opens an existing workflow conversation in the main Agent tab", async () => {
+    const conversations = createConversationNamespace([
+      storedConversation({
+        id: "conv-workflow",
+        platform: "workflow",
+        sessionKey: "workflow:project-1:123",
+      }),
+    ])
+    const windowManager = createWindowManager()
+    const ctx = createContext({
+      agent: {},
+      dataRepo: {
+        namespace: vi.fn(() => conversations),
+      } as unknown as DataRepository,
+      windowManager,
+    })
+
+    await expect(sessionMethods.openConversation.handler(ctx, {
+      projectId: "project-1",
+      conversationId: "conv-workflow",
+      sessionKey: "workflow:project-1:123",
+      platform: "workflow",
+    })).resolves.toEqual({ opened: true })
+
+    expect(windowManager.open).toHaveBeenCalledWith("main")
+    expect(windowManager.broadcast).toHaveBeenCalledWith(
+      "synapse:open-agent-session",
+      {
+        projectId: "project-1",
+        conversationId: "conv-workflow",
+        sessionKey: "workflow:project-1:123",
+        sourceFilter: "workflow",
+      },
+      expect.any(Function),
+    )
+    const filter = windowManager.broadcast.mock.calls[0]?.[2]
+    expect(filter?.({ role: "main" })).toBe(true)
+    expect(filter?.({ role: "detail" })).toBe(false)
+  })
+
+  it("does not open the Agent tab when the workflow conversation is gone", async () => {
+    const conversations = createConversationNamespace([])
+    const windowManager = createWindowManager()
+    const ctx = createContext({
+      agent: {},
+      dataRepo: {
+        namespace: vi.fn(() => conversations),
+      } as unknown as DataRepository,
+      windowManager,
+    })
+
+    await expect(sessionMethods.openConversation.handler(ctx, {
+      projectId: "project-1",
+      conversationId: "conv-workflow",
+      sessionKey: "workflow:project-1:123",
+      platform: "workflow",
+    })).resolves.toEqual({ opened: false, reason: "not-found" })
+
+    expect(windowManager.open).not.toHaveBeenCalled()
+    expect(windowManager.broadcast).not.toHaveBeenCalled()
+  })
+
   it("logs session rename failures without recording the requested title", async () => {
     const renameSession = vi.fn().mockRejectedValue(new Error("write failed"))
     const ctx = createContext({
@@ -206,6 +269,7 @@ describe("agent session IPC methods", () => {
 function createContext(overrides: {
   readonly agent: Record<string, unknown>
   readonly dataRepo: DataRepository
+  readonly windowManager?: WindowManager
 }): IpcHandlerContext {
   const providerService = {}
   const container: ProjectContainer = {
@@ -226,8 +290,27 @@ function createContext(overrides: {
     resolve: <T>(serviceId: string): T => {
       if (serviceId === "core.project-containers") return projectContainers as T
       if (serviceId === "core.data-repository") return overrides.dataRepo as T
+      if (serviceId === "core.window-manager" && overrides.windowManager) return overrides.windowManager as T
       throw new Error(`Unknown service: ${serviceId}`)
     },
+  }
+}
+
+function createWindowManager(): WindowManager & {
+  open: ReturnType<typeof vi.fn>
+  broadcast: ReturnType<typeof vi.fn>
+} {
+  return {
+    register: vi.fn(),
+    attach: vi.fn(),
+    open: vi.fn(),
+    close: vi.fn(),
+    list: vi.fn(() => []),
+    getAllWindows: vi.fn(() => []),
+    broadcast: vi.fn(() => 1),
+  } as unknown as WindowManager & {
+    open: ReturnType<typeof vi.fn>
+    broadcast: ReturnType<typeof vi.fn>
   }
 }
 

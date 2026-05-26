@@ -1,4 +1,5 @@
 import { createMainLogger } from "../log-store"
+import type { SynapseAgentConversationTarget } from "../../../src/types/agent-navigation"
 
 const logger = createMainLogger("service.workflow.scheduler")
 
@@ -12,6 +13,7 @@ export interface NodeExecOutcome {
   durationMs?: number
   usage?: Record<string, unknown>
   costUsd?: number
+  agentConversation?: SynapseAgentConversationTarget
 }
 
 export interface NodeTask {
