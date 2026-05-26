@@ -30,6 +30,7 @@ import {
   listSkillFiles,
   prepareQuickPublishDraft,
   readItemContent,
+  scanAll,
   scanSkillDirectories,
   trashScanItem,
 } from "../editor-scan-service"
@@ -189,6 +190,27 @@ describe("editor scan quick publish", () => {
       mode: "path",
     })
     expect(result.duplicateSkillNames).toEqual(["reviewer"])
+  })
+
+  it("keeps global scans non-fatal when an editor detection directory is inaccessible", async () => {
+    const root = await createTempDir()
+    const blockedHome = path.join(root, "blocked-home")
+    await mkdir(blockedHome, { recursive: true })
+    await chmod(blockedHome, 0o000)
+    vi.spyOn(os, "homedir").mockReturnValue(blockedHome)
+    mockEditorScanProject(path.join(root, "missing-project"))
+
+    try {
+      await expect(scanAll()).resolves.toMatchObject({
+        global: expect.arrayContaining([
+          expect.objectContaining({
+            status: "not-detected",
+          }),
+        ]),
+      })
+    } finally {
+      await chmod(blockedHome, 0o700)
+    }
   })
 
   it("reads installed skill repository version from .synapse.json", async () => {

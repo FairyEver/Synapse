@@ -71,8 +71,10 @@ if (!gotSingleInstanceLock) {
       }
       createIpcRegistry(ipcCtx)
 
-      // Initialize install status cache
-      await installStatusCacheService.buildCache()
+      // Initialize install status cache without making startup depend on editor scans.
+      void installStatusCacheService.buildCache().catch((error) => {
+        logger.warn("Install status cache initialization failed.", { error })
+      })
 
       const result = await registry.startAll().catch(async (startErr) => {
         await registry.stopAll(10_000).catch((stopErr) => {
