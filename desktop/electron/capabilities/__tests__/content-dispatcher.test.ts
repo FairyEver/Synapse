@@ -260,4 +260,44 @@ describe("content capability dispatcher", () => {
     }, { source: "mcp-stdio" })).rejects.toThrow(ContentCapabilityError)
     expect(deps.contentWriter.deleteContent).not.toHaveBeenCalled()
   })
+
+  it.each([
+    ["update", "updateContent", {
+      id: "rule-1",
+      baseHistoryDirname: "20260521000000Z__user__abc123",
+      name: "team-rule",
+      title: "Team Rule",
+      description: "Description",
+      category: "coding",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+      content: "# Rule",
+    }],
+    ["delete", "deleteContent", {
+      id: "rule-1",
+      baseHistoryDirname: "20260521000000Z__user__abc123",
+    }],
+  ] as const)("rejects %s conflicts as content capability errors", async (operation, serviceName, params) => {
+    const deps = createDeps()
+    const dispatcher = createContentCapabilityDispatcher(deps)
+    const conflict = {
+      id: "rule-1",
+      type: "rule" as const,
+      status: "conflict" as const,
+      latestHistoryDirname: "20260522000000Z__user__newer",
+      latestModifiedAt: "2026-05-22T00:00:00.000Z",
+      latestModifiedByDisplayName: "Other User",
+    }
+    deps.contentWriter[serviceName].mockResolvedValueOnce(conflict as never)
+
+    await expect(dispatcher.dispatch(`content.rule.${operation}`, params, { source: "mcp-stdio" }))
+      .rejects.toMatchObject({
+        code: "CONTENT_CONFLICT",
+        details: {
+          conflict,
+        },
+      })
+    expect(deps.eventBus.emit).not.toHaveBeenCalled()
+  })
 })

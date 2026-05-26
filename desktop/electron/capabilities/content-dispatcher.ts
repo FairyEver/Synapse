@@ -163,6 +163,7 @@ async function updateContent(
     contentType,
     payload,
   } as SynapseUpdateContentRequest)
+  assertNoMutationConflict(result)
   emitContentChanged(deps, "update", result)
 
   return { ok: true, data: result }
@@ -177,12 +178,25 @@ async function deleteContent(
   await assertOwnedByCurrentUser(deps, contentType, payload.id)
 
   const result = await deps.contentWriter.deleteContent(payload)
+  assertNoMutationConflict(result)
   emitContentChanged(deps, "delete", result)
 
   return {
     ok: true,
     data: result,
   }
+}
+
+function assertNoMutationConflict(result: SynapseContentMutationResult): void {
+  if (result.status !== "conflict") {
+    return
+  }
+
+  throw new ContentCapabilityError("CONTENT_CONFLICT", "内容已更新，请先读取最新版本后重试。", {
+    details: {
+      conflict: result,
+    },
+  })
 }
 
 function emitContentChanged(
