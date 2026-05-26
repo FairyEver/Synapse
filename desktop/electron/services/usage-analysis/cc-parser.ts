@@ -1,7 +1,7 @@
 import fs from "node:fs"
 import path from "node:path"
 import readline from "node:readline"
-import { estimateUsageCost } from "./pricing"
+import { estimateUsageCost, type UsageModelPriceRule } from "./pricing"
 import { localDateKey, localHourKey } from "./range"
 
 export interface ParsedUsageSession {
@@ -67,6 +67,7 @@ export interface ParsedUsageFile {
 
 export interface UsageParseOptions {
   readonly startLine?: number
+  readonly priceRules?: readonly UsageModelPriceRule[]
 }
 
 function asRecord(value: unknown): Record<string, unknown> | undefined {
@@ -178,7 +179,7 @@ export async function parseClaudeUsageFile(filePath: string, options: UsageParse
       cacheWrite: asNumber(usage.cache_creation_input_tokens),
       reasoning: extractReasoningTokens(content),
     }
-    const cost = estimateUsageCost(model, tokens)
+    const cost = estimateUsageCost(model, tokens, options.priceRules)
     const eventId = `${sessionId}:usage:${messageId || `line-${lineCount}`}`
     usageEvents.set(eventId, {
       id: eventId,

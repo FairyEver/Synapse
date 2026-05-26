@@ -116,7 +116,7 @@ export async function parseCodexUsageFile(filePath: string, options: UsageParseO
         cacheWrite: 0,
         reasoning: asNumber(last.reasoning_output_tokens),
       }
-      const cost = estimateUsageCost(currentModel, tokens)
+      const cost = estimateUsageCost(currentModel, tokens, options.priceRules)
       usageEvents.push({
         id: `${sessionId}:usage:${usageEvents.length}`,
         sessionId,

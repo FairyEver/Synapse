@@ -71,6 +71,8 @@ export function initUsageAnalysisSchema(database: DatabaseSync): void {
         cache_read_tokens INTEGER NOT NULL DEFAULT 0,
         cache_write_tokens INTEGER NOT NULL DEFAULT 0,
         reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+        priced_tokens INTEGER NOT NULL DEFAULT 0,
+        unpriced_tokens INTEGER NOT NULL DEFAULT 0,
         cost_input REAL NOT NULL DEFAULT 0,
         cost_output REAL NOT NULL DEFAULT 0,
         cost_cache_read REAL NOT NULL DEFAULT 0,
@@ -110,6 +112,8 @@ export function initUsageAnalysisSchema(database: DatabaseSync): void {
         cache_read_tokens INTEGER NOT NULL DEFAULT 0,
         cache_write_tokens INTEGER NOT NULL DEFAULT 0,
         reasoning_tokens INTEGER NOT NULL DEFAULT 0,
+        priced_tokens INTEGER NOT NULL DEFAULT 0,
+        unpriced_tokens INTEGER NOT NULL DEFAULT 0,
         cost_input REAL NOT NULL DEFAULT 0,
         cost_output REAL NOT NULL DEFAULT 0,
         cost_cache_read REAL NOT NULL DEFAULT 0,
@@ -174,6 +178,8 @@ export function initUsageAnalysisSchema(database: DatabaseSync): void {
     ensureColumn(database, `${prefix}_usage_events`, "pricing_version", "TEXT NOT NULL DEFAULT ''")
     for (const aggregateTable of [`${prefix}_daily_usage`, `${prefix}_hourly_usage`]) {
       ensureColumn(database, aggregateTable, "cost_input", "REAL NOT NULL DEFAULT 0")
+      ensureColumn(database, aggregateTable, "priced_tokens", "INTEGER NOT NULL DEFAULT 0")
+      ensureColumn(database, aggregateTable, "unpriced_tokens", "INTEGER NOT NULL DEFAULT 0")
       ensureColumn(database, aggregateTable, "cost_output", "REAL NOT NULL DEFAULT 0")
       ensureColumn(database, aggregateTable, "cost_cache_read", "REAL NOT NULL DEFAULT 0")
       ensureColumn(database, aggregateTable, "cost_cache_write", "REAL NOT NULL DEFAULT 0")

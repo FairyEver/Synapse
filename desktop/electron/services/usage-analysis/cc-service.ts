@@ -3,7 +3,8 @@ import {
   parseClaudeUsageFile,
   type ParsedUsageFile,
 } from "./cc-parser"
-import { estimateUsageCost, listUsagePriceRules, saveUsagePriceRules, type UsageModelPriceRule, type UsageModelPriceRuleInput } from "./pricing"
+import { SYNAPSE_COST_CURRENCY, USD_TO_CNY_RATE } from "../../../action-packages/shared/cost-currency"
+import { listUsagePriceRules, saveUsagePriceRules, type UsageModelPriceRule, type UsageModelPriceRuleInput } from "./pricing"
 import { createUsageRangeFilter } from "./range"
 import { collectJsonlFiles, fingerprintFile } from "./scan"
 import type {
@@ -52,6 +53,10 @@ interface UsageEventRow {
   readonly cost_reasoning: number
   readonly total_cost: number
   readonly price_known: number
+  readonly cost_currency: string
+  readonly pricing_rate: number
+  readonly priced_at: string
+  readonly pricing_version: string
 }
 
 interface ParsedTaskLike {
@@ -159,12 +164,7 @@ export class CcUsageAnalysisService {
   }
 
   savePricingRules(rules: readonly UsageModelPriceRuleInput[]): UsageModelPriceRule[] {
-    const saved = saveUsagePriceRules(this.db, rules)
-    repriceUsageEvents(this.db, "cc")
-    repriceUsageEvents(this.db, "cx")
-    rebuildAggregates(this.db, "cc")
-    rebuildAggregates(this.db, "cx")
-    return saved
+    return saveUsagePriceRules(this.db, rules)
   }
 
   getTime(range: UsageRangeInput): UsageTimeBucket[] {
@@ -181,8 +181,8 @@ export class CcUsageAnalysisService {
       SELECT
         ${bucketColumn} AS bucket,
         SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens,
-        SUM(CASE WHEN price_known = 1 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END) AS priced_tokens,
-        SUM(CASE WHEN price_known = 0 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END) AS unpriced_tokens,
+        SUM(priced_tokens) AS priced_tokens,
+        SUM(unpriced_tokens) AS unpriced_tokens,
         SUM(total_cost) AS estimated_cost,
         SUM(requests) AS requests,
         SUM(conversations) AS conversations
@@ -280,8 +280,8 @@ export class CcUsageAnalysisService {
         SUM(cache_write_tokens) AS cache_write,
         SUM(reasoning_tokens) AS reasoning,
         SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens,
-        SUM(CASE WHEN price_known = 1 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END) AS priced_tokens,
-        SUM(CASE WHEN price_known = 0 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END) AS unpriced_tokens,
+        SUM(priced_tokens) AS priced_tokens,
+        SUM(unpriced_tokens) AS unpriced_tokens,
         SUM(total_cost) AS estimated_cost,
         SUM(requests) AS requests
       FROM ${this.prefix}_daily_usage
@@ -436,8 +436,8 @@ export class CcUsageAnalysisService {
         SUM(conversations) AS sessions,
         SUM(requests) AS requests,
         SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens) AS tokens,
-        SUM(CASE WHEN price_known = 1 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END) AS priced_tokens,
-        SUM(CASE WHEN price_known = 0 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END) AS unpriced_tokens,
+        SUM(priced_tokens) AS priced_tokens,
+        SUM(unpriced_tokens) AS unpriced_tokens,
         SUM(total_cost) AS estimated_cost
       FROM ${this.prefix}_daily_usage
       ${filter.whereSql}
@@ -592,12 +592,7 @@ export class CcUsageAnalysisService {
   private ensureAggregatesReady(): void {
     const usageRow = this.db.prepare(`SELECT EXISTS(SELECT 1 FROM ${this.prefix}_usage_events LIMIT 1) AS exists_value`).get() as { exists_value?: number } | undefined
     if (toNumber(usageRow?.exists_value) === 0) return
-    if (this.hasStaleEventPricing()) {
-      repriceUsageEvents(this.db, this.prefix)
-      rebuildAggregates(this.db, this.prefix)
-      return
-    }
-    if (this.hasMissingUsageAggregates() || this.hasStaleToolAggregates() || this.hasStaleCostAggregates()) {
+    if (this.hasMissingUsageAggregates() || this.hasStaleToolAggregates() || this.hasStaleCostAggregates() || this.hasStalePricingTokenAggregates()) {
       rebuildAggregates(this.db, this.prefix)
     }
   }
@@ -637,16 +632,15 @@ export class CcUsageAnalysisService {
     return toNumber(row?.total_cost) > 0 && toNumber(row?.component_cost) === 0
   }
 
-  private hasStaleEventPricing(): boolean {
+  private hasStalePricingTokenAggregates(): boolean {
     const row = this.db.prepare(`
-      SELECT EXISTS(
-        SELECT 1
-        FROM ${this.prefix}_usage_events
-        WHERE price_known = 0 AND total_cost > 0
-        LIMIT 1
-      ) AS exists_value
-    `).get() as { exists_value?: number } | undefined
-    return toNumber(row?.exists_value) === 1
+      SELECT
+        COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens), 0) AS tokens,
+        COALESCE(SUM(priced_tokens + unpriced_tokens), 0) AS classified_tokens
+      FROM ${this.prefix}_daily_usage
+      WHERE model != ?
+    `).get(TOOL_CALLS_AGGREGATE_MODEL) as { tokens?: number; classified_tokens?: number } | undefined
+    return toNumber(row?.tokens) > 0 && toNumber(row?.classified_tokens) === 0
   }
 
   private createAggregateRangeWhere(
@@ -711,8 +705,8 @@ export class CcUsageAnalysisService {
         COALESCE(SUM(cache_write_tokens), 0) AS cache_write,
         COALESCE(SUM(reasoning_tokens), 0) AS reasoning,
         COALESCE(SUM(input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens), 0) AS tokens,
-        COALESCE(SUM(CASE WHEN price_known = 1 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END), 0) AS priced_tokens,
-        COALESCE(SUM(CASE WHEN price_known = 0 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END), 0) AS unpriced_tokens,
+        COALESCE(SUM(priced_tokens), 0) AS priced_tokens,
+        COALESCE(SUM(unpriced_tokens), 0) AS unpriced_tokens,
         COALESCE(SUM(total_cost), 0) AS estimated_cost,
         COALESCE(SUM(cost_input), 0) AS cost_input,
         COALESCE(SUM(cost_output), 0) AS cost_output,
@@ -869,10 +863,12 @@ async function refreshUsageNamespace(options: {
   readonly db: DatabaseSync
   readonly prefix: "cc" | "cx"
   readonly roots: string[]
-  readonly parseFile: (filePath: string, parseOptions?: { readonly startLine?: number }) => Promise<ParsedFileWithTasks>
+  readonly parseFile: (filePath: string, parseOptions?: { readonly startLine?: number; readonly priceRules?: readonly UsageModelPriceRule[] }) => Promise<ParsedFileWithTasks>
 }): Promise<UsageRefreshResult> {
   const startedAt = Date.now()
   const files = collectJsonlFiles(options.roots)
+  const priceRules = listUsagePriceRules(options.db)
+  const pricedAt = new Date().toISOString()
   let parsedFiles = 0
   let skippedFiles = 0
   let failedFiles = 0
@@ -890,13 +886,13 @@ async function refreshUsageNamespace(options: {
       }
 
       const canAppend = options.prefix === "cc" && existing?.parse_status === "parsed" && fp.size >= existing.size && existing.line_count > 0
-      const parsed = await options.parseFile(file, canAppend ? { startLine: existing.line_count } : undefined)
+      const parsed = await options.parseFile(file, canAppend ? { startLine: existing.line_count, priceRules } : { priceRules })
       if (canAppend && parsed.lineCount <= existing.line_count) {
         markScanFile(options.db, options.prefix, file, fp.size, fp.mtimeMs, parsed.lineCount)
         skippedFiles += 1
         continue
       }
-      persistParsedFile(options.db, options.prefix, file, fp.size, fp.mtimeMs, parsed, canAppend ? "append" : "replace")
+      persistParsedFile(options.db, options.prefix, file, fp.size, fp.mtimeMs, parsed, canAppend ? "append" : "replace", pricedAt)
       parsedFiles += 1
       usageEvents += parsed.usageEvents.length
       toolEvents += parsed.toolEvents.length
@@ -917,7 +913,6 @@ async function refreshUsageNamespace(options: {
     }
   }
 
-  repriceUsageEvents(options.db, options.prefix)
   rebuildAggregates(options.db, options.prefix)
 
   return {
@@ -939,6 +934,7 @@ function persistParsedFile(
   mtimeMs: number,
   parsed: ParsedFileWithTasks,
   mode: "append" | "replace",
+  pricedAt: string,
 ): void {
   db.exec("BEGIN IMMEDIATE")
   try {
@@ -1000,8 +996,9 @@ function persistParsedFile(
       INSERT OR REPLACE INTO ${prefix}_usage_events (
         id, session_id, timestamp_ms, date, hour, workspace_key, workspace_label, model, provider,
         input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens,
-        cost_input, cost_output, cost_cache_read, cost_cache_write, cost_reasoning, total_cost, price_known
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        cost_input, cost_output, cost_cache_read, cost_cache_write, cost_reasoning, total_cost, price_known,
+        cost_currency, pricing_rate, priced_at, pricing_version
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     for (const event of parsed.usageEvents) {
       insertUsage.run(
@@ -1026,6 +1023,10 @@ function persistParsedFile(
         event.costReasoning,
         event.totalCost,
         event.priceKnown ? 1 : 0,
+        SYNAPSE_COST_CURRENCY,
+        USD_TO_CNY_RATE,
+        pricedAt,
+        "",
       )
     }
 
@@ -1099,50 +1100,6 @@ function refreshSessionSummaries(db: DatabaseSync, prefix: "cc" | "cx", sessionI
   }
 }
 
-function repriceUsageEvents(db: DatabaseSync, prefix: "cc" | "cx"): void {
-  const rules = listUsagePriceRules(db)
-  const rows = db.prepare(`SELECT * FROM ${prefix}_usage_events`).all() as unknown as UsageEventRow[]
-  if (rows.length === 0) return
-
-  const update = db.prepare(`
-    UPDATE ${prefix}_usage_events SET
-      cost_input = ?,
-      cost_output = ?,
-      cost_cache_read = ?,
-      cost_cache_write = ?,
-      cost_reasoning = ?,
-      total_cost = ?,
-      price_known = ?
-    WHERE id = ?
-  `)
-  db.exec("BEGIN IMMEDIATE")
-  try {
-    for (const row of rows) {
-      const next = estimateUsageCost(row.model, {
-        input: row.input_tokens,
-        output: row.output_tokens,
-        cacheRead: row.cache_read_tokens,
-        cacheWrite: row.cache_write_tokens,
-        reasoning: row.reasoning_tokens,
-      }, rules)
-      update.run(
-        next.input,
-        next.output,
-        next.cacheRead,
-        next.cacheWrite,
-        next.reasoning,
-        next.total,
-        next.priceKnown ? 1 : 0,
-        row.id,
-      )
-    }
-    db.exec("COMMIT")
-  } catch (error) {
-    db.exec("ROLLBACK")
-    throw error
-  }
-}
-
 function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
   db.exec("BEGIN IMMEDIATE")
   try {
@@ -1151,8 +1108,8 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
     db.exec(`
       INSERT INTO ${prefix}_daily_usage (
         date, model, provider, workspace_key, input_tokens, output_tokens, cache_read_tokens,
-        cache_write_tokens, reasoning_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
-        cost_reasoning, total_cost, price_known, requests, conversations, tool_calls
+        cache_write_tokens, reasoning_tokens, priced_tokens, unpriced_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
+        cost_reasoning, total_cost, price_known, cost_currency, requests, conversations, tool_calls
       )
       SELECT
         date,
@@ -1164,6 +1121,8 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
         SUM(cache_read_tokens),
         SUM(cache_write_tokens),
         SUM(reasoning_tokens),
+        SUM(CASE WHEN price_known = 1 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END),
+        SUM(CASE WHEN price_known = 0 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END),
         SUM(cost_input),
         SUM(cost_output),
         SUM(cost_cache_read),
@@ -1171,6 +1130,7 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
         SUM(cost_reasoning),
         SUM(total_cost),
         MAX(price_known),
+        '${SYNAPSE_COST_CURRENCY}',
         COUNT(*),
         COUNT(DISTINCT session_id),
         0
@@ -1180,8 +1140,8 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
     db.exec(`
       INSERT INTO ${prefix}_daily_usage (
         date, model, provider, workspace_key, input_tokens, output_tokens, cache_read_tokens,
-        cache_write_tokens, reasoning_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
-        cost_reasoning, total_cost, price_known, requests, conversations, tool_calls
+        cache_write_tokens, reasoning_tokens, priced_tokens, unpriced_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
+        cost_reasoning, total_cost, price_known, cost_currency, requests, conversations, tool_calls
       )
       SELECT
         date,
@@ -1202,6 +1162,9 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
         0,
         0,
         0,
+        '${SYNAPSE_COST_CURRENCY}',
+        0,
+        0,
         COUNT(*)
       FROM ${prefix}_tool_events
       GROUP BY date, workspace_key
@@ -1209,8 +1172,8 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
     db.exec(`
       INSERT INTO ${prefix}_hourly_usage (
         hour, model, provider, workspace_key, input_tokens, output_tokens, cache_read_tokens,
-        cache_write_tokens, reasoning_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
-        cost_reasoning, total_cost, price_known, requests, conversations, tool_calls
+        cache_write_tokens, reasoning_tokens, priced_tokens, unpriced_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
+        cost_reasoning, total_cost, price_known, cost_currency, requests, conversations, tool_calls
       )
       SELECT
         hour,
@@ -1222,6 +1185,8 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
         SUM(cache_read_tokens),
         SUM(cache_write_tokens),
         SUM(reasoning_tokens),
+        SUM(CASE WHEN price_known = 1 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END),
+        SUM(CASE WHEN price_known = 0 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END),
         SUM(cost_input),
         SUM(cost_output),
         SUM(cost_cache_read),
@@ -1229,6 +1194,7 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
         SUM(cost_reasoning),
         SUM(total_cost),
         MAX(price_known),
+        '${SYNAPSE_COST_CURRENCY}',
         COUNT(*),
         COUNT(DISTINCT session_id),
         0
@@ -1238,8 +1204,8 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
     db.exec(`
       INSERT INTO ${prefix}_hourly_usage (
         hour, model, provider, workspace_key, input_tokens, output_tokens, cache_read_tokens,
-        cache_write_tokens, reasoning_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
-        cost_reasoning, total_cost, price_known, requests, conversations, tool_calls
+        cache_write_tokens, reasoning_tokens, priced_tokens, unpriced_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
+        cost_reasoning, total_cost, price_known, cost_currency, requests, conversations, tool_calls
       )
       SELECT
         hour,
@@ -1258,6 +1224,9 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
         0,
         0,
         0,
+        0,
+        0,
+        '${SYNAPSE_COST_CURRENCY}',
         0,
         0,
         COUNT(*)
@@ -1271,4 +1240,4 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
   }
 }
 
-export { refreshUsageNamespace }
+export { refreshUsageNamespace, rebuildAggregates }
