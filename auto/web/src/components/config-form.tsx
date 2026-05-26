@@ -8,13 +8,6 @@ interface ConfigFormProps {
 }
 
 const CONCURRENCY_OPTIONS = [1, 2, 3, 4, 5, 6, 8, 10, 12, 16, 20]
-const INTERVAL_OPTIONS = [
-  { value: 10, label: '10 秒' },
-  { value: 60, label: '1 分钟' },
-  { value: 600, label: '10 分钟' },
-  { value: 1800, label: '30 分钟' },
-  { value: 3600, label: '1 小时' },
-]
 const TIMEOUT_OPTIONS = [5, 10, 15, 20, 30, 45, 60, 90, 120]
 const MAX_LOGS_OPTIONS = [10, 20, 30, 50, 100, 200]
 
@@ -49,17 +42,6 @@ export function ConfigForm({ config, onChange }: ConfigFormProps) {
             >
               {CONCURRENCY_OPTIONS.map(n => (
                 <option key={n} value={n}>{n} worker{n > 1 ? 's' : ''}</option>
-              ))}
-            </select>
-          </Field>
-          <Field label="循环间隔">
-            <select
-              value={config.intervalSeconds}
-              onChange={e => update('intervalSeconds', Number(e.target.value))}
-              className="select-field"
-            >
-              {INTERVAL_OPTIONS.map(o => (
-                <option key={o.value} value={o.value}>{o.label}</option>
               ))}
             </select>
           </Field>

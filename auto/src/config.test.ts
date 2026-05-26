@@ -58,6 +58,54 @@ test('saveUiConfig persists active prompt content and runtime settings separatel
   }
 })
 
+test('loadUiConfig tolerates legacy intervalSeconds without keeping it active', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-config-legacy-interval-'))
+  try {
+    const file = join(dir, 'ui-config.json')
+    const promptFile = join(dir, 'prompt.md')
+    const promptsDir = join(dir, 'prompts')
+    await mkdir(promptsDir, { recursive: true })
+    await writeFile(join(promptsDir, 'default.md'), 'prompt', 'utf-8')
+    await writeFile(file, `${JSON.stringify({
+      ...DEFAULT_UI_CONFIG,
+      activePromptName: 'default',
+      workingDirectory: dir,
+      intervalSeconds: 180,
+    }, null, 2)}\n`, 'utf-8')
+
+    const loaded = await loadUiConfig(file, promptFile, promptsDir)
+
+    assert.equal('intervalSeconds' in loaded, false)
+    assert.equal(loaded.workingDirectory, dir)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('saveUiConfig does not persist intervalSeconds', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-config-save-no-interval-'))
+  try {
+    const file = join(dir, 'ui-config.json')
+    const promptFile = join(dir, 'prompt.md')
+    const promptsDir = join(dir, 'prompts')
+    await mkdir(promptsDir, { recursive: true })
+    await writeFile(join(promptsDir, 'default.md'), 'old', 'utf-8')
+
+    await saveUiConfig({
+      ...DEFAULT_UI_CONFIG,
+      prompt: 'hello',
+      activePromptName: 'default',
+      workingDirectory: dir,
+      intervalSeconds: 60,
+    }, file, promptFile, promptsDir)
+
+    const savedConfig = JSON.parse(await readFile(file, 'utf-8'))
+    assert.equal('intervalSeconds' in savedConfig, false)
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
 test('loadUiConfig migrates legacy prompt into prompt library', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'auto-config-library-'))
   try {

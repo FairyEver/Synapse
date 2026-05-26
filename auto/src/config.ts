@@ -37,7 +37,6 @@ export interface UiConfig {
   prompts: string[]
   workingDirectory: string
   concurrency: number
-  intervalSeconds: number
   timeoutMinutes: number
   maxLogs: number
   provider: Provider
@@ -51,7 +50,6 @@ export const DEFAULT_UI_CONFIG: UiConfig = {
   prompts: [],
   workingDirectory: PACKAGE_ROOT,
   concurrency: 1,
-  intervalSeconds: 600,
   timeoutMinutes: 30,
   maxLogs: 50,
   provider: 'codex',
@@ -157,14 +155,6 @@ export function validateUiConfig(raw: unknown): UiConfig {
     prompts,
     workingDirectory: resolveFromPackageRoot(workingDirectory),
     concurrency: positiveInteger(merged.concurrency, 'concurrency'),
-    intervalSeconds: positiveInteger(
-      typeof merged.intervalSeconds === 'number' && merged.intervalSeconds >= 1
-        ? merged.intervalSeconds
-        : typeof (raw as Record<string, unknown>).intervalMinutes === 'number'
-          ? Number((raw as Record<string, unknown>).intervalMinutes) * 60
-          : DEFAULT_UI_CONFIG.intervalSeconds,
-      'intervalSeconds',
-    ),
     timeoutMinutes: positiveInteger(merged.timeoutMinutes, 'timeoutMinutes'),
     maxLogs: positiveInteger(merged.maxLogs, 'maxLogs'),
     provider,
@@ -198,7 +188,6 @@ function uiConfigFile(config: UiConfig): Omit<UiConfig, 'prompt' | 'prompts'> {
     activePromptName: config.activePromptName,
     workingDirectory: config.workingDirectory,
     concurrency: config.concurrency,
-    intervalSeconds: config.intervalSeconds,
     timeoutMinutes: config.timeoutMinutes,
     maxLogs: config.maxLogs,
     provider: config.provider,
