@@ -661,6 +661,65 @@ describe("AgentComposer", () => {
     expect(onInputKeyDown).not.toHaveBeenCalled()
   })
 
+  it("inserts a quick input from the slash menu without sending", async () => {
+    const onDraftChange = vi.fn()
+    const onSubmit = vi.fn((event: FormEvent) => event.preventDefault())
+    const onQuickInputDirectSend = vi.fn()
+    const onInputKeyDown = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft="请 /日报"
+          disabled={false}
+          canSend={true}
+          sending={false}
+          cancelPhase="idle"
+          slashCandidates={[
+            {
+              name: "日报模板",
+              description: "整理今天完成的工作",
+              kind: "quickInput",
+              insertText: "日报模板\n整理今天完成的工作",
+            },
+            {
+              name: "review-code",
+              description: "Review code changes",
+              kind: "skill",
+              source: "skill",
+            },
+          ]}
+          onDraftChange={onDraftChange}
+          onQuickInputDirectSend={onQuickInputDirectSend}
+          onInputKeyDown={onInputKeyDown}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+    textarea!.setSelectionRange(5, 5)
+
+    await act(async () => {
+      textarea!.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+      }))
+    })
+
+    expect(onDraftChange).toHaveBeenCalledWith("请 日报模板\n整理今天完成的工作")
+    expect(onQuickInputDirectSend).not.toHaveBeenCalled()
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onInputKeyDown).not.toHaveBeenCalled()
+  })
+
   it("does not render the quick input menu when no quick inputs exist", () => {
     const html = renderToStaticMarkup(
       <AgentComposer

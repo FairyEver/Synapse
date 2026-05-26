@@ -42,7 +42,7 @@ import {
   formatAgentTranscript,
   sessionLabel,
 } from "./utils"
-import { toAgentSlashCandidates } from "./slash-menu"
+import { toAgentSlashCandidates, toQuickInputSlashCandidates } from "./slash-menu"
 import { knowledgeBaseStaticCommands } from "./knowledge-base-commands"
 
 const logger = createRendererLogger("agent")
@@ -360,8 +360,11 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     return result
   }, [canManageKnowledgeSources, selectedAgentDefinition?.commands, chat.commands])
   const slashCandidates = useMemo(
-    () => toAgentSlashCandidates(mergedCommands),
-    [mergedCommands],
+    () => [
+      ...toQuickInputSlashCandidates(config.global.quickInputs),
+      ...toAgentSlashCandidates(mergedCommands),
+    ],
+    [config.global.quickInputs, mergedCommands],
   )
   const knowledgeBaseActions = useMemo(
     () => toKnowledgeBaseComposerActions(mergedCommands),
