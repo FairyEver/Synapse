@@ -533,6 +533,28 @@ describe("contentIpcModule sync ownership", () => {
     }))
   })
 
+  it("keeps install success when install status refresh fails", async () => {
+    const { contentIpcModule } = await import("../ipc")
+    mocks.installStatusCacheService.refresh.mockRejectedValueOnce(new Error("scan failed"))
+
+    const result = await contentIpcModule.methods.installToEditor.handler(createContext() as never, {
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "codex",
+      projectPath: "/project",
+      scope: "project",
+    } as never)
+
+    expect(result).toEqual({ installed: true })
+    expect(mocks.contentInstallService.installToEditor).toHaveBeenCalled()
+    expect(mocks.installStatusCacheService.refresh).toHaveBeenCalledWith("skill-1")
+    expect(getEvents("install-status.changed")).toHaveLength(0)
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      "Failed to refresh install status after content change.",
+      expect.objectContaining({ contentId: "skill-1" }),
+    )
+  })
+
   it("refreshes and broadcasts install status after a skill update succeeds", async () => {
     const { contentIpcModule } = await import("../ipc")
 

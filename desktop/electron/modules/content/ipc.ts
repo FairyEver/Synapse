@@ -99,13 +99,17 @@ async function notifyInstallStatusChanged(
   eventBus: EventBus,
   contentId: string,
 ): Promise<void> {
-  const entries = await installStatusCacheService.refresh(contentId)
-  eventBus.emit({
-    domain: "install-status",
-    type: "install-status.changed",
-    payload: { contentId, entries },
-    timestamp: new Date().toISOString(),
-  })
+  try {
+    const entries = await installStatusCacheService.refresh(contentId)
+    eventBus.emit({
+      domain: "install-status",
+      type: "install-status.changed",
+      payload: { contentId, entries },
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    logger.warn("Failed to refresh install status after content change.", { contentId, error })
+  }
 }
 
 function emitContentChanged(
