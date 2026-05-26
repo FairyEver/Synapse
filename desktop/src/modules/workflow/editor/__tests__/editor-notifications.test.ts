@@ -14,4 +14,16 @@ describe("workflow editor notifications", () => {
     expect(editorBranch).toContain("</AppNotificationsProvider>")
     expect(editorBranch.indexOf("<AppNotificationsProvider>")).toBeLessThan(editorBranch.indexOf("<WorkflowEditorApp />"))
   })
+
+  it("mounts the app notifications provider in the workflow runner window", async () => {
+    const source = await readFile(path.resolve(__dirname, "../../../../main.tsx"), "utf8")
+    const runnerBranch = source.slice(
+      source.indexOf('} else if (windowType === "workflow-runner")'),
+      source.indexOf('} else if (windowType === "knowledge-source-manager")'),
+    )
+
+    expect(runnerBranch).toContain("<AppNotificationsProvider>")
+    expect(runnerBranch).toContain("</AppNotificationsProvider>")
+    expect(runnerBranch.indexOf("<AppNotificationsProvider>")).toBeLessThan(runnerBranch.indexOf("<WorkflowRunnerApp />"))
+  })
 })
