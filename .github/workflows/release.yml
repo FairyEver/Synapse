@@ -38,7 +38,11 @@ jobs:
       GH_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v5
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          git fetch --depth=1 origin "${GITHUB_SHA}"
+          git checkout --detach FETCH_HEAD
 
       - name: Setup Node.js
         uses: actions/setup-node@v5

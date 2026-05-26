@@ -6,13 +6,26 @@ on:
   pull_request:
     branches: [main]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: "true"
+
 jobs:
   desktop:
     name: Desktop typecheck + tests + hard-constraints
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout repository
+        shell: bash
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            git fetch --depth=1 origin "pull/${{ github.event.pull_request.number }}/merge"
+          else
+            git fetch --depth=1 origin "${GITHUB_SHA}"
+          fi
+          git checkout --detach FETCH_HEAD
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Setup pnpm
@@ -34,8 +47,18 @@ jobs:
     name: Desktop Windows typecheck + tests + package
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - name: Checkout repository
+        shell: bash
+        run: |
+          git init .
+          git remote add origin "https://github.com/${GITHUB_REPOSITORY}.git"
+          if [ "${GITHUB_EVENT_NAME}" = "pull_request" ]; then
+            git fetch --depth=1 origin "pull/${{ github.event.pull_request.number }}/merge"
+          else
+            git fetch --depth=1 origin "${GITHUB_SHA}"
+          fi
+          git checkout --detach FETCH_HEAD
+      - uses: actions/setup-node@v5
         with:
           node-version: 22
       - name: Setup pnpm
