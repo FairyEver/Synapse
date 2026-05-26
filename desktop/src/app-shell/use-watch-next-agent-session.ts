@@ -1,13 +1,31 @@
 import { useEffect, useRef } from "react"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import {
+  type WatchNextAgentSessionPayload,
   requestOpenAgentSession,
   subscribeCancelWatchNextAgentSession,
   subscribeWatchNextAgentSession,
 } from "@/app-shell/navigation"
+import type { SynapseAgentConversationUpdatedPayload } from "@/types/agent"
+
+type PendingAgentSessionWatch = WatchNextAgentSessionPayload & {
+  expiresAt: number
+}
+
+function isWatchedAgentSessionEvent(
+  watch: PendingAgentSessionWatch | null,
+  payload: SynapseAgentConversationUpdatedPayload,
+  now = Date.now(),
+): boolean {
+  if (watch === null || now >= watch.expiresAt) return false
+  if (payload.projectId !== watch.projectId) return false
+  if (watch.platform && payload.platform !== watch.platform) return false
+  if (watch.sessionKeyPrefix && !payload.sessionKey.startsWith(watch.sessionKeyPrefix)) return false
+  return true
+}
 
 export function useWatchNextAgentSession(): void {
-  const pendingWatchRef = useRef<{ projectId: string; expiresAt: number } | null>(null)
+  const pendingWatchRef = useRef<PendingAgentSessionWatch | null>(null)
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout> | null = null
@@ -16,9 +34,9 @@ export function useWatchNextAgentSession(): void {
       pendingWatchRef.current = null
       timer = null
     }
-    const unsubscribe = subscribeWatchNextAgentSession(({ projectId }) => {
+    const unsubscribe = subscribeWatchNextAgentSession((payload) => {
       if (timer !== null) clearTimeout(timer)
-      pendingWatchRef.current = { projectId, expiresAt: Date.now() + 120_000 }
+      pendingWatchRef.current = { ...payload, expiresAt: Date.now() + 120_000 }
       timer = setTimeout(() => {
         pendingWatchRef.current = null
         timer = null
@@ -42,11 +60,7 @@ export function useWatchNextAgentSession(): void {
     return bridge.agent.onEvent((domainEvent) => {
       if (domainEvent.type !== "conversationUpdated") return
       const watch = pendingWatchRef.current
-      if (
-        watch !== null
-        && domainEvent.payload.projectId === watch.projectId
-        && Date.now() < watch.expiresAt
-      ) {
+      if (isWatchedAgentSessionEvent(watch, domainEvent.payload)) {
         pendingWatchRef.current = null
         requestOpenAgentSession({
           projectId: domainEvent.payload.projectId,
@@ -56,3 +70,5 @@ export function useWatchNextAgentSession(): void {
     })
   }, [])
 }
+
+export { isWatchedAgentSessionEvent }
