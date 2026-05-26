@@ -8,12 +8,25 @@ import { mcpDefinitions } from "../services/definitions/generated/main-registry"
 import type { SynapseMcpDefinition } from "../../src/definitions/types"
 import { getMcpServerToken } from "./mcp-server"
 import { SYNAPSE_MCP_LEGACY_SERVER_NAMES, SYNAPSE_MCP_SERVER_NAME } from "../../database/shared/server-identity"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 
 const logger = createMainLogger("database.mcp-installer")
 
 type McpTarget = string
 type McpRegistrationMode = "http" | "stdio" | null
 type McpStatus = Record<McpTarget, boolean>
+type McpRegistrationSecurity = {
+  actor: ActorIdentity
+  source: string
+  permissionGuard?: PermissionGuard
+  auditSink?: AuditSink
+}
+type McpWriteAudit = {
+  action: "fs.write"
+  actor: ActorIdentity
+  resource: string
+  metadata: Record<string, unknown>
+}
 type McpServerInfo = {
   target: McpTarget
   settingsPath: string
@@ -79,6 +92,74 @@ function ensureParentDirectory(settingsPath: string): void {
   if (!existsSync(dir)) {
     mkdirSync(dir, { recursive: true })
   }
+}
+
+function buildMcpWriteAudit(
+  target: McpTarget,
+  settingsPath: string,
+  security: McpRegistrationSecurity | undefined,
+  operation: "register" | "unregister",
+): McpWriteAudit {
+  return {
+    action: "fs.write",
+    actor: security?.actor ?? { kind: "system", id: "database-mcp" },
+    resource: settingsPath,
+    metadata: {
+      source: security?.source ?? "database.mcp.register",
+      operation,
+      target,
+      settingsPath,
+      writesSecret: Boolean(getMcpServerToken()),
+    },
+  }
+}
+
+async function authorizeMcpWrite(
+  security: McpRegistrationSecurity | undefined,
+  audit: McpWriteAudit,
+): Promise<{ allowed: true } | { allowed: false; reason: string }> {
+  const permission = await security?.permissionGuard?.check({
+    action: audit.action,
+    actor: audit.actor,
+    resource: audit.resource,
+    context: audit.metadata,
+  })
+
+  if (permission && !permission.allowed) {
+    security?.auditSink?.record({
+      action: audit.action,
+      actor: audit.actor,
+      resource: audit.resource,
+      outcome: "denied",
+      metadata: {
+        ...audit.metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    return { allowed: false, reason: permission.reason }
+  }
+
+  return { allowed: true }
+}
+
+function recordMcpWriteAudit(
+  security: McpRegistrationSecurity | undefined,
+  audit: McpWriteAudit | null,
+  outcome: "allowed" | "failed",
+  error?: string,
+): void {
+  if (!audit || !security?.auditSink) return
+  security.auditSink.record({
+    action: audit.action,
+    actor: audit.actor,
+    resource: audit.resource,
+    outcome,
+    metadata: {
+      ...audit.metadata,
+      ...(error ? { error } : {}),
+    },
+  })
 }
 
 function readJsonSettings(settingsPath: string): Record<string, unknown> {
@@ -353,12 +434,22 @@ function removeHermesYamlMcp(settingsPath: string, serverName: string): boolean 
   return true
 }
 
-function registerMcp(target: McpTarget, mcpPort: number): { success: boolean; error?: string } {
+async function registerMcp(
+  target: McpTarget,
+  mcpPort: number,
+  security?: McpRegistrationSecurity,
+): Promise<{ success: boolean; error?: string }> {
+  let audit: McpWriteAudit | null = null
   try {
     const definition = requireMcpDefinition(target)
     assertSupportedSettingsFormat(definition)
     const settingsPath = getSettingsPath(definition)
     const mcpUrl = getMcpUrl(mcpPort)
+    audit = buildMcpWriteAudit(target, settingsPath, security, "register")
+    const permission = await authorizeMcpWrite(security, audit)
+    if (!permission.allowed) {
+      return { success: false, error: permission.reason }
+    }
 
     ensureParentDirectory(settingsPath)
 
@@ -371,9 +462,11 @@ function registerMcp(target: McpTarget, mcpPort: number): { success: boolean; er
     }
 
     logger.info("MCP server registered.", { target, settingsPath, mode: "http" })
+    recordMcpWriteAudit(security, audit, "allowed")
     return { success: true }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    recordMcpWriteAudit(security, audit, "failed", message)
     logger.error("MCP registration failed.", { target, error: message })
     return { success: false, error: message }
   }
@@ -403,19 +496,33 @@ function removeCodexMcp(settingsPath: string, serverName: string): boolean {
   return true
 }
 
-function unregisterMcp(target: McpTarget, serverName: string): { success: boolean; modified: boolean; error?: string } {
+async function unregisterMcp(
+  target: McpTarget,
+  serverName: string,
+  security?: McpRegistrationSecurity,
+): Promise<{ success: boolean; modified: boolean; error?: string }> {
+  let audit: McpWriteAudit | null = null
   try {
     const definition = requireMcpDefinition(target)
     assertSupportedSettingsFormat(definition)
     const settingsPath = getSettingsPath(definition)
+    audit = buildMcpWriteAudit(target, settingsPath, security, "unregister")
+    const permission = await authorizeMcpWrite(security, audit)
+    if (!permission.allowed) {
+      return { success: false, modified: false, error: permission.reason }
+    }
     const modified = usesCodexTomlSettings(definition)
       ? removeCodexMcp(settingsPath, serverName)
       : usesHermesYamlSettings(definition)
         ? removeHermesYamlMcp(settingsPath, serverName)
         : removeJsonMcp(settingsPath, serverName)
+    if (modified) {
+      recordMcpWriteAudit(security, audit, "allowed")
+    }
     return { success: true, modified }
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)
+    recordMcpWriteAudit(security, audit, "failed", message)
     logger.warn("MCP unregister failed.", { target, name: serverName, error: message })
     return { success: false, modified: false, error: message }
   }
@@ -484,17 +591,20 @@ async function openMcpSettings(target: McpTarget): Promise<{ success: boolean; e
   }
 }
 
-function cleanupLegacyMcpNamesForTarget(target: McpTarget): void {
+async function cleanupLegacyMcpNamesForTarget(
+  target: McpTarget,
+  security?: McpRegistrationSecurity,
+): Promise<void> {
   for (const legacy of SYNAPSE_MCP_LEGACY_SERVER_NAMES) {
     if (legacy === SYNAPSE_MCP_SERVER_NAME) continue
-    const { success, modified } = unregisterMcp(target, legacy)
+    const { success, modified } = await unregisterMcp(target, legacy, security)
     if (success && modified) {
       logger.info("Legacy MCP entry removed.", { target, name: legacy })
     }
   }
 }
 
-function autoRegisterMcp(mcpPort: number): void {
+async function autoRegisterMcp(mcpPort: number, security?: McpRegistrationSecurity): Promise<void> {
   logger.info("MCP auto-registration started.", { port: mcpPort, targets: MCP_TARGETS.map((d) => d) })
   const mcpUrl = getMcpUrl(mcpPort)
 
@@ -524,14 +634,14 @@ function autoRegisterMcp(mcpPort: number): void {
 
       if (detection.registered && detection.mode === "http" && detection.url === mcpUrl) {
         logger.info("MCP target already registered with correct URL.", { target, settingsPath })
-        cleanupLegacyMcpNamesForTarget(target)
+        await cleanupLegacyMcpNamesForTarget(target, security)
         continue
       }
 
-      const result = registerMcp(target, mcpPort)
+      const result = await registerMcp(target, mcpPort, security)
       if (result.success) {
         logger.info("MCP auto-registered.", { target, settingsPath, previousMode: detection.mode, previousUrl: detection.url })
-        cleanupLegacyMcpNamesForTarget(target)
+        await cleanupLegacyMcpNamesForTarget(target, security)
       } else {
         logger.warn("MCP auto-registration failed, preserving legacy entries.", { target, error: result.error })
       }

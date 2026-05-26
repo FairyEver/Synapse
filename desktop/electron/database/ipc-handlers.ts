@@ -85,6 +85,15 @@ function recordAudit(
   })
 }
 
+function mcpRegistrationSecurity(event: IpcMainInvokeEvent, source: string) {
+  return {
+    actor: actorIdentityForIpc(event),
+    source,
+    permissionGuard,
+    auditSink,
+  }
+}
+
 function getOwnerWindow(event: IpcMainInvokeEvent): BrowserWindow | undefined {
   return BrowserWindow.fromWebContents(event.sender) ?? undefined
 }
@@ -425,8 +434,8 @@ function registerDatabaseHandlers(): void {
     return openMcpSettings(target)
   })
 
-  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseMcpRegister, async (_event, target: DatabaseMcpTarget) => {
-    return registerMcp(target, getMcpServerPort())
+  handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseMcpRegister, async (event, target: DatabaseMcpTarget) => {
+    return registerMcp(target, getMcpServerPort(), mcpRegistrationSecurity(event, "database.mcp.register"))
   })
 
   handleValidatedIpc(DATABASE_IPC_CHANNELS.databaseFolderList, async () => {
