@@ -232,7 +232,9 @@ export class KnowledgeBaseService {
     if (!isManagedKnowledgeBaseProject(project)) {
       throw new Error("当前项目不是托管知识库。")
     }
-    return resolveManagedKnowledgeBasePath(project, this.userDataPath)
+    const projectPath = resolveManagedKnowledgeBasePath(project, this.userDataPath)
+    await assertKnowledgeBaseRootNotSymlink(projectPath)
+    return projectPath
   }
 
   private async ensureRawRoot(projectPath: string): Promise<string> {
@@ -380,6 +382,20 @@ async function assertNoSymlinkInRequiredPath(projectPath: string, relativePath: 
       }
       throw error
     }
+  }
+}
+
+async function assertKnowledgeBaseRootNotSymlink(projectPath: string): Promise<void> {
+  try {
+    const stat = await lstat(projectPath)
+    if (stat.isSymbolicLink()) {
+      throw new Error("知识库根目录不能是符号链接。")
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return
+    }
+    throw error
   }
 }
 

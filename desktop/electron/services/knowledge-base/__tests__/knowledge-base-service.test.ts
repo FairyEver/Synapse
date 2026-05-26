@@ -340,6 +340,15 @@ describe("KnowledgeBaseService", () => {
     })).rejects.toThrow("符号链接")
   })
 
+  it("rejects managed knowledge base runtime roots that are symlinks", async () => {
+    const { projectId, projectPath, service } = await managedFixture()
+    const outsidePath = await tempDir()
+    await rm(projectPath, { recursive: true, force: true })
+    await symlink(outsidePath, projectPath)
+
+    await expect(service.listSources(projectId)).rejects.toThrow("知识库根目录不能是符号链接。")
+  })
+
   it("rejects raw paths outside the raw directory", async () => {
     const { projectId, service } = await managedFixture()
 
