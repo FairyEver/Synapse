@@ -42,6 +42,8 @@ export const scriptNodeExecutor: NodeExecutor<ScriptNodeConfig> = {
           triggeredBy: "manual",
           abortSignal: context.abortSignal,
         },
+        auditSource: "workflow",
+        auditActionType: "workflow.script",
       })
 
       const durationMs = Date.now() - start

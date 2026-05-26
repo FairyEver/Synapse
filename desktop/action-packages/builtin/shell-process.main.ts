@@ -18,6 +18,8 @@ export async function runShellAction(input: {
   readonly content: string
   readonly config: ShellActionConfig
   readonly context: ActionRuntimeContext
+  readonly auditSource?: string
+  readonly auditActionType?: string
 }): Promise<ActionRunResult> {
   const platform = input.platform ?? process.platform
   const shell = resolveShellCommand(input.config.shell, input.content, {
@@ -44,8 +46,8 @@ export async function runShellAction(input: {
       stderr: "buffer",
     },
     metadata: {
-      source: "task-scheduler",
-      actionType: "shell",
+      source: input.auditSource ?? "task-scheduler",
+      actionType: input.auditActionType ?? "shell",
       taskId: input.context.taskId,
       runId: input.context.runId,
       triggeredBy: input.context.triggeredBy,

@@ -86,6 +86,18 @@ describe("scriptNodeExecutor", () => {
     expect(input.agentDeps.sendToAgent).not.toHaveBeenCalled()
   })
 
+  it("marks shell audit metadata as workflow source", async () => {
+    const deps = fakeRuntimeDeps()
+    await scriptNodeExecutor.execute(makeInput({}, deps))
+
+    expect(deps.processRunner?.run).toHaveBeenCalledWith(expect.objectContaining({
+      metadata: expect.objectContaining({
+        source: "workflow",
+        actionType: "workflow.script",
+      }),
+    }))
+  })
+
   it("does not let resolved variables override protected process env names", async () => {
     const deps = fakeRuntimeDeps()
     const input = makeInput({ env: { CUSTOM: "configured" } }, deps)
