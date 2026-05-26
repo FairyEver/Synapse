@@ -108,6 +108,39 @@ describe("NodeResultPanel", () => {
     })
   })
 
+  it("hides structured markdown output when it duplicates the primary output", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <NodeResultPanel
+          result={{
+            ...nodeResult(),
+            output: "# Source\n\nBody",
+            outputs: {
+              markdown: "# Source\n\nBody",
+              sourcePath: "/tmp/source.docx",
+              format: "docx",
+            },
+          }}
+          nodeName="File conversion"
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    const fieldLabels = Array.from(container.querySelectorAll("span")).map((node) => node.textContent)
+    expect(fieldLabels).not.toContain("markdown")
+    expect(fieldLabels).toContain("sourcePath")
+    expect(fieldLabels).toContain("format")
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
+
   it("renders content sections as markdown by default and can switch to plain text", async () => {
     const container = document.createElement("div")
     document.body.appendChild(container)

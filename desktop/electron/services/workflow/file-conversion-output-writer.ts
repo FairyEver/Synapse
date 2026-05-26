@@ -7,6 +7,9 @@ import {
   isWorkflowFileConversionOutputPathAllowed,
   WorkflowFileConversionOutputWriteError,
 } from "../../../workflow-nodes/file-conversion/output-boundary"
+import { createMainLogger } from "../log-store"
+
+const logger = createMainLogger("workflow.file-conversion-output-writer")
 
 export interface WorkflowFileConversionOutputWriteRequest {
   readonly outputPath: string
@@ -38,7 +41,13 @@ export function createWorkflowFileConversionOutputWriter(deps: {
       context: metadata,
     })
     if (!permission.allowed) {
-      deps.auditSink.record({
+      logger.warn("workflow file conversion output denied", {
+        runId: request.runId,
+        outputPathLength: request.outputPath.length,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      })
+      recordAudit(deps.auditSink, {
         action: "fs.write",
         actor,
         resource: request.outputPath,
@@ -48,7 +57,7 @@ export function createWorkflowFileConversionOutputWriter(deps: {
           reason: permission.reason,
           policyId: permission.policyId,
         },
-      })
+      }, request, "denied")
       throw new WorkflowFileConversionOutputWriteError("write_failed", "Workflow output write was denied.")
     }
 
@@ -56,16 +65,25 @@ export function createWorkflowFileConversionOutputWriter(deps: {
       await mkdir(path.dirname(request.outputPath), { recursive: true })
       await assertSafeWorkflowFileConversionOutputPath(request.outputPath)
       await writeFile(request.outputPath, request.markdown, "utf8")
-      deps.auditSink.record({
+      recordAudit(deps.auditSink, {
         action: "fs.write",
         actor,
         resource: request.outputPath,
         outcome: "allowed",
         metadata,
+      }, request, "allowed")
+      logger.info("workflow file conversion output written", {
+        runId: request.runId,
+        outputPathLength: request.outputPath.length,
       })
     } catch (error) {
       if (error instanceof WorkflowFileConversionOutputWriteError) {
-        deps.auditSink.record({
+        logger.warn("workflow file conversion output denied", {
+          runId: request.runId,
+          outputPathLength: request.outputPath.length,
+          reason: error.code,
+        })
+        recordAudit(deps.auditSink, {
           action: "fs.write",
           actor,
           resource: request.outputPath,
@@ -74,11 +92,17 @@ export function createWorkflowFileConversionOutputWriter(deps: {
             ...metadata,
             reason: error.code,
           },
-        })
+        }, request, "denied")
         throw error
       }
 
-      deps.auditSink.record({
+      logger.warn("workflow file conversion output write failed", {
+        runId: request.runId,
+        outputPathLength: request.outputPath.length,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: (error instanceof Error ? error.message : String(error)).length,
+      })
+      recordAudit(deps.auditSink, {
         action: "fs.write",
         actor,
         resource: request.outputPath,
@@ -88,9 +112,29 @@ export function createWorkflowFileConversionOutputWriter(deps: {
           errorName: error instanceof Error ? error.name : typeof error,
           errorLength: (error instanceof Error ? error.message : String(error)).length,
         },
-      })
+      }, request, "failed")
       throw new WorkflowFileConversionOutputWriteError("write_failed", "Workflow output write failed.", { cause: error })
     }
+  }
+}
+
+function recordAudit(
+  auditSink: AuditSink,
+  event: Parameters<AuditSink["record"]>[0],
+  request: WorkflowFileConversionOutputWriteRequest,
+  outcome: "allowed" | "denied" | "failed",
+): void {
+  try {
+    auditSink.record(event)
+  } catch (error) {
+    logger.warn("workflow file conversion output audit failed", {
+      runId: request.runId,
+      outcome,
+      outputPathLength: request.outputPath.length,
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorLength: (error instanceof Error ? error.message : String(error)).length,
+    })
+    throw error
   }
 }
 

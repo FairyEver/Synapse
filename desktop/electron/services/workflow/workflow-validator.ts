@@ -98,7 +98,7 @@ function validateFileConversionNodeConfig(node: WorkflowDefinition["nodes"][numb
       return
     }
 
-    if (!isWorkflowFileConversionOutputPathAllowed(pathToValidate)) {
+    if (!hasTemplatePlaceholder(pathToValidate) && !isWorkflowFileConversionOutputPathAllowed(pathToValidate)) {
       errors.push({
         type: "invalid_config",
         nodeId: node.id,
@@ -147,6 +147,10 @@ function collectTemplateTexts(node: WorkflowDefinition["nodes"][number]): string
   }
 
   return texts
+}
+
+function hasTemplatePlaceholder(value: string): boolean {
+  return /\{\{\s*\$?[\p{L}\p{N}_.-]+\s*\}\}/u.test(value)
 }
 
 export function validateWorkflow(def: WorkflowDefinition): ValidationResult {

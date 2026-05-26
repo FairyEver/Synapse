@@ -139,12 +139,12 @@ describe("file conversion workflow node", () => {
   it("returns structured conversion output and propagates warnings", async () => {
     const result = await fileConversionNodeExecutor.execute(makeInput({}))
 
+    expect(result.output).toBe(conversionResult.markdown)
     expect(result.outputs).toEqual({
       sourcePath: conversionResult.sourcePath,
       format: conversionResult.format,
       kind: conversionResult.kind,
       title: conversionResult.title,
-      markdown: conversionResult.markdown,
       text: conversionResult.text,
       metadata: conversionResult.metadata,
       warnings: conversionResult.warnings,
@@ -296,7 +296,39 @@ describe("file conversion workflow node", () => {
       outcome: "allowed",
       metadata: { source: "workflow.fileConversionOutput", runId: "run-1" },
     }))
+    expect(logger.info).toHaveBeenCalledWith("workflow file conversion output written", {
+      runId: "run-1",
+      outputPathLength: outputPath.length,
+    })
     await expect(readFile(outputPath, "utf8")).resolves.toBe(conversionResult.markdown)
+  })
+
+  it("writer logs audit sink failures", async () => {
+    await mkdir(getWorkflowFileConversionOutputRoot(), { recursive: true })
+    tempRoot = await mkdtemp(join(getWorkflowFileConversionOutputRoot(), "test-"))
+    const outputPath = join(tempRoot, "converted.md")
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn().mockResolvedValue({ allowed: false, reason: "denied by test" }),
+    }
+    const auditSink = { record: vi.fn(() => { throw new Error("audit unavailable token=secret-value") }), list: vi.fn(() => []), clearForTests: vi.fn() }
+    const writer = createWorkflowFileConversionOutputWriter({ permissionGuard, auditSink })
+
+    await expect(writer({
+      outputPath,
+      markdown: conversionResult.markdown,
+      runId: "run-1",
+      abortSignal: new AbortController().signal,
+    })).rejects.toThrow()
+
+    expect(logger.warn).toHaveBeenCalledWith("workflow file conversion output audit failed", {
+      runId: "run-1",
+      outcome: "denied",
+      outputPathLength: outputPath.length,
+      errorName: "Error",
+      errorLength: "audit unavailable token=secret-value".length,
+    })
+    expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("secret-value")
   })
 
   it("validator rejects missing inputPath", () => {
@@ -322,6 +354,21 @@ describe("file conversion workflow node", () => {
 
     expect(validation.valid).toBe(false)
     expect(validation.errors.some((error) => error.nodeId === "convert" && error.message.includes("工作流输出目录"))).toBe(true)
+  })
+
+  it("validator allows bound template variables for markdown-file output paths", () => {
+    const validation = validateWorkflow(makeDefinition({
+      inputPath: "/tmp/source.docx",
+      outputMode: "markdown-file",
+      outputPath: "{{outputPath}}",
+      variables: [{
+        name: "outputPath",
+        source: { type: "static", value: join(getWorkflowFileConversionOutputRoot(), "run-1", "converted.md") },
+      }],
+    }))
+
+    expect(validation.valid).toBe(true)
+    expect(validation.errors).toHaveLength(0)
   })
 
   it("validator rejects unbound file conversion path placeholders", () => {

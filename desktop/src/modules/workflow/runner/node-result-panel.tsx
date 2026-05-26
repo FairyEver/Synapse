@@ -52,9 +52,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
     })
     onClose()
   }
-  const structuredOutputs = result.outputs && Object.keys(result.outputs).length > 0
-    ? result.outputs
-    : undefined
+  const structuredOutputs = resolveStructuredOutputs(result)
 
   return (
     <div className="flex h-full min-w-0 max-w-full flex-col overflow-hidden">
@@ -305,6 +303,14 @@ function formatOutputValue(value: unknown): string {
     }
   }
   return String(value)
+}
+
+function resolveStructuredOutputs(result: NodeRunResult): Record<string, unknown> | undefined {
+  if (!result.outputs || Object.keys(result.outputs).length === 0) return undefined
+  const entries = Object.entries(result.outputs).filter(([key, value]) => (
+    !(key === "markdown" && typeof value === "string" && value === result.output)
+  ))
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
 
 /** JSON.stringify replacer that replaces circular references with a marker. */

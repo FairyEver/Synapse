@@ -168,7 +168,6 @@ function buildConversionOutputs(result: FileConversionResult): Record<string, un
     format: result.format,
     kind: result.kind,
     title: result.title,
-    markdown: result.markdown,
     text: result.text,
     metadata: result.metadata,
     warnings: result.warnings,
