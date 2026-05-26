@@ -17,6 +17,8 @@ const overview: UsageOverviewReport = {
   generatedAt: "2026-05-20T04:00:00.000Z",
   totals: {
     tokens: 1200,
+    pricedTokens: 1200,
+    unpricedTokens: 0,
     estimatedCost: 1.2,
     requests: 12,
     conversations: 3,
@@ -48,6 +50,8 @@ const timeRows: UsageTimeBucket[] = [
   {
     bucket: "2026-05-20 09",
     tokens: 400,
+    pricedTokens: 400,
+    unpricedTokens: 0,
     estimatedCost: 0.4,
     requests: 4,
     conversations: 1,
@@ -209,6 +213,8 @@ function emptyHour(bucket: string): UsageTimeBucket {
   return {
     bucket,
     tokens: 0,
+    pricedTokens: 0,
+    unpricedTokens: 0,
     estimatedCost: 0,
     requests: 0,
     conversations: 0,
@@ -223,6 +229,8 @@ function modelRow(model: string, tokens: number): UsageModelRow {
     model,
     provider: "",
     tokens,
+    pricedTokens: tokens,
+    unpricedTokens: 0,
     estimatedCost: 0,
     input: tokens,
     output: 0,

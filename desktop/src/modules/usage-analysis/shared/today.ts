@@ -44,7 +44,11 @@ export function buildTodayMetricRows(
     {
       label: "今日 Token",
       value: formatInteger(overview.totals.tokens),
-      subValue: overview.totals.estimatedCost > 0 ? formatCurrency(overview.totals.estimatedCost) : undefined,
+      subValue: formatCostSubValue(
+        overview.totals.tokens,
+        overview.totals.estimatedCost,
+        overview.totals.unpricedTokens,
+      ),
     },
     {
       label: "新增 Token",
@@ -143,6 +147,13 @@ function formatCurrency(value: number): string {
   }).format(value)
 }
 
+function formatCostSubValue(tokens: number, estimatedCost: number, unpricedTokens: number): string | undefined {
+  if (tokens <= 0) return undefined
+  if (unpricedTokens >= tokens) return "未定价"
+  if (unpricedTokens > 0 && estimatedCost > 0) return `${formatCurrency(estimatedCost)} · 部分定价`
+  return estimatedCost > 0 ? formatCurrency(estimatedCost) : undefined
+}
+
 function formatPercent(value: number): string {
   return new Intl.NumberFormat("zh-CN", { style: "percent", maximumFractionDigits: 0 }).format(value)
 }
@@ -155,6 +166,8 @@ function emptyHourBucket(bucket: string): UsageTimeBucket {
   return {
     bucket,
     tokens: 0,
+    pricedTokens: 0,
+    unpricedTokens: 0,
     estimatedCost: 0,
     requests: 0,
     conversations: 0,

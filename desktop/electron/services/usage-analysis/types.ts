@@ -57,6 +57,8 @@ export interface UsageOverviewReport {
   readonly generatedAt: string
   readonly totals: {
     readonly tokens: number
+    readonly pricedTokens: number
+    readonly unpricedTokens: number
     readonly estimatedCost: number
     readonly requests: number
     readonly conversations: number
@@ -74,6 +76,8 @@ export interface UsageOverviewReport {
 export interface UsageTimeBucket {
   readonly bucket: string
   readonly tokens: number
+  readonly pricedTokens: number
+  readonly unpricedTokens: number
   readonly estimatedCost: number
   readonly requests: number
   readonly conversations: number
@@ -91,6 +95,8 @@ export interface UsageModelRow {
   readonly model: string
   readonly provider?: string
   readonly tokens: number
+  readonly pricedTokens: number
+  readonly unpricedTokens: number
   readonly estimatedCost: number
   readonly input: number
   readonly output: number
@@ -107,6 +113,8 @@ export interface UsageProjectRow {
   readonly sessions: number
   readonly requests: number
   readonly tokens: number
+  readonly pricedTokens: number
+  readonly unpricedTokens: number
   readonly estimatedCost: number
   readonly toolCalls: number
   readonly lastUsedAt: string
@@ -128,6 +136,8 @@ export interface UsageDetailRow {
   readonly workspaceLabel: string
   readonly model: string
   readonly tokens: number
+  readonly pricedTokens: number
+  readonly unpricedTokens: number
   readonly estimatedCost: number
   readonly tokenBreakdown: UsageTokenBreakdown
   readonly toolCalls: number

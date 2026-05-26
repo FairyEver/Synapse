@@ -1,5 +1,7 @@
 import type {
   UsageAnalysisDetailRow,
+  UsageAnalysisModelPriceRule,
+  UsageAnalysisModelPriceRuleInput,
   UsageAnalysisModelRow,
   UsageAnalysisOverviewReport,
   UsageAnalysisProjectRow,
@@ -19,6 +21,8 @@ export type UsageModelRow = UsageAnalysisModelRow
 export type UsageProjectRow = UsageAnalysisProjectRow
 export type UsageToolRow = UsageAnalysisToolRow
 export type UsageDetailRow = UsageAnalysisDetailRow
+export type UsageModelPriceRule = UsageAnalysisModelPriceRule
+export type UsageModelPriceRuleInput = UsageAnalysisModelPriceRuleInput
 
 export type ReportState<T> = {
   readonly data: T | null
