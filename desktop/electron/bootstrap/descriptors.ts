@@ -339,11 +339,12 @@ export function createRunWorkflowHandler(deps: {
       const current = runStatuses.get(runId)
       if (current && current.status === "running") {
         const endedAt = Date.now()
+        const sanitizedNodeResults = sanitizeNodeResultsForSnapshot(current.nodeResults)
         runStatuses.set(runId, {
           ...current, runId, workflowId: id,
           status: "failed",
           error: "工作流引擎异常",
-          nodeResults: sanitizeNodeResultsForSnapshot(current.nodeResults),
+          nodeResults: sanitizedNodeResults,
           startedAt, endedAt,
           durationMs: endedAt - startedAt,
         })
@@ -355,7 +356,7 @@ export function createRunWorkflowHandler(deps: {
             runId,
             workflowId: id,
             error: "工作流引擎异常",
-            result: { status: "failed", nodeResults: current.nodeResults, durationMs: endedAt - startedAt },
+            result: { status: "failed", nodeResults: sanitizedNodeResults, durationMs: endedAt - startedAt },
           },
           timestamp: new Date().toISOString(),
         }, { backpressure: "block" })
@@ -363,7 +364,7 @@ export function createRunWorkflowHandler(deps: {
           runId, workflowId: id, version: def.version,
           startedAt, endedAt, status: "failed",
           params: effectiveParams,
-          nodeResults: current.nodeResults,
+          nodeResults: sanitizedNodeResults,
           definition: def,
           error: "工作流引擎异常",
         })).catch((err) => {

@@ -524,7 +524,24 @@ describe("bootstrap descriptors (T1.5)", () => {
     const snapshotService = { save: vi.fn() }
     const capabilityLogger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
     const engineError = new Error("engine crashed token=sk-secret at /Users/example")
-    const workflowEngine = { run: vi.fn().mockRejectedValue(engineError) }
+    const workflowEngine = {
+      run: vi.fn(async (_def: unknown, _params: unknown, runId: string, emit: (event: unknown) => void) => {
+        emit({
+          type: "node:completed",
+          runId,
+          nodeId: "end-1",
+          result: {
+            nodeId: "end-1",
+            status: "success",
+            input: {
+              variables: { apiToken: "token=sk-secret" },
+              prompt: "resolved prompt token=sk-secret at /Users/example/repo",
+            },
+          },
+        })
+        throw engineError
+      }),
+    }
 
     const handler = createRunWorkflowHandler({
       workflowService: workflowService as never,
@@ -557,7 +574,18 @@ describe("bootstrap descriptors (T1.5)", () => {
       expect.objectContaining({ backpressure: "block" }),
     )
     expect(snapshotService.save).toHaveBeenCalledWith(
-      expect.objectContaining({ runId, status: "failed" }),
+      expect.objectContaining({
+        runId,
+        status: "failed",
+        nodeResults: {
+          "end-1": expect.objectContaining({
+            input: {
+              variables: { apiToken: "token=[redacted]" },
+              prompt: "resolved prompt token=[redacted] at [path]",
+            },
+          }),
+        },
+      }),
     )
     expect(capabilityLogger.error).toHaveBeenCalledWith(
       "workflow engine rejected (mcp dispatch)",
@@ -569,7 +597,8 @@ describe("bootstrap descriptors (T1.5)", () => {
       }),
     )
 
-    const serialized = JSON.stringify([runStatuses.get(runId), eventBus.emit.mock.calls, snapshotService.save.mock.calls, capabilityLogger.error.mock.calls])
+    const terminalEvents = eventBus.emit.mock.calls.filter(([event]) => event?.type === "workflow:failed")
+    const serialized = JSON.stringify([runStatuses.get(runId), terminalEvents, snapshotService.save.mock.calls, capabilityLogger.error.mock.calls])
     expect(serialized).not.toContain("sk-secret")
     expect(serialized).not.toContain("/Users/example")
   })
