@@ -131,7 +131,7 @@ describe("createCopySource", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/editor-scan/lib/__tests__/editor-copy-source.test.ts
+pnpm --filter @synapse/desktop exec vitest run src/modules/editor-scan/lib/__tests__/editor-copy-source.test.ts
 ```
 
 Expected: FAIL because `editor-copy-source.ts` does not exist.
@@ -221,7 +221,7 @@ const source = useMemo(
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/editor-scan/lib/__tests__/editor-copy-source.test.ts desktop/src/modules/editor-scan/__tests__/scan-item-detail-dialog-layout.test.ts
+pnpm --filter @synapse/desktop exec vitest run src/modules/editor-scan/lib/__tests__/editor-copy-source.test.ts src/modules/editor-scan/__tests__/scan-item-detail-dialog-layout.test.ts
 ```
 
 Expected: PASS.
@@ -376,7 +376,7 @@ describe("bulk skill copy helpers", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/editor-scan/lib/__tests__/bulk-skill-copy.test.ts
+pnpm --filter @synapse/desktop exec vitest run src/modules/editor-scan/lib/__tests__/bulk-skill-copy.test.ts
 ```
 
 Expected: FAIL because `bulk-skill-copy.ts` does not exist.
@@ -514,7 +514,7 @@ export {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/editor-scan/lib/__tests__/bulk-skill-copy.test.ts
+pnpm --filter @synapse/desktop exec vitest run src/modules/editor-scan/lib/__tests__/bulk-skill-copy.test.ts
 ```
 
 Expected: PASS.
@@ -626,7 +626,7 @@ describe("ScanItemCard selection", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/editor-scan/__tests__/scan-item-card-selection.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/editor-scan/__tests__/scan-item-card-selection.test.tsx
 ```
 
 Expected: FAIL because `ScanItemCard` has no `selectable` props.
@@ -755,7 +755,7 @@ export { ScanItemCard }
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/editor-scan/__tests__/scan-item-card-selection.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/editor-scan/__tests__/scan-item-card-selection.test.tsx
 ```
 
 Expected: PASS.
@@ -922,7 +922,7 @@ describe("EditorScanModule bulk Skill selection", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/editor-scan/__tests__/editor-scan-bulk-selection.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/editor-scan/__tests__/editor-scan-bulk-selection.test.tsx
 ```
 
 Expected: FAIL because selection state and bulk copy dialog are not wired.
@@ -1201,7 +1201,7 @@ export type { EditorBulkSkillCopyDialogProps }
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/editor-scan/__tests__/editor-scan-bulk-selection.test.tsx desktop/src/modules/editor-scan/__tests__/scan-item-card-selection.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/editor-scan/__tests__/editor-scan-bulk-selection.test.tsx src/modules/editor-scan/__tests__/scan-item-card-selection.test.tsx
 ```
 
 Expected: PASS.
@@ -1473,7 +1473,7 @@ describe("EditorBulkSkillCopyDialog", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/editor-scan/__tests__/editor-bulk-skill-copy-dialog.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/editor-scan/__tests__/editor-bulk-skill-copy-dialog.test.tsx
 ```
 
 Expected: FAIL because the dialog stub has no UI.
@@ -1866,7 +1866,7 @@ export type { EditorBulkSkillCopyDialogProps }
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/editor-scan/__tests__/editor-bulk-skill-copy-dialog.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/editor-scan/__tests__/editor-bulk-skill-copy-dialog.test.tsx
 ```
 
 Expected: PASS.
@@ -1876,7 +1876,7 @@ Expected: PASS.
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/editor-scan
+pnpm --filter @synapse/desktop exec vitest run src/modules/editor-scan
 ```
 
 Expected: PASS.
@@ -1906,7 +1906,7 @@ Add this bullet directly under `## 新增功能` in `RELEASE_NOTES_PENDING.md`:
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/editor-scan
+pnpm --filter @synapse/desktop exec vitest run src/modules/editor-scan
 ```
 
 Expected: PASS.
