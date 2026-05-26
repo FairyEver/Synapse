@@ -145,7 +145,7 @@ describe("WorkflowWindowManager", () => {
   it("closes the editor window when opening the runner for the same workflow", async () => {
     const manager = new WorkflowWindowManager()
 
-    const editor = manager.open("workflow-1", "app://-")
+    const editor = await manager.open("workflow-1", "app://-")
     const runner = await manager.openRunner("workflow-1", "run-1", "app://-")
 
     expect(editor).not.toBe(runner)
@@ -154,10 +154,10 @@ describe("WorkflowWindowManager", () => {
     expect(manager.getOpenEditorIds()).toEqual([])
   })
 
-  it("opens editor windows wider and taller than before with main window minimum bounds", () => {
+  it("opens editor windows wider and taller than before with main window minimum bounds", async () => {
     const manager = new WorkflowWindowManager()
 
-    const editor = manager.open("workflow-1", "app://-") as unknown as FakeBrowserWindow
+    const editor = await manager.open("workflow-1", "app://-") as unknown as FakeBrowserWindow
 
     expect(editor.options).toMatchObject({
       width: 1350,
@@ -168,11 +168,22 @@ describe("WorkflowWindowManager", () => {
     })
   })
 
+  it("cleans up editor window state when editor URL loading fails", async () => {
+    const manager = new WorkflowWindowManager()
+    electronMock.setNextLoadError(new Error("load failed"))
+
+    await expect(manager.open("workflow-1", "app://-")).rejects.toThrow("load failed")
+
+    expect(manager.getOpenEditorIds()).toEqual([])
+    expect(electronMock.windows[0]?.isDestroyed()).toBe(true)
+    expect(healthMock.detach).toHaveBeenCalled()
+  })
+
   it("closes the runner window when opening the editor for the same workflow", async () => {
     const manager = new WorkflowWindowManager()
 
     const runner = await manager.openRunner("workflow-1", "run-1", "app://-")
-    const editor = manager.open("workflow-1", "app://-")
+    const editor = await manager.open("workflow-1", "app://-")
 
     expect(runner).not.toBe(editor)
     expect(runner.isDestroyed()).toBe(true)
@@ -183,7 +194,7 @@ describe("WorkflowWindowManager", () => {
   it("keeps the editor open when runner URL loading fails", async () => {
     const manager = new WorkflowWindowManager()
 
-    const editor = manager.open("workflow-1", "app://-")
+    const editor = await manager.open("workflow-1", "app://-")
     electronMock.setNextLoadError(new Error("load failed"))
     const openPromise = manager.openRunner("workflow-1", "run-1", "app://-")
 

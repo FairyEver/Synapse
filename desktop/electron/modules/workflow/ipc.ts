@@ -1014,10 +1014,10 @@ export const workflowIpcModule: IpcModule = {
     },
     openEditor: {
       channel: "synapse:workflow:open-editor", kind: "invoke", request: z.object({ id: z.string(), runId: z.string().optional() }), response: z.void(),
-      handler: (ctx, { id, runId }: { id: string; runId?: string }) => {
+      handler: async (ctx, { id, runId }: { id: string; runId?: string }) => {
         logger.info("workflow:openEditor", { workflowId: id, runId })
         const baseUrl = rendererBaseUrl()
-        ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").open(id, baseUrl, runId)
+        await ctx.resolve<WorkflowWindowManager>("core.workflow.window-manager").open(id, baseUrl, runId)
       },
     },
     editorState: {

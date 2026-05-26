@@ -20,7 +20,7 @@ export class WorkflowWindowManager {
 
   constructor(private readonly mainWindowManager?: WindowManager) {}
 
-  open(workflowId: string, baseUrl: string, runId?: string): BrowserWindow {
+  async open(workflowId: string, baseUrl: string, runId?: string): Promise<BrowserWindow> {
     const existing = this.editorWindows.get(workflowId)
     if (existing && !existing.isDestroyed()) {
       logger.info("workflow editor window reused", { workflowId, runId })
@@ -39,9 +39,6 @@ export class WorkflowWindowManager {
     const params = new URLSearchParams({ window: "workflow-editor", workflowId })
     if (runId) params.set("runId", runId)
     const url = `${baseUrl}${baseUrl.includes("?") ? "&" : "?"}${params.toString()}`
-    void win.loadURL(url).catch((err: Error) => {
-      logger.error("workflow editor window URL load failed", { workflowId, url, error: err.message })
-    })
 
     const windowId = `workflow-editor:${workflowId}`
     if (this.mainWindowManager) {
@@ -59,6 +56,16 @@ export class WorkflowWindowManager {
       this.editorWindows.delete(workflowId)
     })
     this.editorWindows.set(workflowId, win)
+    try {
+      await win.loadURL(url)
+    } catch (err) {
+      logger.error("workflow editor window URL load failed", { workflowId, url, error: err instanceof Error ? err.message : String(err) })
+      this.healthServices.get(windowId)?.detach()
+      this.healthServices.delete(windowId)
+      this.editorWindows.delete(workflowId)
+      if (!win.isDestroyed()) win.destroy()
+      throw err
+    }
     this.closeRunnerWindow(workflowId, "workflow runner window closed after editor opened")
     logger.info("workflow editor window opened", { workflowId, runId })
     return win
