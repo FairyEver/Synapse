@@ -39,8 +39,8 @@ export function fetchGuide(): Promise<{ content: string }> {
   return json<{ content: string }>('/api/guide')
 }
 
-export function fetchWorkerOutput(): Promise<{ workers: Record<number, OutputLine[]> }> {
-  return json<{ workers: Record<number, OutputLine[]> }>('/api/workers/output')
+export function fetchWorkerOutput(): Promise<{ workers: Record<string, OutputLine[]> }> {
+  return json<{ workers: Record<string, OutputLine[]> }>('/api/workers/output')
 }
 
 export function createPrompt(name: string): Promise<UiConfig> {

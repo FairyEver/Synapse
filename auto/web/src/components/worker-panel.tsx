@@ -5,7 +5,8 @@ import { Terminal } from './terminal'
 import { cn } from '../lib/utils'
 
 interface WorkerPanelProps {
-  worker: WorkerResult
+  worker: WorkerResult | null
+  label: string
   lines: OutputLine[]
   trimmedCount: number
   defaultOpen?: boolean
@@ -27,9 +28,12 @@ const statusConfig: Record<string, { icon: typeof Circle; color: string; iconExt
   timeout:  { icon: Clock,       color: 'text-orange-500', label: '超时' },
 }
 
-export function WorkerPanel({ worker, lines, trimmedCount, defaultOpen = false }: WorkerPanelProps) {
+export function WorkerPanel({ worker, label, lines, trimmedCount, defaultOpen = false }: WorkerPanelProps) {
   const [open, setOpen] = useState(defaultOpen)
-  const cfg = statusConfig[worker.status] ?? statusConfig.pending
+  const status = worker?.status ?? 'pending'
+  const durationMs = worker?.durationMs ?? 0
+  const lastMessage = worker?.lastMessage ?? ''
+  const cfg = statusConfig[status] ?? statusConfig.pending
   const Icon = cfg.icon
 
   return (
@@ -41,11 +45,11 @@ export function WorkerPanel({ worker, lines, trimmedCount, defaultOpen = false }
       >
         <ChevronRight className={cn('h-4 w-4 transition-transform', open && 'rotate-90')} />
         <Icon className={cn('h-4 w-4', cfg.color, cfg.iconExtra)} />
-        <span className="font-medium">Worker {worker.id}</span>
+        <span className="font-medium">{label}</span>
         <span className={cn('text-xs', cfg.color)}>{cfg.label}</span>
-        {worker.durationMs > 0 && (
+        {durationMs > 0 && (
           <span className="text-xs text-muted-foreground ml-auto">
-            {formatDuration(worker.durationMs)}
+            {formatDuration(durationMs)}
           </span>
         )}
       </button>
@@ -55,7 +59,7 @@ export function WorkerPanel({ worker, lines, trimmedCount, defaultOpen = false }
             <Terminal lines={lines} trimmedCount={trimmedCount} className="h-full" />
           ) : (
             <div className="h-full bg-terminal-bg flex items-center justify-center text-terminal-fg/50 text-xs font-mono">
-              {worker.lastMessage || '暂无输出'}
+              {lastMessage || '暂无输出'}
             </div>
           )}
         </div>

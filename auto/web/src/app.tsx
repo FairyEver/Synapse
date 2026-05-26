@@ -24,14 +24,12 @@ export function App() {
   })
 
   useEffect(() => {
-    if (snapshot && !snapshot.currentBatch) return
-    if (snapshot?.currentBatch) {
-      api.fetchWorkerOutput()
-        .then(res => outputBuffer.load(res.workers))
-        .catch(() => {})
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load on mount + batch change
-  }, [snapshot?.currentBatch?.id])
+    if (!snapshot?.session) return
+    api.fetchWorkerOutput()
+      .then(res => outputBuffer.load(res.workers))
+      .catch(() => {})
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load on session change
+  }, [snapshot?.session?.id])
 
   const handleSave = useCallback(async () => {
     if (!config) return
@@ -60,8 +58,8 @@ export function App() {
     }
   }, [])
 
-  const isRunning = snapshot && !['idle', 'stopped', 'error'].includes(snapshot.status)
-  const hasResults = snapshot && (snapshot.currentBatch || snapshot.lastBatch)
+  const isRunning = snapshot && ['running', 'draining'].includes(snapshot.status)
+  const hasResults = snapshot && snapshot.session
   const showRunView = !showConfig && (isRunning || hasResults)
 
   if (loading) {

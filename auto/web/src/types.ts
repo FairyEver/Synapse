@@ -34,7 +34,6 @@ export interface UiConfig {
 }
 
 export type WorkerStatus = 'pending' | 'running' | 'success' | 'error' | 'timeout'
-export type BatchStatus = 'running' | 'success' | 'partial' | 'error'
 
 export interface WorkerResult {
   id: number
@@ -45,29 +44,42 @@ export interface WorkerResult {
   lastMessage: string
 }
 
-export interface BatchSnapshot {
-  id: string
-  status: BatchStatus
-  startedAt: string
-  finishedAt: string | null
-  durationMs: number
-  workers: WorkerResult[]
-  summaryPath: string
+export type SchedulerStatus = 'idle' | 'running' | 'draining' | 'stopped' | 'error'
+
+export interface RunTotals {
+  started: number
+  success: number
+  error: number
+  timeout: number
 }
 
-export type SchedulerStatus = 'idle' | 'running' | 'waiting' | 'stopping' | 'stopped' | 'error'
+export interface SlotSnapshot {
+  slotId: number
+  sequence: number
+  worker: WorkerResult | null
+}
+
+export interface RunSessionSnapshot {
+  id: string
+  startedAt: string
+  durationMs: number
+  slots: SlotSnapshot[]
+  recentRuns: WorkerResult[]
+  totals: RunTotals
+  summaryPath: string
+}
 
 export interface SchedulerSnapshot {
   status: SchedulerStatus
   drainAfterCurrent: boolean
   activeConfig: UiConfig | null
-  currentBatch: BatchSnapshot | null
-  lastBatch: (BatchSnapshot & { finishedAt: string }) | null
+  session: RunSessionSnapshot | null
   error: string
 }
 
 export interface OutputLine {
   workerId: number
+  sequence?: number
   stream: 'stdout' | 'stderr' | 'event'
   text: string
   ts: number
