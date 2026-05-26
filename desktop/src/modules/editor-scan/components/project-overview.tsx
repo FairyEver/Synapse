@@ -15,6 +15,12 @@ type ProjectOverviewProps = {
   selectedEditorId: SynapseEditorId
   selectedEditorLabel: string
   contentTab: "skill" | "rule"
+  selectedSkillKeys?: Set<string>
+  buildSkillKey?: (input: {
+    path: string
+    scope: EditorScanScope
+    projectPath?: string
+  }) => string
   onItemClick?: (
     item: EditorScanSkillItem | EditorScanRuleItem,
     type: "skill" | "rule",
@@ -26,6 +32,17 @@ type ProjectOverviewProps = {
       projectPath: string
     },
   ) => void
+  onSkillSelectionChange?: (
+    item: EditorScanSkillItem,
+    context: {
+      editorId: SynapseEditorId
+      editorLabel: string
+      scope: EditorScanScope
+      projectName: string
+      projectPath: string
+    },
+    selected: boolean,
+  ) => void
 }
 
 function ProjectOverview({
@@ -33,7 +50,10 @@ function ProjectOverview({
   selectedEditorId,
   selectedEditorLabel,
   contentTab,
+  selectedSkillKeys,
+  buildSkillKey,
   onItemClick,
+  onSkillSelectionChange,
 }: ProjectOverviewProps) {
   const filteredProjects = useMemo(() => {
     return projects
@@ -85,23 +105,43 @@ function ProjectOverview({
             {project.pathExists && items.length > 0 ? (
               <>
                 <div className="grid grid-cols-2 gap-2">
-                  {items.map((item) => (
-                    <ScanItemCard
-                      key={`${item.path}-${item.name}`}
-                      name={item.name}
-                      path={item.path}
-                      source={item.source}
-                      preview={item.preview}
-                      metadata={"metadata" in item ? item.metadata : undefined}
-                      onClick={() => onItemClick?.(item, contentTab, {
-                        editorId: selectedEditorId,
-                        editorLabel: selectedEditorLabel,
-                        scope: "project",
-                        projectName: project.projectName,
-                        projectPath: project.projectPath,
-                      })}
-                    />
-                  ))}
+                  {items.map((item) => {
+                    const selectionKey = buildSkillKey?.({
+                      path: item.path,
+                      projectPath: project.projectPath,
+                      scope: "project",
+                    }) ?? `${project.projectPath}:${item.path}`
+
+                    return (
+                      <ScanItemCard
+                        key={`${item.path}-${item.name}`}
+                        name={item.name}
+                        path={item.path}
+                        source={item.source}
+                        preview={item.preview}
+                        metadata={"metadata" in item ? item.metadata : undefined}
+                        selectable={contentTab === "skill" && Boolean(onSkillSelectionChange)}
+                        selected={selectedSkillKeys?.has(selectionKey) ?? false}
+                        onSelectionChange={(selected) => {
+                          if (contentTab !== "skill") return
+                          onSkillSelectionChange?.(item as EditorScanSkillItem, {
+                            editorId: selectedEditorId,
+                            editorLabel: selectedEditorLabel,
+                            scope: "project",
+                            projectName: project.projectName,
+                            projectPath: project.projectPath,
+                          }, selected)
+                        }}
+                        onClick={() => onItemClick?.(item, contentTab, {
+                          editorId: selectedEditorId,
+                          editorLabel: selectedEditorLabel,
+                          scope: "project",
+                          projectName: project.projectName,
+                          projectPath: project.projectPath,
+                        })}
+                      />
+                    )
+                  })}
                 </div>
                 <p className="mt-3 text-center text-xs text-muted-foreground">
                   共有 {items.length} 个{label}

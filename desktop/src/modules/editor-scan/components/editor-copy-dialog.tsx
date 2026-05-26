@@ -30,8 +30,8 @@ import {
 } from "@/modules/content/components/editor-write-target-selector"
 import { useEditorAdaptersForContentType } from "@/modules/content/hooks/use-editor-adapters-for-content-type"
 import { installFormDefinitionByEditorId } from "@/definitions/generated/renderer-registry"
+import { createCopySource } from "@/modules/editor-scan/lib/editor-copy-source"
 import type { SynapseEditorAdapterSummary, SynapseEditorInstallFormValues } from "@/types/editor"
-import type { SynapseEditorCopySource } from "@/types/editor-copy"
 import type { ScanItemForDetail } from "@/types/editor-scan"
 
 type EditorCopyDialogProps = {
@@ -43,22 +43,6 @@ type EditorCopyDialogProps = {
 }
 
 const logger = createRendererLogger("editor-scan.copy")
-
-function createCopySource(
-  item: ScanItemForDetail,
-  content: string | null,
-): SynapseEditorCopySource {
-  return {
-    content: item.type === "rule" ? content ?? item.content : undefined,
-    editorId: item.editorId,
-    itemName: item.name,
-    itemPath: item.path,
-    itemType: item.type,
-    metadata: item.metadata,
-    scope: item.scope,
-    synapseContentId: item.synapseContentId ?? null,
-  }
-}
 
 function EditorCopyDialog({
   content,

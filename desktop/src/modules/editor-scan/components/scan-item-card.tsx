@@ -1,6 +1,8 @@
+import type { MouseEvent } from "react"
 import { FolderOpen } from "lucide-react"
 import { toast } from "sonner"
 import { Badge } from "@/components/ui/badge"
+import { Checkbox } from "@/components/ui/checkbox"
 import {
   Tooltip,
   TooltipContent,
@@ -17,6 +19,9 @@ type ScanItemCardProps = {
   preview: string
   metadata?: Record<string, string>
   onClick?: () => void
+  selectable?: boolean
+  selected?: boolean
+  onSelectionChange?: (selected: boolean) => void
 }
 
 function ScanItemCard({
@@ -26,13 +31,20 @@ function ScanItemCard({
   preview,
   metadata,
   onClick,
+  selectable = false,
+  selected = false,
+  onSelectionChange,
 }: ScanItemCardProps) {
-  const handleOpenInFinder = (e: React.MouseEvent) => {
+  const handleOpenInFinder = (e: MouseEvent) => {
     e.stopPropagation()
     const bridge = getSynapseBridge()
     bridge?.shell.showItemInFolder(itemPath).catch(() => {
       toast.error("无法在访达中打开文件。")
     })
+  }
+
+  const handleSelectionClick = (event: MouseEvent) => {
+    event.stopPropagation()
   }
 
   const metaEntries = metadata
@@ -43,10 +55,19 @@ function ScanItemCard({
 
   return (
     <div
+      data-scan-item-card
       className="group cursor-pointer rounded-lg bg-card px-3.5 py-3"
       onClick={onClick}
     >
       <div className="flex items-center gap-2">
+        {selectable ? (
+          <Checkbox
+            aria-label={`选择 ${name}`}
+            checked={selected}
+            onClick={handleSelectionClick}
+            onCheckedChange={(value) => onSelectionChange?.(value === true)}
+          />
+        ) : null}
         <span className="truncate text-sm font-medium">{name}</span>
         <TooltipProvider>
           <Tooltip>
