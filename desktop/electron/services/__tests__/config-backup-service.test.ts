@@ -186,6 +186,39 @@ describe("ConfigBackupService quick inputs", () => {
       { id: "quick-1", content: "第一行\n第二行", directSend: true },
     ])
   })
+
+  it("redacts selected backup paths in import and export logs", async () => {
+    const exportDir = await mkdtemp(path.join(tmpdir(), "synapse-config-backup-export-"))
+    const exportPath = path.join(exportDir, "private-backup.json")
+    const importPath = await writeBackupFile({})
+
+    try {
+      await configBackupService.writeExport(exportPath)
+      await configBackupService.readImport(importPath)
+
+      expect(mocks.logger.info).toHaveBeenCalledWith("Config backup exported.", { filePath: "[path]" })
+      expect(mocks.logger.info).toHaveBeenCalledWith("Config backup imported.", { filePath: "[path]" })
+      expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain(exportDir)
+      expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain(path.dirname(importPath))
+    } finally {
+      await rm(exportDir, { recursive: true, force: true })
+      await rm(path.dirname(importPath), { recursive: true, force: true })
+    }
+  })
+
+  it("redacts selected backup paths in rollback logs", async () => {
+    const filePath = await writeBackupFile({})
+    vi.mocked(userIdentityService.importIdentity).mockRejectedValueOnce(new Error("identity failed"))
+
+    try {
+      await expect(configBackupService.readImport(filePath)).rejects.toThrow("identity failed")
+
+      expect(mocks.logger.warn).toHaveBeenCalledWith("Identity import failed, rolling back config.", { filePath: "[path]" })
+      expect(JSON.stringify(mocks.logger.warn.mock.calls)).not.toContain(path.dirname(filePath))
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
 })
 
 function createIdentity() {

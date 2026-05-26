@@ -737,7 +737,7 @@ class ConfigBackupService {
     await writeBackupFile(filePath, backup)
 
     logger.info("Config backup exported.", {
-      filePath,
+      filePath: redactedFilePathForLog(),
     })
   }
 
@@ -797,13 +797,13 @@ class ConfigBackupService {
     try {
       await userIdentityService.importIdentity(backup.identity)
     } catch (identityError) {
-      logger.warn("Identity import failed, rolling back config.", { filePath })
+      logger.warn("Identity import failed, rolling back config.", { filePath: redactedFilePathForLog() })
       await configStore.replace(previousConfig)
       throw identityError
     }
 
     logger.info("Config backup imported.", {
-      filePath,
+      filePath: redactedFilePathForLog(),
     })
 
     return {
@@ -850,13 +850,13 @@ class ConfigBackupService {
     try {
       await userIdentityService.importIdentity(backup.identity)
     } catch (identityError) {
-      logger.warn("Identity import failed, rolling back config.", { filePath })
+      logger.warn("Identity import failed, rolling back config.", { filePath: redactedFilePathForLog() })
       await configStore.replace(previousConfig)
       throw identityError
     }
 
     logger.info("Config backup imported.", {
-      filePath,
+      filePath: redactedFilePathForLog(),
     })
 
     return {
@@ -868,3 +868,7 @@ class ConfigBackupService {
 export const configBackupService = new ConfigBackupService()
 
 export { createConfigBackupPayload }
+
+function redactedFilePathForLog(): string {
+  return "[path]"
+}
