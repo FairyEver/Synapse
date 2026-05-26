@@ -10,6 +10,8 @@ import { ScanItemCard } from "./scan-item-card"
 type GlobalOverviewProps = {
   result: EditorScanGlobalResult
   contentTab: "skill" | "rule"
+  selectedSkillKeys?: Set<string>
+  buildSkillKey?: (input: { path: string; scope: EditorScanScope }) => string
   onItemClick?: (
     item: EditorScanSkillItem | EditorScanRuleItem,
     type: "skill" | "rule",
@@ -19,9 +21,25 @@ type GlobalOverviewProps = {
       scope: EditorScanScope
     },
   ) => void
+  onSkillSelectionChange?: (
+    item: EditorScanSkillItem,
+    context: {
+      editorId: SynapseEditorId
+      editorLabel: string
+      scope: EditorScanScope
+    },
+    selected: boolean,
+  ) => void
 }
 
-function GlobalOverview({ result, contentTab, onItemClick }: GlobalOverviewProps) {
+function GlobalOverview({
+  result,
+  contentTab,
+  selectedSkillKeys,
+  buildSkillKey,
+  onItemClick,
+  onSkillSelectionChange,
+}: GlobalOverviewProps) {
   if (contentTab === "skill") {
     if (result.skills.length === 0) {
       return (
@@ -39,20 +57,31 @@ function GlobalOverview({ result, contentTab, onItemClick }: GlobalOverviewProps
           </p>
         )}
         <div className="grid grid-cols-2 gap-2">
-          {result.skills.map((skill) => (
-            <ScanItemCard
-              key={skill.path}
-              name={skill.name}
-              path={skill.path}
-              source={skill.source}
-              preview={skill.preview}
-              onClick={() => onItemClick?.(skill, "skill", {
-                editorId: result.editorId,
-                editorLabel: result.editorLabel,
-                scope: "global",
-              })}
-            />
-          ))}
+          {result.skills.map((skill) => {
+            const key = buildSkillKey?.({ path: skill.path, scope: "global" }) ?? skill.path
+
+            return (
+              <ScanItemCard
+                key={skill.path}
+                name={skill.name}
+                path={skill.path}
+                source={skill.source}
+                preview={skill.preview}
+                selectable={Boolean(onSkillSelectionChange)}
+                selected={selectedSkillKeys?.has(key) ?? false}
+                onSelectionChange={(selected) => onSkillSelectionChange?.(skill, {
+                  editorId: result.editorId,
+                  editorLabel: result.editorLabel,
+                  scope: "global",
+                }, selected)}
+                onClick={() => onItemClick?.(skill, "skill", {
+                  editorId: result.editorId,
+                  editorLabel: result.editorLabel,
+                  scope: "global",
+                })}
+              />
+            )
+          })}
         </div>
         <p className="mt-3 text-center text-xs text-muted-foreground">
           共有 {result.skills.length} 个全局 Skill

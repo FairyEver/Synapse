@@ -1,5 +1,5 @@
-import { useCallback, useMemo, useState } from "react"
-import { LoaderCircle, RotateCcw, TriangleAlert } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { Copy, LoaderCircle, RotateCcw, TriangleAlert, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -21,6 +21,8 @@ import { GlobalOverview } from "./components/global-overview"
 import { ProjectOverview } from "./components/project-overview"
 import { EmptyScanState } from "./components/empty-scan-state"
 import { ScanItemDetailDialog } from "./components/scan-item-detail-dialog"
+import { EditorBulkSkillCopyDialog } from "./components/editor-bulk-skill-copy-dialog"
+import type { EditorScanSkillCopyItem } from "./lib/editor-copy-source"
 
 type ContentTab = "skill" | "rule"
 type ScopeTab = "global" | "project"
@@ -34,15 +36,36 @@ function EditorScanModule() {
   const [scopeTab, setScopeTab] = useState<ScopeTab>("global")
   const [detailItem, setDetailItem] = useState<ScanItemForDetail | null>(null)
   const [detailOpen, setDetailOpen] = useState(false)
+  const [selectedSkillMap, setSelectedSkillMap] = useState<Map<string, EditorScanSkillCopyItem>>(() => new Map())
+  const [bulkCopyOpen, setBulkCopyOpen] = useState(false)
+
+  const selectedSkillKeys = useMemo(() => new Set(selectedSkillMap.keys()), [selectedSkillMap])
+  const selectedSkills = useMemo(() => Array.from(selectedSkillMap.values()), [selectedSkillMap])
+
+  const buildSkillKey = useCallback((input: {
+    path: string
+    scope: EditorScanScope
+    projectPath?: string
+  }) => `${input.scope}:${input.projectPath ?? "global"}:${input.path}`, [])
+
+  const clearSkillSelection = useCallback(() => {
+    setSelectedSkillMap(new Map())
+    setBulkCopyOpen(false)
+  }, [])
+
+  useEffect(() => {
+    clearSkillSelection()
+  }, [clearSkillSelection, selectedEditorId, contentTab, scopeTab])
 
   const handleRefresh = useCallback(async () => {
     try {
       await refresh()
+      clearSkillSelection()
       showSuccess("扫描结果已刷新")
     } catch {
       showError("刷新失败，请稍后重试。")
     }
-  }, [refresh, showSuccess, showError])
+  }, [clearSkillSelection, refresh, showSuccess, showError])
 
   const handleItemClick = useCallback(
     (
@@ -77,6 +100,49 @@ function EditorScanModule() {
     },
     [],
   )
+
+  const handleSkillSelectionChange = useCallback((
+    item: EditorScanSkillItem,
+    context: {
+      editorId: SynapseEditorId
+      editorLabel: string
+      scope: EditorScanScope
+      projectName?: string
+      projectPath?: string
+    },
+    selected: boolean,
+  ) => {
+    const key = buildSkillKey({
+      path: item.path,
+      projectPath: context.projectPath,
+      scope: context.scope,
+    })
+
+    setSelectedSkillMap((current) => {
+      const next = new Map(current)
+      if (!selected) {
+        next.delete(key)
+        return next
+      }
+
+      next.set(key, {
+        key,
+        name: item.name,
+        path: item.path,
+        source: item.source,
+        preview: item.preview,
+        fileCount: item.fileCount,
+        synapseContentId: item.synapseContentId,
+        editorId: context.editorId,
+        editorLabel: context.editorLabel,
+        scope: context.scope,
+        projectName: context.projectName,
+        projectPath: context.projectPath,
+        trash: item.trash,
+      })
+      return next
+    })
+  }, [buildSkillKey])
 
   const globalResult = useMemo(
     () => data?.global.find((g) => g.editorId === selectedEditorId) ?? null,
@@ -166,14 +232,24 @@ function EditorScanModule() {
         <ScrollArea className="min-h-0 flex-1">
           <div className="flex flex-col gap-2">
             {scopeTab === "global" ? (
-              <GlobalOverview result={globalResult} contentTab={contentTab} onItemClick={handleItemClick} />
+              <GlobalOverview
+                result={globalResult}
+                contentTab={contentTab}
+                selectedSkillKeys={selectedSkillKeys}
+                buildSkillKey={buildSkillKey}
+                onItemClick={handleItemClick}
+                onSkillSelectionChange={handleSkillSelectionChange}
+              />
             ) : (
               <ProjectOverview
                 projects={data?.projects ?? []}
                 selectedEditorId={selectedEditorId}
                 selectedEditorLabel={globalResult.editorLabel}
                 contentTab={contentTab}
+                selectedSkillKeys={selectedSkillKeys}
+                buildSkillKey={buildSkillKey}
                 onItemClick={handleItemClick}
+                onSkillSelectionChange={handleSkillSelectionChange}
               />
             )}
           </div>
@@ -209,20 +285,35 @@ function EditorScanModule() {
               </TabsList>
             </Tabs>
           </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="size-7"
-            onClick={() => void handleRefresh()}
-            disabled={loading}
-            title="刷新"
-          >
-            {loading ? (
-              <LoaderCircle className="size-4 animate-spin" />
-            ) : (
-              <RotateCcw className="size-4" />
-            )}
-          </Button>
+          <div className="flex items-center gap-2">
+            {contentTab === "skill" && selectedSkills.length > 0 ? (
+              <div className="flex items-center gap-2">
+                <span className="text-sm text-muted-foreground">已选 {selectedSkills.length} 个</span>
+                <Button variant="outline" size="sm" onClick={clearSkillSelection}>
+                  <X data-icon="inline-start" />
+                  取消选择
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => setBulkCopyOpen(true)}>
+                  <Copy data-icon="inline-start" />
+                  复制到...
+                </Button>
+              </div>
+            ) : null}
+            <Button
+              variant="ghost"
+              size="icon"
+              className="size-7"
+              onClick={() => void handleRefresh()}
+              disabled={loading}
+              title="刷新"
+            >
+              {loading ? (
+                <LoaderCircle className="size-4 animate-spin" />
+              ) : (
+                <RotateCcw className="size-4" />
+              )}
+            </Button>
+          </div>
         </div>
         <div className="min-h-0 flex-1 px-2 pb-2 pt-0">
           {renderContent()}
@@ -234,6 +325,15 @@ function EditorScanModule() {
         onChanged={refresh}
         open={detailOpen}
         onOpenChange={setDetailOpen}
+      />
+      <EditorBulkSkillCopyDialog
+        items={selectedSkills}
+        onCopied={async () => {
+          await refresh()
+          clearSkillSelection()
+        }}
+        open={bulkCopyOpen}
+        onOpenChange={setBulkCopyOpen}
       />
     </SidebarContentLayout>
   )
