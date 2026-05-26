@@ -141,12 +141,8 @@ export const moduleRouteItems: ModuleRouteItem[] = [
   },
 ];
 
-export function getUserRouteItems(permissionKeys: readonly string[] = []) {
-  const allowed = new Set(permissionKeys);
-  return [
-    ...userRouteItems,
-    ...moduleRouteItems.filter((item) => allowed.has(item.permissionKey)),
-  ];
+export function getUserRouteItems(_permissionKeys: readonly string[] = []) {
+  return userRouteItems;
 }
 
 export const routeItems = adminRouteItems;

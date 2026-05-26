@@ -45,7 +45,9 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       </SidebarHeader>
       <SidebarContent>
         <NavMain items={mainRoutes} />
-        <NavProjects projects={operationRoutes} className="mt-auto" />
+        {operationRoutes.length > 0 ? (
+          <NavProjects projects={operationRoutes} className="mt-auto" />
+        ) : null}
       </SidebarContent>
       <SidebarFooter>
         <NavUser
