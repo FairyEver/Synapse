@@ -69,6 +69,18 @@ describe("QuickInputsPanel", () => {
     expect(onSave).toHaveBeenCalledWith([{ id: "quick-1", content: "新内容", directSend: false }])
   })
 
+  it("keeps the edit dialog open and shows an error when saving fails", async () => {
+    const onSave = vi.fn(async () => false)
+    const container = await renderPanel([{ id: "quick-1", content: "旧内容", directSend: false }], onSave)
+
+    await clickButton(container, "编辑片段")
+    await setTextareaValue("新内容")
+    await clickDialogButton("保存")
+
+    expect(document.body.textContent).toContain("保存失败，请重试。")
+    expect(document.body.textContent).toContain("编辑片段")
+  })
+
   it("edits the direct send setting", async () => {
     const onSave = vi.fn(async () => true)
     const container = await renderPanel([{ id: "quick-1", content: "继续", directSend: true }], onSave)
@@ -95,6 +107,15 @@ describe("QuickInputsPanel", () => {
       { id: "quick-1", content: "继续", directSend: false },
       { id: "quick-2", content: "整理", directSend: false },
     ])
+  })
+
+  it("shows an error when direct send toggle save fails", async () => {
+    const onSave = vi.fn(async () => false)
+    await renderPanel([{ id: "quick-1", content: "继续", directSend: true }], onSave)
+
+    await clickListDirectSendSwitch("继续")
+
+    expect(document.body.textContent).toContain("保存失败，请重试。")
   })
 
   it("disables list direct send switches while saving", async () => {
@@ -132,6 +153,22 @@ describe("QuickInputsPanel", () => {
     ])
   })
 
+  it("shows an error when pinning fails", async () => {
+    const onSave = vi.fn(async () => false)
+    const container = await renderPanel([
+      { id: "quick-1", content: "第一条", directSend: false },
+      { id: "quick-2", content: "第二条", directSend: true },
+    ], onSave)
+
+    const pinButtons = container.querySelectorAll('button[aria-label="置顶片段"]')
+    await act(async () => {
+      pinButtons[1]?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("置顶失败，请重试。")
+  })
+
   it("deletes an existing quick input after confirmation", async () => {
     const onSave = vi.fn(async () => true)
     const container = await renderPanel([{ id: "quick-1", content: "待删除", directSend: false }], onSave)
@@ -140,6 +177,17 @@ describe("QuickInputsPanel", () => {
     await clickDialogButton("删除")
 
     expect(onSave).toHaveBeenCalledWith([])
+  })
+
+  it("keeps delete dialog open and shows an error when deletion fails", async () => {
+    const onSave = vi.fn(async () => false)
+    const container = await renderPanel([{ id: "quick-1", content: "待删除", directSend: false }], onSave)
+
+    await clickButton(container, "删除片段")
+    await clickDialogButton("删除")
+
+    expect(document.body.textContent).toContain("删除失败，请重试。")
+    expect(document.body.textContent).toContain("删除片段")
   })
 })
 
