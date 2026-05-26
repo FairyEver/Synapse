@@ -6,6 +6,8 @@ type FakeBrowserWindow = {
   readonly options: Electron.BrowserWindowConstructorOptions
   destroyed: boolean
   focused: boolean
+  minimized: boolean
+  restored: boolean
   loadedUrls: string[]
   sentMessages: Array<{ channel: string; payload: unknown }>
   loadError?: Error
@@ -18,6 +20,8 @@ type FakeBrowserWindow = {
     isDestroyed: () => boolean
   }
   isDestroyed: () => boolean
+  isMinimized: () => boolean
+  restore: () => void
   focus: () => void
   loadURL: (url: string) => Promise<void>
   on: (event: string, handler: () => void) => void
@@ -36,6 +40,8 @@ const electronMock = vi.hoisted(() => {
       options,
       destroyed: false,
       focused: false,
+      minimized: false,
+      restored: false,
       loadedUrls: [],
       sentMessages: [],
       loadError: nextLoadError,
@@ -49,6 +55,11 @@ const electronMock = vi.hoisted(() => {
         isDestroyed: () => win.destroyed,
       },
       isDestroyed: () => win.destroyed,
+      isMinimized: () => win.minimized,
+      restore: () => {
+        win.restored = true
+        win.minimized = false
+      },
       focus: () => {
         win.focused = true
       },
@@ -168,6 +179,18 @@ describe("WorkflowWindowManager", () => {
     })
   })
 
+  it("restores a minimized editor window when reusing it", async () => {
+    const manager = new WorkflowWindowManager()
+
+    const editor = await manager.open("workflow-1", "app://-") as unknown as FakeBrowserWindow
+    editor.minimized = true
+    const reused = await manager.open("workflow-1", "app://-")
+
+    expect(reused).toBe(editor)
+    expect(editor.restored).toBe(true)
+    expect(editor.focused).toBe(true)
+  })
+
   it("cleans up editor window state when editor URL loading fails", async () => {
     const manager = new WorkflowWindowManager()
     electronMock.setNextLoadError(new Error("load failed"))
@@ -201,5 +224,17 @@ describe("WorkflowWindowManager", () => {
     await expect(openPromise).rejects.toThrow("load failed")
 
     expect(editor.isDestroyed()).toBe(false)
+  })
+
+  it("restores a minimized runner window when reusing it", async () => {
+    const manager = new WorkflowWindowManager()
+
+    const runner = await manager.openRunner("workflow-1", "run-1", "app://-") as unknown as FakeBrowserWindow
+    runner.minimized = true
+    const reused = await manager.openRunner("workflow-1", "run-2", "app://-")
+
+    expect(reused).toBe(runner)
+    expect(runner.restored).toBe(true)
+    expect(runner.focused).toBe(true)
   })
 })

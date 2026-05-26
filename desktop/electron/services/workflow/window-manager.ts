@@ -25,7 +25,7 @@ export class WorkflowWindowManager {
     if (existing && !existing.isDestroyed()) {
       logger.info("workflow editor window reused", { workflowId, runId })
       this.sendToWindow(existing, "synapse:workflow:editor-refocus", { runId }, { workflowId, runId })
-      existing.focus()
+      focusWorkflowWindow(existing)
       this.closeRunnerWindow(workflowId, "workflow runner window closed after editor opened")
       return existing
     }
@@ -76,7 +76,7 @@ export class WorkflowWindowManager {
     if (existing && !existing.isDestroyed()) {
       logger.info("workflow runner window reused — switching run", { workflowId, newRunId: runId })
       this.sendToWindow(existing, "synapse:workflow:runner-switch-run", { runId }, { workflowId, runId })
-      existing.focus()
+      focusWorkflowWindow(existing)
       this.closeEditorWindow(workflowId, "workflow editor window closed after runner opened")
       return existing
     }
@@ -197,4 +197,9 @@ export class WorkflowWindowManager {
       logger.warn("workflow window message skipped", { channel, ...meta })
     }
   }
+}
+
+function focusWorkflowWindow(window: BrowserWindow): void {
+  if (window.isMinimized()) window.restore()
+  window.focus()
 }
