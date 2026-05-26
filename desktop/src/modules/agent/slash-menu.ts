@@ -1,7 +1,7 @@
 import type { SynapseAgentPublishedCommand } from "@/types/agent"
 import type { SynapseQuickInput } from "@/types/config"
 
-export type AgentSlashCandidateKind = "quickInput" | "skill" | "command"
+export type AgentSlashCandidateKind = "quickInput" | "knowledgeBase" | "skill" | "command"
 
 export type AgentSlashCandidate = {
   readonly name: string
@@ -19,7 +19,7 @@ export type AgentSlashFragment = {
 
 export type AgentSlashGroup = {
   readonly kind: AgentSlashCandidateKind
-  readonly label: "片段" | "Skills" | "Commands"
+  readonly label: "片段" | "知识库" | "Skills" | "Commands"
   readonly items: readonly AgentSlashCandidate[]
 }
 
@@ -114,11 +114,15 @@ export function groupAgentSlashCandidates(
   candidates: readonly AgentSlashCandidate[],
 ): AgentSlashGroup[] {
   const quickInputs = candidates.filter((candidate) => candidate.kind === "quickInput")
+  const knowledgeBase = candidates.filter((candidate) => candidate.kind === "knowledgeBase")
   const skills = candidates.filter((candidate) => candidate.kind === "skill")
   const commands = candidates.filter((candidate) => candidate.kind === "command")
   const groups: AgentSlashGroup[] = []
   if (quickInputs.length > 0) {
     groups.push({ kind: "quickInput", label: "片段", items: quickInputs })
+  }
+  if (knowledgeBase.length > 0) {
+    groups.push({ kind: "knowledgeBase", label: "知识库", items: knowledgeBase })
   }
   if (skills.length > 0) {
     groups.push({ kind: "skill", label: "Skills", items: skills })

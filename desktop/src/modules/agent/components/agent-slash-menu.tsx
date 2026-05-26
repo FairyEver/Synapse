@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { Command, TextCursorInput } from "lucide-react"
+import { BookOpen, Command, TextCursorInput } from "lucide-react"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -18,6 +18,9 @@ type AgentSlashMenuProps = {
 function AgentSlashCandidateIcon({ kind }: { readonly kind: AgentSlashCandidate["kind"] }) {
   if (kind === "quickInput") {
     return <TextCursorInput className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+  }
+  if (kind === "knowledgeBase") {
+    return <BookOpen className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
   }
   return <Command className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
 }

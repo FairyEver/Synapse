@@ -19,6 +19,12 @@ const candidates: AgentSlashCandidate[] = [
     insertText: "日报模板\n整理今天完成的工作",
   },
   {
+    name: "wiki-query",
+    description: "查询知识库并基于已有页面回答",
+    kind: "knowledgeBase",
+    insertText: "/wiki-query ",
+  },
+  {
     name: "review-code",
     description: "Review code changes",
     kind: "skill",
@@ -131,7 +137,7 @@ describe("AgentSlashMenu", () => {
     Element.prototype.scrollIntoView = originalScrollIntoView
   })
 
-  it("renders quick inputs before skills and commands", () => {
+  it("renders quick inputs, knowledge base, skills, and commands in order", () => {
     const html = renderToStaticMarkup(
       <AgentSlashMenu
         candidates={candidates}
@@ -142,12 +148,16 @@ describe("AgentSlashMenu", () => {
     )
 
     expect(html).toContain("片段")
+    expect(html).toContain("知识库")
     expect(html).toContain("Skills")
     expect(html).toContain("Commands")
-    expect(html.indexOf("片段")).toBeLessThan(html.indexOf("Skills"))
+    expect(html.indexOf("片段")).toBeLessThan(html.indexOf("知识库"))
+    expect(html.indexOf("知识库")).toBeLessThan(html.indexOf("Skills"))
     expect(html.indexOf("Skills")).toBeLessThan(html.indexOf("Commands"))
     expect(html).toContain("/日报模板")
     expect(html).toContain("整理今天完成的工作")
+    expect(html).toContain("/wiki-query")
+    expect(html).toContain("查询知识库并基于已有页面回答")
     expect(html).toContain("/review-code")
     expect(html).toContain("Review code changes")
     expect(html).toContain("/status")
@@ -206,6 +216,6 @@ describe("AgentSlashMenu", () => {
       button?.click()
     })
 
-    expect(onSelect).toHaveBeenCalledWith(candidates[2])
+    expect(onSelect).toHaveBeenCalledWith(candidates[3])
   })
 })

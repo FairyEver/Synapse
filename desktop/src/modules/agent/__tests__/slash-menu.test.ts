@@ -355,6 +355,43 @@ describe("agent slash menu utilities", () => {
     ])
   })
 
+  it("groups knowledge base candidates after quick inputs and before skills", () => {
+    const quickInput = toQuickInputSlashCandidates([
+      { id: "quick-1", content: "日报模板\n整理今天完成的工作", directSend: false },
+    ])[0]
+    const knowledgeBase = toKnowledgeBaseSlashCandidates([
+      {
+        name: "wiki-query",
+        description: "查询知识库并基于已有页面回答",
+        slashText: "/wiki-query ",
+      },
+    ])[0]
+
+    expect(groupAgentSlashCandidates([candidates[0], candidates[2], knowledgeBase, quickInput]))
+      .toEqual([
+        {
+          kind: "quickInput",
+          label: "片段",
+          items: [quickInput],
+        },
+        {
+          kind: "knowledgeBase",
+          label: "知识库",
+          items: [knowledgeBase],
+        },
+        {
+          kind: "skill",
+          label: "Skills",
+          items: [candidates[0]],
+        },
+        {
+          kind: "command",
+          label: "Commands",
+          items: [candidates[2]],
+        },
+      ])
+  })
+
   it("filters quick inputs by slash fragment text", () => {
     const quickInputs = toQuickInputSlashCandidates([
       { id: "quick-1", content: "日报模板\n整理今天完成的工作", directSend: false },
