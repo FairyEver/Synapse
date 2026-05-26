@@ -1,4 +1,4 @@
-import { access, mkdir, mkdtemp, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -123,11 +123,17 @@ describe("RepositoryStructureService", () => {
     expect(mocks.contentIndexService.clearIndex).not.toHaveBeenCalled()
   })
 
-  it("initializes a non-empty directory after the confirmed preview matches current entries", async () => {
+  it("moves non-empty directory contents into a backup before initialization", async () => {
     const { repositoryStructureService } = await import("../repository-structure-service")
     const localPath = await makeTempRepositoryPath()
     const filePath = path.join(localPath, "notes.md")
     await writeFile(filePath, "# Notes", "utf8")
+    const preview = await repositoryStructureService.checkInitializationPreview({
+      contentDirs: {},
+      localPath,
+      name: "Repo",
+      uuid: "repo-1",
+    })
 
     await expect(repositoryStructureService.initializeStructure({
       contentDirs: {},
@@ -135,13 +141,64 @@ describe("RepositoryStructureService", () => {
       name: "Repo",
       uuid: "repo-1",
     }, {
-      confirmedNonGitEntries: ["notes.md"],
+      confirmedOperationToken: preview.operationToken,
     })).resolves.toEqual(expect.objectContaining({
       message: "初始化完成。",
     }))
 
     await expect(access(filePath)).rejects.toThrow()
     await expect(access(path.join(localPath, "rules", ".gitkeep"))).resolves.toBeUndefined()
+    const entries = await readdir(localPath)
+    const backupName = entries.find((entry) => entry.startsWith(".synapse-init-backup-"))
+    expect(backupName).toBeTruthy()
+    await expect(access(path.join(localPath, backupName!, "notes.md"))).resolves.toBeUndefined()
     expect(mocks.contentIndexService.clearIndex).toHaveBeenCalledTimes(1)
+  })
+
+  it("rejects initialization when the confirmed token no longer matches current contents", async () => {
+    const { repositoryStructureService } = await import("../repository-structure-service")
+    const localPath = await makeTempRepositoryPath()
+    await writeFile(path.join(localPath, "notes.md"), "# Notes", "utf8")
+    const preview = await repositoryStructureService.checkInitializationPreview({
+      contentDirs: {},
+      localPath,
+      name: "Repo",
+      uuid: "repo-1",
+    })
+    await writeFile(path.join(localPath, "new.md"), "# New", "utf8")
+
+    await expect(repositoryStructureService.initializeStructure({
+      contentDirs: {},
+      localPath,
+      name: "Repo",
+      uuid: "repo-1",
+    }, {
+      confirmedOperationToken: preview.operationToken,
+    })).rejects.toThrow("目录内容已变化")
+
+    await expect(access(path.join(localPath, "notes.md"))).resolves.toBeUndefined()
+    await expect(access(path.join(localPath, "new.md"))).resolves.toBeUndefined()
+  })
+
+  it("rejects initialization for source-like directories", async () => {
+    const { repositoryStructureService } = await import("../repository-structure-service")
+    const localPath = await makeTempRepositoryPath()
+    await writeFile(path.join(localPath, "package.json"), "{}\n", "utf8")
+    const preview = await repositoryStructureService.checkInitializationPreview({
+      contentDirs: {},
+      localPath,
+      name: "Repo",
+      uuid: "repo-1",
+    })
+
+    expect(preview.dangerFlags).toContain("source-repository")
+    await expect(repositoryStructureService.initializeStructure({
+      contentDirs: {},
+      localPath,
+      name: "Repo",
+      uuid: "repo-1",
+    }, {
+      confirmedOperationToken: preview.operationToken,
+    })).rejects.toThrow("不能直接初始化")
   })
 })
