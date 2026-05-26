@@ -680,6 +680,61 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("/Users/example/repo")
   })
 
+  it("createRunWorkflowHandler skips snapshots after workflow deletion tombstone", async () => {
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: "repo-1",
+          repositories: [{ uuid: "repo-1", name: "Test", localPath: "/test" }],
+        })),
+      },
+    }))
+
+    const { createRunWorkflowHandler } = await importBootstrap()
+    const workflowDef = {
+      id: "wf-1",
+      name: "Test",
+      version: "",
+      nodes: [
+        { id: "end-1", type: "end" as const, name: "End", position: { x: 400, y: 200 }, config: { outputType: "text" as const, template: "", variables: [] } },
+      ],
+      edges: [],
+      params: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    const workflowService = { get: vi.fn().mockResolvedValue(workflowDef) }
+    const runAborts = new Map<string, AbortController>()
+    const runStatuses = new Map<string, { runId: string; workflowId: string; status: string; nodeResults: Record<string, unknown>; startedAt: number; params?: Record<string, unknown>; definition?: unknown }>()
+    const runCompletions = new Map<string, Promise<unknown>>()
+    const eventBus = { emit: vi.fn() }
+    const snapshotService = { save: vi.fn() }
+    const capabilityLogger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const workflowEngine = {
+      run: vi.fn(async (_def: unknown, _params: unknown, runId: string, emit: (event: unknown) => void) => {
+        emit({ type: "workflow:completed", runId, workflowId: "wf-1", result: { status: "completed", nodeResults: {}, durationMs: 1 } })
+      }),
+    }
+
+    const handler = createRunWorkflowHandler({
+      workflowService: workflowService as never,
+      workflowEngine: workflowEngine as never,
+      snapshotService: snapshotService as never,
+      eventBus: eventBus as never,
+      runAborts: runAborts as never,
+      runStatuses: runStatuses as never,
+      runCompletions,
+      capabilityLogger: capabilityLogger as never,
+      isWorkflowDeleted: () => true,
+    })
+
+    const result = await handler("wf-1", {})
+    expect(result).toHaveProperty("runId")
+    await Promise.resolve()
+
+    expect(snapshotService.save).not.toHaveBeenCalled()
+  })
+
   it("coreTaskSchedulerDescriptor depends on action runtime", async () => {
     const { coreTaskSchedulerDescriptor } = await importBootstrap()
     expect(coreTaskSchedulerDescriptor.dependsOn).toEqual([

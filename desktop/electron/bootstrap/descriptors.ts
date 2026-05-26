@@ -282,9 +282,10 @@ export function createRunWorkflowHandler(deps: {
   runStatuses: Map<string, WorkflowRunStatus>
   runCompletions: Map<string, Promise<unknown>>
   capabilityLogger: ReturnType<typeof createMainLogger>
+  isWorkflowDeleted?: (workflowId: string) => boolean
 }) {
   return async (id: string, params: Record<string, unknown>): Promise<{ runId: string } | { errors: ValidationError[] }> => {
-    const { workflowService, workflowEngine, snapshotService, eventBus, runAborts, runStatuses, runCompletions, capabilityLogger } = deps
+    const { workflowService, workflowEngine, snapshotService, eventBus, runAborts, runStatuses, runCompletions, capabilityLogger, isWorkflowDeleted } = deps
     const def = await workflowService.get(id)
     if (!def) return { errors: [{ type: "invalid_config" as const, message: "Workflow not found" }] }
     const validation = validateWorkflow(def)
@@ -327,10 +328,12 @@ export function createRunWorkflowHandler(deps: {
         const endedAt = Date.now()
         const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
         runStatuses.set(runId, { ...current, runId, workflowId: id, status, nodeResults: event.result?.nodeResults ?? nextNodeResults, startedAt, endedAt, durationMs: event.result?.durationMs ?? endedAt - startedAt, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
-        Promise.resolve(snapshotService.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: sanitizeNodeResultsForSnapshot(event.result?.nodeResults ?? nextNodeResults), definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })).catch((err) => {
-          capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
-          eventBus.emit({ domain: "workflow", type: "snapshot:failed", payload: { runId, workflowId: id, error: err instanceof Error ? err.message : String(err) }, timestamp: new Date().toISOString() }, { backpressure: "block" })
-        })
+        if (!isWorkflowDeleted?.(id)) {
+          Promise.resolve(snapshotService.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: sanitizeNodeResultsForSnapshot(event.result?.nodeResults ?? nextNodeResults), definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })).catch((err) => {
+            capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
+            eventBus.emit({ domain: "workflow", type: "snapshot:failed", payload: { runId, workflowId: id, error: err instanceof Error ? err.message : String(err) }, timestamp: new Date().toISOString() }, { backpressure: "block" })
+          })
+        }
       }
     }, ac.signal, projectId, "mcp").catch((err) => {
       const diagnostic = capabilityRejectionDiagnostic(err)
@@ -360,16 +363,18 @@ export function createRunWorkflowHandler(deps: {
           },
           timestamp: new Date().toISOString(),
         }, { backpressure: "block" })
-        Promise.resolve(snapshotService.save({
-          runId, workflowId: id, version: def.version,
-          startedAt, endedAt, status: "failed",
-          params: effectiveParams,
-          nodeResults: sanitizedNodeResults,
-          definition: def,
-          error: "工作流引擎异常",
-        })).catch((err) => {
-          capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
-        })
+        if (!isWorkflowDeleted?.(id)) {
+          Promise.resolve(snapshotService.save({
+            runId, workflowId: id, version: def.version,
+            startedAt, endedAt, status: "failed",
+            params: effectiveParams,
+            nodeResults: sanitizedNodeResults,
+            definition: def,
+            error: "工作流引擎异常",
+          })).catch((err) => {
+            capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
+          })
+        }
       }
     }).finally(() => {
       runCompletions.delete(runId)
@@ -419,6 +424,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
     const capabilityLogger = createMainLogger("bootstrap.workflow-capability")
     const runCompletions = new Map<string, Promise<unknown>>()
+    const deletedWorkflowIds = new Set<string>()
 
     const workflowDispatcher = createWorkflowDispatcher({
       workflowService,
@@ -434,9 +440,11 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
         runStatuses,
         runCompletions,
         capabilityLogger,
+        isWorkflowDeleted: (workflowId) => deletedWorkflowIds.has(workflowId),
       }),
       cancelRun: (runId: string) => { runAborts.get(runId)?.abort(); runAborts.delete(runId) },
       cancelRunsForWorkflow: async (workflowId: string) => {
+        deletedWorkflowIds.add(workflowId)
         const runningRunIds: string[] = []
         for (const [runId, status] of runStatuses) {
           if (status.workflowId === workflowId && status.status === "running") {
