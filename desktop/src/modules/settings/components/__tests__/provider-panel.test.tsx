@@ -482,6 +482,8 @@ describe("ProviderPanel dialog editor", () => {
           ANTHROPIC_API_KEY: "sk-pasted",
           ANTHROPIC_MODEL: "claude-pasted",
           ENABLE_TOOL_SEARCH: "true",
+          OPENAI_API_KEY: "sk-openai",
+          GITHUB_TOKEN: "ghp-secret",
         },
         hooks: {},
         permissions: { allow: [], deny: [] },
@@ -508,6 +510,10 @@ describe("ProviderPanel dialog editor", () => {
         model: "claude-pasted",
         env: {
           ENABLE_TOOL_SEARCH: "true",
+        },
+        secretEnv: {
+          OPENAI_API_KEY: "sk-openai",
+          GITHUB_TOKEN: "ghp-secret",
         },
         settingsConfig: {
           env: {
@@ -593,6 +599,7 @@ describe("ProviderPanel dialog editor", () => {
         env: {
           ENABLE_TOOL_SEARCH: "false",
           CLAUDE_CODE_EFFORT_LEVEL: "max",
+          CUSTOM_SECRET: "secret-value",
         },
         hooks: {},
         permissions: { allow: [], deny: [] },
@@ -613,6 +620,15 @@ describe("ProviderPanel dialog editor", () => {
           ENABLE_TOOL_SEARCH: "false",
           CLAUDE_CODE_EFFORT_LEVEL: "max",
         },
+        secretEnv: {
+          CUSTOM_SECRET: "secret-value",
+        },
+        settingsConfig: expect.objectContaining({
+          env: {
+            ENABLE_TOOL_SEARCH: "false",
+            CLAUDE_CODE_EFFORT_LEVEL: "max",
+          },
+        }),
       }),
     })
   })
@@ -746,6 +762,47 @@ describe("ProviderPanel dialog editor", () => {
     })
     expect(toast).toHaveBeenCalledWith("已导入 1 个 Provider")
     expect(document.body.textContent).toContain("DeepSeek")
+  })
+
+  it("disables direct provider deletion when task or workflow references exist", async () => {
+    const deleteProvider = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([customProvider()]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+          scanProviderReferences: vi.fn().mockResolvedValue({
+            providerId: "custom-provider",
+            references: [
+              { kind: "scheduled-task", entityId: "task-1", entityName: "日报", providerId: "custom-provider", modelTier: "default" },
+            ],
+            taskCount: 1,
+            workflowNodeCount: 0,
+            conversationCount: 0,
+          }),
+          deleteProvider,
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    await act(async () => {
+      buttonByText(document.body, "删除").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const directDelete = buttonByText(document.body, "先迁移引用")
+    expect(directDelete.disabled).toBe(true)
+    expect(document.body.textContent).toContain("迁移到其他供应商")
+    await act(async () => {
+      directDelete.click()
+      await Promise.resolve()
+    })
+    expect(deleteProvider).not.toHaveBeenCalled()
   })
 })
 

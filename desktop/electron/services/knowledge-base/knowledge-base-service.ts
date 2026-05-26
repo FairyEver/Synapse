@@ -6,6 +6,8 @@ import path from "node:path"
 import type {
   SynapseKnowledgeBaseCreateManagedPayload,
   SynapseKnowledgeBaseCreateManagedResult,
+  SynapseKnowledgeBaseDeleteManagedPayload,
+  SynapseKnowledgeBaseDeleteManagedResult,
   SynapseKnowledgeBaseAddUrlSourcePayload,
   SynapseKnowledgeBaseCreateRawFolderPayload,
   SynapseKnowledgeBaseListRawDirectoryPayload,
@@ -47,6 +49,7 @@ type KnowledgeBaseServiceDeps = {
   fileConversionService?: Pick<FileConversionService, "convert">
   fetchUrl?: FetchUrl
   rawFileManager?: KnowledgeBaseRawFileManager
+  trashItem?: (targetPath: string) => Promise<void>
 }
 
 export class KnowledgeBaseService {
@@ -57,6 +60,7 @@ export class KnowledgeBaseService {
   private readonly fileConversionService: Pick<FileConversionService, "convert">
   private readonly fetchUrl: FetchUrl
   private readonly rawFileManager: KnowledgeBaseRawFileManager
+  private readonly trashItem: (targetPath: string) => Promise<void>
 
   constructor(deps: KnowledgeBaseServiceDeps = {}) {
     this.managedTemplateRoot = deps.managedTemplateRoot ?? resolveManagedTemplateRoot()
@@ -68,6 +72,7 @@ export class KnowledgeBaseService {
     this.rawFileManager = deps.rawFileManager ?? new KnowledgeBaseRawFileManager({
       trashItem: (targetPath) => shell.trashItem(targetPath),
     })
+    this.trashItem = deps.trashItem ?? ((targetPath) => shell.trashItem(targetPath))
   }
 
   async createManaged(payload: SynapseKnowledgeBaseCreateManagedPayload): Promise<SynapseKnowledgeBaseCreateManagedResult> {
@@ -98,6 +103,19 @@ export class KnowledgeBaseService {
       templateVersion: KNOWLEDGE_BASE_TEMPLATE_VERSION,
       ...(source ? { templateSource: source } : undefined),
     }
+  }
+
+  async deleteManaged(payload: SynapseKnowledgeBaseDeleteManagedPayload): Promise<SynapseKnowledgeBaseDeleteManagedResult> {
+    const runtimePath = await this.resolveProjectPath(payload.projectId)
+    if (!await pathExists(runtimePath)) {
+      return { projectId: payload.projectId, runtimePath, deleted: false }
+    }
+    await this.trashItem(runtimePath)
+    logger.info("Managed Knowledge Base runtime trashed.", {
+      projectId: payload.projectId,
+      runtimePath,
+    })
+    return { projectId: payload.projectId, runtimePath, deleted: true }
   }
 
   async listSources(projectId: string): Promise<SynapseKnowledgeBaseListSourcesResult> {

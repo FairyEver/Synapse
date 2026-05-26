@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Folder } from "lucide-react"
+import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
   AlertDialog,
@@ -58,6 +59,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   const [knowledgeBaseName, setKnowledgeBaseName] = useState("")
   const [knowledgeBaseError, setKnowledgeBaseError] = useState<string | null>(null)
   const [isCreatingKnowledgeBase, setIsCreatingKnowledgeBase] = useState(false)
+  const [openingKnowledgeBaseProjectId, setOpeningKnowledgeBaseProjectId] = useState<string | null>(null)
   const hasDirectoryPicker = Boolean(window.synapse?.repository)
 
   const resetForm = () => {
@@ -162,10 +164,12 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
     }
 
     const projectId = crypto.randomUUID()
+    let shouldCleanupRuntime = false
     setIsCreatingKnowledgeBase(true)
     setKnowledgeBaseError(null)
     try {
       const result = await window.synapse.knowledgeBase.createManaged({ projectId, name })
+      shouldCleanupRuntime = true
       await onSave([
         ...projects,
         {
@@ -186,10 +190,46 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       setIsKnowledgeBaseDialogOpen(false)
       resetKnowledgeBaseForm()
     } catch (error) {
+      if (shouldCleanupRuntime) {
+        await window.synapse.knowledgeBase.deleteManaged?.({ projectId }).catch((cleanupError) => {
+          logger.error("Failed to clean up managed knowledge base runtime after create failure.", { cleanupError, projectId })
+        })
+      }
       logger.error("Failed to create managed knowledge base project.", { error, projectId })
-      setKnowledgeBaseError(error instanceof Error ? error.message : "创建失败。")
+      setKnowledgeBaseError("创建知识库失败。")
     } finally {
       setIsCreatingKnowledgeBase(false)
+    }
+  }
+
+  const handleRemoveProject = async (project: SynapseProjectConfig) => {
+    try {
+      if (isKnowledgeBaseProject(project)) {
+        const bridge = window.synapse?.knowledgeBase
+        if (!bridge?.deleteManaged) {
+          throw new Error("知识库服务不可用。")
+        }
+        await bridge.deleteManaged({ projectId: project.id })
+      }
+      await onSave(projects.filter((item) => item.id !== project.id))
+      logger.info("Project removed.", { projectId: project.id })
+    } catch (error) {
+      logger.error("Failed to remove project.", { projectId: project.id, error })
+    }
+  }
+
+  const handleOpenKnowledgeBaseSources = async (project: SynapseProjectConfig) => {
+    try {
+      setOpeningKnowledgeBaseProjectId(project.id)
+      await window.synapse?.knowledgeBase?.openSourceManager({
+        projectId: project.id,
+        projectName: project.name,
+      })
+    } catch (error) {
+      logger.error("Failed to open knowledge base source manager.", { projectId: project.id, error })
+      toast("打开资料管理失败")
+    } finally {
+      setOpeningKnowledgeBaseProjectId((current) => current === project.id ? null : current)
     }
   }
 
@@ -321,12 +361,8 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      void window.synapse?.knowledgeBase?.openSourceManager({
-                        projectId: project.id,
-                        projectName: project.name,
-                      }).catch((error) => logger.error("Failed to open knowledge base source manager.", { projectId: project.id, error }))
-                    }}
+                    disabled={openingKnowledgeBaseProjectId === project.id}
+                    onClick={() => void handleOpenKnowledgeBaseSources(project)}
                   >
                     资料管理
                   </Button>
@@ -351,9 +387,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                       if (sessions.length > 0) {
                         setDeleteTarget({ project, sessionCount: sessions.length })
                       } else {
-                        void onSave(projects.filter((item) => item.id !== project.id))
-                          .then(() => logger.info("Project removed.", { projectId: project.id }))
-                          .catch((err) => logger.error("Failed to remove project.", { projectId: project.id, error: err }))
+                        void handleRemoveProject(project)
                       }
                     }).catch((err) => {
                       logger.error("Failed to list project sessions before deletion.", { projectId: project.id, error: err })
@@ -539,10 +573,9 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
               onClick={() => {
                 if (!deleteTarget) return
                 const targetId = deleteTarget.project.id
+                const targetProject = deleteTarget.project
                 setDeleteTarget(null)
-                void onSave(projects.filter((item) => item.id !== targetId))
-                  .then(() => logger.info("Project removed.", { projectId: targetId }))
-                  .catch((err) => logger.error("Failed to remove project.", { projectId: targetId, error: err }))
+                void handleRemoveProject(targetProject)
               }}
             >
               删除项目

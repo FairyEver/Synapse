@@ -84,6 +84,39 @@ describe("knowledgeBaseIpcModule", () => {
     })
   })
 
+  it("deletes a managed knowledge base through guarded write permission", async () => {
+    const deleteManaged = vi.fn().mockResolvedValue({
+      projectId: "kb-1",
+      runtimePath: "/UserData/knowledge-bases/kb-1",
+      deleted: true,
+    })
+    const { auditSink, harness, permissionGuard } = createHarness({ service: { deleteManaged } })
+
+    const result = await harness.invoke("synapse:knowledge-base:delete-managed", {
+      projectId: "kb-1",
+    })
+
+    expect(result).toEqual({
+      projectId: "kb-1",
+      runtimePath: "/UserData/knowledge-bases/kb-1",
+      deleted: true,
+    })
+    expect(deleteManaged).toHaveBeenCalledWith({ projectId: "kb-1" })
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base:kb-1",
+      context: { source: "knowledgeBase.deleteManaged" },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base:kb-1",
+      outcome: "allowed",
+      metadata: { source: "knowledgeBase.deleteManaged" },
+    })
+  })
+
   it("lists source files through guarded read permission", async () => {
     const listSources = vi.fn().mockResolvedValue({
       projectId: "kb-1",

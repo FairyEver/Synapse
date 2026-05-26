@@ -116,6 +116,7 @@ type DatabaseMcpServerInfo = {
   registered: boolean
   mode: "http" | "stdio" | null
   url: string | null
+  readError?: string
 }
 
 type DatabaseMcpHttpStatus = {

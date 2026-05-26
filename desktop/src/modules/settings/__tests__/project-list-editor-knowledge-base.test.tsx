@@ -9,6 +9,8 @@ import type { SynapseProjectConfig } from "@/types/config"
 import type {
   SynapseKnowledgeBaseCreateManagedPayload,
   SynapseKnowledgeBaseCreateManagedResult,
+  SynapseKnowledgeBaseDeleteManagedPayload,
+  SynapseKnowledgeBaseDeleteManagedResult,
 } from "@/types/knowledge-base"
 
 const kbProject: SynapseProjectConfig = {
@@ -31,8 +33,14 @@ const rendererLogger = vi.hoisted(() => ({
   info: vi.fn(),
 }))
 
+const toast = vi.hoisted(() => vi.fn())
+
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => rendererLogger,
+}))
+
+vi.mock("sonner", () => ({
+  toast,
 }))
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -43,6 +51,7 @@ let bridgeMocks: ReturnType<typeof createSynapseBridgeMocks>
 beforeEach(() => {
   rendererLogger.error.mockClear()
   rendererLogger.info.mockClear()
+  toast.mockClear()
   vi.stubGlobal("crypto", {
     ...globalThis.crypto,
     randomUUID: vi.fn(() => "new-project-id"),
@@ -77,6 +86,11 @@ function createSynapseBridgeMocks() {
         projectPath: "synapse-kb://new-project-id",
         runtimePath: "/UserData/knowledge-bases/new-project-id",
         templateVersion: "2026-05-24",
+      }),
+      deleteManaged: vi.fn<(payload: SynapseKnowledgeBaseDeleteManagedPayload) => Promise<SynapseKnowledgeBaseDeleteManagedResult>>().mockResolvedValue({
+        projectId: "project-1",
+        runtimePath: "/UserData/knowledge-bases/project-1",
+        deleted: true,
       }),
       openSourceManager: vi.fn<(payload: { projectId: string; projectName: string }) => Promise<void>>().mockResolvedValue(undefined),
     },
@@ -164,6 +178,25 @@ describe("ProjectListEditor knowledge base actions", () => {
     })
   })
 
+  it("shows feedback when opening knowledge base source manager fails", async () => {
+    bridgeMocks.knowledgeBase.openSourceManager.mockRejectedValueOnce(new Error("open failed"))
+    renderEditor([kbProject])
+
+    await act(async () => {
+      buttonByText("资料管理").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(rendererLogger.error).toHaveBeenCalledWith("Failed to open knowledge base source manager.", {
+        projectId: "project-1",
+        error: expect.any(Error),
+      })
+      expect(toast).toHaveBeenCalledWith("打开资料管理失败")
+    })
+  })
+
   it("creates a managed knowledge base project with name only", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     renderEditor([], onSave)
@@ -203,6 +236,97 @@ describe("ProjectListEditor knowledge base actions", () => {
         }),
       ])
     })
+  })
+
+  it("does not show raw filesystem errors when creating a knowledge base fails", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    bridgeMocks.knowledgeBase.createManaged.mockRejectedValueOnce(new Error("EACCES: permission denied, mkdir '/Users/test/secret-path'"))
+    renderEditor([], onSave)
+
+    await act(async () => {
+      buttonByText("新建知识库").click()
+    })
+    await act(async () => {
+      changeInput(inputByLabel("知识库名称"), "Knowledge")
+    })
+    await act(async () => {
+      buttonByText("创建").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("创建知识库失败。")
+    expect(document.body.textContent).not.toContain("secret-path")
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
+  it("cleans up managed knowledge base runtime when project save fails", async () => {
+    const onSave = vi.fn().mockRejectedValue(new Error("config save failed"))
+    renderEditor([], onSave)
+
+    await act(async () => {
+      buttonByText("新建知识库").click()
+    })
+    await act(async () => {
+      changeInput(inputByLabel("知识库名称"), "Knowledge")
+    })
+    await act(async () => {
+      buttonByText("创建").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.createManaged).toHaveBeenCalledWith({
+        projectId: "new-project-id",
+        name: "Knowledge",
+      })
+      expect(bridgeMocks.knowledgeBase.deleteManaged).toHaveBeenCalledWith({
+        projectId: "new-project-id",
+      })
+    })
+    expect(document.body.textContent).toContain("创建知识库失败。")
+  })
+
+  it("deletes managed knowledge base runtime before removing the project", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    renderEditor([kbProject], onSave)
+
+    await act(async () => {
+      buttonByText("删除").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.deleteManaged).toHaveBeenCalledWith({
+        projectId: "project-1",
+      })
+      expect(onSave).toHaveBeenCalledWith([])
+    })
+  })
+
+  it("keeps managed knowledge base project when runtime deletion fails", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    bridgeMocks.knowledgeBase.deleteManaged.mockRejectedValueOnce(new Error("trash failed"))
+    renderEditor([kbProject], onSave)
+
+    await act(async () => {
+      buttonByText("删除").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.deleteManaged).toHaveBeenCalledWith({
+        projectId: "project-1",
+      })
+      expect(rendererLogger.error).toHaveBeenCalledWith("Failed to remove project.", {
+        projectId: "project-1",
+        error: expect.any(Error),
+      })
+    })
+    expect(onSave).not.toHaveBeenCalled()
   })
 
   it("clears stale knowledge base dialog fields and errors after closing", async () => {

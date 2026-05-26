@@ -164,8 +164,8 @@ export function ProviderDeleteDialog({ provider, onOpenChange, onDeleted }: Prov
                 迁移到其他供应商
               </Button>
             )}
-            <Button variant="destructive" disabled={busy || scan.status === "loading" || scan.status === "error" || hasConversationReferences} onClick={handleDelete}>
-              {scan.status === "error" ? "扫描失败" : hasConversationReferences ? "无法删除" : hasReferences ? "仍然删除" : "确认删除"}
+            <Button variant="destructive" disabled={busy || scan.status === "loading" || scan.status === "error" || hasReferences} onClick={handleDelete}>
+              {scan.status === "error" ? "扫描失败" : hasConversationReferences ? "无法删除" : hasReferences ? "先迁移引用" : "确认删除"}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -15,6 +15,16 @@ export type SynapseKnowledgeBaseCreateManagedResult = {
   }
 }
 
+export type SynapseKnowledgeBaseDeleteManagedPayload = {
+  projectId: string
+}
+
+export type SynapseKnowledgeBaseDeleteManagedResult = {
+  projectId: string
+  runtimePath: string
+  deleted: boolean
+}
+
 export type SynapseKnowledgeBaseOpenSourceManagerPayload = {
   projectId: string
   projectName: string

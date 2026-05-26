@@ -12,7 +12,7 @@ import type {
   AuditSink,
   PermissionGuard,
 } from "../../runtime/security"
-import { ProviderSecretStore, providerApiKeySecretId } from "./provider-secret-store"
+import { ProviderSecretStore, providerApiKeySecretId, providerEnvSecretId } from "./provider-secret-store"
 import type { ProviderReferenceScanResult } from "./provider-reference-scanner"
 import type {
   CCProvider,
@@ -62,6 +62,13 @@ export interface BuildProviderEnvContext {
 }
 
 const PROVIDER_KIND = "cc-provider"
+
+interface ProviderSecretRollbackSnapshot {
+  readonly apiKey?: {
+    readonly value: string | undefined
+  }
+  readonly env: Record<string, string | undefined>
+}
 
 export class ProviderService {
   private readonly providers: DataNamespace<ProviderEntryV1>
@@ -268,7 +275,11 @@ export class ProviderService {
     }
     let secretRef: string | undefined
     let nextSecretEnvRefs: Record<string, string | undefined>
+    let secretRollbackSnapshot: ProviderSecretRollbackSnapshot | undefined
     try {
+      secretRollbackSnapshot = hasSecretChange
+        ? await this.captureProviderSecretRollbackSnapshot(existing, patch)
+        : undefined
       secretRef = patch.apiKey === undefined
         ? existing.secretRef
         : await this.secretStore.setApiKey(id, patch.apiKey, `${patch.name ?? existing.name} API key`)
@@ -300,7 +311,26 @@ export class ProviderService {
       secretEnvRefs: Object.keys(nextSecretEnvRefs).length ? nextSecretEnvRefs as Record<string, string> : undefined,
       updatedAt: this.isoNow(),
     }
-    await this.providers.upsert(toProviderEntry(updated))
+    try {
+      await this.providers.upsert(toProviderEntry(updated))
+    } catch (error) {
+      if (secretRollbackSnapshot) {
+        try {
+          await this.restoreProviderSecrets(id, existing.name, secretRollbackSnapshot)
+        } catch (rollbackError) {
+          this.recordSecretWriteAudit(id, "update", "failed", {
+            ...errorAuditMetadata(error),
+            rollbackErrorName: rollbackError instanceof Error ? rollbackError.name : typeof rollbackError,
+            rollbackErrorLength: String(rollbackError).length,
+          })
+          throw rollbackError
+        }
+      }
+      if (hasSecretChange) {
+        this.recordSecretWriteAudit(id, "update", "failed", errorAuditMetadata(error))
+      }
+      throw error
+    }
     if (hasSecretChange) {
       this.recordSecretWriteAudit(id, "update", "allowed", { secretRef })
     }
@@ -336,8 +366,6 @@ export class ProviderService {
       await this.clearActiveUserProvider()
     }
 
-    await this.providers.remove(id)
-
     try {
       if (provider.secretRef) {
         await this.secretStore.deleteSecret(provider.secretRef)
@@ -351,6 +379,7 @@ export class ProviderService {
       this.recordSecretWriteAudit(id, "delete", "failed", errorAuditMetadata(error))
       throw error
     }
+    await this.providers.remove(id)
     this.recordSecretWriteAudit(id, "delete", "allowed", { secretRef: provider.secretRef })
   }
 
@@ -531,6 +560,49 @@ export class ProviderService {
         },
       })
       throw error
+    }
+  }
+
+  private async captureProviderSecretRollbackSnapshot(
+    provider: CCProvider,
+    patch: UpdateProviderInput,
+  ): Promise<ProviderSecretRollbackSnapshot> {
+    const envNames = new Set([
+      ...(patch.clearSecretEnv ?? []),
+      ...Object.keys(patch.secretEnv ?? {}),
+    ])
+    const env: Record<string, string | undefined> = {}
+    for (const envName of envNames) {
+      const ref = provider.secretEnvRefs?.[envName] ?? providerEnvSecretId(provider.id, envName)
+      env[envName] = await this.secretStore.getSecretValue(ref)
+    }
+
+    return {
+      apiKey: patch.apiKey === undefined
+        ? undefined
+        : { value: await this.secretStore.getSecretValue(provider.secretRef ?? providerApiKeySecretId(provider.id)) },
+      env,
+    }
+  }
+
+  private async restoreProviderSecrets(
+    providerId: string,
+    providerName: string,
+    snapshot: ProviderSecretRollbackSnapshot,
+  ): Promise<void> {
+    if (snapshot.apiKey) {
+      if (snapshot.apiKey.value === undefined) {
+        await this.secretStore.deleteSecret(providerApiKeySecretId(providerId))
+      } else {
+        await this.secretStore.setApiKey(providerId, snapshot.apiKey.value, `${providerName} API key`)
+      }
+    }
+    for (const [envName, value] of Object.entries(snapshot.env)) {
+      if (value === undefined) {
+        await this.secretStore.deleteSecret(providerEnvSecretId(providerId, envName))
+      } else {
+        await this.secretStore.setEnvSecret(providerId, envName, value, `${providerName} ${envName}`)
+      }
     }
   }
 

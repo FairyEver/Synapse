@@ -40,12 +40,16 @@ type DialogMode =
   | { type: "edit"; item: SynapseQuickInput }
   | null
 
+const SAVE_FAILED_MESSAGE = "保存失败，请重试。"
+
 function QuickInputsPanel({ quickInputs, onSave }: QuickInputsPanelProps) {
   const [dialogMode, setDialogMode] = useState<DialogMode>(null)
   const [content, setContent] = useState("")
   const [directSend, setDirectSend] = useState(true)
   const [formError, setFormError] = useState<string | null>(null)
   const [deletingItem, setDeletingItem] = useState<SynapseQuickInput | null>(null)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
+  const [panelError, setPanelError] = useState<string | null>(null)
   const [saving, setSaving] = useState(false)
 
   const openAddDialog = useCallback(() => {
@@ -53,6 +57,7 @@ function QuickInputsPanel({ quickInputs, onSave }: QuickInputsPanelProps) {
     setContent("")
     setDirectSend(true)
     setFormError(null)
+    setPanelError(null)
   }, [])
 
   const openEditDialog = useCallback((item: SynapseQuickInput) => {
@@ -60,6 +65,7 @@ function QuickInputsPanel({ quickInputs, onSave }: QuickInputsPanelProps) {
     setContent(item.content)
     setDirectSend(item.directSend)
     setFormError(null)
+    setPanelError(null)
   }, [])
 
   const closeDialog = useCallback(() => {
@@ -87,6 +93,7 @@ function QuickInputsPanel({ quickInputs, onSave }: QuickInputsPanelProps) {
       : updateQuickInput(quickInputs, dialogMode.item.id, content, directSend)
 
     setSaving(true)
+    setFormError(null)
     try {
       const saved = await onSave(nextItems)
       if (saved) {
@@ -94,7 +101,12 @@ function QuickInputsPanel({ quickInputs, onSave }: QuickInputsPanelProps) {
         setContent("")
         setDirectSend(true)
         setFormError(null)
+        setPanelError(null)
+      } else {
+        setFormError(SAVE_FAILED_MESSAGE)
       }
+    } catch {
+      setFormError(SAVE_FAILED_MESSAGE)
     } finally {
       setSaving(false)
     }
@@ -106,8 +118,12 @@ function QuickInputsPanel({ quickInputs, onSave }: QuickInputsPanelProps) {
     }
 
     setSaving(true)
+    setPanelError(null)
     try {
-      await onSave(pinQuickInputToTop(quickInputs, item.id))
+      const saved = await onSave(pinQuickInputToTop(quickInputs, item.id))
+      if (!saved) setPanelError("置顶失败，请重试。")
+    } catch {
+      setPanelError("置顶失败，请重试。")
     } finally {
       setSaving(false)
     }
@@ -119,8 +135,12 @@ function QuickInputsPanel({ quickInputs, onSave }: QuickInputsPanelProps) {
     }
 
     setSaving(true)
+    setPanelError(null)
     try {
-      await onSave(updateQuickInputDirectSend(quickInputs, item.id, nextValue))
+      const saved = await onSave(updateQuickInputDirectSend(quickInputs, item.id, nextValue))
+      if (!saved) setPanelError(SAVE_FAILED_MESSAGE)
+    } catch {
+      setPanelError(SAVE_FAILED_MESSAGE)
     } finally {
       setSaving(false)
     }
@@ -132,11 +152,18 @@ function QuickInputsPanel({ quickInputs, onSave }: QuickInputsPanelProps) {
     }
 
     setSaving(true)
+    setDeleteError(null)
     try {
       const saved = await onSave(deleteQuickInput(quickInputs, deletingItem.id))
       if (saved) {
         setDeletingItem(null)
+        setDeleteError(null)
+        setPanelError(null)
+      } else {
+        setDeleteError("删除失败，请重试。")
       }
+    } catch {
+      setDeleteError("删除失败，请重试。")
     } finally {
       setSaving(false)
     }
@@ -151,6 +178,7 @@ function QuickInputsPanel({ quickInputs, onSave }: QuickInputsPanelProps) {
           新增
         </Button>
       </div>
+      {panelError ? <p className="text-sm text-destructive">{panelError}</p> : null}
 
       {quickInputs.length > 0 ? (
         <div className="flex flex-col gap-2">
@@ -193,7 +221,10 @@ function QuickInputsPanel({ quickInputs, onSave }: QuickInputsPanelProps) {
                     variant="ghost"
                     size="icon-sm"
                     aria-label="删除片段"
-                    onClick={() => setDeletingItem(item)}
+                    onClick={() => {
+                      setDeleteError(null)
+                      setDeletingItem(item)
+                    }}
                   >
                     <Trash2 />
                   </Button>
@@ -262,7 +293,12 @@ function QuickInputsPanel({ quickInputs, onSave }: QuickInputsPanelProps) {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>删除片段</AlertDialogTitle>
-            <AlertDialogDescription>确定删除这条片段吗？</AlertDialogDescription>
+            <AlertDialogDescription asChild>
+              <div className="flex flex-col gap-2">
+                <p>确定删除这条片段吗？</p>
+                {deleteError ? <p className="text-destructive">{deleteError}</p> : null}
+              </div>
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel disabled={saving}>取消</AlertDialogCancel>

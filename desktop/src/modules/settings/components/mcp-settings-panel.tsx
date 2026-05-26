@@ -144,6 +144,7 @@ function McpSettingsPanel() {
       registered: Boolean(state?.registered),
       settingsFileExists: Boolean(state?.settingsFileExists),
       mode: state?.mode ?? null,
+      readError: state?.readError,
     }
   })
 
@@ -205,6 +206,8 @@ function McpSettingsPanel() {
               <span className="truncate text-sm">{server.label}</span>
               {mcpServersLoading ? (
                 <span className="text-xs text-muted-foreground">检测中...</span>
+              ) : server.readError ? (
+                <StatusPill active={false} activeLabel="" inactiveLabel="配置读取失败" variant="warning" />
               ) : server.registered && server.mode === "http" ? (
                 <StatusPill active activeLabel="已注册" inactiveLabel="" />
               ) : server.registered && server.mode === "stdio" ? (
@@ -225,6 +228,7 @@ function McpSettingsPanel() {
               <Button
                 variant="outline"
                 size="sm"
+                disabled={Boolean(server.readError)}
                 onClick={() => handleRegisterMCP(server.id)}
               >
                 {server.registered ? "重新注册" : "注册"}

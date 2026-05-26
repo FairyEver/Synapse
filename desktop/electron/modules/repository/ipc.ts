@@ -254,8 +254,19 @@ export const repositoryIpcModule: IpcModule = {
       request: z.object({ repositoryUuid: z.string() }),
       response: initializationPreviewSchema,
       handler: async (_ctx, request: { repositoryUuid: string }) => {
-        const repository = await resolveRepositoryConfig(request.repositoryUuid)
-        return repositoryStructureService.checkInitializationPreview(repository)
+        logger.info(`Handling repository.checkInitializationPreview request. repositoryUuid: ${request.repositoryUuid}`)
+
+        try {
+          const repository = await resolveRepositoryConfig(request.repositoryUuid)
+          const preview = await repositoryStructureService.checkInitializationPreview(repository)
+
+          logger.info(`repository.checkInitializationPreview request completed. repositoryUuid: ${request.repositoryUuid}, isEmpty: ${preview.isEmpty}, nonGitEntryCount: ${preview.nonGitEntries.length}, dangerFlagCount: ${preview.dangerFlags.length}`)
+
+          return preview
+        } catch (error) {
+          logger.error(`repository.checkInitializationPreview request failed. repositoryUuid: ${request.repositoryUuid}, error: ${error}`)
+          throw error
+        }
       },
     },
     createLocalRepository: {
@@ -298,46 +309,56 @@ export const repositoryIpcModule: IpcModule = {
       }),
       response: initializeResultSchema,
       handler: async (ctx, request: { repositoryUuid: string; options?: z.infer<typeof initializationOptionsSchema> }) => {
-        const repository = await resolveRepositoryConfig(request.repositoryUuid)
-        const eventBus = ctx.resolve<EventBus>("core.event-bus")
+        const hasConfirmedOperationToken = Boolean(request.options?.confirmedOperationToken)
+        logger.info(`Handling repository.initializeStructure request. repositoryUuid: ${request.repositoryUuid}, hasConfirmedOperationToken: ${hasConfirmedOperationToken}`)
 
-        eventBus.emit({
-          domain: "repository",
-          type: "repository.progress",
-          payload: {
-            repositoryUuid: request.repositoryUuid,
-            operation: "initialize",
-            statusText: "正在初始化仓库...",
-            percent: 0,
-          },
-          timestamp: new Date().toISOString(),
-        })
+        try {
+          const repository = await resolveRepositoryConfig(request.repositoryUuid)
+          const eventBus = ctx.resolve<EventBus>("core.event-bus")
 
-        const result = await repositoryStructureService.initializeStructure(repository, request.options)
-        const pendingPushes = await contentSubmissionService.readPendingPushState(repository)
+          eventBus.emit({
+            domain: "repository",
+            type: "repository.progress",
+            payload: {
+              repositoryUuid: request.repositoryUuid,
+              operation: "initialize",
+              statusText: "正在初始化仓库...",
+              percent: 0,
+            },
+            timestamp: new Date().toISOString(),
+          })
 
-        eventBus.emit({
-          domain: "repository",
-          type: "repository.updated",
-          payload: {
-            repositoryUuid: request.repositoryUuid,
-            operation: "initialize",
-            completedAt: result.initializedAt,
-            message: result.message,
-          },
-          timestamp: new Date().toISOString(),
-        })
-        eventBus.emit({
-          domain: "repository",
-          type: "repository.pendingPushesUpdated",
-          payload: {
-            repositoryUuid: request.repositoryUuid,
-            pendingPushes,
-          },
-          timestamp: new Date().toISOString(),
-        })
+          const result = await repositoryStructureService.initializeStructure(repository, request.options)
+          const pendingPushes = await contentSubmissionService.readPendingPushState(repository)
 
-        return result
+          eventBus.emit({
+            domain: "repository",
+            type: "repository.updated",
+            payload: {
+              repositoryUuid: request.repositoryUuid,
+              operation: "initialize",
+              completedAt: result.initializedAt,
+              message: result.message,
+            },
+            timestamp: new Date().toISOString(),
+          })
+          eventBus.emit({
+            domain: "repository",
+            type: "repository.pendingPushesUpdated",
+            payload: {
+              repositoryUuid: request.repositoryUuid,
+              pendingPushes,
+            },
+            timestamp: new Date().toISOString(),
+          })
+
+          logger.info(`repository.initializeStructure request completed. repositoryUuid: ${request.repositoryUuid}, initializedAt: ${result.initializedAt}, pendingPushCount: ${result.pendingPushCount ?? pendingPushes.count}`)
+
+          return result
+        } catch (error) {
+          logger.error(`repository.initializeStructure request failed. repositoryUuid: ${request.repositoryUuid}, error: ${error}`)
+          throw error
+        }
       },
     },
     chooseDirectory: {

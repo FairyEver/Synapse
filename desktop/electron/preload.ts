@@ -90,6 +90,7 @@ const IPC_CHANNELS = {
   },
   "knowledge-base": {
     "createManaged": "synapse:knowledge-base:create-managed",
+    "deleteManaged": "synapse:knowledge-base:delete-managed",
     "listSources": "synapse:knowledge-base:list-sources",
     "listRawDirectory": "synapse:knowledge-base:list-raw-directory",
     "uploadSources": "synapse:knowledge-base:upload-sources",
@@ -536,6 +537,8 @@ const synapseBridge: SynapseBridge = {
   knowledgeBase: {
     createManaged: (payload) =>
       invoke(IPC_CHANNELS["knowledge-base"].createManaged)(payload),
+    deleteManaged: (payload) =>
+      invoke(IPC_CHANNELS["knowledge-base"].deleteManaged)(payload),
     listSources: (projectId: string) =>
       invoke(IPC_CHANNELS["knowledge-base"].listSources)({ projectId }),
     listRawDirectory: (payload) =>
