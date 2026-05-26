@@ -241,6 +241,36 @@ describe("validateWorkflow", () => {
     expect(r.warnings.some((w) => w.type === "duplicate_switch_branch_targets" && w.nodeId === "sw")).toBe(true)
   })
 
+  it("errors when an HTTP request template variable is not bound", () => {
+    const httpNode = {
+      id: "http",
+      name: "HTTP",
+      type: "http_request",
+      position: { x: 0, y: 0 },
+      config: {
+        method: "POST",
+        url: "https://example.test/{{missing}}",
+        headers: { Authorization: "Bearer {{token}}" },
+        query: { q: "{{query}}" },
+        bodyType: "text",
+        body: "{{payload}}",
+        auth: { type: "basic", basicUsername: "{{username}}", basicPassword: "{{password}}" },
+        variables: [{ name: "token", source: { type: "static", value: "secret" } }],
+      },
+    }
+    const cleanEnd = { ...nodeEnd, config: { outputType: "text", template: "", variables: [] } }
+    const r = validateWorkflow({ ...base, nodes: [httpNode, cleanEnd], edges: [{ id: "e1", from: "http", to: "end" }] })
+
+    expect(r.errors).toEqual(expect.arrayContaining([
+      expect.objectContaining({ nodeId: "http", message: expect.stringContaining("missing") }),
+      expect.objectContaining({ nodeId: "http", message: expect.stringContaining("query") }),
+      expect.objectContaining({ nodeId: "http", message: expect.stringContaining("payload") }),
+      expect.objectContaining({ nodeId: "http", message: expect.stringContaining("username") }),
+      expect.objectContaining({ nodeId: "http", message: expect.stringContaining("password") }),
+    ]))
+    expect(r.errors.some((error) => error.message.includes("token"))).toBe(false)
+  })
+
   // Edge case: non-switch node edge incorrectly carries a branch field
   it("errors on non-switch edge with orphan branch field", () => {
     const r = validateWorkflow({ ...base, edges: [{ id: "e1", from: "a", to: "b", branch: "yes" }, { id: "e2", from: "b", to: "end" }] })
