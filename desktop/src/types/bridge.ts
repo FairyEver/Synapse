@@ -925,7 +925,7 @@ export type SynapseBridge = {
     inspectImportPackage: () => Promise<WorkflowImportPreview | null>
     importPackage: (packagePath: string, mappings: WorkflowModelMapping[]) => Promise<{ workflowId: string; versionHash: string } | { errors: ValidationError[] }>
     onEvent: (listener: (event: WorkflowEvent) => void) => () => void
-    onDefinitionUpdated: (listener: (payload: { workflowId: string; source: string; versionHash: string }) => void) => () => void
+    onDefinitionUpdated: (listener: (payload: { workflowId: string; source?: string; versionHash?: string }) => void) => () => void
     onRunnerSwitchRun: (listener: (payload: { runId: string }) => void) => () => void
     onEditorRefocus: (listener: (payload: { runId?: string }) => void) => () => void
   }

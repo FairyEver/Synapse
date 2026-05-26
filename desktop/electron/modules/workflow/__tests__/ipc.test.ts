@@ -482,6 +482,35 @@ describe("workflowIpcModule", () => {
     expect(runStatuses.get(runId)?.nodeResults["node-1"]?.progressLabel).toBe("Working")
   })
 
+  it("emits a workflow-delete source after deleting a definition", async () => {
+    const eventBus = { emit: vi.fn() }
+    const workflow = { delete: vi.fn(async () => undefined) }
+    const snapshots = { deleteWorkflow: vi.fn(async () => undefined) }
+    const windowManager = { forceCloseAll: vi.fn() }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow") return workflow as T
+      if (serviceId === "core.workflow.snapshots") return snapshots as T
+      if (serviceId === "core.workflow.window-manager") return windowManager as T
+      if (serviceId === "core.event-bus") return eventBus as T
+      if (serviceId === "core.workflow.run-aborts") return new Map<string, AbortController>() as T
+      if (serviceId === "core.workflow.run-statuses") return new Map<string, WorkflowRunStatus>() as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    await harness.invoke("synapse:workflow:delete", { id: "workflow-1" })
+
+    expect(workflow.delete).toHaveBeenCalledWith("workflow-1")
+    expect(snapshots.deleteWorkflow).toHaveBeenCalledWith("workflow-1")
+    expect(windowManager.forceCloseAll).toHaveBeenCalledWith("workflow-1")
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "workflow",
+      type: "workflow:definition-updated",
+      payload: { workflowId: "workflow-1", source: "workflow-delete" },
+    }))
+  })
+
 })
 
 function workflowDefinition() {

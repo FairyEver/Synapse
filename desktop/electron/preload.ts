@@ -799,7 +799,7 @@ const synapseBridge: SynapseBridge = {
       subscribe(EVENT_CHANNELS.workflow.event)((domainEvent) => {
         listener((domainEvent as DomainEvent).payload as WorkflowEvent)
       }),
-    onDefinitionUpdated: createDomainEventPayloadSubscription<{ workflowId: string; source: string; versionHash: string }>(
+    onDefinitionUpdated: createDomainEventPayloadSubscription<{ workflowId: string; source?: string; versionHash?: string }>(
       subscribe,
       "workflow",
       "workflow:definition-updated",

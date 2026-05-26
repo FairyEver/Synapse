@@ -78,14 +78,15 @@ export function WorkflowEditorApp() {
         if (cancelled) return
         // Re-check dirty state: the user may have started editing while
         // the IPC call was in flight. Overwriting would lose their work.
-        if (isDirtyRef.current) {
-          logger.info("definition loaded but editor has unsaved changes, skipping overwrite", { workflowId })
-          return
-        }
         if (def) {
+          if (isDirtyRef.current) {
+            logger.info("definition loaded but editor has unsaved changes, skipping overwrite", { workflowId })
+            return
+          }
           setDefinition(def)
           setLoadError(null)
         } else {
+          setDefinition(null)
           setLoadError("工作流不存在或已被删除")
           logger.warn("editor definition load failed: workflow not found", { workflowId })
         }
@@ -121,14 +122,15 @@ export function WorkflowEditorApp() {
   useEffect(() => {
     const unsub = window.synapse?.workflow.onDefinitionUpdated((payload) => {
       if (payload.workflowId !== workflowId) return
-      if (payload.source !== "mcp") return
-      if (isDirtyRef.current) {
+      if (payload.source !== "mcp" && payload.source !== "workflow-delete") return
+      const workflowDeleted = payload.source === "workflow-delete"
+      if (!workflowDeleted && isDirtyRef.current) {
         logger.warn("external definition update received but editor has unsaved changes, skipping reload", { workflowId })
         toast.warning("工作流已被外部更新，当前有未保存的更改", { duration: 3000 })
         return
       }
       loadDefinition()
-      toast.info("工作流已被外部更新", { duration: 2000 })
+      toast.info(workflowDeleted ? "工作流已被删除" : "工作流已被外部更新", { duration: 2000 })
     })
     return unsub
   }, [workflowId, loadDefinition])
