@@ -6,8 +6,10 @@ import { MarkdownViewer } from "@/components/markdown-viewer"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { TokenUsageSummary } from "@/components/token-usage-summary"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
-import { ChevronDown, Copy, X } from "lucide-react"
+import { ChevronDown, Copy, MessageSquare, X } from "lucide-react"
 import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
+import type { SynapseAgentConversationTarget } from "@/types/agent-navigation"
+import { agentConversationTargetFromOutputs } from "@/lib/agent-conversation-target"
 import { track } from "@/lib/ui-tracking"
 import { createRendererLogger } from "@/app-shell/logging"
 import { cn } from "@/lib/utils"
@@ -23,9 +25,10 @@ interface NodeResultPanelProps {
   definition?: WorkflowDefinition
   onClose: () => void
   onCopyNodeReport?: () => Promise<void>
+  onOpenAgentConversation?: (target: SynapseAgentConversationTarget) => void
 }
 
-export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyNodeReport }: NodeResultPanelProps) {
+export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyNodeReport, onOpenAgentConversation }: NodeResultPanelProps) {
   // Resolve activeBranch ID to user-configured label when definition is available
   const activeBranchLabel = (() => {
     if (!result.activeBranch || !definition) return result.activeBranch
@@ -53,6 +56,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
     onClose()
   }
   const structuredOutputs = resolveStructuredOutputs(result)
+  const agentConversation = agentConversationTargetFromOutputs(result.outputs)
 
   return (
     <div className="flex h-full min-w-0 max-w-full flex-col overflow-hidden">
@@ -75,6 +79,17 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
             <Copy className="h-3.5 w-3.5 mr-1" />复制
           </Button>
         )}
+        {agentConversation ? (
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7"
+            onClick={() => onOpenAgentConversation?.(agentConversation)}
+          >
+            <MessageSquare data-icon="inline-start" />
+            打开对话
+          </Button>
+        ) : null}
         <Button
           size="icon"
           variant="ghost"
@@ -308,7 +323,8 @@ function formatOutputValue(value: unknown): string {
 function resolveStructuredOutputs(result: NodeRunResult): Record<string, unknown> | undefined {
   if (!result.outputs || Object.keys(result.outputs).length === 0) return undefined
   const entries = Object.entries(result.outputs).filter(([key, value]) => (
-    !(key === "markdown" && typeof value === "string" && value === result.output)
+    key !== "agentConversation"
+    && !(key === "markdown" && typeof value === "string" && value === result.output)
   ))
   return entries.length > 0 ? Object.fromEntries(entries) : undefined
 }
