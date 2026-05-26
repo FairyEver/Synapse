@@ -211,7 +211,17 @@ describe("file conversion workflow node UI", () => {
     )
 
     expect(container.textContent).toContain("Convert")
+    expect(container.textContent).toContain("仅返回结果")
     expect(container.textContent).toContain("/tmp/source.docx")
+
+    const markdownContainer = render(
+      <Wrapper
+        id="convert-2"
+        data={{ name: "Convert", inputPath: "/tmp/source.docx", outputMode: "markdown-file" }}
+      />,
+    )
+
+    expect(markdownContainer.textContent).toContain("Markdown 文件")
   })
 })
 

@@ -24,7 +24,7 @@ export function FileConversionNodeCard({
 }) {
   const Icon = fileConversionNodeManifest.icon
   const timer = useRunningTimer(startedAt, status === "running")
-  const modeLabel = config.outputMode === "markdown-file" ? "Markdown file" : "Result only"
+  const modeLabel = config.outputMode === "markdown-file" ? "Markdown 文件" : "仅返回结果"
 
   return (
     <div className={cn("relative w-56 rounded-lg border bg-card px-3 py-2", status === "running" && "pb-4", selected && "ring-2 ring-primary", statusClass(status))}>
