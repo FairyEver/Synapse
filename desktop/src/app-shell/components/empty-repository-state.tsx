@@ -249,6 +249,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
   ) => {
     setIsInitializing(true)
     const startedAt = performance.now()
+    let persistedRepositoryUuid: string | null = null
 
     try {
       const name = getRepositoryNameFromPath(selectedPath) || "新仓库"
@@ -261,6 +262,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
 
       const repos = [...manager.getRepositories(), newRepository]
       await manager.updateConfig({ repositories: repos })
+      persistedRepositoryUuid = newRepository.uuid
       await manager.refreshRepositoryStates()
 
       await initializeRepository(newRepository.uuid, preview && !preview.isEmpty ? {
@@ -282,6 +284,20 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
         error: err,
         localPath: selectedPath,
       })
+      if (persistedRepositoryUuid) {
+        try {
+          const repos = manager.getRepositories()
+            .filter((repo) => repo.uuid !== persistedRepositoryUuid)
+          await manager.updateConfig({ repositories: repos })
+          await manager.refreshRepositoryStates()
+        } catch (rollbackError) {
+          logger.warn("Failed to rollback repository config after initialization failure.", {
+            error: rollbackError,
+            localPath: selectedPath,
+            repositoryUuid: persistedRepositoryUuid,
+          })
+        }
+      }
       showError(err instanceof Error ? err.message : "初始化仓库失败", { durationMs: 4000 })
     } finally {
       setIsInitializing(false)

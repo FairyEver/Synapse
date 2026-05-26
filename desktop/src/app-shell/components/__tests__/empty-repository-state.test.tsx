@@ -18,7 +18,9 @@ const mocks = vi.hoisted(() => ({
     info: vi.fn(),
     warn: vi.fn(),
   },
+  refreshRepositoryStates: vi.fn(),
   switchActiveRepository: vi.fn(),
+  updateConfig: vi.fn(),
   validateDirectory: vi.fn(),
 }))
 
@@ -56,10 +58,10 @@ vi.mock("@/app-shell/use-repository-manager", () => ({
     getAllStates: () => new Map(),
     getRepositories: () => [],
     getRepositoryState: () => undefined,
-    refreshRepositoryStates: vi.fn(),
+    refreshRepositoryStates: mocks.refreshRepositoryStates,
     subscribeToRepositoryChanges: () => () => {},
     switchActiveRepository: mocks.switchActiveRepository,
-    updateConfig: vi.fn(),
+    updateConfig: mocks.updateConfig,
     validateDirectory: mocks.validateDirectory,
   }),
 }))
@@ -135,5 +137,39 @@ describe("EmptyRepositoryState", () => {
     expect(mocks.initializeRepository).toHaveBeenCalledWith(expect.any(String), {
       confirmedOperationToken: "token-1",
     })
+  })
+
+  it("rolls back the repository config entry when initialization fails", async () => {
+    mocks.chooseDirectory.mockResolvedValue("/repo")
+    mocks.initializeRepository.mockRejectedValue(new Error("init failed"))
+    mocks.updateConfig.mockResolvedValue(undefined)
+    mocks.refreshRepositoryStates.mockResolvedValue(undefined)
+    mocks.validateDirectory.mockResolvedValue({
+      initializationPreview: {
+        dangerFlags: [],
+        isEmpty: true,
+        nonGitEntries: [],
+        operationToken: "token-1",
+      },
+      isValid: false,
+      message: "该目录不是有效的 Synapse 仓库。",
+      missingDirectories: ["rules", "skills", "prompts", "system/users", "system/blobs"],
+    })
+    renderEmptyState()
+
+    await act(async () => {
+      findButton("选择已有目录").click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      findButton("初始化").click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.updateConfig).toHaveBeenNthCalledWith(1, {
+      repositories: [expect.objectContaining({ localPath: "/repo" })],
+    })
+    expect(mocks.updateConfig).toHaveBeenNthCalledWith(2, { repositories: [] })
+    expect(mocks.error).toHaveBeenCalledWith("init failed", { durationMs: 4000 })
   })
 })
