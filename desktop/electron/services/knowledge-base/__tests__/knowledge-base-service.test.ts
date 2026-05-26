@@ -1,10 +1,18 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { KnowledgeBaseService } from "../knowledge-base-service"
 import { KnowledgeBaseRawFileManager } from "../raw-file-manager"
 import type { FileConversionResult } from "../../file-conversion"
+
+const mocks = vi.hoisted(() => ({
+  logger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}))
 
 vi.mock("electron", () => ({
   app: {
@@ -15,6 +23,10 @@ vi.mock("electron", () => ({
   shell: {
     trashItem: vi.fn(),
   },
+}))
+
+vi.mock("../../log-store", () => ({
+  createMainLogger: () => mocks.logger,
 }))
 
 const roots: string[] = []
@@ -279,6 +291,53 @@ describe("KnowledgeBaseService", () => {
       kind: "file",
     })])
     expect(trashItem).toHaveBeenCalledWith(path.join(projectPath, ".raw", "folder", "brief.md"))
+  })
+
+  it("logs raw mutation summaries without full external upload paths", async () => {
+    const sourcePath = path.join(await tempDir(), "secret-client-name.md")
+    await writeFile(sourcePath, "alpha\n")
+    const { projectId, service } = await managedFixture()
+
+    await service.uploadRawFiles({
+      projectId,
+      targetDirectoryPath: "",
+      filePaths: [sourcePath],
+    })
+
+    expect(mocks.logger.info).toHaveBeenCalledWith("Knowledge Base raw mutation completed.", expect.objectContaining({
+      affectedCount: 1,
+      operation: "uploadRawFiles",
+      projectId,
+      skippedCount: 0,
+    }))
+    expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain(sourcePath)
+  })
+
+  it("skips raw moves that target a directory inside itself", async () => {
+    const { projectId, projectPath, service } = await managedFixture()
+    await mkdir(path.join(projectPath, ".raw", "folder", "child"), { recursive: true })
+
+    const result = await service.moveRawEntries({
+      projectId,
+      relativePaths: ["folder"],
+      targetDirectoryPath: "folder/child",
+    })
+
+    expect(result.entries).toEqual([])
+    expect(result.skipped).toEqual([{ path: "folder", reason: "invalid-path" }])
+  })
+
+  it("rejects raw rename through a symlink path", async () => {
+    const { projectId, projectPath, service } = await managedFixture()
+    const outsidePath = await tempDir()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await symlink(outsidePath, path.join(projectPath, ".raw", "linked"))
+
+    await expect(service.renameRawEntry({
+      projectId,
+      relativePath: "linked/file.md",
+      newName: "renamed.md",
+    })).rejects.toThrow("符号链接")
   })
 
   it("rejects raw paths outside the raw directory", async () => {

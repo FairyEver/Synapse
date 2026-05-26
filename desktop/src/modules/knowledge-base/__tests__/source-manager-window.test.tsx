@@ -375,4 +375,83 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       relativePaths: ["brief.md"],
     })
   })
+
+  it("asks for confirmation before trashing a selected directory", async () => {
+    const directoryEntry = {
+      name: "客户",
+      relativePath: "客户",
+      kind: "directory" as const,
+      size: null,
+      modifiedAt: "2026-05-26T00:00:00.000Z",
+    }
+    bridgeMocks.knowledgeBase.listRawDirectory.mockResolvedValue({
+      projectId: "project-1",
+      directoryPath: "",
+      entries: [directoryEntry],
+    })
+    renderWindow()
+    await waitForExpectation(() => expect(document.body.textContent).toContain("客户"))
+
+    await act(async () => {
+      buttonByLabel("选择 客户").click()
+    })
+    await act(async () => {
+      buttonByLabel("移到废纸篓").click()
+    })
+
+    expect(document.body.textContent).toContain("移到废纸篓？")
+    expect(document.body.textContent).toContain("客户")
+    expect(bridgeMocks.knowledgeBase.trashRawEntries).not.toHaveBeenCalled()
+  })
+
+  it("asks for confirmation before moving multiple selected entries", async () => {
+    const directoryEntry = {
+      name: "客户",
+      relativePath: "客户",
+      kind: "directory" as const,
+      size: null,
+      modifiedAt: "2026-05-26T00:00:00.000Z",
+    }
+    bridgeMocks.knowledgeBase.listRawDirectory.mockResolvedValue({
+      projectId: "project-1",
+      directoryPath: "",
+      entries: [
+        {
+          name: "a.md",
+          relativePath: "a.md",
+          kind: "file" as const,
+          size: 12,
+          modifiedAt: "2026-05-26T00:00:00.000Z",
+        },
+        {
+          name: "b.md",
+          relativePath: "b.md",
+          kind: "file" as const,
+          size: 14,
+          modifiedAt: "2026-05-26T00:00:00.000Z",
+        },
+        directoryEntry,
+      ],
+    })
+    renderWindow()
+    await waitForExpectation(() => expect(document.body.textContent).toContain("a.md"))
+
+    await act(async () => {
+      buttonByLabel("选择 a.md").click()
+      buttonByLabel("选择 b.md").click()
+    })
+    await act(async () => {
+      buttonByLabel("移动所选").click()
+    })
+    await act(async () => {
+      buttonByLabel("选择目标文件夹 客户").click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByLabel("确认移动").click()
+    })
+
+    expect(document.body.textContent).toContain("确认移动？")
+    expect(bridgeMocks.knowledgeBase.moveRawEntries).not.toHaveBeenCalled()
+  })
 })

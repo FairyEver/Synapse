@@ -125,8 +125,10 @@ export class KnowledgeBaseRawFileManager {
         await rename(source, target)
         entries.push(await entryForPath(rawRoot, target, sourceStat.isDirectory() ? "directory" : "file"))
       } catch (error) {
-        void error
-        skipped.push({ path: relativePath, reason: "read-error" })
+        skipped.push({
+          path: relativePath,
+          reason: isInvalidRawPathError(error) ? "invalid-path" : "read-error",
+        })
       }
     }
     return { entries: sortEntries(entries), skipped }
@@ -146,8 +148,10 @@ export class KnowledgeBaseRawFileManager {
         entries.push(await entryForPath(rawRoot, target, stat.isDirectory() ? "directory" : "file"))
         await this.trashItem(target)
       } catch (error) {
-        void error
-        skipped.push({ path: relativePath, reason: "trash-error" })
+        skipped.push({
+          path: relativePath,
+          reason: isInvalidRawPathError(error) ? "invalid-path" : "trash-error",
+        })
       }
     }
     return { entries: sortEntries(entries), skipped }
@@ -244,6 +248,12 @@ function isSameOrDescendant(sourcePath: string, targetDirectoryPath: string): bo
   const source = normalizeRawPath(sourcePath)
   const target = normalizeRawPath(targetDirectoryPath)
   return target === source || target.startsWith(`${source}/`)
+}
+
+function isInvalidRawPathError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false
+  return error.message.includes("目标路径不在资料目录中")
+    || error.message.includes("资料路径不能包含符号链接")
 }
 
 function normalizeRelativePath(value: string): string {

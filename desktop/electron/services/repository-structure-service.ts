@@ -19,6 +19,12 @@ import { runGitTextCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage } from "./git-error-utils"
 import { pendingPushesService } from "./pending-pushes-service"
+import {
+  assertRepositoryInitializationAllowed,
+  createInitializationBackupDirectoryName,
+  createRepositoryInitializationPreview,
+  isInitializationBackupEntry,
+} from "./repository-initialization-safety"
 import { repositoryStore } from "./repository-store"
 import { userProfileService } from "./user-profile-service"
 
@@ -30,33 +36,12 @@ function isGitDirectory(entry: Dirent): boolean {
   return entry.name === ".git" && entry.isDirectory()
 }
 
-function formatTopLevelEntryName(entry: Dirent): string {
-  return entry.isDirectory() ? `${entry.name}/` : entry.name
-}
-
 async function readTopLevelEntries(repoRootPath: string): Promise<Dirent[]> {
   return readdir(repoRootPath, { withFileTypes: true })
 }
 
 function getNonGitEntries(entries: Dirent[]): Dirent[] {
-  return entries.filter((entry) => !isGitDirectory(entry))
-}
-
-function getFormattedNonGitEntryNames(entries: Dirent[]): string[] {
-  return getNonGitEntries(entries).map(formatTopLevelEntryName)
-}
-
-function areConfirmedEntriesCurrent(
-  currentEntries: string[],
-  confirmedEntries: string[] | undefined,
-): boolean {
-  if (!confirmedEntries) return false
-
-  const current = [...currentEntries].sort()
-  const confirmed = [...confirmedEntries].sort()
-  if (current.length !== confirmed.length) return false
-
-  return current.every((entryName, index) => entryName === confirmed[index])
+  return entries.filter((entry) => !isGitDirectory(entry) && !isInitializationBackupEntry(entry.name))
 }
 
 function runStructureGitCommand(
@@ -124,6 +109,40 @@ async function writeGitkeep(directoryPath: string): Promise<void> {
 
   await writeFile(temporaryPath, "", "utf8")
   await rename(temporaryPath, targetPath)
+}
+
+async function moveExistingEntriesToInitializationBackup(
+  repositoryPath: string,
+  entries: Dirent[],
+): Promise<string | null> {
+  const movableEntries = getNonGitEntries(entries)
+  if (movableEntries.length === 0) return null
+
+  const backupPath = path.join(repositoryPath, createInitializationBackupDirectoryName(new Date()))
+  await mkdir(backupPath, { recursive: false })
+
+  try {
+    for (const entry of movableEntries) {
+      await rename(path.join(repositoryPath, entry.name), path.join(backupPath, entry.name))
+    }
+    return backupPath
+  } catch (error) {
+    logger.error("Failed to move repository contents into initialization backup.", {
+      backupName: path.basename(backupPath),
+      error,
+    })
+    throw new Error("备份旧目录内容失败，未初始化。", { cause: error })
+  }
+}
+
+function assertConfirmedInitializationToken(
+  preview: SynapseRepositoryInitializationPreview,
+  options: SynapseRepositoryInitializationOptions,
+): void {
+  if (preview.isEmpty) return
+  if (!options.confirmedOperationToken || options.confirmedOperationToken !== preview.operationToken) {
+    throw new Error("目录内容已变化，请重新确认初始化清单。")
+  }
 }
 
 function normalizeRepositoryName(name: string): string {
@@ -205,7 +224,10 @@ class RepositoryStructureService {
 
     const isValid = missingDirectories.length === 0
     const entries = await readTopLevelEntries(localPath)
-    const nonGitEntryNames = getFormattedNonGitEntryNames(entries)
+    const initializationPreview = await createRepositoryInitializationPreview({
+      localPath,
+      entries,
+    })
 
     let message: string
     if (isValid) {
@@ -218,10 +240,7 @@ class RepositoryStructureService {
 
     return {
       isValid,
-      initializationPreview: {
-        isEmpty: nonGitEntryNames.length === 0,
-        nonGitEntries: nonGitEntryNames,
-      },
+      initializationPreview,
       missingDirectories,
       message,
     }
@@ -294,12 +313,12 @@ class RepositoryStructureService {
     }
 
     const entries = await readTopLevelEntries(repository.localPath)
-    const nonGitEntries = getNonGitEntries(entries)
 
-    return {
-      isEmpty: nonGitEntries.length === 0,
-      nonGitEntries: nonGitEntries.map(formatTopLevelEntryName),
-    }
+    return createRepositoryInitializationPreview({
+      repositoryUuid: repository.uuid,
+      localPath: repository.localPath,
+      entries,
+    })
   }
 
   async initializeStructure(
@@ -315,20 +334,20 @@ class RepositoryStructureService {
     await access(repository.localPath, fsConstants.W_OK)
 
     const entries = await readTopLevelEntries(repository.localPath)
-    const nonGitEntries = getNonGitEntries(entries)
-    const nonGitEntryNames = nonGitEntries.map(formatTopLevelEntryName)
+    const preview = await createRepositoryInitializationPreview({
+      repositoryUuid: repository.uuid,
+      localPath: repository.localPath,
+      entries,
+    })
 
-    if (
-      nonGitEntryNames.length > 0 &&
-      !areConfirmedEntriesCurrent(nonGitEntryNames, options.confirmedNonGitEntries)
-    ) {
-      throw new Error("初始化会清空该目录下已有内容，请先确认删除清单后再初始化。")
-    }
+    assertRepositoryInitializationAllowed(preview)
+    assertConfirmedInitializationToken(preview, options)
 
-    for (const entry of nonGitEntries) {
-      await rm(path.join(repository.localPath, entry.name), {
-        force: true,
-        recursive: true,
+    const backupPath = await moveExistingEntriesToInitializationBackup(repository.localPath, entries)
+    if (backupPath) {
+      logger.info("Moved repository contents into initialization backup.", {
+        backupName: path.basename(backupPath),
+        repositoryUuid: repository.uuid,
       })
     }
 

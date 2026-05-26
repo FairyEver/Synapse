@@ -2,7 +2,6 @@
   "activePromptName": "质量巡检v6",
   "workingDirectory": "/Users/liyang/Documents/code/github/Synapse",
   "concurrency": 4,
-  "intervalSeconds": 10,
   "timeoutMinutes": 60,
   "maxLogs": 200,
   "provider": "claude-code",

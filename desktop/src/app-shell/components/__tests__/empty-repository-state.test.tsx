@@ -67,6 +67,7 @@ vi.mock("@/app-shell/use-repository-manager", () => ({
 let roots: Root[] = []
 
 afterEach(() => {
+  vi.useRealTimers()
   for (const root of roots) {
     act(() => {
       root.unmount()
@@ -97,11 +98,15 @@ function findButton(label: string): HTMLButtonElement {
 
 describe("EmptyRepositoryState", () => {
   it("shows a destructive preview before initializing a non-empty non-Synapse directory", async () => {
+    vi.useFakeTimers()
     mocks.chooseDirectory.mockResolvedValue("/repo")
+    mocks.initializeRepository.mockResolvedValue(undefined)
     mocks.validateDirectory.mockResolvedValue({
       initializationPreview: {
+        dangerFlags: [],
         isEmpty: false,
         nonGitEntries: ["notes.md"],
+        operationToken: "token-1",
       },
       isValid: false,
       message: "该目录不是有效的 Synapse 仓库。",
@@ -118,5 +123,17 @@ describe("EmptyRepositoryState", () => {
     expect(document.body.textContent).toContain("notes.md")
     expect(document.body.textContent).not.toContain("该目录尚未包含 Synapse 仓库结构")
     expect(mocks.initializeRepository).not.toHaveBeenCalled()
+
+    act(() => {
+      vi.advanceTimersByTime(3000)
+    })
+    await act(async () => {
+      findButton("确定初始化").click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.initializeRepository).toHaveBeenCalledWith(expect.any(String), {
+      confirmedOperationToken: "token-1",
+    })
   })
 })
