@@ -23,6 +23,12 @@ export type BatchSummary = {
   status: string
   durationMs: number
   workers: SummaryWorker[]
+  totals?: {
+    started: number
+    success: number
+    error: number
+    timeout: number
+  }
 }
 
 function formatTs(date: Date): string {
@@ -33,10 +39,15 @@ export class WorkerLogger {
   private stream: WriteStream
   readonly path: string
 
-  constructor(batchPath: string, workerId: number) {
-    this.path = join(batchPath, `worker-${workerId}.md`)
+  constructor(batchPath: string, workerId: number, sequence?: number) {
+    const fileName = sequence === undefined
+      ? `worker-${workerId}`
+      : `slot-${workerId}-run-${String(sequence).padStart(4, '0')}`
+    this.path = join(batchPath, `${fileName}.md`)
     this.stream = createWriteStream(this.path, { flags: 'w' })
-    this.stream.write(`# Worker ${workerId}\n\n`)
+    this.stream.write(sequence === undefined
+      ? `# Worker ${workerId}\n\n`
+      : `# Slot ${workerId} Run ${sequence}\n\n`)
   }
 
   writeStdout(text: string): void {
@@ -70,8 +81,8 @@ export class BatchLogger {
     mkdirSync(this.path, { recursive: true })
   }
 
-  createWorkerLogger(workerId: number): WorkerLogger {
-    return new WorkerLogger(this.path, workerId)
+  createWorkerLogger(workerId: number, sequence?: number): WorkerLogger {
+    return new WorkerLogger(this.path, workerId, sequence)
   }
 
   async writeSummary(summary: BatchSummary): Promise<string> {
@@ -81,6 +92,13 @@ export class BatchLogger {
       `**Status:** ${summary.status}`,
       `**Duration:** ${(summary.durationMs / 1000).toFixed(1)}s`,
       '',
+      ...(summary.totals ? [
+        `**Started:** ${summary.totals.started}`,
+        `**Success:** ${summary.totals.success}`,
+        `**Error:** ${summary.totals.error}`,
+        `**Timeout:** ${summary.totals.timeout}`,
+        '',
+      ] : []),
       '| Worker | Status | Duration | Exit | Log |',
       '|---:|---|---:|---:|---|',
       ...summary.workers.map(worker =>

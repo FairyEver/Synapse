@@ -4,7 +4,7 @@ import { chmod, mkdtemp, rm, writeFile } from 'fs/promises'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { BatchLogger } from './logger.js'
-import { buildClaudeCodeArgs, buildCodexArgs, buildWorkerPrompt, classifyBatchStatus, createClaudeCodeEventAccumulator, createCodexEventAccumulator, runWorker, type OutputLine } from './runner.js'
+import { buildClaudeCodeArgs, buildCodexArgs, buildWorkerPrompt, classifyBatchStatus, createClaudeCodeEventAccumulator, createCodexEventAccumulator, runBatch, runWorker, type OutputLine } from './runner.js'
 import type { UiConfig } from './config.js'
 import { DEFAULT_UI_CONFIG } from './config.js'
 
@@ -365,6 +365,39 @@ printf '%s\\n' '{"type":"assistant","message":{"content":[{"type":"text","text":
 
     assert.deepEqual(outputLines.map(line => line.text), ['first line', 'second line'])
     assert.ok(outputLines.every(line => line.stream === 'event'))
+  } finally {
+    await rm(dir, { recursive: true, force: true })
+  }
+})
+
+test('runBatch still runs one worker per configured concurrency for once mode', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'auto-runner-once-'))
+  try {
+    const command = join(dir, 'success.sh')
+    await writeFile(command, '#!/bin/sh\necho "ok"\n', 'utf-8')
+    await chmod(command, 0o755)
+
+    const config: UiConfig = {
+      ...DEFAULT_UI_CONFIG,
+      prompt: 'hello',
+      workingDirectory: dir,
+      concurrency: 3,
+      maxLogs: 10000,
+      provider: 'codex',
+      codex: {
+        command,
+        model: '',
+        sandbox: 'danger-full-access',
+        approvalPolicy: 'never',
+        json: true,
+        disableMcp: true,
+      },
+    }
+
+    const result = await runBatch(config)
+
+    assert.equal(result.workers.length, 3)
+    assert.equal(result.status, 'success')
   } finally {
     await rm(dir, { recursive: true, force: true })
   }
