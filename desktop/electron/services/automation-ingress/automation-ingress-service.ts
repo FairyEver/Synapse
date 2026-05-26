@@ -257,12 +257,12 @@ export class AutomationIngressService {
       if (request.method !== "POST") {
         return jsonResponse(405, false, undefined, "method_not_allowed", "POST only")
       }
+      if (!this.consumeRateLimit(request, config.rateLimitPerMinute)) {
+        return jsonResponse(429, false, undefined, "rate_limited", "rate limited")
+      }
       if (!this.authenticated(request, url, config.token)) {
         this.recordAudit("denied", `webhook:${config.path}`, { reason: "unauthorized" })
         return jsonResponse(401, false, undefined, "unauthorized", "unauthorized")
-      }
-      if (!this.consumeRateLimit(request, config.rateLimitPerMinute)) {
-        return jsonResponse(429, false, undefined, "rate_limited", "rate limited")
       }
       const body = parseJsonBody(request.body)
       const mode = stringValue(body.replyMode) === "wait" ? "wait" : "async"
@@ -515,7 +515,7 @@ export class AutomationIngressService {
   }
 
   private consumeRateLimit(request: LocalHttpRequest, limit: number): boolean {
-    const key = firstHeader(request.headers["x-forwarded-for"]) ?? "local"
+    const key = remoteSource(request)
     const now = Date.now()
     const cutoff = now - 60_000
     const values = (this.rateLimiter.get(key) ?? []).filter((value) => value >= cutoff)
@@ -860,7 +860,7 @@ function stringFromUnknown(value: unknown): string {
 }
 
 function remoteSource(request: LocalHttpRequest): string {
-  return firstHeader(request.headers["x-forwarded-for"]) ?? "local"
+  return request.remoteAddress ?? "local"
 }
 
 function firstHeader(value: string | string[] | undefined): string | undefined {
