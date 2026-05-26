@@ -7,6 +7,8 @@ import { InMemoryAuditSink } from "../../../runtime/security"
 import { ExecutionIsolationService } from "../execution-isolation-service"
 
 describe("ExecutionIsolationService", () => {
+  const isWindows = process.platform === "win32"
+
   it("invalidates a passing preflight when the target user changes", async () => {
     const configs = new MemoryNamespace<RunAsConfigEntryV1>("run-as.config")
     await configs.upsert({
@@ -68,10 +70,21 @@ describe("ExecutionIsolationService", () => {
       auditSink,
     })
 
-    await expect(service.updateConfig({
-      projectId: "project-1",
-      enabled: true,
-    })).rejects.toThrow("run_as_user preflight must pass before enabling run-as or disabling preflight")
+    if (isWindows) {
+      await expect(service.updateConfig({
+        projectId: "project-1",
+        enabled: true,
+      })).resolves.toMatchObject({
+        enabled: false,
+        supported: false,
+        lastError: "run_as_user is not supported on Windows",
+      })
+    } else {
+      await expect(service.updateConfig({
+        projectId: "project-1",
+        enabled: true,
+      })).rejects.toThrow("run_as_user preflight must pass before enabling run-as or disabling preflight")
+    }
 
     await expect(configs.get("run-as:project-1")).resolves.toMatchObject({
       enabled: false,
@@ -80,7 +93,7 @@ describe("ExecutionIsolationService", () => {
       expect.objectContaining({
         action: "shell.exec",
         resource: "run_as_user:config",
-        outcome: "failed",
+        outcome: isWindows ? "allowed" : "failed",
       }),
     ])
   })
@@ -143,7 +156,7 @@ describe("ExecutionIsolationService", () => {
       projectId: "project-1",
       enabled: true,
     })).resolves.toMatchObject({
-      enabled: true,
+      enabled: !isWindows,
     })
 
     expect(checked).toEqual([
