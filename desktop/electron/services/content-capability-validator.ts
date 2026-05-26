@@ -365,6 +365,10 @@ function validateBase64Size(value: string, maxBytes: number, field: string): voi
 }
 
 function decodeBase64(value: string, field: string): Uint8Array {
+  if (!isValidBase64(value)) {
+    throwInvalid(field, `${field} 不是有效的 base64。`)
+  }
+
   try {
     return Buffer.from(value, "base64")
   } catch (error) {
@@ -373,6 +377,14 @@ function decodeBase64(value: string, field: string): Uint8Array {
       cause: error,
     })
   }
+}
+
+function isValidBase64(value: string): boolean {
+  if (!value || value.length % 4 === 1) {
+    return false
+  }
+
+  return /^[A-Za-z0-9+/]+={0,2}$/u.test(value)
 }
 
 function requireTrimmedString(value: unknown, field: string): string {

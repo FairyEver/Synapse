@@ -95,6 +95,59 @@ describe("content capability validator", () => {
     expect(Buffer.from(payload.files[0]?.bytes ?? []).toString("utf8")).toBe("hello")
   })
 
+  it("normalizes valid skill attachment base64", () => {
+    const payload = normalizeCreateContentParams("skill", {
+      name: "test-skill",
+      title: "Test Skill",
+      description: "Skill description.",
+      category: "development",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+      content: "# Skill",
+      files: [{
+        path: "references/guide.md",
+        contentBase64: Buffer.from("hello").toString("base64"),
+      }],
+    })
+
+    expect(Buffer.from(payload.files[0]?.bytes ?? []).toString("utf8")).toBe("hello")
+  })
+
+  it("rejects invalid skill attachment base64", () => {
+    expect(() => normalizeCreateContentParams("skill", {
+      name: "test-skill",
+      title: "Test Skill",
+      description: "Skill description.",
+      category: "development",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+      content: "# Skill",
+      files: [{
+        path: "references/guide.md",
+        contentBase64: "not valid %",
+      }],
+    })).toThrow(ContentCapabilityError)
+
+    expect(() => normalizeUpdateContentParams("skill", {
+      name: "test-skill",
+      title: "Test Skill",
+      description: "Skill description.",
+      category: "development",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+      content: "# Skill",
+      id: "skill-1",
+      baseHistoryDirname: "20260521000000Z__user__abc123",
+      files: [{
+        path: "references/guide.md",
+        contentBase64: "abcd=",
+      }],
+    })).toThrow(ContentCapabilityError)
+  })
+
   it("rejects duplicate skill attachment paths after normalization", () => {
     expect(() => normalizeCreateContentParams("skill", {
       name: "test-skill",
