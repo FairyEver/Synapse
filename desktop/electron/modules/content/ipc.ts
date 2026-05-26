@@ -46,6 +46,8 @@ import type { RepositorySyncCoordinator } from "../../services/repository-sync-c
 
 const logger = createMainLogger("ipc.content")
 
+type ContentPostMutationOperation = SynapseContentMutationOperation | "restore" | "purge"
+
 type LegacyContentSavedPushEventEntry = {
   legacyEventRequest: Promise<void>
   pushRequest: Promise<void>
@@ -138,6 +140,40 @@ async function notifyPendingPushesUpdatedIfPossible(
   } catch (error) {
     logger.warn("Failed to refresh pending pushes after content-saved repository push.", {
       error,
+      repositoryUuid: repository.uuid,
+    })
+  }
+}
+
+async function resolveActiveRepositoryIfPossible(
+  operation: ContentPostMutationOperation,
+): Promise<SynapseRepositoryConfig | null> {
+  try {
+    return await resolveActiveRepository()
+  } catch (error) {
+    logger.warn("Failed to resolve active repository after content mutation.", {
+      error,
+      operation,
+    })
+    return null
+  }
+}
+
+async function notifyPendingPushesUpdatedAfterContentMutation(
+  eventBus: EventBus,
+  repository: SynapseRepositoryConfig | null,
+  operation: ContentPostMutationOperation,
+): Promise<void> {
+  if (!repository) {
+    return
+  }
+
+  try {
+    await notifyPendingPushesUpdated(eventBus, repository)
+  } catch (error) {
+    logger.warn("Failed to refresh pending pushes after content mutation.", {
+      error,
+      operation,
       repositoryUuid: repository.uuid,
     })
   }
@@ -330,9 +366,9 @@ export const contentIpcModule: IpcModule = {
 
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const result = await contentSubmissionService.createContent(request)
-        const repository = await resolveActiveRepository()
+        const repository = await resolveActiveRepositoryIfPossible("create")
 
-        await notifyPendingPushesUpdated(eventBus, repository)
+        await notifyPendingPushesUpdatedAfterContentMutation(eventBus, repository, "create")
         emitContentChanged(eventBus, "create", result)
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
@@ -352,9 +388,9 @@ export const contentIpcModule: IpcModule = {
 
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const result = await contentSubmissionService.updateContent(request)
-        const repository = await resolveActiveRepository()
+        const repository = await resolveActiveRepositoryIfPossible("update")
 
-        await notifyPendingPushesUpdated(eventBus, repository)
+        await notifyPendingPushesUpdatedAfterContentMutation(eventBus, repository, "update")
         emitContentChanged(eventBus, "update", result)
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
@@ -378,9 +414,9 @@ export const contentIpcModule: IpcModule = {
 
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const result = await contentSubmissionService.deleteContent(payload)
-        const repository = await resolveActiveRepository()
+        const repository = await resolveActiveRepositoryIfPossible("delete")
 
-        await notifyPendingPushesUpdated(eventBus, repository)
+        await notifyPendingPushesUpdatedAfterContentMutation(eventBus, repository, "delete")
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
           requestContentSavedPush(ctx, eventBus, repository)
@@ -408,9 +444,9 @@ export const contentIpcModule: IpcModule = {
 
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const result = await contentSubmissionService.restoreContent(payload)
-        const repository = await resolveActiveRepository()
+        const repository = await resolveActiveRepositoryIfPossible("restore")
 
-        await notifyPendingPushesUpdated(eventBus, repository)
+        await notifyPendingPushesUpdatedAfterContentMutation(eventBus, repository, "restore")
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
           requestContentSavedPush(ctx, eventBus, repository)
@@ -429,9 +465,9 @@ export const contentIpcModule: IpcModule = {
 
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const result = await contentSubmissionService.purgeContent(payload)
-        const repository = await resolveActiveRepository()
+        const repository = await resolveActiveRepositoryIfPossible("purge")
 
-        await notifyPendingPushesUpdated(eventBus, repository)
+        await notifyPendingPushesUpdatedAfterContentMutation(eventBus, repository, "purge")
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
           requestContentSavedPush(ctx, eventBus, repository)

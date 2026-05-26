@@ -20,6 +20,8 @@ const mocks = vi.hoisted(() => ({
   },
   contentSubmissionService: {
     createContent: vi.fn(),
+    deleteContent: vi.fn(),
+    purgeContent: vi.fn(),
     readPendingPushState: vi.fn(async () => ({ count: 1, items: [] })),
     restoreContent: vi.fn(),
     updateContent: vi.fn(),
@@ -156,6 +158,14 @@ describe("contentIpcModule sync ownership", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mocks.contentSubmissionService.createContent.mockResolvedValue({
+      status: "saved",
+      pendingPushCount: 1,
+    })
+    mocks.contentSubmissionService.deleteContent.mockResolvedValue({
+      status: "saved",
+      pendingPushCount: 1,
+    })
+    mocks.contentSubmissionService.purgeContent.mockResolvedValue({
       status: "saved",
       pendingPushCount: 1,
     })
@@ -420,6 +430,30 @@ describe("contentIpcModule sync ownership", () => {
       error: "Unexpected service id: repo.sync-coordinator",
       message: "Unexpected service id: repo.sync-coordinator",
     })
+  })
+
+  it.each([
+    ["create", "createContent", { contentType: "rule", payload: { title: "Rule" } }],
+    ["update", "updateContent", { contentType: "rule", payload: { id: "rule-1", title: "Rule" } }],
+    ["deleteContent", "deleteContent", { id: "rule-1", type: "rule" }],
+    ["restore", "restoreContent", { id: "rule-1", type: "rule" }],
+    ["purge", "purgeContent", { id: "rule-1", type: "rule" }],
+  ] as const)("returns the %s result when pending push refresh fails", async (methodName, serviceName, payload) => {
+    const { contentIpcModule } = await import("../ipc")
+    const expectedResult = {
+      status: "saved",
+      pendingPushCount: 1,
+    }
+    mocks.contentSubmissionService[serviceName].mockResolvedValueOnce(expectedResult)
+    mocks.contentSubmissionService.readPendingPushState.mockRejectedValueOnce(new Error("cache unavailable"))
+
+    await expect(contentIpcModule.methods[methodName].handler(createContext() as never, payload as never))
+      .resolves.toBe(expectedResult)
+
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      "Failed to refresh pending pushes after content mutation.",
+      expect.objectContaining({ repositoryUuid: "repo-1" }),
+    )
   })
 
   it("emits content.changed after create saves", async () => {
