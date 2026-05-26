@@ -53,6 +53,13 @@ const mocks = vi.hoisted(() => {
       isGitRepository: true,
       gitRootPath: "/repo",
     },
+    repositoryStructureService: {
+      checkInitializationPreview: vi.fn(),
+      createLocalRepository: vi.fn(),
+      ensureContentDirectories: vi.fn(),
+      initializeStructure: vi.fn(),
+      validateDirectoryStructure: vi.fn(),
+    },
     resetInstallStatus: () => {
       installStatus = {
         "skill-1": [{
@@ -104,13 +111,7 @@ vi.mock("../../../services/repository-store", () => ({
 }))
 
 vi.mock("../../../services/repository-structure-service", () => ({
-  repositoryStructureService: {
-    checkInitializationPreview: vi.fn(),
-    createLocalRepository: vi.fn(),
-    ensureContentDirectories: vi.fn(),
-    initializeStructure: vi.fn(),
-    validateDirectoryStructure: vi.fn(),
-  },
+  repositoryStructureService: mocks.repositoryStructureService,
 }))
 
 vi.mock("../../../services/repository-sync-coordinator", () => ({
@@ -141,7 +142,67 @@ describe("repositoryIpcModule", () => {
       repository: mocks.repositoryState,
       completedAt: "2026-05-21T13:00:00.000Z",
     })
+    mocks.repositoryStructureService.checkInitializationPreview.mockResolvedValue({
+      isEmpty: false,
+      nonGitEntries: ["notes.md"],
+      operationToken: "preview-token",
+      dangerFlags: [],
+    })
+    mocks.repositoryStructureService.initializeStructure.mockResolvedValue({
+      initializedAt: "2026-05-21T14:00:00.000Z",
+      pendingPushCount: 1,
+      repository: mocks.repositoryState,
+    })
     mocks.contentSubmissionService.readPendingPushState.mockResolvedValue({ count: 0, items: [] })
+  })
+
+  it("logs repository initialization preview lifecycle", async () => {
+    const { repositoryIpcModule } = await import("../ipc")
+
+    await repositoryIpcModule.methods.checkInitializationPreview.handler(createContext() as never, {
+      repositoryUuid: "repo-1",
+    })
+
+    expect(mocks.logger.info).toHaveBeenCalledWith(
+      "Handling repository.checkInitializationPreview request. repositoryUuid: repo-1",
+    )
+    expect(mocks.logger.info).toHaveBeenCalledWith(
+      "repository.checkInitializationPreview request completed. repositoryUuid: repo-1, isEmpty: false, nonGitEntryCount: 1, dangerFlagCount: 0",
+    )
+  })
+
+  it("logs repository initialization preview failures", async () => {
+    const { repositoryIpcModule } = await import("../ipc")
+    mocks.repositoryStructureService.checkInitializationPreview.mockRejectedValueOnce(new Error("preview failed"))
+
+    await expect(repositoryIpcModule.methods.checkInitializationPreview.handler(createContext() as never, {
+      repositoryUuid: "repo-1",
+    })).rejects.toThrow("preview failed")
+
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      "repository.checkInitializationPreview request failed. repositoryUuid: repo-1, error: Error: preview failed",
+    )
+  })
+
+  it("logs repository initialization failures without exposing confirmation tokens", async () => {
+    const { repositoryIpcModule } = await import("../ipc")
+    mocks.repositoryStructureService.initializeStructure.mockRejectedValueOnce(new Error("init failed"))
+
+    await expect(repositoryIpcModule.methods.initializeStructure.handler(createContext() as never, {
+      repositoryUuid: "repo-1",
+      options: { confirmedOperationToken: "secret-token" },
+    })).rejects.toThrow("init failed")
+
+    expect(mocks.logger.info).toHaveBeenCalledWith(
+      "Handling repository.initializeStructure request. repositoryUuid: repo-1, hasConfirmedOperationToken: true",
+    )
+    expect(mocks.logger.error).toHaveBeenCalledWith(
+      "repository.initializeStructure request failed. repositoryUuid: repo-1, error: Error: init failed",
+    )
+    expect(JSON.stringify([
+      mocks.logger.info.mock.calls,
+      mocks.logger.error.mock.calls,
+    ])).not.toContain("secret-token")
   })
 
   it("refreshes and broadcasts changed install status after repository sync", async () => {
