@@ -58,7 +58,6 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   const [knowledgeBaseName, setKnowledgeBaseName] = useState("")
   const [knowledgeBaseError, setKnowledgeBaseError] = useState<string | null>(null)
   const [isCreatingKnowledgeBase, setIsCreatingKnowledgeBase] = useState(false)
-  const [knowledgeBaseActionError, setKnowledgeBaseActionError] = useState<string | null>(null)
   const hasDirectoryPicker = Boolean(window.synapse?.repository)
 
   const resetForm = () => {
@@ -462,7 +461,6 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
         </DialogContent>
       </Dialog>
       </div>
-      <FieldError>{knowledgeBaseActionError}</FieldError>
 
       <Dialog open={editingProject !== null} onOpenChange={(open) => { if (!open) handleEditDialogClose() }}>
         <DialogContent className="sm:max-w-[480px]">
