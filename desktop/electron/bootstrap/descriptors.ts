@@ -973,6 +973,7 @@ export const coreExecutionIsolationDescriptor: ServiceDescriptor<ExecutionIsolat
       configs: dataRepository.namespace("run_as.config"),
       preflights: dataRepository.namespace("run_as.preflight"),
       processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+      permissionGuard,
       auditSink,
       logger: ctx.logger.child("execution-isolation"),
     })
