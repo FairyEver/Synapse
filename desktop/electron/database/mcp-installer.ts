@@ -21,6 +21,7 @@ type McpServerInfo = {
   registered: boolean
   mode: McpRegistrationMode
   url: string | null
+  readError?: string
 }
 
 const MCP_DEFINITIONS = mcpDefinitions
@@ -445,8 +446,13 @@ function getMcpServers(): McpServerInfo[] {
       }
 
       return { ...base, ...detection }
-    } catch {
-      return base
+    } catch (error) {
+      logger.warn("MCP settings read failed.", {
+        target,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: String(error).length,
+      })
+      return { ...base, readError: "配置读取失败" }
     }
   })
 }
