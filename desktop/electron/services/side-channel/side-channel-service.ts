@@ -73,13 +73,26 @@ export class SideChannelService implements ReplyTargetRuntime {
   }
 
   async start(): Promise<void> {
+    const bindAddress = this.deps.bindAddress ?? "127.0.0.1"
+    const resource = `${bindAddress}:${String(this.deps.preferredPort ?? 0)}${this.sendPath}`
     const permission = await this.deps.permissionGuard?.check({
       action: "network.listen",
       actor: { kind: "user" },
-      resource: `127.0.0.1:${String(this.deps.preferredPort ?? 0)}${this.sendPath}`,
+      resource,
       context: { serviceId: NETWORK_SERVICE_ID },
     })
     if (permission && !permission.allowed) {
+      this.deps.auditSink?.record({
+        action: "network.listen",
+        actor: { kind: "user" },
+        resource,
+        outcome: "denied",
+        metadata: {
+          serviceId: NETWORK_SERVICE_ID,
+          reason: permission.reason,
+          policyId: permission.policyId,
+        },
+      })
       throw new Error(permission.reason)
     }
     this.binding = await this.deps.networkRegistry.register({

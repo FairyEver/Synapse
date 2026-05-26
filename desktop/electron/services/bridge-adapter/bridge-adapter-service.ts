@@ -119,13 +119,27 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
   }
 
   async start(): Promise<void> {
+    const bindAddress = this.deps.bindAddress ?? "127.0.0.1"
+    const preferredPort = this.deps.preferredPort ?? DEFAULT_BRIDGE_PORT
+    const resource = `${bindAddress}:${String(preferredPort)}${this.path}`
     const permission = await this.deps.permissionGuard?.check({
       action: "network.listen",
       actor: { kind: "user" },
-      resource: `127.0.0.1:${String(this.deps.preferredPort ?? DEFAULT_BRIDGE_PORT)}${this.path}`,
+      resource,
       context: { serviceId: NETWORK_SERVICE_ID },
     })
     if (permission && !permission.allowed) {
+      this.deps.auditSink?.record({
+        action: "network.listen",
+        actor: { kind: "user" },
+        resource,
+        outcome: "denied",
+        metadata: {
+          serviceId: NETWORK_SERVICE_ID,
+          reason: permission.reason,
+          policyId: permission.policyId,
+        },
+      })
       throw new Error(permission.reason)
     }
     this.disposeDispatcher = this.deps.sideChannel.registerDispatcher("bridge", this)

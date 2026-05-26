@@ -12,6 +12,7 @@ import type {
   OutboxEntryV1,
 } from "../../../runtime/data-repo"
 import { createNetworkServiceRegistry } from "../../../runtime/network"
+import type { PermissionGuard } from "../../../runtime/security"
 import { createPermissionGuard, InMemoryAuditSink } from "../../../runtime/security"
 import type { ReplyTarget } from "../../reply-target"
 import {
@@ -343,6 +344,36 @@ describe("SideChannelService", () => {
     ])
     expect(JSON.stringify(auditSink.list())).not.toContain("sk-secret")
     expect(JSON.stringify(auditSink.list())).not.toContain("/Users/example/repo")
+  })
+
+  it("records denied audit when network listen permission is rejected", async () => {
+    const auditSink = new InMemoryAuditSink()
+    const service = new SideChannelService({
+      projectContainers: fakeProjectContainers(),
+      networkRegistry: createNetworkServiceRegistry(),
+      dataRepository: fakeDataRepository(new MemoryNamespace<OutboxEntryV1>("outbox")),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      permissionGuard: denyPermissionGuard(),
+      auditSink,
+      preferredPort: 49999,
+      token: "tok",
+    })
+
+    await expect(service.start()).rejects.toThrow("denied by test-policy")
+
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "network.listen",
+        actor: { kind: "user" },
+        resource: "127.0.0.1:49999/send",
+        outcome: "denied",
+        metadata: expect.objectContaining({
+          serviceId: "side-channel.send",
+          reason: "denied by test-policy",
+          policyId: "test-policy",
+        }),
+      }),
+    ])
   })
 
   it("fails side-channel sends when the reply target dispatcher is missing", async () => {
@@ -683,6 +714,17 @@ function fakeLogger(overrides: Partial<StructuredLogger> = {}): StructuredLogger
     ...overrides,
   }
   return logger
+}
+
+function denyPermissionGuard(): PermissionGuard {
+  return {
+    registerPolicy: vi.fn(() => () => {}),
+    check: vi.fn(async () => ({
+      allowed: false as const,
+      reason: "denied by test-policy",
+      policyId: "test-policy",
+    })),
+  }
 }
 
 async function expectEventually<T>(read: () => Promise<T>, expected: T): Promise<void> {
