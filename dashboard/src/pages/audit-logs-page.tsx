@@ -1,6 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
-import { EmptyState, ErrorState, LoadingState } from '@/components/page-state';
+import {
+  EmptyState,
+  ErrorState,
+  FeedbackMessage,
+  type FeedbackState,
+  LoadingState,
+} from '@/components/page-state';
 import { PaginationFooter } from '@/components/pagination-footer';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -27,8 +33,10 @@ export function AuditLogsPage() {
   const [action, setAction] = useState('');
   const [from, setFrom] = useState('');
   const [to, setTo] = useState('');
-  const [feedback, setFeedback] = useState('');
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [isExporting, setIsExporting] = useState(false);
   const [selectedLog, setSelectedLog] = useState<AuditLog | null>(null);
+  const exportingRef = useRef(false);
 
   const loader = useCallback(
     (options: { page: number; pageSize: number }) =>
@@ -54,11 +62,20 @@ export function AuditLogsPage() {
   }
 
   async function exportLogs() {
-    setFeedback('');
+    if (exportingRef.current) return;
+    exportingRef.current = true;
+    setFeedback(null);
+    setIsExporting(true);
     try {
       await adminApi.exportAuditLogs({ action, from, to });
     } catch (nextError) {
-      setFeedback(nextError instanceof Error ? nextError.message : '导出失败');
+      setFeedback({
+        message: nextError instanceof Error ? nextError.message : '导出失败',
+        tone: 'error',
+      });
+    } finally {
+      exportingRef.current = false;
+      setIsExporting(false);
     }
   }
 
@@ -86,8 +103,10 @@ export function AuditLogsPage() {
         <Button variant="outline" onClick={refresh}>
           查询
         </Button>
-        <Button onClick={exportLogs}>导出 CSV</Button>
-        <p className="text-sm text-muted-foreground">{feedback}</p>
+        <Button disabled={isExporting} onClick={exportLogs}>
+          导出 CSV
+        </Button>
+        <FeedbackMessage feedback={feedback} />
       </div>
       {isLoading ? <LoadingState /> : null}
       {error ? <ErrorState message={error} onRetry={refresh} /> : null}

@@ -69,19 +69,22 @@ export class LogFileController {
 
   @Get("recent")
   async getRecent(
+    @Query("from") from: string | undefined,
     @Query("level") level?: string,
     @Query("limit") limitStr?: string,
+    @Query("to") to?: string,
     @Req() request?: AdminRequest,
   ) {
     const limit = parseRecentLogLimit(limitStr);
+    const range = parseDownloadDateRange(from, to);
     if (level && !["debug", "info", "warn", "error", "fatal"].includes(level)) {
       throw new BadRequestException(`无效的日志级别：${level}`);
     }
-    const entries = await this.logFileService.readRecent({ level, limit });
+    const entries = await this.logFileService.readRecent({ ...range, level, limit });
     await this.recordLogAudit(request, {
       action: "logs.recent",
       targetId: "recent",
-      detail: { level, limit, count: entries.length },
+      detail: { from: range.from, level, limit, to: range.to, count: entries.length },
     });
     return entries;
   }

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,16 +17,24 @@ export function SystemPage() {
   const [data, setData] = useState<SystemOverview | null>(null);
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(true);
+  const latestRequestId = useRef(0);
 
   const refresh = useCallback(async () => {
+    const requestId = latestRequestId.current + 1;
+    latestRequestId.current = requestId;
     setIsLoading(true);
     setError('');
     try {
-      setData(await adminApi.getSystemOverview());
+      const nextData = await adminApi.getSystemOverview();
+      if (requestId !== latestRequestId.current) return;
+      setData(nextData);
     } catch (nextError) {
+      if (requestId !== latestRequestId.current) return;
       setError(nextError instanceof Error ? nextError.message : '加载失败');
     } finally {
-      setIsLoading(false);
+      if (requestId === latestRequestId.current) {
+        setIsLoading(false);
+      }
     }
   }, []);
 
@@ -48,7 +56,7 @@ export function SystemPage() {
         <Card>
           <CardContent className="flex items-center justify-between gap-4">
             <p className="text-sm text-destructive">{error}</p>
-            <Button variant="outline" onClick={refresh}>
+            <Button variant="outline" disabled={isLoading} onClick={refresh}>
               重试
             </Button>
           </CardContent>
@@ -78,7 +86,7 @@ export function SystemPage() {
           <span className="text-sm text-muted-foreground">
             服务器时间：{formatDate(data?.serverTime)}
           </span>
-          <Button variant="outline" onClick={refresh}>
+          <Button variant="outline" disabled={isLoading} onClick={refresh}>
             刷新
           </Button>
         </CardContent>

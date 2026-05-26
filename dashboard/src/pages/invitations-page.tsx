@@ -1,6 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
-import { EmptyState, ErrorState, LoadingState } from '@/components/page-state';
+import {
+  EmptyState,
+  ErrorState,
+  FeedbackMessage,
+  type FeedbackState,
+  LoadingState,
+} from '@/components/page-state';
 import { PaginationFooter } from '@/components/pagination-footer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -60,26 +66,28 @@ export function InvitationsPage() {
   );
   const { error, isLoading, page, pageSize, refresh, rows, setPage, total } =
     useAdminList(loader);
-  const [feedback, setFeedback] = useState('');
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [manualCopyUrl, setManualCopyUrl] = useState('');
   const [deletingIds, setDeletingIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
+  const deletingIdsRef = useRef(new Set<string>());
 
   async function copyInvitation(invitation: AdminInvitationRow) {
     if (!invitation.inviteUrl) return;
     setManualCopyUrl('');
     if (await writeClipboardText(invitation.inviteUrl)) {
-      setFeedback('邀请链接已复制');
+      setFeedback({ message: '邀请链接已复制', tone: 'neutral' });
       return;
     }
-    setFeedback('复制失败');
+    setFeedback({ message: '复制失败', tone: 'error' });
     setManualCopyUrl(invitation.inviteUrl);
   }
 
   async function deleteInvitation(invitation: AdminInvitationRow) {
-    if (deletingIds.has(invitation.id)) return;
-    setFeedback('');
+    if (deletingIdsRef.current.has(invitation.id)) return;
+    deletingIdsRef.current.add(invitation.id);
+    setFeedback(null);
     setDeletingIds((current) => new Set(current).add(invitation.id));
     try {
       await adminApi.deleteInvitation(invitation.id);
@@ -89,8 +97,12 @@ export function InvitationsPage() {
         await refresh();
       }
     } catch (nextError) {
-      setFeedback(nextError instanceof Error ? nextError.message : '删除失败');
+      setFeedback({
+        message: nextError instanceof Error ? nextError.message : '删除失败',
+        tone: 'error',
+      });
     } finally {
+      deletingIdsRef.current.delete(invitation.id);
       setDeletingIds((current) => {
         const next = new Set(current);
         next.delete(invitation.id);
@@ -101,7 +113,7 @@ export function InvitationsPage() {
 
   return (
     <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 pt-0">
-      {feedback ? <p className="text-sm text-muted-foreground">{feedback}</p> : null}
+      <FeedbackMessage feedback={feedback} />
       {manualCopyUrl ? (
         <Input aria-label="邀请链接" readOnly value={manualCopyUrl} />
       ) : null}

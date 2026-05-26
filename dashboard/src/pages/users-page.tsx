@@ -1,6 +1,12 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 
-import { EmptyState, ErrorState, LoadingState } from '@/components/page-state';
+import {
+  EmptyState,
+  ErrorState,
+  FeedbackMessage,
+  type FeedbackState,
+  LoadingState,
+} from '@/components/page-state';
 import { PaginationFooter } from '@/components/pagination-footer';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -68,7 +74,7 @@ export function UsersPage() {
   );
   const { error, isLoading, page, pageSize, refresh, rows, setPage, total } =
     useAdminList(loader);
-  const [feedback, setFeedback] = useState('');
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
   const [submittingIds, setSubmittingIds] = useState<ReadonlySet<string>>(
     () => new Set(),
   );
@@ -83,17 +89,21 @@ export function UsersPage() {
   const [permissionFeedback, setPermissionFeedback] = useState('');
   const [isPermissionLoading, setIsPermissionLoading] = useState(false);
   const [isPermissionSaving, setIsPermissionSaving] = useState(false);
+  const latestPermissionRequestId = useRef(0);
 
   async function updateStatus(user: AdminUserRow) {
     if (submittingIds.has(user.id)) return;
     const nextStatus = user.status === 'active' ? 'disabled' : 'active';
-    setFeedback('');
+    setFeedback(null);
     setSubmittingIds((current) => new Set(current).add(user.id));
     try {
       await adminApi.updateUserStatus(user.id, nextStatus);
       await refresh();
     } catch (nextError) {
-      setFeedback(nextError instanceof Error ? nextError.message : '操作失败');
+      setFeedback({
+        message: nextError instanceof Error ? nextError.message : '操作失败',
+        tone: 'error',
+      });
     } finally {
       setSubmittingIds((current) => {
         const next = new Set(current);
@@ -104,7 +114,11 @@ export function UsersPage() {
   }
 
   async function openPermissions(user: AdminUserRow) {
+    const requestId = latestPermissionRequestId.current + 1;
+    latestPermissionRequestId.current = requestId;
     setSelectedUser(user);
+    setDefinitions([]);
+    setPermissionKeys(new Set());
     setPermissionError('');
     setPermissionFeedback('');
     setIsPermissionLoading(true);
@@ -113,14 +127,20 @@ export function UsersPage() {
         adminApi.listModulePermissions(),
         adminApi.listUserModulePermissions(user.id),
       ]);
+      if (requestId !== latestPermissionRequestId.current) return;
       setDefinitions(nextDefinitions);
       setPermissionKeys(new Set(permissions.permissionKeys));
     } catch (nextError) {
+      if (requestId !== latestPermissionRequestId.current) return;
+      setDefinitions([]);
+      setPermissionKeys(new Set());
       setPermissionError(
         nextError instanceof Error ? nextError.message : '加载失败',
       );
     } finally {
-      setIsPermissionLoading(false);
+      if (requestId === latestPermissionRequestId.current) {
+        setIsPermissionLoading(false);
+      }
     }
   }
 
@@ -148,7 +168,7 @@ export function UsersPage() {
 
   return (
     <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 pt-0">
-      {feedback ? <p className="text-sm text-muted-foreground">{feedback}</p> : null}
+      <FeedbackMessage feedback={feedback} />
       {isLoading ? <LoadingState /> : null}
       {error ? <ErrorState message={error} onRetry={refresh} /> : null}
       {!isLoading && !error ? (
@@ -218,7 +238,16 @@ export function UsersPage() {
       ) : null}
       <Sheet
         open={selectedUser !== null}
-        onOpenChange={(open) => !open && setSelectedUser(null)}
+        onOpenChange={(open) => {
+          if (open) return;
+          latestPermissionRequestId.current += 1;
+          setSelectedUser(null);
+          setDefinitions([]);
+          setPermissionKeys(new Set());
+          setPermissionError('');
+          setPermissionFeedback('');
+          setIsPermissionLoading(false);
+        }}
       >
         <SheetContent
           aria-describedby={undefined}
@@ -240,7 +269,7 @@ export function UsersPage() {
                 {permissionFeedback}
               </p>
             ) : null}
-            {!isPermissionLoading ? (
+            {!isPermissionLoading && !permissionError ? (
               <>
                 <div className="grid gap-2">
                   {definitions.map((definition) => (
@@ -265,7 +294,10 @@ export function UsersPage() {
                     </label>
                   ))}
                 </div>
-                <Button disabled={isPermissionSaving} onClick={savePermissions}>
+                <Button
+                  disabled={isPermissionSaving || definitions.length === 0}
+                  onClick={savePermissions}
+                >
                   保存
                 </Button>
               </>

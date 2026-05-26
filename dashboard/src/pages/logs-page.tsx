@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { EmptyState, ErrorState, LoadingState } from '@/components/page-state';
+import {
+  EmptyState,
+  ErrorState,
+  FeedbackMessage,
+  type FeedbackState,
+  LoadingState,
+} from '@/components/page-state';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -45,8 +51,12 @@ export function LogsPage() {
   const [cleanupBefore, setCleanupBefore] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [feedback, setFeedback] = useState('');
+  const [feedback, setFeedback] = useState<FeedbackState | null>(null);
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const latestRequestId = useRef(0);
+  const cleaningUpRef = useRef(false);
+  const downloadingRef = useRef(false);
 
   const refresh = useCallback(async () => {
     const requestId = latestRequestId.current + 1;
@@ -56,8 +66,10 @@ export function LogsPage() {
     try {
       const [nextEntries, nextFiles] = await Promise.all([
         adminApi.fetchRecentLogs({
+          from,
           level: level === 'all' ? undefined : level,
           limit: 200,
+          to,
         }),
         adminApi.listLogFiles(),
       ]);
@@ -72,7 +84,7 @@ export function LogsPage() {
         setIsLoading(false);
       }
     }
-  }, [level]);
+  }, [from, level, to]);
 
   useEffect(() => {
     void refresh();
@@ -80,22 +92,40 @@ export function LogsPage() {
 
   async function cleanupLogs() {
     if (!cleanupBefore) return;
-    setFeedback('');
+    if (cleaningUpRef.current) return;
+    cleaningUpRef.current = true;
+    setFeedback(null);
+    setIsCleaningUp(true);
     try {
       const result = await adminApi.cleanupLogs(cleanupBefore);
-      setFeedback(`已清理 ${result.deleted} 条`);
+      setFeedback({ message: `已清理 ${result.deleted} 条`, tone: 'neutral' });
       await refresh();
     } catch (nextError) {
-      setFeedback(nextError instanceof Error ? nextError.message : '清理失败');
+      setFeedback({
+        message: nextError instanceof Error ? nextError.message : '清理失败',
+        tone: 'error',
+      });
+    } finally {
+      cleaningUpRef.current = false;
+      setIsCleaningUp(false);
     }
   }
 
   async function downloadLogs(options: { from?: string; to?: string } = {}) {
-    setFeedback('');
+    if (downloadingRef.current) return;
+    downloadingRef.current = true;
+    setFeedback(null);
+    setIsDownloading(true);
     try {
       await adminApi.downloadLogs(options);
     } catch (nextError) {
-      setFeedback(nextError instanceof Error ? nextError.message : '下载失败');
+      setFeedback({
+        message: nextError instanceof Error ? nextError.message : '下载失败',
+        tone: 'error',
+      });
+    } finally {
+      downloadingRef.current = false;
+      setIsDownloading(false);
     }
   }
 
@@ -121,7 +151,7 @@ export function LogsPage() {
         <Button variant="outline" onClick={refresh}>
           刷新
         </Button>
-        <p className="text-sm text-muted-foreground">{feedback}</p>
+        <FeedbackMessage feedback={feedback} />
       </div>
       {isLoading ? <LoadingState /> : null}
       {error ? <ErrorState message={error} onRetry={refresh} /> : null}
@@ -164,11 +194,14 @@ export function LogsPage() {
             />
             <Button
               variant="outline"
+              disabled={isDownloading}
               onClick={() => downloadLogs({ from, to })}
             >
               下载范围
             </Button>
-            <Button onClick={() => downloadLogs()}>下载全部</Button>
+            <Button disabled={isDownloading} onClick={() => downloadLogs()}>
+              下载全部
+            </Button>
             <Input
               className={filterControlClass}
               type="date"
@@ -177,7 +210,7 @@ export function LogsPage() {
             />
             <Button
               variant="outline"
-              disabled={!cleanupBefore}
+              disabled={!cleanupBefore || isCleaningUp}
               onClick={cleanupLogs}
             >
               清理

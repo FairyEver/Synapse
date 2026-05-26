@@ -46,9 +46,9 @@ describe("LogFileController", () => {
   it("caps recent log limit", async () => {
     const { controller, service } = createController();
 
-    await controller.getRecent(undefined, "999999999");
+    await controller.getRecent(undefined, undefined, "999999999");
 
-    expect(service.readRecent).toHaveBeenCalledWith({ level: undefined, limit: 1000 });
+    expect(service.readRecent).toHaveBeenCalledWith({ from: undefined, level: undefined, limit: 1000, to: undefined });
   });
 
   it("records audit logs for recent log reads", async () => {
@@ -57,28 +57,37 @@ describe("LogFileController", () => {
       { time: "2026-05-23T00:00:00.000Z", level: "error", msg: "failed" },
     ]);
 
-    await expect(controller.getRecent("error", "50", {
+    await expect(controller.getRecent("2026-05-01", "error", "50", "2026-05-23", {
       admin: { email: "admin@example.com" },
       ip: "203.0.113.10",
     } as never)).resolves.toEqual([
       { time: "2026-05-23T00:00:00.000Z", level: "error", msg: "failed" },
     ]);
 
-    expect(service.readRecent).toHaveBeenCalledWith({ level: "error", limit: 50 });
+    expect(service.readRecent).toHaveBeenCalledWith({ from: "2026-05-01", level: "error", limit: 50, to: "2026-05-23" });
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "admin@example.com",
       action: "logs.recent",
       targetType: "logs",
       targetId: "recent",
-      detail: { level: "error", limit: 50, count: 1 },
+      detail: { from: "2026-05-01", level: "error", limit: 50, to: "2026-05-23", count: 1 },
       ipAddress: "203.0.113.10",
     });
+  });
+
+  it("rejects reversed recent log date ranges before reading logs", async () => {
+    const { controller, service } = createController();
+
+    await expect(controller.getRecent("2026-05-23", undefined, "50", "2026-05-01"))
+      .rejects
+      .toThrow("from 不能晚于 to。");
+    expect(service.readRecent).not.toHaveBeenCalled();
   });
 
   it("rejects non-numeric recent log limit", async () => {
     const { controller } = createController();
 
-    await expect(controller.getRecent(undefined, "abc"))
+    await expect(controller.getRecent(undefined, undefined, "abc"))
       .rejects
       .toThrow("limit 参数必须为数字。");
   });
@@ -86,7 +95,7 @@ describe("LogFileController", () => {
   it("rejects invalid recent log levels with a localized message", async () => {
     const { controller } = createController();
 
-    await expect(controller.getRecent("trace", "50"))
+    await expect(controller.getRecent(undefined, "trace", "50"))
       .rejects
       .toThrow("无效的日志级别：trace");
   });

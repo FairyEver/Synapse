@@ -70,8 +70,8 @@ export class LogFileService {
     });
   }
 
-  async readRecent(opts: { level?: string; limit?: number } = {}): Promise<LogEntry[]> {
-    const { level, limit = 200 } = opts;
+  async readRecent(opts: { from?: string; level?: string; limit?: number; to?: string } = {}): Promise<LogEntry[]> {
+    const { from, level, limit = 200, to } = opts;
     const files = await this.listFiles();
     if (files.length === 0) return [];
 
@@ -87,8 +87,12 @@ export class LogFileService {
           try {
             const parsed = JSON.parse(line);
             if (targetLevel !== undefined && parsed.level !== targetLevel) continue;
+            const entryTime = new Date(parsed.time);
+            const entryDate = entryTime.toISOString().slice(0, 10);
+            if (from && entryDate < from) continue;
+            if (to && entryDate > to) continue;
             results.push({
-              time: new Date(parsed.time).toISOString(),
+              time: entryTime.toISOString(),
               level: this.levelToName(parsed.level),
               msg: parsed.msg ?? parsed.message ?? "",
               ...(parsed.req && { req: { method: parsed.req.method, url: parsed.req.url } }),

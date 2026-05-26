@@ -242,7 +242,11 @@ async function downloadFile(path: string, filename: string) {
   const response = await fetch(path, { credentials: 'include' });
 
   if (!response.ok) {
-    throw new ApiError(await readErrorMessage(response), response.status);
+    const message = await readErrorMessage(response);
+    if (shouldNotifyAuthExpired(path, response.status)) {
+      notifyAuthExpired();
+    }
+    throw new ApiError(message, response.status);
   }
 
   const objectUrl = URL.createObjectURL(await response.blob());
@@ -347,7 +351,9 @@ export const adminApi = {
       'audit-logs.csv',
     ),
   listLogFiles: () => request<LogFileInfo[]>(`${adminApiBasePath}/logs/files`),
-  fetchRecentLogs: (options: { level?: string; limit?: number } = {}) =>
+  fetchRecentLogs: (
+    options: { from?: string; level?: string; limit?: number; to?: string } = {},
+  ) =>
     request<LogEntry[]>(
       `${adminApiBasePath}/logs/recent${querySuffix(options)}`,
     ),

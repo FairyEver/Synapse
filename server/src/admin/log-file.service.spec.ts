@@ -111,6 +111,29 @@ describe("LogFileService", () => {
     expect(handle.read).toHaveBeenCalledTimes(1);
   });
 
+  it("filters recent entries by date range", async () => {
+    const oldEntry = JSON.stringify({ time: "2026-05-21T23:00:00.000Z", level: 30, msg: "old" });
+    const keptEntry = JSON.stringify({ time: "2026-05-23T01:00:00.000Z", level: 30, msg: "kept" });
+    const newEntry = JSON.stringify({ time: "2026-05-24T01:00:00.000Z", level: 30, msg: "new" });
+    const content = `${oldEntry}\n${keptEntry}\n${newEntry}\n`;
+    mockReadableFile(content);
+    mockedReaddir.mockResolvedValue(["app.log"] as never);
+    mockedStat.mockResolvedValue({
+      size: Buffer.byteLength(content),
+      mtime: new Date("2026-05-24T00:00:00.000Z"),
+    } as never);
+
+    const service = new LogFileService("/tmp/synapse-logs");
+
+    await expect(service.readRecent({ from: "2026-05-22", to: "2026-05-23" })).resolves.toEqual([
+      {
+        time: "2026-05-23T01:00:00.000Z",
+        level: "info",
+        msg: "kept",
+      },
+    ]);
+  });
+
   it("continues cleanup when one log file cannot be deleted", async () => {
     mockedReaddir.mockResolvedValue(["server.2026-05-01.log", "server.2026-05-02.log"] as never);
     mockedStat.mockResolvedValue({

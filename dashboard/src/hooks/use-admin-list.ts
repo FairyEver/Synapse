@@ -14,6 +14,7 @@ export function useAdminList<T>(
   const [total, setTotal] = useState(0);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const isMountedRef = useRef(true);
   const latestRequestId = useRef(0);
 
   const refresh = useCallback(async () => {
@@ -24,18 +25,26 @@ export function useAdminList<T>(
 
     try {
       const result = await loader({ page, pageSize });
+      if (!isMountedRef.current) return;
       if (requestId !== latestRequestId.current) return;
       setRows(result.data);
       setTotal(result.total);
     } catch (nextError) {
+      if (!isMountedRef.current) return;
       if (requestId !== latestRequestId.current) return;
       setError(nextError instanceof Error ? nextError.message : '加载失败');
     } finally {
-      if (requestId === latestRequestId.current) {
+      if (isMountedRef.current && requestId === latestRequestId.current) {
         setIsLoading(false);
       }
     }
   }, [loader, page, pageSize]);
+
+  useEffect(() => {
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     void refresh();

@@ -27,3 +27,23 @@ export function ErrorState({
 export function EmptyState() {
   return <p className="p-4 text-sm text-muted-foreground">暂无记录</p>;
 }
+
+export type FeedbackState = {
+  message: string;
+  tone: 'error' | 'neutral';
+};
+
+export function FeedbackMessage({ feedback }: { feedback: FeedbackState | null }) {
+  if (!feedback) return null;
+  return (
+    <p
+      className={
+        feedback.tone === 'error'
+          ? 'text-sm text-destructive'
+          : 'text-sm text-muted-foreground'
+      }
+    >
+      {feedback.message}
+    </p>
+  );
+}
