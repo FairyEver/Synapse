@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 import {
   Dialog,
   DialogContent,
@@ -46,6 +47,7 @@ function WorkflowImportDialog({
   }, [preview])
 
   const rows = preview?.modelReferences ?? []
+  const missingProviders = Boolean(preview && rows.length > 0 && preview.providerOptions.length === 0)
   const canImport = Boolean(preview) && rows.every((row) => mappings[row.id]?.targetProviderId && mappings[row.id]?.targetModelTier)
 
   const providerById = useMemo(
@@ -101,6 +103,11 @@ function WorkflowImportDialog({
               <span className="text-muted-foreground">{preview.workflow.nodeCount} 个节点</span>
               <span className="text-muted-foreground">{preview.workflow.modelReferenceCount} 个模型</span>
             </div>
+            {missingProviders ? (
+              <Alert>
+                <AlertDescription>先配置供应商后再导入。</AlertDescription>
+              </Alert>
+            ) : null}
             <ScrollArea className="min-h-0 flex-1 pr-3">
               <div className="space-y-3">
                 {rows.map((ref) => {

@@ -89,6 +89,20 @@ describe("WorkflowImportDialog", () => {
     expect(document.body.textContent).toContain("终审")
   })
 
+  it("explains why import is unavailable without local providers", () => {
+    renderDialog({
+      preview: {
+        ...preview(),
+        providerOptions: [],
+        suggestedMappings: [],
+      },
+    })
+
+    expect(document.body.textContent).toContain("先配置供应商后再导入")
+    const importButton = Array.from(document.querySelectorAll("button")).find((node) => node.textContent === "导入")
+    expect(importButton?.disabled).toBe(true)
+  })
+
   it("submits suggested mappings by default", () => {
     const { onImport } = renderDialog()
     const button = Array.from(document.querySelectorAll("button")).find((node) => node.textContent === "导入")
