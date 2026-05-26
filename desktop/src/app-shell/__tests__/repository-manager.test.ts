@@ -224,6 +224,38 @@ describe("RepositoryManager", () => {
     expect(manager.getContentList("skill").map((item) => item.id)).toEqual(["repo-2-skill"])
   })
 
+  it("continues active repository switching when pending push refresh fails", async () => {
+    let currentConfig: SynapseConfig = {
+      ...config,
+      repositories: [repository, addedRepository],
+    }
+    const bridge = createBridge()
+    bridge.config.get = vi.fn(async () => currentConfig)
+    bridge.config.update = vi.fn(async (patch) => {
+      currentConfig = { ...currentConfig, ...patch }
+      return currentConfig
+    })
+    installBridge(bridge)
+    const manager = new RepositoryManager()
+
+    await manager.initialize()
+    await manager.refreshContentList("skill")
+    expect(manager.getContentList("skill")).toHaveLength(3)
+
+    bridge.repository.getPendingPushes = vi.fn(async () => {
+      throw new Error("pending push database unavailable")
+    })
+    bridge.content.list = vi.fn(({ contentType }: { contentType: SynapseContentType }) => {
+      if (contentType !== "skill") return Promise.resolve([])
+      return Promise.resolve([createSkill("repo-2-skill")])
+    }) as typeof bridge.content.list
+
+    await expect(manager.switchActiveRepository(addedRepository.uuid)).resolves.toBeUndefined()
+
+    expect(manager.getActiveRepositoryUuid()).toBe(addedRepository.uuid)
+    expect(manager.getContentList("skill").map((item) => item.id)).toEqual(["repo-2-skill"])
+  })
+
   it("stores sync snapshot updates and mirrors pending pushes", async () => {
     const snapshotListeners: Array<(event: SynapseRepositorySyncSnapshotUpdatedEvent) => void> = []
     const bridge = createBridge()

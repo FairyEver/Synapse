@@ -180,7 +180,11 @@ class RepositoryManager {
     }
 
     await this.updateConfig({ activeRepoUuid: uuid })
-    await this.refreshPendingPushes(uuid)
+    try {
+      await this.refreshPendingPushes(uuid)
+    } catch (error) {
+      logger.warn("repository.pending-push-refresh-failed", { uuid, error: String(error) })
+    }
   }
 
   async clearActiveRepository(): Promise<void> {
