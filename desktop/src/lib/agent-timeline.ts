@@ -135,6 +135,7 @@ export function historyRecordToTimelineItem(
     agentSessionId: stringMetadata(metadata, "agentSessionId"),
     threadId: stringMetadata(metadata, "threadId"),
   }
+  const storedMetadata = storedResultMetadata(metadata)
   switch (stringMetadata(metadata, "agentEventType")) {
     case "toolUse":
       return {
@@ -174,6 +175,7 @@ export function historyRecordToTimelineItem(
         role: entry.role,
         content: entry.content,
         legacy: entry.role === "tool" || entry.role === "system",
+        ...(storedMetadata ? { metadata: storedMetadata } : {}),
       }
   }
 }
@@ -394,6 +396,19 @@ function recordMetadata(metadata: Record<string, unknown> | undefined, key: stri
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined
+}
+
+function storedResultMetadata(metadata: Record<string, unknown> | undefined): SynapseAgentResultMetadata | undefined {
+  const result = {
+    model: stringMetadata(metadata, "model"),
+    effort: stringMetadata(metadata, "effort"),
+    contextRemainingPercent: numberMetadata(metadata, "contextRemainingPercent"),
+    workDir: stringMetadata(metadata, "workDir"),
+    cancelled: booleanMetadata(metadata, "cancelled"),
+    usage: recordMetadata(metadata, "usage"),
+    costUsd: numberMetadata(metadata, "costUsd"),
+  }
+  return Object.values(result).some((value) => value !== undefined) ? result : undefined
 }
 
 function resultMetadata(event: Extract<SynapseAgentEvent, { type: "result" }>): SynapseAgentResultMetadata | undefined {
