@@ -80,7 +80,7 @@ export function AuditLogsPage() {
   }
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 pt-0">
+    <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0">
       <div className="flex flex-wrap items-center gap-2">
         <Input
           className={filterControlClass}

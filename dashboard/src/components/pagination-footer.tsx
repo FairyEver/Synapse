@@ -11,6 +11,8 @@ export function PaginationFooter({
   total: number;
   onPageChange: (page: number) => void;
 }) {
+  if (total <= 0) return null;
+
   const pageCount = Math.max(1, Math.ceil(total / pageSize));
 
   return (
