@@ -1,7 +1,8 @@
-import { BadRequestException, Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common"
+import { Body, Controller, Get, Post, Req, UseGuards } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Request } from "express"
 import { z } from "zod"
+import { badRequestFromZodError } from "../common/zod-validation"
 import { AuthenticatedUserRequest, UserAuthGuard } from "./user-auth.guard"
 import { UserAuthService } from "./user-auth.service"
 
@@ -57,7 +58,7 @@ export class UserAuthController {
 function parseBody<T extends z.ZodType>(schema: T, body: unknown, message: string): z.infer<T> {
   const result = schema.safeParse(body)
   if (!result.success) {
-    throw new BadRequestException(message)
+    throw badRequestFromZodError(result.error, message)
   }
   return result.data
 }

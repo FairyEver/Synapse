@@ -204,7 +204,7 @@ describe("AdminController", () => {
     const controller = createController({ deleteInvitations: vi.fn() } as never)
 
     expect(() => controller.deleteInvitations({ ids: [] }, {} as never))
-      .toThrow("邀请 ID 无效。")
+      .toThrow("邀请 ID 无效：ids 至少选择 1 项")
   })
 
   it("rejects invalid user status", async () => {
@@ -212,7 +212,7 @@ describe("AdminController", () => {
 
     await expect(controller.updateUserStatus("user-1", { status: "bad" }))
       .rejects
-      .toThrow("用户状态无效。")
+      .toThrow("用户状态无效：status 必须是 active 或 disabled")
   })
 
   it("lists module permission definitions through the service", () => {
@@ -281,7 +281,7 @@ describe("AdminController", () => {
       { admin: { id: "admin-1", email: "admin@example.com" } } as never,
     ))
       .rejects
-      .toThrow("用户模块权限无效。")
+      .toThrow("用户模块权限无效：permissionKeys.0 模块权限不存在或已停用。")
     expect(replaceUserModulePermissions).not.toHaveBeenCalled()
   })
 
@@ -295,7 +295,7 @@ describe("AdminController", () => {
       { admin: { id: "admin-1", email: "admin@example.com" } } as never,
     ))
       .rejects
-      .toThrow("用户模块权限无效。")
+      .toThrow("用户模块权限无效：permissionKeys.0 至少 1 个字符")
     expect(replaceUserModulePermissions).not.toHaveBeenCalled()
   })
 
@@ -309,7 +309,7 @@ describe("AdminController", () => {
       { admin: { id: "admin-1", email: "admin@example.com" } } as never,
     ))
       .rejects
-      .toThrow("用户模块权限无效。")
+      .toThrow("用户模块权限无效：包含不支持的字段：roleIds")
     expect(replaceUserModulePermissions).not.toHaveBeenCalled()
   })
 })

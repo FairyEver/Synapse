@@ -62,6 +62,20 @@ describe("UserAuthController", () => {
     expect(auth.register).not.toHaveBeenCalled()
   })
 
+  it("returns field details for invalid register requests", () => {
+    const auth = {
+      register: vi.fn(),
+    }
+    const controller = new UserAuthController(auth as unknown as UserAuthService)
+
+    expect(() => controller.register({
+      email: "not-an-email",
+      password: "short",
+    }, { ip: "203.0.113.21" } as never))
+      .toThrow("注册请求无效：email 格式无效；password 至少 8 个字符")
+    expect(auth.register).not.toHaveBeenCalled()
+  })
+
   it("passes valid refresh requests with the request ip to the service", () => {
     const auth = {
       refresh: vi.fn().mockResolvedValue({ accessToken: "access", refreshToken: "refresh" }),
