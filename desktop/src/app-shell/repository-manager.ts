@@ -69,6 +69,7 @@ class RepositoryManager {
   private contentCache: Map<SynapseContentType, SynapseContentMeta[]> = new Map()
   private contentLoading: Map<SynapseContentType, boolean> = new Map()
   private contentErrors: Map<SynapseContentType, Error | null> = new Map()
+  private contentRefreshVersions: Map<SynapseContentType, number> = new Map()
   private contentSnapshots: Map<SynapseContentType, { items: SynapseContentMeta[]; isLoading: boolean; error: Error | null }> = new Map()
 
   // ===== 订阅者 =====
@@ -560,21 +561,32 @@ class RepositoryManager {
       return
     }
 
+    const activeRepositoryUuid = this.getActiveRepositoryUuid()
+    const refreshVersion = (this.contentRefreshVersions.get(contentType) ?? 0) + 1
+    this.contentRefreshVersions.set(contentType, refreshVersion)
     this.contentLoading.set(contentType, true)
     this.notifyContentSubscribers(contentType)
 
     try {
       const items = await bridge.list({ contentType })
+      if (!this.isCurrentContentRefresh(contentType, refreshVersion, activeRepositoryUuid)) {
+        return
+      }
       this.contentCache.set(contentType, items as SynapseContentMeta[])
       this.contentErrors.set(contentType, null)
     } catch (error) {
+      if (!this.isCurrentContentRefresh(contentType, refreshVersion, activeRepositoryUuid)) {
+        return
+      }
       this.contentErrors.set(
         contentType,
         error instanceof Error ? error : new Error("Failed to load content"),
       )
     } finally {
-      this.contentLoading.set(contentType, false)
-      this.notifyContentSubscribers(contentType)
+      if (this.isCurrentContentRefresh(contentType, refreshVersion, activeRepositoryUuid)) {
+        this.contentLoading.set(contentType, false)
+        this.notifyContentSubscribers(contentType)
+      }
     }
   }
 
@@ -887,11 +899,24 @@ class RepositoryManager {
 
   private resetContentForRepositoryChange(): void {
     for (const contentType of ["rule", "skill", "prompt"] as SynapseContentType[]) {
+      this.contentRefreshVersions.set(
+        contentType,
+        (this.contentRefreshVersions.get(contentType) ?? 0) + 1,
+      )
       this.contentCache.set(contentType, [])
       this.contentLoading.set(contentType, false)
       this.contentErrors.set(contentType, null)
       this.notifyContentSubscribers(contentType)
     }
+  }
+
+  private isCurrentContentRefresh(
+    contentType: SynapseContentType,
+    refreshVersion: number,
+    activeRepositoryUuid: string | null,
+  ): boolean {
+    return this.contentRefreshVersions.get(contentType) === refreshVersion
+      && this.getActiveRepositoryUuid() === activeRepositoryUuid
   }
 
   private getPreparingStatusText(operation: SynapseRepositoryOperationKind): string {

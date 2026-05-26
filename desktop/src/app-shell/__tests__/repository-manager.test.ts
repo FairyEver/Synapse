@@ -189,6 +189,41 @@ describe("RepositoryManager", () => {
     })
   })
 
+  it("ignores stale content refresh results after the active repository changes", async () => {
+    let currentConfig: SynapseConfig = {
+      ...config,
+      repositories: [repository, addedRepository],
+    }
+    const skillListResolvers: Array<(items: SynapseContentMeta<"skill">[]) => void> = []
+    const bridge = createBridge()
+    bridge.config.get = vi.fn(async () => currentConfig)
+    bridge.config.update = vi.fn(async (patch) => {
+      currentConfig = { ...currentConfig, ...patch }
+      return currentConfig
+    })
+    bridge.content.list = vi.fn(({ contentType }: { contentType: SynapseContentType }) => {
+      if (contentType !== "skill") return Promise.resolve([])
+      return new Promise<SynapseContentMeta<"skill">[]>((resolve) => {
+        skillListResolvers.push(resolve)
+      })
+    }) as typeof bridge.content.list
+    installBridge(bridge)
+    const manager = new RepositoryManager()
+
+    await manager.initialize()
+    const staleRefresh = manager.refreshContentList("skill")
+    await manager.updateConfig({ activeRepoUuid: addedRepository.uuid })
+    const currentRefresh = manager.refreshContentList("skill")
+
+    skillListResolvers[1]([createSkill("repo-2-skill")])
+    await currentRefresh
+    expect(manager.getContentList("skill").map((item) => item.id)).toEqual(["repo-2-skill"])
+
+    skillListResolvers[0]([createSkill("repo-1-skill")])
+    await staleRefresh
+    expect(manager.getContentList("skill").map((item) => item.id)).toEqual(["repo-2-skill"])
+  })
+
   it("stores sync snapshot updates and mirrors pending pushes", async () => {
     const snapshotListeners: Array<(event: SynapseRepositorySyncSnapshotUpdatedEvent) => void> = []
     const bridge = createBridge()
