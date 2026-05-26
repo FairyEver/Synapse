@@ -1,8 +1,17 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
 import type { WorkflowModelMapping } from "../../../src/types/workflow-package"
 import type { CCProvider } from "../provider/types"
 import { WorkflowPackageService } from "../workflow/workflow-package-service"
+
+const logger = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+}))
+
+vi.mock("../log-store", () => ({
+  createMainLogger: () => logger,
+}))
 
 const nowIso = "2026-05-19T10:00:00.000Z"
 
@@ -105,6 +114,11 @@ function createService() {
 }
 
 describe("WorkflowPackageService", () => {
+  beforeEach(() => {
+    logger.info.mockClear()
+    logger.warn.mockClear()
+  })
+
   it("builds an export package with grouped model references", async () => {
     const { service } = createService()
     const pkg = await service.buildExportPackage("workflow-source")
@@ -169,6 +183,14 @@ describe("WorkflowPackageService", () => {
     const result = await service.importPackage(pkg, mappings)
 
     expect(result).toEqual({ workflowId: "workflow-imported", versionHash: "v_imported" })
+    expect(logger.info).toHaveBeenCalledWith("workflow package import succeeded", {
+      sourceWorkflowId: "workflow-source",
+      workflowId: "workflow-imported",
+      modelReferenceCount: 2,
+      mappingCount: 2,
+      nodeCount: 3,
+      versionHash: "v_imported",
+    })
     expect(saved).toHaveLength(1)
     const imported = saved[0]
     expect(imported.id).toBe("workflow-imported")
@@ -188,6 +210,12 @@ describe("WorkflowPackageService", () => {
     const pkg = await service.buildExportPackage("workflow-source")
 
     await expect(service.importPackage(pkg, [])).rejects.toThrow(/Missing model mapping/)
+    expect(logger.warn).toHaveBeenCalledWith("workflow package import missing model mapping", {
+      sourceWorkflowId: "workflow-source",
+      sourceRefId: "model-ref-1",
+      modelReferenceCount: 2,
+      mappingCount: 0,
+    })
   })
 
   it("rejects import when a mapping targets an unknown provider", async () => {

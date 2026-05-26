@@ -10,10 +10,12 @@ import type {
 } from "../../../src/types/workflow-package"
 import type { ProviderService } from "../provider"
 import type { CCProvider } from "../provider/types"
+import { createMainLogger } from "../log-store"
 import type { WorkflowSaveError, WorkflowService } from "./workflow-service"
 
 const PACKAGE_FORMAT = "synapse-workflow-package-v1" as const
 const MODEL_TIERS: readonly WorkflowPackageModelTier[] = ["default", "haiku", "sonnet", "opus"]
+const logger = createMainLogger("service.workflow.package")
 
 interface WorkflowPackageServiceDeps {
   readonly workflowService: Pick<WorkflowService, "get" | "save">
@@ -51,6 +53,13 @@ export class WorkflowPackageService {
     assertPackage(pkg)
     const providers = await this.providerService.listProviders()
     const providerOptions = providers.map(toProviderOption)
+    logger.info("workflow package import preview built", {
+      sourceWorkflowId: pkg.workflow.id,
+      fileBase: packagePath.split(/[\\/]/).pop() ?? packagePath,
+      modelReferenceCount: pkg.modelReferences.length,
+      providerOptionCount: providerOptions.length,
+      nodeCount: pkg.workflow.nodes.length,
+    })
     return {
       packagePath,
       workflow: {
@@ -73,17 +82,45 @@ export class WorkflowPackageService {
     const providers = await this.providerService.listProviders()
     const providerIds = new Set(providers.map((provider) => provider.id))
     const mappingByRef = new Map(mappings.map((mapping) => [mapping.sourceRefId, mapping]))
+    const importLogBase = {
+      sourceWorkflowId: pkg.workflow.id,
+      modelReferenceCount: pkg.modelReferences.length,
+      mappingCount: mappings.length,
+    }
 
     for (const ref of pkg.modelReferences) {
       const mapping = mappingByRef.get(ref.id)
-      if (!mapping) throw new Error(`Missing model mapping for ${ref.id}`)
-      if (!providerIds.has(mapping.targetProviderId)) throw new Error(`Unknown target provider ${mapping.targetProviderId}`)
-      if (!MODEL_TIERS.includes(mapping.targetModelTier)) throw new Error(`Invalid target model tier ${mapping.targetModelTier}`)
+      if (!mapping) {
+        logger.warn("workflow package import missing model mapping", { ...importLogBase, sourceRefId: ref.id })
+        throw new Error(`Missing model mapping for ${ref.id}`)
+      }
+      if (!providerIds.has(mapping.targetProviderId)) {
+        logger.warn("workflow package import unknown target provider", { ...importLogBase, sourceRefId: ref.id, targetProviderId: mapping.targetProviderId })
+        throw new Error(`Unknown target provider ${mapping.targetProviderId}`)
+      }
+      if (!MODEL_TIERS.includes(mapping.targetModelTier)) {
+        logger.warn("workflow package import invalid target model tier", { ...importLogBase, sourceRefId: ref.id, targetModelTier: mapping.targetModelTier })
+        throw new Error(`Invalid target model tier ${mapping.targetModelTier}`)
+      }
     }
 
     const imported = rewriteWorkflowForImport(pkg.workflow, pkg.modelReferences, mappingByRef, this.createId(), this.now().getTime())
     const saveResult = await this.workflowService.save(imported)
-    if ("errors" in saveResult) return saveResult
+    if ("errors" in saveResult) {
+      logger.warn("workflow package import blocked by validation", {
+        ...importLogBase,
+        workflowId: imported.id,
+        errorCount: saveResult.errors.length,
+        errors: saveResult.errors,
+      })
+      return saveResult
+    }
+    logger.info("workflow package import succeeded", {
+      ...importLogBase,
+      workflowId: imported.id,
+      nodeCount: imported.nodes.length,
+      versionHash: saveResult.versionHash,
+    })
     return { workflowId: imported.id, versionHash: saveResult.versionHash }
   }
 }

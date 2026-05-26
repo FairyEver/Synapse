@@ -1,3 +1,6 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises"
+import { tmpdir } from "node:os"
+import path from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const logStoreMock = vi.hoisted(() => ({
@@ -335,6 +338,46 @@ describe("workflowIpcModule", () => {
       { runId: "active-run" },
     )
     expect(ac.signal.aborted).toBe(true)
+  })
+
+  it("logs workflow package imports at the IPC boundary", async () => {
+    const tempRoot = await mkdtemp(path.join(tmpdir(), "workflow-import-test-"))
+    const packagePath = path.join(tempRoot, "shared.synapse-workflow.json")
+    const packageData = {
+      format: "synapse-workflow-package-v1",
+      exportedAt: "2026-05-26T00:00:00.000Z",
+      workflow: workflowDefinition(),
+      modelReferences: [],
+    }
+    await writeFile(packagePath, `${JSON.stringify(packageData)}\n`, "utf8")
+    const packageService = { importPackage: vi.fn(async () => ({ workflowId: "workflow-imported", versionHash: "v-imported" })) }
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const auditSink = { record: vi.fn() }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.package") return packageService as T
+      if (serviceId === "core.permission-guard") return permissionGuard as T
+      if (serviceId === "core.audit-sink") return auditSink as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    try {
+      const result = await harness.invoke("synapse:workflow:import-package", { packagePath, mappings: [] })
+
+      expect(result).toEqual({ workflowId: "workflow-imported", versionHash: "v-imported" })
+      expect(logStoreMock.logger.info).toHaveBeenCalledWith("workflow:importPackage requested", {
+        fileBase: "shared.synapse-workflow.json",
+        mappingCount: 0,
+      })
+      expect(logStoreMock.logger.info).toHaveBeenCalledWith("workflow:importPackage succeeded", {
+        fileBase: "shared.synapse-workflow.json",
+        workflowId: "workflow-imported",
+        versionHash: "v-imported",
+      })
+    } finally {
+      await rm(tempRoot, { recursive: true, force: true })
+    }
   })
 
   it("blocks workflow:run when the workflow already has an active run", async () => {

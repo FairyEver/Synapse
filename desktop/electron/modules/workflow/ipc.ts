@@ -536,10 +536,26 @@ export const workflowIpcModule: IpcModule = {
           raw = JSON.parse(await readFile(packagePath, "utf-8"))
         } catch (error) {
           recordFilePermissionFailure({ auditSink, action, resource: packagePath, source, error })
+          logger.warn("workflow:inspectImportPackage read failed", {
+            fileBase: path.basename(packagePath),
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorLength: (error instanceof Error ? error.message : String(error)).length,
+          })
           throw error
         }
         const packageData = workflowPackageSchema.parse(raw) as SynapseWorkflowPackageV1
-        return ctx.resolve<WorkflowPackageService>("core.workflow.package").buildImportPreview(packagePath, packageData)
+        logger.info("workflow:inspectImportPackage requested", {
+          fileBase: path.basename(packagePath),
+          workflowId: packageData.workflow.id,
+          modelReferenceCount: packageData.modelReferences.length,
+        })
+        const preview = await ctx.resolve<WorkflowPackageService>("core.workflow.package").buildImportPreview(packagePath, packageData)
+        logger.info("workflow:inspectImportPackage succeeded", {
+          fileBase: path.basename(packagePath),
+          workflowId: preview.workflow.id,
+          providerOptionCount: preview.providerOptions.length,
+        })
+        return preview
       },
     },
     importPackage: {
@@ -558,10 +574,43 @@ export const workflowIpcModule: IpcModule = {
           raw = JSON.parse(await readFile(packagePath, "utf-8"))
         } catch (error) {
           recordFilePermissionFailure({ auditSink, action, resource: packagePath, source, error })
+          logger.warn("workflow:importPackage read failed", {
+            fileBase: path.basename(packagePath),
+            mappingCount: mappings.length,
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorLength: (error instanceof Error ? error.message : String(error)).length,
+          })
           throw error
         }
         const packageData = workflowPackageSchema.parse(raw) as SynapseWorkflowPackageV1
-        return ctx.resolve<WorkflowPackageService>("core.workflow.package").importPackage(packageData, mappings)
+        logger.info("workflow:importPackage requested", {
+          fileBase: path.basename(packagePath),
+          mappingCount: mappings.length,
+        })
+        try {
+          const result = await ctx.resolve<WorkflowPackageService>("core.workflow.package").importPackage(packageData, mappings)
+          if ("errors" in result) {
+            logger.warn("workflow:importPackage blocked by validation", {
+              fileBase: path.basename(packagePath),
+              errorCount: result.errors.length,
+            })
+          } else {
+            logger.info("workflow:importPackage succeeded", {
+              fileBase: path.basename(packagePath),
+              workflowId: result.workflowId,
+              versionHash: result.versionHash,
+            })
+          }
+          return result
+        } catch (error) {
+          logger.warn("workflow:importPackage failed", {
+            fileBase: path.basename(packagePath),
+            mappingCount: mappings.length,
+            errorName: error instanceof Error ? error.name : typeof error,
+            errorLength: (error instanceof Error ? error.message : String(error)).length,
+          })
+          throw error
+        }
       },
     },
     list: {
