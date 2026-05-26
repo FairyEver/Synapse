@@ -184,9 +184,6 @@ export const IPC_CHANNELS = {
     "compressUpdate": "synapse:ops:compress:update",
   },
   "workflow": {
-    "exportPackageData": "synapse:workflow:export-package-data",
-    "inspectImportPackageData": "synapse:workflow:inspect-import-package-data",
-    "importPackageData": "synapse:workflow:import-package-data",
     "exportPackage": "synapse:workflow:export-package",
     "inspectImportPackage": "synapse:workflow:inspect-import-package",
     "importPackage": "synapse:workflow:import-package",

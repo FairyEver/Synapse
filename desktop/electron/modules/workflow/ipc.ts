@@ -476,30 +476,6 @@ async function waitForRunCompletion(runId: string): Promise<void> {
 export const workflowIpcModule: IpcModule = {
   id: "workflow",
   methods: {
-    exportPackageData: {
-      channel: "synapse:workflow:export-package-data", kind: "invoke",
-      request: z.object({ workflowId: z.string() }),
-      response: workflowPackageSchema,
-      handler: async (ctx, { workflowId }: { workflowId: string }) =>
-        ctx.resolve<WorkflowPackageService>("core.workflow.package").buildExportPackage(workflowId),
-    },
-    inspectImportPackageData: {
-      channel: "synapse:workflow:inspect-import-package-data", kind: "invoke",
-      request: z.object({ packagePath: z.string(), packageData: workflowPackageSchema }),
-      response: workflowImportPreviewSchema,
-      handler: async (ctx, { packagePath, packageData }: { packagePath: string; packageData: SynapseWorkflowPackageV1 }) =>
-        ctx.resolve<WorkflowPackageService>("core.workflow.package").buildImportPreview(packagePath, packageData),
-    },
-    importPackageData: {
-      channel: "synapse:workflow:import-package-data", kind: "invoke",
-      request: z.object({ packageData: workflowPackageSchema, mappings: z.array(workflowModelMappingSchema) }),
-      response: z.union([
-        z.object({ workflowId: z.string(), versionHash: z.string() }),
-        z.object({ errors: z.array(z.object({ type: z.string(), nodeId: z.string().optional(), edgeId: z.string().optional(), message: z.string() })) }),
-      ]),
-      handler: async (ctx, { packageData, mappings }: { packageData: SynapseWorkflowPackageV1; mappings: WorkflowModelMapping[] }) =>
-        ctx.resolve<WorkflowPackageService>("core.workflow.package").importPackage(packageData, mappings),
-    },
     exportPackage: {
       channel: "synapse:workflow:export-package", kind: "invoke",
       request: z.object({ workflowId: z.string(), workflowName: z.string().optional() }),
