@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   EmptyState,
   ErrorState,
   FeedbackMessage,
@@ -162,13 +173,33 @@ export function BackupPage() {
                       >
                         下载
                       </Button>
-                      <Button
-                        variant="outline"
-                        disabled={deletingFilenames.has(file.filename)}
-                        onClick={() => deleteBackup(file.filename)}
-                      >
-                        删除
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            disabled={deletingFilenames.has(file.filename)}
+                          >
+                            删除
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>删除备份</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {file.filename}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>取消</AlertDialogCancel>
+                            <AlertDialogAction
+                              variant="destructive"
+                              onClick={() => deleteBackup(file.filename)}
+                            >
+                              删除
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </TableCell>
                 </TableRow>

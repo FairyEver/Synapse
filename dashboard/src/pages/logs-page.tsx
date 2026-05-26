@@ -1,6 +1,17 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
+import {
   EmptyState,
   ErrorState,
   FeedbackMessage,
@@ -208,13 +219,33 @@ export function LogsPage() {
               value={cleanupBefore}
               onChange={(event) => setCleanupBefore(event.target.value)}
             />
-            <Button
-              variant="outline"
-              disabled={!cleanupBefore || isCleaningUp}
-              onClick={cleanupLogs}
-            >
-              清理
-            </Button>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  disabled={!cleanupBefore || isCleaningUp}
+                >
+                  清理
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>清理日志</AlertDialogTitle>
+                  <AlertDialogDescription>
+                    {cleanupBefore}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel>取消</AlertDialogCancel>
+                  <AlertDialogAction
+                    variant="destructive"
+                    onClick={cleanupLogs}
+                  >
+                    清理
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </div>
 
           <Table>
