@@ -56,6 +56,8 @@ export interface AgentSendDeps {
     durationMs: number
     usage?: Record<string, unknown>
     costUsd?: number
+    costCny?: number
+    costCurrency?: "CNY"
     agentConversation?: SynapseAgentConversationTarget
   }>
 }
@@ -96,6 +98,8 @@ export interface NodeExecutionResult {
   durationMs: number
   usage?: Record<string, unknown>
   costUsd?: number
+  costCny?: number
+  costCurrency?: "CNY"
   agentConversation?: SynapseAgentConversationTarget
 }
 

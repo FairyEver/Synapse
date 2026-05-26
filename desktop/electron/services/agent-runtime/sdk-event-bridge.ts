@@ -1,5 +1,6 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk" with { "resolution-mode": "import" }
 
+import { SYNAPSE_COST_CURRENCY, usdToCny } from "../../../action-packages/shared/cost-currency"
 import type { AgentEvent } from "./types"
 
 const REDACTED = "[redacted]"
@@ -39,12 +40,16 @@ export function bridgeSdkMessage(
       // a stop_reason are treated as success.
     }
 
+    const costUsd = numberValue(raw.total_cost_usd)
+    const costCny = costUsd === undefined ? undefined : usdToCny(costUsd)
     return {
       type: "result",
       content: typeof raw.result === "string" ? raw.result : "",
       done: true,
       sdkSessionId,
-      costUsd: numberValue(raw.total_cost_usd),
+      costUsd,
+      costCny,
+      costCurrency: costCny === undefined ? undefined : SYNAPSE_COST_CURRENCY,
       usage: recordValue(raw.usage),
       payload: sanitizeResultSuccessPayload(payload),
       ...envelope,

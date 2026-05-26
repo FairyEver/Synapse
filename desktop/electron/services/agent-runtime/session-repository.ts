@@ -29,6 +29,8 @@ export interface CreateAgentSessionInput {
   readonly sdkSessionId?: string
   readonly usage?: ConversationEntryV1["usage"]
   readonly costUsd?: number
+  readonly costCny?: number
+  readonly costCurrency?: "CNY"
 }
 
 export interface SaveAgentSessionInput {
@@ -40,6 +42,8 @@ export interface SaveAgentSessionInput {
   readonly sdkSessionId?: string
   readonly usage?: ConversationEntryV1["usage"]
   readonly costUsd?: number
+  readonly costCny?: number
+  readonly costCurrency?: "CNY"
 }
 
 export class AgentSessionRepository {
@@ -135,6 +139,8 @@ export class AgentSessionRepository {
       sdkSessionId: input.sdkSessionId,
       usage: input.usage,
       costUsd: input.costUsd,
+      costCny: input.costCny,
+      costCurrency: input.costCurrency,
       history: [],
       userMeta: input.userMeta,
       active: true,
@@ -169,6 +175,8 @@ export class AgentSessionRepository {
       sdkSessionId: input.sdkSessionId,
       usage: input.usage,
       costUsd: input.costUsd,
+      costCny: input.costCny,
+      costCurrency: input.costCurrency,
       history: [],
       userMeta: input.userMeta,
       active: false,
@@ -239,6 +247,8 @@ export class AgentSessionRepository {
       sdkSessionId: input.sdkSessionId,
       usage: input.usage,
       costUsd: input.costUsd,
+      costCny: input.costCny,
+      costCurrency: input.costCurrency,
       updatedAt: this.isoNow(),
     })
     await this.conversations.upsert(updated)
@@ -264,12 +274,16 @@ export class AgentSessionRepository {
     readonly conversationId: string
     readonly usage?: ConversationEntryV1["usage"]
     readonly costUsd?: number
+    readonly costCny?: number
+    readonly costCurrency?: "CNY"
   }): Promise<ConversationEntryV1> {
     const conversation = await this.requireConversation(input.conversationId)
     const updated: ConversationEntryV1 = {
       ...conversation,
       usage: input.usage ?? conversation.usage,
       costUsd: input.costUsd ?? conversation.costUsd,
+      costCny: input.costCny ?? conversation.costCny,
+      costCurrency: input.costCurrency ?? conversation.costCurrency,
       updatedAt: this.isoNow(),
     }
     await this.conversations.upsert(updated)
@@ -405,6 +419,8 @@ function applyAgentSession(
     readonly sdkSessionId?: string
     readonly usage?: ConversationEntryV1["usage"]
     readonly costUsd?: number
+    readonly costCny?: number
+    readonly costCurrency?: "CNY"
     readonly updatedAt: string
   },
 ): ConversationEntryV1 {
@@ -418,6 +434,8 @@ function applyAgentSession(
     sdkSessionId: input.sdkSessionId ?? conversation.sdkSessionId,
     usage: input.usage ?? conversation.usage,
     costUsd: input.costUsd ?? conversation.costUsd,
+    costCny: input.costCny ?? conversation.costCny,
+    costCurrency: input.costCurrency ?? conversation.costCurrency,
     pastAgentSessionIds: pastAgentSessionIds(conversation.pastAgentSessionIds, previous, next),
     resumePolicy: input.resumePolicy ?? conversation.resumePolicy ?? "resume",
     updatedAt: input.updatedAt,

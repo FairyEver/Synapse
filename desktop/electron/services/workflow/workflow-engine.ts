@@ -247,7 +247,7 @@ export class WorkflowEngine {
             outputs: mergeAgentConversationOutput(execResult.outputs, execResult.agentConversation),
             activeBranch: execResult.activeBranch,
             error: execResult.error, durationMs: execResult.durationMs,
-            usage: execResult.usage, costUsd: execResult.costUsd,
+            usage: execResult.usage, costUsd: execResult.costUsd, costCny: execResult.costCny, costCurrency: execResult.costCurrency,
             agentConversation: execResult.agentConversation,
           }
         } catch (err) {
@@ -298,6 +298,8 @@ export class WorkflowEngine {
         nr.error = outcome.error
         nr.usage = outcome.usage
         nr.costUsd = outcome.costUsd
+        nr.costCny = outcome.costCny
+        nr.costCurrency = outcome.costCurrency
         nr.endedAt = Date.now()
         nr.durationMs = outcome.durationMs
 
@@ -309,6 +311,7 @@ export class WorkflowEngine {
             ...(nr.activeBranch !== undefined ? { activeBranch: nr.activeBranch } : {}),
             ...(nr.usage !== undefined ? { usage: nr.usage } : {}),
             ...(nr.costUsd !== undefined ? { costUsd: nr.costUsd } : {}),
+            ...(nr.costCny !== undefined ? { costCny: nr.costCny, costCurrency: nr.costCurrency } : {}),
           })
           if (outcome.output !== undefined) nodeOutputs[outcome.nodeId] = outcome.output
           emit({ type: "node:completed", runId, nodeId: outcome.nodeId, output: outcome.output, result: { ...nr } })
@@ -326,6 +329,7 @@ export class WorkflowEngine {
             durationMs: nr.durationMs,
             ...(nr.usage !== undefined ? { usage: nr.usage } : {}),
             ...(nr.costUsd !== undefined ? { costUsd: nr.costUsd } : {}),
+            ...(nr.costCny !== undefined ? { costCny: nr.costCny, costCurrency: nr.costCurrency } : {}),
           })
           emit({ type: "node:failed", runId, nodeId: outcome.nodeId, error: outcome.error ?? "Unknown error", result: { ...nr } })
         }

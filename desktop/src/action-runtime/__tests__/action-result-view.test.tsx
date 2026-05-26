@@ -48,6 +48,7 @@ describe("ActionResultView", () => {
     expect(html).toContain("7,890")
     expect(html).toContain("缓存写")
     expect(html).toContain("12")
-    expect(html).not.toContain("0.01")
+    expect(html).toContain("¥0.072")
+    expect(html).not.toContain("$0.01")
   })
 })

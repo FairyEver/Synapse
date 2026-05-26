@@ -39,7 +39,8 @@ describe("workflow run reports", () => {
     expect(report).toContain("- 运行 ID：run-1")
     expect(report).toContain("- 状态：running")
     expect(report).toContain("- 快照：是")
-    expect(report).toContain("- 总费用：$0.01")
+    expect(report).toContain("- 总费用：¥0.072")
+    expect(report).not.toContain("$0.01")
     expect(report).toContain('"topic": "debug-token=[redacted]"')
     expect(report).toContain("- 节点数：3")
     expect(report).toContain("- 边数：2")
@@ -140,7 +141,8 @@ describe("workflow run reports", () => {
     expect(report).toContain("- 输出：56")
     expect(report).toContain("- 缓存读：7,890")
     expect(report).toContain("- 缓存写：12")
-    expect(report).toContain("- 费用：$0.01")
+    expect(report).toContain("- 费用：¥0.072")
+    expect(report).not.toContain("$0.01")
   })
 
   it("formats bigint and circular objects without throwing", () => {

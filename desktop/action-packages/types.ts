@@ -11,6 +11,8 @@ export type ActionRunResult = {
   readonly metrics?: ActionRunMetrics
   readonly usage?: Record<string, unknown>
   readonly costUsd?: number
+  readonly costCny?: number
+  readonly costCurrency?: "CNY"
 }
 
 export type ActionRunLog = {

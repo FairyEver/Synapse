@@ -1327,6 +1327,8 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
           durationMs: result.durationMs,
           usage: result.usage,
           costUsd: result.costUsd,
+          costCny: result.costCny,
+          costCurrency: result.costCurrency,
           agentConversation: agentConversation ?? (
             result.conversationId
               ? {

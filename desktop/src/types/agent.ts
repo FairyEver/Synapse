@@ -59,9 +59,13 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
         cancelled?: boolean
         usage?: Record<string, unknown>
         costUsd?: number
+        costCny?: number
+        costCurrency?: "CNY"
       }
       usage?: Record<string, unknown>
       costUsd?: number
+      costCny?: number
+      costCurrency?: "CNY"
     }
   | {
       type: "error"
@@ -148,6 +152,8 @@ export interface SynapseAgentResultMetadata {
   readonly cancelled?: boolean
   readonly usage?: Record<string, unknown>
   readonly costUsd?: number
+  readonly costCny?: number
+  readonly costCurrency?: "CNY"
 }
 
 export interface SynapseAgentMessageTimelineItem extends SynapseAgentTimelineBase {

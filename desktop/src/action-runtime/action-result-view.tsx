@@ -19,7 +19,7 @@ function ActionResultView({ result }: { readonly result: ActionRunResult }) {
     <div className="flex min-w-0 flex-col gap-2">
       {result.summary ? <p className="text-sm text-muted-foreground break-words">{result.summary}</p> : null}
       {result.metrics ? <MetricsView metrics={result.metrics} /> : null}
-      <TokenUsageSummary usage={result.usage} />
+      <TokenUsageSummary usage={result.usage} costUsd={result.costUsd} costCny={result.costCny} costCurrency={result.costCurrency} />
       {result.error ? <OutputBlock label="错误" value={result.error} /> : null}
       {result.logs?.map((log) => (
         <OutputBlock key={log.label} label={log.label} value={log.value} />

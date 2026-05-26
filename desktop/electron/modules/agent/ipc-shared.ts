@@ -62,6 +62,8 @@ const resultMetadataSchema = z.object({
   cancelled: z.boolean().optional(),
   usage: jsonRecordSchema.optional(),
   costUsd: z.number().optional(),
+  costCny: z.number().optional(),
+  costCurrency: z.literal("CNY").optional(),
 })
 
 export const timelineItemSchema = z.discriminatedUnion("kind", [
@@ -362,6 +364,8 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     metadata: resultMetadataSchema.optional(),
     usage: jsonRecordSchema.optional(),
     costUsd: z.number().optional(),
+    costCny: z.number().optional(),
+    costCurrency: z.literal("CNY").optional(),
   }),
   z.object({ ...agentEventBaseSchema, type: z.literal("error"), message: z.string() }),
   z.object({

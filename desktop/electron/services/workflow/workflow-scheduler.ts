@@ -13,6 +13,8 @@ export interface NodeExecOutcome {
   durationMs?: number
   usage?: Record<string, unknown>
   costUsd?: number
+  costCny?: number
+  costCurrency?: "CNY"
   agentConversation?: SynapseAgentConversationTarget
 }
 

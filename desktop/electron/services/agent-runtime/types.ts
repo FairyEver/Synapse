@@ -115,6 +115,8 @@ export interface AgentResultMetadata {
   readonly cancelled?: boolean
   readonly usage?: Record<string, unknown>
   readonly costUsd?: number
+  readonly costCny?: number
+  readonly costCurrency?: "CNY"
 }
 
 export interface AgentResultEvent extends AgentEventBase {
@@ -123,6 +125,8 @@ export interface AgentResultEvent extends AgentEventBase {
   readonly done: true
   readonly metadata?: AgentResultMetadata
   readonly costUsd?: number
+  readonly costCny?: number
+  readonly costCurrency?: "CNY"
   readonly usage?: Record<string, unknown>
   readonly payload?: Record<string, unknown>
 }
@@ -246,6 +250,8 @@ export interface AgentRuntimeTurnResult {
   readonly error?: string
   readonly usage?: Record<string, unknown>
   readonly costUsd?: number
+  readonly costCny?: number
+  readonly costCurrency?: "CNY"
 }
 
 export interface AgentRuntimeRelayResult extends AgentRuntimeTurnResult {
@@ -284,4 +290,6 @@ export type ScheduledAgentSendResult = {
   readonly durationMs: number
   readonly usage?: Record<string, unknown>
   readonly costUsd?: number
+  readonly costCny?: number
+  readonly costCurrency?: "CNY"
 }

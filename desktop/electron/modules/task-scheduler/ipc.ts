@@ -130,6 +130,8 @@ const actionRunResultSchema = z.object({
   error: z.string().optional(),
   usage: z.record(z.string(), z.unknown()).optional(),
   costUsd: z.number().optional(),
+  costCny: z.number().optional(),
+  costCurrency: z.literal("CNY").optional(),
   metrics: z.object({
     durationMs: z.number().optional(),
     exitCode: z.number().nullable().optional(),

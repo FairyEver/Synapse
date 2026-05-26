@@ -25,6 +25,8 @@ describe("SDK event bridge", () => {
       done: true,
       sdkSessionId: "sdk-1",
       costUsd: 0.01,
+      costCny: expect.closeTo(0.072, 6),
+      costCurrency: "CNY",
       usage: { input_tokens: 1, output_tokens: 2 },
       ...baseEnvelope,
     })

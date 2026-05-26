@@ -195,6 +195,8 @@ export interface ConversationEntryV1 extends Record<string, unknown> {
   sdkSessionId?: string
   usage?: ConversationUsageV1
   costUsd?: number
+  costCny?: number
+  costCurrency?: "CNY"
   platform?: string
   channelKey?: string
   workspaceKey?: string
@@ -232,6 +234,8 @@ export const conversationsSchema: NamespaceSchema<ConversationEntryV1> = {
     && isOptionalString((v as ConversationEntryV1).sdkSessionId)
     && ((v as ConversationEntryV1).usage === undefined || isConversationUsage((v as ConversationEntryV1).usage))
     && isOptionalNonNegativeFiniteNumber((v as ConversationEntryV1).costUsd)
+    && isOptionalNonNegativeFiniteNumber((v as ConversationEntryV1).costCny)
+    && ((v as ConversationEntryV1).costCurrency === undefined || (v as ConversationEntryV1).costCurrency === "CNY")
     && isOptionalString((v as ConversationEntryV1).channelKey)
     && isOptionalString((v as ConversationEntryV1).workspaceKey)
     && isOptionalString((v as ConversationEntryV1).workspacePath)

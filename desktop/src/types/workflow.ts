@@ -70,6 +70,8 @@ export interface NodeRunResult {
   progressLabel?: string
   usage?: Record<string, unknown>
   costUsd?: number
+  costCny?: number
+  costCurrency?: "CNY"
 }
 export interface WorkflowRunResult {
   status: "completed" | "failed" | "cancelled"

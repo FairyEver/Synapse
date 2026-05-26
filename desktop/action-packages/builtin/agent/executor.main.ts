@@ -88,6 +88,8 @@ export function createAgentAction(deps: {
           metrics: { durationMs: result.durationMs },
           usage: result.usage,
           costUsd: result.costUsd,
+          costCny: result.costCny,
+          costCurrency: result.costCurrency,
         }
       } catch (rawError) {
         const message = rawError instanceof Error ? rawError.message : String(rawError)

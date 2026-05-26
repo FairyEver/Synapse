@@ -399,7 +399,7 @@ function recordMetadata(metadata: Record<string, unknown> | undefined, key: stri
 }
 
 function storedResultMetadata(metadata: Record<string, unknown> | undefined): SynapseAgentResultMetadata | undefined {
-  const result = {
+  const result: SynapseAgentResultMetadata = {
     model: stringMetadata(metadata, "model"),
     effort: stringMetadata(metadata, "effort"),
     contextRemainingPercent: numberMetadata(metadata, "contextRemainingPercent"),
@@ -407,15 +407,19 @@ function storedResultMetadata(metadata: Record<string, unknown> | undefined): Sy
     cancelled: booleanMetadata(metadata, "cancelled"),
     usage: recordMetadata(metadata, "usage"),
     costUsd: numberMetadata(metadata, "costUsd"),
+    costCny: numberMetadata(metadata, "costCny"),
+    costCurrency: stringMetadata(metadata, "costCurrency") === "CNY" ? "CNY" : undefined,
   }
   return Object.values(result).some((value) => value !== undefined) ? result : undefined
 }
 
 function resultMetadata(event: Extract<SynapseAgentEvent, { type: "result" }>): SynapseAgentResultMetadata | undefined {
-  const metadata = {
+  const metadata: SynapseAgentResultMetadata = {
     ...event.metadata,
     usage: event.metadata?.usage ?? event.usage,
     costUsd: event.metadata?.costUsd ?? event.costUsd,
+    costCny: event.metadata?.costCny ?? event.costCny,
+    costCurrency: (event.metadata?.costCurrency ?? event.costCurrency) === "CNY" ? "CNY" : undefined,
   }
   return Object.values(metadata).some((value) => value !== undefined) ? metadata : undefined
 }

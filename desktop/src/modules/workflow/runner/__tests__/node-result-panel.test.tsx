@@ -359,7 +359,7 @@ describe("NodeResultPanel", () => {
     expect(container.textContent).toContain("缓存写")
     expect(container.textContent).toContain("12")
     expect(container.textContent).toContain("费用")
-    expect(container.textContent).toContain("$0.01")
+    expect(container.textContent).toContain("¥0.072")
 
     await act(async () => {
       root.unmount()

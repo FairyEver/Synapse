@@ -396,6 +396,8 @@ export class AgentRuntimeService {
           durationMs: Date.now() - startMs,
           usage: result.usage,
           costUsd: result.costUsd,
+          costCny: result.costCny,
+          costCurrency: result.costCurrency,
         }
         this.logScheduledAgentFailure(input, message, scheduledResult, undefined, result.agentSessionId)
         return scheduledResult
@@ -410,6 +412,8 @@ export class AgentRuntimeService {
         durationMs: Date.now() - startMs,
         usage: result.usage,
         costUsd: result.costUsd,
+        costCny: result.costCny,
+        costCurrency: result.costCurrency,
       }
       if (scheduledResult.status !== "success") {
         this.logScheduledAgentFailure(input, message, scheduledResult, result.error?.length, result.agentSessionId)
