@@ -18,6 +18,27 @@ describe("usage analysis report views", () => {
     expect(html).toContain("缓存读")
     expect(html).toContain("按小时")
   })
+
+  it("marks unknown model prices as unpriced", () => {
+    const report = overviewReport()
+    const html = renderToStaticMarkup(
+      <OverviewReportView
+        state={state({
+          ...report,
+          totals: {
+            ...report.totals,
+            pricedTokens: 0,
+            unpricedTokens: report.totals.tokens,
+            estimatedCost: 0,
+          },
+        }, false)}
+        trendBucket="day"
+        onTrendBucketChange={() => undefined}
+      />,
+    )
+
+    expect(html).toContain("未定价")
+  })
 })
 
 function state<T>(data: T, loading: boolean): ReportState<T> {
@@ -34,6 +55,8 @@ function overviewReport(): UsageOverviewReport {
     generatedAt: "2026-05-20T00:00:00.000Z",
     totals: {
       tokens: 10,
+      pricedTokens: 10,
+      unpricedTokens: 0,
       estimatedCost: 0.01,
       requests: 1,
       conversations: 1,
@@ -60,6 +83,8 @@ function overviewReport(): UsageOverviewReport {
     trend: [{
       bucket: "2026-05-20",
       tokens: 10,
+      pricedTokens: 10,
+      unpricedTokens: 0,
       estimatedCost: 0.01,
       requests: 1,
       conversations: 1,

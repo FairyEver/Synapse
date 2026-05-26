@@ -110,7 +110,7 @@ function TodayRhythmRow({ row }: { readonly row: UsageTimeBucket }) {
       <TableCell className="text-right tabular-nums">{formatInteger(row.tokens)}</TableCell>
       <TableCell className="text-right tabular-nums">{formatInteger(calculateNewTokens(breakdown))}</TableCell>
       <TableCell className="text-right tabular-nums">{formatInteger(breakdown.cacheRead)}</TableCell>
-      <TableCell className="text-right tabular-nums">{formatCurrency(row.estimatedCost)}</TableCell>
+      <TableCell className="text-right tabular-nums">{formatEstimatedCost(row.estimatedCost, row.tokens, row.unpricedTokens)}</TableCell>
       <TableCell className="text-right tabular-nums">{formatInteger(row.requests)}</TableCell>
       <TableCell>{row.dominantModel || "-"}</TableCell>
       <TableCell>{describeTokenStructure(breakdown)}</TableCell>
@@ -140,4 +140,9 @@ function formatInteger(value: number): string {
 
 function formatCurrency(value: number): string {
   return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "USD", maximumFractionDigits: 4 }).format(value)
+}
+
+function formatEstimatedCost(value: number, tokens: number, unpricedTokens: number): string {
+  if (tokens > 0 && unpricedTokens >= tokens) return "未定价"
+  return formatCurrency(value)
 }

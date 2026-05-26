@@ -378,6 +378,31 @@ export type UsageAnalysisTokenBreakdown = {
 
 export type UsageAnalysisCostBreakdown = UsageAnalysisTokenBreakdown
 
+export type UsageAnalysisModelPriceRule = {
+  readonly id: string
+  readonly modelPattern: string
+  readonly inputPer1M: number
+  readonly outputPer1M: number
+  readonly cacheReadPer1M: number
+  readonly cacheWritePer1M: number
+  readonly reasoningPer1M: number
+  readonly enabled: boolean
+  readonly source: "builtin" | "user"
+  readonly sortIndex: number
+  readonly updatedAt: string
+}
+
+export type UsageAnalysisModelPriceRuleInput = {
+  readonly id?: string
+  readonly modelPattern: string
+  readonly inputPer1M?: number
+  readonly outputPer1M?: number
+  readonly cacheReadPer1M?: number
+  readonly cacheWritePer1M?: number
+  readonly reasoningPer1M?: number
+  readonly enabled?: boolean
+}
+
 export type UsageAnalysisRefreshResult = {
   readonly scannedFiles: number
   readonly parsedFiles: number
@@ -391,6 +416,8 @@ export type UsageAnalysisRefreshResult = {
 export type UsageAnalysisTimeBucket = {
   readonly bucket: string
   readonly tokens: number
+  readonly pricedTokens: number
+  readonly unpricedTokens: number
   readonly estimatedCost: number
   readonly requests: number
   readonly conversations: number
@@ -408,6 +435,8 @@ export type UsageAnalysisModelRow = {
   readonly model: string
   readonly provider?: string
   readonly tokens: number
+  readonly pricedTokens: number
+  readonly unpricedTokens: number
   readonly estimatedCost: number
   readonly input: number
   readonly output: number
@@ -424,6 +453,8 @@ export type UsageAnalysisProjectRow = {
   readonly sessions: number
   readonly requests: number
   readonly tokens: number
+  readonly pricedTokens: number
+  readonly unpricedTokens: number
   readonly estimatedCost: number
   readonly toolCalls: number
   readonly lastUsedAt: string
@@ -445,6 +476,8 @@ export type UsageAnalysisDetailRow = {
   readonly workspaceLabel: string
   readonly model: string
   readonly tokens: number
+  readonly pricedTokens: number
+  readonly unpricedTokens: number
   readonly estimatedCost: number
   readonly tokenBreakdown: UsageAnalysisTokenBreakdown
   readonly toolCalls: number
@@ -455,6 +488,8 @@ export type UsageAnalysisOverviewReport = {
   readonly generatedAt: string
   readonly totals: {
     readonly tokens: number
+    readonly pricedTokens: number
+    readonly unpricedTokens: number
     readonly estimatedCost: number
     readonly requests: number
     readonly conversations: number
@@ -937,6 +972,8 @@ export type SynapseBridge = {
   usageAnalysis: {
     cc: UsageAnalysisBridgeDomain
     codex: UsageAnalysisBridgeDomain
+    getPricingRules: () => Promise<UsageAnalysisModelPriceRule[]>
+    savePricingRules: (rules: UsageAnalysisModelPriceRuleInput[]) => Promise<UsageAnalysisModelPriceRule[]>
   }
   http: {
     testRequest: (config: Record<string, unknown>) => Promise<{

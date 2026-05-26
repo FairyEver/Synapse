@@ -11,7 +11,7 @@ import {
   CodexUsageAnalysisService,
   refreshUsageInWorker,
 } from "../services/usage-analysis"
-import type { UsageDetailInput, UsageRangeInput } from "../services/usage-analysis"
+import type { UsageDetailInput, UsageModelPriceRuleInput, UsageRangeInput } from "../services/usage-analysis"
 
 let registered = false
 
@@ -163,6 +163,8 @@ export function registerUsageAnalysisHandlers(): void {
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexProjects, async (_event, range?: UsageRangeInput) => codex.getProjects(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexTools, async (_event, range?: UsageRangeInput) => codex.getTools(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexDetails, async (_event, range?: UsageDetailInput) => codex.getDetails(normalizeDetailsRange(range)))
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.pricingRulesGet, async () => cc.getPricingRules())
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.pricingRulesSave, async (_event, rules?: readonly UsageModelPriceRuleInput[]) => cc.savePricingRules(Array.isArray(rules) ? rules : []))
 
   registered = true
 }

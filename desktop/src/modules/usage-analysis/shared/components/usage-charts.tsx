@@ -34,6 +34,7 @@ interface RankPoint {
   readonly label: string
   readonly value: number
   readonly extra?: number
+  readonly extraLabel?: string
 }
 
 interface UsageTrendChartProps {
@@ -372,7 +373,7 @@ export function UsageRankChart({ title, rows, valueFormatter, extraFormatter }: 
     series: [{
       name: title,
       type: "bar",
-      data: data.map((row) => ({ value: row.value, extra: row.extra })),
+      data: data.map((row) => ({ value: row.value, extra: row.extra, extraLabel: row.extraLabel })),
       barWidth: RANK_BAR_HEIGHT,
       barCategoryGap: RANK_BAR_GAP,
       itemStyle: {
@@ -536,7 +537,11 @@ function formatRankTooltip(params: unknown, valueFormatter: (value: number) => s
   const item = Array.isArray(params) ? params.find(isTooltipObject) : params
   if (!isTooltipObject(item)) return ""
   const data = isDataObject(item.data) ? item.data : undefined
-  const extra = typeof data?.extra === "number" && extraFormatter ? `<br/>${extraFormatter(data.extra)}` : ""
+  const extra = data?.extraLabel
+    ? `<br/>${data.extraLabel}`
+    : typeof data?.extra === "number" && extraFormatter
+      ? `<br/>${extraFormatter(data.extra)}`
+      : ""
   return `${item.marker ?? ""}${item.name ?? ""}: ${valueFormatter(readTooltipValue(item))}${extra}`
 }
 
@@ -553,7 +558,7 @@ function isTooltipObject(value: unknown): value is {
   return typeof value === "object" && value !== null
 }
 
-function isDataObject(value: unknown): value is { extra?: number } {
+function isDataObject(value: unknown): value is { extra?: number; extraLabel?: string } {
   return typeof value === "object" && value !== null
 }
 

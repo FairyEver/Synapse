@@ -41,6 +41,7 @@ export interface ParsedUsageEvent {
   readonly costCacheWrite: number
   readonly costReasoning: number
   readonly totalCost: number
+  readonly priceKnown: boolean
 }
 
 export interface ParsedToolEvent {
@@ -177,7 +178,7 @@ export async function parseClaudeUsageFile(filePath: string, options: UsageParse
       cacheWrite: asNumber(usage.cache_creation_input_tokens),
       reasoning: extractReasoningTokens(content),
     }
-    const cost = estimateUsageCost("cc", model, tokens)
+    const cost = estimateUsageCost(model, tokens)
     const eventId = `${sessionId}:usage:${messageId || `line-${lineCount}`}`
     usageEvents.set(eventId, {
       id: eventId,
@@ -200,6 +201,7 @@ export async function parseClaudeUsageFile(filePath: string, options: UsageParse
       costCacheWrite: cost.cacheWrite,
       costReasoning: cost.reasoning,
       totalCost: cost.total,
+      priceKnown: cost.priceKnown,
     })
   }
 

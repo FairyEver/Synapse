@@ -13,4 +13,6 @@ export const USAGE_ANALYSIS_CHANNELS = {
   codexProjects: "synapse:usage-analysis:codex:projects",
   codexTools: "synapse:usage-analysis:codex:tools",
   codexDetails: "synapse:usage-analysis:codex:details",
+  pricingRulesGet: "synapse:usage-analysis:pricing-rules:get",
+  pricingRulesSave: "synapse:usage-analysis:pricing-rules:save",
 } as const

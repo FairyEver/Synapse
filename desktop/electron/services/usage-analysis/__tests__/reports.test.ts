@@ -89,6 +89,53 @@ describe("usage analysis reports", () => {
     expect(db.prepare("SELECT SUM(tool_calls) AS toolCalls FROM cc_hourly_usage").get()).toEqual({ toolCalls: 1 })
   })
 
+  it("recalculates report costs after saving model-only price rules", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const projectDir = path.join(dir, ".claude", "projects", "-tmp-project")
+    fs.mkdirSync(projectDir, { recursive: true })
+    fs.writeFileSync(path.join(projectDir, "session.jsonl"), JSON.stringify({
+      type: "assistant",
+      timestamp: "2026-05-19T01:00:01.000Z",
+      message: {
+        role: "assistant",
+        model: "local-model",
+        usage: { input_tokens: 1_000_000, output_tokens: 500_000 },
+      },
+    }))
+
+    const db = getUsageAnalysisDb(dir)
+    const service = new CcUsageAnalysisService({ db, roots: [path.join(dir, ".claude", "projects")] })
+    await service.refresh()
+
+    const before = service.getOverview({ preset: "all" })
+    expect(before.totals.estimatedCost).toBe(0)
+    expect(before.totals.unpricedTokens).toBe(1_500_000)
+    expect(before.topModels[0]).toMatchObject({
+      model: "local-model",
+      unpricedTokens: 1_500_000,
+    })
+
+    service.savePricingRules([{
+      modelPattern: "local-model",
+      inputPer1M: 2,
+      outputPer1M: 8,
+      cacheReadPer1M: 0,
+      cacheWritePer1M: 0,
+      reasoningPer1M: 8,
+    }])
+
+    const after = service.getOverview({ preset: "all" })
+    expect(after.totals.estimatedCost).toBe(6)
+    expect(after.totals.unpricedTokens).toBe(0)
+    expect(after.topModels[0]).toMatchObject({
+      model: "local-model",
+      estimatedCost: 6,
+      pricedTokens: 1_500_000,
+      unpricedTokens: 0,
+    })
+  })
+
   it("rebuilds missing aggregates before reading reports", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)

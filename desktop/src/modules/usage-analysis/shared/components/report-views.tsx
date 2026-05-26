@@ -33,6 +33,20 @@ function formatCurrency(value: number): string {
   return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "USD", maximumFractionDigits: 4 }).format(value)
 }
 
+function formatEstimatedCost(value: number, tokens: number, unpricedTokens: number): string {
+  if (tokens > 0 && unpricedTokens >= tokens) return "未定价"
+  return formatCurrency(value)
+}
+
+function costStatus(tokens: number, unpricedTokens: number): string | undefined {
+  if (tokens <= 0 || unpricedTokens <= 0) return undefined
+  return unpricedTokens >= tokens ? "未定价" : "部分定价"
+}
+
+function modelCostLabel(row: UsageModelRow): string {
+  return `费用 ${formatEstimatedCost(row.estimatedCost, row.tokens, row.unpricedTokens)}`
+}
+
 function formatPercent(value: number): string {
   return new Intl.NumberFormat("zh-CN", { style: "percent", maximumFractionDigits: 1 }).format(value)
 }
@@ -140,7 +154,11 @@ export function OverviewReportView({ state, trendBucket, onTrendBucketChange }: 
               { label: "Token", value: formatInteger(report.totals.tokens) },
               { label: "新增 Token", value: formatInteger(newTokens(report.tokenBreakdown)), subValue: "不含缓存读" },
               { label: "缓存读", value: formatInteger(report.tokenBreakdown.cacheRead), subValue: cacheReadShare(report.tokenBreakdown) },
-              { label: "估算费用", value: formatCurrency(report.totals.estimatedCost) },
+              {
+                label: "估算费用",
+                value: formatEstimatedCost(report.totals.estimatedCost, report.totals.tokens, report.totals.unpricedTokens),
+                subValue: costStatus(report.totals.tokens, report.totals.unpricedTokens),
+              },
               { label: "请求", value: formatInteger(report.totals.requests) },
               { label: "会话", value: formatInteger(report.totals.conversations) },
             ]}
@@ -151,7 +169,7 @@ export function OverviewReportView({ state, trendBucket, onTrendBucketChange }: 
             <UsageBreakdownChart title="费用类型占比" rows={costChartRows(report.costBreakdown)} valueFormatter={formatCurrency} compact />
           </div>
           <div className="grid min-w-0 gap-2 xl:grid-cols-3">
-            <UsageRankChart title="模型 Token 排行" rows={report.topModels.map((row) => ({ label: row.model, value: row.tokens, extra: row.estimatedCost }))} valueFormatter={formatInteger} extraFormatter={(value) => `费用 ${formatCurrency(value)}`} />
+            <UsageRankChart title="模型 Token 排行" rows={report.topModels.map((row) => ({ label: row.model, value: row.tokens, extraLabel: modelCostLabel(row) }))} valueFormatter={formatInteger} />
             <UsageRankChart title="项目 Token 排行" rows={report.topProjects.map((row) => ({ label: projectLabels.get(projectKey(row)) ?? row.workspaceLabel, value: row.tokens, extra: row.requests }))} valueFormatter={formatInteger} extraFormatter={(value) => `请求 ${formatInteger(value)}`} />
             <UsageRankChart title="工具调用排行" rows={report.topTools.map((row) => ({ label: row.toolName, value: row.calls, extra: row.failureRate }))} valueFormatter={formatInteger} extraFormatter={(value) => `失败率 ${formatPercent(value)}`} />
           </div>
@@ -186,7 +204,7 @@ export function TimeReportView({ state, trendBucket, onTrendBucketChange }: {
               <TableRow key={row.bucket}>
                 <TableCell>{row.bucket}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatInteger(row.tokens)}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatCurrency(row.estimatedCost)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatEstimatedCost(row.estimatedCost, row.tokens, row.unpricedTokens)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatInteger(row.requests)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatInteger(row.toolCalls)}</TableCell>
                 <TableCell>{row.dominantModel || "-"}</TableCell>
@@ -205,7 +223,7 @@ export function ModelsReportView({ state }: { readonly state: LoaderState<UsageM
   return (
     <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
       <div className="flex min-w-0 flex-col gap-2">
-        <UsageRankChart title="Token 排行" rows={rows.map((row) => ({ label: row.model, value: row.tokens, extra: row.estimatedCost }))} valueFormatter={formatInteger} extraFormatter={(value) => `费用 ${formatCurrency(value)}`} />
+        <UsageRankChart title="Token 排行" rows={rows.map((row) => ({ label: row.model, value: row.tokens, extraLabel: modelCostLabel(row) }))} valueFormatter={formatInteger} />
         <UsageBreakdownChart title="模型费用占比" rows={rows.map((row) => ({ label: row.model, value: row.estimatedCost }))} valueFormatter={formatCurrency} />
         <ModelTable rows={rows} />
       </div>
@@ -267,7 +285,7 @@ export function DetailsReportView({ state }: { readonly state: LoaderState<Usage
                 <TableCell>{row.workspaceLabel}</TableCell>
                 <TableCell>{row.model}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatInteger(row.tokens)}</TableCell>
-                <TableCell className="text-right tabular-nums">{formatCurrency(row.estimatedCost)}</TableCell>
+                <TableCell className="text-right tabular-nums">{formatEstimatedCost(row.estimatedCost, row.tokens, row.unpricedTokens)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatInteger(row.toolCalls)}</TableCell>
               </TableRow>
             ))}
@@ -300,7 +318,7 @@ function ModelTable({ title, rows, compact = false }: { readonly title?: string;
               <TableCell>{row.model}</TableCell>
               {!compact ? <TableCell>{row.provider ?? "-"}</TableCell> : null}
               <TableCell className="text-right tabular-nums">{formatInteger(row.tokens)}</TableCell>
-              <TableCell className="text-right tabular-nums">{formatCurrency(row.estimatedCost)}</TableCell>
+              <TableCell className="text-right tabular-nums">{formatEstimatedCost(row.estimatedCost, row.tokens, row.unpricedTokens)}</TableCell>
               {!compact ? <TableCell className="text-right tabular-nums">{formatInteger(row.requests)}</TableCell> : null}
             </TableRow>
           ))}

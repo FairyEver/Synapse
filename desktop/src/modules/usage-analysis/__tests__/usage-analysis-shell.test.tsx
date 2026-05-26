@@ -61,6 +61,25 @@ describe("UsageAnalysisShell", () => {
     expect(html).toContain("90 天")
   })
 
+  it("shows the pricing rules action when provided", () => {
+    const html = renderToStaticMarkup(
+      <UsageAnalysisShell
+        title="CC"
+        view="overview"
+        range="30d"
+        refreshing={false}
+        onViewChange={() => undefined}
+        onRangeChange={() => undefined}
+        onPricingRulesClick={() => undefined}
+        onRefresh={() => undefined}
+      >
+        <div>content</div>
+      </UsageAnalysisShell>,
+    )
+
+    expect(html).toContain("价格规则")
+  })
+
   it("shows a disabled loading refresh button while refreshing", () => {
     const html = renderToStaticMarkup(
       <UsageAnalysisShell

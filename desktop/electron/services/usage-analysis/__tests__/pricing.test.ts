@@ -1,9 +1,31 @@
 import { describe, expect, it } from "vitest"
-import { estimateUsageCost } from "../pricing"
+import { estimateUsageCost, normalizeUsagePriceRules } from "../pricing"
 
 describe("usage analysis pricing", () => {
+  it("matches prices by model pattern without provider-specific rules", () => {
+    const rules = normalizeUsagePriceRules([{
+      modelPattern: "shared-model",
+      inputPer1M: 2,
+      outputPer1M: 6,
+      cacheReadPer1M: 0.5,
+      cacheWritePer1M: 3,
+      reasoningPer1M: 6,
+    }])
+
+    const cost = estimateUsageCost("shared-model", {
+      input: 1_000_000,
+      output: 1_000_000,
+      cacheRead: 1_000_000,
+      cacheWrite: 1_000_000,
+      reasoning: 1_000_000,
+    }, rules)
+
+    expect(cost.priceKnown).toBe(true)
+    expect(cost.total).toBe(17.5)
+  })
+
   it("estimates OpenAI-style cached input and reasoning costs", () => {
-    const cost = estimateUsageCost("codex", "gpt-5.5", {
+    const cost = estimateUsageCost("gpt-5.5", {
       input: 1_000_000,
       output: 1_000_000,
       cacheRead: 1_000_000,
@@ -19,7 +41,7 @@ describe("usage analysis pricing", () => {
   })
 
   it("estimates Anthropic-style cache creation costs", () => {
-    const cost = estimateUsageCost("cc", "claude-opus-4.6", {
+    const cost = estimateUsageCost("claude-opus-4.6", {
       input: 1_000_000,
       output: 1_000_000,
       cacheRead: 1_000_000,
@@ -34,8 +56,8 @@ describe("usage analysis pricing", () => {
     expect(cost.total).toBeCloseTo(cost.input + cost.output + cost.cacheRead + cost.cacheWrite, 6)
   })
 
-  it("returns zero cost for unknown models", () => {
-    expect(estimateUsageCost("cc", "unknown-model", {
+  it("marks unknown models as unpriced", () => {
+    expect(estimateUsageCost("unknown-model", {
       input: 1,
       output: 1,
       cacheRead: 1,
@@ -48,6 +70,7 @@ describe("usage analysis pricing", () => {
       cacheWrite: 0,
       reasoning: 0,
       total: 0,
+      priceKnown: false,
     })
   })
 })
