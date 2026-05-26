@@ -1,8 +1,8 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { DEFAULT_UI_CONFIG, type UiConfig } from './config.js'
-import { AutoScheduler, type BatchRunner } from './scheduler.js'
-import type { OutputLine } from './runner.js'
+import { AutoScheduler, type WorkerRunner } from './scheduler.js'
+import type { WorkerResult } from './runner.js'
 
 function config(): UiConfig {
   return {
@@ -10,104 +10,108 @@ function config(): UiConfig {
     prompt: 'hello',
     workingDirectory: '/tmp/work',
     concurrency: 2,
-    intervalSeconds: 60,
     timeoutMinutes: 1,
     maxLogs: 10,
   }
 }
 
-test('stopAfterCurrent prevents another batch after the active batch finishes', async () => {
-  let runs = 0
-  const deferred: { finishRun?: () => void } = {}
-  const runner: BatchRunner = async () => {
-    runs++
-    await new Promise<void>(resolve => {
-      deferred.finishRun = resolve
-    })
-    return {
-      id: 'batch-1',
-      status: 'success',
-      startedAt: new Date().toISOString(),
-      finishedAt: new Date().toISOString(),
-      durationMs: 1,
-      workers: [],
-      summaryPath: '/tmp/summary.md',
-    }
+function result(slotId: number, sequence: number, status: WorkerResult['status'] = 'success'): WorkerResult {
+  return {
+    id: slotId,
+    status,
+    durationMs: 1,
+    exitCode: status === 'success' ? 0 : 1,
+    logPath: `/tmp/slot-${slotId}-run-${sequence}.md`,
+    lastMessage: `slot ${slotId} run ${sequence}`,
+  }
+}
+
+test('start fills all configured slots', async () => {
+  const started: Array<{ slotId: number; sequence: number }> = []
+  const runner: WorkerRunner = async (_config, run, _onUpdate, _onOutput) => {
+    started.push({ slotId: run.slotId, sequence: run.sequence })
+    await new Promise<void>(() => {})
+    return result(run.slotId, run.sequence)
   }
 
-  const scheduler = new AutoScheduler(runner, { wait: () => Promise.resolve() })
+  const scheduler = new AutoScheduler(runner)
   void scheduler.start(config())
   await scheduler.waitForStatus('running')
-  scheduler.stopAfterCurrent()
-  assert.ok(deferred.finishRun)
-  deferred.finishRun()
-  await scheduler.waitForStatus('stopped')
 
-  assert.equal(runs, 1)
-  assert.equal(scheduler.getSnapshot().status, 'stopped')
+  assert.deepEqual(started, [
+    { slotId: 1, sequence: 1 },
+    { slotId: 2, sequence: 2 },
+  ])
+  assert.equal(scheduler.getSnapshot().session?.slots.length, 2)
 })
 
-test('stopAfterCurrent aborts the wait before the next batch', async () => {
-  let runs = 0
-  let waitAborted = false
-  const runner: BatchRunner = async () => {
-    runs++
-    return {
-      id: `batch-${runs}`,
-      status: 'success',
-      startedAt: new Date().toISOString(),
-      finishedAt: new Date().toISOString(),
-      durationMs: 1,
-      workers: [],
-      summaryPath: '/tmp/summary.md',
-    }
+test('finished slot is refilled without waiting for sibling slots', async () => {
+  const deferred = new Map<number, () => void>()
+  const started: Array<{ slotId: number; sequence: number }> = []
+  const runner: WorkerRunner = async (_config, run) => {
+    started.push({ slotId: run.slotId, sequence: run.sequence })
+    await new Promise<void>(resolve => deferred.set(run.sequence, resolve))
+    return result(run.slotId, run.sequence)
   }
 
-  const scheduler = new AutoScheduler(runner, {
-    wait: (_ms, signal) => new Promise<void>(resolve => {
-      signal.addEventListener('abort', () => {
-        waitAborted = true
-        resolve()
-      }, { once: true })
-    }),
-  })
+  const scheduler = new AutoScheduler(runner)
   void scheduler.start(config())
-  await scheduler.waitForStatus('waiting')
-  scheduler.stopAfterCurrent()
-  await scheduler.waitForStatus('stopped')
+  await scheduler.waitForRunCount(2)
+  deferred.get(1)?.()
+  await scheduler.waitForRunCount(3)
 
-  assert.equal(waitAborted, true)
-  assert.equal(runs, 1)
+  assert.deepEqual(started, [
+    { slotId: 1, sequence: 1 },
+    { slotId: 2, sequence: 2 },
+    { slotId: 1, sequence: 3 },
+  ])
+
+  scheduler.stopAfterCurrent()
+  deferred.get(2)?.()
+  deferred.get(3)?.()
+  await scheduler.waitForStatus('stopped')
 })
 
-test('subscribeOutput receives output lines from batch runner', async () => {
-  const collectedLines: OutputLine[] = []
-  const fakeLine: OutputLine = { workerId: 1, stream: 'stdout', text: 'hello', ts: Date.now() }
-
-  const deferred: { finishRun?: () => void } = {}
-  const runner: BatchRunner = async (_config, _onUpdate, onOutput) => {
-    onOutput?.(fakeLine)
-    await new Promise<void>(resolve => { deferred.finishRun = resolve })
-    return {
-      id: 'batch-1',
-      status: 'success',
-      startedAt: new Date().toISOString(),
-      finishedAt: new Date().toISOString(),
-      durationMs: 1,
-      workers: [],
-      summaryPath: '/tmp/summary.md',
-    }
+test('stop drains active slots without replacement', async () => {
+  const deferred = new Map<number, () => void>()
+  const runner: WorkerRunner = async (_config, run) => {
+    await new Promise<void>(resolve => deferred.set(run.sequence, resolve))
+    return result(run.slotId, run.sequence)
   }
 
-  const scheduler = new AutoScheduler(runner, { wait: () => Promise.resolve() })
-  scheduler.subscribeOutput(line => collectedLines.push(line))
+  const scheduler = new AutoScheduler(runner)
   void scheduler.start(config())
-  await scheduler.waitForStatus('running')
+  await scheduler.waitForRunCount(2)
   scheduler.stopAfterCurrent()
-  assert.ok(deferred.finishRun)
-  deferred.finishRun()
+  await scheduler.waitForStatus('draining')
+  deferred.get(1)?.()
+  deferred.get(2)?.()
   await scheduler.waitForStatus('stopped')
 
-  assert.equal(collectedLines.length, 1)
-  assert.deepEqual(collectedLines[0], fakeLine)
+  const snapshot = scheduler.getSnapshot()
+  assert.equal(snapshot.status, 'stopped')
+  assert.equal(snapshot.session?.totals.started, 2)
+})
+
+test('worker failure increments totals and continues the slot', async () => {
+  const deferred = new Map<number, () => void>()
+  const runner: WorkerRunner = async (_config, run) => {
+    await new Promise<void>(resolve => deferred.set(run.sequence, resolve))
+    return result(run.slotId, run.sequence, run.sequence === 1 ? 'error' : 'success')
+  }
+
+  const scheduler = new AutoScheduler(runner)
+  void scheduler.start(config())
+  await scheduler.waitForRunCount(2)
+  deferred.get(1)?.()
+  await scheduler.waitForRunCount(3)
+
+  const snapshot = scheduler.getSnapshot()
+  assert.equal(snapshot.session?.totals.error, 1)
+  assert.equal(snapshot.session?.totals.started, 3)
+
+  scheduler.stopAfterCurrent()
+  deferred.get(2)?.()
+  deferred.get(3)?.()
+  await scheduler.waitForStatus('stopped')
 })
