@@ -185,6 +185,7 @@ describe("useAgentChat", () => {
         sessionKey: nextSession.sessionKey,
       })
       emitAgentEvent?.({
+        domain: "agent",
         type: "phase.update",
         timestamp: "2026-05-13T00:02:00.000Z",
         payload: {
