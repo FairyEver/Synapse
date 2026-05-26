@@ -374,6 +374,13 @@ class ContentSubmissionService {
     identity: Awaited<ReturnType<typeof userIdentityService.requireReadyRepoProfile>>,
   ): Promise<SynapseContentMutationResult> {
     const repositoryConfig = await this.resolveActiveRepository()
+    const repositoryState = await readReadyRepositoryState(repositoryConfig)
+
+    if (repositoryState.isGitRepository) {
+      await pullWithRebase(repositoryConfig)
+    }
+
+    await contentIndexService.syncIndex(repositoryConfig)
 
     const latestDetail = await contentHistoryService.readCurrentDetail(
       repositoryConfig,
