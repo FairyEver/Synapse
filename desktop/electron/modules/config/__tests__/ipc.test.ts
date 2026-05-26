@@ -41,6 +41,10 @@ vi.mock("../../../services/config-backup-service", () => ({
   configBackupService: {
     exportBackup: vi.fn(),
     importBackup: vi.fn(),
+    readImport: vi.fn(),
+    selectExportTarget: vi.fn(),
+    selectImportSource: vi.fn(),
+    writeExport: vi.fn(),
   },
 }))
 
@@ -103,6 +107,28 @@ describe("configIpcModule", () => {
     expect(result.agent.defaultProviderModel).toEqual(providerModel)
   })
 
+  it("returns filePath for config backup export", async () => {
+    const { configBackupService } = await import("../../../services/config-backup-service")
+    vi.mocked(configBackupService.selectExportTarget).mockResolvedValue("/tmp/synapse-backup.json")
+    vi.mocked(configBackupService.writeExport).mockResolvedValue(undefined)
+    const harness = createHarness()
+
+    const result = await harness.invoke("synapse:config:export-backup", undefined)
+
+    expect(result).toEqual({ filePath: "/tmp/synapse-backup.json" })
+  })
+
+  it("returns filePath for config backup import", async () => {
+    const { configBackupService } = await import("../../../services/config-backup-service")
+    vi.mocked(configBackupService.selectImportSource).mockResolvedValue("/tmp/synapse-backup.json")
+    vi.mocked(configBackupService.readImport).mockResolvedValue({ filePath: "/tmp/synapse-backup.json" })
+    const harness = createHarness()
+
+    const result = await harness.invoke("synapse:config:import-backup", undefined)
+
+    expect(result).toEqual({ filePath: "/tmp/synapse-backup.json" })
+  })
+
   it("relaunches even when resetApp cannot delete every userData entry", async () => {
     mocks.fs.readdir.mockResolvedValue([
       { name: "stale-cache", isDirectory: () => true },
@@ -129,6 +155,19 @@ describe("configIpcModule", () => {
 function createHarness() {
   const harness = createInMemoryHarness()
   const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+    if (serviceId === "core.permission-guard") {
+      return {
+        check: vi.fn().mockResolvedValue({ allowed: true }),
+        registerPolicy: vi.fn(),
+      } as T
+    }
+    if (serviceId === "core.audit-sink") {
+      return {
+        clearForTests: vi.fn(),
+        list: vi.fn(() => []),
+        record: vi.fn(),
+      } as T
+    }
     throw new Error(`Unexpected service id: ${serviceId}`)
   }
 

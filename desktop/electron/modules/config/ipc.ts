@@ -61,14 +61,11 @@ const configSchema = z.object({
 const configPatchSchema = z.any()
 
 const exportResultSchema = z.object({
-  success: z.boolean(),
-  filePath: z.optional(z.string()),
-  message: z.optional(z.string()),
+  filePath: z.string(),
 }).nullable()
 
 const importResultSchema = z.object({
-  success: z.boolean(),
-  message: z.optional(z.string()),
+  filePath: z.string(),
 }).nullable()
 
 export const configIpcModule: IpcModule = {
@@ -154,7 +151,7 @@ export const configIpcModule: IpcModule = {
             outcome: "allowed",
             metadata: { source: "config.exportBackup" },
           })
-          return { success: true, filePath }
+          return { filePath }
         } catch (error) {
           auditSink.record({
             action: "fs.write",
@@ -219,7 +216,7 @@ export const configIpcModule: IpcModule = {
         })
 
         try {
-          await configBackupService.readImport(filePath)
+          const result = await configBackupService.readImport(filePath)
           auditSink.record({
             action: "fs.write",
             actor,
@@ -227,7 +224,7 @@ export const configIpcModule: IpcModule = {
             outcome: "allowed",
             metadata: { operation: "config.import", source: "config.importBackup" },
           })
-          return { success: true, message: "配置已成功导入。" }
+          return result
         } catch (error) {
           auditSink.record({
             action: "fs.write",
