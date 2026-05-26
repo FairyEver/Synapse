@@ -145,7 +145,7 @@ describe("WorkflowEngine", () => {
       edges: [{ id: "e1", from: "a", to: "end" }],
     }
     const engine = new WorkflowEngine({
-      sendToAgent: vi.fn(async (input: { onConversationCreated?: (target: typeof target) => void }) => {
+      sendToAgent: vi.fn(async (input: { onConversationCreated?: (conversationTarget: typeof target) => void }) => {
         input.onConversationCreated?.(target)
         return {
           status: "success" as const,

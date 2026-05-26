@@ -33,7 +33,7 @@ export function TimelineView({ definition, nodeResults, selectedNodeId, onNodeSe
     const activeNodeIds = new Set(activeResults.map((r) => r.nodeId))
     const pendingNodes = definition.nodes
       .filter((n) => !activeNodeIds.has(n.id))
-      .map((n) => ({ nodeId: n.id, status: "pending" as const, input: { variables: {} } }))
+      .map((n): NodeRunResult => ({ nodeId: n.id, status: "pending", input: { variables: {} } }))
     return [...activeResults, ...pendingNodes]
   }, [definition.nodes, nodeResults])
 

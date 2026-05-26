@@ -126,7 +126,7 @@ describe("promptNodeExecutor", () => {
     }
     const onAgentConversation = vi.fn()
     const sendToAgent = vi.fn(async (
-      input: { onConversationCreated?: (target: typeof target) => void },
+      input: { onConversationCreated?: (conversationTarget: typeof target) => void },
     ) => {
       input.onConversationCreated?.(target)
       return {
