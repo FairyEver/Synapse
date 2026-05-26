@@ -2,6 +2,7 @@ import { lstat, mkdir, readFile } from "node:fs/promises"
 import path from "node:path"
 
 import { atomicWriteTextFile } from "./atomic-write"
+import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 
 export interface KnowledgeBaseManifestSourceEntry {
   readonly hash: string
@@ -34,6 +35,10 @@ export async function readKnowledgeBaseManifest(projectPath: string): Promise<Kn
     if (isMissingPathError(error)) {
       return { status: "missing", manifest: emptyManifest() }
     }
+    knowledgeBaseLogger.warn("Knowledge Base manifest read failed.", {
+      manifestPath: ".raw/.manifest.json",
+      ...knowledgeBaseErrorMeta(error),
+    })
     return {
       status: "invalid",
       error: error instanceof Error ? error.message : String(error),

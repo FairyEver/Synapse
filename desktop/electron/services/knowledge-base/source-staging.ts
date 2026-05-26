@@ -6,6 +6,7 @@ import type { SynapseKnowledgeBaseUploadSourcesResult } from "../../../src/types
 import type { FileConversionInput, FileConversionResult } from "../file-conversion"
 import { sourceFrontmatter } from "../file-conversion/markdown"
 import { acquireUrlSource, type FetchUrl } from "../source-acquisition/url-source"
+import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 
 type SourceConverter = {
   convert(input: FileConversionInput): Promise<FileConversionResult>
@@ -135,11 +136,21 @@ export async function stageKnowledgeBaseSources(
       let converted: FileConversionResult
       try {
         converted = await input.converter.convert({ filePath: sourcePath, ocr: { enabled: true } })
-      } catch {
+      } catch (error) {
+        knowledgeBaseLogger.warn("Knowledge Base source conversion failed.", {
+          extension,
+          fileName: path.basename(sourcePath),
+          ...knowledgeBaseErrorMeta(error),
+        })
         skipped.push({ path: filePath, reason: "conversion-error" })
         continue
       }
       if (hasOcrUnavailableWarning(converted)) {
+        knowledgeBaseLogger.warn("Knowledge Base source conversion returned OCR unavailable.", {
+          extension,
+          fileName: path.basename(sourcePath),
+          warningCodes: converted.warnings.map((warning) => warning.code),
+        })
         skipped.push({ path: filePath, reason: "conversion-error" })
         continue
       }
@@ -169,7 +180,11 @@ export async function stageKnowledgeBaseSources(
         sourceKind: "file",
         conversionWarnings: [...converted.warnings],
       })
-    } catch {
+    } catch (error) {
+      knowledgeBaseLogger.warn("Knowledge Base source staging failed.", {
+        fileName: path.basename(sourcePath),
+        ...knowledgeBaseErrorMeta(error),
+      })
       skipped.push({ path: filePath, reason: "read-error" })
     }
   }
@@ -189,6 +204,10 @@ export async function stageKnowledgeBaseUrlSource(
   })
 
   if (!result.ok) {
+    knowledgeBaseLogger.warn("Knowledge Base URL source acquisition failed.", {
+      code: result.code,
+      ...knowledgeBaseErrorMeta(result.message),
+    })
     return {
       uploaded: [],
       skipped: [urlAcquisitionFailure(input.url)],

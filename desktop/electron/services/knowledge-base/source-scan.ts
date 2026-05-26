@@ -3,6 +3,7 @@ import type { Dirent } from "node:fs"
 import { lstat, readdir, readFile } from "node:fs/promises"
 import path from "node:path"
 
+import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 import { readKnowledgeBaseManifest, type KnowledgeBaseManifestReadResult } from "./manifest"
 
 const SUPPORTED_SOURCE_EXTENSIONS = new Set([
@@ -68,7 +69,11 @@ export async function scanKnowledgeBaseSources(
             ? manifestEntry.hash === hash ? "unchanged" : "changed"
             : "new",
       })
-    } catch {
+    } catch (error) {
+      knowledgeBaseLogger.warn("Knowledge Base raw source read failed during scan.", {
+        relativePath,
+        ...knowledgeBaseErrorMeta(error),
+      })
       skippedSources.push({ relativePath, reason: "read-error" })
     }
   }
@@ -87,7 +92,11 @@ async function walkRawSources(
   let entries: Dirent[]
   try {
     entries = await readdir(directoryPath, { withFileTypes: true })
-  } catch {
+  } catch (error) {
+    knowledgeBaseLogger.warn("Knowledge Base raw directory read failed during scan.", {
+      relativePath: normalizeRelativePath(path.relative(projectPath, directoryPath)),
+      ...knowledgeBaseErrorMeta(error),
+    })
     return {
       relativePaths: [],
       skippedSources: [{
@@ -141,6 +150,10 @@ async function inspectRawDirectory(rawPath: string): Promise<"directory" | "miss
     if (isMissingPathError(error)) {
       return "missing"
     }
+    knowledgeBaseLogger.warn("Knowledge Base raw directory inspect failed.", {
+      relativePath: ".raw",
+      ...knowledgeBaseErrorMeta(error),
+    })
     return "read-error"
   }
 }
