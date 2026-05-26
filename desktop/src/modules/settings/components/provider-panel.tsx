@@ -113,6 +113,7 @@ type ProviderFormValues = {
 
 type ProviderConfigParseResult = {
   readonly env: Record<string, string>
+  readonly secretEnv?: Record<string, string>
   readonly settingsConfig: Record<string, unknown>
 }
 
@@ -1218,6 +1219,7 @@ function buildCreateInput(
     sonnetModel: optionalTrimmed(values.sonnetModel),
     opusModel: optionalTrimmed(values.opusModel),
     env: config.env,
+    secretEnv: config.secretEnv,
     settingsConfig: config.settingsConfig,
     sortIndex: optionalNumber(values.sortIndex),
   }
@@ -1241,6 +1243,7 @@ function buildUpdateInput(
     sonnetModel: optionalTrimmed(values.sonnetModel),
     opusModel: optionalTrimmed(values.opusModel),
     env: config.env,
+    secretEnv: config.secretEnv,
     settingsConfig: config.settingsConfig,
     sortIndex: optionalNumber(values.sortIndex),
     ...(apiKey ? { apiKey } : {}),
@@ -1325,9 +1328,11 @@ function providerConfigJsonFromValues(values: ProviderFormValues): ProviderConfi
   } catch {
     return null
   }
+  const splitEnv = splitProviderConfigEnv(stripFormEnvKeys(stringifyEnvRecord(parsed.env)))
   return {
-    env: stripFormEnvKeys(stringifyEnvRecord(parsed.env)),
-    settingsConfig: settingsConfigFromParsed(parsed),
+    env: splitEnv.publicEnv,
+    secretEnv: Object.keys(splitEnv.secretEnv).length ? splitEnv.secretEnv : undefined,
+    settingsConfig: settingsConfigFromParsed(parsed, splitEnv.publicEnv),
   }
 }
 
@@ -1343,11 +1348,13 @@ function normalizedProviderConfig(settingsConfig: Record<string, unknown>): Prov
   }
 }
 
-function settingsConfigFromParsed(parsed: ProviderConfigJson): Record<string, unknown> {
+function settingsConfigFromParsed(
+  parsed: ProviderConfigJson,
+  publicEnv: Record<string, string>,
+): Record<string, unknown> {
   const settingsConfig: Record<string, unknown> = { ...parsed }
-  const env = stripFormEnvKeys(stringifyEnvRecord(parsed.env))
-  if (Object.keys(env).length > 0) {
-    settingsConfig.env = env
+  if (Object.keys(publicEnv).length > 0) {
+    settingsConfig.env = publicEnv
   } else {
     delete settingsConfig.env
   }
@@ -1390,6 +1397,26 @@ function envString(value: unknown): string {
 
 function stripFormEnvKeys(env: Record<string, string>): Record<string, string> {
   return Object.fromEntries(Object.entries(env).filter(([key]) => !FORM_ENV_KEYS.has(key)))
+}
+
+function splitProviderConfigEnv(env: Record<string, string>): {
+  readonly publicEnv: Record<string, string>
+  readonly secretEnv: Record<string, string>
+} {
+  const publicEnv: Record<string, string> = {}
+  const secretEnv: Record<string, string> = {}
+  for (const [key, value] of Object.entries(env)) {
+    if (isSensitiveEnvName(key)) {
+      secretEnv[key] = value
+    } else {
+      publicEnv[key] = value
+    }
+  }
+  return { publicEnv, secretEnv }
+}
+
+function isSensitiveEnvName(key: string): boolean {
+  return /(?:SECRET|TOKEN|PASSWORD|PRIVATE_KEY|API_KEY|ACCESS_KEY)/i.test(key)
 }
 
 function stringifyEnvRecord(value: Record<string, unknown> | undefined): Record<string, string> {

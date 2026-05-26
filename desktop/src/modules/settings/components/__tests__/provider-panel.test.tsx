@@ -482,6 +482,8 @@ describe("ProviderPanel dialog editor", () => {
           ANTHROPIC_API_KEY: "sk-pasted",
           ANTHROPIC_MODEL: "claude-pasted",
           ENABLE_TOOL_SEARCH: "true",
+          OPENAI_API_KEY: "sk-openai",
+          GITHUB_TOKEN: "ghp-secret",
         },
         hooks: {},
         permissions: { allow: [], deny: [] },
@@ -508,6 +510,10 @@ describe("ProviderPanel dialog editor", () => {
         model: "claude-pasted",
         env: {
           ENABLE_TOOL_SEARCH: "true",
+        },
+        secretEnv: {
+          OPENAI_API_KEY: "sk-openai",
+          GITHUB_TOKEN: "ghp-secret",
         },
         settingsConfig: {
           env: {
@@ -593,6 +599,7 @@ describe("ProviderPanel dialog editor", () => {
         env: {
           ENABLE_TOOL_SEARCH: "false",
           CLAUDE_CODE_EFFORT_LEVEL: "max",
+          CUSTOM_SECRET: "secret-value",
         },
         hooks: {},
         permissions: { allow: [], deny: [] },
@@ -613,6 +620,15 @@ describe("ProviderPanel dialog editor", () => {
           ENABLE_TOOL_SEARCH: "false",
           CLAUDE_CODE_EFFORT_LEVEL: "max",
         },
+        secretEnv: {
+          CUSTOM_SECRET: "secret-value",
+        },
+        settingsConfig: expect.objectContaining({
+          env: {
+            ENABLE_TOOL_SEARCH: "false",
+            CLAUDE_CODE_EFFORT_LEVEL: "max",
+          },
+        }),
       }),
     })
   })
