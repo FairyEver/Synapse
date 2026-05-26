@@ -19,6 +19,10 @@ import { runGitTextCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage } from "./git-error-utils"
 import { pendingPushesService } from "./pending-pushes-service"
+import {
+  createRepositoryInitializationPreview,
+  isInitializationBackupEntry,
+} from "./repository-initialization-safety"
 import { repositoryStore } from "./repository-store"
 import { userProfileService } from "./user-profile-service"
 
@@ -39,7 +43,7 @@ async function readTopLevelEntries(repoRootPath: string): Promise<Dirent[]> {
 }
 
 function getNonGitEntries(entries: Dirent[]): Dirent[] {
-  return entries.filter((entry) => !isGitDirectory(entry))
+  return entries.filter((entry) => !isGitDirectory(entry) && !isInitializationBackupEntry(entry.name))
 }
 
 function getFormattedNonGitEntryNames(entries: Dirent[]): string[] {
@@ -205,7 +209,10 @@ class RepositoryStructureService {
 
     const isValid = missingDirectories.length === 0
     const entries = await readTopLevelEntries(localPath)
-    const nonGitEntryNames = getFormattedNonGitEntryNames(entries)
+    const initializationPreview = await createRepositoryInitializationPreview({
+      localPath,
+      entries,
+    })
 
     let message: string
     if (isValid) {
@@ -218,10 +225,7 @@ class RepositoryStructureService {
 
     return {
       isValid,
-      initializationPreview: {
-        isEmpty: nonGitEntryNames.length === 0,
-        nonGitEntries: nonGitEntryNames,
-      },
+      initializationPreview,
       missingDirectories,
       message,
     }
@@ -294,12 +298,12 @@ class RepositoryStructureService {
     }
 
     const entries = await readTopLevelEntries(repository.localPath)
-    const nonGitEntries = getNonGitEntries(entries)
 
-    return {
-      isEmpty: nonGitEntries.length === 0,
-      nonGitEntries: nonGitEntries.map(formatTopLevelEntryName),
-    }
+    return createRepositoryInitializationPreview({
+      repositoryUuid: repository.uuid,
+      localPath: repository.localPath,
+      entries,
+    })
   }
 
   async initializeStructure(

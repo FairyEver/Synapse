@@ -1,4 +1,4 @@
-import { access, mkdtemp, writeFile } from "node:fs/promises"
+import { access, mkdir, mkdtemp, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -71,12 +71,39 @@ describe("RepositoryStructureService", () => {
     const result = await repositoryStructureService.validateDirectoryStructure(localPath)
 
     expect(result).toEqual(expect.objectContaining({
-      initializationPreview: {
+      initializationPreview: expect.objectContaining({
         isEmpty: false,
         nonGitEntries: ["notes.md"],
-      },
+      }),
       isValid: false,
     }))
+  })
+
+  it("returns a deterministic initialization token when validating a non-Synapse directory", async () => {
+    const { repositoryStructureService } = await import("../repository-structure-service")
+    const localPath = await makeTempRepositoryPath()
+    await writeFile(path.join(localPath, "notes.md"), "# Notes", "utf8")
+
+    const first = await repositoryStructureService.validateDirectoryStructure(localPath)
+    const second = await repositoryStructureService.validateDirectoryStructure(localPath)
+
+    expect(first.initializationPreview.operationToken).toBeTruthy()
+    expect(first.initializationPreview.operationToken).toBe(second.initializationPreview.operationToken)
+    expect(first.initializationPreview.nonGitEntries).toEqual(["notes.md"])
+    expect(first.initializationPreview.dangerFlags).toEqual([])
+  })
+
+  it("does not create missing content directories while validating", async () => {
+    const { repositoryStructureService } = await import("../repository-structure-service")
+    const localPath = await makeTempRepositoryPath()
+    await mkdir(path.join(localPath, "system", "users"), { recursive: true })
+    await mkdir(path.join(localPath, "system", "blobs"), { recursive: true })
+
+    await repositoryStructureService.validateDirectoryStructure(localPath)
+
+    await expect(access(path.join(localPath, "rules"))).rejects.toThrow()
+    await expect(access(path.join(localPath, "skills"))).rejects.toThrow()
+    await expect(access(path.join(localPath, "prompts"))).rejects.toThrow()
   })
 
   it("refuses to initialize a non-empty directory without a matching confirmation preview", async () => {

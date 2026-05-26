@@ -72,13 +72,24 @@ export type SynapseRepositoryOperationResult = {
   pendingPushCount?: number
 }
 
+export type SynapseRepositoryInitializationDangerFlag =
+  | "home"
+  | "desktop"
+  | "documents"
+  | "downloads"
+  | "filesystem-root"
+  | "synapse-source-checkout"
+  | "source-repository"
+
 export type SynapseRepositoryInitializationPreview = {
   isEmpty: boolean
   nonGitEntries: string[]
+  operationToken: string
+  dangerFlags: SynapseRepositoryInitializationDangerFlag[]
 }
 
 export type SynapseRepositoryInitializationOptions = {
-  confirmedNonGitEntries?: string[]
+  confirmedOperationToken?: string
 }
 
 export type SynapseRepositoryInitializationResult = {
