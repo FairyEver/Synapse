@@ -254,7 +254,11 @@ export class ReactiveScheduler {
     }
     for (const id of nodes) {
       if (!results.has(id)) {
-        results.set(id, { nodeId: id, status: "skipped", ...(hadFailure ? { error: "upstream failed" } : {}) })
+        if (abortSignal.aborted) {
+          results.set(id, { nodeId: id, status: "cancelled", error: "运行被取消" })
+        } else {
+          results.set(id, { nodeId: id, status: "skipped", ...(hadFailure ? { error: "upstream failed" } : {}) })
+        }
       }
     }
     const counts = schedulerResultCounts(results)

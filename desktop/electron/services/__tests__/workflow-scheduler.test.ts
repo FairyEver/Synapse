@@ -316,7 +316,8 @@ describe("ReactiveScheduler", () => {
       }),
       cb, ctrl.signal,
     )
-    await expect(promise).resolves.toBeInstanceOf(Map)
+    const results = await promise
+    expect(results.get("a")?.status).toBe("cancelled")
     expect(Date.now() - startedAt).toBeLessThan(40)
   })
 
