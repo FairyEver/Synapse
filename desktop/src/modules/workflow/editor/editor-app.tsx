@@ -325,7 +325,8 @@ export function WorkflowEditorApp() {
     try {
       const saveResult = await handleSave(def, true)
       if (!saveResult || "errors" in saveResult) {
-        toast.error("保存失败，运行已取消")
+        const errors = saveResult && "errors" in saveResult ? saveResult.errors : []
+        toast.error(errors[0]?.message ?? "保存失败，运行已取消")
         return null
       }
       const saved = definitionRef.current

@@ -49,7 +49,17 @@ vi.mock("../canvas-floating-toolbar", () => ({
 }))
 
 vi.mock("../canvas", () => ({
-  WorkflowCanvas: () => <div data-testid="canvas" />,
+  WorkflowCanvas: ({
+    definition,
+    onChange,
+  }: {
+    definition: WorkflowDefinition
+    onChange: (definition: WorkflowDefinition) => void
+  }) => (
+    <button type="button" data-testid="canvas" onClick={() => onChange({ ...definition, name: "Changed workflow" })}>
+      Change workflow
+    </button>
+  ),
 }))
 
 vi.mock("../node-palette", () => ({
@@ -267,6 +277,48 @@ describe("WorkflowEditorApp", () => {
     expect(document.body.textContent).toContain("请选择项目，或设置工作流默认项目。")
     expect(document.body.textContent).not.toContain("invalid_type")
     expect(document.body.textContent).not.toContain("[")
+  })
+
+  it("shows save validation details when run is cancelled before execution", async () => {
+    const validationMessage = "节点「提示词节点」缺少 providerId"
+    const workflowApi = {
+      get: vi.fn().mockResolvedValue(definitionWithPrompt()),
+      openRunner: vi.fn(),
+      runDefinition: vi.fn(),
+      save: vi.fn().mockResolvedValue({
+        errors: [{ type: "invalid_config", nodeId: "prompt-1", message: validationMessage }],
+      }),
+      onEditorRefocus: vi.fn(() => vi.fn()),
+      onDefinitionUpdated: vi.fn(() => vi.fn()),
+    }
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: { workflow: workflowApi },
+    })
+    window.history.replaceState({}, "", "/?workflowId=workflow-1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowEditorApp />)
+      await Promise.resolve()
+    })
+
+    await act(async () => {
+      buttonByText("Change workflow").click()
+    })
+
+    await act(async () => {
+      buttonByText("Run workflow").dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(workflowApi.save).toHaveBeenCalled()
+    expect(workflowApi.runDefinition).not.toHaveBeenCalled()
+    expect(toastError).toHaveBeenCalledWith(validationMessage)
   })
 
   it("collapses the floating validation card", async () => {
