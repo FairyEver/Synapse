@@ -1,3 +1,5 @@
+import { formatSynapseCost, resolveSynapseCostCny } from "@/lib/cost-currency"
+
 export interface TokenUsageField {
   readonly label: string
   readonly value: number
@@ -12,13 +14,6 @@ const TOKEN_USAGE_DEFINITIONS: readonly { readonly label: string; readonly keys:
 
 const tokenNumberFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
-})
-
-const costFormatter = new Intl.NumberFormat("en-US", {
-  currency: "USD",
-  maximumFractionDigits: 6,
-  minimumFractionDigits: 2,
-  style: "currency",
 })
 
 export function tokenUsageFields(usage: Record<string, unknown> | undefined): readonly TokenUsageField[] | undefined {
@@ -36,12 +31,11 @@ export function formatTokenUsageValue(value: number): string {
 }
 
 export function normalizeCostUsd(value: unknown): number | undefined {
-  if (typeof value !== "number" || !Number.isFinite(value)) return undefined
-  return Math.max(0, value)
+  return resolveSynapseCostCny({ costUsd: value })
 }
 
 export function formatCostUsd(value: number): string {
-  return costFormatter.format(value)
+  return formatSynapseCost(value)
 }
 
 function tokenNumber(usage: Record<string, unknown>, keys: readonly string[]): number | undefined {
