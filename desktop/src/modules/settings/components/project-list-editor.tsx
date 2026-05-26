@@ -1,5 +1,6 @@
 import { useState } from "react"
 import { Folder } from "lucide-react"
+import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
 import {
   AlertDialog,
@@ -58,6 +59,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   const [knowledgeBaseName, setKnowledgeBaseName] = useState("")
   const [knowledgeBaseError, setKnowledgeBaseError] = useState<string | null>(null)
   const [isCreatingKnowledgeBase, setIsCreatingKnowledgeBase] = useState(false)
+  const [openingKnowledgeBaseProjectId, setOpeningKnowledgeBaseProjectId] = useState<string | null>(null)
   const hasDirectoryPicker = Boolean(window.synapse?.repository)
 
   const resetForm = () => {
@@ -209,6 +211,21 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
     }
   }
 
+  const handleOpenKnowledgeBaseSources = async (project: SynapseProjectConfig) => {
+    try {
+      setOpeningKnowledgeBaseProjectId(project.id)
+      await window.synapse?.knowledgeBase?.openSourceManager({
+        projectId: project.id,
+        projectName: project.name,
+      })
+    } catch (error) {
+      logger.error("Failed to open knowledge base source manager.", { projectId: project.id, error })
+      toast("打开资料管理失败")
+    } finally {
+      setOpeningKnowledgeBaseProjectId((current) => current === project.id ? null : current)
+    }
+  }
+
   const handleEditProject = (project: SynapseProjectConfig) => {
     logger.info("Project edit dialog opened.", { projectId: project.id })
     setEditingProject(project)
@@ -337,12 +354,8 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                   <Button
                     variant="ghost"
                     size="sm"
-                    onClick={() => {
-                      void window.synapse?.knowledgeBase?.openSourceManager({
-                        projectId: project.id,
-                        projectName: project.name,
-                      }).catch((error) => logger.error("Failed to open knowledge base source manager.", { projectId: project.id, error }))
-                    }}
+                    disabled={openingKnowledgeBaseProjectId === project.id}
+                    onClick={() => void handleOpenKnowledgeBaseSources(project)}
                   >
                     资料管理
                   </Button>

@@ -33,8 +33,14 @@ const rendererLogger = vi.hoisted(() => ({
   info: vi.fn(),
 }))
 
+const toast = vi.hoisted(() => vi.fn())
+
 vi.mock("@/app-shell/logging", () => ({
   createRendererLogger: () => rendererLogger,
+}))
+
+vi.mock("sonner", () => ({
+  toast,
 }))
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -45,6 +51,7 @@ let bridgeMocks: ReturnType<typeof createSynapseBridgeMocks>
 beforeEach(() => {
   rendererLogger.error.mockClear()
   rendererLogger.info.mockClear()
+  toast.mockClear()
   vi.stubGlobal("crypto", {
     ...globalThis.crypto,
     randomUUID: vi.fn(() => "new-project-id"),
@@ -168,6 +175,25 @@ describe("ProjectListEditor knowledge base actions", () => {
         projectId: "project-1",
         projectName: "Knowledge",
       })
+    })
+  })
+
+  it("shows feedback when opening knowledge base source manager fails", async () => {
+    bridgeMocks.knowledgeBase.openSourceManager.mockRejectedValueOnce(new Error("open failed"))
+    renderEditor([kbProject])
+
+    await act(async () => {
+      buttonByText("资料管理").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(rendererLogger.error).toHaveBeenCalledWith("Failed to open knowledge base source manager.", {
+        projectId: "project-1",
+        error: expect.any(Error),
+      })
+      expect(toast).toHaveBeenCalledWith("打开资料管理失败")
     })
   })
 
