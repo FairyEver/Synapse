@@ -100,7 +100,7 @@ export function InvitationsPage() {
   }
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 pt-0">
+    <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0">
       {feedback ? <p className="text-sm text-muted-foreground">{feedback}</p> : null}
       {manualCopyUrl ? (
         <Input aria-label="邀请链接" readOnly value={manualCopyUrl} />

@@ -82,7 +82,7 @@ export function BackupPage() {
   }
 
   return (
-    <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 pt-0">
+    <main className="flex min-w-0 flex-1 flex-col gap-4 overflow-y-auto p-4 pt-0">
       <div className="flex items-center justify-between gap-4">
         <p className="text-sm text-muted-foreground">{feedback}</p>
         <Button disabled={isBackingUp} onClick={triggerBackup}>
