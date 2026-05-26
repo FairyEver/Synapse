@@ -283,7 +283,8 @@ describe("WorkflowRunnerApp", () => {
     expect(navigator.clipboard.writeText).toHaveBeenCalledTimes(1)
     const copied = vi.mocked(navigator.clipboard.writeText).mock.calls[0]?.[0] ?? ""
     expect(copied).toContain("# 工作流运行报告：Workflow")
-    expect(copied).toContain('"topic": "token=secret-value"')
+    expect(copied).toContain('"topic": "token=[redacted]"')
+    expect(copied).not.toContain("secret-value")
     expect(toast).toHaveBeenCalledWith("运行报告已复制。")
   })
 

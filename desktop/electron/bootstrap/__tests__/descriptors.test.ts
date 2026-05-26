@@ -574,6 +574,83 @@ describe("bootstrap descriptors (T1.5)", () => {
     expect(serialized).not.toContain("/Users/example")
   })
 
+  it("createRunWorkflowHandler sanitizes node results before persisting snapshots", async () => {
+    vi.doMock("../../services/config-store", () => ({
+      configStore: {
+        load: vi.fn(async () => ({
+          activeRepoUuid: "repo-1",
+          repositories: [{ uuid: "repo-1", name: "Test", localPath: "/test" }],
+        })),
+      },
+    }))
+
+    const { createRunWorkflowHandler } = await importBootstrap()
+    const workflowDef = {
+      id: "wf-1",
+      name: "Test",
+      version: "",
+      nodes: [
+        { id: "end-1", type: "end" as const, name: "End", position: { x: 400, y: 200 }, config: { outputType: "text" as const, template: "", variables: [] } },
+      ],
+      edges: [],
+      params: [],
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }
+    const rawNodeResults = {
+      "end-1": {
+        nodeId: "end-1",
+        status: "success" as const,
+        input: {
+          variables: { apiToken: "token=sk-secret" },
+          prompt: "resolved prompt token=sk-secret at /Users/example/repo",
+        },
+      },
+    }
+    const workflowService = { get: vi.fn().mockResolvedValue(workflowDef) }
+    const runAborts = new Map<string, AbortController>()
+    const runStatuses = new Map<string, { runId: string; workflowId: string; status: string; nodeResults: Record<string, unknown>; startedAt: number; params?: Record<string, unknown>; definition?: unknown }>()
+    const runCompletions = new Map<string, Promise<unknown>>()
+    const eventBus = { emit: vi.fn() }
+    const snapshotService = { save: vi.fn() }
+    const capabilityLogger = { error: vi.fn(), info: vi.fn(), warn: vi.fn() }
+    const workflowEngine = {
+      run: vi.fn(async (_def: unknown, _params: unknown, runId: string, emit: (event: unknown) => void) => {
+        emit({ type: "node:completed", runId, nodeId: "end-1", result: rawNodeResults["end-1"] })
+        emit({ type: "workflow:completed", runId, workflowId: "wf-1", result: { status: "completed", nodeResults: rawNodeResults, durationMs: 1 } })
+      }),
+    }
+
+    const handler = createRunWorkflowHandler({
+      workflowService: workflowService as never,
+      workflowEngine: workflowEngine as never,
+      snapshotService: snapshotService as never,
+      eventBus: eventBus as never,
+      runAborts: runAborts as never,
+      runStatuses: runStatuses as never,
+      runCompletions,
+      capabilityLogger: capabilityLogger as never,
+    })
+
+    await handler("wf-1", {})
+
+    await vi.waitFor(() => {
+      expect(snapshotService.save).toHaveBeenCalled()
+    })
+    expect(snapshotService.save).toHaveBeenCalledWith(expect.objectContaining({
+      nodeResults: {
+        "end-1": expect.objectContaining({
+          input: {
+            variables: { apiToken: "token=[redacted]" },
+            prompt: "resolved prompt token=[redacted] at [path]",
+          },
+        }),
+      },
+    }))
+    expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(snapshotService.save.mock.calls)).not.toContain("/Users/example/repo")
+  })
+
   it("coreTaskSchedulerDescriptor depends on action runtime", async () => {
     const { coreTaskSchedulerDescriptor } = await importBootstrap()
     expect(coreTaskSchedulerDescriptor.dependsOn).toEqual([

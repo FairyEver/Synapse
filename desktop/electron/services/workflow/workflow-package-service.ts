@@ -148,6 +148,7 @@ function rewriteWorkflowForImport(
     version: "",
     createdAt: timestamp,
     updatedAt: timestamp,
+    defaultProjectId: undefined,
     nodes: workflow.nodes.map((node) => ({ ...node, config: { ...node.config } })),
     edges: workflow.edges.map((edge) => ({ ...edge })),
     params: workflow.params.map((param) => ({ ...param })),
@@ -172,7 +173,22 @@ function rewriteWorkflowForImport(
     }
   }
 
+  next = {
+    ...next,
+    nodes: next.nodes.map((node) =>
+      isModelNode(node)
+        ? { ...node, config: withoutProjectId(node.config) }
+        : node,
+    ),
+  }
+
   return next
+}
+
+function withoutProjectId(config: WorkflowNode["config"]): WorkflowNode["config"] {
+  const rest = { ...(config as Record<string, unknown>) }
+  delete rest.projectId
+  return rest
 }
 
 function modelNodeOccurrence(node: WorkflowNode, inherited: boolean): WorkflowModelReference["occurrences"][number] {

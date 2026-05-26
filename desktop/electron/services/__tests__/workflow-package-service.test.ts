@@ -15,6 +15,7 @@ function workflowDefinition(): WorkflowDefinition {
     updatedAt: 2,
     defaultProviderId: "provider-deepseek",
     defaultModelTier: "sonnet",
+    defaultProjectId: "exporter-project",
     params: [],
     nodes: [
       {
@@ -22,7 +23,7 @@ function workflowDefinition(): WorkflowDefinition {
         name: "分析",
         type: "prompt",
         position: { x: 0, y: 0 },
-        config: { prompt: "Analyze", variables: [] },
+        config: { prompt: "Analyze", variables: [], projectId: "exporter-node-project" },
       },
       {
         id: "n2",
@@ -175,6 +176,8 @@ describe("WorkflowPackageService", () => {
     expect(imported.createdAt).toBe(Date.parse(nowIso))
     expect(imported.defaultProviderId).toBe("local-openai")
     expect(imported.defaultModelTier).toBe("sonnet")
+    expect(imported.defaultProjectId).toBeUndefined()
+    expect(imported.nodes.find((node) => node.id === "n1")?.config.projectId).toBeUndefined()
     expect(imported.nodes.find((node) => node.id === "n1")?.config.providerId).toBeUndefined()
     expect(imported.nodes.find((node) => node.id === "n2")?.config.providerId).toBe("local-openai")
     expect(imported.nodes.find((node) => node.id === "n2")?.config.modelTier).toBe("opus")

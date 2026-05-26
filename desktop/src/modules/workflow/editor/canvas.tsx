@@ -484,7 +484,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
   }, [onNodeSelect, onRequestRename])
 
   const handleAutoLayout = useCallback(() => {
-    const layouted = autoLayoutNodes(nodesRef.current, edges) as WorkflowFlowNode[]
+    const layouted = autoLayoutNodes(nodesRef.current, edgesRef.current) as WorkflowFlowNode[]
     setNodes(layouted)
     const wfNodes: WorkflowNode[] = layouted.map(flowNodeToWorkflowNode)
     const newDef = { ...definitionRef.current, nodes: wfNodes }
@@ -494,7 +494,7 @@ function CanvasContent({ definition, onChange, onNodeSelect, onRequestRename }, 
     requestAnimationFrame(() => {
       void fitView(CANVAS_FIT_VIEW_OPTIONS)
     })
-  }, [edges, onChange, setNodes, fitView])
+  }, [onChange, setNodes, fitView])
 
   const handleFitView = useCallback(() => {
     if (nodesRef.current.length === 0) {

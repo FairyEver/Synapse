@@ -59,7 +59,22 @@ describe("workflowIpcModule", () => {
     const snapshots = { save: vi.fn(async () => undefined) }
     const workflow = { get: vi.fn(async () => workflowDefinition()) }
     const engine = {
-      run: vi.fn(() => Promise.reject(new Error(rawError))),
+      run: vi.fn((_def: unknown, _params: unknown, runId: string, emit: (event: unknown) => void) => {
+        emit({
+          type: "node:completed",
+          runId,
+          nodeId: "prompt-1",
+          result: {
+            nodeId: "prompt-1",
+            status: "success",
+            input: {
+              variables: { secret: "token=sk-secret" },
+              prompt: "prompt token=sk-secret at /Users/example/repo",
+            },
+          },
+        })
+        return Promise.reject(new Error(rawError))
+      }),
     }
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
@@ -92,8 +107,18 @@ describe("workflowIpcModule", () => {
     expect(JSON.stringify(logStoreMock.logger.error.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(logStoreMock.logger.error.mock.calls)).not.toContain("/Users/example/repo")
     expect(JSON.stringify(logStoreMock.logger.error.mock.calls)).not.toContain("prompt text")
-    expect(JSON.stringify([...runStatuses.values()])).not.toContain("sk-secret")
-    expect(JSON.stringify(eventBus.emit.mock.calls)).not.toContain("sk-secret")
+    expect(snapshots.save).toHaveBeenCalledWith(expect.objectContaining({
+      nodeResults: {
+        "prompt-1": expect.objectContaining({
+          input: {
+            variables: { secret: "token=[redacted]" },
+            prompt: "prompt token=[redacted] at [path]",
+          },
+        }),
+      },
+    }))
+    expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("sk-secret")
+    expect(JSON.stringify(snapshots.save.mock.calls)).not.toContain("/Users/example/repo")
   })
 
   it("passes triggerSource to engine.run for each IPC entry point", async () => {

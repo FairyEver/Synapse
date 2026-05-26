@@ -112,6 +112,7 @@ import { WorkflowPackageService } from "../services/workflow/workflow-package-se
 import { WorkflowEngine } from "../services/workflow/workflow-engine"
 import { RunSnapshotService } from "../services/workflow/run-snapshot-service"
 import { buildEffectiveRunParams, validateWorkflow, validateRunParams } from "../services/workflow/workflow-validator"
+import { sanitizeNodeResultsForSnapshot } from "../services/workflow/run-snapshot-sanitize"
 import { WorkflowWindowManager } from "../services/workflow/window-manager"
 import { createWorkflowFileConversionOutputWriter } from "../services/workflow/file-conversion-output-writer"
 import { createDefaultFileConversionService } from "../services/file-conversion"
@@ -326,7 +327,7 @@ export function createRunWorkflowHandler(deps: {
         const endedAt = Date.now()
         const status = event.type === "workflow:completed" ? "completed" : event.type === "workflow:cancelled" ? "cancelled" : "failed"
         runStatuses.set(runId, { ...current, runId, workflowId: id, status, nodeResults: event.result?.nodeResults ?? nextNodeResults, startedAt, endedAt, durationMs: event.result?.durationMs ?? endedAt - startedAt, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })
-        Promise.resolve(snapshotService.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: event.result?.nodeResults ?? nextNodeResults, definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })).catch((err) => {
+        Promise.resolve(snapshotService.save({ runId, workflowId: id, version: def.version, startedAt, endedAt, status, params: effectiveParams, nodeResults: sanitizeNodeResultsForSnapshot(event.result?.nodeResults ?? nextNodeResults), definition: def, ...(event.type === "workflow:failed" ? { error: event.error } : {}) })).catch((err) => {
           capabilityLogger.warn("failed to persist workflow run snapshot", { runId, workflowId: id, boundary: "workflow-snapshot", ...capabilityRejectionDiagnostic(err) })
           eventBus.emit({ domain: "workflow", type: "snapshot:failed", payload: { runId, workflowId: id, error: err instanceof Error ? err.message : String(err) }, timestamp: new Date().toISOString() }, { backpressure: "block" })
         })
@@ -342,7 +343,7 @@ export function createRunWorkflowHandler(deps: {
           ...current, runId, workflowId: id,
           status: "failed",
           error: "工作流引擎异常",
-          nodeResults: current.nodeResults,
+          nodeResults: sanitizeNodeResultsForSnapshot(current.nodeResults),
           startedAt, endedAt,
           durationMs: endedAt - startedAt,
         })

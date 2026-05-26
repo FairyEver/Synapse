@@ -71,7 +71,7 @@ const workflowDefinitionSchema = {
   type: "object",
   description: "Full WorkflowDefinition object. Include workflow defaults such as defaultProjectId, defaultProviderId, defaultModelTier, and defaultNodeTimeoutMins when prompt/switch nodes inherit them.",
   properties: {
-    id: { type: "string" },
+    id: { type: "string", minLength: 1 },
     name: { type: "string" },
     description: { type: "string" },
     version: { type: "string" },

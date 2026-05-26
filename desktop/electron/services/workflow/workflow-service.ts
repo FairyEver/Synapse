@@ -87,6 +87,9 @@ export class WorkflowService {
   }
 
   async save(def: WorkflowDefinition): Promise<WorkflowSaveResult | WorkflowSaveError> {
+    if (typeof def.id !== "string" || !def.id.trim()) {
+      return { errors: [{ type: "invalid_config", message: "工作流 ID 不能为空" }] }
+    }
     const validation = validateWorkflow(def)
     if (!validation.valid) {
       logger.warn("workflow save blocked by validation", { id: def.id, name: def.name, errorCount: validation.errors.length, errors: validation.errors })

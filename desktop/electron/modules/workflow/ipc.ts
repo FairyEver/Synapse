@@ -18,6 +18,7 @@ import type { SynapseWorkflowPackageV1, WorkflowModelMapping } from "../../../sr
 import { createMainLogger } from "../../services/log-store"
 import { configStore } from "../../services/config-store"
 import { sanitizeError } from "../../services/error-sanitize"
+import { sanitizeNodeResultsForSnapshot } from "../../services/workflow/run-snapshot-sanitize"
 
 const logger = createMainLogger("workflow.ipc")
 const DELETE_ABORT_WAIT_MS = 5_000
@@ -146,24 +147,6 @@ function recordFilePermissionFailure(options: {
       errorLength: message.length,
     },
   })
-}
-
-/**
- * Deep-sanitize nodeResults for persistent storage: apply sanitizeError
- * to resolved variable values and resolved prompt text so that sensitive
- * content (tokens, API keys, local paths) is not written to run snapshots.
- * The in-memory copy retains the original resolved values for the active run.
- */
-function sanitizeNodeResultsForSnapshot(
-  nodeResults: Record<string, NodeRunResult>,
-): Record<string, NodeRunResult> {
-  const out: Record<string, NodeRunResult> = {}
-  for (const [nodeId, nr] of Object.entries(nodeResults)) {
-    out[nodeId] = nr.input
-      ? { ...nr, input: { variables: Object.fromEntries(Object.entries(nr.input.variables).map(([k, v]) => [k, sanitizeError(v)])), ...(nr.input.prompt !== undefined ? { prompt: sanitizeError(nr.input.prompt) } : {}) } }
-      : nr
-  }
-  return out
 }
 
 function saveRunSnapshot(
@@ -454,7 +437,7 @@ function handleEngineRejection(options: {
     { domain: "workflow", type: "workflow:failed", payload: { type: "workflow:failed", runId, workflowId: def.id, error: visibleError, result: { status: "failed", nodeResults: current.nodeResults, durationMs } }, timestamp: new Date().toISOString() },
     { backpressure: "block" },
   )
-  saveRunSnapshot(snapshots, { runId, workflowId: def.id, version: def.version, startedAt, endedAt, status: "failed", params, nodeResults: current.nodeResults, definition: def, error: visibleError }, eventBus)
+  saveRunSnapshot(snapshots, { runId, workflowId: def.id, version: def.version, startedAt, endedAt, status: "failed", params, nodeResults: sanitizeNodeResultsForSnapshot(current.nodeResults), definition: def, error: visibleError }, eventBus)
   pruneTerminalStatuses(runStatuses, def.id)
 }
 

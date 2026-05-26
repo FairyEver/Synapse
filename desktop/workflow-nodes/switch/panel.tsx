@@ -104,6 +104,10 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
     ? `${getProviderName(config.providerId) ?? config.providerId} · ${getModelName(config.providerId, config.modelTier ?? "default") ?? TIER_LABELS[config.modelTier ?? "default"]}`
     : "选择供应商 + 模型"
   const branchIdError = getBranchIdError(branches)
+  const defaultBranchOptions = branches.filter((branch) => BRANCH_ID_RE.test(branch.id))
+  const renderedDefaultBranch = defaultBranchOptions.some((branch) => branch.id === defaultBranch)
+    ? defaultBranch
+    : NO_DEFAULT
   const applyRoutePromptTemplate = () => {
     const nextPrompt = buildSwitchPromptTemplate(branches, defaultBranch === NO_DEFAULT ? undefined : defaultBranch)
     setPrompt(nextPrompt)
@@ -236,7 +240,7 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
           <div className="grid gap-1 mt-1">
             <span className="text-[11px] text-muted-foreground">默认分支</span>
             <Select
-              value={defaultBranch}
+              value={renderedDefaultBranch}
               onValueChange={(v) => {
                 setDefaultBranch(v)
                 commit({ defaultBranch: v === NO_DEFAULT ? undefined : v })
@@ -247,7 +251,7 @@ export function SwitchNodePanel({ config, onChange, upstreamNodes, workflowParam
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value={NO_DEFAULT} className="text-xs">无（匹配失败则失败）</SelectItem>
-                {branches.map((b) => (
+                {defaultBranchOptions.map((b) => (
                   <SelectItem key={b.id} value={b.id} className="text-xs">{b.label}</SelectItem>
                 ))}
               </SelectContent>

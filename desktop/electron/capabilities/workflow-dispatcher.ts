@@ -40,6 +40,12 @@ function requireObject(params: Record<string, unknown>, key: string): Record<str
   return v as Record<string, unknown>
 }
 
+function requireNestedString(params: Record<string, unknown>, parentKey: string, key: string): string {
+  const v = params[key]
+  if (typeof v !== "string" || !v) throw new Error(`Missing or invalid '${parentKey}.${key}': expected non-empty string`)
+  return v
+}
+
 function requireArray(params: Record<string, unknown>, key: string): unknown[] {
   const v = params[key]
   if (!Array.isArray(v)) throw new Error(`Missing or invalid '${key}': expected array`)
@@ -232,30 +238,32 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   },
 
   "workflow.definition.update": async (params, deps) => {
-    const definition = requireObject(params, "definition") as unknown as WorkflowDefinition
-    // Normalize fields required by the IPC response schema but often missing from
-    // external callers (MCP agents). Without this, the saved JSON passes DAG
-    // validation but fails Zod response validation when the UI loads it via IPC get.
-    const now = Date.now()
-    if (typeof definition.createdAt !== "number") {
-      // Prefer preserving the existing createdAt from disk if available
-      const existing = await deps.workflowService.get(definition.id)
-      definition.createdAt = existing?.createdAt ?? now
-    }
-    if (typeof definition.updatedAt !== "number") definition.updatedAt = now
-    if (!definition.version) definition.version = ""
-    // Ensure every param has a `default` (required by IPC schema)
-    if (Array.isArray(definition.params)) {
-      for (const p of definition.params) {
-        if ((p as { default?: unknown }).default === undefined) {
-          (p as { default: unknown }).default = null
+    const rawDefinition = requireObject(params, "definition")
+    const workflowId = requireNestedString(rawDefinition, "definition", "id")
+    return withWorkflowMutationLock(deps, workflowId, async () => {
+      const existing = await deps.workflowService.get(workflowId)
+      if (!existing) throw new Error(`Workflow not found: ${workflowId}`)
+      const definition = rawDefinition as unknown as WorkflowDefinition
+      // Normalize fields required by the IPC response schema but often missing from
+      // external callers (MCP agents). Without this, the saved JSON passes DAG
+      // validation but fails Zod response validation when the UI loads it via IPC get.
+      const now = Date.now()
+      if (typeof definition.createdAt !== "number") definition.createdAt = existing.createdAt ?? now
+      if (typeof definition.updatedAt !== "number") definition.updatedAt = now
+      if (!definition.version) definition.version = ""
+      // Ensure every param has a `default` (required by IPC schema)
+      if (Array.isArray(definition.params)) {
+        for (const p of definition.params) {
+          if ((p as { default?: unknown }).default === undefined) {
+            (p as { default: unknown }).default = null
+          }
         }
       }
-    }
-    const saveResult = await deps.workflowService.save(definition)
-    if ("errors" in saveResult) throw new Error(`Save failed: ${(saveResult as WorkflowSaveError).errors.map((e) => e.message).join("; ")}`)
-    emitDefinitionUpdated(deps.eventBus, definition.id, "mcp", (saveResult as WorkflowSaveResult).versionHash)
-    return { ok: true, data: saveResult }
+      const saveResult = await deps.workflowService.save(definition)
+      if ("errors" in saveResult) throw new Error(`Save failed: ${(saveResult as WorkflowSaveError).errors.map((e) => e.message).join("; ")}`)
+      emitDefinitionUpdated(deps.eventBus, workflowId, "mcp", (saveResult as WorkflowSaveResult).versionHash)
+      return { ok: true, data: saveResult }
+    })
   },
 
   "workflow.definition.delete": async (params, deps) => {
@@ -316,13 +324,11 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
   "workflow.node.delete": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
     const nodeId = requireString(params, "nodeId")
-    const def = await deps.workflowService.get(workflowId)
-    if (!def) throw new Error(`Workflow not found: ${workflowId}`)
-    const target = def.nodes.find((n) => n.id === nodeId)
-    if (!target) throw new Error(`Node not found: ${nodeId}`)
-    if (target.type === "end") throw new Error("Cannot delete the end node")
     let removedEdgeCount: number
     const result = await atomicMutate(deps, workflowId, (d) => {
+      const target = d.nodes.find((n) => n.id === nodeId)
+      if (!target) throw new Error(`Node not found: ${nodeId}`)
+      if (target.type === "end") throw new Error("Cannot delete the end node")
       const before = d.edges.length
       d.nodes = d.nodes.filter((n) => n.id !== nodeId)
       d.edges = d.edges.filter((e) => e.from !== nodeId && e.to !== nodeId)

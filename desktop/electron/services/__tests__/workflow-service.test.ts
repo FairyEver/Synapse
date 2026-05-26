@@ -125,4 +125,12 @@ describe("WorkflowService", () => {
     expect("errors" in result).toBe(true)
     expect((result as { errors: unknown[] }).errors.length).toBeGreaterThan(0)
   })
+  it("rejects workflows without a valid id before persisting", async () => {
+    const { svc } = createRepo()
+    const def = { ...makeDef(), id: "" }
+    const result = await svc.save(def)
+    expect("errors" in result).toBe(true)
+    expect((result as { errors: Array<{ message: string }> }).errors[0].message).toContain("ID")
+    expect(await svc.list()).toEqual([])
+  })
 })

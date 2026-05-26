@@ -10,7 +10,7 @@ The copied content is optimized for AI review, not end-user presentation. It mus
 
 - Copy one node's run result from the node result side panel.
 - Copy the whole workflow run result from the runner toolbar.
-- Include all useful debugging data, without redaction.
+- Include useful debugging data while redacting sensitive tokens, credentials, auth headers, and local paths before copying.
 - Include every node in the workflow, including completed, failed, cancelled, skipped, waiting, and never-started nodes.
 - Include time, duration, and execution order information.
 - Allow copying while a workflow is still running. The report marks this as a running snapshot.
@@ -32,7 +32,6 @@ Out of scope:
 - Exporting reports to files.
 - Adding new IPC endpoints.
 - Changing workflow engine execution or snapshot persistence.
-- Redacting tokens, headers, environment values, prompts, outputs, or errors.
 - Adding copy format menus such as JSON, YAML, or summary-only variants.
 
 ## Existing Context
@@ -215,7 +214,7 @@ The report also keeps each node's original definition order index when available
 - Empty string values use `（空）`.
 - Timestamps are rendered as readable local time plus the raw timestamp when useful for debugging.
 - Durations are rendered in milliseconds, with a readable seconds form when the value is large.
-- No copied content is redacted.
+- Copied content redacts sensitive keys and sensitive scalar values before it enters the system clipboard.
 
 ## Implementation Plan Boundary
 
@@ -244,7 +243,7 @@ Add focused tests for:
 - A user can copy a whole workflow run report with one click from the runner toolbar.
 - A user can copy a selected node report with one click from the node detail panel.
 - Reports are Markdown with embedded code blocks.
-- Reports include unredacted debugging data.
+- Reports preserve debugging structure while redacting sensitive values before clipboard writes.
 - Reports include all nodes for whole-run copy.
 - Running workflows can be copied as snapshots.
 - The change does not add IPC, storage changes, or workflow engine changes.

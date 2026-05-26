@@ -369,6 +369,29 @@ describe("WorkflowEngine", () => {
     )
   })
 
+  it("falls back to workflow project when node projectId is blank", async () => {
+    const nodeWithBlankProject = {
+      id: "blank-project",
+      name: "Blank Project",
+      type: "prompt",
+      position: { x: 0, y: 0 },
+      config: { providerId: "test-provider", modelTier: "sonnet", projectId: "", variables: [], prompt: "test" },
+    }
+    const def: WorkflowDefinition = {
+      id: "wf-project-default", name: "WF", version: "v1", createdAt: 0, updatedAt: 0,
+      defaultProjectId: "workflow-project",
+      params: [],
+      nodes: [nodeWithBlankProject, nodeEnd],
+      edges: [{ id: "e1", from: "blank-project", to: "end" }],
+    }
+    const agent = fakeAgent("ok")
+    const engine = new WorkflowEngine(agent)
+    await engine.run(def, {}, "run-project-default", () => {}, undefined, "workflow-project")
+    expect(agent.sendToAgent).toHaveBeenCalledWith(
+      expect.objectContaining({ projectId: "workflow-project" }),
+    )
+  })
+
   it("resolves Agent timeout from workflow default when node omits it", async () => {
     const nodeNoTimeout = { id: "nt", name: "NT", type: "prompt", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "test" } }
     const def: WorkflowDefinition = {

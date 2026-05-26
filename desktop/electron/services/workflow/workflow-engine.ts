@@ -39,6 +39,10 @@ function errorDiagnostic(error: unknown): { readonly errorName: string; readonly
   }
 }
 
+function normalizeOptionalString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() ? value.trim() : undefined
+}
+
 type EventCallback = (event: WorkflowEvent) => void
 
 export class WorkflowEngine {
@@ -191,7 +195,7 @@ export class WorkflowEngine {
             ...(resolvedPrompt !== undefined ? { promptLength: resolvedPrompt.length } : {}),
           })
 
-          const nodeProjectId = (cfg as Record<string, unknown>)["projectId"] as string | undefined
+          const nodeProjectId = normalizeOptionalString((cfg as Record<string, unknown>)["projectId"])
           const effectiveProjectId = nodeProjectId ?? projectId
 
           const execResult = await executor.execute({

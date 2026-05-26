@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { createWorkflowDispatcher, type WorkflowDispatchDeps } from "../workflow-dispatcher"
+import type { WorkflowDefinition } from "../../../src/types/workflow"
 
 function makeDeps(overrides: Partial<WorkflowDispatchDeps> = {}): WorkflowDispatchDeps {
   return {
@@ -44,6 +45,16 @@ function makeDeps(overrides: Partial<WorkflowDispatchDeps> = {}): WorkflowDispat
   }
 }
 
+function deferred<T>() {
+  let resolve!: (value: T) => void
+  let reject!: (reason?: unknown) => void
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res
+    reject = rej
+  })
+  return { promise, resolve, reject }
+}
+
 describe("createWorkflowDispatcher", () => {
   it("workflow.definition.list dispatches correctly", async () => {
     const deps = makeDeps()
@@ -60,6 +71,67 @@ describe("createWorkflowDispatcher", () => {
     const result = await dispatcher.dispatch("workflow.definition.create", {}, { source: "api" })
     expect(result.ok).toBe(true)
     expect(result.data).toEqual({ id: "wf-new", versionHash: "v_new" })
+  })
+
+  it("serializes workflow.definition.update behind in-flight workflow mutations", async () => {
+    const releaseFirstSave = deferred<{ versionHash: string }>()
+    const baseDefinition: WorkflowDefinition = {
+      id: "wf-1", name: "Test", description: "", version: "v1",
+      createdAt: 1, updatedAt: 2, params: [],
+      nodes: [{ id: "n1", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} }],
+      edges: [],
+    }
+    const save = vi.fn(async (def: WorkflowDefinition) => {
+      if (save.mock.calls.length === 1) return releaseFirstSave.promise
+      return { versionHash: `v_${def.name}` }
+    })
+    const deps = makeDeps({
+      workflowService: {
+        ...makeDeps().workflowService,
+        get: vi.fn(async () => structuredClone(baseDefinition)),
+        save,
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const firstMutation = dispatcher.dispatch(
+      "workflow.node.update",
+      { workflowId: "wf-1", nodeId: "n1", patch: { name: "Updated End" } },
+      { source: "api" },
+    )
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+
+    const definitionUpdate = dispatcher.dispatch(
+      "workflow.definition.update",
+      { definition: { ...baseDefinition, name: "Replacement" } },
+      { source: "api" },
+    )
+    await Promise.resolve()
+
+    expect(save).toHaveBeenCalledTimes(1)
+    releaseFirstSave.resolve({ versionHash: "v_first" })
+    await firstMutation
+    await definitionUpdate
+    expect(save).toHaveBeenCalledTimes(2)
+  })
+
+  it("rejects workflow.definition.update before saving when definition id is missing", async () => {
+    const deps = makeDeps()
+    const dispatcher = createWorkflowDispatcher(deps)
+    const definitionWithoutId: Record<string, unknown> = {
+      id: "wf-1", name: "Test", description: "", version: "v1",
+      createdAt: 1, updatedAt: 2, params: [],
+      nodes: [{ id: "n1", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} }],
+      edges: [],
+    }
+    delete definitionWithoutId.id
+
+    await expect(dispatcher.dispatch(
+      "workflow.definition.update",
+      { definition: definitionWithoutId },
+      { source: "api" },
+    )).rejects.toThrow("Missing or invalid 'definition.id'")
+    expect(deps.workflowService.save).not.toHaveBeenCalled()
   })
 
   it("checks permission and audits allowed workflow mutations", async () => {
@@ -248,6 +320,34 @@ describe("createWorkflowDispatcher", () => {
     const result = await dispatcher.dispatch("workflow.run.disable", { runId: "run-1" }, { source: "api" })
     expect(result.ok).toBe(true)
     expect(deps.cancelRun).toHaveBeenCalledWith("run-1")
+  })
+
+  it("reads workflow.node.delete state only through the mutation lock", async () => {
+    const definition: WorkflowDefinition = {
+      id: "wf-1", name: "Test", description: "", version: "v1",
+      createdAt: 1, updatedAt: 2, params: [],
+      nodes: [
+        { id: "n1", name: "Prompt", type: "prompt", position: { x: 100, y: 200 }, config: {} },
+        { id: "end", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} },
+      ],
+      edges: [],
+    }
+    const get = vi.fn(async () => structuredClone(definition))
+    const deps = makeDeps({
+      workflowService: {
+        ...makeDeps().workflowService,
+        get,
+        save: vi.fn(async () => ({ versionHash: "v_saved" })),
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    await dispatcher.dispatch(
+      "workflow.node.delete",
+      { workflowId: "wf-1", nodeId: "n1" },
+      { source: "api" },
+    )
+    expect(get).toHaveBeenCalledTimes(1)
   })
 
   it("workflow.node.create with auto-position", async () => {
