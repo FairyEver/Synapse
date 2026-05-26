@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react';
-import { Navigate, useNavigate } from 'react-router';
+import { Navigate, useLocation, useNavigate } from 'react-router';
+import type { Location } from 'react-router';
 
 import { BrandIcon } from '@/components/brand-icon';
 import { LoginForm } from '@/components/login-form';
@@ -8,15 +9,21 @@ import { ApiError } from '@/lib/api';
 
 export function LoginPage() {
   const { isAuthenticated, login, session } = useAuth();
+  const location = useLocation();
   const navigate = useNavigate();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const from = getSafeReturnPath(location, session?.role);
+
   if (isAuthenticated) {
     return (
-      <Navigate to={session?.role === 'user' ? '/me' : '/system'} replace />
+      <Navigate
+        to={from ?? (session?.role === 'user' ? '/me' : '/system')}
+        replace
+      />
     );
   }
 
@@ -27,9 +34,13 @@ export function LoginPage() {
 
     try {
       const nextSession = await login({ email, password });
-      navigate(nextSession.role === 'admin' ? '/system' : '/me', {
-        replace: true,
-      });
+      navigate(
+        getSafeReturnPath(location, nextSession.role) ??
+          (nextSession.role === 'admin' ? '/system' : '/me'),
+        {
+          replace: true,
+        },
+      );
     } catch (nextError) {
       setError(nextError instanceof ApiError ? nextError.message : '登录失败');
     } finally {
@@ -56,4 +67,38 @@ export function LoginPage() {
       </div>
     </main>
   );
+}
+
+function getSafeReturnPath(
+  location: Location,
+  role: 'admin' | 'user' | undefined,
+) {
+  const state = location.state as { from?: Location } | null;
+  const pathname = state?.from?.pathname;
+  if (!pathname || pathname === '/login' || !pathname.startsWith('/')) {
+    return null;
+  }
+  if (role === 'admin' && !isAdminPath(pathname)) {
+    return null;
+  }
+  if (role === 'user' && !isUserPath(pathname)) {
+    return null;
+  }
+  return `${pathname}${state?.from?.search ?? ''}${state?.from?.hash ?? ''}`;
+}
+
+function isAdminPath(pathname: string) {
+  return [
+    '/system',
+    '/users',
+    '/teams',
+    '/invitations',
+    '/audit-logs',
+    '/backup',
+    '/logs',
+  ].includes(pathname);
+}
+
+function isUserPath(pathname: string) {
+  return pathname === '/me' || pathname === '/settings' || pathname.startsWith('/modules/');
 }

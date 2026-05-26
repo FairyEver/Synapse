@@ -1,10 +1,9 @@
 import { type FormEvent, useState } from 'react';
-import { Link, Navigate, useSearchParams } from 'react-router';
+import { Navigate, useNavigate, useSearchParams } from 'react-router';
 
 import { Button } from '@/components/ui/button';
 import {
   Card,
-  CardAction,
   CardContent,
   CardFooter,
   CardHeader,
@@ -16,22 +15,22 @@ import { useAuth } from '@/hooks/use-auth';
 import { userApi } from '@/lib/api';
 
 export function TeamInvitePage() {
-  const { isAuthenticated, isLoading, session } = useAuth();
+  const { isAuthenticated, isLoading, refreshSession, session } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const [token, setToken] = useState(searchParams.get('token') ?? '');
-  const [feedback, setFeedback] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    setFeedback('');
     setError('');
     setIsSubmitting(true);
 
     try {
       await userApi.joinTeam({ token });
-      setFeedback('已加入团队');
+      await refreshSession();
+      navigate('/me', { replace: true });
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '加入失败');
     } finally {
@@ -56,11 +55,6 @@ export function TeamInvitePage() {
       <Card className="w-full max-w-sm">
         <CardHeader>
           <CardTitle>团队邀请</CardTitle>
-          <CardAction>
-            <Button asChild variant="link">
-              <Link to="/login">登录</Link>
-            </Button>
-          </CardAction>
         </CardHeader>
         <form onSubmit={onSubmit}>
           <CardContent>
@@ -74,9 +68,6 @@ export function TeamInvitePage() {
                   required
                 />
               </div>
-              {feedback ? (
-                <p className="text-sm text-muted-foreground">{feedback}</p>
-              ) : null}
               {error ? (
                 <p className="text-sm text-destructive">{error}</p>
               ) : null}

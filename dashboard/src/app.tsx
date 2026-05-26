@@ -1,6 +1,8 @@
+import { useEffect } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router';
 
 import { DashboardLayout } from '@/components/dashboard-layout';
+import { ErrorState } from '@/components/page-state';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { AuditLogsPage } from '@/pages/audit-logs-page';
 import { BackupPage } from '@/pages/backup-page';
@@ -18,14 +20,31 @@ import { UsersPage } from '@/pages/users-page';
 import { moduleRouteItems } from '@/routes';
 
 function ProtectedRoute({ roles }: { roles: Array<'admin' | 'user'> }) {
-  const { isAuthenticated, isLoading, session } = useAuth();
+  const { error, isAuthenticated, isLoading, refreshSession, session } =
+    useAuth();
   const location = useLocation();
+
+  useEffect(() => {
+    if (isLoading || !isAuthenticated) return;
+    void refreshSession().catch(() => undefined);
+  }, [isAuthenticated, isLoading, location.pathname, refreshSession]);
 
   if (isLoading) {
     return (
       <div className="flex min-h-svh items-center justify-center text-sm text-muted-foreground">
         加载中
       </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <main className="min-w-0 overflow-x-hidden overflow-y-auto p-4 pt-0">
+        <ErrorState
+          message={error}
+          onRetry={() => void refreshSession().catch(() => undefined)}
+        />
+      </main>
     );
   }
 
