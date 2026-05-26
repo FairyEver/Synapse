@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest"
-import { estimateUsageCost, normalizeUsagePriceRules } from "../pricing"
+import { DatabaseSync } from "node:sqlite"
+import { initUsageAnalysisSchema } from "../db-schema"
+import { DEFAULT_USAGE_PRICE_RULES, estimateUsageCost, listUsagePriceRules, normalizeUsagePriceRules } from "../pricing"
 
 describe("usage analysis pricing", () => {
   it("matches prices by model pattern without provider-specific rules", () => {
@@ -71,6 +73,34 @@ describe("usage analysis pricing", () => {
       reasoning: 0,
       total: 0,
       priceKnown: false,
+    })
+  })
+
+  it("seeds new databases with CNY default price rules", () => {
+    const db = new DatabaseSync(":memory:")
+    initUsageAnalysisSchema(db)
+
+    const rules = listUsagePriceRules(db)
+    expect(rules.find((rule) => rule.modelPattern === "claude-sonnet-4")).toMatchObject({
+      inputPer1M: 21.6,
+      outputPer1M: 108,
+      cacheReadPer1M: 2.16,
+      cacheWritePer1M: 27,
+      reasoningPer1M: 108,
+      currency: "CNY",
+    })
+    expect(db.prepare("SELECT value FROM usage_pricing_meta WHERE key = ?").get("cost_currency_migrated_to_cny_v1")).toBeTruthy()
+    db.close()
+  })
+
+  it("keeps default in-memory rules in CNY", () => {
+    expect(DEFAULT_USAGE_PRICE_RULES.find((rule) => rule.modelPattern === "claude-sonnet-4")).toMatchObject({
+      inputPer1M: 21.6,
+      outputPer1M: 108,
+      cacheReadPer1M: 2.16,
+      cacheWritePer1M: 27,
+      reasoningPer1M: 108,
+      currency: "CNY",
     })
   })
 })

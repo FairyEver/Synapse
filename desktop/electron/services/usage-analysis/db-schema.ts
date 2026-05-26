@@ -1,5 +1,5 @@
 import type { DatabaseSync } from "node:sqlite"
-import { seedDefaultUsagePriceRules } from "./pricing"
+import { migrateUsageAnalysisCostsToCny } from "./currency-migration"
 
 export function initUsageAnalysisSchema(database: DatabaseSync): void {
   database.exec(`
@@ -11,6 +11,7 @@ export function initUsageAnalysisSchema(database: DatabaseSync): void {
       cache_read_per_1m REAL NOT NULL DEFAULT 0,
       cache_write_per_1m REAL NOT NULL DEFAULT 0,
       reasoning_per_1m REAL NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT '',
       enabled INTEGER NOT NULL DEFAULT 1,
       source TEXT NOT NULL DEFAULT 'user',
       sort_index INTEGER NOT NULL DEFAULT 0,
@@ -76,7 +77,11 @@ export function initUsageAnalysisSchema(database: DatabaseSync): void {
         cost_cache_write REAL NOT NULL DEFAULT 0,
         cost_reasoning REAL NOT NULL DEFAULT 0,
         total_cost REAL NOT NULL DEFAULT 0,
-        price_known INTEGER NOT NULL DEFAULT 0
+        price_known INTEGER NOT NULL DEFAULT 0,
+        cost_currency TEXT NOT NULL DEFAULT '',
+        pricing_rate REAL NOT NULL DEFAULT 0,
+        priced_at TEXT NOT NULL DEFAULT '',
+        pricing_version TEXT NOT NULL DEFAULT ''
       )
     `)
     database.exec(`
@@ -112,6 +117,7 @@ export function initUsageAnalysisSchema(database: DatabaseSync): void {
         cost_reasoning REAL NOT NULL DEFAULT 0,
         total_cost REAL NOT NULL DEFAULT 0,
         price_known INTEGER NOT NULL DEFAULT 0,
+        cost_currency TEXT NOT NULL DEFAULT '',
         requests INTEGER NOT NULL DEFAULT 0,
         conversations INTEGER NOT NULL DEFAULT 0,
         tool_calls INTEGER NOT NULL DEFAULT 0,
@@ -136,6 +142,7 @@ export function initUsageAnalysisSchema(database: DatabaseSync): void {
         cost_reasoning REAL NOT NULL DEFAULT 0,
         total_cost REAL NOT NULL DEFAULT 0,
         price_known INTEGER NOT NULL DEFAULT 0,
+        cost_currency TEXT NOT NULL DEFAULT '',
         requests INTEGER NOT NULL DEFAULT 0,
         conversations INTEGER NOT NULL DEFAULT 0,
         tool_calls INTEGER NOT NULL DEFAULT 0,
@@ -155,10 +162,16 @@ export function initUsageAnalysisSchema(database: DatabaseSync): void {
     )
   `)
 
+  ensureColumn(database, "usage_model_prices", "currency", "TEXT NOT NULL DEFAULT ''")
+
   for (const prefix of ["cc", "cx"] as const) {
     ensureColumn(database, `${prefix}_scan_files`, "line_count", "INTEGER NOT NULL DEFAULT 0")
     ensureColumn(database, `${prefix}_tool_events`, "hour", "TEXT NOT NULL DEFAULT ''")
     ensureColumn(database, `${prefix}_usage_events`, "price_known", "INTEGER NOT NULL DEFAULT 0")
+    ensureColumn(database, `${prefix}_usage_events`, "cost_currency", "TEXT NOT NULL DEFAULT ''")
+    ensureColumn(database, `${prefix}_usage_events`, "pricing_rate", "REAL NOT NULL DEFAULT 0")
+    ensureColumn(database, `${prefix}_usage_events`, "priced_at", "TEXT NOT NULL DEFAULT ''")
+    ensureColumn(database, `${prefix}_usage_events`, "pricing_version", "TEXT NOT NULL DEFAULT ''")
     for (const aggregateTable of [`${prefix}_daily_usage`, `${prefix}_hourly_usage`]) {
       ensureColumn(database, aggregateTable, "cost_input", "REAL NOT NULL DEFAULT 0")
       ensureColumn(database, aggregateTable, "cost_output", "REAL NOT NULL DEFAULT 0")
@@ -166,6 +179,7 @@ export function initUsageAnalysisSchema(database: DatabaseSync): void {
       ensureColumn(database, aggregateTable, "cost_cache_write", "REAL NOT NULL DEFAULT 0")
       ensureColumn(database, aggregateTable, "cost_reasoning", "REAL NOT NULL DEFAULT 0")
       ensureColumn(database, aggregateTable, "price_known", "INTEGER NOT NULL DEFAULT 0")
+      ensureColumn(database, aggregateTable, "cost_currency", "TEXT NOT NULL DEFAULT ''")
     }
     database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_usage_date ON ${prefix}_usage_events(date)`)
     database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_usage_hour ON ${prefix}_usage_events(hour)`)
@@ -182,7 +196,7 @@ export function initUsageAnalysisSchema(database: DatabaseSync): void {
     database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_tool_session ON ${prefix}_tool_events(session_id)`)
     database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_tool_name ON ${prefix}_tool_events(category, tool_name)`)
   }
-  seedDefaultUsagePriceRules(database)
+  migrateUsageAnalysisCostsToCny(database)
 }
 
 function ensureColumn(database: DatabaseSync, table: string, column: string, definition: string): void {
