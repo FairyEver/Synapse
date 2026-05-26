@@ -52,6 +52,8 @@ export interface AgentSendDeps {
     response: string
     error?: string
     durationMs: number
+    usage?: Record<string, unknown>
+    costUsd?: number
   }>
 }
 
@@ -88,6 +90,8 @@ export interface NodeExecutionResult {
   activeBranch?: string
   error?: string
   durationMs: number
+  usage?: Record<string, unknown>
+  costUsd?: number
 }
 
 export interface NodeExecutor<TConfig = unknown> {

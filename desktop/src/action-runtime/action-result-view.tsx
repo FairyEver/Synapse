@@ -1,5 +1,6 @@
 import type { ActionRunResult } from "../../action-packages/types"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { TokenUsageSummary } from "@/components/token-usage-summary"
 
 interface DiagnosticsData {
   readonly envKeys?: readonly string[]
@@ -18,6 +19,7 @@ function ActionResultView({ result }: { readonly result: ActionRunResult }) {
     <div className="flex min-w-0 flex-col gap-2">
       {result.summary ? <p className="text-sm text-muted-foreground break-words">{result.summary}</p> : null}
       {result.metrics ? <MetricsView metrics={result.metrics} /> : null}
+      <TokenUsageSummary usage={result.usage} />
       {result.error ? <OutputBlock label="错误" value={result.error} /> : null}
       {result.logs?.map((log) => (
         <OutputBlock key={log.label} label={log.label} value={log.value} />

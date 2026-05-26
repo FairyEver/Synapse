@@ -128,6 +128,8 @@ const actionRunResultSchema = z.object({
   logs: z.array(z.object({ label: z.string(), value: z.string() })).optional(),
   outputs: z.record(z.string(), z.unknown()).optional(),
   error: z.string().optional(),
+  usage: z.record(z.string(), z.unknown()).optional(),
+  costUsd: z.number().optional(),
   metrics: z.object({
     durationMs: z.number().optional(),
     exitCode: z.number().nullable().optional(),

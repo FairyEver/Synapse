@@ -512,6 +512,8 @@ export class ConversationRouter {
     let latestAssistantText = ""
     let streamedText = ""
     let resultMetadata: ConversationEntryV1["history"][number]["metadata"] | undefined
+    let resultUsage: Record<string, unknown> | undefined
+    let resultCostUsd: number | undefined
     let error: string | undefined
 
     const accepted = await liveSession.send(message)
@@ -546,10 +548,12 @@ export class ConversationRouter {
       if (event.type === "result") {
         resultText = latestAssistantText || event.content || streamedText
         resultMetadata = resultHistoryMetadata(event)
+        resultUsage = resultUsageFromEvent(event)
+        resultCostUsd = resultCostFromEvent(event)
         await this.repository.saveUsage({
           conversationId: conversation.id,
-          usage: event.usage as ConversationEntryV1["usage"] | undefined,
-          costUsd: event.costUsd,
+          usage: resultUsage as ConversationEntryV1["usage"] | undefined,
+          costUsd: resultCostUsd,
         })
         break
       }
@@ -585,6 +589,8 @@ export class ConversationRouter {
       agentSessionId: saved.sdkSessionId,
       threadId: saved.sdkSessionId,
       error,
+      usage: resultUsage,
+      costUsd: resultCostUsd,
     }
   }
 
@@ -643,6 +649,8 @@ export class ConversationRouter {
     let resultText = ""
     let latestAssistantText = ""
     let resultMetadata: ConversationEntryV1["history"][number]["metadata"] | undefined
+    let resultUsage: Record<string, unknown> | undefined
+    let resultCostUsd: number | undefined
     let error: string | undefined
     try {
       const savedConversation = await this.repository.appendHistory(conversation.id, "user", message.content)
@@ -712,10 +720,12 @@ export class ConversationRouter {
           resultText = latestAssistantText || event.content || partialText
           partialText = resultText || partialText
           resultMetadata = resultHistoryMetadata(event)
+          resultUsage = resultUsageFromEvent(event)
+          resultCostUsd = resultCostFromEvent(event)
           await this.repository.saveUsage({
             conversationId: conversation.id,
-            usage: event.usage as ConversationEntryV1["usage"] | undefined,
-            costUsd: event.costUsd,
+            usage: resultUsage as ConversationEntryV1["usage"] | undefined,
+            costUsd: resultCostUsd,
           })
           break
         }
@@ -770,6 +780,8 @@ export class ConversationRouter {
         threadId: saved.sdkSessionId,
         error,
         timedOut: false,
+        usage: resultUsage,
+        costUsd: resultCostUsd,
       }
       await this.appendAfterTurnEvents(message, result, saved.id, turnId, sessionHandle.created)
       return result
@@ -1239,10 +1251,18 @@ function resultHistoryMetadata(
 ): ConversationEntryV1["history"][number]["metadata"] | undefined {
   const metadata = compactMetadata({
     ...event.metadata,
-    usage: event.metadata?.usage ?? event.usage,
-    costUsd: event.metadata?.costUsd ?? event.costUsd,
+    usage: resultUsageFromEvent(event),
+    costUsd: resultCostFromEvent(event),
   })
   return Object.keys(metadata).length > 0 ? metadata : undefined
+}
+
+function resultUsageFromEvent(event: Extract<AgentEvent, { type: "result" }>): Record<string, unknown> | undefined {
+  return event.metadata?.usage ?? event.usage
+}
+
+function resultCostFromEvent(event: Extract<AgentEvent, { type: "result" }>): number | undefined {
+  return event.metadata?.costUsd ?? event.costUsd
 }
 
 function compactMetadata(input: Record<string, unknown>): Record<string, unknown> {

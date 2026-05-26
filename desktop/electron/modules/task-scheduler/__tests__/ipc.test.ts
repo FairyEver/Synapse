@@ -79,7 +79,25 @@ describe("taskSchedulerIpcModule", () => {
       })),
       runTaskNow: vi.fn(async () => null),
       stopRun: vi.fn(() => ({ stopped: true })),
-      schedulerRunList: vi.fn(async () => []),
+      schedulerRunList: vi.fn(async () => [{
+        id: "run:1",
+        schemaVersion: 2,
+        taskId: "task:1",
+        startedAt: "2026-04-29T00:00:00.000Z",
+        finishedAt: "2026-04-29T00:01:00.000Z",
+        status: "success",
+        triggeredBy: "manual",
+        result: {
+          status: "success",
+          usage: {
+            input_tokens: 10,
+            output_tokens: 2,
+            cache_read_input_tokens: 30,
+            cache_creation_input_tokens: 4,
+          },
+          costUsd: 0.01,
+        },
+      }]),
     }
     const harness = createInMemoryHarness()
     const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
@@ -100,12 +118,25 @@ describe("taskSchedulerIpcModule", () => {
       patch: { enabled: false },
     })
     await harness.invoke("synapse:task-scheduler:tasks:run", { taskId: "task:1" })
-    await harness.invoke("synapse:task-scheduler:runs:list", { taskId: "task:1" })
+    const runs = await harness.invoke("synapse:task-scheduler:runs:list", { taskId: "task:1" })
 
     expect(service.schedulerTaskCreate).toHaveBeenCalled()
     expect(service.schedulerTaskUpdate).toHaveBeenCalledWith("task:1", { enabled: false })
     expect(service.runTaskNow).toHaveBeenCalledWith("task:1")
     expect(service.schedulerRunList).toHaveBeenCalledWith("task:1", { limit: undefined })
+    expect(runs).toEqual([
+      expect.objectContaining({
+        result: expect.objectContaining({
+          usage: {
+            input_tokens: 10,
+            output_tokens: 2,
+            cache_read_input_tokens: 30,
+            cache_creation_input_tokens: 4,
+          },
+          costUsd: 0.01,
+        }),
+      }),
+    ])
   })
 
   it("preserves activeDays through create and update IPC validation", async () => {

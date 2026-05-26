@@ -80,6 +80,8 @@ export function createAgentAction(deps: {
           error: persistableAgentError(status, result.error),
           outputs: { conversationId: result.conversationId, configVersion: currentConfigVersion },
           metrics: { durationMs: result.durationMs },
+          usage: result.usage,
+          costUsd: result.costUsd,
         }
       } catch (rawError) {
         const message = rawError instanceof Error ? rawError.message : String(rawError)

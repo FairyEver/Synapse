@@ -10,6 +10,8 @@ export interface NodeExecOutcome {
   activeBranch?: string
   error?: string
   durationMs?: number
+  usage?: Record<string, unknown>
+  costUsd?: number
 }
 
 export interface NodeTask {

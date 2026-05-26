@@ -95,6 +95,39 @@ describe("WorkflowEngine", () => {
     expect(result.output).toBe("result: done")
   })
 
+  it("preserves prompt node usage and cost in node results and completed events", async () => {
+    const def: WorkflowDefinition = {
+      id: "wf-usage", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeEnd],
+      edges: [{ id: "e1", from: "a", to: "end" }],
+    }
+    const events: WorkflowEvent[] = []
+    const usage = {
+      input_tokens: 10,
+      output_tokens: 2,
+      cache_read_input_tokens: 30,
+      cache_creation_input_tokens: 4,
+    }
+    const engine = new WorkflowEngine({
+      sendToAgent: vi.fn().mockResolvedValue({
+        status: "success" as const,
+        response: "hello",
+        durationMs: 5,
+        usage,
+        costUsd: 0.01,
+      }),
+    })
+
+    const result = await engine.run(def, {}, "run-usage", (event) => events.push(event))
+    const completedNode = events.find((event) => event.type === "node:completed" && event.nodeId === "a")
+
+    expect(result.nodeResults.a).toMatchObject({ usage, costUsd: 0.01 })
+    expect(completedNode).toMatchObject({
+      type: "node:completed",
+      result: expect.objectContaining({ usage, costUsd: 0.01 }),
+    })
+  })
+
   it("skips nodes not connected to end node", async () => {
     const orphan = { id: "orphan", name: "Orphan", type: "prompt", position: { x: 0, y: 200 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "orphan" } }
     const def: WorkflowDefinition = {

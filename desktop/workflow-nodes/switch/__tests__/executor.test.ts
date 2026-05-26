@@ -38,6 +38,36 @@ describe("switchNodeExecutor", () => {
     })
     expect(r.activeBranch).toBe("yes")
   })
+  it("returns Agent usage and cost with matched branch output", async () => {
+    const r = await switchNodeExecutor.execute({
+      config, resolvedVariables: {}, context: ctx,
+      agentDeps: {
+        sendToAgent: vi.fn().mockResolvedValue({
+          status: "success" as const,
+          response: "yes",
+          durationMs: 5,
+          usage: {
+            input_tokens: 10,
+            output_tokens: 2,
+            cache_read_input_tokens: 30,
+            cache_creation_input_tokens: 4,
+          },
+          costUsd: 0.01,
+        }),
+      },
+    })
+    expect(r).toMatchObject({
+      status: "success",
+      activeBranch: "yes",
+      usage: {
+        input_tokens: 10,
+        output_tokens: 2,
+        cache_read_input_tokens: 30,
+        cache_creation_input_tokens: 4,
+      },
+      costUsd: 0.01,
+    })
+  })
   it("uses defaultBranch on mismatch if configured", async () => {
     const r = await switchNodeExecutor.execute({
       config: { ...config, defaultBranch: "no" }, resolvedVariables: {}, context: ctx,

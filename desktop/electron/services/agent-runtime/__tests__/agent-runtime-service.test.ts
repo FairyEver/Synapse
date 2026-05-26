@@ -734,6 +734,52 @@ describe("AgentRuntimeService", () => {
     expect(JSON.stringify(logger.info.mock.calls)).not.toContain("done from sensitive prompt")
   })
 
+  it("returns scheduled agent usage and cost from the terminal SDK result", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => new ScriptedSession([
+        {
+          type: "result",
+          content: "done",
+          done: true,
+          sdkSessionId: "sdk-1",
+          usage: {
+            input_tokens: 10,
+            output_tokens: 2,
+            cache_read_input_tokens: 30,
+            cache_creation_input_tokens: 4,
+          },
+          costUsd: 0.01,
+        },
+      ], "sdk-1"),
+      now: fixedNow,
+    })
+
+    const result = await service.sendScheduled({
+      projectId: "project-1",
+      agentType: "claude-code",
+      mode: "plan",
+      prompt: "scheduled prompt",
+      sessionPolicy: "fresh",
+      timeoutMs: 120_000,
+    })
+
+    expect(result).toMatchObject({
+      status: "success",
+      usage: {
+        input_tokens: 10,
+        output_tokens: 2,
+        cache_read_input_tokens: 30,
+        cache_creation_input_tokens: 4,
+      },
+      costUsd: 0.01,
+    })
+  })
+
   it("persists scheduled fresh-session permission mode for renderer summaries", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const service = new AgentRuntimeService({

@@ -82,6 +82,41 @@ describe("promptNodeExecutor", () => {
     expect(r.status).toBe("success")
     expect(r.output).toBe("answer")
   })
+
+  it("returns Agent usage and cost with successful output", async () => {
+    const r = await promptNodeExecutor.execute({
+      config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "test" },
+      resolvedVariables: {},
+      context: ctx,
+      agentDeps: {
+        sendToAgent: vi.fn().mockResolvedValue({
+          status: "success" as const,
+          response: "answer",
+          durationMs: 5,
+          usage: {
+            input_tokens: 10,
+            output_tokens: 2,
+            cache_read_input_tokens: 30,
+            cache_creation_input_tokens: 4,
+          },
+          costUsd: 0.01,
+        }),
+      },
+    })
+
+    expect(r).toMatchObject({
+      status: "success",
+      output: "answer",
+      usage: {
+        input_tokens: 10,
+        output_tokens: 2,
+        cache_read_input_tokens: 30,
+        cache_creation_input_tokens: 4,
+      },
+      costUsd: 0.01,
+    })
+  })
+
   it("returns sanitized Agent error for UI display — redacts secrets and paths", async () => {
     const error = "SDK failed with token=sk-secret from /Users/liyang/private"
     const r = await promptNodeExecutor.execute({

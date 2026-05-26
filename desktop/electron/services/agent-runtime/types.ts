@@ -243,6 +243,8 @@ export interface AgentRuntimeTurnResult {
   readonly agentSessionId?: string
   readonly threadId?: string
   readonly error?: string
+  readonly usage?: Record<string, unknown>
+  readonly costUsd?: number
 }
 
 export interface AgentRuntimeRelayResult extends AgentRuntimeTurnResult {
@@ -277,4 +279,6 @@ export type ScheduledAgentSendResult = {
   readonly summary?: string
   readonly error?: string
   readonly durationMs: number
+  readonly usage?: Record<string, unknown>
+  readonly costUsd?: number
 }

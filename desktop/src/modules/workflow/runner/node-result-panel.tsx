@@ -4,6 +4,7 @@ import { Badge } from "@/components/ui/badge"
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
 import { MarkdownViewer } from "@/components/markdown-viewer"
 import { ScrollArea } from "@/components/ui/scroll-area"
+import { TokenUsageSummary } from "@/components/token-usage-summary"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
 import { ChevronDown, Copy, X } from "lucide-react"
 import type { NodeRunResult, WorkflowDefinition } from "@/types/workflow"
@@ -89,6 +90,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
       </div>
       <ScrollArea className="min-w-0 flex-1 p-3">
         <div className="flex min-w-0 max-w-full flex-col gap-3 text-xs">
+          <TokenUsageSummary usage={result.usage} />
           {Object.keys(result.input.variables).length > 0 && (
             <ContentSection title="输入变量" trackingName="workflow-runner-input-variables-render-mode">
               {(mode) => (

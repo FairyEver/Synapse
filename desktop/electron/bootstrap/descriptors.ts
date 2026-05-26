@@ -1294,7 +1294,14 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
             workflowNodeName,
           },
         })
-        return { status: result.status === "success" ? "success" : "failed", response: result.summary ?? "", error: result.error, durationMs: result.durationMs }
+        return {
+          status: result.status === "success" ? "success" : "failed",
+          response: result.summary ?? "",
+          error: result.error,
+          durationMs: result.durationMs,
+          usage: result.usage,
+          costUsd: result.costUsd,
+        }
       } catch (err) {
         const diagnostic = workflowAgentErrorDiagnostic(err)
         engineLogger.error("engine agent call failed (infrastructure)", {

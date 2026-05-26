@@ -130,6 +130,59 @@ describe("builtin agent action executor", () => {
     }))
   })
 
+  it("persists scheduled Agent usage and cost on the action run result", async () => {
+    const runtime = {
+      sendScheduled: vi.fn(async () => ({
+        conversationId: "conversation-1",
+        status: "success" as const,
+        summary: "done",
+        durationMs: 12,
+        usage: {
+          input_tokens: 10,
+          output_tokens: 2,
+          cache_read_input_tokens: 30,
+          cache_creation_input_tokens: 4,
+        },
+        costUsd: 0.01,
+      })),
+    } as unknown as AgentRuntimeService
+    const action = createAgentAction({
+      getAgentRuntime: async () => runtime,
+    })
+
+    const result = await action.execute({
+      config: {
+        projectId: "project-1",
+        agentType: "claude-code",
+        providerId: "anthropic",
+        modelTier: "sonnet",
+        mode: "default",
+        prompt: "Run scheduled work",
+        sessionPolicy: "fresh",
+        timeoutMins: 1,
+      },
+      context: {
+        taskId: "task-1",
+        runId: "run-1",
+        triggeredBy: "schedule",
+        cwd: "/repo",
+        actor: { kind: "user", id: "task-scheduler" },
+        abortSignal: new AbortController().signal,
+      },
+    })
+
+    expect(result).toMatchObject({
+      status: "success",
+      usage: {
+        input_tokens: 10,
+        output_tokens: 2,
+        cache_read_input_tokens: 30,
+        cache_creation_input_tokens: 4,
+      },
+      costUsd: 0.01,
+    })
+  })
+
   it("maps scheduler-aborted agent errors to cancelled", async () => {
     const runtime = {
       sendScheduled: vi.fn(async () => ({

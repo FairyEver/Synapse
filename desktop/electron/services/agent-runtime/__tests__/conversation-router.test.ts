@@ -329,6 +329,15 @@ describe("ConversationRouter", () => {
     const result = await router.send(baseMessage("hello"))
     const savedConversation = await conversations.get(result.conversationId)
 
+    expect(result).toMatchObject({
+      usage: {
+        input_tokens: 10,
+        output_tokens: 2,
+        cache_read_input_tokens: 30,
+        cache_creation_input_tokens: 4,
+      },
+      costUsd: 0.01,
+    })
     expect(savedConversation?.history.filter((entry) => entry.role === "assistant")).toEqual([
       expect.objectContaining({
         content: "usage answer",

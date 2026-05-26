@@ -1,4 +1,5 @@
 import type { NodeRunResult, WorkflowDefinition, WorkflowNode, WorkflowRunStatus } from "@/types/workflow"
+import { formatTokenUsageValue, tokenUsageFields } from "@/lib/token-usage"
 import { resolveBranchLabel } from "../lib/branch-label"
 
 interface WorkflowRunReportInput {
@@ -103,6 +104,14 @@ export function formatNodeRunReport(input: NodeRunReportInput): string {
 
   if (result.outputs && Object.keys(result.outputs).length > 0) {
     sections.push(["## 结构化输出", codeBlock("json", formatJson(result.outputs))].join("\n"))
+  }
+
+  const usageFields = tokenUsageFields(result.usage)
+  if (usageFields) {
+    sections.push([
+      "## Token 消耗",
+      ...usageFields.map((field) => `- ${field.label}：${formatTokenUsageValue(field.value)}`),
+    ].join("\n"))
   }
 
   if (result.error) {

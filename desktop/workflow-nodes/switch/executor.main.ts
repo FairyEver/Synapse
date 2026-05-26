@@ -109,7 +109,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
       logger.warn("switch node agent call failed", {
         projectId: context.projectId, runId: context.runId, ...diagnostic, sanitizedError, durationMs,
       })
-      return { status: "failed", output: "", error: agentFailureMessage(agentResult.error), durationMs }
+      return { status: "failed", output: "", error: agentFailureMessage(agentResult.error), durationMs, usage: agentResult.usage, costUsd: agentResult.costUsd }
     }
 
     const providerFailure = agentProviderFailureFromResponse(agentResult.response)
@@ -119,7 +119,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
       logger.warn("switch node agent call failed", {
         projectId: context.projectId, runId: context.runId, ...diagnostic, sanitizedError, durationMs,
       })
-      return { status: "failed", output: "", error: agentFailureMessage(providerFailure), durationMs }
+      return { status: "failed", output: "", error: agentFailureMessage(providerFailure), durationMs, usage: agentResult.usage, costUsd: agentResult.costUsd }
     }
 
     const rawResponse = agentResult.response.trim()
@@ -132,7 +132,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
         projectId: context.projectId, runId: context.runId, activeBranch: matched,
         responseLength: rawResponse.length, normalizedResponseLength: normalizedResponse.length, durationMs,
       })
-      return { status: "success", output: matched, activeBranch: matched, durationMs }
+      return { status: "success", output: matched, activeBranch: matched, durationMs, usage: agentResult.usage, costUsd: agentResult.costUsd }
     }
 
     if (config.defaultBranch) {
@@ -140,7 +140,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
         projectId: context.projectId, runId: context.runId, activeBranch: config.defaultBranch,
         responseLength: rawResponse.length, normalizedResponseLength: normalizedResponse.length, durationMs,
       })
-      return { status: "success", output: config.defaultBranch, activeBranch: config.defaultBranch, durationMs }
+      return { status: "success", output: config.defaultBranch, activeBranch: config.defaultBranch, durationMs, usage: agentResult.usage, costUsd: agentResult.costUsd }
     }
 
     logger.warn("switch node branch match failed — no match and no default", {
@@ -150,6 +150,8 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
     return {
       status: "failed", output: "", durationMs,
       error: `Agent 响应不匹配任何分支 [${ids.join(", ")}]`,
+      usage: agentResult.usage,
+      costUsd: agentResult.costUsd,
     }
   },
 }

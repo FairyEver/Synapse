@@ -48,7 +48,7 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
         sanitizedError,
         durationMs,
       })
-      return { status: "failed", output: "", error: agentFailureMessage(result.error), durationMs }
+      return { status: "failed", output: "", error: agentFailureMessage(result.error), durationMs, usage: result.usage, costUsd: result.costUsd }
     }
 
     const providerFailure = agentProviderFailureFromResponse(result.response)
@@ -60,7 +60,7 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
         sanitizedError,
         durationMs,
       })
-      return { status: "failed", output: "", error: agentFailureMessage(providerFailure), durationMs }
+      return { status: "failed", output: "", error: agentFailureMessage(providerFailure), durationMs, usage: result.usage, costUsd: result.costUsd }
     }
 
     input.onProgress?.("processing_output", "处理输出…")
@@ -68,6 +68,6 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
       projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
       outputLength: result.response.length, durationMs,
     })
-    return { status: "success", output: result.response, durationMs }
+    return { status: "success", output: result.response, durationMs, usage: result.usage, costUsd: result.costUsd }
   },
 }

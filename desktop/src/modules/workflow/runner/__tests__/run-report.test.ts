@@ -83,6 +83,30 @@ describe("workflow run reports", () => {
     expect(report).toContain("backend failed token=secret-value")
   })
 
+  it("includes token usage in node reports", () => {
+    const report = formatNodeRunReport({
+      definition: workflowDefinition(),
+      node: workflowDefinition().nodes[0],
+      result: nodeResult("node-1", {
+        usage: {
+          input_tokens: 1234,
+          output_tokens: 56,
+          cache_read_input_tokens: 7890,
+          cache_creation_input_tokens: 12,
+        },
+        costUsd: 0.01,
+      }),
+      orderIndex: 1,
+    })
+
+    expect(report).toContain("## Token 消耗")
+    expect(report).toContain("- 输入：1,234")
+    expect(report).toContain("- 输出：56")
+    expect(report).toContain("- 缓存读：7,890")
+    expect(report).toContain("- 缓存写：12")
+    expect(report).not.toContain("0.01")
+  })
+
   it("formats bigint and circular objects without throwing", () => {
     const cyclic: Record<string, unknown> = { label: "cycle" }
     cyclic.self = cyclic

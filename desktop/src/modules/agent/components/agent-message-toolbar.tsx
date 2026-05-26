@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react"
 import { Check, Clipboard } from "lucide-react"
 import { toast } from "sonner"
 import { createRendererLogger } from "@/app-shell/logging"
+import { TokenUsageSummary } from "@/components/token-usage-summary"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import { errorLogMeta } from "../utils"
@@ -18,10 +19,6 @@ interface AgentMessageToolbarProps {
   readonly copyButtonClassName?: string
 }
 
-const tokenNumberFormatter = new Intl.NumberFormat("en-US", {
-  maximumFractionDigits: 0,
-})
-
 function AgentMessageToolbar({
   timestamp,
   content,
@@ -34,7 +31,6 @@ function AgentMessageToolbar({
   const [copied, setCopied] = useState(false)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const formattedTimestamp = timestamp ? formatTime(timestamp) : undefined
-  const usageFields = usage ? tokenUsageFields(usage) : undefined
 
   useEffect(() => {
     return () => {
@@ -79,15 +75,7 @@ function AgentMessageToolbar({
           {formattedTimestamp}
         </time>
       ) : null}
-      {usageFields ? (
-        <span aria-label="Token 消耗" className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-          {usageFields.map((field) => (
-            <span key={field.label} className="whitespace-nowrap">
-              {field.label} {tokenNumberFormatter.format(field.value)}
-            </span>
-          ))}
-        </span>
-      ) : null}
+      <TokenUsageSummary usage={usage} />
       <button
         type="button"
         className={cn(
@@ -111,26 +99,6 @@ function formatTime(timestamp: string): string | undefined {
   const hours = date.getHours().toString().padStart(2, "0")
   const minutes = date.getMinutes().toString().padStart(2, "0")
   return `${hours}:${minutes}`
-}
-
-function tokenUsageFields(usage: Record<string, unknown>): Array<{ label: string; value: number }> | undefined {
-  const fields = [
-    { label: "输入", value: tokenNumber(usage, ["input_tokens", "inputTokens"]) },
-    { label: "输出", value: tokenNumber(usage, ["output_tokens", "outputTokens"]) },
-    { label: "缓存读", value: tokenNumber(usage, ["cache_read_input_tokens", "cacheReadInputTokens", "cacheRead"]) },
-    { label: "缓存写", value: tokenNumber(usage, ["cache_creation_input_tokens", "cacheCreationInputTokens", "cacheWrite"]) },
-  ]
-  return fields.some((field) => field.value !== undefined)
-    ? fields.map((field) => ({ label: field.label, value: field.value ?? 0 }))
-    : undefined
-}
-
-function tokenNumber(usage: Record<string, unknown>, keys: readonly string[]): number | undefined {
-  for (const key of keys) {
-    const value = usage[key]
-    if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, value)
-  }
-  return undefined
 }
 
 export { AgentMessageToolbar }
