@@ -34,8 +34,10 @@ import {
   resolveManagedKnowledgeBasePath,
 } from "./managed-path"
 import { KnowledgeBaseRawFileManager } from "./raw-file-manager"
+import { createMainLogger } from "../log-store"
 
 export const KNOWLEDGE_BASE_TEMPLATE_VERSION = "2026-05-21"
+const logger = createMainLogger("service.knowledge-base")
 
 type KnowledgeBaseServiceDeps = {
   managedTemplateRoot?: string
@@ -165,13 +167,16 @@ export class KnowledgeBaseService {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
     const entry = await this.rawFileManager.createFolder(rawRoot, payload.parentDirectoryPath, payload.name)
-    return { projectId: payload.projectId, entries: [entry], skipped: [] }
+    const result = { entries: [entry], skipped: [] }
+    this.recordRawMutation("createRawFolder", payload.projectId, result)
+    return { projectId: payload.projectId, ...result }
   }
 
   async uploadRawFiles(payload: SynapseKnowledgeBaseUploadRawFilesPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
     const result = await this.rawFileManager.uploadFiles(rawRoot, payload.targetDirectoryPath, payload.filePaths)
+    this.recordRawMutation("uploadRawFiles", payload.projectId, result)
     return { projectId: payload.projectId, ...result }
   }
 
@@ -179,13 +184,16 @@ export class KnowledgeBaseService {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
     const entry = await this.rawFileManager.renameEntry(rawRoot, payload.relativePath, payload.newName)
-    return { projectId: payload.projectId, entries: [entry], skipped: [] }
+    const result = { entries: [entry], skipped: [] }
+    this.recordRawMutation("renameRawEntry", payload.projectId, result)
+    return { projectId: payload.projectId, ...result }
   }
 
   async moveRawEntries(payload: SynapseKnowledgeBaseMoveRawEntriesPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
     const result = await this.rawFileManager.moveEntries(rawRoot, payload.relativePaths, payload.targetDirectoryPath)
+    this.recordRawMutation("moveRawEntries", payload.projectId, result)
     return { projectId: payload.projectId, ...result }
   }
 
@@ -193,7 +201,26 @@ export class KnowledgeBaseService {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
     const result = await this.rawFileManager.trashEntries(rawRoot, payload.relativePaths)
+    this.recordRawMutation("trashRawEntries", payload.projectId, result)
     return { projectId: payload.projectId, ...result }
+  }
+
+  private recordRawMutation(
+    operation: string,
+    projectId: string,
+    result: Omit<SynapseKnowledgeBaseRawMutationResult, "projectId">,
+  ): void {
+    const skippedReasons = result.skipped.reduce<Record<string, number>>((counts, item) => {
+      counts[item.reason] = (counts[item.reason] ?? 0) + 1
+      return counts
+    }, {})
+    logger.info("Knowledge Base raw mutation completed.", {
+      affectedCount: result.entries.length,
+      operation,
+      projectId,
+      skippedCount: result.skipped.length,
+      skippedReasons,
+    })
   }
 
   private async resolveProjectPath(projectId: string): Promise<string> {
