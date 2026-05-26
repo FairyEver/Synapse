@@ -126,6 +126,35 @@ describe("WorkflowEngine", () => {
       type: "node:completed",
       result: expect.objectContaining({ usage, costUsd: 0.01 }),
     })
+    expect(logger.info).toHaveBeenCalledWith("node succeeded", expect.objectContaining({
+      usage,
+      costUsd: 0.01,
+    }))
+  })
+
+  it("logs usage and cost when a node fails", async () => {
+    const usage = { input_tokens: 12, output_tokens: 3 }
+    nodeTypeRegistry.register(
+      { ...promptNodeManifest, type: "costly-failure" },
+      { execute: vi.fn().mockResolvedValue({ status: "failed", error: "agent failed", durationMs: 5, usage, costUsd: 0.02 }) },
+    )
+    const failingNode = {
+      ...nodeA,
+      id: "costly-failure",
+      type: "costly-failure",
+    }
+    const def: WorkflowDefinition = {
+      id: "wf-costly-failure", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [failingNode, nodeEnd],
+      edges: [{ id: "e1", from: "costly-failure", to: "end" }],
+    }
+
+    await new WorkflowEngine(fakeAgent("unused")).run(def, {}, "run-costly-failure", () => {})
+
+    expect(logger.warn).toHaveBeenCalledWith("node failed", expect.objectContaining({
+      usage,
+      costUsd: 0.02,
+    }))
   })
 
   it("skips nodes not connected to end node", async () => {
@@ -298,7 +327,7 @@ describe("WorkflowEngine", () => {
     const events: WorkflowEvent[] = []
 
     const result = await new WorkflowEngine(fakeAgent("unused"))
-      .run(def, {}, "run-throw", (event) => events.push(event))
+      .run(def, {}, "run-throw", (event) => events.push(event), undefined, undefined, "scheduler")
 
     const failedEvent = events.find((event) => event.type === "node:failed")
     const summarizedError = `节点执行异常：${sanitizeError(rawError)}`
@@ -312,6 +341,7 @@ describe("WorkflowEngine", () => {
     expect(logger.warn).toHaveBeenCalledWith("node threw exception", expect.objectContaining({
       errorName: "Error",
       errorLength: rawError.length,
+      triggerSource: "scheduler",
     }))
   })
 

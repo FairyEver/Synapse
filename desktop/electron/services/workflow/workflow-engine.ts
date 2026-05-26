@@ -236,6 +236,7 @@ export class WorkflowEngine {
           const visibleError = `节点执行异常：${sanitizeError(rawMessage)}`
           logger.warn("node threw exception", {
             runId, nodeId, nodeName: node.name, nodeType: node.type,
+            triggerSource: triggerSource ?? "unknown",
             ...diagnostic,
           })
           const throwDurationMs = nodeResults[nodeId]?.startedAt != null ? Date.now() - nodeResults[nodeId].startedAt! : undefined
@@ -280,6 +281,8 @@ export class WorkflowEngine {
             triggerSource: triggerSource ?? "unknown",
             ...(nr.output !== undefined ? { outputLength: nr.output.length } : {}),
             ...(nr.activeBranch !== undefined ? { activeBranch: nr.activeBranch } : {}),
+            ...(nr.usage !== undefined ? { usage: nr.usage } : {}),
+            ...(nr.costUsd !== undefined ? { costUsd: nr.costUsd } : {}),
           })
           if (outcome.output !== undefined) nodeOutputs[outcome.nodeId] = outcome.output
           emit({ type: "node:completed", runId, nodeId: outcome.nodeId, output: outcome.output, result: { ...nr } })
@@ -295,6 +298,8 @@ export class WorkflowEngine {
             triggerSource: triggerSource ?? "unknown",
             ...stringDiagnostic(outcome.error, "agent"),
             durationMs: nr.durationMs,
+            ...(nr.usage !== undefined ? { usage: nr.usage } : {}),
+            ...(nr.costUsd !== undefined ? { costUsd: nr.costUsd } : {}),
           })
           emit({ type: "node:failed", runId, nodeId: outcome.nodeId, error: outcome.error ?? "Unknown error", result: { ...nr } })
         }
