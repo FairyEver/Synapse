@@ -94,6 +94,9 @@ describe("bulk skill copy helpers", () => {
     const ready = classifyBulkSkillCopyPreflight(item, source, createReadyTarget("/target/jenkins", false))
     const overwrite = classifyBulkSkillCopyPreflight(item, source, createReadyTarget("/target/jenkins", true))
 
+    if (ready.status !== "ready") throw new Error("Expected ready preflight item.")
+    if (overwrite.status !== "overwrite") throw new Error("Expected overwrite preflight item.")
+
     expect(createBulkSkillCopyPayload(ready, "codex", "global")).toMatchObject({
       overwriteConfirmed: undefined,
       targetEditorId: "codex",
