@@ -1,5 +1,7 @@
-import { lstat, mkdir, readFile, writeFile } from "node:fs/promises"
+import { lstat, mkdir, readFile } from "node:fs/promises"
 import path from "node:path"
+
+import { atomicWriteTextFile } from "./atomic-write"
 
 export interface KnowledgeBaseManifestSourceEntry {
   readonly hash: string
@@ -50,7 +52,7 @@ export async function writeKnowledgeBaseManifest(
   await assertNoSymlinkInPath(root, ".raw")
   await assertNoSymlinkInPath(root, ".raw/.manifest.json")
   await mkdir(rawPath, { recursive: true })
-  await writeFile(manifestPath, `${JSON.stringify(normalizeManifest(manifest), null, 2)}\n`, "utf8")
+  await atomicWriteTextFile(manifestPath, `${JSON.stringify(normalizeManifest(manifest), null, 2)}\n`)
 }
 
 function parseKnowledgeBaseManifest(value: unknown): KnowledgeBaseManifest {

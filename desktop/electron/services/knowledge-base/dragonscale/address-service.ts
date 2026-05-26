@@ -1,9 +1,10 @@
 import { createHash } from "node:crypto"
 import type { Dirent } from "node:fs"
-import { mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises"
+import { mkdir, readFile, readdir, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 
+import { atomicWriteTextFile } from "../atomic-write"
 import type { DragonScaleAddress, DragonScaleAddressServiceResult } from "./types"
 
 const vaultLocks = new Map<string, Promise<void>>()
@@ -29,7 +30,7 @@ export class DragonScaleAddressService {
     return this.withVaultLock(vaultPath, async () => {
       const counterPath = await this.ensureCounter(vaultPath)
       const current = await this.readCounter(counterPath)
-      await writeFile(counterPath, `${current + 1}\n`, "utf8")
+      await atomicWriteTextFile(counterPath, `${current + 1}\n`)
       return { address: formatAddress(current), counterPath }
     })
   }
@@ -51,7 +52,7 @@ export class DragonScaleAddressService {
       const next = await this.recoverNextCounter(vaultPath)
       const metaPath = path.join(vaultPath, ".vault-meta")
       await mkdir(metaPath, { recursive: true })
-      await writeFile(path.join(metaPath, "address-counter.txt"), `${next}\n`, "utf8")
+      await atomicWriteTextFile(path.join(metaPath, "address-counter.txt"), `${next}\n`)
       return next
     })
   }
@@ -67,7 +68,7 @@ export class DragonScaleAddressService {
       if (!isMissingPathError(error)) throw error
     }
     const next = await this.recoverNextCounter(vaultPath)
-    await writeFile(counterPath, `${next}\n`, "utf8")
+    await atomicWriteTextFile(counterPath, `${next}\n`)
     return counterPath
   }
 
