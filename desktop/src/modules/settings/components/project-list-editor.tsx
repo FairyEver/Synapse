@@ -189,7 +189,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       resetKnowledgeBaseForm()
     } catch (error) {
       logger.error("Failed to create managed knowledge base project.", { error, projectId })
-      setKnowledgeBaseError(error instanceof Error ? error.message : "创建失败。")
+      setKnowledgeBaseError("创建知识库失败。")
     } finally {
       setIsCreatingKnowledgeBase(false)
     }

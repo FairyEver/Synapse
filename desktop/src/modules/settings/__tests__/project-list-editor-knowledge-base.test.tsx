@@ -238,6 +238,28 @@ describe("ProjectListEditor knowledge base actions", () => {
     })
   })
 
+  it("does not show raw filesystem errors when creating a knowledge base fails", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    bridgeMocks.knowledgeBase.createManaged.mockRejectedValueOnce(new Error("EACCES: permission denied, mkdir '/Users/test/secret-path'"))
+    renderEditor([], onSave)
+
+    await act(async () => {
+      buttonByText("新建知识库").click()
+    })
+    await act(async () => {
+      changeInput(inputByLabel("知识库名称"), "Knowledge")
+    })
+    await act(async () => {
+      buttonByText("创建").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("创建知识库失败。")
+    expect(document.body.textContent).not.toContain("secret-path")
+    expect(onSave).not.toHaveBeenCalled()
+  })
+
   it("deletes managed knowledge base runtime before removing the project", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     renderEditor([kbProject], onSave)
