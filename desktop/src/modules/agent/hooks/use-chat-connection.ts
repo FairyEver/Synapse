@@ -77,6 +77,7 @@ function useChatConnection(
     selectedSessionKeyRef,
     selectRequestIdRef,
     timelineVersionRef,
+    pendingConversationIdsRef,
   } = refs
 
   const respondingPermissionIdsRef = useRef(new Set<string>())
@@ -498,6 +499,7 @@ function useChatConnection(
       updateTimeline((current) => [...current, optimisticItem])
     }
     if (conversationId) {
+      pendingConversationIdsRef.current.add(conversationId)
       dispatch({ type: "ADD_SENDING_CONVERSATION", conversationId })
     }
     dispatch({ type: "SET_ERROR", error: null })
@@ -532,6 +534,7 @@ function useChatConnection(
       // Only remove on enqueue failure — the turn never started, so no phase
       // event will fire to clean it up.
       if (conversationId) {
+        pendingConversationIdsRef.current.delete(conversationId)
         dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId })
       }
       return false

@@ -7,7 +7,7 @@ import { createRoot, type Root } from "react-dom/client"
 import { act } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { SynapseAgentSessionSummary } from "@/types/agent"
+import type { SynapseAgentDomainEvent, SynapseAgentSessionSummary } from "@/types/agent"
 import { useAgentChat } from "../use-agent-chat"
 import type { AgentProjectScope } from "../../project-resolution"
 
@@ -145,6 +145,67 @@ describe("useAgentChat", () => {
       errorLength: "enqueue failed with prompt=secret".length,
     }))
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("prompt=secret")
+  })
+
+  it("tracks pending background conversations for phase filtering", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          onEvent: ReturnType<typeof vi.fn>
+          send: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.send.mockResolvedValue(undefined)
+    let emitAgentEvent: ((event: SynapseAgentDomainEvent) => void) | undefined
+    bridge.onEvent.mockImplementation((callback) => {
+      emitAgentEvent = callback
+      return () => {}
+    })
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    await act(async () => {
+      await chat?.sendMessage("hello", {
+        projectId: nextSession.projectId,
+        conversationId: nextSession.id,
+        sessionKey: nextSession.sessionKey,
+      })
+      emitAgentEvent?.({
+        type: "phase.update",
+        timestamp: "2026-05-13T00:02:00.000Z",
+        payload: {
+          projectId: nextSession.projectId,
+          sessionKey: nextSession.sessionKey,
+          conversationId: nextSession.id,
+          runId: "run-background",
+          phase: "received",
+          status: "in-progress",
+          startedAt: "2026-05-13T00:02:00.000Z",
+        },
+      })
+    })
+
+    expect(rendererLogger.debug).toHaveBeenCalledWith(
+      "Phase event ignored for inactive conversation.",
+      expect.objectContaining({
+        conversationId: nextSession.id,
+        pendingConversation: true,
+      }),
+    )
   })
 
   it("logs archived session refresh failures without exposing the error message", async () => {

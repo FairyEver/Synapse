@@ -113,6 +113,7 @@ function useAgentChat(
   useEffect(() => {
     if (projectIdsRef.current.length === 0) {
       selectRequestIdRef.current += 1
+      pendingConversationIdsRef.current.clear()
       dispatch({ type: "RESET" })
       clearTimeline()
       setSelectedSession(undefined)

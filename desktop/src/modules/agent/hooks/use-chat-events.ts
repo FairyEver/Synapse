@@ -100,6 +100,7 @@ function useChatEvents(
       if (domainEvent.type === "phase.update") {
         const payload = domainEvent.payload
         if (isTerminalPhase(payload.phase, payload.status) && payload.conversationId) {
+          pendingConversationIdsRef.current.delete(payload.conversationId)
           dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: payload.conversationId })
         }
         const selectedProject = selectedProjectIdRef.current
