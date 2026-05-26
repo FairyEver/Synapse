@@ -8,12 +8,47 @@ import { CcUsageAnalysisService } from "../cc-service"
 const tempDirs: string[] = []
 
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.useRealTimers()
   closeUsageAnalysisDbForTests()
   for (const dir of tempDirs.splice(0)) fs.rmSync(dir, { recursive: true, force: true })
 })
 
 describe("usage analysis reports", () => {
+  it("keeps refreshing when an enumerated JSONL file disappears before fingerprinting", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const projectDir = path.join(dir, ".claude", "projects", "-tmp-project")
+    fs.mkdirSync(projectDir, { recursive: true })
+    const file = path.join(projectDir, "deleted.jsonl")
+    fs.writeFileSync(file, "{}\n")
+    const originalStatSync: typeof fs.statSync = fs.statSync
+    vi.spyOn(fs, "statSync").mockImplementation(((target: fs.PathLike, options?: fs.StatSyncOptions) => {
+      if (target === file) {
+        const error = new Error(`ENOENT: no such file or directory, stat '${file}'`) as NodeJS.ErrnoException
+        error.code = "ENOENT"
+        throw error
+      }
+      return originalStatSync(target, options as never)
+    }) as typeof fs.statSync)
+
+    const db = getUsageAnalysisDb(dir)
+    const service = new CcUsageAnalysisService({ db, roots: [path.join(dir, ".claude", "projects")] })
+
+    const refresh = await service.refresh()
+
+    expect(refresh).toMatchObject({
+      failedFiles: 1,
+      parsedFiles: 0,
+      scannedFiles: 1,
+    })
+    expect(db.prepare("SELECT parse_status, size, mtime_ms FROM cc_scan_files WHERE file_path = ?").get(file)).toEqual({
+      parse_status: "failed",
+      size: 0,
+      mtime_ms: 0,
+    })
+  })
+
   it("stores parsed CC events and returns overview totals", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)

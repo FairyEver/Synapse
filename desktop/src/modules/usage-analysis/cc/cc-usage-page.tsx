@@ -24,8 +24,8 @@ export function CcUsagePage() {
     try {
       await requireSynapseBridge().usageAnalysis.cc.refresh()
       setRefreshKey((current) => current + 1)
-    } catch (error) {
-      showError(error instanceof Error ? error.message : "刷新失败")
+    } catch {
+      showError("刷新失败")
     } finally {
       setRefreshing(false)
     }
