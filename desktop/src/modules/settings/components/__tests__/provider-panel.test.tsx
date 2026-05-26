@@ -74,14 +74,13 @@ describe("ProviderPanel diagnostics", () => {
     expect(document.body.textContent).not.toContain("secret provider token detail")
   })
 
-  it("logs active provider failures with provider correlation and sanitized toast copy", async () => {
-    const listProviders = vi.fn().mockResolvedValue([customProvider()])
-    const setActiveProvider = vi.fn().mockRejectedValue(new Error("secret provider token detail"))
+  it("hides the legacy active provider action from provider rows", async () => {
+    const setActiveProvider = vi.fn()
     Object.defineProperty(window, "synapse", {
       configurable: true,
       value: {
         agent: {
-          listProviders,
+          listProviders: vi.fn().mockResolvedValue([customProvider()]),
           listProviderPresets: vi.fn().mockResolvedValue([]),
           setActiveProvider,
         },
@@ -91,22 +90,8 @@ describe("ProviderPanel diagnostics", () => {
     renderProviderPanel()
     await flush()
 
-    await act(async () => {
-      buttonByText(document.body, "设为默认").click()
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    expect(rendererLogger.error).toHaveBeenCalledWith("Provider set active failed.", {
-      action: "setActiveProvider",
-      boundary: "settings.providers.set-active",
-      errorLength: 28,
-      errorName: "Error",
-      providerId: "custom-provider",
-    })
-    expect(toast).toHaveBeenCalledWith("切换失败")
-    expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret provider token detail")
-    expect(JSON.stringify(toast.mock.calls)).not.toContain("secret provider token detail")
+    expect(document.body.textContent).not.toContain("设为默认")
+    expect(setActiveProvider).not.toHaveBeenCalled()
   })
 })
 
@@ -170,11 +155,12 @@ describe("ProviderPanel dialog editor", () => {
 
     const actionHead = Array.from(document.body.querySelectorAll("th"))
       .find((cell) => cell.textContent === "操作")
-    const actionCell = buttonByText(document.body, "设为默认").closest("td")
+    const actionCell = buttonByText(document.body, "编辑").closest("td")
 
     expect(actionHead?.className).toContain("w-64")
     expect(actionCell?.className).toContain("whitespace-nowrap")
-    expect(buttonByText(document.body, "设为默认").className).toContain("whitespace-nowrap")
+    expect(buttonByText(document.body, "编辑").className).toContain("whitespace-nowrap")
+    expect(document.body.textContent).not.toContain("设为默认")
   })
 
   it("keeps the provider table outside and renders the cc-switch-like form only in the dialog", async () => {

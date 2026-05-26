@@ -133,7 +133,6 @@ type ProviderPanelViewProps = {
   readonly onEdit: (provider: SynapseAgentProvider) => void
   readonly onArchive: (provider: SynapseAgentProvider) => void
   readonly onDelete: (provider: SynapseAgentProvider) => void
-  readonly onSetActive: (provider: SynapseAgentProvider) => void
   readonly onRetry: () => void
 }
 
@@ -340,24 +339,6 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
     }
   }, [archiveConfirm, refresh])
 
-  const handleSetActive = useCallback(async (provider: SynapseAgentProvider) => {
-    try {
-      await requireSynapseBridge().agent.setActiveProvider({
-        providerId: provider.id,
-      })
-      await refresh()
-      toast("已设为默认")
-    } catch (rawError) {
-      logger.error("Provider set active failed.", {
-        boundary: "settings.providers.set-active",
-        action: "setActiveProvider",
-        providerId: provider.id,
-        ...providerErrorDiagnostic(rawError),
-      })
-      toast("切换失败")
-    }
-  }, [refresh])
-
   return (
     <>
       <ProviderPanelView
@@ -370,7 +351,6 @@ function ProviderPanel({ refreshKey }: ProviderPanelProps) {
         onEdit={openEditDialog}
         onArchive={handleArchive}
         onDelete={setDeletingProvider}
-        onSetActive={handleSetActive}
         onRetry={refresh}
       />
       <ProviderFormDialog
@@ -430,7 +410,6 @@ function ProviderPanelView({
   onEdit,
   onArchive,
   onDelete,
-  onSetActive,
   onRetry,
 }: ProviderPanelViewProps) {
   const visibleProviders = useMemo(
@@ -507,7 +486,6 @@ function ProviderPanelView({
                       onEdit={onEdit}
                       onArchive={onArchive}
                       onDelete={onDelete}
-                      onSetActive={onSetActive}
                     />
                   </TableCell>
                 </TableRow>
@@ -658,22 +636,17 @@ function ProviderRowActions({
   onEdit,
   onArchive,
   onDelete,
-  onSetActive,
 }: {
   readonly provider: SynapseAgentProvider
   readonly onEdit: (provider: SynapseAgentProvider) => void
   readonly onArchive: (provider: SynapseAgentProvider) => void
   readonly onDelete: (provider: SynapseAgentProvider) => void
-  readonly onSetActive: (provider: SynapseAgentProvider) => void
 }) {
   if (provider.readonly) return null
 
   return (
     <div className="flex justify-end gap-2">
       <ProviderTextAction onClick={() => onEdit(provider)}>编辑</ProviderTextAction>
-      {provider.active ? null : (
-        <ProviderTextAction onClick={() => onSetActive(provider)}>设为默认</ProviderTextAction>
-      )}
       <ProviderTextAction onClick={() => onArchive(provider)}>归档</ProviderTextAction>
       <ProviderTextAction onClick={() => onDelete(provider)}>删除</ProviderTextAction>
     </div>
