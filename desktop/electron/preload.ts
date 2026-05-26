@@ -7,10 +7,7 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
 import type { SynapseBridge } from "../src/types/bridge"
 import type { SynapseAgentDomainEvent } from "../src/types/agent"
-import {
-  OPEN_AGENT_SESSION_EVENT,
-  type OpenAgentSessionPayload,
-} from "../src/types/agent-navigation"
+import type { OpenAgentSessionPayload } from "../src/types/agent-navigation"
 import type { SynapseContentChangedEvent } from "../src/types/content"
 import type { DatabaseChangeEvent } from "../src/types/database"
 import type { InstallStatusChangedEvent } from "../src/types/install-status"
@@ -24,6 +21,8 @@ import type { SynapseAppUpdateState } from "../src/types/update"
 import type { WorkflowEvent } from "../src/types/workflow"
 import type { IpcChannelMap } from "./generated/ipc-channels.generated"
 import type { DomainEvent, EventDomain, Unsubscribe } from "./runtime/event-bus"
+
+const OPEN_AGENT_SESSION_EVENT = "synapse:open-agent-session"
 
 const IPC_CHANNELS = {
   "content": {
