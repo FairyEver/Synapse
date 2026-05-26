@@ -1,5 +1,15 @@
 import { describe, expect, it, vi } from "vitest"
 
+const logger = vi.hoisted(() => ({
+  error: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+}))
+
+vi.mock("@/app-shell/logging", () => ({
+  createRendererLogger: () => logger,
+}))
+
 import { RepositoryManager } from "../repository-manager"
 import type { SynapseBridge } from "@/types/bridge"
 import type { SynapseConfig, SynapseRepositoryConfig } from "@/types/config"
@@ -186,6 +196,107 @@ describe("RepositoryManager", () => {
 
     await vi.waitFor(() => {
       expect(manager.getContentList("skill")).toHaveLength(4)
+    })
+  })
+
+  it("ignores stale content refresh results after the active repository changes", async () => {
+    let currentConfig: SynapseConfig = {
+      ...config,
+      repositories: [repository, addedRepository],
+    }
+    const skillListResolvers: Array<(items: SynapseContentMeta<"skill">[]) => void> = []
+    const bridge = createBridge()
+    bridge.config.get = vi.fn(async () => currentConfig)
+    bridge.config.update = vi.fn(async (patch) => {
+      currentConfig = { ...currentConfig, ...patch }
+      return currentConfig
+    })
+    bridge.content.list = vi.fn(({ contentType }: { contentType: SynapseContentType }) => {
+      if (contentType !== "skill") return Promise.resolve([])
+      return new Promise<SynapseContentMeta<"skill">[]>((resolve) => {
+        skillListResolvers.push(resolve)
+      })
+    }) as typeof bridge.content.list
+    installBridge(bridge)
+    const manager = new RepositoryManager()
+
+    await manager.initialize()
+    const staleRefresh = manager.refreshContentList("skill")
+    await manager.updateConfig({ activeRepoUuid: addedRepository.uuid })
+    const currentRefresh = manager.refreshContentList("skill")
+
+    skillListResolvers[1]([createSkill("repo-2-skill")])
+    await currentRefresh
+    expect(manager.getContentList("skill").map((item) => item.id)).toEqual(["repo-2-skill"])
+
+    skillListResolvers[0]([createSkill("repo-1-skill")])
+    await staleRefresh
+    expect(manager.getContentList("skill").map((item) => item.id)).toEqual(["repo-2-skill"])
+  })
+
+  it("continues active repository switching when pending push refresh fails", async () => {
+    let currentConfig: SynapseConfig = {
+      ...config,
+      repositories: [repository, addedRepository],
+    }
+    const bridge = createBridge()
+    bridge.config.get = vi.fn(async () => currentConfig)
+    bridge.config.update = vi.fn(async (patch) => {
+      currentConfig = { ...currentConfig, ...patch }
+      return currentConfig
+    })
+    installBridge(bridge)
+    const manager = new RepositoryManager()
+
+    await manager.initialize()
+    await manager.refreshContentList("skill")
+    expect(manager.getContentList("skill")).toHaveLength(3)
+
+    bridge.repository.getPendingPushes = vi.fn(async () => {
+      throw new Error("pending push database unavailable")
+    })
+    bridge.content.list = vi.fn(({ contentType }: { contentType: SynapseContentType }) => {
+      if (contentType !== "skill") return Promise.resolve([])
+      return Promise.resolve([createSkill("repo-2-skill")])
+    }) as typeof bridge.content.list
+
+    await expect(manager.switchActiveRepository(addedRepository.uuid)).resolves.toBeUndefined()
+
+    expect(manager.getActiveRepositoryUuid()).toBe(addedRepository.uuid)
+    expect(manager.getContentList("skill").map((item) => item.id)).toEqual(["repo-2-skill"])
+  })
+
+  it("logs subscriber failures without stopping repository notifications", async () => {
+    logger.warn.mockClear()
+    const bridge = createBridge()
+    installBridge(bridge)
+    const manager = new RepositoryManager()
+    await manager.initialize()
+
+    manager.subscribeToRepositoryChanges(() => {
+      throw new Error("repository subscriber failed")
+    })
+    manager.subscribeToContentChanges("skill", () => {
+      throw new Error("content subscriber failed")
+    })
+    manager.subscribeToOperationChanges(repository.uuid, () => {
+      throw new Error("operation subscriber failed")
+    })
+
+    await manager.updateConfig({ activeRepoUuid: repository.uuid })
+    await manager.refreshContentList("skill")
+    await manager.syncRepository(repository.uuid)
+
+    expect(logger.warn).toHaveBeenCalledWith("repository.subscriber-failed", {
+      error: "Error: repository subscriber failed",
+    })
+    expect(logger.warn).toHaveBeenCalledWith("repository.content-subscriber-failed", {
+      contentType: "skill",
+      error: "Error: content subscriber failed",
+    })
+    expect(logger.warn).toHaveBeenCalledWith("repository.operation-subscriber-failed", {
+      error: "Error: operation subscriber failed",
+      uuid: repository.uuid,
     })
   })
 

@@ -416,8 +416,16 @@ describe("TaskSchedulerModule", () => {
     })
 
     expect(mocks.runTask).toHaveBeenCalledWith("task-1")
-    expect(mocks.requestWatchNextAgentSession).toHaveBeenCalledWith({ projectId: "project-1" })
-    expect(mocks.cancelWatchNextAgentSession).toHaveBeenCalledWith({ projectId: "project-1" })
+    expect(mocks.requestWatchNextAgentSession).toHaveBeenCalledWith({
+      projectId: "project-1",
+      platform: "scheduled",
+      sessionKeyPrefix: "scheduled:project-1:",
+    })
+    expect(mocks.cancelWatchNextAgentSession).toHaveBeenCalledWith({
+      projectId: "project-1",
+      platform: "scheduled",
+      sessionKeyPrefix: "scheduled:project-1:",
+    })
     expect(mocks.notify).toHaveBeenCalledWith({ message: "触发失败", tone: "destructive" })
     expect(mocks.notify).not.toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
     expect(mocks.rendererLogger.error).toHaveBeenCalledWith("Failed to run task.", {
@@ -484,8 +492,16 @@ describe("TaskSchedulerModule", () => {
         await Promise.resolve()
       })
 
-      expect(mocks.requestWatchNextAgentSession).toHaveBeenCalledWith({ projectId: "project-1" })
-      expect(mocks.cancelWatchNextAgentSession).toHaveBeenCalledWith({ projectId: "project-1" })
+      expect(mocks.requestWatchNextAgentSession).toHaveBeenCalledWith({
+        projectId: "project-1",
+        platform: "scheduled",
+        sessionKeyPrefix: "scheduled:project-1:",
+      })
+      expect(mocks.cancelWatchNextAgentSession).toHaveBeenCalledWith({
+        projectId: "project-1",
+        platform: "scheduled",
+        sessionKeyPrefix: "scheduled:project-1:",
+      })
       expect(mocks.notify).toHaveBeenCalledWith({ message: "触发失败", tone: "destructive" })
       expect(mocks.notify).not.toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
     },
@@ -530,7 +546,11 @@ describe("TaskSchedulerModule", () => {
       await Promise.resolve()
     })
 
-    expect(mocks.requestWatchNextAgentSession).toHaveBeenCalledWith({ projectId: "project-1" })
+    expect(mocks.requestWatchNextAgentSession).toHaveBeenCalledWith({
+      projectId: "project-1",
+      platform: "scheduled",
+      sessionKeyPrefix: "scheduled:project-1:",
+    })
     expect(mocks.notify).toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
   })
 
@@ -574,7 +594,11 @@ describe("TaskSchedulerModule", () => {
       await Promise.resolve()
     })
 
-    expect(mocks.requestWatchNextAgentSession).toHaveBeenCalledWith({ projectId: "project-1" })
+    expect(mocks.requestWatchNextAgentSession).toHaveBeenCalledWith({
+      projectId: "project-1",
+      platform: "scheduled",
+      sessionKeyPrefix: "scheduled:project-1:",
+    })
     expect(mocks.notify).not.toHaveBeenCalledWith({ message: "任务已触发", tone: "success" })
 
     await act(async () => {

@@ -8,7 +8,9 @@ import {
   useRef,
   useState,
 } from "react"
+import { LoaderCircle } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
+import { Button } from "@/components/ui/button"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
   SynapseConfig,
@@ -62,6 +64,7 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
   const [isReady, setIsReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [resetKey, setResetKey] = useState(0)
+  const [isRetrying, setIsRetrying] = useState(false)
   const hasLoadedRef = useRef(false)
 
   const refreshConfig = useCallback(async () => {
@@ -103,6 +106,21 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
     [],
   )
 
+  const loadInitialConfig = useCallback(async () => {
+    setError(null)
+    setIsReady(false)
+    setIsRetrying(true)
+    try {
+      await refreshConfig()
+    } catch (loadError) {
+      logger.error("Failed to refresh app config.", loadError)
+      setError(loadError instanceof Error ? loadError.message : "加载本地配置失败")
+      setIsReady(false)
+    } finally {
+      setIsRetrying(false)
+    }
+  }, [refreshConfig])
+
   useEffect(() => {
     if (hasLoadedRef.current) {
       return
@@ -110,12 +128,8 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
 
     hasLoadedRef.current = true
 
-    void refreshConfig().catch((loadError: unknown) => {
-      logger.error("Failed to refresh app config.", loadError)
-      setError(loadError instanceof Error ? loadError.message : "加载本地配置失败")
-      setIsReady(true)
-    })
-  }, [refreshConfig])
+    void loadInitialConfig()
+  }, [loadInitialConfig])
 
   useEffect(() => {
     const mediaQueryList =
@@ -150,6 +164,34 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
     }),
     [config, error, isReady, refreshConfig, updateConfig, resetKey],
   )
+
+  if (!isReady) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-background px-6 py-10">
+        <div className="flex w-full max-w-md flex-col gap-3 rounded-lg border border-border bg-card p-6">
+          {error ? (
+            <>
+              <div className="flex flex-col gap-2">
+                <h1 className="text-lg font-medium text-foreground">无法读取配置</h1>
+                <p className="text-sm text-muted-foreground">{error}</p>
+              </div>
+              <div className="flex justify-end">
+                <Button variant="outline" disabled={isRetrying} onClick={() => void loadInitialConfig()}>
+                  {isRetrying ? <LoaderCircle className="mr-2 size-4 animate-spin" /> : null}
+                  重试
+                </Button>
+              </div>
+            </>
+          ) : (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <LoaderCircle className="size-4 animate-spin" />
+              正在读取配置
+            </div>
+          )}
+        </div>
+      </main>
+    )
+  }
 
   return <AppConfigContext.Provider value={value}>{children}</AppConfigContext.Provider>
 }

@@ -271,15 +271,21 @@ const [isExporting, setIsExporting] = useState(false)
     const agentProjectId = task.action.type === "builtin.agent"
       ? task.action.config["projectId"]
       : undefined
-    const shouldWatchAgentSession = typeof agentProjectId === "string" && agentProjectId.length > 0
+    const agentSessionWatch = typeof agentProjectId === "string" && agentProjectId.length > 0
+      ? {
+          projectId: agentProjectId,
+          platform: "scheduled",
+          sessionKeyPrefix: `scheduled:${agentProjectId}:`,
+        }
+      : null
     try {
-      if (shouldWatchAgentSession) {
-        requestWatchNextAgentSession({ projectId: agentProjectId })
+      if (agentSessionWatch) {
+        requestWatchNextAgentSession(agentSessionWatch)
       }
       const run = await runTask(task.id)
       if (!isAcceptedManualRun(run)) {
-        if (shouldWatchAgentSession) {
-          cancelWatchNextAgentSession({ projectId: agentProjectId })
+        if (agentSessionWatch) {
+          cancelWatchNextAgentSession(agentSessionWatch)
         }
         logger.warn("Task run was not accepted.", {
           action: "runTask",
@@ -302,8 +308,8 @@ const [isExporting, setIsExporting] = useState(false)
       })
       notify({ message: "任务已触发", tone: "success" })
     } catch (err) {
-      if (shouldWatchAgentSession) {
-        cancelWatchNextAgentSession({ projectId: agentProjectId })
+      if (agentSessionWatch) {
+        cancelWatchNextAgentSession(agentSessionWatch)
       }
       logger.error("Failed to run task.", {
         action: "runTask",

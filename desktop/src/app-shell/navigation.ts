@@ -14,6 +14,8 @@ type OpenAgentSessionPayload = {
 
 type WatchNextAgentSessionPayload = {
   projectId: string
+  platform?: string
+  sessionKeyPrefix?: string
 }
 let currentAppTab = "skill"
 
