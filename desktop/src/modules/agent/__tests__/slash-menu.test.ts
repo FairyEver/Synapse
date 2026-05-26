@@ -6,6 +6,7 @@ import {
   groupAgentSlashCandidates,
   replaceAgentSlashFragment,
   toAgentSlashCandidates,
+  toQuickInputSlashCandidates,
   type AgentSlashCandidate,
 } from "../slash-menu"
 import { knowledgeBaseStaticCommands } from "../knowledge-base-commands"
@@ -206,6 +207,91 @@ describe("agent slash menu utilities", () => {
       "/wiki query ",
     )).toEqual({
       value: "Ask /wiki query ",
+      cursor: 16,
+    })
+  })
+
+  it("converts quick inputs into slash candidates", () => {
+    expect(toQuickInputSlashCandidates([
+      {
+        id: "quick-1",
+        content: "\n  日报模板  \n整理今天完成的工作",
+        directSend: true,
+      },
+      {
+        id: "quick-2",
+        content: "  /发版总结  \n列出用户可感知变化",
+        directSend: false,
+      },
+      {
+        id: "quick-empty",
+        content: "   \n\t",
+        directSend: false,
+      },
+    ])).toEqual([
+      {
+        name: "日报模板",
+        description: "整理今天完成的工作",
+        kind: "quickInput",
+        insertText: "\n  日报模板  \n整理今天完成的工作",
+      },
+      {
+        name: "发版总结",
+        description: "列出用户可感知变化",
+        kind: "quickInput",
+        insertText: "  /发版总结  \n列出用户可感知变化",
+      },
+    ])
+  })
+
+  it("groups quick inputs before skills and commands", () => {
+    const quickInput = toQuickInputSlashCandidates([
+      { id: "quick-1", content: "日报模板\n整理今天完成的工作", directSend: false },
+    ])[0]
+
+    expect(groupAgentSlashCandidates([quickInput, ...candidates])).toEqual([
+      {
+        kind: "quickInput",
+        label: "片段",
+        items: [quickInput],
+      },
+      {
+        kind: "skill",
+        label: "Skills",
+        items: [candidates[0], candidates[1]],
+      },
+      {
+        kind: "command",
+        label: "Commands",
+        items: [candidates[2], candidates[3]],
+      },
+    ])
+  })
+
+  it("filters quick inputs by slash fragment text", () => {
+    const quickInputs = toQuickInputSlashCandidates([
+      { id: "quick-1", content: "日报模板\n整理今天完成的工作", directSend: false },
+      { id: "quick-2", content: "发版总结\n写用户得到什么", directSend: false },
+    ])
+
+    expect(filterAgentSlashCandidates(quickInputs, "发版").map((item) => item.name))
+      .toEqual(["发版总结"])
+  })
+
+  it("replaces a slash fragment with full quick input content", () => {
+    const quickInput = toQuickInputSlashCandidates([
+      { id: "quick-1", content: "日报模板\n整理今天完成的工作", directSend: true },
+    ])[0]
+    const fragment = findAgentSlashFragment("请 /日报", 5)
+    expect(fragment).not.toBeNull()
+
+    expect(replaceAgentSlashFragment(
+      "请 /日报",
+      fragment!,
+      quickInput.name,
+      quickInput.insertText,
+    )).toEqual({
+      value: "请 日报模板\n整理今天完成的工作",
       cursor: 16,
     })
   })

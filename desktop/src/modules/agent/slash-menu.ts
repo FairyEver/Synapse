@@ -1,12 +1,13 @@
 import type { SynapseAgentPublishedCommand } from "@/types/agent"
+import type { SynapseQuickInput } from "@/types/config"
 
-export type AgentSlashCandidateKind = "skill" | "command"
+export type AgentSlashCandidateKind = "quickInput" | "skill" | "command"
 
 export type AgentSlashCandidate = {
   readonly name: string
   readonly description?: string
   readonly kind: AgentSlashCandidateKind
-  readonly source: SynapseAgentPublishedCommand["source"]
+  readonly source?: SynapseAgentPublishedCommand["source"]
   readonly insertText?: string
 }
 
@@ -18,11 +19,34 @@ export type AgentSlashFragment = {
 
 export type AgentSlashGroup = {
   readonly kind: AgentSlashCandidateKind
-  readonly label: "Skills" | "Commands"
+  readonly label: "片段" | "Skills" | "Commands"
   readonly items: readonly AgentSlashCandidate[]
 }
 
 const FRAGMENT_BOUNDARY = /\s/
+
+export function toQuickInputSlashCandidates(
+  quickInputs: readonly SynapseQuickInput[],
+): AgentSlashCandidate[] {
+  return quickInputs.flatMap((item) => {
+    const lines = item.content.split(/\r?\n/)
+    const firstLineIndex = lines.findIndex((line) => line.trim().length > 0)
+    const firstLine = firstLineIndex >= 0 ? lines[firstLineIndex]?.trim() : undefined
+    if (!firstLine) return []
+
+    const description = lines
+      .slice(firstLineIndex + 1)
+      .map((line) => line.trim())
+      .find((line) => line.length > 0)
+
+    return [{
+      name: firstLine.replace(/^\/+/, ""),
+      description,
+      kind: "quickInput" as const,
+      insertText: item.content,
+    }]
+  })
+}
 
 export function toAgentSlashCandidates(
   commands: readonly SynapseAgentPublishedCommand[],
@@ -89,9 +113,13 @@ export function filterAgentSlashCandidates(
 export function groupAgentSlashCandidates(
   candidates: readonly AgentSlashCandidate[],
 ): AgentSlashGroup[] {
+  const quickInputs = candidates.filter((candidate) => candidate.kind === "quickInput")
   const skills = candidates.filter((candidate) => candidate.kind === "skill")
   const commands = candidates.filter((candidate) => candidate.kind === "command")
   const groups: AgentSlashGroup[] = []
+  if (quickInputs.length > 0) {
+    groups.push({ kind: "quickInput", label: "片段", items: quickInputs })
+  }
   if (skills.length > 0) {
     groups.push({ kind: "skill", label: "Skills", items: skills })
   }
