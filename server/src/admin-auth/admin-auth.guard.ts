@@ -29,6 +29,12 @@ export class AdminAuthGuard implements CanActivate {
       throw new UnauthorizedException("未登录或登录已过期。")
     }
     if (session.role !== "admin") {
+      await recordAuthGuardFailure({
+        auditLog: this.auditLog,
+        action: "admin.auth.forbidden",
+        request,
+        token,
+      })
       throw new ForbiddenException("需要管理员权限。")
     }
     request.admin = { id: session.id, email: session.email }

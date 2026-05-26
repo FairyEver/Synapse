@@ -13,6 +13,7 @@ import { AuditLogService } from "./audit-log.service"
 const SENSITIVE_BODY_KEY_PATTERN = /password|token|secret|credential/i
 const REDACTED_VALUE = "[REDACTED]"
 const USER_STATUS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/status$/
+const USER_MODULE_PERMISSIONS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/module-permissions$/
 
 interface AuditPolicy {
   readonly success: boolean
@@ -45,7 +46,7 @@ export class AuditLogInterceptor implements NestInterceptor {
         method,
         path,
         request.params as Record<string, string>,
-        responseBody,
+        error ?? responseBody,
       )
       if (!action) return
 
@@ -144,6 +145,12 @@ function resolveKnownAdminAuditTarget(
   if (method === "PATCH" && USER_STATUS_PATH_PATTERN.test(path)) {
     return { action: "admin.user.status_update", targetType: "user", targetId: params.id ?? readId(responseBody) }
   }
+  if (method === "PUT" && USER_MODULE_PERMISSIONS_PATH_PATTERN.test(path)) {
+    return { action: "admin.user_module_permissions.replace", targetType: "user", targetId: params.id ?? readId(responseBody) }
+  }
+  if (method === "GET" && path === "/api/admin/backup/list") {
+    return { action: "backup.list", targetType: "backup", targetId: "list" }
+  }
   if (method === "GET" && path === "/api/admin/audit-logs/export") {
     return { action: "admin.audit_logs.export", targetType: "audit_log", targetId: "export" }
   }
@@ -166,8 +173,6 @@ function readId(body: unknown): string {
   if (body && typeof body === "object" && "id" in body) {
     return String((body as { id: unknown }).id)
   }
-  if (body && typeof body === "object" && "filename" in body) {
-    return String((body as { filename: unknown }).filename)
-  }
+  if (body && typeof body === "object" && "filename" in body) return String((body as { filename: unknown }).filename)
   return "unknown"
 }

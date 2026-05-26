@@ -18,7 +18,10 @@ export class BackupController {
   async triggerBackup() {
     const result = await this.backupService.performBackup()
     if (result.status === "failed") {
-      throw new InternalServerErrorException(result.error ? `备份失败：${result.error}` : "备份失败。")
+      throw Object.assign(
+        new InternalServerErrorException(result.error ? `备份失败：${result.error}` : "备份失败。"),
+        { filename: result.filename },
+      )
     }
     return result
   }
@@ -45,6 +48,7 @@ export class BackupController {
     } catch (error: unknown) {
       await this.recordDownloadAudit(filename, request, error)
       if (!response.headersSent) throw error
+      if (!response.destroyed) response.destroy(error instanceof Error ? error : undefined)
     }
   }
 

@@ -207,6 +207,35 @@ describe("AdminAuthService", () => {
     })
   })
 
+  it("filters inactive dashboard module permissions and records them on login audits", async () => {
+    const auditLog = { record: vi.fn() }
+    const { service, prisma } = await createTestService(auditLog)
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: "user-1",
+      email: "user@example.com",
+      passwordHash: await hashPassword("user-password"),
+      status: "active",
+      modulePermissions: [
+        { permissionKey: "module.workflow" },
+        { permissionKey: "module.removed" },
+      ],
+    })
+
+    await expect(service.login("user@example.com", "user-password", "203.0.113.14"))
+      .resolves
+      .toMatchObject({
+        modulePermissions: ["module.workflow"],
+      })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "user@example.com",
+      action: "user.dashboard_login.success",
+      targetType: "user",
+      targetId: "user-1",
+      detail: { modulePermissions: ["module.workflow"] },
+      ipAddress: "203.0.113.14",
+    })
+  })
+
   it("records disabled dashboard user login attempts separately from wrong passwords", async () => {
     const auditLog = { record: vi.fn() }
     const { service, prisma } = await createTestService(auditLog)
@@ -272,6 +301,29 @@ describe("AdminAuthService", () => {
       passwordHash: await hashPassword("user-password"),
       status: "active",
       modulePermissions: [{ permissionKey: "module.workflow" }],
+    })
+
+    const result = await service.login("user@example.com", "user-password")
+
+    await expect(service.verifyDashboardSession(result.token)).resolves.toEqual({
+      id: "user-1",
+      email: "user@example.com",
+      role: "user",
+      modulePermissions: ["module.workflow"],
+    })
+  })
+
+  it("filters inactive dashboard module permissions for verified sessions", async () => {
+    const { service, prisma } = await createTestService()
+    prisma.user.findUnique.mockResolvedValue({
+      id: "user-1",
+      email: "user@example.com",
+      passwordHash: await hashPassword("user-password"),
+      status: "active",
+      modulePermissions: [
+        { permissionKey: "module.workflow" },
+        { permissionKey: "module.removed" },
+      ],
     })
 
     const result = await service.login("user@example.com", "user-password")

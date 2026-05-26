@@ -1,5 +1,5 @@
 import type { ExecutionContext } from "@nestjs/common"
-import { UnauthorizedException } from "@nestjs/common"
+import { ForbiddenException, UnauthorizedException } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
 import { UserAuthGuard } from "./user-auth.guard"
 
@@ -84,7 +84,7 @@ describe("UserAuthGuard", () => {
     expect(auditLog.record).not.toHaveBeenCalled()
   })
 
-  it("rejects dashboard admin cookies for user auth routes", async () => {
+  it("rejects dashboard admin cookies for user auth routes as forbidden", async () => {
     const auth = { verifyAccessToken: vi.fn() }
     const dashboardAuth = {
       verifyDashboardSession: vi.fn().mockResolvedValue({
@@ -102,11 +102,11 @@ describe("UserAuthGuard", () => {
       ip: "203.0.113.33",
       headers: {},
       cookies: { synapse_admin: "admin-cookie" },
-    }))).rejects.toThrow(UnauthorizedException)
+    }))).rejects.toThrow(ForbiddenException)
 
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "unknown",
-      action: "user.auth.verify.failed",
+      action: "user.auth.forbidden",
       targetType: "auth",
       targetId: "unknown",
       detail: {

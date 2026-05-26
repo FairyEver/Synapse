@@ -86,7 +86,7 @@ describe("AuditLogInterceptor", () => {
         adminEmail: "admin@example.com",
         action: "backup.list",
         targetType: "backup",
-        targetId: "unknown",
+        targetId: "list",
         detail: { method: "GET", path: "/api/admin/backup/list", body: undefined },
         ipAddress: "127.0.0.1",
       })
@@ -155,6 +155,31 @@ describe("AuditLogInterceptor", () => {
     })
   })
 
+  it("uses backup failure filenames as backup trigger audit targets", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+    const error = Object.assign(new Error("备份失败：COS unavailable"), {
+      filename: "synapse-backup-20260523.tar.gz",
+    })
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "POST",
+        path: "/api/admin/backup",
+      }),
+      { handle: () => throwError(() => error) },
+    ))).rejects.toThrow("备份失败：COS unavailable")
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "backup.post.failed",
+        targetType: "backup",
+        targetId: "synapse-backup-20260523.tar.gz",
+      }))
+    })
+  })
+
   it("does not duplicate admin service audit records", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
     const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
@@ -204,6 +229,32 @@ describe("AuditLogInterceptor", () => {
       })
     })
     expect(auth.getEmail).not.toHaveBeenCalled()
+  })
+
+  it("records failed module permission updates with the module permission audit action", async () => {
+    const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
+    const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
+
+    await expect(lastValueFrom(interceptor.intercept(
+      createContext({
+        method: "PUT",
+        path: "/api/admin/users/user-1/module-permissions",
+        params: { id: "user-1" },
+        body: { permissionKeys: ["module.unknown"] },
+        admin: { id: "admin-1", email: "current-admin@example.com" },
+      }),
+      { handle: () => throwError(() => new Error("用户模块权限无效。")) },
+    ))).rejects.toThrow("用户模块权限无效。")
+
+    await vi.waitFor(() => {
+      expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        adminEmail: "current-admin@example.com",
+        action: "admin.user_module_permissions.replace.failed",
+        targetType: "user",
+        targetId: "user-1",
+      }))
+    })
   })
 
   it("records failed log file list reads with the controller audit action", async () => {

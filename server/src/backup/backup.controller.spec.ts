@@ -19,7 +19,7 @@ describe("BackupController", () => {
     await expect(controller.triggerBackup()).resolves.toEqual(result)
   })
 
-  it("throws when backup returns a failed result", async () => {
+  it("throws with the backup filename when backup returns a failed result", async () => {
     const service = {
       performBackup: vi.fn().mockResolvedValue({
         filename: "synapse-backup.tar.gz",
@@ -31,7 +31,10 @@ describe("BackupController", () => {
     }
     const controller = new BackupController(service as unknown as BackupService)
 
-    await expect(controller.triggerBackup()).rejects.toThrow("备份失败：COS 未配置")
+    await expect(controller.triggerBackup()).rejects.toMatchObject({
+      message: "备份失败：COS 未配置",
+      filename: "synapse-backup.tar.gz",
+    })
   })
 
   it("sends backup downloads as attachments", async () => {
@@ -103,7 +106,7 @@ describe("BackupController", () => {
     }))
   })
 
-  it("does not rethrow backup stream errors after headers are sent", async () => {
+  it("destroys the response on backup stream errors after headers are sent", async () => {
     const error = new Error("COS stream failed")
     let readStarted = false
     const stream = new Readable({
@@ -125,6 +128,7 @@ describe("BackupController", () => {
     }) as Writable & { set: ReturnType<typeof vi.fn>; headersSent: boolean }
     let headersSent = false
     response.set = vi.fn()
+    const destroy = vi.spyOn(response, "destroy")
     Object.defineProperty(response, "headersSent", { get: () => headersSent })
     const auditLog = {
       record: vi.fn().mockResolvedValue(undefined),
@@ -137,6 +141,7 @@ describe("BackupController", () => {
       targetId: "synapse-backup.tar",
       detail: { filename: "synapse-backup.tar", error: "COS stream failed" },
     }))
+    expect(destroy).toHaveBeenCalledWith(error)
   })
 
   it("deletes a backup file", async () => {

@@ -294,7 +294,6 @@ describe("AdminService", () => {
 
   it("deletes invitations in bulk and records an audit log", async () => {
     const prisma = createPrismaMock()
-    prisma.invitation.count.mockResolvedValue(2)
     prisma.invitation.deleteMany.mockResolvedValue({ count: 2 })
     const auditLog = { record: vi.fn() }
     const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never, auditLog as never)
@@ -303,6 +302,7 @@ describe("AdminService", () => {
       .resolves
       .toEqual({ ok: true, count: 2 })
 
+    expect(prisma.$transaction).toHaveBeenCalled()
     expect(prisma.invitation.deleteMany).toHaveBeenCalledWith({
       where: { id: { in: ["invite-1", "invite-2"] } },
     })
@@ -318,7 +318,7 @@ describe("AdminService", () => {
 
   it("rejects bulk invitation deletes when any id does not exist", async () => {
     const prisma = createPrismaMock()
-    prisma.invitation.count.mockResolvedValue(1)
+    prisma.invitation.deleteMany.mockResolvedValue({ count: 1 })
     const auditLog = { record: vi.fn() }
     const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never, auditLog as never)
 
@@ -326,7 +326,9 @@ describe("AdminService", () => {
       .rejects
       .toThrow("邀请不存在。")
 
-    expect(prisma.invitation.deleteMany).not.toHaveBeenCalled()
+    expect(prisma.invitation.deleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ["invite-1", "missing-invite"] } },
+    })
     expect(auditLog.record).not.toHaveBeenCalled()
   })
 

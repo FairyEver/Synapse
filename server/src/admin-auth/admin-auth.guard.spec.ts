@@ -38,7 +38,7 @@ describe("AdminAuthGuard", () => {
     })
   })
 
-  it("rejects dashboard user cookies as forbidden without recording admin auth failure", async () => {
+  it("records dashboard user cookies as forbidden admin access", async () => {
     const auth = {
       verifyDashboardSession: vi.fn().mockResolvedValue({
         id: "user-1",
@@ -56,6 +56,17 @@ describe("AdminAuthGuard", () => {
       cookies: { synapse_admin: "user-token" },
     }))).rejects.toThrow(ForbiddenException)
 
-    expect(auditLog.record).not.toHaveBeenCalled()
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "unknown",
+      action: "admin.auth.forbidden",
+      targetType: "auth",
+      targetId: "unknown",
+      detail: {
+        method: "GET",
+        path: "/api/admin/system",
+        tokenPresent: true,
+      },
+      ipAddress: "203.0.113.30",
+    })
   })
 })

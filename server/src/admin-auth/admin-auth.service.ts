@@ -4,6 +4,7 @@ import { Cron } from "@nestjs/schedule"
 import { hashToken } from "../auth/token"
 import { verifyPassword } from "../auth/password"
 import { AuditLogService } from "../common/audit-log.service"
+import { isActiveModulePermissionKey } from "../permissions/permission-registry"
 import { PrismaService } from "../prisma/prisma.service"
 
 interface AdminJwtPayload {
@@ -26,7 +27,9 @@ const dashboardJwtExpiresIn = "8h"
 const userModulePermissionSelect = { permissionKey: true } as const
 
 function getDashboardModulePermissions(user: { modulePermissions?: readonly { permissionKey: string }[] }): string[] {
-  return user.modulePermissions?.map((item) => item.permissionKey) ?? []
+  return user.modulePermissions
+    ?.map((item) => item.permissionKey)
+    .filter(isActiveModulePermissionKey) ?? []
 }
 
 @Injectable()
@@ -79,18 +82,20 @@ export class AdminAuthService {
     const userPasswordMatches = user ? await verifyPassword(password, user.passwordHash) : false
     if (user && user.status === "active" && userPasswordMatches) {
       const token = this.signDashboardToken({ sub: user.id, email: user.email, type: "user" })
+      const modulePermissions = getDashboardModulePermissions(user)
       await this.auditLog?.record({
         adminEmail: user.email,
         action: "user.dashboard_login.success",
         targetType: "user",
         targetId: user.id,
+        detail: { modulePermissions },
         ipAddress,
       })
       return {
         email: user.email,
         token,
         role: "user",
-        modulePermissions: getDashboardModulePermissions(user),
+        modulePermissions,
       }
     }
     if (user && user.status !== "active" && userPasswordMatches) {

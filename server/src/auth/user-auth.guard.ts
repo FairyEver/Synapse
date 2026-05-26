@@ -1,4 +1,4 @@
-import { CanActivate, ExecutionContext, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
+import { CanActivate, ExecutionContext, ForbiddenException, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
 import type { Request } from "express"
 import { AdminAuthService } from "../admin-auth/admin-auth.service"
 import { AuditLogService } from "../common/audit-log.service"
@@ -32,7 +32,7 @@ export class UserAuthGuard implements CanActivate {
     const session = typeof cookieToken === "string"
       ? await this.dashboardAuth.verifyDashboardSession(cookieToken)
       : null
-    if (session?.role !== "user") {
+    if (!session) {
       await recordAuthGuardFailure({
         auditLog: this.auditLog,
         action: "user.auth.verify.failed",
@@ -40,6 +40,15 @@ export class UserAuthGuard implements CanActivate {
         token: cookieToken,
       })
       throw new UnauthorizedException("未登录或登录已过期。")
+    }
+    if (session.role !== "user") {
+      await recordAuthGuardFailure({
+        auditLog: this.auditLog,
+        action: "user.auth.forbidden",
+        request,
+        token: cookieToken,
+      })
+      throw new ForbiddenException("需要普通用户权限。")
     }
     request.user = { id: session.id }
     return true

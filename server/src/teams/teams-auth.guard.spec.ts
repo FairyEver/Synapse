@@ -1,5 +1,5 @@
 import type { ExecutionContext } from "@nestjs/common"
-import { UnauthorizedException } from "@nestjs/common"
+import { ForbiddenException } from "@nestjs/common"
 import { describe, expect, it, vi } from "vitest"
 import { TeamsAuthGuard } from "./teams-auth.guard"
 
@@ -31,7 +31,7 @@ describe("TeamsAuthGuard", () => {
     expect(auditLog.record).not.toHaveBeenCalled()
   })
 
-  it("records audit logs when a dashboard cookie is not a user session", async () => {
+  it("records forbidden audit logs when a dashboard cookie is not a user session", async () => {
     const userAuth = { verifyAccessToken: vi.fn() }
     const dashboardAuth = {
       verifyDashboardSession: vi.fn().mockResolvedValue({
@@ -49,11 +49,11 @@ describe("TeamsAuthGuard", () => {
       ip: "203.0.113.32",
       headers: {},
       cookies: { synapse_admin: "admin-token" },
-    }))).rejects.toThrow(UnauthorizedException)
+    }))).rejects.toThrow(ForbiddenException)
 
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "unknown",
-      action: "teams.auth.verify.failed",
+      action: "teams.auth.forbidden",
       targetType: "auth",
       targetId: "unknown",
       detail: {
