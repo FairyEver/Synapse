@@ -9,7 +9,12 @@ import {
   toQuickInputSlashCandidates,
   type AgentSlashCandidate,
 } from "../slash-menu"
-import { knowledgeBaseStaticCommands } from "../knowledge-base-commands"
+import {
+  KNOWLEDGE_BASE_AGENT_CAPABILITIES,
+  knowledgeBaseStaticCommands,
+  toKnowledgeBaseComposerActions,
+  toKnowledgeBaseSlashCandidates,
+} from "../knowledge-base-commands"
 
 const candidates: AgentSlashCandidate[] = [
   {
@@ -183,17 +188,99 @@ describe("agent slash menu utilities", () => {
     }])
   })
 
-  it("converts knowledge base static commands into slash candidates", () => {
-    expect(toAgentSlashCandidates(knowledgeBaseStaticCommands()).map((item) => ({
+  it("converts the full knowledge base catalog into slash candidates", () => {
+    expect(toKnowledgeBaseSlashCandidates().map((item) => ({
       name: item.name,
+      description: item.description,
+      kind: item.kind,
       insertText: item.insertText,
     }))).toEqual([
-      { name: "wiki ingest", insertText: "ingest all changed sources in .raw" },
-      { name: "wiki query", insertText: "query: " },
-      { name: "save", insertText: "/save " },
-      { name: "autoresearch", insertText: "/autoresearch " },
-      { name: "wiki lint", insertText: "run wiki-lint" },
+      {
+        name: "autoresearch",
+        description: "围绕主题研究并写入知识库",
+        kind: "knowledgeBase",
+        insertText: "/autoresearch ",
+      },
+      {
+        name: "canvas",
+        description: "创建或更新知识库画布",
+        kind: "knowledgeBase",
+        insertText: "/canvas ",
+      },
+      {
+        name: "defuddle",
+        description: "清理网页正文后用于入库",
+        kind: "knowledgeBase",
+        insertText: "/defuddle ",
+      },
+      {
+        name: "obsidian-bases",
+        description: "创建或编辑 Obsidian Bases",
+        kind: "knowledgeBase",
+        insertText: "/obsidian-bases ",
+      },
+      {
+        name: "obsidian-markdown",
+        description: "按 Obsidian 语法编写页面",
+        kind: "knowledgeBase",
+        insertText: "/obsidian-markdown ",
+      },
+      {
+        name: "save",
+        description: "保存当前对话或关键结论",
+        kind: "knowledgeBase",
+        insertText: "/save ",
+      },
+      {
+        name: "wiki",
+        description: "管理知识库结构与热缓存",
+        kind: "knowledgeBase",
+        insertText: "/wiki ",
+      },
+      {
+        name: "wiki-fold",
+        description: "折叠整理知识库日志",
+        kind: "knowledgeBase",
+        insertText: "/wiki-fold ",
+      },
+      {
+        name: "wiki-ingest",
+        description: "汲取资料，整理 .raw 中的新内容",
+        kind: "knowledgeBase",
+        insertText: "/wiki-ingest ",
+      },
+      {
+        name: "wiki-lint",
+        description: "检查链接、索引、孤立页面和结构问题",
+        kind: "knowledgeBase",
+        insertText: "/wiki-lint ",
+      },
+      {
+        name: "wiki-query",
+        description: "查询知识库并基于已有页面回答",
+        kind: "knowledgeBase",
+        insertText: "/wiki-query ",
+      },
     ])
+  })
+
+  it("derives curated knowledge base composer actions from the same catalog", () => {
+    expect(toKnowledgeBaseComposerActions().map((item) => ({
+      label: item.label,
+      action: item.action,
+      commandText: item.commandText,
+    }))).toEqual([
+      { label: "汲取资料", action: "send", commandText: "/wiki-ingest " },
+      { label: "查询知识库", action: "insert", commandText: "/wiki-query " },
+      { label: "保存对话", action: "insert", commandText: "/save " },
+      { label: "研究主题", action: "insert", commandText: "/autoresearch " },
+      { label: "检查知识库", action: "send", commandText: "/wiki-lint " },
+    ])
+  })
+
+  it("keeps the legacy knowledge base command helper backed by the catalog", () => {
+    expect(knowledgeBaseStaticCommands().map((item) => item.name))
+      .toEqual(KNOWLEDGE_BASE_AGENT_CAPABILITIES.map((item) => item.name))
   })
 
   it("uses insertText when replacing slash fragments", () => {
