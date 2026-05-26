@@ -1,4 +1,4 @@
-import { lstat, readFile, readdir, stat } from "node:fs/promises"
+import { lstat, readFile, readdir, realpath, stat } from "node:fs/promises"
 import path from "node:path"
 import { parseFrontmatterBlock } from "../../src/definitions/editor/shared-yaml-scalar"
 import {
@@ -71,12 +71,41 @@ async function resolveSkillMainFile(dirPath: string): Promise<string | null> {
 
   for (const candidate of SKILL_MAIN_FILE_PRIORITY) {
     if (children.includes(candidate)) {
-      return path.join(dirPath, candidate)
+      return await resolveTrustedSkillMainFile(dirPath, path.join(dirPath, candidate))
     }
   }
 
   const mdFiles = children.filter((fileName) => fileName.endsWith(".md")).sort()
-  return mdFiles.length > 0 ? path.join(dirPath, mdFiles[0] ?? "") : null
+  return mdFiles.length > 0 ? await resolveTrustedSkillMainFile(dirPath, path.join(dirPath, mdFiles[0] ?? "")) : null
+}
+
+async function resolveTrustedSkillMainFile(dirPath: string, filePath: string): Promise<string | null> {
+  let info: Awaited<ReturnType<typeof lstat>>
+  try {
+    info = await lstat(filePath)
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return null
+    }
+    throw error
+  }
+
+  if (info.isSymbolicLink()) {
+    throwInvalid("sourceDirectoryPath", `Skill 主文件不能是符号链接：${path.basename(filePath)}`)
+  }
+  if (!info.isFile()) {
+    return null
+  }
+
+  const [dirRealPath, fileRealPath] = await Promise.all([
+    realpath(dirPath),
+    realpath(filePath),
+  ])
+  if (!isPathInside(dirRealPath, fileRealPath)) {
+    throwInvalid("sourceDirectoryPath", "Skill 主文件必须位于 Skill 源目录内。")
+  }
+
+  return filePath
 }
 
 async function readSkillDraftFromDirectory(
@@ -296,6 +325,11 @@ async function assertDirectoryExists(dirPath: string): Promise<void> {
 
 function toPortableRelativePath(relativeName: string): string {
   return relativeName.split(path.sep).join("/")
+}
+
+function isPathInside(rootPath: string, targetPath: string): boolean {
+  const relative = path.relative(rootPath, targetPath)
+  return relative === "" || (!relative.startsWith("..") && !path.isAbsolute(relative))
 }
 
 function throwInvalid(field: string, message: string): never {

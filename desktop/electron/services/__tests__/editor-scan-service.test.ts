@@ -504,6 +504,22 @@ describe("editor scan quick publish", () => {
     expect(draft.files.map((file) => file.originalName)).toEqual(["notes.txt"])
   })
 
+  it("rejects symlinked skill main files when preparing a skill draft", async () => {
+    const root = await createTempDir()
+    const skillDir = path.join(root, "release-helper")
+    const outsideFilePath = path.join(root, "secret.md")
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(outsideFilePath, "# Secret\n")
+    await symlink(outsideFilePath, path.join(skillDir, "SKILL.md"))
+
+    await expect(prepareQuickPublishDraft({
+      itemType: "skill",
+      itemPath: skillDir,
+      itemName: "release-helper",
+      metadata: {},
+    })).rejects.toThrow("Skill 主文件不能是符号链接")
+  })
+
   it("keeps the exact content for each Codex rule segment", async () => {
     const root = await createTempDir()
     const filePath = path.join(root, "AGENTS.md")
