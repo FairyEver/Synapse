@@ -55,6 +55,10 @@ import type {
 const logger = createRendererLogger("knowledge-base.source-manager")
 type DirectoryTree = Record<string, SynapseKnowledgeBaseRawEntry[]>
 type TreeRenderer = (items: SynapseKnowledgeBaseRawEntry[]) => ReactNode
+type PendingRawMove = {
+  relativePaths: string[]
+  targetDirectoryPath: string
+}
 
 type SourceManagerSidebarProps = {
   currentDirectory: string
@@ -147,6 +151,15 @@ function breadcrumbItems(directoryPath: string): Array<{ label: string; path: st
 
 function directoriesOnly(entries: SynapseKnowledgeBaseRawEntry[]): SynapseKnowledgeBaseRawEntry[] {
   return entries.filter((entry) => entry.kind === "directory")
+}
+
+function needsRawMutationConfirmation(
+  entries: SynapseKnowledgeBaseRawEntry[],
+  relativePaths: string[],
+): boolean {
+  if (relativePaths.length > 1) return true
+  const selected = new Set(relativePaths)
+  return entries.some((entry) => selected.has(entry.relativePath) && entry.kind === "directory")
 }
 
 function SourceManagerSidebar({
@@ -350,6 +363,7 @@ function KnowledgeBaseSourceManagerWindow() {
   const [renameValue, setRenameValue] = useState("")
   const [moveOpen, setMoveOpen] = useState(false)
   const [moveTargetPath, setMoveTargetPath] = useState("")
+  const [pendingMove, setPendingMove] = useState<PendingRawMove | null>(null)
   const [trashPaths, setTrashPaths] = useState<string[]>([])
   const bridge = getSynapseBridge()
 
@@ -512,14 +526,14 @@ function KnowledgeBaseSourceManagerWindow() {
     setRenameValue("")
   }, [bridge, payload, promise, refreshDirectory, renameTarget, renameValue])
 
-  const moveSelected = useCallback(async () => {
-    if (!payload || !bridge || selectedList.length === 0) return
+  const runMoveRawEntries = useCallback(async (relativePaths: string[], targetDirectoryPath: string) => {
+    if (!payload || !bridge || relativePaths.length === 0) return
     await promise(
       async () => {
         const result = await bridge.knowledgeBase.moveRawEntries({
           projectId: payload.projectId,
-          relativePaths: selectedList,
-          targetDirectoryPath: moveTargetPath.trim(),
+          relativePaths,
+          targetDirectoryPath,
         })
         setSelectedPaths(new Set())
         await refreshDirectory()
@@ -531,17 +545,28 @@ function KnowledgeBaseSourceManagerWindow() {
         error: "移动失败",
       },
     )
+  }, [bridge, payload, promise, refreshDirectory])
+
+  const moveSelected = useCallback(async () => {
+    if (selectedList.length === 0) return
+    const targetDirectoryPath = moveTargetPath.trim()
+    if (needsRawMutationConfirmation(entries, selectedList)) {
+      setPendingMove({ relativePaths: selectedList, targetDirectoryPath })
+      setMoveOpen(false)
+      return
+    }
+    await runMoveRawEntries(selectedList, targetDirectoryPath)
     setMoveTargetPath("")
     setMoveOpen(false)
-  }, [bridge, moveTargetPath, payload, promise, refreshDirectory, selectedList])
+  }, [entries, moveTargetPath, runMoveRawEntries, selectedList])
 
-  const trashSelected = useCallback(async () => {
-    if (!payload || !bridge || trashPaths.length === 0) return
+  const runTrashRawEntries = useCallback(async (relativePaths: string[]) => {
+    if (!payload || !bridge || relativePaths.length === 0) return
     await promise(
       async () => {
         const result = await bridge.knowledgeBase.trashRawEntries({
           projectId: payload.projectId,
-          relativePaths: trashPaths,
+          relativePaths,
         })
         setSelectedPaths(new Set())
         await refreshDirectory()
@@ -553,8 +578,12 @@ function KnowledgeBaseSourceManagerWindow() {
         error: "移动失败",
       },
     )
+  }, [bridge, payload, promise, refreshDirectory])
+
+  const trashSelected = useCallback(async () => {
+    await runTrashRawEntries(trashPaths)
     setTrashPaths([])
-  }, [bridge, payload, promise, refreshDirectory, trashPaths])
+  }, [runTrashRawEntries, trashPaths])
 
   const handleDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
@@ -816,12 +845,53 @@ function KnowledgeBaseSourceManagerWindow() {
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>移到废纸篓？</AlertDialogTitle>
-            <AlertDialogDescription>所选项目会进入系统废纸篓。</AlertDialogDescription>
+            <AlertDialogDescription asChild>
+              <div className="flex flex-col gap-2">
+                {trashPaths.slice(0, 5).map((relativePath) => (
+                  <span key={relativePath} className="break-all">{relativePath}</span>
+                ))}
+                {trashPaths.length > 5 ? (
+                  <span>还有 {trashPaths.length - 5} 项</span>
+                ) : null}
+              </div>
+            </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>取消</AlertDialogCancel>
             <AlertDialogAction variant="destructive" onClick={trashSelected} aria-label="确认移到废纸篓">
               移到废纸篓
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <AlertDialog open={pendingMove !== null} onOpenChange={(open) => {
+        if (!open) setPendingMove(null)
+      }}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>确认移动？</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="flex flex-col gap-2">
+                {pendingMove?.relativePaths.slice(0, 5).map((relativePath) => (
+                  <span key={relativePath} className="break-all">{relativePath}</span>
+                ))}
+                {pendingMove && pendingMove.relativePaths.length > 5 ? (
+                  <span>还有 {pendingMove.relativePaths.length - 5} 项</span>
+                ) : null}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>取消</AlertDialogCancel>
+            <AlertDialogAction onClick={() => {
+              const pending = pendingMove
+              setPendingMove(null)
+              if (!pending) return
+              void runMoveRawEntries(pending.relativePaths, pending.targetDirectoryPath)
+              setMoveTargetPath("")
+            }}>
+              确认
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
