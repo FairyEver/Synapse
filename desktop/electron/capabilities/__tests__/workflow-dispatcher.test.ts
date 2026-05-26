@@ -459,6 +459,33 @@ describe("createWorkflowDispatcher", () => {
     expect((result.data as Record<string, unknown>).edgeId).toHaveLength(36)
   })
 
+  it("workflow.edge.delete rejects missing edge without saving", async () => {
+    const save = vi.fn(async () => ({ versionHash: "v_456" }))
+    const deps = makeDeps({
+      workflowService: {
+        ...makeDeps().workflowService,
+        get: vi.fn(async () => ({
+          id: "wf-1", name: "Test", description: "", version: "v1",
+          createdAt: 1, updatedAt: 2, params: [],
+          nodes: [
+            { id: "n1", name: "Prompt", type: "prompt", position: { x: 200, y: 200 }, config: {} },
+            { id: "n2", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} },
+          ],
+          edges: [{ id: "e1", from: "n1", to: "n2" }],
+        })),
+        save,
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    await expect(dispatcher.dispatch(
+      "workflow.edge.delete",
+      { workflowId: "wf-1", edgeId: "missing-edge" },
+      { source: "api" },
+    )).rejects.toThrow("Edge not found: missing-edge")
+    expect(save).not.toHaveBeenCalled()
+  })
+
   it("workflow.node.delete rejects deleting end node", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)

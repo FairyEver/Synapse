@@ -357,6 +357,9 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
     const workflowId = requireString(params, "workflowId")
     const edgeId = requireString(params, "edgeId")
     return atomicMutate(deps, workflowId, (def) => {
+      if (!def.edges.some((edge) => edge.id === edgeId)) {
+        throw new Error(`Edge not found: ${edgeId}`)
+      }
       def.edges = def.edges.filter((e) => e.id !== edgeId)
     })
   },
