@@ -23,7 +23,7 @@ import { SkillRegistry } from "./skill-registry"
 import { AGENT_RUNTIME_SERVICE_ID } from "./types"
 import type { AgentMessage } from "./types"
 
-const MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS = new Set([
+export const MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS = new Set([
   "autoresearch",
   "canvas",
   "defuddle",

@@ -6,7 +6,9 @@ import { ServiceNotFoundError, ServiceNotRunningError } from "../../../runtime/s
 import {
   AgentRuntimeService,
   createAgentRuntimeProjectService,
+  MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS,
 } from "../index"
+import { KNOWLEDGE_BASE_AGENT_CAPABILITIES } from "../../../../src/modules/agent/knowledge-base-commands"
 import type { AgentEvent, AgentMessage } from "../types"
 
 const createdSessionInputs = vi.hoisted(() => ({
@@ -268,6 +270,11 @@ describe("createAgentRuntimeProjectService", () => {
     } finally {
       service.stopIdleReclaim()
     }
+  })
+
+  it("covers every knowledge base UI catalog item in native slash passthrough", () => {
+    expect(KNOWLEDGE_BASE_AGENT_CAPABILITIES.map((item) => item.name).sort())
+      .toEqual([...MANAGED_KNOWLEDGE_BASE_NATIVE_SLASH_COMMANDS].sort())
   })
 })
 
