@@ -55,7 +55,22 @@ describe("AdminAuthController", () => {
       extraField: "ignored",
     }, { ip: "203.0.113.11" } as unknown as AdminRequest, { cookie: vi.fn() } as never))
       .rejects
-      .toThrow("登录请求无效。")
+      .toThrow("登录请求无效：包含不支持的字段：extraField")
+    expect(auth.login).not.toHaveBeenCalled()
+  })
+
+  it("rejects invalid admin login fields with field details", async () => {
+    const auth = {
+      login: vi.fn(),
+    }
+    const controller = new AdminAuthController(auth as never)
+
+    await expect(controller.login({
+      email: "not-an-email",
+      password: "",
+    }, { ip: "203.0.113.11" } as unknown as AdminRequest, { cookie: vi.fn() } as never))
+      .rejects
+      .toThrow("登录请求无效：email 格式无效；password 至少 1 个字符")
     expect(auth.login).not.toHaveBeenCalled()
   })
 

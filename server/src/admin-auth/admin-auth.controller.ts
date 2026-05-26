@@ -1,8 +1,9 @@
-import { BadRequestException, Body, Controller, Get, Optional, Post, Req, Res, UnauthorizedException, UseGuards } from "@nestjs/common"
+import { Body, Controller, Get, Optional, Post, Req, Res, UnauthorizedException, UseGuards } from "@nestjs/common"
 import { Throttle } from "@nestjs/throttler"
 import type { Response } from "express"
 import { z } from "zod"
 import { AuditLogService } from "../common/audit-log.service"
+import { badRequestFromZodError } from "../common/zod-validation"
 import { AdminAuthGuard, type AdminRequest } from "./admin-auth.guard"
 import { AdminAuthService } from "./admin-auth.service"
 
@@ -33,7 +34,7 @@ export class AdminAuthController {
   async login(@Body() body: unknown, @Req() request: AdminRequest, @Res({ passthrough: true }) response: Response) {
     const result = loginSchema.safeParse(body)
     if (!result.success) {
-      throw new BadRequestException("登录请求无效。")
+      throw badRequestFromZodError(result.error, "登录请求无效。")
     }
     const credentials = result.data
     const session = await this.auth.login(credentials.email, credentials.password, request.ip)
