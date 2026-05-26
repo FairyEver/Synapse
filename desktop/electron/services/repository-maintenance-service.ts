@@ -1,5 +1,4 @@
 import { access, copyFile, mkdir, readFile, readdir, rm, stat, writeFile } from "node:fs/promises"
-import { existsSync } from "node:fs"
 import type { Dirent } from "node:fs"
 import path from "node:path"
 import { isFileNotFoundError, pathExists } from "./fs-utils"
@@ -21,7 +20,7 @@ import {
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage } from "./git-error-utils"
 import { pendingPushesService } from "./pending-pushes-service"
-import { runGitCommand, type GitCommandResult } from "./git-command"
+import { isGitRebaseInProgress, runGitCommand, type GitCommandResult } from "./git-command"
 import { withRepositoryCacheDatabase } from "./repository-cache-database"
 import { repositoryStore } from "./repository-store"
 
@@ -325,9 +324,7 @@ async function ensureBotIdentity(gitRootPath: string): Promise<void> {
 
 async function abortRebaseIfNeeded(localPath: string): Promise<void> {
   try {
-    const rebaseDir = path.join(localPath, ".git", "rebase-merge")
-    const rebaseApplyDir = path.join(localPath, ".git", "rebase-apply")
-    if (!existsSync(rebaseDir) && !existsSync(rebaseApplyDir)) return
+    if (!(await isGitRebaseInProgress(localPath))) return
 
     logger.warn("Rebase in progress detected during maintenance. Aborting.", { localPath })
     await runMaintenanceGitCommand(

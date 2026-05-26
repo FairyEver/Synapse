@@ -1,12 +1,10 @@
-import { access } from "node:fs/promises"
-import path from "node:path"
 import type { SynapseRepositoryConfig } from "../../src/types/config"
 import type {
   SynapseRepositoryOperationKind,
   SynapseRepositoryOperationResult,
   SynapseRepositoryProgressEvent,
 } from "../../src/types/repository"
-import { runGitCommand } from "./git-command"
+import { isGitRebaseInProgress, runGitCommand } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage } from "./git-error-utils"
 import { repositoryLockManager } from "./repository-lock-manager"
@@ -181,26 +179,8 @@ async function getAheadCount(cwd: string): Promise<number> {
   return parseInt(result.stdout.trim(), 10) || 0
 }
 
-async function isRebaseInProgress(localPath: string): Promise<boolean> {
-  const gitDir = path.join(localPath, ".git")
-
-  try {
-    await access(path.join(gitDir, "rebase-merge"))
-    return true
-  } catch {
-    // not in rebase-merge
-  }
-
-  try {
-    await access(path.join(gitDir, "rebase-apply"))
-    return true
-  } catch {
-    return false
-  }
-}
-
 async function abortRebaseIfNeeded(localPath: string): Promise<void> {
-  if (!(await isRebaseInProgress(localPath))) {
+  if (!(await isGitRebaseInProgress(localPath))) {
     return
   }
 

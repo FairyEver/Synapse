@@ -35,11 +35,10 @@ import {
   knowledgeBaseVirtualPath,
   resolveManagedKnowledgeBasePath,
 } from "./managed-path"
+import { knowledgeBaseErrorMeta, knowledgeBaseLogger as logger } from "./logging"
 import { KnowledgeBaseRawFileManager } from "./raw-file-manager"
-import { createMainLogger } from "../log-store"
 
 export const KNOWLEDGE_BASE_TEMPLATE_VERSION = "2026-05-21"
-const logger = createMainLogger("service.knowledge-base")
 
 type KnowledgeBaseServiceDeps = {
   managedTemplateRoot?: string
@@ -159,6 +158,13 @@ export class KnowledgeBaseService {
       now: this.now,
       converter: this.fileConversionService,
     })
+    logger.info("Knowledge Base source upload completed.", {
+      projectId,
+      requestedCount: payload.filePaths.length,
+      uploadedCount: result.uploaded.length,
+      skippedCount: result.skipped.length,
+      skippedReasons: skippedReasonCounts(result.skipped),
+    })
     return { projectId, uploaded: result.uploaded, skipped: result.skipped }
   }
 
@@ -170,6 +176,12 @@ export class KnowledgeBaseService {
       url: payload.url,
       now: this.now,
       fetchUrl: this.fetchUrl,
+    })
+    logger.info("Knowledge Base URL source upload completed.", {
+      projectId,
+      uploadedCount: result.uploaded.length,
+      skippedCount: result.skipped.length,
+      skippedReasons: skippedReasonCounts(result.skipped),
     })
     return { projectId, uploaded: result.uploaded, skipped: result.skipped }
   }
@@ -228,16 +240,12 @@ export class KnowledgeBaseService {
     projectId: string,
     result: Omit<SynapseKnowledgeBaseRawMutationResult, "projectId">,
   ): void {
-    const skippedReasons = result.skipped.reduce<Record<string, number>>((counts, item) => {
-      counts[item.reason] = (counts[item.reason] ?? 0) + 1
-      return counts
-    }, {})
     logger.info("Knowledge Base raw mutation completed.", {
       affectedCount: result.entries.length,
       operation,
       projectId,
       skippedCount: result.skipped.length,
-      skippedReasons,
+      skippedReasons: skippedReasonCounts(result.skipped),
     })
   }
 
@@ -250,7 +258,9 @@ export class KnowledgeBaseService {
     if (!isManagedKnowledgeBaseProject(project)) {
       throw new Error("当前项目不是托管知识库。")
     }
-    return resolveManagedKnowledgeBasePath(project, this.userDataPath)
+    const projectPath = resolveManagedKnowledgeBasePath(project, this.userDataPath)
+    await assertKnowledgeBaseRootNotSymlink(projectPath)
+    return projectPath
   }
 
   private async ensureRawRoot(projectPath: string): Promise<string> {
@@ -283,7 +293,11 @@ async function walkRawFiles(projectPath: string, directoryPath: string): Promise
   let entries: Dirent[]
   try {
     entries = await readdir(directoryPath, { withFileTypes: true })
-  } catch {
+  } catch (error) {
+    logger.warn("Knowledge Base raw file walk failed.", {
+      relativePath: normalizeRelativePath(path.relative(projectPath, directoryPath)),
+      ...knowledgeBaseErrorMeta(error),
+    })
     return []
   }
 
@@ -304,7 +318,11 @@ async function walkRawFiles(projectPath: string, directoryPath: string): Promise
         size: stat.size,
         modifiedAt: stat.mtime.toISOString(),
       })
-    } catch {
+    } catch (error) {
+      logger.warn("Knowledge Base raw file stat failed.", {
+        relativePath,
+        ...knowledgeBaseErrorMeta(error),
+      })
       files.push({
         relativePath,
         size: 0,
@@ -321,6 +339,15 @@ function isSupportedSourcePath(relativePath: string): boolean {
 
 function normalizeRelativePath(value: string): string {
   return value.split(path.sep).join("/")
+}
+
+function skippedReasonCounts(
+  skipped: readonly { readonly reason: string }[],
+): Record<string, number> {
+  return skipped.reduce<Record<string, number>>((counts, item) => {
+    counts[item.reason] = (counts[item.reason] ?? 0) + 1
+    return counts
+  }, {})
 }
 
 function resolveManagedTemplateRoot(): string {
@@ -398,6 +425,20 @@ async function assertNoSymlinkInRequiredPath(projectPath: string, relativePath: 
       }
       throw error
     }
+  }
+}
+
+async function assertKnowledgeBaseRootNotSymlink(projectPath: string): Promise<void> {
+  try {
+    const stat = await lstat(projectPath)
+    if (stat.isSymbolicLink()) {
+      throw new Error("知识库根目录不能是符号链接。")
+    }
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") {
+      return
+    }
+    throw error
   }
 }
 

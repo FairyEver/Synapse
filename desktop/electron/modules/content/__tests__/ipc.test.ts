@@ -238,6 +238,76 @@ describe("contentIpcModule sync ownership", () => {
     expect(mocks.coordinator.requestPush).toHaveBeenCalledWith(mocks.repository, "content-saved")
   })
 
+  it("does not log user-provided titles when creating content", async () => {
+    const { contentIpcModule } = await import("../ipc")
+    const secretTitle = "客户 Alpha 事故复盘"
+
+    await contentIpcModule.methods.create.handler(createContext() as never, {
+      contentType: "prompt",
+      payload: { title: secretTitle },
+    } as never)
+
+    expect(mocks.logger.info).toHaveBeenCalledWith("Handling content.create request.", {
+      contentType: "prompt",
+    })
+    expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain(secretTitle)
+  })
+
+  it("validates mutating content IPC request shapes with Zod schemas", async () => {
+    const { contentIpcModule } = await import("../ipc")
+    const contentPayload = {
+      category: "General",
+      content: "body",
+      description: "description",
+      icon: "FileText",
+      iconBg: "default",
+      iconImage: "",
+      iconType: "icon",
+      title: "Rule",
+    }
+
+    expect(contentIpcModule.methods.create.request.safeParse({
+      contentType: "rule",
+      payload: { ...contentPayload, name: "rule-name" },
+    }).success).toBe(true)
+    expect(contentIpcModule.methods.create.request.safeParse({
+      contentType: "rule",
+      payload: { title: "missing required fields" },
+    }).success).toBe(false)
+    expect(contentIpcModule.methods.update.request.safeParse({
+      contentType: "rule",
+      payload: { ...contentPayload, baseHistoryDirname: "history", id: "rule-1", name: "rule-name" },
+    }).success).toBe(true)
+    expect(contentIpcModule.methods.update.request.safeParse({
+      contentType: "rule",
+      payload: { ...contentPayload, name: "rule-name" },
+    }).success).toBe(false)
+    expect(contentIpcModule.methods.deleteContent.request.safeParse({
+      baseHistoryDirname: "history",
+      id: "rule-1",
+      type: "rule",
+    }).success).toBe(true)
+    expect(contentIpcModule.methods.restore.request.safeParse({
+      id: "rule-1",
+      type: "rule",
+    }).success).toBe(false)
+    expect(contentIpcModule.methods.openDetailWindow.request.safeParse({
+      contentType: "rule",
+      id: "rule-1",
+      title: "Rule",
+      viewMode: "rendered",
+    }).success).toBe(true)
+    expect(contentIpcModule.methods.installToEditor.request.safeParse({
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "codex",
+      scope: "project",
+    }).success).toBe(true)
+    expect(contentIpcModule.methods.readEditorInstallFormValues.request.safeParse({
+      editorId: "codex",
+    }).success).toBe(false)
+  })
+
   it("emits legacy push completion events after coordinator push succeeds", async () => {
     const { contentIpcModule } = await import("../ipc")
     const push = createDeferred<undefined>()
@@ -531,6 +601,28 @@ describe("contentIpcModule sync ownership", () => {
         }],
       },
     }))
+  })
+
+  it("keeps install success when install status refresh fails", async () => {
+    const { contentIpcModule } = await import("../ipc")
+    mocks.installStatusCacheService.refresh.mockRejectedValueOnce(new Error("scan failed"))
+
+    const result = await contentIpcModule.methods.installToEditor.handler(createContext() as never, {
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "codex",
+      projectPath: "/project",
+      scope: "project",
+    } as never)
+
+    expect(result).toEqual({ installed: true })
+    expect(mocks.contentInstallService.installToEditor).toHaveBeenCalled()
+    expect(mocks.installStatusCacheService.refresh).toHaveBeenCalledWith("skill-1")
+    expect(getEvents("install-status.changed")).toHaveLength(0)
+    expect(mocks.logger.warn).toHaveBeenCalledWith(
+      "Failed to refresh install status after content change.",
+      expect.objectContaining({ contentId: "skill-1" }),
+    )
   })
 
   it("refreshes and broadcasts install status after a skill update succeeds", async () => {

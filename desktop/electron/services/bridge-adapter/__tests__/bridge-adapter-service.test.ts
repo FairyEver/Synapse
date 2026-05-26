@@ -5,6 +5,7 @@ import WebSocket from "ws"
 
 import type { ConversationEntryV1 } from "../../../runtime/data-repo"
 import { createNetworkServiceRegistry } from "../../../runtime/network"
+import type { PermissionGuard } from "../../../runtime/security"
 import { InMemoryAuditSink } from "../../../runtime/security"
 import type { StructuredLogger } from "../../../runtime/service-registry"
 import type {
@@ -62,6 +63,36 @@ describe("BridgeAdapterService", () => {
     const { service, port } = await startBridge()
     await expect(openBridge(port, "")).rejects.toThrow()
     await service.stop()
+  })
+
+  it("records denied audit when network listen permission is rejected", async () => {
+    const auditSink = new InMemoryAuditSink()
+    const service = new BridgeAdapterService({
+      projectContainers: fakeProjectContainers(new FakeAgentRuntime()),
+      networkRegistry: createNetworkServiceRegistry(),
+      sideChannel: new FakeSideChannel() as unknown as SideChannelService,
+      listProjects: async () => [{ projectId: "project-1", name: "Project", workspacePath: "/repo" }],
+      permissionGuard: denyPermissionGuard(),
+      auditSink,
+      token: "tok",
+      preferredPort: 49998,
+    })
+
+    await expect(service.start()).rejects.toThrow("denied by test-policy")
+
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "network.listen",
+        actor: { kind: "user" },
+        resource: "127.0.0.1:49998/bridge/ws",
+        outcome: "denied",
+        metadata: expect.objectContaining({
+          serviceId: "bridge.adapter",
+          reason: "denied by test-policy",
+          policyId: "test-policy",
+        }),
+      }),
+    ])
   })
 
   it("routes inbound bridge message to AgentMessage", async () => {
@@ -514,6 +545,17 @@ function createLogger(): StructuredLogger & {
   }
   logger.child.mockReturnValue(logger)
   return logger
+}
+
+function denyPermissionGuard(): PermissionGuard {
+  return {
+    registerPolicy: vi.fn(() => () => {}),
+    check: vi.fn(async () => ({
+      allowed: false as const,
+      reason: "denied by test-policy",
+      policyId: "test-policy",
+    })),
+  }
 }
 
 async function registeredBridge(

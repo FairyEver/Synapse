@@ -17,6 +17,7 @@ export interface DataRepositoryAuditSinkDeps {
 }
 
 const MAX_MEMORY_EVENTS = 10_000
+const SENSITIVE_RESOURCE_VALUE_PATTERN = /(?<=\b(?:token|secret|authorization|api[_-]?key|password|bearer|auth)\s*[:=]\s*)\S+/gi
 const POSIX_PATH_PATTERN = /(?:\/Users|\/home|\/Volumes|\/private|\/tmp)\/[^\s"'`<>),;]+/g
 
 export class DataRepositoryAuditSink implements AuditSink {
@@ -115,10 +116,7 @@ function sanitizeMetadata(
 }
 
 function sanitizeResource(resource: string): string {
-  return resource.replace(
-    /(?<=\b(?:token|secret|authorization|api[_-]?key|password|bearer|auth)\s*[:=]\s*)\S+/gi,
-    "[redacted]",
-  )
+  return sanitizePathText(resource.replace(SENSITIVE_RESOURCE_VALUE_PATTERN, "[redacted]"))
 }
 
 function sanitizeRecord(record: Record<string, unknown>): Record<string, unknown> {
@@ -137,9 +135,13 @@ function sanitizeValue(value: unknown): unknown {
     return sanitizeRecord(value as Record<string, unknown>)
   }
   if (typeof value === "string") {
-    return value.replace(POSIX_PATH_PATTERN, "[path]")
+    return sanitizePathText(value)
   }
   return value
+}
+
+function sanitizePathText(value: string): string {
+  return value.replace(POSIX_PATH_PATTERN, "[path]")
 }
 
 function isSensitiveKey(key: string): boolean {

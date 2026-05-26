@@ -725,7 +725,7 @@ export const workflowIpcModule: IpcModule = {
         eventBus.emit({
           domain: "workflow",
           type: "workflow:definition-updated",
-          payload: { workflowId: id },
+          payload: { workflowId: id, source: "workflow-delete" },
           timestamp: new Date().toISOString(),
         })
         logger.info("workflow:delete done", { id })

@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import type { DataChangeListener, DataNamespace, RunAsConfigEntryV1, RunAsPreflightEntryV1 } from "../../../runtime/data-repo"
 import type { ControlledProcessRunner } from "../../../runtime/process"
+import type { PermissionGuard, PermissionRequest, PermissionResult } from "../../../runtime/security"
+import { InMemoryAuditSink } from "../../../runtime/security"
 import { ExecutionIsolationService } from "../execution-isolation-service"
 
 describe("ExecutionIsolationService", () => {
@@ -25,6 +27,7 @@ describe("ExecutionIsolationService", () => {
       configs,
       preflights: new MemoryNamespace<RunAsPreflightEntryV1>("run-as.preflights"),
       processRunner: {} as ControlledProcessRunner,
+      permissionGuard: permissionGuard({ allowed: true }),
     })
 
     await expect(service.updateConfig({
@@ -42,7 +45,132 @@ describe("ExecutionIsolationService", () => {
         .toThrow("run_as_user preflight has not passed")
     }
   })
+
+  it("blocks enabling run-as until preflight has passed", async () => {
+    const configs = new MemoryNamespace<RunAsConfigEntryV1>("run-as.config")
+    await configs.upsert({
+      id: "run-as:project-1",
+      schemaVersion: 1,
+      projectId: "project-1",
+      enabled: false,
+      user: "safe-user",
+      envAllowlist: ["LANG"],
+      requirePreflight: true,
+      createdAt: "2026-05-21T00:00:00.000Z",
+      updatedAt: "2026-05-21T00:00:00.000Z",
+    })
+    const auditSink = new InMemoryAuditSink()
+    const service = new ExecutionIsolationService({
+      configs,
+      preflights: new MemoryNamespace<RunAsPreflightEntryV1>("run-as.preflights"),
+      processRunner: {} as ControlledProcessRunner,
+      permissionGuard: permissionGuard({ allowed: true }),
+      auditSink,
+    })
+
+    await expect(service.updateConfig({
+      projectId: "project-1",
+      enabled: true,
+    })).rejects.toThrow("run_as_user preflight must pass before enabling run-as or disabling preflight")
+
+    await expect(configs.get("run-as:project-1")).resolves.toMatchObject({
+      enabled: false,
+    })
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "shell.exec",
+        resource: "run_as_user:config",
+        outcome: "failed",
+      }),
+    ])
+  })
+
+  it("records permission denial before updating run-as config", async () => {
+    const configs = new MemoryNamespace<RunAsConfigEntryV1>("run-as.config")
+    const auditSink = new InMemoryAuditSink()
+    const service = new ExecutionIsolationService({
+      configs,
+      preflights: new MemoryNamespace<RunAsPreflightEntryV1>("run-as.preflights"),
+      processRunner: {} as ControlledProcessRunner,
+      permissionGuard: permissionGuard({
+        allowed: false,
+        reason: "denied by test",
+        policyId: "test",
+      }),
+      auditSink,
+    })
+
+    await expect(service.updateConfig({
+      projectId: "project-1",
+      enabled: true,
+    })).rejects.toThrow("denied by test")
+
+    await expect(configs.get("run-as:project-1")).resolves.toBeNull()
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "shell.exec",
+        resource: "run_as_user:config",
+        outcome: "denied",
+      }),
+    ])
+  })
+
+  it("audits allowed run-as config updates", async () => {
+    const configs = new MemoryNamespace<RunAsConfigEntryV1>("run-as.config")
+    await configs.upsert({
+      id: "run-as:project-1",
+      schemaVersion: 1,
+      projectId: "project-1",
+      enabled: false,
+      user: "safe-user",
+      envAllowlist: ["LANG"],
+      requirePreflight: true,
+      lastPreflightStatus: "pass",
+      createdAt: "2026-05-21T00:00:00.000Z",
+      updatedAt: "2026-05-21T00:00:00.000Z",
+    })
+    const auditSink = new InMemoryAuditSink()
+    const checked: PermissionRequest[] = []
+    const service = new ExecutionIsolationService({
+      configs,
+      preflights: new MemoryNamespace<RunAsPreflightEntryV1>("run-as.preflights"),
+      processRunner: {} as ControlledProcessRunner,
+      permissionGuard: permissionGuard({ allowed: true }, checked),
+      auditSink,
+    })
+
+    await expect(service.updateConfig({
+      projectId: "project-1",
+      enabled: true,
+    })).resolves.toMatchObject({
+      enabled: true,
+    })
+
+    expect(checked).toEqual([
+      expect.objectContaining({
+        action: "shell.exec",
+        resource: "run_as_user:config",
+      }),
+    ])
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "shell.exec",
+        resource: "run_as_user:config",
+        outcome: "allowed",
+      }),
+    ])
+  })
 })
+
+function permissionGuard(result: PermissionResult, requests: PermissionRequest[] = []): PermissionGuard {
+  return {
+    registerPolicy: () => () => {},
+    check: async (request) => {
+      requests.push(request)
+      return result
+    },
+  }
+}
 
 class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
   readonly schemaVersion = 1

@@ -434,6 +434,39 @@ function getEditorScanPaths(): EditorScanPaths[] {
   })
 }
 
+async function scanGlobalEditor(ep: EditorScanPaths): Promise<EditorScanGlobalResult> {
+  try {
+    const detected = await pathExists(ep.detectionDir)
+    const [skillScan, rules] = await Promise.all([
+      scanSkillDirectories(ep.globalSkillPaths),
+      scanRulesForEditor(ep.editorId, ep.globalRulesPath),
+    ])
+    return {
+      editorId: ep.editorId,
+      editorLabel: ep.editorLabel,
+      status: detected ? "detected" : "not-detected",
+      skills: skillScan.skills,
+      duplicateSkillNames: skillScan.duplicateSkillNames,
+      rules,
+      rulesSupported: ep.rulesSupported,
+    }
+  } catch (error) {
+    logger.warn("global editor scan failed", {
+      editorId: ep.editorId,
+      error,
+    })
+    return {
+      editorId: ep.editorId,
+      editorLabel: ep.editorLabel,
+      status: "not-detected",
+      skills: [],
+      duplicateSkillNames: [],
+      rules: [],
+      rulesSupported: ep.rulesSupported,
+    }
+  }
+}
+
 async function scanSkillDirectories(
   dirPaths: readonly string[],
 ): Promise<{ skills: EditorScanSkillItem[]; duplicateSkillNames: string[] }> {
@@ -537,22 +570,7 @@ async function scanAll(): Promise<EditorScanResult> {
   const editorPaths = getEditorScanPaths()
 
   const globalPromise = Promise.all(
-    editorPaths.map(async (ep): Promise<EditorScanGlobalResult> => {
-      const detected = await pathExists(ep.detectionDir)
-      const [skillScan, rules] = await Promise.all([
-        scanSkillDirectories(ep.globalSkillPaths),
-        scanRulesForEditor(ep.editorId, ep.globalRulesPath),
-      ])
-      return {
-        editorId: ep.editorId,
-        editorLabel: ep.editorLabel,
-        status: detected ? "detected" : "not-detected",
-        skills: skillScan.skills,
-        duplicateSkillNames: skillScan.duplicateSkillNames,
-        rules,
-        rulesSupported: ep.rulesSupported,
-      }
-    }),
+    editorPaths.map(scanGlobalEditor),
   )
 
   const config = await configStore.load()

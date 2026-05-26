@@ -111,6 +111,50 @@ describe("ConfigBackupService quick inputs", () => {
     }
   })
 
+  it("preserves repository variables, global lists, sort order, and agent defaults when importing a backup", async () => {
+    const filePath = await writeBackupFile({
+      favorites: { rule: ["rule-1"], skill: ["skill-1"], prompt: ["prompt-1"] },
+      recentlyViewed: { rule: ["rule-2"], skill: ["skill-2"], prompt: ["prompt-2"] },
+      contentSortOrder: "name-asc",
+    }, {
+      activeRepoUuid: "repo-1",
+      repositories: [{
+        uuid: "repo-1",
+        name: "Repo",
+        localPath: "/repo",
+        contentDirs: { rule: "rules", skill: "skills", prompt: "prompts" },
+        variables: [{ name: "API_HOST", value: "https://example.test", description: "API" }],
+      }],
+      agent: {
+        defaultPermissionMode: "bypassPermissions",
+        defaultProviderModel: { providerId: "provider-1", modelTier: "sonnet" },
+      },
+    })
+
+    try {
+      await configBackupService.readImport(filePath)
+
+      expect(configStore.replace).toHaveBeenCalledWith(expect.objectContaining({
+        activeRepoUuid: "repo-1",
+        repositories: [expect.objectContaining({
+          uuid: "repo-1",
+          variables: [{ name: "API_HOST", value: "https://example.test", description: "API" }],
+        })],
+        global: expect.objectContaining({
+          favorites: { rule: ["rule-1"], skill: ["skill-1"], prompt: ["prompt-1"] },
+          recentlyViewed: { rule: ["rule-2"], skill: ["skill-2"], prompt: ["prompt-2"] },
+          contentSortOrder: "name-asc",
+        }),
+        agent: {
+          defaultPermissionMode: "bypassPermissions",
+          defaultProviderModel: { providerId: "provider-1", modelTier: "sonnet" },
+        },
+      }))
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
+
   it("rejects malformed quick inputs when importing a backup", async () => {
     const filePath = await writeBackupFile({
       quickInputs: [{ id: "quick-1", content: "   " }],
@@ -142,6 +186,39 @@ describe("ConfigBackupService quick inputs", () => {
       { id: "quick-1", content: "第一行\n第二行", directSend: true },
     ])
   })
+
+  it("redacts selected backup paths in import and export logs", async () => {
+    const exportDir = await mkdtemp(path.join(tmpdir(), "synapse-config-backup-export-"))
+    const exportPath = path.join(exportDir, "private-backup.json")
+    const importPath = await writeBackupFile({})
+
+    try {
+      await configBackupService.writeExport(exportPath)
+      await configBackupService.readImport(importPath)
+
+      expect(mocks.logger.info).toHaveBeenCalledWith("Config backup exported.", { filePath: "[path]" })
+      expect(mocks.logger.info).toHaveBeenCalledWith("Config backup imported.", { filePath: "[path]" })
+      expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain(exportDir)
+      expect(JSON.stringify(mocks.logger.info.mock.calls)).not.toContain(path.dirname(importPath))
+    } finally {
+      await rm(exportDir, { recursive: true, force: true })
+      await rm(path.dirname(importPath), { recursive: true, force: true })
+    }
+  })
+
+  it("redacts selected backup paths in rollback logs", async () => {
+    const filePath = await writeBackupFile({})
+    vi.mocked(userIdentityService.importIdentity).mockRejectedValueOnce(new Error("identity failed"))
+
+    try {
+      await expect(configBackupService.readImport(filePath)).rejects.toThrow("identity failed")
+
+      expect(mocks.logger.warn).toHaveBeenCalledWith("Identity import failed, rolling back config.", { filePath: "[path]" })
+      expect(JSON.stringify(mocks.logger.warn.mock.calls)).not.toContain(path.dirname(filePath))
+    } finally {
+      await rm(path.dirname(filePath), { recursive: true, force: true })
+    }
+  })
 })
 
 function createIdentity() {
@@ -154,7 +231,12 @@ function createIdentity() {
 
 async function writeBackupFile(
   globalOverrides: Record<string, unknown>,
-  options: { includeQuickInputs?: boolean } = {},
+  options: {
+    includeQuickInputs?: boolean
+    activeRepoUuid?: unknown
+    repositories?: unknown[]
+    agent?: unknown
+  } = {},
 ): Promise<string> {
   const dir = await mkdtemp(path.join(tmpdir(), "synapse-config-backup-"))
   const filePath = path.join(dir, "backup.json")
@@ -164,7 +246,12 @@ async function writeBackupFile(
 
 function createBackup(
   globalOverrides: Record<string, unknown>,
-  options: { includeQuickInputs?: boolean },
+  options: {
+    includeQuickInputs?: boolean
+    activeRepoUuid?: unknown
+    repositories?: unknown[]
+    agent?: unknown
+  },
 ): Record<string, unknown> {
   const globalConfig: Record<string, unknown> = {
     themeMode: "light",
@@ -183,9 +270,10 @@ function createBackup(
     schemaVersion: 1,
     exportedAt: "2026-05-25T00:00:00.000Z",
     config: {
-      activeRepoUuid: null,
-      repositories: [],
+      activeRepoUuid: options.activeRepoUuid ?? null,
+      repositories: options.repositories ?? [],
       global: globalConfig,
+      ...(options.agent !== undefined ? { agent: options.agent } : undefined),
     },
     identity: createIdentity(),
   }

@@ -69,7 +69,109 @@ const contentMutationResultSchema = z.object({
   status: z.string(),
 }).passthrough()
 const nullableContentRecordSchema = contentRecordSchema.nullable()
-const unknownRequestSchema = z.unknown()
+const contentIconTypeSchema = z.enum(["icon", "image"])
+const contentViewModeSchema = z.enum(["rendered", "source"])
+const skillFilePayloadSchema = z.object({
+  bytes: z.instanceof(Uint8Array).optional(),
+  originalName: z.string(),
+  sha256: z.string().optional(),
+  size: z.number(),
+}).passthrough()
+const createContentPayloadBaseSchema = z.object({
+  category: z.string(),
+  content: z.string(),
+  description: z.string(),
+  icon: z.string(),
+  iconBg: z.string(),
+  iconImage: z.string(),
+  iconImageBytes: z.instanceof(Uint8Array).optional(),
+  iconType: contentIconTypeSchema,
+  title: z.string(),
+  usage: z.string().optional(),
+}).passthrough()
+const createContentPayloadSchema = createContentPayloadBaseSchema.extend({
+  files: z.array(skillFilePayloadSchema).optional(),
+  name: z.string().optional(),
+})
+const updateContentPayloadSchema = createContentPayloadSchema.extend({
+  baseHistoryDirname: z.string(),
+  force: z.boolean().optional(),
+  id: z.string(),
+})
+const createContentRequestSchema = z.object({
+  contentType: contentTypeSchema,
+  payload: createContentPayloadSchema,
+})
+const updateContentRequestSchema = z.object({
+  contentType: contentTypeSchema,
+  payload: updateContentPayloadSchema,
+})
+const deleteContentPayloadSchema = z.object({
+  baseHistoryDirname: z.string(),
+  force: z.boolean().optional(),
+  id: z.string(),
+  type: contentTypeSchema,
+})
+const restoreContentPayloadSchema = z.object({
+  baseHistoryDirname: z.string(),
+  id: z.string(),
+  type: contentTypeSchema,
+})
+const purgeContentPayloadSchema = z.object({
+  id: z.string(),
+  type: contentTypeSchema,
+})
+const contentWindowNoticeSchema = z.object({
+  id: z.string(),
+  message: z.string(),
+})
+const openContentDetailWindowPayloadSchema = z.object({
+  contentType: contentTypeSchema,
+  id: z.string(),
+  title: z.string(),
+  viewMode: contentViewModeSchema,
+})
+const openContentCreateWindowPayloadSchema = z.object({
+  contentType: contentTypeSchema,
+  initialValue: createContentPayloadSchema.nullable().optional(),
+  notices: z.array(contentWindowNoticeSchema).optional(),
+  requestId: z.string().optional(),
+  sourceLabel: z.string().nullable().optional(),
+  title: z.string(),
+})
+const contentEditPrefillSchema = z.discriminatedUnion("contentType", [
+  z.object({ content: z.string(), contentType: z.literal("rule") }),
+  z.object({ content: z.string(), contentType: z.literal("skill"), files: z.array(skillFilePayloadSchema) }),
+])
+const openContentEditWindowPayloadSchema = z.object({
+  contentType: contentTypeSchema,
+  id: z.string(),
+  origin: z.enum(["detail", "external"]),
+  prefill: contentEditPrefillSchema.nullable().optional(),
+  requestId: z.string().optional(),
+  sourceLabel: z.string().nullable().optional(),
+  title: z.string(),
+})
+const editorInstallScopeSchema = z.enum(["global", "project"])
+const resolveEditorTargetPayloadSchema = z.object({
+  contentId: z.string(),
+  contentType: contentTypeSchema,
+  editorId: z.string(),
+  projectPath: z.string().optional(),
+  ruleName: z.string().optional(),
+  scope: editorInstallScopeSchema,
+  skillName: z.string().optional(),
+  skillTitle: z.string().optional(),
+})
+const installToEditorPayloadSchema = resolveEditorTargetPayloadSchema.extend({
+  installFormValues: z.record(z.string(), z.unknown()).optional(),
+  replaceConfirmed: z.boolean().optional(),
+  variableSubstitutions: z.record(z.string(), z.string()).optional(),
+})
+const readEditorInstallFormValuesPayloadSchema = z.object({
+  editorId: z.string(),
+  targetPath: z.string(),
+})
 
 // Helper to notify pending pushes updated
 async function notifyPendingPushesUpdated(
@@ -99,13 +201,17 @@ async function notifyInstallStatusChanged(
   eventBus: EventBus,
   contentId: string,
 ): Promise<void> {
-  const entries = await installStatusCacheService.refresh(contentId)
-  eventBus.emit({
-    domain: "install-status",
-    type: "install-status.changed",
-    payload: { contentId, entries },
-    timestamp: new Date().toISOString(),
-  })
+  try {
+    const entries = await installStatusCacheService.refresh(contentId)
+    eventBus.emit({
+      domain: "install-status",
+      type: "install-status.changed",
+      payload: { contentId, entries },
+      timestamp: new Date().toISOString(),
+    })
+  } catch (error) {
+    logger.warn("Failed to refresh install status after content change.", { contentId, error })
+  }
 }
 
 function emitContentChanged(
@@ -359,10 +465,10 @@ export const contentIpcModule: IpcModule = {
     create: {
       kind: "invoke",
       channel: "synapse:content:create",
-      request: unknownRequestSchema,
+      request: createContentRequestSchema,
       response: contentMutationResultSchema,
       handler: async (ctx, request: SynapseCreateContentRequest) => {
-        logger.info(`Handling content.create request. contentType: ${request.contentType}, title: ${request.payload?.title}`)
+        logger.info("Handling content.create request.", { contentType: request.contentType })
 
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         const result = await contentSubmissionService.createContent(request)
@@ -381,7 +487,7 @@ export const contentIpcModule: IpcModule = {
     update: {
       kind: "invoke",
       channel: "synapse:content:update",
-      request: unknownRequestSchema,
+      request: updateContentRequestSchema,
       response: contentMutationResultSchema,
       handler: async (ctx, request: SynapseUpdateContentRequest) => {
         logger.info(`Handling content.update request. contentType: ${request.contentType}, contentId: ${request.payload?.id}`)
@@ -407,7 +513,7 @@ export const contentIpcModule: IpcModule = {
     deleteContent: {
       kind: "invoke",
       channel: "synapse:content:delete-content",
-      request: unknownRequestSchema,
+      request: deleteContentPayloadSchema,
       response: contentMutationResultSchema,
       handler: async (ctx, payload: SynapseDeleteContentPayload) => {
         logger.info(`Handling content.deleteContent request. contentType: ${payload.type}, contentId: ${payload.id}`)
@@ -437,7 +543,7 @@ export const contentIpcModule: IpcModule = {
     restore: {
       kind: "invoke",
       channel: "synapse:content:restore",
-      request: unknownRequestSchema,
+      request: restoreContentPayloadSchema,
       response: contentMutationResultSchema,
       handler: async (ctx, payload: SynapseRestoreContentPayload) => {
         logger.info(`Handling content.restore request. contentType: ${payload.type}, contentId: ${payload.id}`)
@@ -458,7 +564,7 @@ export const contentIpcModule: IpcModule = {
     purge: {
       kind: "invoke",
       channel: "synapse:content:purge",
-      request: unknownRequestSchema,
+      request: purgeContentPayloadSchema,
       response: contentMutationResultSchema,
       handler: async (ctx, payload: SynapsePurgeContentPayload) => {
         logger.info(`Handling content.purge request. contentType: ${payload.type}, contentId: ${payload.id}`)
@@ -562,7 +668,7 @@ export const contentIpcModule: IpcModule = {
     openDetailWindow: {
       kind: "invoke",
       channel: "synapse:content:open-detail-window",
-      request: unknownRequestSchema,
+      request: openContentDetailWindowPayloadSchema,
       response: z.void(),
       handler: async (_ctx, payload: SynapseOpenContentWindowPayload) => {
         await contentWindowService.openDetailWindow(payload)
@@ -571,7 +677,7 @@ export const contentIpcModule: IpcModule = {
     openCreateWindow: {
       kind: "invoke",
       channel: "synapse:content:open-create-window",
-      request: unknownRequestSchema,
+      request: openContentCreateWindowPayloadSchema,
       response: z.void(),
       handler: async (_ctx, payload: SynapseOpenContentCreateWindowPayload) => {
         await contentWindowService.openCreateWindow(payload)
@@ -580,7 +686,7 @@ export const contentIpcModule: IpcModule = {
     openEditWindow: {
       kind: "invoke",
       channel: "synapse:content:open-edit-window",
-      request: unknownRequestSchema,
+      request: openContentEditWindowPayloadSchema,
       response: z.void(),
       handler: async (_ctx, payload: SynapseOpenContentEditWindowPayload) => {
         await contentWindowService.openEditWindow(payload)
@@ -598,7 +704,7 @@ export const contentIpcModule: IpcModule = {
     resolveEditorInstallTarget: {
       kind: "invoke",
       channel: "synapse:content:resolve-editor-install-target",
-      request: unknownRequestSchema,
+      request: resolveEditorTargetPayloadSchema,
       response: contentRecordSchema,
       handler: async (_ctx, payload: SynapseResolveEditorTargetPayload) => {
         return contentInstallService.resolveEditorInstallTarget(payload)
@@ -607,7 +713,7 @@ export const contentIpcModule: IpcModule = {
     installToEditor: {
       kind: "invoke",
       channel: "synapse:content:install-to-editor",
-      request: unknownRequestSchema,
+      request: installToEditorPayloadSchema,
       response: contentRecordSchema,
       handler: async (ctx, payload: SynapseInstallToEditorPayload) => {
         logger.info(`Handling content.installToEditor request. contentType: ${payload.contentType}, contentId: ${payload.contentId}, editorId: ${payload.editorId}, scope: ${payload.scope}`)
@@ -626,7 +732,7 @@ export const contentIpcModule: IpcModule = {
     readEditorInstallFormValues: {
       kind: "invoke",
       channel: "synapse:content:read-editor-install-form-values",
-      request: unknownRequestSchema,
+      request: readEditorInstallFormValuesPayloadSchema,
       response: contentRecordSchema,
       handler: async (ctx, payload: SynapseReadEditorInstallFormValuesPayload) => {
         return contentInstallService.readEditorInstallFormValues(payload, {

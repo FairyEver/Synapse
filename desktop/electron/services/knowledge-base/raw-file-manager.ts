@@ -6,6 +6,7 @@ import type {
   SynapseKnowledgeBaseRawEntry,
   SynapseKnowledgeBaseRawMutationResult,
 } from "../../../src/types/knowledge-base"
+import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
 
 type TrashItem = (targetPath: string) => Promise<void>
 
@@ -78,7 +79,11 @@ export class KnowledgeBaseRawFileManager {
         await copyFile(sourcePath, targetPath)
         entries.push(await entryForPath(rawRoot, targetPath, "file"))
       } catch (error) {
-        void error
+        knowledgeBaseLogger.warn("Knowledge Base raw file upload skipped.", {
+          fileName: path.basename(filePath),
+          reason: "read-error",
+          ...knowledgeBaseErrorMeta(error),
+        })
         skipped.push({ path: filePath, reason: "read-error" })
       }
     }
@@ -125,9 +130,15 @@ export class KnowledgeBaseRawFileManager {
         await rename(source, target)
         entries.push(await entryForPath(rawRoot, target, sourceStat.isDirectory() ? "directory" : "file"))
       } catch (error) {
+        const reason = isInvalidRawPathError(error) ? "invalid-path" : "read-error"
+        knowledgeBaseLogger.warn("Knowledge Base raw entry move skipped.", {
+          reason,
+          relativePath,
+          ...knowledgeBaseErrorMeta(error),
+        })
         skipped.push({
           path: relativePath,
-          reason: isInvalidRawPathError(error) ? "invalid-path" : "read-error",
+          reason,
         })
       }
     }
@@ -148,9 +159,15 @@ export class KnowledgeBaseRawFileManager {
         entries.push(await entryForPath(rawRoot, target, stat.isDirectory() ? "directory" : "file"))
         await this.trashItem(target)
       } catch (error) {
+        const reason = isInvalidRawPathError(error) ? "invalid-path" : "trash-error"
+        knowledgeBaseLogger.warn("Knowledge Base raw entry trash skipped.", {
+          reason,
+          relativePath,
+          ...knowledgeBaseErrorMeta(error),
+        })
         skipped.push({
           path: relativePath,
-          reason: isInvalidRawPathError(error) ? "invalid-path" : "trash-error",
+          reason,
         })
       }
     }
@@ -239,7 +256,12 @@ async function pathExists(targetPath: string): Promise<boolean> {
     await access(targetPath, constants.F_OK)
     return true
   } catch (error) {
-    void error
+    if (!isMissingPathError(error)) {
+      knowledgeBaseLogger.warn("Knowledge Base raw path existence check failed.", {
+        targetName: path.basename(targetPath),
+        ...knowledgeBaseErrorMeta(error),
+      })
+    }
     return false
   }
 }
@@ -254,6 +276,14 @@ function isInvalidRawPathError(error: unknown): boolean {
   if (!(error instanceof Error)) return false
   return error.message.includes("目标路径不在资料目录中")
     || error.message.includes("资料路径不能包含符号链接")
+}
+
+function isMissingPathError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && ((error as { readonly code?: unknown }).code === "ENOENT"
+      || (error as { readonly code?: unknown }).code === "ENOTDIR")
 }
 
 function normalizeRelativePath(value: string): string {

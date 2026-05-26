@@ -7,7 +7,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { WorkflowDefinition } from "@/types/workflow"
 
-const { rendererLogger, toastError } = vi.hoisted(() => ({
+const { rendererLogger, toastError, toastInfo, toastWarning } = vi.hoisted(() => ({
   rendererLogger: {
     debug: vi.fn(),
     error: vi.fn(),
@@ -15,6 +15,8 @@ const { rendererLogger, toastError } = vi.hoisted(() => ({
     warn: vi.fn(),
   },
   toastError: vi.fn(),
+  toastInfo: vi.fn(),
+  toastWarning: vi.fn(),
 }))
 
 vi.mock("@/app-shell/logging", () => ({
@@ -24,7 +26,9 @@ vi.mock("@/app-shell/logging", () => ({
 vi.mock("sonner", () => ({
   toast: {
     error: toastError,
+    info: toastInfo,
     success: vi.fn(),
+    warning: toastWarning,
   },
 }))
 
@@ -238,6 +242,50 @@ describe("WorkflowEditorApp", () => {
     })
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("sk-secret")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example")
+  })
+
+  it("clears stale editor state when an open workflow is deleted externally", async () => {
+    let definitionUpdated: ((payload: { workflowId: string; source?: string }) => void) | undefined
+    const workflowApi = {
+      get: vi.fn()
+        .mockResolvedValueOnce(definition())
+        .mockResolvedValueOnce(null),
+      openRunner: vi.fn(),
+      runDefinition: vi.fn(),
+      save: vi.fn(),
+      onEditorRefocus: vi.fn(() => vi.fn()),
+      onDefinitionUpdated: vi.fn((listener: (payload: { workflowId: string; source?: string }) => void) => {
+        definitionUpdated = listener
+        return vi.fn()
+      }),
+    }
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: { workflow: workflowApi },
+    })
+    window.history.replaceState({}, "", "/?workflowId=workflow-1")
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<WorkflowEditorApp />)
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("Change workflow")
+
+    await act(async () => {
+      definitionUpdated?.({ workflowId: "workflow-1", source: "workflow-delete" })
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(workflowApi.get).toHaveBeenCalledTimes(2)
+    expect(document.body.textContent).toContain("工作流不存在或已被删除")
+    expect(document.body.textContent).not.toContain("Change workflow")
+    expect(toastInfo).toHaveBeenCalledWith("工作流已被删除", { duration: 2000 })
   })
 
   it("shows node repair hints without raw validation JSON", async () => {

@@ -7,8 +7,18 @@ import type {
   SynapseConfigBackupExportResult,
   SynapseConfigBackupImportResult,
 } from "../../src/types/backup"
-import { SYNAPSE_THEME_MODE_OPTIONS } from "../../src/types/config"
-import type { SynapseFavorites, SynapseQuickInput } from "../../src/types/config"
+import { SYNAPSE_CONTENT_SORT_OPTIONS, SYNAPSE_THEME_MODE_OPTIONS } from "../../src/types/config"
+import type {
+  SynapseAgentGlobalConfig,
+  SynapseFavorites,
+  SynapseProjectCapabilities,
+  SynapseQuickInput,
+  SynapseRecentlyViewed,
+  SynapseVariable,
+} from "../../src/types/config"
+import { SYNAPSE_AGENT_PERMISSION_MODES } from "../../src/types/agent"
+import { MODEL_TIERS } from "../../src/types/provider-model"
+import type { ModelTier } from "../../src/types/provider-model"
 import type { SynapseContentType } from "../../src/types/content"
 import { configStore } from "./config-store"
 import { createMainLogger } from "./log-store"
@@ -66,6 +76,7 @@ function validateProject(
   const id = readRequiredField(rawValue, "id", itemPath, errors)
   const name = readRequiredField(rawValue, "name", itemPath, errors)
   const projectPath = readRequiredField(rawValue, "path", itemPath, errors)
+  const capabilities = validateProjectCapabilities(rawValue.capabilities, `${itemPath}.capabilities`, errors)
 
   if (!isNonEmptyString(id)) {
     errors.push(`${itemPath}.id 必须是非空字符串。`)
@@ -87,7 +98,124 @@ function validateProject(
     id: id.trim(),
     name: name.trim(),
     path: projectPath.trim(),
+    ...(capabilities ? { capabilities } : undefined),
   }
+}
+
+function validateProjectCapabilities(
+  rawValue: unknown,
+  itemPath: string,
+  errors: string[],
+): SynapseProjectCapabilities | undefined {
+  if (rawValue === undefined) {
+    return undefined
+  }
+
+  if (!isRecord(rawValue)) {
+    errors.push(`${itemPath} 必须是对象。`)
+    return undefined
+  }
+
+  if (rawValue.knowledgeBase === undefined) {
+    return undefined
+  }
+
+  const knowledgeBasePath = `${itemPath}.knowledgeBase`
+  const knowledgeBase = rawValue.knowledgeBase
+  if (!isRecord(knowledgeBase)) {
+    errors.push(`${knowledgeBasePath} 必须是对象。`)
+    return undefined
+  }
+
+  const templateVersion = knowledgeBase.templateVersion
+  const runtimeId = knowledgeBase.runtimeId
+  if (knowledgeBase.enabled !== true) {
+    errors.push(`${knowledgeBasePath}.enabled 必须是 true。`)
+  }
+  if (knowledgeBase.schemaVersion !== 1) {
+    errors.push(`${knowledgeBasePath}.schemaVersion 必须是 1。`)
+  }
+  if (!isNonEmptyString(templateVersion)) {
+    errors.push(`${knowledgeBasePath}.templateVersion 必须是非空字符串。`)
+  }
+  if (knowledgeBase.managed !== undefined && knowledgeBase.managed !== true) {
+    errors.push(`${knowledgeBasePath}.managed 必须是 true。`)
+  }
+  if (runtimeId !== undefined && !isNonEmptyString(runtimeId)) {
+    errors.push(`${knowledgeBasePath}.runtimeId 必须是非空字符串。`)
+  }
+
+  if (
+    knowledgeBase.enabled !== true
+    || knowledgeBase.schemaVersion !== 1
+    || !isNonEmptyString(templateVersion)
+    || (knowledgeBase.managed !== undefined && knowledgeBase.managed !== true)
+    || (runtimeId !== undefined && !isNonEmptyString(runtimeId))
+  ) {
+    return undefined
+  }
+
+  return {
+    knowledgeBase: {
+      enabled: true,
+      schemaVersion: 1,
+      templateVersion: templateVersion.trim(),
+      ...(knowledgeBase.managed === true ? { managed: true } : undefined),
+      ...(isNonEmptyString(runtimeId) ? { runtimeId: runtimeId.trim() } : undefined),
+    },
+  }
+}
+
+const VARIABLE_NAME_REGEX = /^[A-Za-z0-9_]+$/
+
+function validateVariables(
+  rawValue: unknown,
+  itemPath: string,
+  errors: string[],
+): SynapseVariable[] | undefined {
+  if (rawValue === undefined) {
+    return undefined
+  }
+
+  if (!Array.isArray(rawValue)) {
+    errors.push(`${itemPath} 必须是数组。`)
+    return undefined
+  }
+
+  const variables: SynapseVariable[] = []
+  rawValue.forEach((item, index) => {
+    const variablePath = `${itemPath}[${index}]`
+    if (!isRecord(item)) {
+      errors.push(`${variablePath} 必须是对象。`)
+      return
+    }
+
+    const name = item.name
+    if (!isNonEmptyString(name) || !VARIABLE_NAME_REGEX.test(name.trim())) {
+      errors.push(`${variablePath}.name 必须是字母、数字或下划线组成的非空字符串。`)
+      return
+    }
+
+    if (typeof item.value !== "string") {
+      errors.push(`${variablePath}.value 必须是字符串。`)
+      return
+    }
+
+    if (item.description !== undefined && typeof item.description !== "string") {
+      errors.push(`${variablePath}.description 必须是字符串。`)
+      return
+    }
+
+    variables.push({
+      name: name.trim(),
+      value: item.value,
+      ...(typeof item.description === "string" && item.description.trim().length > 0
+        ? { description: item.description.trim() }
+        : undefined),
+    })
+  })
+
+  return variables.length > 0 ? variables : undefined
 }
 
 function validateRepository(
@@ -106,6 +234,7 @@ function validateRepository(
   const name = readRequiredField(rawValue, "name", itemPath, errors)
   const localPath = readRequiredField(rawValue, "localPath", itemPath, errors)
   const rawContentDirs = rawValue.contentDirs
+  const variables = validateVariables(rawValue.variables, `${itemPath}.variables`, errors)
 
   if (!isNonEmptyString(uuid)) {
     errors.push(`${itemPath}.uuid 必须是非空字符串。`)
@@ -159,6 +288,49 @@ function validateRepository(
     name: name.trim(),
     localPath: localPath.trim(),
     contentDirs,
+    ...(variables ? { variables } : undefined),
+  }
+}
+
+function validateStringList(rawValue: unknown, itemPath: string, errors: string[]): string[] {
+  if (rawValue === undefined) {
+    return []
+  }
+
+  if (!Array.isArray(rawValue)) {
+    errors.push(`${itemPath} 必须是数组。`)
+    return []
+  }
+
+  const values: string[] = []
+  rawValue.forEach((item, index) => {
+    if (!isNonEmptyString(item)) {
+      errors.push(`${itemPath}[${index}] 必须是非空字符串。`)
+      return
+    }
+    values.push(item.trim())
+  })
+  return values
+}
+
+function validateContentLists(
+  rawValue: unknown,
+  itemPath: string,
+  errors: string[],
+): SynapseFavorites & SynapseRecentlyViewed {
+  if (rawValue === undefined) {
+    return { rule: [], skill: [], prompt: [] }
+  }
+
+  if (!isRecord(rawValue)) {
+    errors.push(`${itemPath} 必须是对象。`)
+    return { rule: [], skill: [], prompt: [] }
+  }
+
+  return {
+    rule: validateStringList(rawValue.rule, `${itemPath}.rule`, errors),
+    skill: validateStringList(rawValue.skill, `${itemPath}.skill`, errors),
+    prompt: validateStringList(rawValue.prompt, `${itemPath}.prompt`, errors),
   }
 }
 
@@ -210,6 +382,73 @@ function validateQuickInputs(rawValue: unknown, errors: string[]): SynapseQuickI
   return quickInputs
 }
 
+function validateAgentConfig(
+  rawValue: unknown,
+  errors: string[],
+): SynapseAgentGlobalConfig | null {
+  if (rawValue === undefined) {
+    return {
+      defaultPermissionMode: "default",
+      defaultProviderModel: null,
+    }
+  }
+
+  if (!isRecord(rawValue)) {
+    errors.push("config.agent 必须是对象。")
+    return null
+  }
+
+  const rawPermissionMode = rawValue.defaultPermissionMode
+  const defaultPermissionMode = rawPermissionMode === undefined && rawValue.defaultBypassPermissions === true
+    ? "bypassPermissions"
+    : rawPermissionMode === undefined
+      ? "default"
+      : rawPermissionMode
+
+  if (
+    typeof defaultPermissionMode !== "string"
+    || !SYNAPSE_AGENT_PERMISSION_MODES.includes(defaultPermissionMode as (typeof SYNAPSE_AGENT_PERMISSION_MODES)[number])
+  ) {
+    errors.push(`config.agent.defaultPermissionMode 必须是 ${SYNAPSE_AGENT_PERMISSION_MODES.join(" / ")} 之一。`)
+    return null
+  }
+  const normalizedPermissionMode = defaultPermissionMode as SynapseAgentGlobalConfig["defaultPermissionMode"]
+
+  const providerModel = rawValue.defaultProviderModel
+  if (providerModel === undefined || providerModel === null) {
+    return {
+      defaultPermissionMode: normalizedPermissionMode,
+      defaultProviderModel: null,
+    }
+  }
+
+  if (!isRecord(providerModel)) {
+    errors.push("config.agent.defaultProviderModel 必须是对象或 null。")
+    return null
+  }
+
+  const providerId = providerModel.providerId
+  const modelTier = providerModel.modelTier
+  if (!isNonEmptyString(providerId)) {
+    errors.push("config.agent.defaultProviderModel.providerId 必须是非空字符串。")
+  }
+  if (typeof modelTier !== "string" || !MODEL_TIERS.includes(modelTier as (typeof MODEL_TIERS)[number])) {
+    errors.push(`config.agent.defaultProviderModel.modelTier 必须是 ${MODEL_TIERS.join(" / ")} 之一。`)
+  }
+
+  if (!isNonEmptyString(providerId) || typeof modelTier !== "string" || !MODEL_TIERS.includes(modelTier as (typeof MODEL_TIERS)[number])) {
+    return null
+  }
+
+  return {
+    defaultPermissionMode: normalizedPermissionMode,
+    defaultProviderModel: {
+      providerId: providerId.trim(),
+      modelTier: modelTier as ModelTier,
+    },
+  }
+}
+
 function validateConfig(
   rawValue: unknown,
   errors: string[],
@@ -222,6 +461,7 @@ function validateConfig(
   const activeRepoUuid = readRequiredField(rawValue, "activeRepoUuid", "config", errors)
   const repositories = readRequiredField(rawValue, "repositories", "config", errors)
   const global = readRequiredField(rawValue, "global", "config", errors)
+  const normalizedAgent = validateAgentConfig(rawValue.agent, errors)
 
   if (activeRepoUuid !== null && activeRepoUuid !== undefined && !isNonEmptyString(activeRepoUuid)) {
     errors.push("config.activeRepoUuid 必须是字符串或 null。")
@@ -260,12 +500,22 @@ function validateConfig(
   const themeMode = readRequiredField(global, "themeMode", "config.global", errors)
   const projects = readRequiredField(global, "projects", "config.global", errors)
   const quickInputs = validateQuickInputs(global.quickInputs, errors)
+  const favorites = validateContentLists(global.favorites, "config.global.favorites", errors)
+  const recentlyViewed = validateContentLists(global.recentlyViewed, "config.global.recentlyViewed", errors)
+  const contentSortOrder = global.contentSortOrder ?? "modified-desc"
 
   if (
     typeof themeMode !== "string"
     || !SYNAPSE_THEME_MODE_OPTIONS.includes(themeMode as (typeof SYNAPSE_THEME_MODE_OPTIONS)[number])
   ) {
     errors.push(`config.global.themeMode 必须是 ${SYNAPSE_THEME_MODE_OPTIONS.join(" / ")} 之一。`)
+  }
+
+  if (
+    typeof contentSortOrder !== "string"
+    || !SYNAPSE_CONTENT_SORT_OPTIONS.includes(contentSortOrder as (typeof SYNAPSE_CONTENT_SORT_OPTIONS)[number])
+  ) {
+    errors.push(`config.global.contentSortOrder 必须是 ${SYNAPSE_CONTENT_SORT_OPTIONS.join(" / ")} 之一。`)
   }
 
   const normalizedProjects: SynapseConfigBackup["config"]["global"]["projects"] = []
@@ -313,6 +563,9 @@ function validateConfig(
   if (
     typeof themeMode !== "string"
     || !SYNAPSE_THEME_MODE_OPTIONS.includes(themeMode as (typeof SYNAPSE_THEME_MODE_OPTIONS)[number])
+    || typeof contentSortOrder !== "string"
+    || !SYNAPSE_CONTENT_SORT_OPTIONS.includes(contentSortOrder as (typeof SYNAPSE_CONTENT_SORT_OPTIONS)[number])
+    || !normalizedAgent
   ) {
     return null
   }
@@ -324,22 +577,11 @@ function validateConfig(
       themeMode: themeMode as SynapseConfigBackup["config"]["global"]["themeMode"],
       projects: normalizedProjects,
       quickInputs,
-      favorites: {
-        rule: [],
-        skill: [],
-        prompt: [],
-      } satisfies SynapseFavorites,
-      recentlyViewed: {
-        rule: [],
-        skill: [],
-        prompt: [],
-      },
-      contentSortOrder: "modified-desc",
+      favorites,
+      recentlyViewed,
+      contentSortOrder: contentSortOrder as SynapseConfigBackup["config"]["global"]["contentSortOrder"],
     },
-    agent: {
-      defaultPermissionMode: "default",
-      defaultProviderModel: null,
-    },
+    agent: normalizedAgent,
   }
 }
 
@@ -495,7 +737,7 @@ class ConfigBackupService {
     await writeBackupFile(filePath, backup)
 
     logger.info("Config backup exported.", {
-      filePath,
+      filePath: redactedFilePathForLog(),
     })
   }
 
@@ -555,13 +797,13 @@ class ConfigBackupService {
     try {
       await userIdentityService.importIdentity(backup.identity)
     } catch (identityError) {
-      logger.warn("Identity import failed, rolling back config.", { filePath })
+      logger.warn("Identity import failed, rolling back config.", { filePath: redactedFilePathForLog() })
       await configStore.replace(previousConfig)
       throw identityError
     }
 
     logger.info("Config backup imported.", {
-      filePath,
+      filePath: redactedFilePathForLog(),
     })
 
     return {
@@ -608,13 +850,13 @@ class ConfigBackupService {
     try {
       await userIdentityService.importIdentity(backup.identity)
     } catch (identityError) {
-      logger.warn("Identity import failed, rolling back config.", { filePath })
+      logger.warn("Identity import failed, rolling back config.", { filePath: redactedFilePathForLog() })
       await configStore.replace(previousConfig)
       throw identityError
     }
 
     logger.info("Config backup imported.", {
-      filePath,
+      filePath: redactedFilePathForLog(),
     })
 
     return {
@@ -626,3 +868,7 @@ class ConfigBackupService {
 export const configBackupService = new ConfigBackupService()
 
 export { createConfigBackupPayload }
+
+function redactedFilePathForLog(): string {
+  return "[path]"
+}

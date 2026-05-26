@@ -30,6 +30,7 @@ import {
   listSkillFiles,
   prepareQuickPublishDraft,
   readItemContent,
+  scanAll,
   scanSkillDirectories,
   trashScanItem,
 } from "../editor-scan-service"
@@ -189,6 +190,27 @@ describe("editor scan quick publish", () => {
       mode: "path",
     })
     expect(result.duplicateSkillNames).toEqual(["reviewer"])
+  })
+
+  it("keeps global scans non-fatal when an editor detection directory is inaccessible", async () => {
+    const root = await createTempDir()
+    const blockedHome = path.join(root, "blocked-home")
+    await mkdir(blockedHome, { recursive: true })
+    await chmod(blockedHome, 0o000)
+    vi.spyOn(os, "homedir").mockReturnValue(blockedHome)
+    mockEditorScanProject(path.join(root, "missing-project"))
+
+    try {
+      await expect(scanAll()).resolves.toMatchObject({
+        global: expect.arrayContaining([
+          expect.objectContaining({
+            status: "not-detected",
+          }),
+        ]),
+      })
+    } finally {
+      await chmod(blockedHome, 0o700)
+    }
   })
 
   it("reads installed skill repository version from .synapse.json", async () => {
@@ -480,6 +502,22 @@ describe("editor scan quick publish", () => {
     expect(draft.itemType).toBe("skill")
     if (draft.itemType !== "skill") return
     expect(draft.files.map((file) => file.originalName)).toEqual(["notes.txt"])
+  })
+
+  it("rejects symlinked skill main files when preparing a skill draft", async () => {
+    const root = await createTempDir()
+    const skillDir = path.join(root, "release-helper")
+    const outsideFilePath = path.join(root, "secret.md")
+    await mkdir(skillDir, { recursive: true })
+    await writeFile(outsideFilePath, "# Secret\n")
+    await symlink(outsideFilePath, path.join(skillDir, "SKILL.md"))
+
+    await expect(prepareQuickPublishDraft({
+      itemType: "skill",
+      itemPath: skillDir,
+      itemName: "release-helper",
+      metadata: {},
+    })).rejects.toThrow("Skill 主文件不能是符号链接")
   })
 
   it("keeps the exact content for each Codex rule segment", async () => {

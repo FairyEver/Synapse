@@ -51,7 +51,14 @@ async function initDatabase(
 
   if (mcpPort > 0) {
     try {
-      autoRegisterMcp(mcpPort)
+      await autoRegisterMcp(mcpPort, security
+        ? {
+            actor: { kind: "system", id: "database" },
+            source: "database.mcp.autoRegister",
+            permissionGuard: security.permissionGuard,
+            auditSink: security.auditSink,
+          }
+        : undefined)
     } catch (error) {
       logger.warn("MCP auto-registration failed (non-fatal).", { error })
     }

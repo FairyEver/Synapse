@@ -1,8 +1,9 @@
 import { mkdir, mkdtemp, readFile, rm, symlink } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
-import { afterEach, describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 
+import { knowledgeBaseLogger } from "../logging"
 import {
   readKnowledgeBaseManifest,
   writeKnowledgeBaseManifest,
@@ -18,6 +19,7 @@ async function tempDir(): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
@@ -67,5 +69,27 @@ describe("writeKnowledgeBaseManifest", () => {
       sources: {},
       address_map: {},
     })).rejects.toThrow("符号链接")
+  })
+
+  it("logs corrupt manifest reads with sanitized error metadata", async () => {
+    const warn = vi.spyOn(knowledgeBaseLogger, "warn").mockImplementation(() => undefined)
+    const root = await tempDir()
+    await mkdir(path.join(root, ".raw"), { recursive: true })
+    await writeKnowledgeBaseManifest(root, {
+      version: 1,
+      sources: {},
+      address_map: {},
+    })
+    await rm(path.join(root, ".raw", ".manifest.json"))
+    await mkdir(path.join(root, ".raw", ".manifest.json"))
+
+    const result = await readKnowledgeBaseManifest(root)
+
+    expect(result.status).toBe("invalid")
+    expect(warn).toHaveBeenCalledWith("Knowledge Base manifest read failed.", expect.objectContaining({
+      errorName: "Error",
+      manifestPath: ".raw/.manifest.json",
+    }))
+    expect(String((warn.mock.calls[0]?.[1] as { error?: unknown } | undefined)?.error)).not.toContain(root)
   })
 })

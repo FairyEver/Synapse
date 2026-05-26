@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import type { FileConversionResult } from "../../file-conversion"
 import type { FetchUrl } from "../../source-acquisition/url-source"
+import { knowledgeBaseLogger } from "../logging"
 import { scanKnowledgeBaseSources } from "../source-scan"
 import { stageKnowledgeBaseSources, stageKnowledgeBaseUrlSource } from "../source-staging"
 
@@ -17,6 +18,7 @@ async function tempDir(): Promise<string> {
 }
 
 afterEach(async () => {
+  vi.restoreAllMocks()
   await Promise.all(roots.splice(0).map((dir) => rm(dir, { recursive: true, force: true })))
 })
 
@@ -86,6 +88,35 @@ describe("knowledge base source staging", () => {
     expect(result.uploaded[0]).not.toHaveProperty("originalRelativePath")
     await expect(readFile(path.join(projectPath, ".raw", "2026", "05", "23", "note.md"), "utf8"))
       .resolves.toBe("alpha\n")
+  })
+
+  it("logs conversion failures without raw absolute paths", async () => {
+    const warn = vi.spyOn(knowledgeBaseLogger, "warn").mockImplementation(() => undefined)
+    const projectPath = await tempDir()
+    const inputDir = await tempDir()
+    const sourcePath = path.join(inputDir, "report.pdf")
+    await writeFile(sourcePath, "binary")
+
+    const result = await stageKnowledgeBaseSources({
+      projectPath,
+      filePaths: [sourcePath],
+      now: () => new Date("2026-05-23T13:00:00.000Z"),
+      converter: {
+        convert: async () => {
+          throw new Error(`failed to convert ${sourcePath} token=secret-value`)
+        },
+      },
+    })
+
+    expect(result.skipped).toEqual([{ path: sourcePath, reason: "conversion-error" }])
+    expect(warn).toHaveBeenCalledWith("Knowledge Base source conversion failed.", expect.objectContaining({
+      error: expect.not.stringContaining(sourcePath),
+      fileName: "report.pdf",
+    }))
+    expect(warn.mock.calls[0]?.[1]).toMatchObject({
+      error: expect.stringContaining("[path]"),
+    })
+    expect(String((warn.mock.calls[0]?.[1] as { error?: unknown } | undefined)?.error)).not.toContain("secret-value")
   })
 
   it("stages URL sources into the dated raw web directory", async () => {

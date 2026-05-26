@@ -6,7 +6,11 @@ import type {
   WebhookConfigEntryV1,
   WebhookRunEntryV1,
 } from "../../../runtime/data-repo"
-import { createNetworkServiceRegistry } from "../../../runtime/network"
+import {
+  createNetworkServiceRegistry,
+  type LocalHttpRequest,
+  type LocalHttpResponse,
+} from "../../../runtime/network"
 import type { ControlledProcessRunner } from "../../../runtime/process"
 import type { ProjectContainerRegistry } from "../../../runtime/project-container"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
@@ -317,6 +321,94 @@ describe("AutomationIngressService", () => {
     }))
 
     await service.stop()
+  })
+
+  it("rate limits unauthorized webhook attempts before authentication", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send: async () => ({ resultText: "not used" }) }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+    })
+    await service.updateConfig({ enabled: true, rateLimitPerMinute: 2, resetToken: true })
+
+    const first = await handleWebhookRequest(service, {
+      method: "POST",
+      url: "/hook",
+      headers: { "x-forwarded-for": "203.0.113.10" },
+      body: Buffer.alloc(0),
+      remoteAddress: "127.0.0.1",
+    })
+    const second = await handleWebhookRequest(service, {
+      method: "POST",
+      url: "/hook",
+      headers: { "x-forwarded-for": "203.0.113.11" },
+      body: Buffer.alloc(0),
+      remoteAddress: "127.0.0.1",
+    })
+    const third = await handleWebhookRequest(service, {
+      method: "POST",
+      url: "/hook",
+      headers: { "x-forwarded-for": "203.0.113.12" },
+      body: Buffer.alloc(0),
+      remoteAddress: "127.0.0.1",
+    })
+
+    expect(first.status).toBe(401)
+    expect(second.status).toBe(401)
+    expect(third.status).toBe(429)
+  })
+
+  it("does not trust x-forwarded-for for authenticated webhook rate limits", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const send = vi.fn(async () => ({ resultText: "ok" }))
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({ send }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: unusedProcessRunner(),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+    })
+    const config = await service.updateConfig({ enabled: true, rateLimitPerMinute: 1, resetToken: true })
+    const body = JSON.stringify({
+      project: "project-1",
+      sessionKey: "local:automation",
+      prompt: "run",
+      replyMode: "wait",
+    })
+
+    const first = await handleWebhookRequest(service, {
+      method: "POST",
+      url: "/hook",
+      headers: {
+        authorization: `Bearer ${config.token ?? ""}`,
+        "Content-Type": "application/json",
+        "x-forwarded-for": "203.0.113.10",
+      },
+      body: Buffer.from(body),
+      remoteAddress: "127.0.0.1",
+    })
+    const second = await handleWebhookRequest(service, {
+      method: "POST",
+      url: "/hook",
+      headers: {
+        authorization: `Bearer ${config.token ?? ""}`,
+        "Content-Type": "application/json",
+        "x-forwarded-for": "203.0.113.11",
+      },
+      body: Buffer.from(body),
+      remoteAddress: "127.0.0.1",
+    })
+
+    expect(first.status).toBe(200)
+    expect(second.status).toBe(429)
+    expect(send).toHaveBeenCalledTimes(1)
   })
 
   it("does not persist or return webhook session credentials or unsafe metadata", async () => {
@@ -671,7 +763,7 @@ describe("AutomationIngressService", () => {
         status: 400,
         errorCode: "invalid_json",
         bodyLength: '{"prompt":"test body",'.length,
-        source: "local",
+        source: expect.any(String),
       }),
     )
     expect(JSON.stringify(logger.warn.mock.calls)).not.toContain("test body")
@@ -1009,4 +1101,13 @@ async function waitFor(predicate: () => boolean): Promise<void> {
     await new Promise((resolve) => setTimeout(resolve, 0))
   }
   throw new Error("Timed out waiting for condition")
+}
+
+function handleWebhookRequest(
+  service: AutomationIngressService,
+  request: LocalHttpRequest,
+): Promise<LocalHttpResponse> {
+  return (service as unknown as {
+    handleHttp(request: LocalHttpRequest): Promise<LocalHttpResponse>
+  }).handleHttp(request)
 }

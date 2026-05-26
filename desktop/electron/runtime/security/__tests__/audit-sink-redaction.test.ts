@@ -70,6 +70,29 @@ describe("DataRepositoryAuditSink metadata redaction", () => {
     expect(JSON.stringify(namespace.items)).not.toContain("/Users/alice")
     expect(JSON.stringify(namespace.items)).not.toContain("/home/alice")
   })
+
+  it("redacts POSIX absolute paths in resources before caching and persistence", async () => {
+    const namespace = new FakeAuditNamespace()
+    const sink = new DataRepositoryAuditSink({
+      audit: namespace,
+      idFactory: () => "audit-resource-path",
+      now: () => new Date("2026-05-19T00:00:00.000Z"),
+    })
+
+    sink.record({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "/Users/alice/private/repo/config.json token=sk-test-secret",
+      outcome: "allowed",
+    })
+    await sink.flushForTests()
+
+    expect(sink.list()[0]?.resource).toBe("[path] token=[redacted]")
+    expect(namespace.items[0]?.resource.id).toBe("[path] token=[redacted]")
+    expect(JSON.stringify(sink.list())).not.toContain("/Users/alice")
+    expect(JSON.stringify(namespace.items)).not.toContain("/Users/alice")
+    expect(JSON.stringify(namespace.items)).not.toContain("sk-test-secret")
+  })
 })
 
 class FakeAuditNamespace implements DataNamespace<AuditEntryV1> {

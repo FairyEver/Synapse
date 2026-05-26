@@ -808,14 +808,15 @@ async function refreshUsageNamespace(options: {
   let toolEvents = 0
 
   for (const file of files) {
-    const fp = fingerprintFile(file)
-    const existing = options.db.prepare(`SELECT size, mtime_ms, line_count, parse_status FROM ${options.prefix}_scan_files WHERE file_path = ?`).get(file) as ScanFileRow | undefined
-    if (existing?.size === fp.size && existing.mtime_ms === fp.mtimeMs && existing.parse_status === "parsed") {
-      skippedFiles += 1
-      continue
-    }
-
+    let fp: ReturnType<typeof fingerprintFile> | null = null
     try {
+      fp = fingerprintFile(file)
+      const existing = options.db.prepare(`SELECT size, mtime_ms, line_count, parse_status FROM ${options.prefix}_scan_files WHERE file_path = ?`).get(file) as ScanFileRow | undefined
+      if (existing?.size === fp.size && existing.mtime_ms === fp.mtimeMs && existing.parse_status === "parsed") {
+        skippedFiles += 1
+        continue
+      }
+
       const canAppend = options.prefix === "cc" && existing?.parse_status === "parsed" && fp.size >= existing.size && existing.line_count > 0
       const parsed = await options.parseFile(file, canAppend ? { startLine: existing.line_count } : undefined)
       if (canAppend && parsed.lineCount <= existing.line_count) {
@@ -840,7 +841,7 @@ async function refreshUsageNamespace(options: {
           parse_status = excluded.parse_status,
           error_kind = excluded.error_kind,
           last_scanned_at = excluded.last_scanned_at
-      `).run(file, fp.size, fp.mtimeMs, errorKind, new Date().toISOString())
+      `).run(file, fp?.size ?? 0, fp?.mtimeMs ?? 0, errorKind, new Date().toISOString())
     }
   }
 

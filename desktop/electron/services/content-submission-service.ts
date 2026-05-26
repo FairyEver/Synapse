@@ -1,4 +1,3 @@
-import { access } from "node:fs/promises"
 import path from "node:path"
 import { getContentTypeDefinition } from "../../src/config/content-types"
 import type {
@@ -20,7 +19,7 @@ import { contentIndexService } from "./content-index-service"
 import { contentWriteService, type ContentWriteResult } from "./content-write-service"
 import { builtinContentService } from "./builtin-content-service"
 import { configStore } from "./config-store"
-import { runGitCommand, type GitCommandResult } from "./git-command"
+import { isGitRebaseInProgress, runGitCommand, type GitCommandResult } from "./git-command"
 import { createMainLogger } from "./log-store"
 import { formatGitFailureMessage } from "./git-error-utils"
 import { repositoryLockManager } from "./repository-lock-manager"
@@ -112,26 +111,8 @@ async function ensureBotIdentity(gitRootPath: string): Promise<void> {
   )
 }
 
-async function isRebaseInProgress(localPath: string): Promise<boolean> {
-  const gitDir = path.join(localPath, ".git")
-
-  try {
-    await access(path.join(gitDir, "rebase-merge"))
-    return true
-  } catch {
-    // not in rebase-merge
-  }
-
-  try {
-    await access(path.join(gitDir, "rebase-apply"))
-    return true
-  } catch {
-    return false
-  }
-}
-
 async function abortRebaseIfNeeded(localPath: string): Promise<void> {
-  if (!(await isRebaseInProgress(localPath))) {
+  if (!(await isGitRebaseInProgress(localPath))) {
     return
   }
 

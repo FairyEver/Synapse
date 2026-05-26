@@ -9,7 +9,7 @@ import type {
   ControlledProcessIsolationOptions,
   ControlledProcessRunner,
 } from "../../runtime/process"
-import type { AuditSink } from "../../runtime/security"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type {
   ProcessIsolationResolver,
@@ -41,6 +41,7 @@ export interface ExecutionIsolationServiceDeps {
   readonly configs: DataNamespace<RunAsConfigEntryV1>
   readonly preflights: DataNamespace<RunAsPreflightEntryV1>
   readonly processRunner: ControlledProcessRunner
+  readonly permissionGuard: PermissionGuard
   readonly auditSink?: AuditSink
   readonly logger?: StructuredLogger
   readonly now?: () => Date
@@ -58,19 +59,65 @@ export class ExecutionIsolationService implements ProcessIsolationResolver {
   }
 
   async updateConfig(input: RunAsConfigUpdate): Promise<RunAsConfigView> {
-    const existing = await this.getOrCreateConfig(input.projectId)
+    const existing = await this.getExistingOrDefaultConfig(input.projectId)
     const supported = isRunAsUserSupported()
     const nextUser = input.user === undefined ? existing.user : input.user.trim() || undefined
     const nextEnvAllowlist = input.envAllowlist === undefined
       ? existing.envAllowlist
       : normalizeAllowlist(input.envAllowlist)
     const nextRequirePreflight = input.requirePreflight ?? existing.requirePreflight
-    const preflightBoundaryChanged = nextUser !== existing.user
+    const targetBoundaryChanged = nextUser !== existing.user
       || !sameStringArray(nextEnvAllowlist, existing.envAllowlist)
+    const preflightBoundaryChanged = targetBoundaryChanged
       || nextRequirePreflight !== existing.requirePreflight
+    const nextEnabled = supported ? input.enabled ?? existing.enabled : false
+    const resource = "run_as_user:config"
+    const auditMetadata = {
+      projectId: input.projectId,
+      enabled: nextEnabled,
+      user: nextUser,
+      requirePreflight: nextRequirePreflight,
+      source: "run_as.update",
+    }
+    const permission = await this.deps.permissionGuard.check({
+      action: "shell.exec",
+      actor: { kind: "user" },
+      resource,
+      context: auditMetadata,
+    })
+    if (!permission.allowed) {
+      this.deps.auditSink?.record({
+        action: "shell.exec",
+        actor: { kind: "user" },
+        resource,
+        outcome: "denied",
+        metadata: {
+          ...auditMetadata,
+          reason: permission.reason,
+          policyId: permission.policyId,
+        },
+      })
+      throw new Error(permission.reason)
+    }
+    const preflightValidForNextTarget = existing.lastPreflightStatus === "pass" && !targetBoundaryChanged
+    if (((!existing.enabled && nextEnabled) || (existing.requirePreflight && !nextRequirePreflight))
+      && !preflightValidForNextTarget) {
+      const error = new Error("run_as_user preflight must pass before enabling run-as or disabling preflight")
+      this.deps.auditSink?.record({
+        action: "shell.exec",
+        actor: { kind: "user" },
+        resource,
+        outcome: "failed",
+        metadata: {
+          ...auditMetadata,
+          error: error.message,
+        },
+      })
+      throw error
+    }
     const next: RunAsConfigEntryV1 = {
       ...existing,
-      enabled: supported ? input.enabled ?? existing.enabled : false,
+      enabled: nextEnabled,
       user: nextUser,
       envAllowlist: nextEnvAllowlist,
       requirePreflight: nextRequirePreflight,
@@ -81,8 +128,29 @@ export class ExecutionIsolationService implements ProcessIsolationResolver {
       lastPreflightStatus: preflightBoundaryChanged ? undefined : existing.lastPreflightStatus,
       updatedAt: this.isoNow(),
     }
-    await this.deps.configs.upsert(next)
-    return toView(next)
+    try {
+      await this.deps.configs.upsert(next)
+      this.deps.auditSink?.record({
+        action: "shell.exec",
+        actor: { kind: "user" },
+        resource,
+        outcome: "allowed",
+        metadata: auditMetadata,
+      })
+      return toView(next)
+    } catch (error) {
+      this.deps.auditSink?.record({
+        action: "shell.exec",
+        actor: { kind: "user" },
+        resource,
+        outcome: "failed",
+        metadata: {
+          ...auditMetadata,
+          error: errorMessage(error),
+        },
+      })
+      throw error
+    }
   }
 
   async resolveProcessIsolation(
@@ -260,9 +328,19 @@ export class ExecutionIsolationService implements ProcessIsolationResolver {
     const id = configId(projectId)
     const existing = await this.deps.configs.get(id)
     if (existing) return existing
+    const entry = this.defaultConfig(projectId)
+    await this.deps.configs.upsert(entry)
+    return entry
+  }
+
+  private async getExistingOrDefaultConfig(projectId: string): Promise<RunAsConfigEntryV1> {
+    return await this.deps.configs.get(configId(projectId)) ?? this.defaultConfig(projectId)
+  }
+
+  private defaultConfig(projectId: string): RunAsConfigEntryV1 {
     const now = this.isoNow()
-    const entry: RunAsConfigEntryV1 = {
-      id,
+    return {
+      id: configId(projectId),
       schemaVersion: 1,
       projectId,
       enabled: false,
@@ -271,8 +349,6 @@ export class ExecutionIsolationService implements ProcessIsolationResolver {
       createdAt: now,
       updatedAt: now,
     }
-    await this.deps.configs.upsert(entry)
-    return entry
   }
 
   private async recordCheck(
