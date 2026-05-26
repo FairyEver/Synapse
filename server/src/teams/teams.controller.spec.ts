@@ -21,6 +21,34 @@ describe("TeamsController", () => {
     )
   })
 
+  it("rejects invalid team creation fields with field details", () => {
+    const service = {
+      createTeam: vi.fn(),
+    }
+    const controller = new TeamsController(service as unknown as TeamsService)
+
+    expect(() => controller.createTeam({
+      user: { id: "user-1" },
+      ip: "203.0.113.10",
+    } as never, { name: "" }))
+      .toThrow("团队创建请求无效：name 至少 1 个字符")
+    expect(service.createTeam).not.toHaveBeenCalled()
+  })
+
+  it("rejects invalid team join fields with field details", () => {
+    const service = {
+      joinTeam: vi.fn(),
+    }
+    const controller = new TeamsController(service as unknown as TeamsService)
+
+    expect(() => controller.joinTeam({
+      user: { id: "user-1" },
+      ip: "203.0.113.10",
+    } as never, { token: "" }))
+      .toThrow("加入团队请求无效：token 至少 1 个字符")
+    expect(service.joinTeam).not.toHaveBeenCalled()
+  })
+
   it("passes request IP to member removal", () => {
     const service = {
       removeMember: vi.fn().mockResolvedValue({ ok: true }),

@@ -1,5 +1,6 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Post, Req, UseGuards } from "@nestjs/common"
+import { Body, Controller, Delete, Get, Param, Post, Req, UseGuards } from "@nestjs/common"
 import { z } from "zod"
+import { badRequestFromZodError } from "../common/zod-validation"
 import { resolvePublicAppUrl } from "../invitations/invitation-url"
 import { AuthenticatedTeamRequest, TeamsAuthGuard } from "./teams-auth.guard"
 import { TeamsService } from "./teams.service"
@@ -62,6 +63,6 @@ export class TeamsController {
 
 function parseBody<T extends z.ZodType>(schema: T, body: unknown, message: string): z.infer<T> {
   const result = schema.safeParse(body)
-  if (!result.success) throw new BadRequestException(message)
+  if (!result.success) throw badRequestFromZodError(result.error, message)
   return result.data
 }
