@@ -7,6 +7,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
+import { formatSynapseCost } from "@/lib/cost-currency"
 import { MetricGrid } from "./metric-grid"
 import { ReportState } from "./report-state"
 import { UsageBreakdownChart, UsageRankChart, UsageTrendChart } from "./usage-charts"
@@ -30,7 +31,7 @@ function formatDecimal(value: number): string {
 }
 
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "USD", maximumFractionDigits: 4 }).format(value)
+  return formatSynapseCost(value)
 }
 
 function formatEstimatedCost(value: number, tokens: number, unpricedTokens: number): string {

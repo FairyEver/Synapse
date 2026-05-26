@@ -391,6 +391,7 @@ export type UsageAnalysisModelPriceRule = {
   readonly cacheReadPer1M: number
   readonly cacheWritePer1M: number
   readonly reasoningPer1M: number
+  readonly currency: "CNY"
   readonly enabled: boolean
   readonly source: "builtin" | "user"
   readonly sortIndex: number
@@ -405,6 +406,7 @@ export type UsageAnalysisModelPriceRuleInput = {
   readonly cacheReadPer1M?: number
   readonly cacheWritePer1M?: number
   readonly reasoningPer1M?: number
+  readonly currency?: "CNY"
   readonly enabled?: boolean
 }
 

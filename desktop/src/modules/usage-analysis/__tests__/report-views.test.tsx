@@ -39,6 +39,19 @@ describe("usage analysis report views", () => {
 
     expect(html).toContain("未定价")
   })
+
+  it("formats overview costs as RMB", () => {
+    const html = renderToStaticMarkup(
+      <OverviewReportView
+        state={state(overviewReport(), false)}
+        trendBucket="day"
+        onTrendBucketChange={() => undefined}
+      />,
+    )
+
+    expect(html).toContain("¥0.01")
+    expect(html).not.toContain("US$")
+  })
 })
 
 function state<T>(data: T, loading: boolean): ReportState<T> {

@@ -75,7 +75,7 @@ describe("today usage helpers", () => {
     const metrics = buildTodayMetricRows(overview, timeRows, new Date(2026, 4, 20, 12, 0, 0))
 
     expect(metrics.map((metric) => metric.label)).toEqual(["今日 Token", "新增 Token", "缓存读", "最近 1 小时"])
-    expect(metrics[0].subValue).toBe("US$1.20")
+    expect(metrics[0].subValue).toContain("¥1.20")
     expect(metrics[1]).toMatchObject({ value: "600", subValue: "不含缓存读" })
     expect(metrics[2]).toMatchObject({ value: "600", subValue: "50%" })
     expect(metrics[3].value).toBe("400")

@@ -12,6 +12,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
+import { formatSynapseCost } from "@/lib/cost-currency"
 import { MetricGrid } from "./metric-grid"
 import { ReportState } from "./report-state"
 import { UsageBreakdownChart, UsageTodayHourlyChart } from "./usage-charts"
@@ -139,7 +140,7 @@ function formatInteger(value: number): string {
 }
 
 function formatCurrency(value: number): string {
-  return new Intl.NumberFormat("zh-CN", { style: "currency", currency: "USD", maximumFractionDigits: 4 }).format(value)
+  return formatSynapseCost(value)
 }
 
 function formatEstimatedCost(value: number, tokens: number, unpricedTokens: number): string {

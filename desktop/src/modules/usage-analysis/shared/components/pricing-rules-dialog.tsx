@@ -119,7 +119,7 @@ export function PricingRulesDialog({ open, onOpenChange, onSaved }: PricingRules
       <DialogContent className="sm:max-w-5xl">
         <DialogHeader>
           <DialogTitle>价格规则</DialogTitle>
-          <DialogDescription>美元 / 1M token</DialogDescription>
+          <DialogDescription>人民币 / 1M token</DialogDescription>
         </DialogHeader>
         <div className="min-w-0 overflow-hidden">
           <ScrollArea className="h-96" viewportClassName="min-w-0">
@@ -223,6 +223,7 @@ function toRuleInput(rule: EditablePriceRule): UsageModelPriceRuleInput {
     cacheReadPer1M: parsePriceField(rule.cacheReadPer1M),
     cacheWritePer1M: parsePriceField(rule.cacheWritePer1M),
     reasoningPer1M: parsePriceField(rule.reasoningPer1M),
+    currency: "CNY",
     enabled: rule.enabled,
   }
 }

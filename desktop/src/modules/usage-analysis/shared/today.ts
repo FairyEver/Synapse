@@ -1,3 +1,4 @@
+import { formatSynapseCost } from "@/lib/cost-currency"
 import type { UsageModelRow, UsageOverviewReport, UsageTimeBucket } from "./types"
 
 export interface TodayMetricRow {
@@ -140,11 +141,7 @@ function formatInteger(value: number): string {
 
 function formatCurrency(value: number): string {
   if (value <= 0) return "-"
-  return new Intl.NumberFormat("zh-CN", {
-    style: "currency",
-    currency: "USD",
-    maximumFractionDigits: 4,
-  }).format(value)
+  return formatSynapseCost(value)
 }
 
 function formatCostSubValue(tokens: number, estimatedCost: number, unpricedTokens: number): string | undefined {
