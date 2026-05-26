@@ -15,7 +15,7 @@ const GUIDE_PATH = resolve(__dirname, '../GUIDE.md')
 const DEFAULT_PORT = 47831
 
 export class OutputBuffer {
-  private lines = new Map<number, OutputLine[]>()
+  private lines = new Map<string, OutputLine[]>()
   private maxPerWorker: number
 
   constructor(maxPerWorker = 2000) {
@@ -23,10 +23,11 @@ export class OutputBuffer {
   }
 
   append(line: OutputLine): void {
-    let bucket = this.lines.get(line.workerId)
+    const key = outputKey(line)
+    let bucket = this.lines.get(key)
     if (!bucket) {
       bucket = []
-      this.lines.set(line.workerId, bucket)
+      this.lines.set(key, bucket)
     }
     bucket.push(line)
     if (bucket.length > this.maxPerWorker) {
@@ -38,13 +39,17 @@ export class OutputBuffer {
     this.lines.clear()
   }
 
-  getAll(): Record<number, OutputLine[]> {
-    const result: Record<number, OutputLine[]> = {}
-    for (const [id, lines] of this.lines) {
-      result[id] = [...lines]
+  getAll(): Record<string, OutputLine[]> {
+    const result: Record<string, OutputLine[]> = {}
+    for (const [key, lines] of this.lines) {
+      result[key] = [...lines]
     }
     return result
   }
+}
+
+function outputKey(line: OutputLine): string {
+  return line.sequence === undefined ? String(line.workerId) : `${line.workerId}:${line.sequence}`
 }
 
 function sendJson(res: ServerResponse, statusCode: number, body: unknown): void {
@@ -272,15 +277,6 @@ export async function startServer(options: { port?: number; open?: boolean } = {
   const outputBuffer = new OutputBuffer()
 
   scheduler.subscribeOutput(line => outputBuffer.append(line))
-
-  let lastBatchId = ''
-  scheduler.subscribe(snapshot => {
-    const batchId = snapshot.currentBatch?.id ?? ''
-    if (batchId && batchId !== lastBatchId) {
-      outputBuffer.reset()
-      lastBatchId = batchId
-    }
-  })
 
   let port = options.port ?? DEFAULT_PORT
 

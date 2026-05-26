@@ -35,6 +35,7 @@ export type WorkerUpdate = (worker: WorkerResult) => void
 
 export type OutputLine = {
   workerId: number
+  sequence?: number
   stream: 'stdout' | 'stderr' | 'event'
   text: string
   ts: number

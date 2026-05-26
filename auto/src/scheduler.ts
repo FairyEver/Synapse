@@ -196,7 +196,7 @@ export class AutoScheduler {
         result = await this.workerRunner(config, { slotId, sequence, logger }, update => {
           this.updateSlot(slotId, sequence, update)
         }, line => {
-          for (const listener of this.outputListeners) listener({ ...line, workerId: slotId })
+          for (const listener of this.outputListeners) listener({ ...line, workerId: slotId, sequence })
         })
       } catch (err) {
         result = failedWorker(slotId, sequence, logger.path, err)

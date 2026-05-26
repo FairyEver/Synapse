@@ -133,3 +133,14 @@ test('output buffer endpoint returns buffered lines', async () => {
     await rm(dir, { recursive: true, force: true })
   }
 })
+
+test('output buffer separates repeated slot runs by sequence', () => {
+  const outputBuffer = new OutputBuffer()
+
+  outputBuffer.append({ workerId: 1, sequence: 1, stream: 'stdout', text: 'old', ts: 1000 })
+  outputBuffer.append({ workerId: 1, sequence: 2, stream: 'stdout', text: 'new', ts: 2000 })
+
+  const all = outputBuffer.getAll()
+  assert.equal(all['1:1'][0].text, 'old')
+  assert.equal(all['1:2'][0].text, 'new')
+})
