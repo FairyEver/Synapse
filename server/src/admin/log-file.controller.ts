@@ -109,7 +109,6 @@ export class LogFileController {
     try {
       result = await this.logFileService.streamZipTo(res, range);
     } catch (error) {
-      if (!res.headersSent) throw error;
       await this.recordLogAudit(request, {
         action: "logs.download.failed",
         targetId: filename,
@@ -120,6 +119,7 @@ export class LogFileController {
           error: error instanceof Error ? error.message : String(error),
         },
       });
+      if (!res.headersSent) throw error;
       if (!res.destroyed) res.destroy(error instanceof Error ? error : undefined);
       return;
     }
