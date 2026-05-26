@@ -491,7 +491,7 @@ export class AutomationIngressService {
         : "failed"
     const replyText = output || result.error || statusText
     if (statusText !== "success") {
-      throw new WebhookError(statusText, result.error ?? replyText, result.timedOut ? 504 : 500)
+      throw new WebhookError(statusText, sanitizeWebhookShellError(result.error ?? replyText), result.timedOut ? 504 : 500)
     }
     return {
       status: statusText,
@@ -891,6 +891,10 @@ function summarizeReturnedAgentError(error: string): string {
 
 function sanitizeWebhookAgentError(value: string): string {
   return sanitizeError(value)
+}
+
+function sanitizeWebhookShellError(value: string): string {
+  return sanitizeError(value) || "failed"
 }
 
 function webhookAgentMessageId(body: Record<string, unknown>, runId: string): string {

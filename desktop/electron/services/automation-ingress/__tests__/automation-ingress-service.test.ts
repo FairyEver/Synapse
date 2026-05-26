@@ -839,6 +839,57 @@ describe("AutomationIngressService", () => {
 
     await service.stop()
   })
+
+  it("redacts returned exec shell errors from wait-mode HTTP responses", async () => {
+    const configs = new MemoryNamespace<WebhookConfigEntryV1>("webhook.config")
+    const runs = new MemoryNamespace<WebhookRunEntryV1>("webhook.runs")
+    const logger = structuredLogger()
+    const errorText = "exec failed: token=sk-ant-test5678 at /Users/alice/.ssh/id_rsa"
+    const service = new AutomationIngressService({
+      projectContainers: fakeProjectContainers({
+        send: async () => ({ resultText: "not used" }),
+      }),
+      networkRegistry: createNetworkServiceRegistry(),
+      configs,
+      runs,
+      processRunner: returnedFailedProcessRunner(errorText),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      logger,
+    })
+    const config = await service.updateConfig({ enabled: true, resetToken: true })
+    await service.start()
+    const status = await service.getStatus()
+
+    const response = await fetch(`http://${status.bindAddress}:${String(status.assignedPort)}${status.path}`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.token ?? ""}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        project: "project-1",
+        exec: "cat /etc/passwd",
+        shell: "posix",
+        replyMode: "wait",
+      }),
+    })
+
+    expect(response.status).toBe(500)
+    const responseBody = await response.json()
+    expect(JSON.stringify(responseBody)).not.toContain("sk-ant-test5678")
+    expect(JSON.stringify(responseBody)).not.toContain("/Users/alice/.ssh/id_rsa")
+    expect(responseBody).toEqual({
+      ok: false,
+      error: {
+        code: "failed",
+        message: "exec failed: token=[redacted] at [path]",
+      },
+    })
+    const [run] = await runs.list()
+    expect(run?.lastError).toBe("exec failed: token=[redacted] at [path]")
+
+    await service.stop()
+  })
 })
 
 function structuredLogger(): StructuredLogger & { warn: ReturnType<typeof vi.fn> } {
@@ -885,6 +936,18 @@ function failingProcessRunner(message: string): ControlledProcessRunner {
     run: async () => {
       throw new Error(message)
     },
+  } as unknown as ControlledProcessRunner
+}
+
+function returnedFailedProcessRunner(message: string): ControlledProcessRunner {
+  return {
+    run: async () => ({
+      exitCode: 1,
+      stdout: "",
+      stderr: "",
+      error: message,
+      timedOut: false,
+    }),
   } as unknown as ControlledProcessRunner
 }
 
