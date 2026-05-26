@@ -193,6 +193,22 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
     }
   }
 
+  const handleRemoveProject = async (project: SynapseProjectConfig) => {
+    try {
+      if (isKnowledgeBaseProject(project)) {
+        const bridge = window.synapse?.knowledgeBase
+        if (!bridge?.deleteManaged) {
+          throw new Error("知识库服务不可用。")
+        }
+        await bridge.deleteManaged({ projectId: project.id })
+      }
+      await onSave(projects.filter((item) => item.id !== project.id))
+      logger.info("Project removed.", { projectId: project.id })
+    } catch (error) {
+      logger.error("Failed to remove project.", { projectId: project.id, error })
+    }
+  }
+
   const handleEditProject = (project: SynapseProjectConfig) => {
     logger.info("Project edit dialog opened.", { projectId: project.id })
     setEditingProject(project)
@@ -351,9 +367,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
                       if (sessions.length > 0) {
                         setDeleteTarget({ project, sessionCount: sessions.length })
                       } else {
-                        void onSave(projects.filter((item) => item.id !== project.id))
-                          .then(() => logger.info("Project removed.", { projectId: project.id }))
-                          .catch((err) => logger.error("Failed to remove project.", { projectId: project.id, error: err }))
+                        void handleRemoveProject(project)
                       }
                     }).catch((err) => {
                       logger.error("Failed to list project sessions before deletion.", { projectId: project.id, error: err })
@@ -539,10 +553,9 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
               onClick={() => {
                 if (!deleteTarget) return
                 const targetId = deleteTarget.project.id
+                const targetProject = deleteTarget.project
                 setDeleteTarget(null)
-                void onSave(projects.filter((item) => item.id !== targetId))
-                  .then(() => logger.info("Project removed.", { projectId: targetId }))
-                  .catch((err) => logger.error("Failed to remove project.", { projectId: targetId, error: err }))
+                void handleRemoveProject(targetProject)
               }}
             >
               删除项目

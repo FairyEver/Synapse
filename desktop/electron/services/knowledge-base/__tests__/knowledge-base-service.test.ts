@@ -106,6 +106,35 @@ describe("KnowledgeBaseService", () => {
     await expect(readFile(path.join(result.runtimePath, ".claude-plugin", "plugin.json"), "utf8")).resolves.toContain("kb")
   })
 
+  it("trashes managed knowledge base runtime", async () => {
+    const { projectId, projectPath, service } = await managedFixture({
+      trashItem: (targetPath) => rm(targetPath, { recursive: true, force: true }),
+    })
+    await writeFile(path.join(projectPath, "CLAUDE.md"), "# Knowledge\n", "utf8")
+
+    const result = await service.deleteManaged({ projectId })
+
+    expect(result).toEqual({
+      projectId,
+      runtimePath: projectPath,
+      deleted: true,
+    })
+    await expect(readFile(path.join(projectPath, "CLAUDE.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("reports managed knowledge base runtime as already absent", async () => {
+    const { projectId, projectPath, service } = await managedFixture({
+      trashItem: vi.fn(),
+    })
+    await rm(projectPath, { recursive: true, force: true })
+
+    await expect(service.deleteManaged({ projectId })).resolves.toEqual({
+      projectId,
+      runtimePath: projectPath,
+      deleted: false,
+    })
+  })
+
   it("lists raw source files with user-facing import statuses", async () => {
     const { projectId, projectPath, service } = await managedFixture()
     await mkdir(path.join(projectPath, ".raw"), { recursive: true })

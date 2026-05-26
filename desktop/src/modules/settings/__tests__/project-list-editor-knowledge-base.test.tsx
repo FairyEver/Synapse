@@ -9,6 +9,8 @@ import type { SynapseProjectConfig } from "@/types/config"
 import type {
   SynapseKnowledgeBaseCreateManagedPayload,
   SynapseKnowledgeBaseCreateManagedResult,
+  SynapseKnowledgeBaseDeleteManagedPayload,
+  SynapseKnowledgeBaseDeleteManagedResult,
 } from "@/types/knowledge-base"
 
 const kbProject: SynapseProjectConfig = {
@@ -77,6 +79,11 @@ function createSynapseBridgeMocks() {
         projectPath: "synapse-kb://new-project-id",
         runtimePath: "/UserData/knowledge-bases/new-project-id",
         templateVersion: "2026-05-24",
+      }),
+      deleteManaged: vi.fn<(payload: SynapseKnowledgeBaseDeleteManagedPayload) => Promise<SynapseKnowledgeBaseDeleteManagedResult>>().mockResolvedValue({
+        projectId: "project-1",
+        runtimePath: "/UserData/knowledge-bases/project-1",
+        deleted: true,
       }),
       openSourceManager: vi.fn<(payload: { projectId: string; projectName: string }) => Promise<void>>().mockResolvedValue(undefined),
     },
@@ -203,6 +210,47 @@ describe("ProjectListEditor knowledge base actions", () => {
         }),
       ])
     })
+  })
+
+  it("deletes managed knowledge base runtime before removing the project", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    renderEditor([kbProject], onSave)
+
+    await act(async () => {
+      buttonByText("删除").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.deleteManaged).toHaveBeenCalledWith({
+        projectId: "project-1",
+      })
+      expect(onSave).toHaveBeenCalledWith([])
+    })
+  })
+
+  it("keeps managed knowledge base project when runtime deletion fails", async () => {
+    const onSave = vi.fn().mockResolvedValue(undefined)
+    bridgeMocks.knowledgeBase.deleteManaged.mockRejectedValueOnce(new Error("trash failed"))
+    renderEditor([kbProject], onSave)
+
+    await act(async () => {
+      buttonByText("删除").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.deleteManaged).toHaveBeenCalledWith({
+        projectId: "project-1",
+      })
+      expect(rendererLogger.error).toHaveBeenCalledWith("Failed to remove project.", {
+        projectId: "project-1",
+        error: expect.any(Error),
+      })
+    })
+    expect(onSave).not.toHaveBeenCalled()
   })
 
   it("clears stale knowledge base dialog fields and errors after closing", async () => {

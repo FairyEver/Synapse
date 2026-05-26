@@ -102,6 +102,8 @@ import type {
   SynapseKnowledgeBaseCreateManagedPayload,
   SynapseKnowledgeBaseCreateManagedResult,
   SynapseKnowledgeBaseCreateRawFolderPayload,
+  SynapseKnowledgeBaseDeleteManagedPayload,
+  SynapseKnowledgeBaseDeleteManagedResult,
   SynapseKnowledgeBaseListSourcesResult,
   SynapseKnowledgeBaseListRawDirectoryPayload,
   SynapseKnowledgeBaseListRawDirectoryResult,
@@ -596,6 +598,9 @@ export type SynapseBridge = {
     createManaged: (
       payload: SynapseKnowledgeBaseCreateManagedPayload,
     ) => Promise<SynapseKnowledgeBaseCreateManagedResult>
+    deleteManaged: (
+      payload: SynapseKnowledgeBaseDeleteManagedPayload,
+    ) => Promise<SynapseKnowledgeBaseDeleteManagedResult>
     listSources: (projectId: string) => Promise<SynapseKnowledgeBaseListSourcesResult>
     listRawDirectory: (
       payload: SynapseKnowledgeBaseListRawDirectoryPayload,
