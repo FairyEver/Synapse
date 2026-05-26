@@ -46,6 +46,51 @@ describe("builtin agent action executor", () => {
     })
   })
 
+  it("persists scheduled Agent conversation target fields", async () => {
+    const runtime = {
+      sendScheduled: vi.fn(async () => ({
+        conversationId: "conversation-1",
+        sessionKey: "scheduled:project-1:123",
+        status: "success" as const,
+        summary: "done",
+        durationMs: 12,
+      })),
+    } as unknown as AgentRuntimeService
+    const action = createAgentAction({
+      getAgentRuntime: async () => runtime,
+    })
+
+    const result = await action.execute({
+      config: {
+        projectId: "project-1",
+        agentType: "claude-code",
+        providerId: "anthropic",
+        modelTier: "sonnet",
+        mode: "default",
+        prompt: "Run scheduled work",
+        sessionPolicy: "fresh",
+        timeoutMins: 1,
+      },
+      context: {
+        taskId: "task-1",
+        runId: "run-1",
+        triggeredBy: "schedule",
+        cwd: "/repo",
+        actor: { kind: "user", id: "task-scheduler" },
+        abortSignal: new AbortController().signal,
+        configVersion: 2,
+      },
+    })
+
+    expect(result.outputs).toEqual({
+      conversationId: "conversation-1",
+      projectId: "project-1",
+      platform: "scheduled",
+      sessionKey: "scheduled:project-1:123",
+      configVersion: 2,
+    })
+  })
+
   it("passes null scheduled timeout as disabled", async () => {
     const runtime = {
       sendScheduled: vi.fn(async () => ({
@@ -230,6 +275,7 @@ describe("builtin agent action executor", () => {
     const runtime = {
       sendScheduled: vi.fn(async () => ({
         conversationId: "new-conversation",
+        sessionKey: "scheduled:project-1:new",
         status: "success" as const,
         summary: "done",
         durationMs: 100,
@@ -273,6 +319,9 @@ describe("builtin agent action executor", () => {
     )
     expect(result.outputs).toEqual({
       conversationId: "new-conversation",
+      projectId: "project-1",
+      platform: "scheduled",
+      sessionKey: "scheduled:project-1:new",
       configVersion: 3,
     })
   })
