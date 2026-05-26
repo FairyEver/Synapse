@@ -16,8 +16,8 @@ export interface FileConversionNodePanelProps {
 }
 
 const OUTPUT_LABELS: Record<NonNullable<FileConversionNodeConfig["outputMode"]>, string> = {
-  result: "Result only",
-  "markdown-file": "Markdown file",
+  result: "仅返回结果",
+  "markdown-file": "Markdown 文件",
 }
 
 export function FileConversionNodePanel({
@@ -46,7 +46,7 @@ export function FileConversionNodePanel({
       <CollapsibleSection title="转换配置">
         <div className="grid gap-3">
           <div className="grid gap-1.5">
-            <Label htmlFor="wf-node-file-conversion-input-path" className="text-xs">Input</Label>
+            <Label htmlFor="wf-node-file-conversion-input-path" className="text-xs">输入路径</Label>
             <Input
               id="wf-node-file-conversion-input-path"
               className="h-7 text-xs"
@@ -56,7 +56,7 @@ export function FileConversionNodePanel({
           </div>
 
           <div className="grid gap-1.5">
-            <Label className="text-xs">Output</Label>
+            <Label className="text-xs">输出模式</Label>
             <Select
               value={outputMode}
               onValueChange={(value) => commit({ outputMode: value as FileConversionNodeConfig["outputMode"] })}
@@ -65,8 +65,8 @@ export function FileConversionNodePanel({
                 <SelectValue>{OUTPUT_LABELS[outputMode]}</SelectValue>
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="result">Result only</SelectItem>
-                <SelectItem value="markdown-file">Markdown file</SelectItem>
+                <SelectItem value="result">仅返回结果</SelectItem>
+                <SelectItem value="markdown-file">Markdown 文件</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -74,7 +74,7 @@ export function FileConversionNodePanel({
           {outputMode === "markdown-file" ? (
             <div className="grid gap-2">
               <div className="grid gap-1.5">
-                <Label htmlFor="wf-node-file-conversion-output-directory" className="text-xs">Directory</Label>
+                <Label htmlFor="wf-node-file-conversion-output-directory" className="text-xs">输出目录</Label>
                 <Input
                   id="wf-node-file-conversion-output-directory"
                   className="h-7 text-xs"
@@ -83,7 +83,7 @@ export function FileConversionNodePanel({
                 />
               </div>
               <div className="grid gap-1.5">
-                <Label htmlFor="wf-node-file-conversion-output-path" className="text-xs">File</Label>
+                <Label htmlFor="wf-node-file-conversion-output-path" className="text-xs">输出路径</Label>
                 <Input
                   id="wf-node-file-conversion-output-path"
                   className="h-7 text-xs"
@@ -98,17 +98,17 @@ export function FileConversionNodePanel({
             <div className="flex items-center gap-2">
               <Checkbox
                 id="wf-node-file-conversion-ocr-enabled"
-                aria-label="OCR"
+                aria-label="OCR 识别"
                 checked={Boolean(ocr.enabled)}
                 onCheckedChange={(checked) => commitOcr({ enabled: checked === true })}
               />
-              <Label htmlFor="wf-node-file-conversion-ocr-enabled" className="text-xs">OCR</Label>
+              <Label htmlFor="wf-node-file-conversion-ocr-enabled" className="text-xs">OCR 识别</Label>
             </div>
 
             {ocr.enabled ? (
               <div className="grid gap-2">
                 <div className="grid gap-1.5">
-                  <Label htmlFor="wf-node-file-conversion-ocr-languages" className="text-xs">Languages</Label>
+                  <Label htmlFor="wf-node-file-conversion-ocr-languages" className="text-xs">语言</Label>
                   <Input
                     id="wf-node-file-conversion-ocr-languages"
                     className="h-7 text-xs"
@@ -117,7 +117,7 @@ export function FileConversionNodePanel({
                   />
                 </div>
                 <div className="grid gap-1.5">
-                  <Label htmlFor="wf-node-file-conversion-ocr-max-pages" className="text-xs">Max pages</Label>
+                  <Label htmlFor="wf-node-file-conversion-ocr-max-pages" className="text-xs">最大页数</Label>
                   <Input
                     id="wf-node-file-conversion-ocr-max-pages"
                     className="h-7 text-xs"

@@ -166,20 +166,25 @@ describe("file conversion workflow node UI", () => {
     )
 
     expect(container.textContent).toContain("输入路径不能为空。")
-    expect(container.textContent).toContain("Input")
-    expect(container.textContent).toContain("Output")
+    expect(container.textContent).toContain("输入路径")
+    expect(container.textContent).toContain("输出模式")
+    expect(container.textContent).toContain("仅返回结果")
 
     setInputValue(container, "wf-node-file-conversion-input-path", "/tmp/source.docx")
     expect(lastConfig(onConfigChange)).toMatchObject({ inputPath: "/tmp/source.docx" })
 
-    clickByText(container, "Markdown file")
+    clickByText(container, "Markdown 文件")
     expect(lastConfig(onConfigChange)).toMatchObject({ outputMode: "markdown-file" })
+    expect(container.textContent).toContain("输出目录")
+    expect(container.textContent).toContain("输出路径")
 
     setInputValue(container, "wf-node-file-conversion-output-directory", "/tmp/synapse-workflow-outputs/run-1")
     expect(lastConfig(onConfigChange)).toMatchObject({ outputDirectory: "/tmp/synapse-workflow-outputs/run-1" })
 
-    clickByLabel(container, "OCR")
+    clickByLabel(container, "OCR 识别")
     expect(lastConfig(onConfigChange)).toMatchObject({ ocr: { enabled: true } })
+    expect(container.textContent).toContain("语言")
+    expect(container.textContent).toContain("最大页数")
 
     setInputValue(container, "wf-node-file-conversion-ocr-languages", "eng, chi_sim")
     expect(lastConfig(onConfigChange)).toMatchObject({ ocr: { languages: ["eng", "chi_sim"] } })
