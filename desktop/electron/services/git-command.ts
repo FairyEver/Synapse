@@ -1,4 +1,6 @@
 import { spawn } from "node:child_process"
+import { access } from "node:fs/promises"
+import path from "node:path"
 
 type GitCommandSource = "stderr" | "stdout"
 
@@ -154,8 +156,40 @@ function runGitTextCommand(options: GitCommandOptions): Promise<string> {
   return runGitCommand(options).then((result) => result.stdout.trim())
 }
 
+async function resolveGitPath(cwd: string, gitPath: string): Promise<string | null> {
+  try {
+    const result = await runGitCommand({
+      args: ["rev-parse", "--git-path", gitPath],
+      cwd,
+      fallbackMessage: "",
+      formatFailureMessage: () => "",
+    })
+    const resolvedPath = result.stdout.trim()
+    if (!resolvedPath) return null
+    return path.isAbsolute(resolvedPath) ? resolvedPath : path.join(cwd, resolvedPath)
+  } catch {
+    return null
+  }
+}
+
+async function gitPathExists(cwd: string, gitPath: string): Promise<boolean> {
+  const resolvedPath = await resolveGitPath(cwd, gitPath)
+  if (!resolvedPath) return false
+  try {
+    await access(resolvedPath)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function isGitRebaseInProgress(cwd: string): Promise<boolean> {
+  return (await gitPathExists(cwd, "rebase-merge")) || (await gitPathExists(cwd, "rebase-apply"))
+}
+
 export {
   formatDefaultGitSpawnError,
+  isGitRebaseInProgress,
   runGitCommand,
   runGitTextCommand,
 }
