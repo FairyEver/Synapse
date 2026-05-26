@@ -7,6 +7,10 @@
 import { contextBridge, ipcRenderer, webUtils } from "electron"
 import type { SynapseBridge } from "../src/types/bridge"
 import type { SynapseAgentDomainEvent } from "../src/types/agent"
+import {
+  OPEN_AGENT_SESSION_EVENT,
+  type OpenAgentSessionPayload,
+} from "../src/types/agent-navigation"
 import type { SynapseContentChangedEvent } from "../src/types/content"
 import type { DatabaseChangeEvent } from "../src/types/database"
 import type { InstallStatusChangedEvent } from "../src/types/install-status"
@@ -164,6 +168,7 @@ const IPC_CHANNELS = {
     "getRuntimeStatus": "synapse:agent:get-runtime-status",
     "listCommands": "synapse:agent:list-commands",
     "openReference": "synapse:agent:open-reference",
+    "openConversation": "synapse:agent:open-conversation",
     "getAvailableAgents": "synapse:agent:get-available-agents",
     "event": "synapse:events:agent",
   },
@@ -748,7 +753,12 @@ const synapseBridge: SynapseBridge = {
     getRuntimeStatus: invoke(IPC_CHANNELS.agent.getRuntimeStatus),
     listCommands: (projectId) => invoke(IPC_CHANNELS.agent.listCommands)({ projectId }),
     openReference: (args) => invoke(IPC_CHANNELS.agent.openReference)(args),
+    openConversation: (target) => invoke(IPC_CHANNELS.agent.openConversation)(target),
     getAvailableAgents: () => invoke(IPC_CHANNELS.agent.getAvailableAgents)({}),
+    onOpenConversation: createRawPayloadSubscription<OpenAgentSessionPayload>(
+      subscribe,
+      OPEN_AGENT_SESSION_EVENT,
+    ),
     onEvent: createRawPayloadSubscription<SynapseAgentDomainEvent>(
       subscribe,
       EVENT_CHANNELS.agent.event,

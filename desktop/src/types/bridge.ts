@@ -29,6 +29,11 @@ import type {
   SynapseAgentPermissionMode,
 } from "./agent"
 import type {
+  OpenAgentSessionPayload,
+  SynapseAgentConversationTarget,
+  SynapseOpenAgentConversationResult,
+} from "./agent-navigation"
+import type {
   SynapseConfigBackupExportResult,
   SynapseConfigBackupImportResult,
 } from "./backup"
@@ -866,6 +871,10 @@ export type SynapseBridge = {
     }>>
     listCommands: (projectId: string) => Promise<SynapseAgentPublishedCommand[]>
     openReference: (args: { projectId: string; reference: string }) => Promise<{ ok: true; path: string }>
+    openConversation: (
+      target: SynapseAgentConversationTarget,
+    ) => Promise<SynapseOpenAgentConversationResult>
+    onOpenConversation: (listener: (payload: OpenAgentSessionPayload) => void) => () => void
     onEvent: (listener: (event: SynapseAgentDomainEvent) => void) => () => void
   }
   ops: {

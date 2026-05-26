@@ -120,6 +120,7 @@ export const IPC_CHANNELS = {
     "status": "synapse:agent:status",
     "listSessions": "synapse:agent:list-sessions",
     "listAllSessions": "synapse:agent:list-all-sessions",
+    "openConversation": "synapse:agent:open-conversation",
     "createSession": "synapse:agent:create-session",
     "switchSession": "synapse:agent:switch-session",
     "deleteSession": "synapse:agent:delete-session",

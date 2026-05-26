@@ -81,6 +81,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const chat = useAgentChat(projectScope, { inputDirty: draft.trim().length > 0 })
   const [pendingMessages, setPendingMessages] = useState<PendingMessage[]>([])
   const pendingSessionRefreshKeyRef = useRef<string | null>(null)
+  const pendingSessionMissingKeyRef = useRef<string | null>(null)
   const pendingMessageIdRef = useRef(0)
   const pinnedSelectionKeyRef = useRef<string | null>(null)
   const latestEntry = chat.timeline.at(-1)
@@ -134,14 +135,26 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   useEffect(() => {
     if (!pendingAgentSession) {
       pendingSessionRefreshKeyRef.current = null
+      pendingSessionMissingKeyRef.current = null
       return
     }
-    const target = chat.sessions.find(
+
+    if (pendingAgentSession.sourceFilter && sourceFilter !== pendingAgentSession.sourceFilter) {
+      pendingSessionRefreshKeyRef.current = null
+      pendingSessionMissingKeyRef.current = null
+      setSourceFilter(pendingAgentSession.sourceFilter)
+      return
+    }
+
+    const allSessions = [...chat.sessions, ...chat.archivedSessions]
+    const target = allSessions.find(
       (s) => s.id === pendingAgentSession.conversationId
-        && s.projectId === pendingAgentSession.projectId,
+        && s.projectId === pendingAgentSession.projectId
+        && (!pendingAgentSession.sessionKey || s.sessionKey === pendingAgentSession.sessionKey),
     )
     if (target) {
       pendingSessionRefreshKeyRef.current = null
+      pendingSessionMissingKeyRef.current = null
       const prompt = pendingAgentSession.prompt
       void (async () => {
         try {
@@ -169,12 +182,18 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     }
 
     const pendingKey = `${pendingAgentSession.projectId}:${pendingAgentSession.conversationId}`
+    if (pendingSessionMissingKeyRef.current === pendingKey) {
+      pendingSessionMissingKeyRef.current = null
+      toast.error("对话不存在或已删除")
+      onPendingAgentSessionConsumed?.()
+      return
+    }
     if (chat.loading || pendingSessionRefreshKeyRef.current === pendingKey) {
       return
     }
     pendingSessionRefreshKeyRef.current = pendingKey
-    void chat.refresh().finally(() => {
-      pendingSessionRefreshKeyRef.current = null
+    void chat.refresh().then(() => {
+      pendingSessionMissingKeyRef.current = pendingKey
     }).catch((rawError) => {
       logger.error("Agent pending session refresh failed.", {
         boundary: "renderer.agent.pending-session-refresh",
@@ -183,9 +202,14 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
         sessionKey: chat.selectedSessionKey,
         ...errorDiagnostic(rawError),
       })
+      pendingSessionMissingKeyRef.current = pendingKey
+    }).finally(() => {
+      pendingSessionRefreshKeyRef.current = null
     })
   }, [
     pendingAgentSession,
+    sourceFilter,
+    chat.archivedSessions,
     chat.loading,
     chat.refresh,
     chat.selectedSessionKey,

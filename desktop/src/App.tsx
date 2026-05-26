@@ -240,12 +240,19 @@ function MainApp() {
     })
   }, [setActiveTab])
 
-  useEffect(() => {
-    return subscribeOpenAgentSession((payload) => {
-      setActiveTab("agent", "notification")
-      setPendingAgentSession(payload)
-    })
+  const handleOpenAgentSession = useCallback((payload: OpenAgentSessionPayload) => {
+    setActiveTab("agent", "notification")
+    setPendingAgentSession(payload)
   }, [setActiveTab])
+
+  useEffect(() => {
+    return subscribeOpenAgentSession(handleOpenAgentSession)
+  }, [handleOpenAgentSession])
+
+  useEffect(() => {
+    const bridge = getSynapseBridge()
+    return bridge?.agent.onOpenConversation(handleOpenAgentSession)
+  }, [handleOpenAgentSession])
 
   useWatchNextAgentSession()
 
