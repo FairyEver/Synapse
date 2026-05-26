@@ -405,7 +405,7 @@ function RepositoryListEditor({
     try {
       const result = await promise(
         () => initializeRepository(repository.uuid, preview && !preview.isEmpty ? {
-          confirmedNonGitEntries: preview.nonGitEntries,
+          confirmedOperationToken: preview.operationToken,
         } : undefined),
         {
           loading: "正在初始化目录...",

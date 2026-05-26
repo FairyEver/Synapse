@@ -101,6 +101,16 @@ const repositoryStateSchema = z.object({
 const initializationPreviewSchema = z.object({
   isEmpty: z.boolean(),
   nonGitEntries: z.array(z.string()),
+  operationToken: z.string(),
+  dangerFlags: z.array(z.enum([
+    "home",
+    "desktop",
+    "documents",
+    "downloads",
+    "filesystem-root",
+    "synapse-source-checkout",
+    "source-repository",
+  ])),
 })
 
 const createLocalRepositoryPayloadSchema = z.object({
@@ -186,7 +196,7 @@ const initializeResultSchema = z.object({
 })
 
 const initializationOptionsSchema = z.object({
-  confirmedNonGitEntries: z.array(z.string()).optional(),
+  confirmedOperationToken: z.string().optional(),
 }).optional()
 
 const validationResultSchema = z.object({

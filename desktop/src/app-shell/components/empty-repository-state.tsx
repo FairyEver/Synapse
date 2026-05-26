@@ -264,7 +264,7 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
       await manager.refreshRepositoryStates()
 
       await initializeRepository(newRepository.uuid, preview && !preview.isEmpty ? {
-        confirmedNonGitEntries: preview.nonGitEntries,
+        confirmedOperationToken: preview.operationToken,
       } : undefined)
       await manager.switchActiveRepository(newRepository.uuid)
 
