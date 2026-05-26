@@ -11,6 +11,7 @@ import { normalizeContentAttachmentPath } from "../../src/lib/content-attachment
 import { createMainLogger } from "./log-store"
 
 const BLOBS_DIRECTORY_PATH = path.join("system", "blobs")
+const SHA256_DIGEST_PATTERN = /^[a-f0-9]{64}$/iu
 const logger = createMainLogger("service.blobs")
 
 type AttachmentWriteInput = {
@@ -24,13 +25,36 @@ function normalizeOriginalName(originalName: string): string {
 }
 
 function createAttachmentPoolPath(repositoryRootPath: string, sha256: string): string {
-  return path.join(
+  const normalizedSha256 = normalizeAttachmentSha256(sha256)
+  const blobsRootPath = path.join(repositoryRootPath, BLOBS_DIRECTORY_PATH)
+  const attachmentPath = path.join(
     repositoryRootPath,
     BLOBS_DIRECTORY_PATH,
-    sha256.slice(0, 2),
-    sha256.slice(2, 4),
-    sha256,
+    normalizedSha256.slice(0, 2),
+    normalizedSha256.slice(2, 4),
+    normalizedSha256,
   )
+
+  assertPathInsideDirectory(attachmentPath, blobsRootPath)
+  return attachmentPath
+}
+
+function normalizeAttachmentSha256(sha256: string): string {
+  const normalizedSha256 = sha256.trim().toLowerCase()
+
+  if (!SHA256_DIGEST_PATTERN.test(normalizedSha256)) {
+    throw new Error("附件摘要无效。")
+  }
+
+  return normalizedSha256
+}
+
+function assertPathInsideDirectory(targetPath: string, directoryPath: string): void {
+  const relative = path.relative(directoryPath, targetPath)
+
+  if (relative === ".." || relative.startsWith(`..${path.sep}`) || path.isAbsolute(relative)) {
+    throw new Error("附件路径越界。")
+  }
 }
 
 function createAttachmentReference(file: AttachmentWriteInput): SynapseContentAttachmentRecord {
@@ -118,9 +142,8 @@ class AttachmentsPoolService {
     repositoryRootPath: string,
     attachment: SynapseContentAttachmentRecord,
   ): Promise<SynapseContentFile | null> {
-    const targetPath = this.resolveAttachmentPath(repositoryRootPath, attachment.sha256)
-
     try {
+      const targetPath = this.resolveAttachmentPath(repositoryRootPath, attachment.sha256)
       const fileBuffer = await readFile(targetPath)
       const baseFile = {
         relativePath: attachment.originalName,
@@ -154,7 +177,18 @@ class AttachmentsPoolService {
     attachment: SynapseContentAttachmentRecord,
     targetPath: string,
   ): Promise<boolean> {
-    const sourcePath = this.resolveAttachmentPath(repositoryRootPath, attachment.sha256)
+    let sourcePath: string
+
+    try {
+      sourcePath = this.resolveAttachmentPath(repositoryRootPath, attachment.sha256)
+    } catch (error) {
+      logger.warn("Attachment digest is invalid, skipping copy.", {
+        attachment,
+        error,
+        targetPath,
+      })
+      return false
+    }
 
     if (!await pathExists(sourcePath)) {
       logger.warn("Attachment blob missing from pool, skipping copy.", {
@@ -177,6 +211,6 @@ class AttachmentsPoolService {
   }
 }
 
-export { attachmentsPoolService, normalizeOriginalName }
+export { attachmentsPoolService, normalizeAttachmentSha256, normalizeOriginalName }
 
 const attachmentsPoolService = new AttachmentsPoolService()

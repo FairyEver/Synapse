@@ -15,6 +15,7 @@ import type {
   SynapseContentSnapshotRecord,
   SynapseContentType,
 } from "../../src/types/content"
+import { normalizeAttachmentSha256 } from "./attachments-pool-service"
 import { isFileNotFoundError } from "./fs-utils"
 import { createMainLogger } from "./log-store"
 
@@ -202,9 +203,16 @@ function parseAttachmentsRecord(rawValue: unknown): SynapseContentAttachmentsRec
         return null
       }
 
+      let sha256: string
+      try {
+        sha256 = normalizeAttachmentSha256(file.sha256)
+      } catch {
+        return null
+      }
+
       return {
         originalName,
-        sha256: file.sha256.trim(),
+        sha256,
         size: file.size,
       }
     })

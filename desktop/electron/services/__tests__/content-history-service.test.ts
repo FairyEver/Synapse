@@ -70,6 +70,8 @@ describe("contentHistoryService", () => {
       files: [
         { originalName: "../CON.txt", sha256: "a".repeat(64), size: 1 },
         { originalName: "aux. /bad:name?.txt", sha256: "b".repeat(64), size: 2 },
+        { originalName: "outside.txt", sha256: "../../outside.txt", size: 3 },
+        { originalName: "bad.txt", sha256: "not-a-digest", size: 4 },
       ],
     })
 
