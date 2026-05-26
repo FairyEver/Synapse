@@ -1,5 +1,5 @@
 import type { NodeRunResult, WorkflowDefinition, WorkflowNode, WorkflowRunStatus } from "@/types/workflow"
-import { formatTokenUsageValue, tokenUsageFields } from "@/lib/token-usage"
+import { formatCostUsd, formatTokenUsageValue, normalizeCostUsd, tokenUsageFields } from "@/lib/token-usage"
 import { sanitizeError } from "@/lib/error-sanitize"
 import { resolveBranchLabel } from "../lib/branch-label"
 
@@ -33,6 +33,7 @@ export function formatWorkflowRunReport(input: WorkflowRunReportInput): string {
   const endedTimes = Object.values(input.nodeResults)
     .map((result) => result.endedAt)
     .filter((value): value is number => typeof value === "number")
+  const totalCostUsd = resolveTotalCostUsd(input.nodeResults)
 
   const sections = [
     `# 工作流运行报告：${input.definition.name}`,
@@ -45,6 +46,7 @@ export function formatWorkflowRunReport(input: WorkflowRunReportInput): string {
       `- 开始时间：${formatTimestamp(startedTimes.length > 0 ? Math.min(...startedTimes) : undefined)}`,
       `- 结束时间：${formatTimestamp(endedTimes.length > 0 ? Math.max(...endedTimes) : undefined)}`,
       `- 总耗时：${formatDuration(resolveTotalDuration(input.nodeResults))}`,
+      ...(totalCostUsd !== undefined ? [`- 总费用：${formatCostUsd(totalCostUsd)}`] : []),
       ...(input.runError ? [`- 错误：${sanitizeError(input.runError)}`] : []),
       "",
       "### 运行参数",
@@ -108,10 +110,12 @@ export function formatNodeRunReport(input: NodeRunReportInput): string {
   }
 
   const usageFields = tokenUsageFields(result.usage)
-  if (usageFields) {
+  const costUsd = normalizeCostUsd(result.costUsd)
+  if (usageFields || costUsd !== undefined) {
     sections.push([
       "## Token 消耗",
-      ...usageFields.map((field) => `- ${field.label}：${formatTokenUsageValue(field.value)}`),
+      ...(usageFields?.map((field) => `- ${field.label}：${formatTokenUsageValue(field.value)}`) ?? []),
+      ...(costUsd !== undefined ? [`- 费用：${formatCostUsd(costUsd)}`] : []),
     ].join("\n"))
   }
 
@@ -184,6 +188,14 @@ function resolveTotalDuration(nodeResults: Record<string, NodeRunResult>): numbe
     .filter((value): value is number => typeof value === "number")
   if (durations.length === 0) return undefined
   return durations.reduce((total, duration) => total + duration, 0)
+}
+
+function resolveTotalCostUsd(nodeResults: Record<string, NodeRunResult>): number | undefined {
+  const costs = Object.values(nodeResults)
+    .map((result) => normalizeCostUsd(result.costUsd))
+    .filter((value): value is number => typeof value === "number")
+  if (costs.length === 0) return undefined
+  return costs.reduce((total, cost) => total + cost, 0)
 }
 
 function formatTimestamp(value: number | undefined): string {

@@ -14,6 +14,13 @@ const tokenNumberFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 })
 
+const costFormatter = new Intl.NumberFormat("en-US", {
+  currency: "USD",
+  maximumFractionDigits: 6,
+  minimumFractionDigits: 2,
+  style: "currency",
+})
+
 export function tokenUsageFields(usage: Record<string, unknown> | undefined): readonly TokenUsageField[] | undefined {
   if (!usage) return undefined
   const fields = TOKEN_USAGE_DEFINITIONS.map((definition) => ({
@@ -26,6 +33,15 @@ export function tokenUsageFields(usage: Record<string, unknown> | undefined): re
 
 export function formatTokenUsageValue(value: number): string {
   return tokenNumberFormatter.format(value)
+}
+
+export function normalizeCostUsd(value: unknown): number | undefined {
+  if (typeof value !== "number" || !Number.isFinite(value)) return undefined
+  return Math.max(0, value)
+}
+
+export function formatCostUsd(value: number): string {
+  return costFormatter.format(value)
 }
 
 function tokenNumber(usage: Record<string, unknown>, keys: readonly string[]): number | undefined {

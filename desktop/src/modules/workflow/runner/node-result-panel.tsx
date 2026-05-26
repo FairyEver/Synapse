@@ -88,7 +88,7 @@ export function NodeResultPanel({ result, nodeName, definition, onClose, onCopyN
       </div>
       <ScrollArea className="min-w-0 flex-1 p-3">
         <div className="flex min-w-0 max-w-full flex-col gap-3 text-xs">
-          <TokenUsageSummary usage={result.usage} />
+          <TokenUsageSummary usage={result.usage} costUsd={result.costUsd} />
           {Object.keys(result.input.variables).length > 0 && (
             <ContentSection title="输入变量" trackingName="workflow-runner-input-variables-render-mode">
               {(mode) => (
