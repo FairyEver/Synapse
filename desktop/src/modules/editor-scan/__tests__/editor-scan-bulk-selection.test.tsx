@@ -121,6 +121,18 @@ vi.mock("../components/editor-bulk-skill-copy-dialog", () => ({
   ),
 }))
 
+vi.mock("../components/editor-bulk-skill-trash-dialog", () => ({
+  EditorBulkSkillTrashDialog: ({
+    items,
+    open,
+  }: {
+    items: Array<{ name: string }>
+    open: boolean
+  }) => open ? (
+    <div data-bulk-trash-dialog>已选 {items.length} 个 Skill</div>
+  ) : null,
+}))
+
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let roots: Root[] = []
@@ -163,6 +175,7 @@ describe("EditorScanModule bulk Skill selection", () => {
 
     expect(document.body.textContent).toContain("已选 1 个")
     expect(document.body.textContent).toContain("复制到...")
+    expect(document.body.textContent).toContain("移到废纸篓")
   })
 
   it("does not show selection checkboxes on the Rule tab", async () => {
@@ -187,5 +200,18 @@ describe("EditorScanModule bulk Skill selection", () => {
     })
 
     expect(document.body.textContent).not.toContain("已选 1 个")
+  })
+
+  it("opens the bulk trash dialog for selected Skills", async () => {
+    await renderModule()
+
+    await act(async () => {
+      clickText("选择 jenkins")
+    })
+    await act(async () => {
+      clickText("移到废纸篓")
+    })
+
+    expect(document.querySelector("[data-bulk-trash-dialog]")?.textContent).toContain("已选 1 个 Skill")
   })
 })

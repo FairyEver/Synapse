@@ -26,6 +26,10 @@ vi.mock("../components/editor-bulk-skill-copy-dialog", () => ({
   EditorBulkSkillCopyDialog: () => null,
 }))
 
+vi.mock("../components/editor-bulk-skill-trash-dialog", () => ({
+  EditorBulkSkillTrashDialog: () => null,
+}))
+
 describe("EditorScanModule", () => {
   it("shows an empty state when the selected editor scan result is missing", () => {
     const html = renderToStaticMarkup(<EditorScanModule />)

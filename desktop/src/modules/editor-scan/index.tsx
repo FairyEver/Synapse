@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { Copy, LoaderCircle, RotateCcw, TriangleAlert, X } from "lucide-react"
+import { Copy, LoaderCircle, RotateCcw, Trash2, TriangleAlert, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -22,6 +22,7 @@ import { ProjectOverview } from "./components/project-overview"
 import { EmptyScanState } from "./components/empty-scan-state"
 import { ScanItemDetailDialog } from "./components/scan-item-detail-dialog"
 import { EditorBulkSkillCopyDialog } from "./components/editor-bulk-skill-copy-dialog"
+import { EditorBulkSkillTrashDialog } from "./components/editor-bulk-skill-trash-dialog"
 import type { EditorScanSkillCopyItem } from "./lib/editor-copy-source"
 
 type ContentTab = "skill" | "rule"
@@ -38,6 +39,7 @@ function EditorScanModule() {
   const [detailOpen, setDetailOpen] = useState(false)
   const [selectedSkillMap, setSelectedSkillMap] = useState<Map<string, EditorScanSkillCopyItem>>(() => new Map())
   const [bulkCopyOpen, setBulkCopyOpen] = useState(false)
+  const [bulkTrashOpen, setBulkTrashOpen] = useState(false)
 
   const selectedSkillKeys = useMemo(() => new Set(selectedSkillMap.keys()), [selectedSkillMap])
   const selectedSkills = useMemo(() => Array.from(selectedSkillMap.values()), [selectedSkillMap])
@@ -51,6 +53,17 @@ function EditorScanModule() {
   const clearSkillSelection = useCallback(() => {
     setSelectedSkillMap(new Map())
     setBulkCopyOpen(false)
+    setBulkTrashOpen(false)
+  }, [])
+
+  const removeSelectedSkills = useCallback((keys: readonly string[]) => {
+    setSelectedSkillMap((current) => {
+      const next = new Map(current)
+      for (const key of keys) {
+        next.delete(key)
+      }
+      return next
+    })
   }, [])
 
   useEffect(() => {
@@ -297,6 +310,10 @@ function EditorScanModule() {
                   <Copy data-icon="inline-start" />
                   复制到...
                 </Button>
+                <Button variant="destructive" size="sm" onClick={() => setBulkTrashOpen(true)}>
+                  <Trash2 data-icon="inline-start" />
+                  移到废纸篓
+                </Button>
               </div>
             ) : null}
             <Button
@@ -334,6 +351,15 @@ function EditorScanModule() {
         }}
         open={bulkCopyOpen}
         onOpenChange={setBulkCopyOpen}
+      />
+      <EditorBulkSkillTrashDialog
+        items={selectedSkills}
+        onTrashed={async (trashedKeys) => {
+          removeSelectedSkills(trashedKeys)
+          await refresh()
+        }}
+        open={bulkTrashOpen}
+        onOpenChange={setBulkTrashOpen}
       />
     </SidebarContentLayout>
   )
