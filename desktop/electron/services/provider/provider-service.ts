@@ -336,8 +336,6 @@ export class ProviderService {
       await this.clearActiveUserProvider()
     }
 
-    await this.providers.remove(id)
-
     try {
       if (provider.secretRef) {
         await this.secretStore.deleteSecret(provider.secretRef)
@@ -351,6 +349,7 @@ export class ProviderService {
       this.recordSecretWriteAudit(id, "delete", "failed", errorAuditMetadata(error))
       throw error
     }
+    await this.providers.remove(id)
     this.recordSecretWriteAudit(id, "delete", "allowed", { secretRef: provider.secretRef })
   }
 

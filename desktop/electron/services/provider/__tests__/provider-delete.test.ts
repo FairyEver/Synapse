@@ -77,6 +77,28 @@ describe("ProviderService.deleteProvider", () => {
 
     await expect(service.getActiveProvider()).resolves.toMatchObject({ id: LOCAL_CLAUDE_CODE_PROVIDER_ID })
   })
+
+  it("keeps the provider record when secret deletion fails", async () => {
+    const { service, providers, secrets } = makeProviderService()
+    await service.createProvider({
+      id: "secret-fails",
+      name: "Secret Fails",
+      category: "custom",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      apiKey: "sk-kept",
+      env: {},
+    })
+    secrets.remove = async () => {
+      throw new Error("secret store unavailable")
+    }
+
+    await expect(service.deleteProvider("secret-fails")).rejects.toThrow("secret store unavailable")
+
+    await expect(providers.get("secret-fails")).resolves.toMatchObject({
+      id: "secret-fails",
+      secretRef: "provider:secret-fails:api-key",
+    })
+  })
 })
 
 describe("ProviderService.listAllProviders", () => {
