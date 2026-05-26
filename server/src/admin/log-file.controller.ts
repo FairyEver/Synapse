@@ -120,6 +120,7 @@ export class LogFileController {
           error: error instanceof Error ? error.message : String(error),
         },
       });
+      if (!res.destroyed) res.destroy(error instanceof Error ? error : undefined);
       return;
     }
     await this.recordLogAudit(request, {

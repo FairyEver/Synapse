@@ -188,6 +188,8 @@ describe("LogFileController", () => {
     const response = {
       set: vi.fn(),
       headersSent: true,
+      destroyed: false,
+      destroy: vi.fn(),
     };
 
     await expect(controller.download("2026-05-01", "2026-05-23", response as never, {
@@ -208,6 +210,7 @@ describe("LogFileController", () => {
       },
       ipAddress: "203.0.113.10",
     });
+    expect(response.destroy).toHaveBeenCalledWith(error);
   });
 
   it("rethrows download stream errors before headers are sent", async () => {
