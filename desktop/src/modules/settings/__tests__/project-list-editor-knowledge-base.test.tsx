@@ -260,6 +260,34 @@ describe("ProjectListEditor knowledge base actions", () => {
     expect(onSave).not.toHaveBeenCalled()
   })
 
+  it("cleans up managed knowledge base runtime when project save fails", async () => {
+    const onSave = vi.fn().mockRejectedValue(new Error("config save failed"))
+    renderEditor([], onSave)
+
+    await act(async () => {
+      buttonByText("新建知识库").click()
+    })
+    await act(async () => {
+      changeInput(inputByLabel("知识库名称"), "Knowledge")
+    })
+    await act(async () => {
+      buttonByText("创建").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.createManaged).toHaveBeenCalledWith({
+        projectId: "new-project-id",
+        name: "Knowledge",
+      })
+      expect(bridgeMocks.knowledgeBase.deleteManaged).toHaveBeenCalledWith({
+        projectId: "new-project-id",
+      })
+    })
+    expect(document.body.textContent).toContain("创建知识库失败。")
+  })
+
   it("deletes managed knowledge base runtime before removing the project", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     renderEditor([kbProject], onSave)

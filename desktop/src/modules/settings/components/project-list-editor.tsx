@@ -164,10 +164,12 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
     }
 
     const projectId = crypto.randomUUID()
+    let shouldCleanupRuntime = false
     setIsCreatingKnowledgeBase(true)
     setKnowledgeBaseError(null)
     try {
       const result = await window.synapse.knowledgeBase.createManaged({ projectId, name })
+      shouldCleanupRuntime = true
       await onSave([
         ...projects,
         {
@@ -188,6 +190,11 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       setIsKnowledgeBaseDialogOpen(false)
       resetKnowledgeBaseForm()
     } catch (error) {
+      if (shouldCleanupRuntime) {
+        await window.synapse.knowledgeBase.deleteManaged?.({ projectId }).catch((cleanupError) => {
+          logger.error("Failed to clean up managed knowledge base runtime after create failure.", { cleanupError, projectId })
+        })
+      }
       logger.error("Failed to create managed knowledge base project.", { error, projectId })
       setKnowledgeBaseError("创建知识库失败。")
     } finally {
