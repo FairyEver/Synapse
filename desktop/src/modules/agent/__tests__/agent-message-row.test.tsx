@@ -130,6 +130,32 @@ describe("AgentMessageEvent", () => {
     expect(html).toContain("复制")
   })
 
+  it("assistant messages render token usage metadata", () => {
+    const html = renderToStaticMarkup(
+      <AgentMessageEvent
+        item={{
+          ...baseEntry,
+          role: "assistant",
+          metadata: {
+            usage: {
+              input_tokens: 100,
+              output_tokens: 20,
+              cache_read_input_tokens: 300,
+              cache_creation_input_tokens: 40,
+            },
+          },
+        }}
+        profile={mockProfile}
+        onOpenReference={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("输入 100")
+    expect(html).toContain("输出 20")
+    expect(html).toContain("缓存读 300")
+    expect(html).toContain("缓存写 40")
+  })
+
   it("wraps local references as markdown links for assistant", () => {
     const html = renderToStaticMarkup(
       <AgentMessageEvent

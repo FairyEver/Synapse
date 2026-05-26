@@ -77,6 +77,37 @@ describe("agent timeline conversion", () => {
     })
   })
 
+  it("preserves stored assistant usage metadata", () => {
+    expect(historyRecordToTimelineItem("session-1", {
+      role: "assistant",
+      content: "done",
+      timestamp: "2026-04-28T00:02:30.000Z",
+      metadata: {
+        usage: {
+          input_tokens: 10,
+          output_tokens: 2,
+          cache_read_input_tokens: 30,
+          cache_creation_input_tokens: 4,
+        },
+        costUsd: 0.01,
+      },
+    }, 4, "claude")).toEqual(expect.objectContaining({
+      id: "session-1:history:4",
+      kind: "message",
+      role: "assistant",
+      content: "done",
+      metadata: {
+        usage: {
+          input_tokens: 10,
+          output_tokens: 2,
+          cache_read_input_tokens: 30,
+          cache_creation_input_tokens: 4,
+        },
+        costUsd: 0.01,
+      },
+    }))
+  })
+
   it("merges assistant text deltas but keeps tool events separate", () => {
     const first = appendAgentTimelineEvent([], {
       type: "text",

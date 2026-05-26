@@ -307,6 +307,44 @@ describe("ConversationRouter", () => {
     ])
   })
 
+  it("persists result usage on the assistant history entry", async () => {
+    const { conversations, router } = createRouter({
+      session: new ScriptedSession([
+        {
+          type: "result",
+          content: "usage answer",
+          done: true,
+          sdkSessionId: "sdk-1",
+          usage: {
+            input_tokens: 10,
+            output_tokens: 2,
+            cache_read_input_tokens: 30,
+            cache_creation_input_tokens: 4,
+          },
+          costUsd: 0.01,
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+    const savedConversation = await conversations.get(result.conversationId)
+
+    expect(savedConversation?.history.filter((entry) => entry.role === "assistant")).toEqual([
+      expect.objectContaining({
+        content: "usage answer",
+        metadata: expect.objectContaining({
+          usage: {
+            input_tokens: 10,
+            output_tokens: 2,
+            cache_read_input_tokens: 30,
+            cache_creation_input_tokens: 4,
+          },
+          costUsd: 0.01,
+        }),
+      }),
+    ])
+  })
+
   it("uses streamed SDK text as the turn result when the final result has no content", async () => {
     const { conversations, router } = createRouter({
       session: new ScriptedSession([

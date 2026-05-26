@@ -13,13 +13,28 @@ interface AgentMessageToolbarProps {
   readonly content: string
   readonly messageId?: string
   readonly role?: "assistant" | "user"
+  readonly usage?: Record<string, unknown>
   readonly className?: string
+  readonly copyButtonClassName?: string
 }
 
-function AgentMessageToolbar({ timestamp, content, messageId, role, className }: AgentMessageToolbarProps) {
+const tokenNumberFormatter = new Intl.NumberFormat("en-US", {
+  maximumFractionDigits: 0,
+})
+
+function AgentMessageToolbar({
+  timestamp,
+  content,
+  messageId,
+  role,
+  usage,
+  className,
+  copyButtonClassName,
+}: AgentMessageToolbarProps) {
   const [copied, setCopied] = useState(false)
   const copiedTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const formattedTimestamp = timestamp ? formatTime(timestamp) : undefined
+  const usageFields = usage ? tokenUsageFields(usage) : undefined
 
   useEffect(() => {
     return () => {
@@ -64,9 +79,21 @@ function AgentMessageToolbar({ timestamp, content, messageId, role, className }:
           {formattedTimestamp}
         </time>
       ) : null}
+      {usageFields ? (
+        <span aria-label="Token 消耗" className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+          {usageFields.map((field) => (
+            <span key={field.label} className="whitespace-nowrap">
+              {field.label} {tokenNumberFormatter.format(field.value)}
+            </span>
+          ))}
+        </span>
+      ) : null}
       <button
         type="button"
-        className="inline-flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground"
+        className={cn(
+          "inline-flex size-5 items-center justify-center rounded text-muted-foreground transition-colors hover:text-foreground",
+          copyButtonClassName,
+        )}
         onClick={handleCopy}
         aria-label="复制"
       >
@@ -84,6 +111,26 @@ function formatTime(timestamp: string): string | undefined {
   const hours = date.getHours().toString().padStart(2, "0")
   const minutes = date.getMinutes().toString().padStart(2, "0")
   return `${hours}:${minutes}`
+}
+
+function tokenUsageFields(usage: Record<string, unknown>): Array<{ label: string; value: number }> | undefined {
+  const fields = [
+    { label: "输入", value: tokenNumber(usage, ["input_tokens", "inputTokens"]) },
+    { label: "输出", value: tokenNumber(usage, ["output_tokens", "outputTokens"]) },
+    { label: "缓存读", value: tokenNumber(usage, ["cache_read_input_tokens", "cacheReadInputTokens", "cacheRead"]) },
+    { label: "缓存写", value: tokenNumber(usage, ["cache_creation_input_tokens", "cacheCreationInputTokens", "cacheWrite"]) },
+  ]
+  return fields.some((field) => field.value !== undefined)
+    ? fields.map((field) => ({ label: field.label, value: field.value ?? 0 }))
+    : undefined
+}
+
+function tokenNumber(usage: Record<string, unknown>, keys: readonly string[]): number | undefined {
+  for (const key of keys) {
+    const value = usage[key]
+    if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, value)
+  }
+  return undefined
 }
 
 export { AgentMessageToolbar }

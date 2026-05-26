@@ -112,6 +112,8 @@ export interface AgentResultMetadata {
   readonly contextRemainingPercent?: number
   readonly workDir?: string
   readonly cancelled?: boolean
+  readonly usage?: Record<string, unknown>
+  readonly costUsd?: number
 }
 
 export interface AgentResultEvent extends AgentEventBase {

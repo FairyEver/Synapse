@@ -54,6 +54,33 @@ describe("AgentMessageToolbar", () => {
     expect(container.textContent).not.toContain("NaN")
   })
 
+  it("renders assistant token usage as four persistent fields", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentMessageToolbar
+          content="agent response"
+          timestamp="2026-05-14T00:00:00.000Z"
+          usage={{
+            input_tokens: 1234,
+            output_tokens: 56,
+            cache_read_input_tokens: 7890,
+            cache_creation_input_tokens: 12,
+          }}
+        />
+      )
+    })
+
+    expect(container.textContent).toContain("输入 1,234")
+    expect(container.textContent).toContain("输出 56")
+    expect(container.textContent).toContain("缓存读 7,890")
+    expect(container.textContent).toContain("缓存写 12")
+  })
+
   it("logs clipboard copy failures without logging message content", async () => {
     const writeText = vi.fn().mockRejectedValue(new Error("clipboard blocked"))
     Object.defineProperty(navigator, "clipboard", {

@@ -114,6 +114,7 @@ function AssistantMessageBody({
 }) {
   const streaming = item.streaming === true
   const preprocessed = wrapLocalReferences(item.content)
+  const hasUsage = Boolean(item.metadata?.usage)
 
   const handleClick = async (event: MouseEvent<HTMLDivElement>) => {
     const target = event.target
@@ -201,7 +202,13 @@ function AssistantMessageBody({
         content={item.content}
         messageId={item.id}
         role={item.role === "user" || item.role === "assistant" ? item.role : undefined}
-        className="mt-2 pt-1 opacity-0 transition-opacity group-hover/message:opacity-100"
+        usage={item.metadata?.usage}
+        className={hasUsage
+          ? "mt-2 pt-1"
+          : "mt-2 pt-1 opacity-0 transition-opacity group-hover/message:opacity-100"}
+        copyButtonClassName={hasUsage
+          ? "opacity-0 transition-opacity group-hover/message:opacity-100 focus:opacity-100"
+          : undefined}
       />
     </div>
   )
