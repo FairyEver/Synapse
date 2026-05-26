@@ -8,6 +8,17 @@ import {
   LoadingState,
 } from '@/components/page-state';
 import { PaginationFooter } from '@/components/pagination-footer';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -169,13 +180,33 @@ export function InvitationsPage() {
                       >
                         复制
                       </Button>
-                      <Button
-                        variant="outline"
-                        disabled={deletingIds.has(invitation.id)}
-                        onClick={() => deleteInvitation(invitation)}
-                      >
-                        删除
-                      </Button>
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <Button
+                            variant="outline"
+                            disabled={deletingIds.has(invitation.id)}
+                          >
+                            删除
+                          </Button>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>删除邀请</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              {invitation.id}
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>取消</AlertDialogCancel>
+                            <AlertDialogAction
+                              variant="destructive"
+                              onClick={() => deleteInvitation(invitation)}
+                            >
+                              删除
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
                     </div>
                   </TableCell>
                 </TableRow>
