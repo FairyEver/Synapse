@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react"
-import { Command } from "lucide-react"
+import { Command, TextCursorInput } from "lucide-react"
 
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { cn } from "@/lib/utils"
@@ -13,6 +13,13 @@ type AgentSlashMenuProps = {
   readonly highlightedIndex: number
   readonly onHighlight: (index: number) => void
   readonly onSelect: (candidate: AgentSlashCandidate) => void
+}
+
+function AgentSlashCandidateIcon({ kind }: { readonly kind: AgentSlashCandidate["kind"] }) {
+  if (kind === "quickInput") {
+    return <TextCursorInput className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+  }
+  return <Command className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
 }
 
 function AgentSlashMenu({
@@ -66,11 +73,12 @@ function AgentSlashMenu({
                       role="option"
                       aria-selected={selected}
                       data-track="agent-slash-menu-item"
+                      data-slash-candidate-kind={candidate.kind}
                       onMouseEnter={() => onHighlight(index)}
                       onMouseDown={(event) => event.preventDefault()}
                       onClick={() => onSelect(candidate)}
                     >
-                      <Command className="mt-0.5 size-4 shrink-0 text-muted-foreground" />
+                      <AgentSlashCandidateIcon kind={candidate.kind} />
                       <span className="min-w-0 flex-1">
                         <span className="block whitespace-normal break-words font-medium">/{candidate.name}</span>
                         {candidate.description ? (

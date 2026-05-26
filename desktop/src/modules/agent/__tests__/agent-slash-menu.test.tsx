@@ -13,6 +13,12 @@ import type { AgentSlashCandidate } from "../slash-menu"
 
 const candidates: AgentSlashCandidate[] = [
   {
+    name: "日报模板",
+    description: "整理今天完成的工作",
+    kind: "quickInput",
+    insertText: "日报模板\n整理今天完成的工作",
+  },
+  {
     name: "review-code",
     description: "Review code changes",
     kind: "skill",
@@ -125,7 +131,7 @@ describe("AgentSlashMenu", () => {
     Element.prototype.scrollIntoView = originalScrollIntoView
   })
 
-  it("renders skills and commands in separate groups", () => {
+  it("renders quick inputs before skills and commands", () => {
     const html = renderToStaticMarkup(
       <AgentSlashMenu
         candidates={candidates}
@@ -135,12 +141,30 @@ describe("AgentSlashMenu", () => {
       />,
     )
 
+    expect(html).toContain("片段")
     expect(html).toContain("Skills")
     expect(html).toContain("Commands")
+    expect(html.indexOf("片段")).toBeLessThan(html.indexOf("Skills"))
+    expect(html.indexOf("Skills")).toBeLessThan(html.indexOf("Commands"))
+    expect(html).toContain("/日报模板")
+    expect(html).toContain("整理今天完成的工作")
     expect(html).toContain("/review-code")
     expect(html).toContain("Review code changes")
     expect(html).toContain("/status")
     expect(html).toContain("Show agent status")
+  })
+
+  it("uses a text input icon for quick input items", () => {
+    const html = renderToStaticMarkup(
+      <AgentSlashMenu
+        candidates={candidates}
+        highlightedIndex={0}
+        onHighlight={vi.fn()}
+        onSelect={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("data-slash-candidate-kind=\"quickInput\"")
   })
 
   it("renders a short empty state", () => {
@@ -182,6 +206,6 @@ describe("AgentSlashMenu", () => {
       button?.click()
     })
 
-    expect(onSelect).toHaveBeenCalledWith(candidates[1])
+    expect(onSelect).toHaveBeenCalledWith(candidates[2])
   })
 })
