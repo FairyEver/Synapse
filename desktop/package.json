@@ -2,7 +2,7 @@
   "name": "@synapse/desktop",
   "productName": "Synapse",
   "private": true,
-  "version": "0.2.182",
+  "version": "0.2.183",
   "description": "Synapse desktop scaffold built with Electron, Vite, React, Tailwind CSS, and shadcn/ui.",
   "author": "FairyEver",
   "homepage": "https://github.com/FairyEver/Synapse",
@@ -141,6 +141,7 @@
     "asarUnpack": [
       "node_modules/@anthropic-ai/claude-agent-sdk-*/claude",
       "node_modules/@anthropic-ai/claude-agent-sdk-*/claude.exe",
+      "dist-electron/action-packages/shared/**",
       "dist-electron/electron/services/usage-analysis/**",
       "dist-electron/electron/workers/file-conversion-worker.js"
     ],
