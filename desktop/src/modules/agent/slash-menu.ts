@@ -26,7 +26,7 @@ export type AgentSlashGroup = {
 const FRAGMENT_BOUNDARY = /\s/
 
 export function toQuickInputSlashCandidates(
-  quickInputs: readonly SynapseQuickInput[],
+  quickInputs: readonly SynapseQuickInput[] = [],
 ): AgentSlashCandidate[] {
   return quickInputs.flatMap((item) => {
     const lines = item.content.split(/\r?\n/)

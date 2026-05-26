@@ -352,7 +352,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   )
   const slashCandidates = useMemo(
     () => [
-      ...toQuickInputSlashCandidates(config.global.quickInputs),
+      ...toQuickInputSlashCandidates(config.global.quickInputs ?? []),
       ...knowledgeBaseSlashCandidates,
       ...toAgentSlashCandidates(mergedCommands),
     ],
