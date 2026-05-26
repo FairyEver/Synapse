@@ -2,7 +2,6 @@ import { normalizeContentNameInput, validateContentNameInput } from "@/lib/conte
 import type { SynapseCreateRulePayload } from "@/types/content"
 import {
   createEmptyContentPayload,
-  isContentPayloadDirty as isContentPayloadDirtyBase,
   normalizeContentPayload,
   validateContentPayload,
 } from "@/modules/content/lib/content-payload"
@@ -45,10 +44,6 @@ function validateCreateRulePayload(payload: SynapseCreateRulePayload): RuleCreat
   }
 
   return errors
-}
-
-function isCreateRulePayloadDirty(payload: SynapseCreateRulePayload): boolean {
-  return isContentPayloadDirtyBase(payload, (p) => p.name !== "")
 }
 
 export {
