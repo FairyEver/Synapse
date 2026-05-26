@@ -12,6 +12,10 @@ export interface WorkflowEventCallbacks {
   onNodeCompleted?: (nodeId: string, output: unknown, result?: NodeRunResult) => void
   onNodeFailed?: (nodeId: string, error: string, result?: NodeRunResult) => void
   onNodeSkipped?: (nodeId: string, result?: NodeRunResult) => void
+  onNodeAgentConversation?: (
+    nodeId: string,
+    target: NonNullable<NodeRunResult["outputs"]>["agentConversation"],
+  ) => void
   onCompleted?: (nodeResults: Record<string, NodeRunResult>) => void
   onFailed?: (error: string, nodeResults?: Record<string, NodeRunResult>) => void
   onCancelled?: (nodeResults?: Record<string, NodeRunResult>) => void
@@ -84,6 +88,8 @@ export function useWorkflowEvents(
         cbRef.current.onNodeStarted?.(event.nodeId, { startedAt: event.startedAt ?? Date.now() })
       } else if (event.type === "node:progress") {
         cbRef.current.onNodeProgress?.(event.nodeId, event.phase, event.label)
+      } else if (event.type === "node:agent-conversation") {
+        cbRef.current.onNodeAgentConversation?.(event.nodeId, event.target)
       } else if (event.type === "node:completed") {
         terminalNodes.add(event.nodeId)
         cbRef.current.onNodeCompleted?.(event.nodeId, event.output, event.result)

@@ -88,6 +88,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
     })
 
     input.onProgress?.("awaiting_response", "等待响应…")
+    let agentConversation: NodeExecutionResult["agentConversation"]
     const agentResult = await agentDeps.sendToAgent({
       providerId: config.providerId ?? "",
       modelTier: config.modelTier ?? "default",
@@ -100,6 +101,10 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
       workflowRunId: context.runId,
       workflowNodeId: context.nodeId,
       workflowNodeName: context.nodeName,
+      onConversationCreated: (target) => {
+        agentConversation = target
+        input.onAgentConversation?.(target)
+      },
     })
     const durationMs = Date.now() - start
 
@@ -109,7 +114,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
       logger.warn("switch node agent call failed", {
         projectId: context.projectId, runId: context.runId, ...diagnostic, sanitizedError, durationMs,
       })
-      return { status: "failed", output: "", error: agentFailureMessage(agentResult.error), durationMs, usage: agentResult.usage, costUsd: agentResult.costUsd }
+      return { status: "failed", output: "", error: agentFailureMessage(agentResult.error), durationMs, usage: agentResult.usage, costUsd: agentResult.costUsd, agentConversation: agentConversation ?? agentResult.agentConversation }
     }
 
     const providerFailure = agentProviderFailureFromResponse(agentResult.response)
@@ -119,7 +124,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
       logger.warn("switch node agent call failed", {
         projectId: context.projectId, runId: context.runId, ...diagnostic, sanitizedError, durationMs,
       })
-      return { status: "failed", output: "", error: agentFailureMessage(providerFailure), durationMs, usage: agentResult.usage, costUsd: agentResult.costUsd }
+      return { status: "failed", output: "", error: agentFailureMessage(providerFailure), durationMs, usage: agentResult.usage, costUsd: agentResult.costUsd, agentConversation: agentConversation ?? agentResult.agentConversation }
     }
 
     const rawResponse = agentResult.response.trim()
@@ -132,7 +137,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
         projectId: context.projectId, runId: context.runId, activeBranch: matched,
         responseLength: rawResponse.length, normalizedResponseLength: normalizedResponse.length, durationMs,
       })
-      return { status: "success", output: matched, activeBranch: matched, durationMs, usage: agentResult.usage, costUsd: agentResult.costUsd }
+      return { status: "success", output: matched, activeBranch: matched, durationMs, usage: agentResult.usage, costUsd: agentResult.costUsd, agentConversation: agentConversation ?? agentResult.agentConversation }
     }
 
     if (config.defaultBranch) {
@@ -140,7 +145,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
         projectId: context.projectId, runId: context.runId, activeBranch: config.defaultBranch,
         responseLength: rawResponse.length, normalizedResponseLength: normalizedResponse.length, durationMs,
       })
-      return { status: "success", output: config.defaultBranch, activeBranch: config.defaultBranch, durationMs, usage: agentResult.usage, costUsd: agentResult.costUsd }
+      return { status: "success", output: config.defaultBranch, activeBranch: config.defaultBranch, durationMs, usage: agentResult.usage, costUsd: agentResult.costUsd, agentConversation: agentConversation ?? agentResult.agentConversation }
     }
 
     logger.warn("switch node branch match failed — no match and no default", {
@@ -152,6 +157,7 @@ export const switchNodeExecutor: NodeExecutor<SwitchNodeConfig> = {
       error: `Agent 响应不匹配任何分支 [${ids.join(", ")}]`,
       usage: agentResult.usage,
       costUsd: agentResult.costUsd,
+      agentConversation: agentConversation ?? agentResult.agentConversation,
     }
   },
 }

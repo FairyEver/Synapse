@@ -132,6 +132,49 @@ describe("WorkflowEngine", () => {
     }))
   })
 
+  it("emits and stores Agent conversation targets for AI nodes", async () => {
+    const target = {
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "workflow:project-1:123",
+      platform: "workflow" as const,
+    }
+    const def: WorkflowDefinition = {
+      id: "wf-agent-target", name: "WF", version: "v1", createdAt: 0, updatedAt: 0, params: [],
+      nodes: [nodeA, nodeEnd],
+      edges: [{ id: "e1", from: "a", to: "end" }],
+    }
+    const engine = new WorkflowEngine({
+      sendToAgent: vi.fn(async (input: { onConversationCreated?: (target: typeof target) => void }) => {
+        input.onConversationCreated?.(target)
+        return {
+          status: "success" as const,
+          response: "hello",
+          durationMs: 5,
+          agentConversation: target,
+        }
+      }),
+    })
+    const events: WorkflowEvent[] = []
+
+    const result = await engine.run(def, {}, "run-agent-target", (event) => events.push(event))
+
+    expect(events).toContainEqual({
+      type: "node:agent-conversation",
+      runId: "run-agent-target",
+      nodeId: "a",
+      target,
+    })
+    expect(result.nodeResults.a.outputs?.agentConversation).toEqual(target)
+    const completedNode = events.find((event) => event.type === "node:completed" && event.nodeId === "a")
+    expect(completedNode).toMatchObject({
+      type: "node:completed",
+      result: expect.objectContaining({
+        outputs: { agentConversation: target },
+      }),
+    })
+  })
+
   it("logs usage and cost when a node fails", async () => {
     const usage = { input_tokens: 12, output_tokens: 3 }
     nodeTypeRegistry.register(

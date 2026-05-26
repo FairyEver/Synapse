@@ -316,6 +316,15 @@ export function createRunWorkflowHandler(deps: {
       const nextNodeResults = { ...current.nodeResults }
       if (event.type === "node:started") {
         nextNodeResults[event.nodeId] = { ...(nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, input: { variables: {} } }), status: "running", startedAt: event.startedAt ?? Date.now() }
+      } else if (event.type === "node:agent-conversation") {
+        const existing = nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: "running" as const, input: { variables: {} } }
+        nextNodeResults[event.nodeId] = {
+          ...existing,
+          outputs: {
+            ...(existing.outputs ?? {}),
+            agentConversation: event.target,
+          },
+        }
       } else if (event.type === "node:completed" || event.type === "node:failed" || event.type === "node:skipped") {
         nextNodeResults[event.nodeId] = event.result ?? nextNodeResults[event.nodeId] ?? { nodeId: event.nodeId, status: "failed", input: { variables: {} } }
       }
@@ -1275,6 +1284,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
       workflowRunId,
       workflowNodeId,
       workflowNodeName,
+      onConversationCreated,
     }) => {
       try {
         if (!projectId) {
@@ -1291,6 +1301,7 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
         const containers = registry.get<ProjectContainerRegistry>("core.project-containers")
         const container = await containers.open(effectiveProjectId, { name: "", workspacePath })
         const agentRuntime = container.get<import("../services/agent-runtime").AgentRuntimeService>(AGENT_RUNTIME_SERVICE_ID)
+        let agentConversation: import("../../src/types/agent-navigation").SynapseAgentConversationTarget | undefined
         const result = await agentRuntime.sendScheduled({
           projectId: effectiveProjectId, agentType: "claude-code", mode: "bypassPermissions", prompt,
           providerId, modelTier,
@@ -1304,6 +1315,10 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
             workflowNodeId,
             workflowNodeName,
           },
+          onConversationCreated: (target) => {
+            agentConversation = target
+            onConversationCreated?.(target)
+          },
         })
         return {
           status: result.status === "success" ? "success" : "failed",
@@ -1312,6 +1327,16 @@ export const coreWorkflowEngineDescriptor: ServiceDescriptor<WorkflowEngine> = {
           durationMs: result.durationMs,
           usage: result.usage,
           costUsd: result.costUsd,
+          agentConversation: agentConversation ?? (
+            result.conversationId
+              ? {
+                  projectId: effectiveProjectId,
+                  conversationId: result.conversationId,
+                  sessionKey: result.sessionKey,
+                  platform: "workflow" as const,
+                }
+              : undefined
+          ),
         }
       } catch (err) {
         const diagnostic = workflowAgentErrorDiagnostic(err)

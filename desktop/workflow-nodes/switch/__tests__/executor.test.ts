@@ -68,6 +68,41 @@ describe("switchNodeExecutor", () => {
       costUsd: 0.01,
     })
   })
+  it("returns and reports the Agent conversation target", async () => {
+    const target = {
+      projectId: "p1",
+      conversationId: "conversation-1",
+      sessionKey: "workflow:p1:123",
+      platform: "workflow" as const,
+    }
+    const onAgentConversation = vi.fn()
+    const sendToAgent = vi.fn(async (
+      input: { onConversationCreated?: (target: typeof target) => void },
+    ) => {
+      input.onConversationCreated?.(target)
+      return {
+        status: "success" as const,
+        response: "yes",
+        durationMs: 5,
+        agentConversation: target,
+      }
+    })
+
+    const r = await switchNodeExecutor.execute({
+      config,
+      resolvedVariables: {},
+      context: ctx,
+      agentDeps: { sendToAgent },
+      onAgentConversation,
+    })
+
+    expect(r).toMatchObject({
+      status: "success",
+      activeBranch: "yes",
+      agentConversation: target,
+    })
+    expect(onAgentConversation).toHaveBeenCalledWith(target)
+  })
   it("uses defaultBranch on mismatch if configured", async () => {
     const r = await switchNodeExecutor.execute({
       config: { ...config, defaultBranch: "no" }, resolvedVariables: {}, context: ctx,

@@ -25,6 +25,7 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
     })
 
     input.onProgress?.("awaiting_response", "等待响应…")
+    let agentConversation: NodeExecutionResult["agentConversation"]
     const result = await input.agentDeps.sendToAgent({
       providerId: input.config.providerId ?? "",
       modelTier: input.config.modelTier ?? "default",
@@ -37,6 +38,10 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
       workflowRunId: input.context.runId,
       workflowNodeId: input.context.nodeId,
       workflowNodeName: input.context.nodeName,
+      onConversationCreated: (target) => {
+        agentConversation = target
+        input.onAgentConversation?.(target)
+      },
     })
     const durationMs = Date.now() - start
 
@@ -48,7 +53,7 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
         sanitizedError,
         durationMs,
       })
-      return { status: "failed", output: "", error: agentFailureMessage(result.error), durationMs, usage: result.usage, costUsd: result.costUsd }
+      return { status: "failed", output: "", error: agentFailureMessage(result.error), durationMs, usage: result.usage, costUsd: result.costUsd, agentConversation: agentConversation ?? result.agentConversation }
     }
 
     const providerFailure = agentProviderFailureFromResponse(result.response)
@@ -60,7 +65,7 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
         sanitizedError,
         durationMs,
       })
-      return { status: "failed", output: "", error: agentFailureMessage(providerFailure), durationMs, usage: result.usage, costUsd: result.costUsd }
+      return { status: "failed", output: "", error: agentFailureMessage(providerFailure), durationMs, usage: result.usage, costUsd: result.costUsd, agentConversation: agentConversation ?? result.agentConversation }
     }
 
     input.onProgress?.("processing_output", "处理输出…")
@@ -68,6 +73,6 @@ export const promptNodeExecutor: NodeExecutor<PromptNodeConfig> = {
       projectId: input.context.projectId, runId: input.context.runId, providerId: input.config.providerId, modelTier: input.config.modelTier,
       outputLength: result.response.length, durationMs,
     })
-    return { status: "success", output: result.response, durationMs, usage: result.usage, costUsd: result.costUsd }
+    return { status: "success", output: result.response, durationMs, usage: result.usage, costUsd: result.costUsd, agentConversation: agentConversation ?? result.agentConversation }
   },
 }
