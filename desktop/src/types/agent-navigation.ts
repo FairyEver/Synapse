@@ -1,0 +1,31 @@
+export const OPEN_AGENT_SESSION_EVENT = "synapse:open-agent-session"
+
+export type SynapseAgentConversationPlatform = "workflow" | "scheduled"
+
+export type SynapseAgentConversationSourceFilter =
+  | "user"
+  | "scheduled"
+  | "workflow"
+  | "webhook"
+  | "relay"
+  | "bridge"
+  | "all"
+
+export interface SynapseAgentConversationTarget {
+  readonly projectId: string
+  readonly conversationId: string
+  readonly sessionKey: string
+  readonly platform: SynapseAgentConversationPlatform
+}
+
+export type SynapseOpenAgentConversationResult =
+  | { readonly opened: true }
+  | { readonly opened: false; readonly reason: "not-found" }
+
+export interface OpenAgentSessionPayload {
+  readonly projectId: string
+  readonly conversationId: string
+  readonly sessionKey?: string
+  readonly sourceFilter?: SynapseAgentConversationSourceFilter
+  readonly prompt?: string
+}
