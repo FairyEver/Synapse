@@ -128,7 +128,11 @@ function EditorScanModule() {
       )
     }
 
-    if (!globalResult) return null
+    if (!globalResult) {
+      return (
+        <EmptyScanState message="未找到当前编辑器的扫描数据，请重新扫描。" />
+      )
+    }
 
     if (isEditorEmpty && globalResult.status === "not-detected") {
       return (
