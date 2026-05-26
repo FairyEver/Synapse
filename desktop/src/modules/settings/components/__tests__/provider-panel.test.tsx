@@ -763,6 +763,47 @@ describe("ProviderPanel dialog editor", () => {
     expect(toast).toHaveBeenCalledWith("已导入 1 个 Provider")
     expect(document.body.textContent).toContain("DeepSeek")
   })
+
+  it("disables direct provider deletion when task or workflow references exist", async () => {
+    const deleteProvider = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders: vi.fn().mockResolvedValue([customProvider()]),
+          listProviderPresets: vi.fn().mockResolvedValue([]),
+          scanProviderReferences: vi.fn().mockResolvedValue({
+            providerId: "custom-provider",
+            references: [
+              { kind: "scheduled-task", entityId: "task-1", entityName: "日报", providerId: "custom-provider", modelTier: "default" },
+            ],
+            taskCount: 1,
+            workflowNodeCount: 0,
+            conversationCount: 0,
+          }),
+          deleteProvider,
+        },
+      },
+    })
+
+    renderProviderPanel()
+    await flush()
+
+    await act(async () => {
+      buttonByText(document.body, "删除").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const directDelete = buttonByText(document.body, "先迁移引用")
+    expect(directDelete.disabled).toBe(true)
+    expect(document.body.textContent).toContain("迁移到其他供应商")
+    await act(async () => {
+      directDelete.click()
+      await Promise.resolve()
+    })
+    expect(deleteProvider).not.toHaveBeenCalled()
+  })
 })
 
 function renderProviderPanel(): void {
