@@ -10,7 +10,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { AgentComposer } from "./components/agent-composer"
-import type { KnowledgeBaseComposerAction } from "./components/knowledge-base-action-menu"
 import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
@@ -43,7 +42,10 @@ import {
   sessionLabel,
 } from "./utils"
 import { toAgentSlashCandidates, toQuickInputSlashCandidates } from "./slash-menu"
-import { knowledgeBaseStaticCommands } from "./knowledge-base-commands"
+import {
+  toKnowledgeBaseComposerActions,
+  toKnowledgeBaseSlashCandidates,
+} from "./knowledge-base-commands"
 
 const logger = createRendererLogger("agent")
 
@@ -60,20 +62,6 @@ const DEFAULT_AGENT_DISPLAY_PROFILE: SynapseAgentDisplayProfile = {
     error: "Failed",
     denied: "Denied",
   },
-}
-
-function toKnowledgeBaseComposerActions(
-  commands: readonly SynapseAgentPublishedCommand[],
-): KnowledgeBaseComposerAction[] {
-  return commands
-    .filter((command) => command.ui?.group === "knowledge-base")
-    .map((command) => {
-      const commandText = command.ui?.insertText ?? `/${command.name.replace(/^\/+/, "")}`
-      const label = command.ui?.label ?? command.description ?? command.name
-      const action = command.ui?.action ?? "insert"
-      return { label, description: command.description, action, commandText }
-    })
-    .filter((action) => action.label.trim().length > 0 && action.commandText.trim().length > 0)
 }
 
 type AgentModuleProps = {
@@ -348,27 +336,31 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   const mergedCommands = useMemo(() => {
     const defCommands = selectedAgentDefinition?.commands ?? []
     const runtimeCommands = chat.commands ?? []
-    const knowledgeBaseCommands = canManageKnowledgeSources ? knowledgeBaseStaticCommands() : []
     const seen = new Set<string>()
     const result: SynapseAgentPublishedCommand[] = []
-    for (const cmd of [...defCommands, ...runtimeCommands, ...knowledgeBaseCommands]) {
+    for (const cmd of [...defCommands, ...runtimeCommands]) {
       if (!seen.has(cmd.name)) {
         seen.add(cmd.name)
         result.push(cmd as unknown as SynapseAgentPublishedCommand)
       }
     }
     return result
-  }, [canManageKnowledgeSources, selectedAgentDefinition?.commands, chat.commands])
+  }, [selectedAgentDefinition?.commands, chat.commands])
+  const knowledgeBaseSlashCandidates = useMemo(
+    () => canManageKnowledgeSources ? toKnowledgeBaseSlashCandidates() : [],
+    [canManageKnowledgeSources],
+  )
   const slashCandidates = useMemo(
     () => [
       ...toQuickInputSlashCandidates(config.global.quickInputs),
+      ...knowledgeBaseSlashCandidates,
       ...toAgentSlashCandidates(mergedCommands),
     ],
-    [config.global.quickInputs, mergedCommands],
+    [config.global.quickInputs, knowledgeBaseSlashCandidates, mergedCommands],
   )
   const knowledgeBaseActions = useMemo(
-    () => toKnowledgeBaseComposerActions(mergedCommands),
-    [mergedCommands],
+    () => canManageKnowledgeSources ? toKnowledgeBaseComposerActions() : [],
+    [canManageKnowledgeSources],
   )
   const selectedDisplayProfile = selectedAgentDefinition?.displayProfile
     ?? DEFAULT_AGENT_DISPLAY_PROFILE

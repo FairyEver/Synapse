@@ -720,6 +720,58 @@ describe("AgentComposer", () => {
     expect(onInputKeyDown).not.toHaveBeenCalled()
   })
 
+  it("inserts knowledge base slash candidates without submitting", async () => {
+    const onDraftChange = vi.fn()
+    const onSubmit = vi.fn()
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft="/wiki-q"
+          disabled={false}
+          canSend={true}
+          sending={false}
+          cancelPhase="idle"
+          slashCandidates={[{
+            name: "wiki-query",
+            description: "查询知识库并基于已有页面回答",
+            kind: "knowledgeBase",
+            insertText: "/wiki-query ",
+          }]}
+          onDraftChange={onDraftChange}
+          onInputKeyDown={vi.fn()}
+          onSubmit={onSubmit}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const textarea = container.querySelector<HTMLTextAreaElement>("textarea")
+    expect(textarea).not.toBeNull()
+    textarea!.setSelectionRange(7, 7)
+    await act(async () => {
+      textarea!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+    expect(container.textContent).toContain("知识库")
+    expect(container.textContent).toContain("/wiki-query")
+    expect(container.textContent).toContain("查询知识库并基于已有页面回答")
+
+    await act(async () => {
+      textarea!.dispatchEvent(new KeyboardEvent("keydown", {
+        key: "Enter",
+        bubbles: true,
+      }))
+    })
+
+    expect(onDraftChange).toHaveBeenCalledWith("/wiki-query ")
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
   it("does not render the quick input menu when no quick inputs exist", () => {
     const html = renderToStaticMarkup(
       <AgentComposer
