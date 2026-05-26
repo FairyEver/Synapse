@@ -250,6 +250,45 @@ describe("NodeResultPanel", () => {
       root.unmount()
     })
   })
+
+  it("renders token usage when present", async () => {
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+
+    await act(async () => {
+      root.render(
+        <NodeResultPanel
+          result={{
+            ...nodeResult(),
+            usage: {
+              input_tokens: 1234,
+              output_tokens: 56,
+              cache_read_input_tokens: 7890,
+              cache_creation_input_tokens: 12,
+            },
+            costUsd: 0.01,
+          }}
+          nodeName="Prompt node"
+          onClose={vi.fn()}
+        />,
+      )
+    })
+
+    expect(container.textContent).toContain("输入")
+    expect(container.textContent).toContain("1,234")
+    expect(container.textContent).toContain("输出")
+    expect(container.textContent).toContain("56")
+    expect(container.textContent).toContain("缓存读")
+    expect(container.textContent).toContain("7,890")
+    expect(container.textContent).toContain("缓存写")
+    expect(container.textContent).toContain("12")
+    expect(container.textContent).not.toContain("0.01")
+
+    await act(async () => {
+      root.unmount()
+    })
+  })
 })
 
 function nodeResult(): NodeRunResult {

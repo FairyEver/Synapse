@@ -9,6 +9,8 @@ export type ActionRunResult = {
   readonly outputs?: Record<string, unknown>
   readonly error?: string
   readonly metrics?: ActionRunMetrics
+  readonly usage?: Record<string, unknown>
+  readonly costUsd?: number
 }
 
 export type ActionRunLog = {

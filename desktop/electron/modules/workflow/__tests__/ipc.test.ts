@@ -342,6 +342,49 @@ describe("workflowIpcModule", () => {
     expect(engine.run).not.toHaveBeenCalled()
   })
 
+  it("preserves node usage through workflow run-status IPC validation", async () => {
+    const usage = {
+      input_tokens: 10,
+      output_tokens: 2,
+      cache_read_input_tokens: 30,
+      cache_creation_input_tokens: 4,
+    }
+    const runStatuses = new Map<string, WorkflowRunStatus>()
+    runStatuses.set("run-usage", {
+      runId: "run-usage",
+      workflowId: "workflow-1",
+      status: "completed",
+      nodeResults: {
+        "node-1": {
+          nodeId: "node-1",
+          status: "success",
+          input: { variables: {} },
+          output: "done",
+          usage,
+          costUsd: 0.01,
+        },
+      },
+      startedAt: 1,
+      endedAt: 2,
+      definition: workflowDefinition(),
+    })
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.run-statuses") return runStatuses as T
+      if (serviceId === "core.workflow.snapshots") return { findByRunId: vi.fn(async () => null) } as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    const status = await harness.invoke("synapse:workflow:run-status", { runId: "run-usage" })
+
+    expect(status).toEqual(expect.objectContaining({
+      nodeResults: {
+        "node-1": expect.objectContaining({ usage, costUsd: 0.01 }),
+      },
+    }))
+  })
+
   it("stores node progress labels in live run status", async () => {
     const runStatuses = new Map<string, WorkflowRunStatus>()
     const eventBus = { emit: vi.fn() }

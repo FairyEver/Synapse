@@ -275,6 +275,8 @@ const nodeRunResultSchema: z.ZodType<NodeRunResult> = z.object({
   endedAt: z.number().optional(),
   durationMs: z.number().optional(),
   progressLabel: z.string().optional(),
+  usage: z.record(z.string(), z.unknown()).optional(),
+  costUsd: z.number().optional(),
 })
 
 const workflowRunStatusSchema: z.ZodType<WorkflowRunStatus> = z.object({

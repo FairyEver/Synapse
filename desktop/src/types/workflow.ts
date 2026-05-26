@@ -62,6 +62,8 @@ export interface NodeRunResult {
   output?: string; outputs?: Record<string, unknown>; activeBranch?: string; error?: string
   startedAt?: number; endedAt?: number; durationMs?: number
   progressLabel?: string
+  usage?: Record<string, unknown>
+  costUsd?: number
 }
 export interface WorkflowRunResult {
   status: "completed" | "failed" | "cancelled"

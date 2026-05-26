@@ -221,6 +221,7 @@ export class WorkflowEngine {
             nodeId, status: execResult.status, output: execResult.output,
             outputs: execResult.outputs, activeBranch: execResult.activeBranch,
             error: execResult.error, durationMs: execResult.durationMs,
+            usage: execResult.usage, costUsd: execResult.costUsd,
           }
         } catch (err) {
           if (effectiveAbortSignal.aborted) {
@@ -264,6 +265,8 @@ export class WorkflowEngine {
         nr.outputs = outcome.outputs
         nr.activeBranch = outcome.activeBranch
         nr.error = outcome.error
+        nr.usage = outcome.usage
+        nr.costUsd = outcome.costUsd
         nr.endedAt = Date.now()
         nr.durationMs = outcome.durationMs
 
