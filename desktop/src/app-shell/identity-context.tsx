@@ -103,7 +103,6 @@ function IdentityProvider({ children }: { children: ReactNode }) {
 
     setCurrentRepoProfileState(nextRepoProfileState)
     setRepoProfileMap(nextRepoProfileMap)
-    setError(null)
   }, [
     activeRepository,
     activeRepositoryState?.status,
@@ -152,8 +151,7 @@ function IdentityProvider({ children }: { children: ReactNode }) {
     }
 
     void refreshRepoProfileState().catch((loadError: unknown) => {
-      logger.error("Failed to refresh repository profile state.", loadError)
-      setError(loadError instanceof Error ? loadError.message : "加载仓库身份失败。")
+      logger.warn("Failed to refresh repository profile state.", loadError)
     })
   }, [
     activeRepository?.uuid,
