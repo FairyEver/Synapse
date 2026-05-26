@@ -270,6 +270,57 @@ describe("ProviderService", () => {
     ])
   })
 
+  it("restores provider secrets when metadata update fails", async () => {
+    const auditSink = new InMemoryAuditSink()
+    const { service, providers, secrets } = makeProviderService({ auditSink })
+
+    await service.createProvider({
+      id: "anthropic",
+      name: "Claude Official",
+      category: "official",
+      apiKeyField: "ANTHROPIC_API_KEY",
+      apiKey: "sk-old",
+      secretEnv: {
+        CUSTOM_TOKEN: "old-token",
+      },
+      env: {},
+    })
+    auditSink.clearForTests()
+    const originalUpsert = providers.upsert.bind(providers)
+    providers.upsert = async (item) => {
+      if (item.id === "anthropic") {
+        throw new Error("provider metadata write failed")
+      }
+      await originalUpsert(item)
+    }
+
+    await expect(service.updateProvider("anthropic", {
+      apiKey: "sk-new",
+      secretEnv: {
+        CUSTOM_TOKEN: "new-token",
+      },
+    })).rejects.toThrow("provider metadata write failed")
+
+    await expect(secrets.get("provider:anthropic:api-key")).resolves.toMatchObject({
+      value: "sk-old",
+    })
+    await expect(secrets.get("provider:anthropic:env:CUSTOM_TOKEN")).resolves.toMatchObject({
+      value: "old-token",
+    })
+    expect(auditSink.list()).toEqual([
+      expect.objectContaining({
+        action: "secret.write",
+        outcome: "failed",
+        resource: "provider:anthropic",
+        metadata: expect.objectContaining({
+          operation: "update",
+          providerId: "anthropic",
+          errorName: "Error",
+        }),
+      }),
+    ])
+  })
+
   it("denies provider secret deletion through PermissionGuard and records audit", async () => {
     const permissionGuard = createPermissionGuard()
     const auditSink = new InMemoryAuditSink()
