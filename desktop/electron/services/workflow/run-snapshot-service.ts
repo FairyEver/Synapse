@@ -144,9 +144,13 @@ export class RunSnapshotService {
         }
         return raw as WorkflowRunSnapshot
       } catch (err) {
-        if ((err as NodeJS.ErrnoException).code !== "ENOENT") {
-          throw err
-        }
+        if ((err as NodeJS.ErrnoException).code === "ENOENT") continue
+        logger.warn("findByRunId snapshot read error, skipping", {
+          runId,
+          workflowId: dirent.name,
+          ...snapshotErrorMetadata(err),
+        })
+        continue
       }
     }
     return null

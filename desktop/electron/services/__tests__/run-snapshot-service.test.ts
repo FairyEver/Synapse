@@ -103,4 +103,25 @@ describe("RunSnapshotService", () => {
     expect(metadata).not.toHaveProperty("error")
     expect(metadata).not.toHaveProperty("stack")
   })
+
+  it("continues findByRunId after a corrupted snapshot in another workflow directory", async () => {
+    const root = await tmpDir()
+    const badDir = path.join(root, "workflow-runs", "aaa-bad")
+    const goodDir = path.join(root, "workflow-runs", "zzz-good")
+    await mkdir(badDir, { recursive: true })
+    await mkdir(goodDir, { recursive: true })
+    await writeFile(path.join(badDir, "target-run.json"), "{", "utf-8")
+    await writeFile(
+      path.join(goodDir, "target-run.json"),
+      JSON.stringify({ ...snapshot("target-run", 100), workflowId: "zzz-good" }),
+      "utf-8",
+    )
+
+    const svc = new RunSnapshotService(root)
+
+    await expect(svc.findByRunId("target-run")).resolves.toMatchObject({
+      runId: "target-run",
+      workflowId: "zzz-good",
+    })
+  })
 })
