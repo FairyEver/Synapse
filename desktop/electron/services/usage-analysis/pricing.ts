@@ -42,6 +42,21 @@ export interface EstimatedUsageCost {
   readonly priceKnown: boolean
 }
 
+export interface UsageModelPriceRulePatch {
+  readonly modelPattern?: string
+  readonly inputPer1M?: number
+  readonly outputPer1M?: number
+  readonly cacheReadPer1M?: number
+  readonly cacheWritePer1M?: number
+  readonly reasoningPer1M?: number
+  readonly enabled?: boolean
+}
+
+export interface UsageModelPriceRuleDeleteResult {
+  readonly deleted: true
+  readonly ruleId: string
+}
+
 interface PriceRuleRow {
   readonly id: string
   readonly model_pattern: string
@@ -223,12 +238,18 @@ export function listUsagePriceRules(database: DatabaseSync): UsageModelPriceRule
 }
 
 export function saveUsagePriceRules(database: DatabaseSync, inputs: readonly UsageModelPriceRuleInput[]): UsageModelPriceRule[] {
+  const now = new Date().toISOString()
   const rules = normalizeUsagePriceRules(inputs.map((rule, index) => ({
     ...rule,
     source: rule.source ?? "user",
     sortIndex: index,
-    updatedAt: new Date().toISOString(),
+    updatedAt: now,
   })))
+  replaceUsagePriceRules(database, rules)
+  return rules
+}
+
+function replaceUsagePriceRules(database: DatabaseSync, rules: readonly UsageModelPriceRule[]): void {
   let transactionStarted = false
   database.exec("BEGIN IMMEDIATE")
   transactionStarted = true
@@ -245,7 +266,68 @@ export function saveUsagePriceRules(database: DatabaseSync, inputs: readonly Usa
     if (transactionStarted) database.exec("ROLLBACK")
     throw error
   }
-  return rules
+}
+
+export function findUsagePriceRuleForModel(
+  model: string,
+  rules: readonly UsageModelPriceRule[] = DEFAULT_USAGE_PRICE_RULES,
+): UsageModelPriceRule | null {
+  return findRule(model, rules)
+}
+
+export function getUsagePriceRule(database: DatabaseSync, ruleId: string): UsageModelPriceRule | null {
+  return listUsagePriceRules(database).find((rule) => rule.id === ruleId) ?? null
+}
+
+export function createUsagePriceRule(database: DatabaseSync, input: UsageModelPriceRuleInput): UsageModelPriceRule {
+  const existing = listUsagePriceRules(database)
+  const now = new Date().toISOString()
+  const rules = normalizeUsagePriceRules([
+    ...existing,
+    {
+      ...input,
+      source: input.source ?? "user",
+      sortIndex: existing.length,
+      updatedAt: now,
+    },
+  ])
+  replaceUsagePriceRules(database, rules)
+  return rules.find((rule) => rule.updatedAt === now && rule.modelPattern === input.modelPattern.trim()) ?? rules[rules.length - 1]
+}
+
+export function updateUsagePriceRule(
+  database: DatabaseSync,
+  ruleId: string,
+  patch: UsageModelPriceRulePatch,
+): UsageModelPriceRule {
+  const existing = listUsagePriceRules(database)
+  if (!existing.some((rule) => rule.id === ruleId)) {
+    throw new Error(`Model price rule not found: ${ruleId}`)
+  }
+  const now = new Date().toISOString()
+  const rules = normalizeUsagePriceRules(existing.map((rule) => (
+    rule.id === ruleId
+      ? { ...rule, ...patch, id: rule.id, updatedAt: now }
+      : rule
+  )))
+  replaceUsagePriceRules(database, rules)
+  const updated = rules.find((rule) => rule.id === ruleId)
+  if (!updated) throw new Error(`Model price rule not found after update: ${ruleId}`)
+  return updated
+}
+
+export function setUsagePriceRuleEnabled(database: DatabaseSync, ruleId: string, enabled: boolean): UsageModelPriceRule {
+  return updateUsagePriceRule(database, ruleId, { enabled })
+}
+
+export function deleteUsagePriceRule(database: DatabaseSync, ruleId: string): UsageModelPriceRuleDeleteResult {
+  const existing = listUsagePriceRules(database)
+  if (!existing.some((rule) => rule.id === ruleId)) {
+    throw new Error(`Model price rule not found: ${ruleId}`)
+  }
+  const rules = normalizeUsagePriceRules(existing.filter((rule) => rule.id !== ruleId))
+  replaceUsagePriceRules(database, rules)
+  return { deleted: true, ruleId }
 }
 
 function insertUsagePriceRules(database: DatabaseSync, rules: readonly UsageModelPriceRule[]): void {

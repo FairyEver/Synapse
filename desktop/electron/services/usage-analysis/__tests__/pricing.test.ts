@@ -1,7 +1,18 @@
 import { describe, expect, it } from "vitest"
 import { DatabaseSync } from "node:sqlite"
 import { initUsageAnalysisSchema } from "../db-schema"
-import { DEFAULT_USAGE_PRICE_RULES, estimateUsageCost, listUsagePriceRules, normalizeUsagePriceRules } from "../pricing"
+import {
+  DEFAULT_USAGE_PRICE_RULES,
+  createUsagePriceRule,
+  deleteUsagePriceRule,
+  estimateUsageCost,
+  findUsagePriceRuleForModel,
+  getUsagePriceRule,
+  listUsagePriceRules,
+  normalizeUsagePriceRules,
+  setUsagePriceRuleEnabled,
+  updateUsagePriceRule,
+} from "../pricing"
 
 describe("usage analysis pricing", () => {
   it("matches prices by model pattern without provider-specific rules", () => {
@@ -102,5 +113,57 @@ describe("usage analysis pricing", () => {
       reasoningPer1M: 108,
       currency: "CNY",
     })
+  })
+
+  it("creates updates enables disables and deletes model price rules by id", () => {
+    const db = new DatabaseSync(":memory:")
+    initUsageAnalysisSchema(db)
+
+    const created = createUsagePriceRule(db, {
+      modelPattern: "local-model",
+      inputPer1M: 14.4,
+      outputPer1M: 57.6,
+    })
+    expect(created).toMatchObject({
+      modelPattern: "local-model",
+      inputPer1M: 14.4,
+      outputPer1M: 57.6,
+      cacheReadPer1M: 0,
+      cacheWritePer1M: 0,
+      reasoningPer1M: 0,
+      currency: "CNY",
+      enabled: true,
+      source: "user",
+    })
+
+    const updated = updateUsagePriceRule(db, created.id, { outputPer1M: 72 })
+    expect(updated).toMatchObject({
+      id: created.id,
+      modelPattern: "local-model",
+      inputPer1M: 14.4,
+      outputPer1M: 72,
+    })
+
+    const disabled = setUsagePriceRuleEnabled(db, created.id, false)
+    expect(disabled.enabled).toBe(false)
+    expect(findUsagePriceRuleForModel("local-model", listUsagePriceRules(db))).toBeNull()
+
+    const enabled = setUsagePriceRuleEnabled(db, created.id, true)
+    expect(enabled.enabled).toBe(true)
+    expect(findUsagePriceRuleForModel("local-model", listUsagePriceRules(db))?.id).toBe(created.id)
+
+    expect(deleteUsagePriceRule(db, created.id)).toEqual({ deleted: true, ruleId: created.id })
+    expect(getUsagePriceRule(db, created.id)).toBeNull()
+    db.close()
+  })
+
+  it("throws clear errors for missing model price rule ids", () => {
+    const db = new DatabaseSync(":memory:")
+    initUsageAnalysisSchema(db)
+
+    expect(() => updateUsagePriceRule(db, "missing-rule", { inputPer1M: 1 })).toThrow(/Model price rule not found/)
+    expect(() => setUsagePriceRuleEnabled(db, "missing-rule", false)).toThrow(/Model price rule not found/)
+    expect(() => deleteUsagePriceRule(db, "missing-rule")).toThrow(/Model price rule not found/)
+    db.close()
   })
 })

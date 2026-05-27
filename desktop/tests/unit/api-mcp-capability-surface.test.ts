@@ -53,12 +53,14 @@ describe("API and MCP capability surface", () => {
     const dispatchers = {
       content: vi.fn(async () => ({ ok: true as const })),
       database: vi.fn(async () => ({ ok: true as const })),
+      model_price: vi.fn(async () => ({ ok: true as const })),
       scheduler: vi.fn(async () => ({ ok: true as const })),
       workflow: vi.fn(async () => ({ ok: true as const })),
     }
     const router = createSynapseActionRouter({
       contentDispatch: dispatchers.content,
       databaseDispatch: dispatchers.database,
+      modelPriceDispatch: dispatchers.model_price,
       schedulerDispatch: dispatchers.scheduler,
       workflowDispatch: dispatchers.workflow,
     })

@@ -6,6 +6,7 @@ function createRouterDeps(overrides: Partial<Parameters<typeof createSynapseActi
   return {
     contentDispatch: vi.fn(),
     databaseDispatch: vi.fn(),
+    modelPriceDispatch: vi.fn(),
     schedulerDispatch: vi.fn(),
     workflowDispatch: vi.fn(),
     ...overrides,
@@ -26,6 +27,24 @@ describe("createSynapseActionRouter", () => {
     })
     expect(databaseDispatch).toHaveBeenCalledWith("database.table.list", {}, { source: "api" })
     expect(deps.contentDispatch).not.toHaveBeenCalled()
+    expect(deps.schedulerDispatch).not.toHaveBeenCalled()
+    expect(deps.workflowDispatch).not.toHaveBeenCalled()
+  })
+
+  it("routes Model Price actions to the Model Price dispatcher", async () => {
+    const modelPriceDispatch = vi.fn(async () => ({ ok: true as const, data: [] }))
+    const deps = createRouterDeps({
+      modelPriceDispatch,
+    })
+    const router = createSynapseActionRouter(deps)
+
+    await expect(router.dispatch("model_price.rule.list", {}, { source: "api" })).resolves.toEqual({
+      ok: true,
+      data: [],
+    })
+    expect(modelPriceDispatch).toHaveBeenCalledWith("model_price.rule.list", {}, { source: "api" })
+    expect(deps.contentDispatch).not.toHaveBeenCalled()
+    expect(deps.databaseDispatch).not.toHaveBeenCalled()
     expect(deps.schedulerDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
