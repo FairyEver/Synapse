@@ -32,10 +32,11 @@ describe("validateWorkflow", () => {
     const r = validateWorkflow({ ...base, nodes: [nodeA, nodeB, nodeC, nodeEnd], edges: [{ id: "e1", from: "b", to: "c" }, { id: "e2", from: "c", to: "end" }] })
     expect(r.errors.some((e) => e.type === "unreachable_reference")).toBe(true)
   })
-  it("warns about disconnected node", () => {
+  it("errors about disconnected node", () => {
     const iso = { id: "iso", name: "Iso", type: "prompt", position: { x: 600, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "" } }
     const r = validateWorkflow({ ...base, nodes: [nodeA, nodeB, nodeEnd, iso] })
-    expect(r.warnings.some((w) => w.type === "disconnected_node")).toBe(true)
+    expect(r.valid).toBe(false)
+    expect(r.errors.some((e) => e.type === "disconnected_node" && e.nodeId === "iso")).toBe(true)
   })
   it("errors on switch edge referencing non-existent branch", () => {
     const sw = { id: "sw", name: "S", type: "switch", position: { x: 0, y: 0 }, config: { providerId: "test-provider", modelTier: "sonnet", variables: [], prompt: "?", branches: [{ id: "yes", label: "Y" }] } }
@@ -278,11 +279,11 @@ describe("validateWorkflow", () => {
   })
 
   // Edge case: end node exists but nothing connects to it
-  it("warns when end node has no incoming edges", () => {
+  it("errors when end node has no incoming edges", () => {
     const endNoIncoming = { ...nodeEnd, config: { ...nodeEnd.config, variables: [{ name: "result", source: { type: "static", value: "" } }] } }
     const r = validateWorkflow({ ...base, nodes: [nodeA, nodeB, endNoIncoming], edges: [{ id: "e1", from: "a", to: "b" }] })
-    expect(r.valid).toBe(true)
-    expect(r.warnings.some((w) => w.type === "disconnected_node" && w.nodeId === "end")).toBe(true)
+    expect(r.valid).toBe(false)
+    expect(r.errors.some((e) => e.type === "disconnected_node" && e.nodeId === "end")).toBe(true)
   })
 
   it("rejects whitespace-only param names", () => {
