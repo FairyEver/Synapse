@@ -80,11 +80,11 @@ describe("UsageAnalysisShell", () => {
     expect(html).toContain("价格规则")
   })
 
-  it("shows details and conversation tabs for CC analysis", () => {
+  it("shows records tab for CC analysis without separate details and conversation tabs", () => {
     const html = renderToStaticMarkup(
       <UsageAnalysisShell
         title="CC"
-        view="conversations"
+        view="records"
         views={CC_USAGE_VIEWS}
         range="30d"
         refreshing={false}
@@ -96,8 +96,9 @@ describe("UsageAnalysisShell", () => {
       </UsageAnalysisShell>,
     )
 
-    expect(html).toContain("明细")
-    expect(html).toContain("对话")
+    expect(html).toContain("记录")
+    expect(html).not.toContain("明细")
+    expect(html).not.toContain("对话")
   })
 
   it("shows a disabled loading refresh button while refreshing", () => {

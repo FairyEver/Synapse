@@ -34,4 +34,20 @@ describe("CC conversation query runner", () => {
     })).resolves.toBe(result)
     expect(calls).toEqual([input])
   })
+
+  it("delegates record detail queries to an injected runner", async () => {
+    const input = {
+      dbPath: "/tmp/usage.db",
+      operation: "record-details" as const,
+      payload: { sessionId: "session-1", limit: 200 },
+    }
+    const result = { sessionId: "session-1", rows: [], total: 0 }
+    const calls: CcConversationWorkerInput[] = []
+
+    await expect(runCcConversationQueryWithRunner(input, async (nextInput) => {
+      calls.push(nextInput)
+      return result
+    })).resolves.toBe(result)
+    expect(calls).toEqual([input])
+  })
 })

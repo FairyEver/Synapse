@@ -148,14 +148,25 @@ describe("preload bridge", () => {
     )
   })
 
-  it("maps Claude Code conversation methods to usage analysis IPC channels", async () => {
+  it("maps Claude Code conversation and record methods to usage analysis IPC channels", async () => {
     const bridge = await loadPreloadBridge()
 
+    await bridge.usageAnalysis.cc.listRecords({ preset: "all", limit: 50 })
+    await bridge.usageAnalysis.cc.listRecordDetails({ sessionId: "session-1", limit: 200 })
     await bridge.usageAnalysis.cc.listConversations({ preset: "all", limit: 5 })
     await bridge.usageAnalysis.cc.getConversation("session-1", { eventId: "event-1" })
+    await bridge.usageAnalysis.cc.searchRecordsText({ preset: "all", query: "登录", rawText: true })
     await bridge.usageAnalysis.cc.searchConversationText({ preset: "all", query: "登录", rawText: true })
     await bridge.usageAnalysis.cc.openConversationWindow({ sessionId: "session-1", title: "对话" })
 
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:usage-analysis:cc:records:list",
+      { preset: "all", limit: 50 },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:usage-analysis:cc:record-details:list",
+      { sessionId: "session-1", limit: 200 },
+    )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:usage-analysis:cc:conversations:list",
       { preset: "all", limit: 5 },
@@ -163,6 +174,10 @@ describe("preload bridge", () => {
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:usage-analysis:cc:conversation:get",
       { sessionId: "session-1", focus: { eventId: "event-1" } },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:usage-analysis:cc:records:search-text",
+      { preset: "all", query: "登录", rawText: true },
     )
     expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
       "synapse:usage-analysis:cc:conversation:search-text",

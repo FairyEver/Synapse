@@ -52,6 +52,54 @@ export type CcConversationListResult = {
   readonly partial: boolean
 }
 
+export type CcRecordListInput = CcConversationListInput
+
+export type CcRecordListItem = CcConversationListItem & {
+  readonly requestCount: number
+}
+
+export type CcRecordDetailRow = {
+  readonly id: string
+  readonly usageEventId?: string
+  readonly timestamp: string
+  readonly timestampMs?: number
+  readonly sessionId: string
+  readonly workspaceLabel: string
+  readonly model: string
+  readonly tokens: number
+  readonly pricedTokens: number
+  readonly unpricedTokens: number
+  readonly estimatedCost: number
+  readonly tokenBreakdown: {
+    readonly input: number
+    readonly output: number
+    readonly cacheRead: number
+    readonly cacheWrite: number
+    readonly reasoning: number
+  }
+  readonly toolCalls: number
+  readonly durationMs?: number
+}
+
+export type CcRecordListResult = {
+  readonly items: readonly CcRecordListItem[]
+  readonly total: number
+  readonly nextCursor?: string
+  readonly partial: boolean
+}
+
+export type CcRecordDetailsInput = {
+  readonly sessionId: string
+  readonly limit?: number
+  readonly offset?: number
+}
+
+export type CcRecordDetailsResult = {
+  readonly sessionId: string
+  readonly rows: readonly CcRecordDetailRow[]
+  readonly total: number
+}
+
 export type CcRawConversationEvent = {
   readonly id: string
   readonly type: string

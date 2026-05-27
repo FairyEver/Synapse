@@ -4,6 +4,10 @@ import type {
   CcConversationDetail,
   CcConversationListInput,
   CcConversationListResult,
+  CcRecordDetailsInput,
+  CcRecordDetailsResult,
+  CcRecordListInput,
+  CcRecordListResult,
 } from "../../../src/types/usage-analysis-conversations"
 
 export type CcConversationWorkerInput =
@@ -19,11 +23,30 @@ export type CcConversationWorkerInput =
   }
   | {
     readonly dbPath: string
+    readonly operation: "records"
+    readonly payload: CcRecordListInput
+  }
+  | {
+    readonly dbPath: string
+    readonly operation: "records-search"
+    readonly payload: CcRecordListInput
+  }
+  | {
+    readonly dbPath: string
+    readonly operation: "record-details"
+    readonly payload: CcRecordDetailsInput
+  }
+  | {
+    readonly dbPath: string
     readonly operation: "get"
     readonly payload: { readonly sessionId: string }
   }
 
-export type CcConversationWorkerResult = CcConversationListResult | CcConversationDetail
+export type CcConversationWorkerResult =
+  | CcConversationListResult
+  | CcConversationDetail
+  | CcRecordListResult
+  | CcRecordDetailsResult
 
 type CcConversationWorkerMessage =
   | { readonly type: "success"; readonly result: CcConversationWorkerResult }
@@ -42,6 +65,17 @@ export function listCcConversationsInWorker(
   }, startCcConversationWorker) as Promise<CcConversationListResult>
 }
 
+export function listCcRecordsInWorker(
+  dbPath: string,
+  input: CcRecordListInput,
+): Promise<CcRecordListResult> {
+  return runCcConversationQueryWithRunner({
+    dbPath,
+    operation: "records",
+    payload: input,
+  }, startCcConversationWorker) as Promise<CcRecordListResult>
+}
+
 export function searchCcConversationTextInWorker(
   dbPath: string,
   input: CcConversationListInput,
@@ -51,6 +85,28 @@ export function searchCcConversationTextInWorker(
     operation: "search",
     payload: input,
   }, startCcConversationWorker) as Promise<CcConversationListResult>
+}
+
+export function searchCcRecordsTextInWorker(
+  dbPath: string,
+  input: CcRecordListInput,
+): Promise<CcRecordListResult> {
+  return runCcConversationQueryWithRunner({
+    dbPath,
+    operation: "records-search",
+    payload: input,
+  }, startCcConversationWorker) as Promise<CcRecordListResult>
+}
+
+export function listCcRecordDetailsInWorker(
+  dbPath: string,
+  input: CcRecordDetailsInput,
+): Promise<CcRecordDetailsResult> {
+  return runCcConversationQueryWithRunner({
+    dbPath,
+    operation: "record-details",
+    payload: input,
+  }, startCcConversationWorker) as Promise<CcRecordDetailsResult>
 }
 
 export function getCcConversationInWorker(dbPath: string, sessionId: string): Promise<CcConversationDetail> {

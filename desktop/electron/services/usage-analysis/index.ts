@@ -5,8 +5,11 @@ export { CcConversationService } from "./cc-conversation-service"
 export { parseCcConversationFile } from "./cc-conversation-parser"
 export {
   getCcConversationInWorker,
+  listCcRecordDetailsInWorker,
   listCcConversationsInWorker,
+  listCcRecordsInWorker,
   searchCcConversationTextInWorker,
+  searchCcRecordsTextInWorker,
 } from "./conversation-runner"
 export { refreshUsageInWorker } from "./refresh-runner"
 export type { UsageModelPriceRule, UsageModelPriceRuleInput } from "./pricing"

@@ -6,11 +6,10 @@ import { CC_USAGE_VIEWS, UsageAnalysisShell } from "../shared/components/usage-a
 import { TodayReportView } from "../shared/components/today-report-view"
 import type { UsageRangePreset, UsageTrendBucketGranularity, UsageViewId } from "../shared/types"
 import { useCcModels, useCcOverview, useCcTime } from "./hooks"
-import { CcConversationsPage } from "./pages/conversations"
-import { CcDetailsPage } from "./pages/details"
 import { CcModelsPage } from "./pages/models"
 import { CcOverviewPage } from "./pages/overview"
 import { CcProjectsPage } from "./pages/projects"
+import { CcRecordsPage } from "./pages/records"
 import { CcTimePage } from "./pages/time"
 import { CcToolsPage } from "./pages/tools"
 
@@ -60,8 +59,7 @@ export function CcUsagePage() {
       {view === "models" ? <CcModelsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "projects" ? <CcProjectsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "tools" ? <CcToolsPage range={range} refreshKey={refreshKey} /> : null}
-      {view === "details" ? <CcDetailsPage range={range} refreshKey={refreshKey} /> : null}
-      {view === "conversations" ? <CcConversationsPage range={range} refreshKey={refreshKey} /> : null}
+      {view === "records" ? <CcRecordsPage range={range} refreshKey={refreshKey} /> : null}
     </UsageAnalysisShell>
   )
 }

@@ -1,5 +1,9 @@
 import { requireSynapseBridge } from "@/lib/electron-bridge"
-import type { CcConversationListInput } from "@/types/usage-analysis-conversations"
+import type {
+  CcConversationListInput,
+  CcRecordDetailsInput,
+  CcRecordListInput,
+} from "@/types/usage-analysis-conversations"
 import { toUsageRangeInput } from "../shared/range"
 import { useReportLoader } from "../shared/use-report-loader"
 import type { UsageReportRangePreset, UsageTrendBucketGranularity } from "../shared/types"
@@ -64,5 +68,35 @@ export function useCcConversations(input: CcConversationListInput, refreshKey: n
       input.cursor,
       refreshKey,
     ],
+  )
+}
+
+export function useCcRecords(input: CcRecordListInput, refreshKey: number) {
+  return useReportLoader(
+    () => input.rawText
+      ? requireSynapseBridge().usageAnalysis.cc.searchRecordsText(input)
+      : requireSynapseBridge().usageAnalysis.cc.listRecords(input),
+    [
+      input.preset,
+      input.query,
+      input.rawText,
+      input.project,
+      input.model,
+      input.tool,
+      input.eventType,
+      input.limit,
+      input.offset,
+      input.cursor,
+      refreshKey,
+    ],
+  )
+}
+
+export function useCcRecordDetails(input: CcRecordDetailsInput | null, refreshKey: number) {
+  return useReportLoader(
+    () => input
+      ? requireSynapseBridge().usageAnalysis.cc.listRecordDetails(input)
+      : Promise.resolve({ sessionId: "", rows: [], total: 0 }),
+    [input?.sessionId, input?.limit, input?.offset, refreshKey],
   )
 }

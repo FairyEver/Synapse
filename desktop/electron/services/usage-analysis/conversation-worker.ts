@@ -1,6 +1,9 @@
 import { DatabaseSync } from "node:sqlite"
 import { parentPort, workerData } from "node:worker_threads"
-import type { CcConversationListInput } from "../../../src/types/usage-analysis-conversations"
+import type {
+  CcConversationListInput,
+  CcRecordDetailsInput,
+} from "../../../src/types/usage-analysis-conversations"
 import { CcConversationService } from "./cc-conversation-service"
 import { initUsageAnalysisSchema } from "./db-schema"
 import type {
@@ -21,15 +24,34 @@ function asListInput(value: unknown): CcConversationListInput {
   return value as CcConversationListInput
 }
 
+function asRecordDetailsInput(value: unknown): CcRecordDetailsInput {
+  if (!isRecord(value) || typeof value.sessionId !== "string") {
+    throw new Error("Invalid CC record details payload")
+  }
+  return value as CcRecordDetailsInput
+}
+
 function asConversationWorkerInput(value: unknown): CcConversationWorkerInput {
   if (!isRecord(value) || typeof value.dbPath !== "string") {
     throw new Error("Invalid CC conversation worker input")
   }
-  if (value.operation === "list" || value.operation === "search") {
+  if (
+    value.operation === "list"
+    || value.operation === "search"
+    || value.operation === "records"
+    || value.operation === "records-search"
+  ) {
     return {
       dbPath: value.dbPath,
       operation: value.operation,
       payload: asListInput(value.payload),
+    }
+  }
+  if (value.operation === "record-details") {
+    return {
+      dbPath: value.dbPath,
+      operation: "record-details",
+      payload: asRecordDetailsInput(value.payload),
     }
   }
   if (value.operation === "get" && isRecord(value.payload) && typeof value.payload.sessionId === "string") {
@@ -57,6 +79,15 @@ async function runConversationQuery(): Promise<CcConversationWorkerResult> {
     }
     if (input.operation === "search") {
       return await service.searchConversationText(input.payload)
+    }
+    if (input.operation === "records") {
+      return service.listRecords(input.payload)
+    }
+    if (input.operation === "records-search") {
+      return await service.searchRecordsText(input.payload)
+    }
+    if (input.operation === "record-details") {
+      return service.listRecordDetails(input.payload)
     }
     return service.listConversations(input.payload)
   } finally {

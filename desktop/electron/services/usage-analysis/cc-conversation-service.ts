@@ -6,6 +6,11 @@ import type {
   CcConversationListItem,
   CcConversationListResult,
   CcConversationMatchSnippet,
+  CcRecordDetailRow,
+  CcRecordDetailsInput,
+  CcRecordDetailsResult,
+  CcRecordListInput,
+  CcRecordListResult,
 } from "../../../src/types/usage-analysis-conversations"
 import { parseCcConversationFile } from "./cc-conversation-parser"
 import { createUsageRangeFilter } from "./range"
@@ -32,6 +37,8 @@ type AggregateRow = {
   readonly last_timestamp_ms: number
 }
 
+const MAX_QUERY_LIMIT = 5000
+
 function toNumber(value: unknown): number {
   const numberValue = Number(value)
   return Number.isFinite(numberValue) ? numberValue : 0
@@ -40,7 +47,7 @@ function toNumber(value: unknown): number {
 function normalizeLimit(value: unknown): number {
   const limit = Math.trunc(Number(value))
   if (!Number.isFinite(limit)) return 50
-  return Math.min(Math.max(limit, 1), 200)
+  return Math.min(Math.max(limit, 1), MAX_QUERY_LIMIT)
 }
 
 function normalizeOffset(value: unknown): number {
@@ -196,8 +203,71 @@ export class CcConversationService {
     return { items: matches, total: matches.length, partial: candidates.length >= 100 }
   }
 
+  listRecords(input: CcRecordListInput): CcRecordListResult {
+    const conversations = this.listConversations(input)
+    return {
+      ...conversations,
+      items: conversations.items.map((item) => ({
+        ...item,
+        requestCount: this.countUsageEvents(item.sessionId),
+      })),
+    }
+  }
+
+  async searchRecordsText(input: CcRecordListInput): Promise<CcRecordListResult> {
+    const conversations = await this.searchConversationText(input)
+    return {
+      ...conversations,
+      items: conversations.items.map((item) => ({
+        ...item,
+        requestCount: this.countUsageEvents(item.sessionId),
+      })),
+    }
+  }
+
+  listRecordDetails(input: CcRecordDetailsInput): CcRecordDetailsResult {
+    const sessionId = input.sessionId.trim()
+    if (!sessionId) return { sessionId, rows: [], total: 0 }
+
+    const limit = normalizeLimit(input.limit)
+    const offset = normalizeOffset(input.offset)
+    const count = this.db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM cc_usage_events
+      WHERE session_id = ?
+    `).get(sessionId) as { total?: number } | undefined
+    const rows = this.db.prepare(`
+      SELECT u.*, COALESCE(t.tool_calls, 0) AS tool_calls, COALESCE(t.duration_ms, 0) AS duration_ms
+      FROM cc_usage_events u
+      LEFT JOIN (
+        SELECT session_id, timestamp_ms, COUNT(*) AS tool_calls, SUM(COALESCE(duration_ms, 0)) AS duration_ms
+        FROM cc_tool_events
+        WHERE session_id = ?
+        GROUP BY session_id, timestamp_ms
+      ) t ON t.session_id = u.session_id AND t.timestamp_ms = u.timestamp_ms
+      WHERE u.session_id = ?
+      ORDER BY u.timestamp_ms DESC
+      LIMIT ? OFFSET ?
+    `).all(sessionId, sessionId, limit, offset) as Record<string, unknown>[]
+
+    return {
+      sessionId,
+      rows: rows.map(toRecordDetailRow),
+      total: toNumber(count?.total),
+    }
+  }
+
   private getSessionRow(sessionId: string): SessionRow | undefined {
     return this.db.prepare("SELECT * FROM cc_sessions WHERE session_id = ?").get(sessionId) as SessionRow | undefined
+  }
+
+  private countUsageEvents(sessionId: string): number {
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS total
+      FROM cc_usage_events
+      WHERE session_id = ?
+    `).get(sessionId) as { total?: number } | undefined
+    return toNumber(row?.total)
   }
 
   private toListItem(row: SessionRow, eventCount = 0): CcConversationListItem {
@@ -228,5 +298,43 @@ export class CcConversationService {
       lastUsedAt: aggregate?.last_timestamp_ms ? new Date(aggregate.last_timestamp_ms).toISOString() : row.ended_at,
       sourceFilePath: row.file_path,
     }
+  }
+}
+
+function isoFromTimestamp(timestampMs: number): string {
+  return new Date(timestampMs).toISOString()
+}
+
+function usageTokenTotal(row: Record<string, unknown>): number {
+  return toNumber(row.input_tokens)
+    + toNumber(row.output_tokens)
+    + toNumber(row.cache_read_tokens)
+    + toNumber(row.cache_write_tokens)
+    + toNumber(row.reasoning_tokens)
+}
+
+function toRecordDetailRow(row: Record<string, unknown>): CcRecordDetailRow {
+  const durationMs = toNumber(row.duration_ms)
+  return {
+    id: String(row.id ?? ""),
+    usageEventId: String(row.id ?? ""),
+    timestamp: isoFromTimestamp(toNumber(row.timestamp_ms)),
+    timestampMs: toNumber(row.timestamp_ms),
+    sessionId: String(row.session_id ?? ""),
+    workspaceLabel: String(row.workspace_label || row.workspace_key || "unknown"),
+    model: String(row.model || "unknown"),
+    tokens: usageTokenTotal(row),
+    pricedTokens: toNumber(row.priced_tokens),
+    unpricedTokens: toNumber(row.unpriced_tokens),
+    estimatedCost: toNumber(row.total_cost),
+    tokenBreakdown: {
+      input: toNumber(row.input_tokens),
+      output: toNumber(row.output_tokens),
+      cacheRead: toNumber(row.cache_read_tokens),
+      cacheWrite: toNumber(row.cache_write_tokens),
+      reasoning: toNumber(row.reasoning_tokens),
+    },
+    toolCalls: toNumber(row.tool_calls),
+    ...(durationMs > 0 ? { durationMs } : {}),
   }
 }
