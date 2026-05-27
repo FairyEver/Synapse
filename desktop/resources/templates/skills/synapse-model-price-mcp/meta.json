@@ -1,0 +1,10 @@
+{
+  "id": "synapse-model-price-mcp",
+  "name": "synapse-model-price-mcp",
+  "title": "Synapse 价格规则 MCP",
+  "usage": "让 AI 通过 Synapse MCP 管理模型价格规则：查看已用模型、补充价格、调整价格、禁用或删除规则。\n\n- **适合**：补全未定价模型、按 ruleId 调整价格、清理错误规则。\n- **会做**：先列出已用模型或规则，再用 ruleId 执行写操作。\n- **不适合**：历史费用重算、数据库表维护、工作流或定时任务管理。",
+  "description": "Use when working with Synapse model price rules through MCP tools.",
+  "category": "data",
+  "icon": "terminal",
+  "iconBg": "teal"
+}
