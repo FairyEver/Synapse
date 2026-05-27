@@ -20,7 +20,7 @@ import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ReplyOutboxService } from "../reply-target"
 import type { ReplyTarget } from "../reply-target"
 import type { ProcessIsolationResolver } from "../execution-isolation"
-import { resolveShellCommand } from "../shell-exec"
+import { resolveEffectiveShell, resolveShellCommand } from "../shell-exec"
 import type { ProviderService } from "../provider"
 import { AgentCommandRouter } from "./command-router"
 import type {
@@ -959,11 +959,14 @@ export class AgentRuntimeService {
     if (!command.exec?.trim()) throw new Error("Command is missing exec body")
     const workDir = command.workDir ?? this.workDirFor(message)
     if (!workDir) throw new Error("Project workspace path is required")
-    const shellKind = command.shell ?? "posix"
+    const shellOptions = {
+      windowsDefault: "powershell" as const,
+      posixLogin: false,
+    }
+    const shellKind = resolveEffectiveShell(command.shell, shellOptions)
     const escapedArgs = args.map((a) => escapeShellArg(a, shellKind)).join(" ")
     const shell = resolveShellCommand(command.shell, `${command.exec} ${escapedArgs}`.trim(), {
-      windowsDefault: "powershell",
-      posixLogin: false,
+      ...shellOptions,
     })
     const result = await this.deps.commandRunner.run({
       actor: { kind: "user", id: message.userId },

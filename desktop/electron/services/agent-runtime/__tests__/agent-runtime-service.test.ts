@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest"
 
 import type {
+  AgentCommandEntryV1,
   AgentCompressStateEntryV1,
   ConversationEntryV1,
   DataChangeEvent,
@@ -9,6 +10,7 @@ import type {
 } from "../../../runtime/data-repo"
 import type { ProviderService } from "../../provider"
 import { AgentRuntimeService, conversationId, permissionActionForTool } from "../agent-runtime-service"
+import { CustomCommandRegistry } from "../command-registry"
 import type {
   AgentEvent,
   AgentLiveSession,
@@ -239,6 +241,61 @@ describe("AgentRuntimeService", () => {
         expect.objectContaining({ name: "wiki ingest" }),
       ]),
     )
+  })
+
+  it("uses the Windows default shell before escaping custom exec command args", async () => {
+    const platformDescriptor = Object.getOwnPropertyDescriptor(process, "platform")
+    Object.defineProperty(process, "platform", {
+      configurable: true,
+      value: "win32",
+    })
+
+    try {
+      const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+      const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
+      const customCommands = new CustomCommandRegistry({
+        projectId: "project-1",
+        commands,
+        now: fixedNow,
+      })
+      await customCommands.addExec({
+        name: "echo-user",
+        exec: "Write-Output",
+        createdBy: "user-1",
+      })
+      const run = vi.fn(async () => ({
+        exitCode: 0,
+        signal: null,
+        stdout: "ok",
+        stderr: "",
+        timedOut: false,
+        durationMs: 1,
+      }))
+      const service = new AgentRuntimeService({
+        projectId: "project-1",
+        workDir: "C:\\repo",
+        conversations,
+        providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+        customCommands,
+        commandRunner: { run },
+        now: fixedNow,
+      })
+
+      await service.send({ ...baseMessage('/echo-user "hello world"'), platform: "local-renderer" })
+
+      expect(run).toHaveBeenCalledWith(expect.objectContaining({
+        command: "powershell.exe",
+        args: [
+          "-NoLogo",
+          "-NoProfile",
+          "-NonInteractive",
+          "-Command",
+          "Write-Output 'hello world'",
+        ],
+      }))
+    } finally {
+      if (platformDescriptor) Object.defineProperty(process, "platform", platformDescriptor)
+    }
   })
 
   it("cancelTurn interrupts before forceKillTurn hard closes the session", async () => {
