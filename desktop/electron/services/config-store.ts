@@ -185,7 +185,7 @@ class ConfigStore {
   async update(patch: SynapseConfigPatch): Promise<SynapseConfig> {
     await this.initialize()
 
-    logger.info("Updating config.", patch)
+    logger.info("Updating config.", sanitizeConfigPatchForLog(patch))
     const currentConfig = await this.readCachedOrNamespace()
     const nextConfig = applySynapseConfigPatch(currentConfig, patch)
 
@@ -309,3 +309,20 @@ class ConfigStore {
 
 // Singleton instance
 export const configStore = new ConfigStore()
+
+function sanitizeConfigPatchForLog(patch: SynapseConfigPatch): SynapseConfigPatch {
+  if (!patch.repositories || !Array.isArray(patch.repositories)) return patch
+  return {
+    ...patch,
+    repositories: patch.repositories.map((repository) => {
+      if (!repository.variables) return repository
+      return {
+        ...repository,
+        variables: repository.variables.map((variable) => ({
+          ...variable,
+          value: variable.value ? "[redacted]" : variable.value,
+        })),
+      }
+    }),
+  }
+}

@@ -1,6 +1,6 @@
 # Synapse MCP 能力
 
-<!-- Sources: docs/reference/capability-naming-matrix.md; desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/database/shared/capability-registry.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/synapse-capabilities/shared/workflow-domain.ts; desktop/synapse-capabilities/shared/content-domain.ts; desktop/electron/capabilities/action-router.ts -->
+<!-- Sources: docs/reference/capability-naming-matrix.md; desktop/synapse-capabilities/shared/naming.ts; desktop/synapse-capabilities/shared/registry.ts; desktop/database/shared/capability-registry.ts; desktop/synapse-capabilities/shared/repository-domain.ts; desktop/synapse-capabilities/shared/variable-domain.ts; desktop/synapse-capabilities/shared/scheduler-domain.ts; desktop/synapse-capabilities/shared/workflow-domain.ts; desktop/synapse-capabilities/shared/content-domain.ts; desktop/electron/capabilities/action-router.ts -->
 
 这里的“能力”指一项可被 MCP 或本地 HTTP API 调用的操作，例如列出数据库表、创建数据行、启用定时任务。
 
@@ -22,6 +22,8 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 当前核心文件：
 
 - `desktop/database/shared/capability-registry.ts`
+- `desktop/synapse-capabilities/shared/repository-domain.ts`
+- `desktop/synapse-capabilities/shared/variable-domain.ts`
 - `desktop/synapse-capabilities/shared/scheduler-domain.ts`
 - `desktop/synapse-capabilities/shared/workflow-domain.ts`
 - `desktop/synapse-capabilities/shared/content-domain.ts`
@@ -54,6 +56,8 @@ Synapse 先在能力清单中定义能力，再把同一项能力暴露到两个
 | 领域 | 职责 | 能力清单 |
 | --- | --- | --- |
 | `database` | 本地表、文件夹、字段、行、选项、日志和 SQL 操作 | `desktop/database/shared/capability-registry.ts` |
+| `repository` | 已配置 Synapse 仓库发现 | `desktop/synapse-capabilities/shared/repository-domain.ts` |
+| `variable` | 仓库本机变量的查询、写入和删除 | `desktop/synapse-capabilities/shared/variable-domain.ts` |
 | `scheduler` | 定时任务、运行记录、运行时状态检查和 action type 查询 | `desktop/synapse-capabilities/shared/scheduler-domain.ts` |
 | `workflow` | DAG 工作流定义、节点/边原子操作、执行、布局 | `desktop/synapse-capabilities/shared/workflow-domain.ts` |
 | `content` | Rule、Skill、Prompt 的发布、查询、更新和删除 | `desktop/synapse-capabilities/shared/content-domain.ts` |
@@ -112,6 +116,10 @@ scheduler.action_type.list -> schedulerActionTypeList
 Content MCP 暴露 Rule、Skill 和 Prompt 的发布与维护能力。创建或更新前应先调用 `content_type_describe` 获取当前分类、图标、背景色和限制。
 
 Content MCP 的更新和删除只允许修改当前仓库身份创建的资源。它不负责安装内容到编辑器。
+
+## Repository And Variable MCP
+
+Repository MCP 第一版只提供只读仓库发现。Variable MCP 管理仓库本机变量，变量值默认不返回；只有单个变量读取显式传 `includeValue: true` 时才会返回明文。
 
 ## 新增或修改能力
 

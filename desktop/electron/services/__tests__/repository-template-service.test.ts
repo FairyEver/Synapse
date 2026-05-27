@@ -24,7 +24,9 @@ describe("RepositoryTemplateService", () => {
       { id: "synapse-content-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-database-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-model-price-mcp", icon: "terminal", iconBg: "teal" },
+      { id: "synapse-repository-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-scheduler-mcp", icon: "terminal", iconBg: "teal" },
+      { id: "synapse-variable-mcp", icon: "terminal", iconBg: "teal" },
       { id: "synapse-workflow-mcp", icon: "terminal", iconBg: "teal" },
     ])
   })

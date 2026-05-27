@@ -7,7 +7,9 @@ function createRouterDeps(overrides: Partial<Parameters<typeof createSynapseActi
     contentDispatch: vi.fn(),
     databaseDispatch: vi.fn(),
     modelPriceDispatch: vi.fn(),
+    repositoryDispatch: vi.fn(),
     schedulerDispatch: vi.fn(),
+    variableDispatch: vi.fn(),
     workflowDispatch: vi.fn(),
     ...overrides,
   }
@@ -27,7 +29,9 @@ describe("createSynapseActionRouter", () => {
     })
     expect(databaseDispatch).toHaveBeenCalledWith("database.table.list", {}, { source: "api" })
     expect(deps.contentDispatch).not.toHaveBeenCalled()
+    expect(deps.repositoryDispatch).not.toHaveBeenCalled()
     expect(deps.schedulerDispatch).not.toHaveBeenCalled()
+    expect(deps.variableDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
 
@@ -45,7 +49,28 @@ describe("createSynapseActionRouter", () => {
     expect(modelPriceDispatch).toHaveBeenCalledWith("model_price.rule.list", {}, { source: "api" })
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
+    expect(deps.repositoryDispatch).not.toHaveBeenCalled()
     expect(deps.schedulerDispatch).not.toHaveBeenCalled()
+    expect(deps.variableDispatch).not.toHaveBeenCalled()
+    expect(deps.workflowDispatch).not.toHaveBeenCalled()
+  })
+
+  it("routes Repository actions to the Repository dispatcher", async () => {
+    const repositoryDispatch = vi.fn(async () => ({ ok: true as const, data: [] }))
+    const deps = createRouterDeps({
+      repositoryDispatch,
+    })
+    const router = createSynapseActionRouter(deps)
+
+    await expect(router.dispatch("repository.item.list", {}, { source: "api" })).resolves.toEqual({
+      ok: true,
+      data: [],
+    })
+    expect(repositoryDispatch).toHaveBeenCalledWith("repository.item.list", {}, { source: "api" })
+    expect(deps.contentDispatch).not.toHaveBeenCalled()
+    expect(deps.databaseDispatch).not.toHaveBeenCalled()
+    expect(deps.schedulerDispatch).not.toHaveBeenCalled()
+    expect(deps.variableDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
 
@@ -63,6 +88,8 @@ describe("createSynapseActionRouter", () => {
     expect(schedulerDispatch).toHaveBeenCalledWith("scheduler.task.list", {}, { source: "api" })
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
+    expect(deps.repositoryDispatch).not.toHaveBeenCalled()
+    expect(deps.variableDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
 
@@ -78,6 +105,27 @@ describe("createSynapseActionRouter", () => {
     expect(schedulerDispatch).toHaveBeenCalledWith("scheduler.run.list", { taskId: "task:1" }, { source: "api" })
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
+    expect(deps.repositoryDispatch).not.toHaveBeenCalled()
+    expect(deps.variableDispatch).not.toHaveBeenCalled()
+    expect(deps.workflowDispatch).not.toHaveBeenCalled()
+  })
+
+  it("routes Variable actions to the Variable dispatcher", async () => {
+    const variableDispatch = vi.fn(async () => ({ ok: true as const, data: [] }))
+    const deps = createRouterDeps({
+      variableDispatch,
+    })
+    const router = createSynapseActionRouter(deps)
+
+    await expect(router.dispatch("variable.item.list", {}, { source: "api" })).resolves.toEqual({
+      ok: true,
+      data: [],
+    })
+    expect(variableDispatch).toHaveBeenCalledWith("variable.item.list", {}, { source: "api" })
+    expect(deps.contentDispatch).not.toHaveBeenCalled()
+    expect(deps.databaseDispatch).not.toHaveBeenCalled()
+    expect(deps.repositoryDispatch).not.toHaveBeenCalled()
+    expect(deps.schedulerDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
 
@@ -95,7 +143,9 @@ describe("createSynapseActionRouter", () => {
     expect(workflowDispatch).toHaveBeenCalledWith("workflow.definition.list", {}, { source: "api" })
     expect(deps.contentDispatch).not.toHaveBeenCalled()
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
+    expect(deps.repositoryDispatch).not.toHaveBeenCalled()
     expect(deps.schedulerDispatch).not.toHaveBeenCalled()
+    expect(deps.variableDispatch).not.toHaveBeenCalled()
   })
 
   it("routes Content actions to the Content dispatcher", async () => {
@@ -111,7 +161,9 @@ describe("createSynapseActionRouter", () => {
     })
     expect(contentDispatch).toHaveBeenCalledWith("content.skill.list", {}, { source: "api" })
     expect(deps.databaseDispatch).not.toHaveBeenCalled()
+    expect(deps.repositoryDispatch).not.toHaveBeenCalled()
     expect(deps.schedulerDispatch).not.toHaveBeenCalled()
+    expect(deps.variableDispatch).not.toHaveBeenCalled()
     expect(deps.workflowDispatch).not.toHaveBeenCalled()
   })
 
