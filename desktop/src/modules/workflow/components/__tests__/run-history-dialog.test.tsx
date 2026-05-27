@@ -118,6 +118,46 @@ describe("RunHistoryDialog", () => {
     expect(document.body.textContent).toContain("工作流准备失败")
   })
 
+  it("keeps the history list within a wider dialog layout", async () => {
+    window.synapse = {
+      workflow: {
+        runHistory: vi.fn().mockResolvedValue([
+          createSnapshot({
+            endedAt: Date.parse("2026-05-15T00:13:31.900Z"),
+            nodeResults: Object.fromEntries(
+              Array.from({ length: 15 }, (_, index) => [
+                `node-${index}`,
+                {
+                  nodeId: `node-${index}`,
+                  status: "success",
+                  input: { variables: {} },
+                  startedAt: Date.parse("2026-05-15T00:00:00.000Z") + index,
+                },
+              ]),
+            ),
+          }),
+        ]),
+      },
+    } as unknown as Window["synapse"]
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<RunHistoryDialog open workflowId="workflow-1" onClose={vi.fn()} />)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(document.body.querySelector('[data-slot="dialog-content"]')?.className).toContain("sm:max-w-2xl")
+    expect(document.body.querySelector('[data-slot="dialog-content"]')?.className).toContain("overflow-hidden")
+    expect(document.body.querySelector('[data-slot="scroll-area-viewport"] .pr-3')).toBeTruthy()
+    expect(document.body.querySelector('[role="button"]')?.className).toContain("min-w-0")
+  })
+
   it("tracks opening a workflow run without recording node output", async () => {
     const openRunner = vi.fn()
     window.synapse = {
