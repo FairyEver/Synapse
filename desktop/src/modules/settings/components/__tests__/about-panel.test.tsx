@@ -60,6 +60,19 @@ describe("AboutPanel cheat codes", () => {
     expect(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES).toContain(getTitlePart(0).className)
   })
 
+  it("moves each active title color one character to the right on each tick", async () => {
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
+    const firstColor = getTitlePart(0).className
+
+    act(() => {
+      vi.advanceTimersByTime(400)
+    })
+
+    expect(getTitlePart(1).className).toBe(firstColor)
+  })
+
   it("does not enable repository maintenance from logo clicks alone", async () => {
     const onAdminModeChange = vi.fn()
     await renderAboutPanel({ onAdminModeChange })

@@ -37,7 +37,7 @@ export function buildSettingsTitleParts(title: string = SETTINGS_CHEAT_CODE_TITL
 }
 
 export function getSettingsTitleActiveColorClass(index: number, offset = 0): string {
-  const classIndex = positiveModulo(index + offset, SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES.length)
+  const classIndex = positiveModulo(index - offset, SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES.length)
   return SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES[classIndex] ?? "text-foreground"
 }
 
