@@ -88,6 +88,7 @@ function TaskCard({
   const lastRun = formatLastRun(task)
   const scope = formatTaskScope(task, projects)
   const description = formatTaskDescription(task.description)
+  const deleteDisabled = busy || activeRunning
 
   return (
     <div
@@ -196,14 +197,14 @@ function TaskCard({
             <Button
               variant="destructive"
               size="icon-sm"
-              disabled={busy}
-              aria-label="删除"
+              disabled={deleteDisabled}
+              aria-label={activeRunning ? "运行中不能删除" : "删除"}
               onClick={onDelete}
             >
               <Trash2 className="size-3.5" />
             </Button>
           </TooltipTrigger>
-          <TooltipContent>删除</TooltipContent>
+          <TooltipContent>{activeRunning ? "先停止运行" : "删除"}</TooltipContent>
         </Tooltip>
       </div>
     </div>

@@ -151,6 +151,9 @@ const [isExporting, setIsExporting] = useState(false)
       return
     }
     const task = deleteTarget
+    if (task.activeRun?.status === "running") {
+      return
+    }
     const result = await runMutation(
       async () => {
         const result = await deleteTask(task.id)
@@ -461,13 +464,13 @@ const [isExporting, setIsExporting] = useState(false)
             <AlertDialogHeader>
               <AlertDialogTitle>删除任务</AlertDialogTitle>
               <AlertDialogDescription>
-                删除后不会再执行。
+                {deleteTarget?.activeRun?.status === "running" ? "先停止当前运行，再删除任务。" : "删除后不会再执行。"}
               </AlertDialogDescription>
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>取消</AlertDialogCancel>
               <AlertDialogAction
-                disabled={busy}
+                disabled={busy || deleteTarget?.activeRun?.status === "running"}
                 onClick={() => {
                   void handleDelete()
                 }}

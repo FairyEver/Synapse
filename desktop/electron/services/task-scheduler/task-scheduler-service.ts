@@ -92,6 +92,9 @@ export class TaskSchedulerService {
   }
 
   async deleteTask(id: string): Promise<{ readonly deleted: boolean }> {
+    if (this.runningTaskIds.has(id) || this.deps.execution.getActiveRunIdForTask(id)) {
+      throw new Error("Task is currently running. Stop it before deleting.")
+    }
     const oldTask = await this.deps.tasks.get(id)
     this.cancel(id)
     try {

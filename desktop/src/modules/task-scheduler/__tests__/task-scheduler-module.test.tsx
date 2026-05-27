@@ -297,6 +297,32 @@ describe("TaskSchedulerModule", () => {
     expect(html).not.toContain("更多操作")
   })
 
+  it("disables deleting a task while it is running", async () => {
+    mocks.useTaskSchedulerTasks.mockReturnValue({
+      tasks: [createTask({
+        name: "Long running task",
+        activeRun: { status: "running", id: "run-1" },
+      })],
+      loading: false,
+      error: null,
+      refresh: vi.fn(),
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TaskSchedulerModule />)
+    })
+
+    const deleteButton = container.querySelector<HTMLButtonElement>('button[aria-label="运行中不能删除"]')
+
+    expect(deleteButton).not.toBeNull()
+    expect(deleteButton?.disabled).toBe(true)
+  })
+
   it("logs mutation failures without exposing raw backend error text", async () => {
     const rawError = "save failed token=sk-secret /Users/example/repo prompt text"
     mocks.createTaskRequest.mockRejectedValueOnce(new Error(rawError))
