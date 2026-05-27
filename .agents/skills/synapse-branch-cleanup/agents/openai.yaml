@@ -1,0 +1,4 @@
+interface:
+  display_name: "Synapse Branch Cleanup"
+  short_description: "Merge Synapse branches into main and remove extras."
+  default_prompt: "Use $synapse-branch-cleanup to merge every Synapse branch into main, then remove non-main branches and extra worktrees."

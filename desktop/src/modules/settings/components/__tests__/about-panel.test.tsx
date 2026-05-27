@@ -62,7 +62,7 @@ describe("AboutPanel cheat codes", () => {
 
     expect(getTitle().className).toContain("text-lg")
     expect(getTitle().className).not.toContain("text-4xl")
-    expect(getTitle().className).toContain("tracking-wider")
+    expect(getTitle().className).toContain("tracking-widest")
     expect(getTitle().className).toContain("transition-[letter-spacing]")
     expect(getTitle().className).toContain("duration-300")
     expect(
@@ -83,7 +83,7 @@ describe("AboutPanel cheat codes", () => {
     expect(getTitlePart(0).className).toContain("transition-[color,transform,font-weight,opacity]")
     expect(getTitlePart(0).className).toContain("duration-200")
     expect(getTitlePart(0).className).toContain("ease-out")
-    expect(getTitlePart(0).className).toContain("hover:scale-110")
+    expect(getTitlePart(0).className).toContain("hover:scale-125")
     expect(getTitlePart(0).className).toContain("hover:font-bold")
   })
 
@@ -94,11 +94,11 @@ describe("AboutPanel cheat codes", () => {
     hoverTitlePart(0)
 
     expect(getTitlePart(0).className).not.toContain("opacity-50")
-    expect(getTitlePart(1).className).toContain("opacity-50")
+    expect(getTitlePart(1).className).toContain("opacity-30")
 
     leaveTitlePart(0)
 
-    expect(getTitlePart(1).className).not.toContain("opacity-50")
+    expect(getTitlePart(1).className).not.toContain("opacity-30")
   })
 
   it("moves each active title color one character to the right on each tick", async () => {

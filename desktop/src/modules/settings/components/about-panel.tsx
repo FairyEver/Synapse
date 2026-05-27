@@ -296,7 +296,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
           <h1
             className={cn(
               "text-lg font-semibold transition-[letter-spacing] duration-300 ease-out",
-              isCheatCodeEntryArmed ? "tracking-wider" : "tracking-tight",
+              isCheatCodeEntryArmed ? "tracking-widest" : "tracking-tight",
             )}
             aria-label={SETTINGS_CHEAT_CODE_TITLE}
             data-settings-cheat-code-title
@@ -309,8 +309,8 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
                   isCheatCodeEntryArmed && part.clickable
                     ? cn(
                         getSettingsTitleActiveColorClass(part.index, activeTitleColorOffset),
-                        "inline-block origin-center transition-[color,transform,font-weight,opacity] duration-200 ease-out hover:scale-110 hover:font-bold",
-                        hoveredTitleIndex !== null && hoveredTitleIndex !== part.index ? "opacity-50" : "opacity-100",
+                        "inline-block origin-center transition-[color,transform,font-weight,opacity] duration-200 ease-out hover:scale-125 hover:font-bold",
+                        hoveredTitleIndex !== null && hoveredTitleIndex !== part.index ? "opacity-30" : "opacity-100",
                       )
                     : undefined
                 }
