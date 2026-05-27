@@ -62,8 +62,8 @@ function getWeekday(date: Date, trigger: TaskTrigger): number {
     // Local-time cron: use local weekday (matches nextCronRunLocal behavior)
     return date.getDay()
   }
-  // Interval triggers: use UTC weekday
-  return date.getUTCDay()
+  // Interval triggers follow the local calendar used by runScheduled().
+  return date.getDay()
 }
 
 function advanceToNextValidDay(
@@ -121,13 +121,14 @@ function advanceToNextValidDay(
       }
     }
   } else {
-    // Interval triggers: advance using UTC dates
+    // Interval triggers: advance using local dates
     const d = new Date(date)
     for (let i = 0; i < MAX_ADVANCE_ITERATIONS; i++) {
-      d.setUTCDate(d.getUTCDate() + 1)
-      if (activeDays.has(d.getUTCDay())) {
-        // Return 1 minute before UTC midnight so interval computation starts from this day
-        return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate(), 0, 0, 0) - 60_000)
+      d.setDate(d.getDate() + 1)
+      if (activeDays.has(d.getDay())) {
+        // Return 1 minute before local midnight so interval computation starts from this day
+        const localMidnight = new Date(d.getFullYear(), d.getMonth(), d.getDate(), 0, 0, 0)
+        return new Date(localMidnight.getTime() - 60_000)
       }
     }
   }
