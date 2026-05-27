@@ -1250,7 +1250,6 @@ class DatabaseService {
     this.close()
 
     try {
-      unlinkSync(this.dbPath)
       try { unlinkSync(walPath) } catch { /* may not exist */ }
       try { unlinkSync(shmPath) } catch { /* may not exist */ }
       copyFileSync(sourcePath, this.dbPath)
@@ -1278,12 +1277,37 @@ class DatabaseService {
         deleteBackup = true
       } catch (restoreError) {
         logger.error("Failed to restore backup after import failure.", { restoreError })
+        this.reopenCurrentDatabaseAfterImportFailure()
       }
       throw error
     } finally {
       if (deleteBackup) {
         try { unlinkSync(backupPath) } catch (error) { logger.warn("Failed to delete temp backup.", { error }) }
       }
+    }
+  }
+
+  private reopenCurrentDatabaseAfterImportFailure(): void {
+    if (this.db) return
+    if (!existsSync(this.dbPath)) return
+
+    try {
+      this.db = new DatabaseSync(this.dbPath)
+      this.db.exec("PRAGMA journal_mode=WAL")
+      this.ensureSystemSchema()
+      this.syncMetaTables()
+      this.syncMetaColumns()
+      this.refreshColumnMetaCache()
+    } catch (reopenError) {
+      logger.error("Failed to reopen database after import restore failure.", { reopenError })
+      if (this.db) {
+        try {
+          this.db.close()
+        } catch (closeError) {
+          logger.warn("Failed to close database after import reopen failure.", { closeError })
+        }
+      }
+      this.db = null
     }
   }
 

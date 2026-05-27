@@ -391,4 +391,46 @@ describe("DatabaseService legacy database migration", () => {
       choices: ["收入", "支出"],
     }))
   })
+
+  it("keeps the current database open when import replacement and backup restore both fail", async () => {
+    const sourcePath = path.join(tempDir, "valid-import.db")
+    createEmptyCurrentDatabaseWithOperationLog(sourcePath)
+
+    const actualFs = await vi.importActual<typeof import("node:fs")>("node:fs")
+    let backupPath: string | null = null
+    const copyFileSync = vi.fn((source: Parameters<typeof actualFs.copyFileSync>[0], target: Parameters<typeof actualFs.copyFileSync>[1]) => {
+      const sourceFilePath = String(source)
+      const targetFilePath = String(target)
+
+      if (targetFilePath.includes(".import-backup.")) {
+        backupPath = targetFilePath
+        actualFs.copyFileSync(source, target)
+        return
+      }
+      if (sourceFilePath === sourcePath && targetFilePath.endsWith("synapse-database.db")) {
+        throw new Error("simulated source copy failure")
+      }
+      if (backupPath && sourceFilePath === backupPath) {
+        throw new Error("simulated restore copy failure")
+      }
+      actualFs.copyFileSync(source, target)
+    })
+
+    vi.doMock("node:fs", async () => ({
+      ...actualFs,
+      copyFileSync,
+    }))
+
+    try {
+      const module = await import("../service")
+      service = module.databaseService
+      service.open()
+      service.databaseTableCreate("tasks", [{ name: "title", kind: "text" }])
+
+      expect(() => service.importDatabase(sourcePath)).toThrow("simulated source copy failure")
+      expect(service.databaseTableList()).toContainEqual(expect.objectContaining({ name: "tasks" }))
+    } finally {
+      vi.doUnmock("node:fs")
+    }
+  })
 })
