@@ -22,6 +22,7 @@ import {
 } from "@/app-shell/navigation"
 import { useWatchNextAgentSession } from "@/app-shell/use-watch-next-agent-session"
 import { useAppNotifications } from "@/app-shell/notifications"
+import { isWorkflowEntryVisible } from "@/app-shell/workflow-entry-visibility"
 import {
   useActiveRepository,
   useHasRepositories,
@@ -30,6 +31,7 @@ import {
   useRepositoryState,
 } from "@/app-shell/use-repository-manager"
 import { getAllContentTypeIds } from "@/config/content-types"
+import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { ErrorBoundary } from "@/components/error-boundary"
 import { parseCcConversationWindowRequest } from "@/lib/cc-conversation-window"
@@ -50,6 +52,7 @@ import { ToolsModule } from "@/modules/tools"
 import type { SynapseContentType } from "@/types/content"
 
 type AppTabId = SynapseContentType | "agent" | "database" | "task-scheduler" | "editor-scan" | "usage-cc" | "usage-codex" | "workflow" | "tools" | "settings"
+type AppTabChangeSource = "navigation" | "shortcut" | "notification" | "sync-status" | "cheat-code"
 type DialogKind = "install"
 type ContentDialogState = Record<DialogKind, boolean>
 type ContentDialogStateMap = Record<SynapseContentType, ContentDialogState>
@@ -88,10 +91,6 @@ const CONTENT_MODULE_COMPONENTS: Record<SynapseContentType, ComponentType<{
   prompt: PromptsModule,
 }
 
-function shouldShowWorkflowEntry(): boolean {
-  return !(getSynapseBridge()?.isPackaged ?? !import.meta.env.DEV)
-}
-
 function MainApp() {
   const activeRepository = useActiveRepository()
   const hasRepositories = useHasRepositories()
@@ -112,6 +111,7 @@ function MainApp() {
     useState<ContentOpenRequest | null>(null)
   const [pendingAgentSession, setPendingAgentSession] =
     useState<OpenAgentSessionPayload | null>(null)
+  const [workflowEntryVisible, setWorkflowEntryVisible] = useState(false)
 
   // 检查是否需要显示空状态页面
   const hasNoRepositories = !hasRepositories
@@ -130,7 +130,7 @@ function MainApp() {
   }, [activeRepository?.uuid, activeTab])
 
   const setActiveTab = useCallback(
-    (nextTab: AppTabId, source: "navigation" | "shortcut" | "notification" | "sync-status") => {
+    (nextTab: AppTabId, source: AppTabChangeSource) => {
       const prevTab = activeTabRef.current
       if (prevTab !== nextTab) {
         logger.info("Top-level tab changed.", {
@@ -143,6 +143,44 @@ function MainApp() {
     },
     [],
   )
+
+  useEffect(() => {
+    const bridge = getSynapseBridge()
+
+    if (!bridge) {
+      setWorkflowEntryVisible(false)
+      return
+    }
+
+    let cancelled = false
+
+    void bridge.cheatCodes.getStates([WORKFLOW_ENTRY_CHEAT_CODE_NAME])
+      .then((states) => {
+        if (!cancelled) {
+          setWorkflowEntryVisible(isWorkflowEntryVisible(states))
+        }
+      })
+      .catch((error) => {
+        logger.error("Failed to read workflow entry cheat code state.", error)
+      })
+
+    const unsubscribe = bridge.cheatCodes.onStateChanged((state) => {
+      if (state.name === WORKFLOW_ENTRY_CHEAT_CODE_NAME) {
+        setWorkflowEntryVisible(state.active)
+      }
+    })
+
+    return () => {
+      cancelled = true
+      unsubscribe()
+    }
+  }, [])
+
+  useEffect(() => {
+    if (activeTab === "workflow" && !workflowEntryVisible) {
+      setActiveTab(DEFAULT_APP_TAB, "cheat-code")
+    }
+  }, [activeTab, setActiveTab, workflowEntryVisible])
 
   const tabs = useMemo(
     () => [
@@ -157,10 +195,10 @@ function MainApp() {
       { id: "editor-scan" as const, label: "本机" },
       { id: "usage-cc" as const, label: "CC" },
       { id: "usage-codex" as const, label: "Codex" },
-      ...(shouldShowWorkflowEntry() ? [{ id: "workflow" as const, label: "工作流" }] : []),
+      ...(workflowEntryVisible ? [{ id: "workflow" as const, label: "工作流" }] : []),
       { id: "settings" as const, label: "设置" },
     ],
-    [],
+    [workflowEntryVisible],
   )
 
   const setContentDialogOpen = useCallback((
@@ -416,7 +454,7 @@ function MainApp() {
               <CodexUsageAnalysisModule />
             </ErrorBoundary>
           ) : null}
-          {activeTab === "workflow" && shouldShowWorkflowEntry() ? (
+          {activeTab === "workflow" && workflowEntryVisible ? (
             <ErrorBoundary fallbackTitle="工作流模块出现问题">
               <WorkflowModule />
             </ErrorBoundary>

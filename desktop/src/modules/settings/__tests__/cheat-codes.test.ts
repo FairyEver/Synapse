@@ -5,6 +5,7 @@ import {
   CHEAT_CODE_LOGO_CLICK_THRESHOLD,
   SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES,
   SETTINGS_CHEAT_CODE_TITLE,
+  WORKFLOW_ENTRY_TITLE_SEQUENCE,
   buildSettingsTitleParts,
   getSettingsTitleActiveColorClass,
   settingsCheatCodes,
@@ -12,6 +13,7 @@ import {
   validateCheatCodeRegistrations,
   type CheatCodeRegistration,
 } from "@/modules/settings/cheat-codes"
+import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
 
 describe("settings cheat codes", () => {
   it("defines shared interaction constants in one place", () => {
@@ -54,13 +56,16 @@ describe("settings cheat codes", () => {
     expect(getSettingsTitleActiveColorClass(2, 2)).toBe(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES[0])
   })
 
-  it("registers repository maintenance through the centralized registry", () => {
+  it("registers repository maintenance and workflow entry through the centralized registry", () => {
     const enableRepositoryMaintenance = vi.fn()
 
-    expect(settingsCheatCodes).toHaveLength(1)
+    expect(settingsCheatCodes).toHaveLength(2)
     expect(settingsCheatCodes[0]?.definition.name).toBe("settings:repository-maintenance:enable")
     expect(settingsCheatCodes[0]?.definition.kind).toBe("action")
     expect(settingsCheatCodes[0]?.binding.settingsTitleSequence).toEqual([0, 11, 8, 9])
+    expect(settingsCheatCodes[1]?.definition.name).toBe(WORKFLOW_ENTRY_CHEAT_CODE_NAME)
+    expect(settingsCheatCodes[1]?.definition.kind).toBe("state")
+    expect(settingsCheatCodes[1]?.binding.settingsTitleSequence).toEqual(WORKFLOW_ENTRY_TITLE_SEQUENCE)
 
     const definition = settingsCheatCodes[0]?.definition
     if (definition?.kind === "action") {

@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import {
   CHEAT_CODE_INTERACTION_RESET_DELAY,
   CHEAT_CODE_LOGO_CLICK_THRESHOLD,
+  WORKFLOW_ENTRY_TITLE_SEQUENCE,
   type CheatCodeContext,
   type CheatCodeRegistration,
 } from "@/modules/settings/cheat-codes"
@@ -16,6 +17,8 @@ import {
   trimTitleSequenceBuffer,
   useCheatCodeTitleSequence,
 } from "@/modules/settings/hooks/use-cheat-code-title-sequence"
+import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
+import type { CheatCodeStateStore } from "@/lib/cheat-codes/manager"
 import type { CheatCodeTriggerResult } from "@/types/cheat-code"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -113,6 +116,29 @@ describe("useCheatCodeTitleSequence", () => {
     expect(latestApi?.isArmed).toBe(false)
   })
 
+  it("toggles state cheat codes through the persistent state store", async () => {
+    const stateStore = createStateStore()
+    const onTriggered = vi.fn()
+
+    renderProbe({
+      cheatCodes: [createStateRegistration(WORKFLOW_ENTRY_CHEAT_CODE_NAME, WORKFLOW_ENTRY_TITLE_SEQUENCE)],
+      onTriggered,
+      stateStore,
+    })
+
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
+    await clickTitleSequence(WORKFLOW_ENTRY_TITLE_SEQUENCE)
+
+    expect(stateStore.toggleState).toHaveBeenCalledWith(WORKFLOW_ENTRY_CHEAT_CODE_NAME)
+    expect(onTriggered).toHaveBeenCalledWith({
+      active: true,
+      changed: true,
+      kind: "state",
+      name: WORKFLOW_ENTRY_CHEAT_CODE_NAME,
+    })
+    expect(latestApi?.isArmed).toBe(false)
+  })
+
   it("does not collapse repeated characters with different indexes", async () => {
     const enableRepositoryMaintenance = vi.fn()
 
@@ -144,6 +170,7 @@ function renderProbe(props: {
   readonly cheatCodes?: readonly CheatCodeRegistration[]
   readonly context?: CheatCodeContext
   readonly onTriggered?: (result: CheatCodeTriggerResult) => void
+  readonly stateStore?: CheatCodeStateStore
 } = {}): void {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -158,6 +185,7 @@ function renderProbe(props: {
         ]}
         context={props.context ?? { enableRepositoryMaintenance: vi.fn() }}
         onTriggered={props.onTriggered}
+        stateStore={props.stateStore}
       />,
     )
   })
@@ -167,6 +195,7 @@ function Probe(props: {
   readonly cheatCodes: readonly CheatCodeRegistration[]
   readonly context: CheatCodeContext
   readonly onTriggered?: (result: CheatCodeTriggerResult) => void
+  readonly stateStore?: CheatCodeStateStore
 }) {
   latestApi = useCheatCodeTitleSequence(props)
   return null
@@ -209,5 +238,41 @@ function createRegistration(name: string, settingsTitleSequence: readonly number
     binding: {
       settingsTitleSequence,
     },
+  }
+}
+
+function createStateRegistration(name: string, settingsTitleSequence: readonly number[]): CheatCodeRegistration {
+  return {
+    definition: {
+      name,
+      kind: "state",
+      run: () => undefined,
+    },
+    binding: {
+      settingsTitleSequence,
+    },
+  }
+}
+
+function createStateStore(): CheatCodeStateStore {
+  const states = new Map<string, boolean>()
+
+  return {
+    getStates: vi.fn(async (names?: readonly string[]) => {
+      if (!names) {
+        return Object.fromEntries(states)
+      }
+
+      return Object.fromEntries(names.map((name) => [name, states.get(name) ?? false]))
+    }),
+    setState: vi.fn(async ({ name, active }) => {
+      states.set(name, active)
+      return { active, name }
+    }),
+    toggleState: vi.fn(async (name: string) => {
+      const active = !(states.get(name) ?? false)
+      states.set(name, active)
+      return { active, name }
+    }),
   }
 }

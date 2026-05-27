@@ -1,8 +1,10 @@
 import type { CheatCodeRegistration as BaseCheatCodeRegistration } from "@/types/cheat-code"
+import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
 
 export const SETTINGS_CHEAT_CODE_TITLE = "Synapse AI Studio"
 export const CHEAT_CODE_INTERACTION_RESET_DELAY = 10000
 export const CHEAT_CODE_LOGO_CLICK_THRESHOLD = 10
+export const WORKFLOW_ENTRY_TITLE_SEQUENCE = [11, 12, 13, 14, 15, 16] as const
 
 export const SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES = [
   "text-red-500",
@@ -56,6 +58,16 @@ const registeredCheatCodes = [
     },
     binding: {
       settingsTitleSequence: [0, 11, 8, 9],
+    },
+  },
+  {
+    definition: {
+      name: WORKFLOW_ENTRY_CHEAT_CODE_NAME,
+      kind: "state",
+      run: () => undefined,
+    },
+    binding: {
+      settingsTitleSequence: WORKFLOW_ENTRY_TITLE_SEQUENCE,
     },
   },
 ] satisfies readonly CheatCodeRegistration[]

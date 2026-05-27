@@ -9,7 +9,9 @@ import {
   CHEAT_CODE_INTERACTION_RESET_DELAY,
   CHEAT_CODE_LOGO_CLICK_THRESHOLD,
   SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES,
+  WORKFLOW_ENTRY_TITLE_SEQUENCE,
 } from "@/modules/settings/cheat-codes"
+import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -133,6 +135,21 @@ describe("AboutPanel cheat codes", () => {
       name: "settings:repository-maintenance:enable",
     })
     expect(getTitle().className).toContain("text-lg")
+  })
+
+  it("toggles the workflow entry state from the registered title index sequence after arming", async () => {
+    const onAdminModeChange = vi.fn()
+    await renderAboutPanel({ onAdminModeChange })
+
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
+    await clickTitleSequence(WORKFLOW_ENTRY_TITLE_SEQUENCE)
+
+    expect(getCheatCodeBridge().toggleState).toHaveBeenCalledWith(WORKFLOW_ENTRY_CHEAT_CODE_NAME)
+    expect(onAdminModeChange).not.toHaveBeenCalled()
+    expect(rendererLogger.info).toHaveBeenCalledWith("Cheat code activated.", {
+      active: true,
+      name: WORKFLOW_ENTRY_CHEAT_CODE_NAME,
+    })
   })
 
   it("ignores title clicks before arming", async () => {
@@ -287,5 +304,39 @@ function installUpdaterBridge(): void {
     onStateChanged: vi.fn(() => () => {}),
   }
 
-  ;(window as unknown as { synapse?: { updater: typeof updater } }).synapse = { updater }
+  const states = new Map<string, boolean>()
+  const cheatCodes = {
+    getStates: vi.fn(async (names?: readonly string[]) => {
+      if (!names) {
+        return Object.fromEntries(states)
+      }
+
+      return Object.fromEntries(names.map((name) => [name, states.get(name) ?? false]))
+    }),
+    setState: vi.fn(async ({ name, active }: { readonly name: string; readonly active: boolean }) => {
+      states.set(name, active)
+      return { active, name }
+    }),
+    toggleState: vi.fn(async (name: string) => {
+      const active = !(states.get(name) ?? false)
+      states.set(name, active)
+      return { active, name }
+    }),
+    onStateChanged: vi.fn(() => () => {}),
+  }
+
+  ;(window as unknown as { synapse?: { updater: typeof updater; cheatCodes: typeof cheatCodes } }).synapse = {
+    cheatCodes,
+    updater,
+  }
+}
+
+function getCheatCodeBridge(): NonNullable<Window["synapse"]>["cheatCodes"] {
+  const bridge = window.synapse?.cheatCodes
+
+  if (!bridge) {
+    throw new Error("Cheat code bridge not found")
+  }
+
+  return bridge
 }
