@@ -63,6 +63,7 @@ type ParsedContentAction = {
   operation: "list" | "get" | "create" | "update" | "delete"
   type: SynapseContentType
 }
+type MutatingContentOperation = Extract<ParsedContentAction["operation"], "create" | "update" | "delete">
 
 type SkillSourceMergeResult = {
   params: ContentToolParams
@@ -74,7 +75,7 @@ const AUTO_DESCRIPTION_MAX_LENGTH = 120
 
 function createContentCapabilityDispatcher(deps: ContentCapabilityDispatcherDeps) {
   return {
-    async dispatch(action: string, params: ContentToolParams, _context: DispatchContext): Promise<DispatchResult> {
+    async dispatch(action: string, params: ContentToolParams, context: DispatchContext): Promise<DispatchResult> {
       if (action === "content.type.describe") {
         return { ok: true, data: describeContentTypes(params.contentType) }
       }
@@ -86,13 +87,53 @@ function createContentCapabilityDispatcher(deps: ContentCapabilityDispatcherDeps
         case "get":
           return getContent(deps, parsed.type, params)
         case "create":
-          return createContent(deps, parsed.type, params)
+          return dispatchContentMutation(deps, parsed.type, parsed.operation, action, params, context, () => createContent(deps, parsed.type, params))
         case "update":
-          return updateContent(deps, parsed.type, params)
+          return dispatchContentMutation(deps, parsed.type, parsed.operation, action, params, context, () => updateContent(deps, parsed.type, params))
         case "delete":
-          return deleteContent(deps, parsed.type, params)
+          return dispatchContentMutation(deps, parsed.type, parsed.operation, action, params, context, () => deleteContent(deps, parsed.type, params))
       }
     },
+  }
+}
+
+async function dispatchContentMutation(
+  deps: ContentCapabilityDispatcherDeps,
+  contentType: SynapseContentType,
+  operation: MutatingContentOperation,
+  action: string,
+  params: ContentToolParams,
+  context: DispatchContext,
+  task: () => Promise<DispatchResult>,
+): Promise<DispatchResult> {
+  const security = buildContentMutationSecurity(deps.security, contentType, operation, action, params, context)
+  if (security) {
+    await authorizeContentMutation(security)
+  }
+
+  try {
+    const result = await task()
+    security?.deps.auditSink.record({
+      action: "content.mutate",
+      actor: security.deps.actor,
+      resource: security.resource,
+      outcome: "allowed",
+      metadata: security.metadata,
+    })
+    return result
+  } catch (error) {
+    security?.deps.auditSink.record({
+      action: "content.mutate",
+      actor: security.deps.actor,
+      resource: security.resource,
+      outcome: "failed",
+      metadata: {
+        ...security.metadata,
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: String(error).length,
+      },
+    })
+    throw error
   }
 }
 
@@ -303,6 +344,63 @@ async function assertOwnedByCurrentUser(
       },
     })
   }
+}
+
+function buildContentMutationSecurity(
+  deps: ContentIconImageSecurityDeps | undefined,
+  contentType: SynapseContentType,
+  operation: MutatingContentOperation,
+  action: string,
+  params: ContentToolParams,
+  context: DispatchContext,
+): {
+  readonly deps: ContentIconImageSecurityDeps
+  readonly metadata: Record<string, unknown>
+  readonly resource: string
+} | null {
+  if (!deps) return null
+  const source = context.source ?? "api"
+  const contentId = optionalTrimmedString(params.id)
+  const metadata: Record<string, unknown> = {
+    source,
+    contentAction: action,
+    contentType,
+    operation,
+  }
+  if (contentId) metadata.contentId = contentId
+
+  return {
+    deps,
+    metadata,
+    resource: contentId ? `content:${contentType}:${contentId}` : `content:${contentType}:${operation}`,
+  }
+}
+
+async function authorizeContentMutation(input: {
+  readonly deps: ContentIconImageSecurityDeps
+  readonly metadata: Record<string, unknown>
+  readonly resource: string
+}): Promise<void> {
+  const permission = await input.deps.permissionGuard.check({
+    action: "content.mutate",
+    actor: input.deps.actor,
+    resource: input.resource,
+    context: input.metadata,
+  })
+  if (permission.allowed) return
+
+  input.deps.auditSink.record({
+    action: "content.mutate",
+    actor: input.deps.actor,
+    resource: input.resource,
+    outcome: "denied",
+    metadata: {
+      ...input.metadata,
+      reason: permission.reason,
+      policyId: permission.policyId,
+    },
+  })
+  throw new ContentCapabilityError("CONTENT_FORBIDDEN", permission.reason)
 }
 
 function parseContentAction(action: string): ParsedContentAction {

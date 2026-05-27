@@ -24,6 +24,7 @@ export type PermissionAction =
   | "secret.write"
   | "scheduler.mutate"
   | "workflow.mutate"
+  | "content.mutate"
 
 export type ActorIdentity =
   | { kind: "user"; id?: string; display?: string }

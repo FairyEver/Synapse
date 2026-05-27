@@ -175,6 +175,101 @@ describe("content capability dispatcher", () => {
     }))
   })
 
+  it("checks permission and audits allowed content mutations", async () => {
+    const auditSink = {
+      clearForTests: vi.fn(),
+      list: vi.fn(() => []),
+      record: vi.fn(),
+    }
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: true as const })),
+      registerPolicy: vi.fn(),
+    }
+    const actor = { kind: "user" as const, id: "synapse-mcp", display: "Synapse MCP" }
+    const deps = {
+      ...createDeps(),
+      security: { actor, auditSink, permissionGuard },
+    }
+    const dispatcher = createContentCapabilityDispatcher(deps)
+
+    const result = await dispatcher.dispatch("content.rule.create", {
+      name: "team-rule",
+      title: "Team Rule",
+      description: "Description",
+      category: "coding",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+      content: "# Rule",
+    }, { source: "mcp-stdio" })
+
+    expect(result.ok).toBe(true)
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "content.mutate",
+      actor,
+      resource: "content:rule:create",
+      context: {
+        source: "mcp-stdio",
+        contentAction: "content.rule.create",
+        contentType: "rule",
+        operation: "create",
+      },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.mutate",
+      actor,
+      resource: "content:rule:create",
+      outcome: "allowed",
+      metadata: expect.objectContaining({
+        source: "mcp-stdio",
+        contentAction: "content.rule.create",
+        contentType: "rule",
+        operation: "create",
+      }),
+    }))
+  })
+
+  it("denies content mutations before reading or writing content", async () => {
+    const auditSink = {
+      clearForTests: vi.fn(),
+      list: vi.fn(() => []),
+      record: vi.fn(),
+    }
+    const permissionGuard = {
+      check: vi.fn(async () => ({ allowed: false as const, reason: "content denied", policyId: "deny-content" })),
+      registerPolicy: vi.fn(),
+    }
+    const actor = { kind: "user" as const, id: "synapse-mcp", display: "Synapse MCP" }
+    const deps = {
+      ...createDeps(),
+      security: { actor, auditSink, permissionGuard },
+    }
+    const dispatcher = createContentCapabilityDispatcher(deps)
+
+    await expect(dispatcher.dispatch("content.rule.delete", {
+      id: "rule-1",
+      baseHistoryDirname: "20260521000000Z__user__abc123",
+    }, { source: "mcp-stdio" })).rejects.toThrow("content denied")
+
+    expect(deps.contentReader.getDetail).not.toHaveBeenCalled()
+    expect(deps.contentWriter.deleteContent).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "content.mutate",
+      actor,
+      resource: "content:rule:rule-1",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        source: "mcp-stdio",
+        contentAction: "content.rule.delete",
+        contentType: "rule",
+        operation: "delete",
+        contentId: "rule-1",
+        reason: "content denied",
+        policyId: "deny-content",
+      }),
+    }))
+  })
+
   it.each([
     ["rule", "create"],
     ["rule", "update"],
