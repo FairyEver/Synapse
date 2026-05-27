@@ -502,7 +502,12 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
 
     const actionRouter = createSynapseActionRouter({
       contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
-      databaseDispatch: dispatchDatabaseAction,
+      databaseDispatch: (action, params, context) => dispatchDatabaseAction(
+        action,
+        params,
+        context,
+        { permissionGuard, auditSink },
+      ),
       schedulerDispatch: (action, params, context) => dispatchSchedulerAction(
         taskScheduler,
         actionRuntime,
