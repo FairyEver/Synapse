@@ -1,4 +1,5 @@
 import { z } from "zod"
+import { stat } from "node:fs/promises"
 
 import { projectRequestSchema } from "../../runtime/ipc/schemas"
 import type { ConversationEntryV1 } from "../../runtime/data-repo"
@@ -15,6 +16,7 @@ import {
   isManagedKnowledgeBaseProject,
   resolveProjectWorkspacePath,
 } from "../../services/knowledge-base/managed-path"
+import { createMainLogger } from "../../services/log-store"
 import type { ProjectContainerRegistry } from "../../runtime/project-container"
 import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
 
@@ -22,6 +24,9 @@ import { historyRecordToTimelineItem } from "../../../src/lib/agent-timeline"
 
 export const DEFAULT_LOCAL_SESSION_KEY = "local:renderer"
 export const LOCAL_RENDERER_PLATFORM = "local-renderer"
+const logger = createMainLogger("agent.ipc-shared")
+const MANAGED_KNOWLEDGE_BASE_WORKSPACE_MISSING_ERROR = "知识库运行目录不存在。请重新创建知识库或从备份恢复。"
+const MANAGED_KNOWLEDGE_BASE_WORKSPACE_UNAVAILABLE_ERROR = "无法访问知识库运行目录。请检查磁盘权限后重试。"
 
 // ─── Shared request schemas ───────────────────────────────────────────────────
 
@@ -181,6 +186,7 @@ export async function resolveProjectAgent(
   if (!project) {
     throw new Error("找不到当前项目。")
   }
+  await assertManagedKnowledgeBaseWorkspace(project)
 
   const containers = resolve<ProjectContainerRegistry>("core.project-containers")
   const container = await containers.open(project.uuid, {
@@ -218,6 +224,42 @@ function resolveAgentProjectConfig(
     localPath: resolveProjectWorkspacePath(project),
     ...(isManagedKnowledgeBaseProject(project) ? { managedKnowledgeBase: true } : undefined),
   }
+}
+
+async function assertManagedKnowledgeBaseWorkspace(project: {
+  readonly uuid: string
+  readonly name: string
+  readonly localPath: string
+  readonly managedKnowledgeBase?: boolean
+}): Promise<void> {
+  if (!project.managedKnowledgeBase) return
+  try {
+    const stats = await stat(project.localPath)
+    if (!stats.isDirectory()) {
+      throw Object.assign(
+        new Error("Managed knowledge base workspace is not a directory."),
+        { code: "ENOTDIR" },
+      )
+    }
+  } catch (error) {
+    const errorCode = nodeErrorCode(error)
+    logger.warn("Managed knowledge base workspace unavailable.", {
+      boundary: "agent.managed-knowledge-base.workspace",
+      projectId: project.uuid,
+      projectName: project.name,
+      errorCode,
+    })
+    if (errorCode === "ENOENT" || errorCode === "ENOTDIR") {
+      throw new Error(MANAGED_KNOWLEDGE_BASE_WORKSPACE_MISSING_ERROR, { cause: error })
+    }
+    throw new Error(MANAGED_KNOWLEDGE_BASE_WORKSPACE_UNAVAILABLE_ERROR, { cause: error })
+  }
+}
+
+function nodeErrorCode(error: unknown): string | undefined {
+  if (!(error instanceof Error) || !("code" in error)) return undefined
+  const code = (error as Error & { readonly code?: unknown }).code
+  return typeof code === "string" ? code : undefined
 }
 
 export function sessionSummary(session: ConversationEntryV1) {
