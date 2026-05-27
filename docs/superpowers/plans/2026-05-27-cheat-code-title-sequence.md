@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Add a settings-local cheat code system and replace the About page logo click hidden entry with a title-character index sequence.
+**Goal:** Add a settings-local cheat code system where ten About-page logo clicks arm an enlarged, color-cycling title sequence input, then the registered title index sequence opens repository maintenance.
 
-**Architecture:** `cheat-codes.ts` owns stable cheat code names, the current settings title input binding, callbacks, and registry validation. `use-cheat-code-title-sequence.ts` owns only index buffering, timeout reset, suffix matching, and callback dispatch. `AboutPanel` renders the existing title as visually unchanged clickable spans and supplies the action context.
+**Architecture:** `cheat-codes.ts` owns stable cheat code names, the shared ten-second interaction timeout, the title input binding, active title color classes, callbacks, and registry validation. `use-cheat-code-title-sequence.ts` owns logo click arming, armed-state tracking, index buffering, shared-timeout reset, suffix matching, and callback dispatch. `AboutPanel` renders the existing logo/title, supplies the action context, and applies the temporary `text-4xl` plus Tailwind default text color feedback while armed.
 
 **Tech Stack:** Electron renderer, React 19, TypeScript, Vitest, jsdom, shadcn/Radix/Tailwind existing UI baseline.
 
@@ -12,12 +12,12 @@
 
 ## File Structure
 
-- Create `desktop/src/modules/settings/cheat-codes.ts`: settings-local cheat code registry, title parts, validation helpers, and callback types.
-- Create `desktop/src/modules/settings/__tests__/cheat-codes.test.ts`: pure unit tests for title parts, registry contents, callbacks, and validation failures.
-- Create `desktop/src/modules/settings/hooks/use-cheat-code-title-sequence.ts`: hook and small pure helpers for sequence matching and buffer trimming.
-- Create `desktop/src/modules/settings/hooks/__tests__/use-cheat-code-title-sequence.test.tsx`: hook tests for matching, timeout, wrong repeated character index, and trigger callback.
-- Create `desktop/src/modules/settings/components/__tests__/about-panel.test.tsx`: About panel integration tests for title index clicks and removed logo click behavior.
-- Modify `desktop/src/modules/settings/components/about-panel.tsx`: remove logo ten-click state; wire title spans to the hook.
+- Create `desktop/src/modules/settings/cheat-codes.ts`: settings-local cheat code registry, shared constants, title parts, active title color classes, validation helpers, and callback types.
+- Create `desktop/src/modules/settings/__tests__/cheat-codes.test.ts`: pure unit tests for constants, title parts, registry contents, callbacks, color classes, and validation failures.
+- Create `desktop/src/modules/settings/hooks/use-cheat-code-title-sequence.ts`: hook and pure helpers for arming, sequence matching, buffer trimming, and reset.
+- Create `desktop/src/modules/settings/hooks/__tests__/use-cheat-code-title-sequence.test.tsx`: hook tests for logo arming, timeout reset, matching, wrong repeated character index, and callback dispatch.
+- Create `desktop/src/modules/settings/components/__tests__/about-panel.test.tsx`: About panel integration tests for logo-armed UI, title index clicks, timeouts, and non-triggering logo clicks.
+- Modify `desktop/src/modules/settings/components/about-panel.tsx`: repurpose logo clicks to arm entry; wire title spans to the hook; apply temporary size and color feedback.
 - Modify `RELEASE_NOTES_PENDING.md`: add a user-facing note under `## 功能优化`.
 
 ## Task 1: Cheat Code Registry
@@ -34,8 +34,12 @@ Create `desktop/src/modules/settings/__tests__/cheat-codes.test.ts`:
 import { describe, expect, it, vi } from "vitest"
 
 import {
+  CHEAT_CODE_INTERACTION_RESET_DELAY,
+  CHEAT_CODE_LOGO_CLICK_THRESHOLD,
+  SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES,
   SETTINGS_CHEAT_CODE_TITLE,
   buildSettingsTitleParts,
+  getSettingsTitleActiveColorClass,
   settingsCheatCodes,
   settingsTitleParts,
   validateCheatCodeRegistrations,
@@ -43,6 +47,11 @@ import {
 } from "@/modules/settings/cheat-codes"
 
 describe("settings cheat codes", () => {
+  it("defines shared interaction constants in one place", () => {
+    expect(CHEAT_CODE_INTERACTION_RESET_DELAY).toBe(10000)
+    expect(CHEAT_CODE_LOGO_CLICK_THRESHOLD).toBe(10)
+  })
+
   it("builds stable title parts with duplicate characters separated by index", () => {
     expect(SETTINGS_CHEAT_CODE_TITLE).toBe("Synapse AI Studio")
 
@@ -58,6 +67,15 @@ describe("settings cheat codes", () => {
       { index: 1, char: " ", clickable: false },
       { index: 2, char: "B", clickable: true },
     ])
+  })
+
+  it("uses only Tailwind default text color classes for active title feedback", () => {
+    expect(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES.length).toBeGreaterThan(3)
+    expect(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES.every((className) => {
+      return className.startsWith("text-") && !className.includes("[") && !className.includes("#")
+    })).toBe(true)
+    expect(getSettingsTitleActiveColorClass(0, 0)).toBe(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES[0])
+    expect(getSettingsTitleActiveColorClass(0, 1)).toBe(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES[1])
   })
 
   it("registers repository maintenance through the centralized registry", () => {
@@ -156,6 +174,18 @@ Create `desktop/src/modules/settings/cheat-codes.ts`:
 
 ```ts
 export const SETTINGS_CHEAT_CODE_TITLE = "Synapse AI Studio"
+export const CHEAT_CODE_INTERACTION_RESET_DELAY = 10000
+export const CHEAT_CODE_LOGO_CLICK_THRESHOLD = 10
+
+export const SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES = [
+  "text-red-500",
+  "text-orange-500",
+  "text-yellow-500",
+  "text-lime-500",
+  "text-cyan-500",
+  "text-blue-500",
+  "text-fuchsia-500",
+] as const
 
 export type SettingsTitlePart = {
   readonly index: number
@@ -179,6 +209,11 @@ export function buildSettingsTitleParts(title: string = SETTINGS_CHEAT_CODE_TITL
     char,
     clickable: char !== " ",
   }))
+}
+
+export function getSettingsTitleActiveColorClass(index: number, offset = 0): string {
+  const classIndex = positiveModulo(index + offset, SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES.length)
+  return SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES[classIndex] ?? "text-foreground"
 }
 
 export const settingsTitleParts = buildSettingsTitleParts()
@@ -274,6 +309,10 @@ function isPrefixSequence(left: readonly number[], right: readonly number[]): bo
 
   return left.every((value, index) => value === right[index])
 }
+
+function positiveModulo(value: number, modulo: number): number {
+  return ((value % modulo) + modulo) % modulo
+}
 ```
 
 - [ ] **Step 4: Run registry tests and verify they pass**
@@ -311,9 +350,13 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { CheatCodeContext, CheatCodeRegistration } from "@/modules/settings/cheat-codes"
 import {
-  CHEAT_CODE_TITLE_SEQUENCE_RESET_DELAY,
+  CHEAT_CODE_INTERACTION_RESET_DELAY,
+  CHEAT_CODE_LOGO_CLICK_THRESHOLD,
+  type CheatCodeContext,
+  type CheatCodeRegistration,
+} from "@/modules/settings/cheat-codes"
+import {
   findMatchingCheatCode,
   trimTitleSequenceBuffer,
   useCheatCodeTitleSequence,
@@ -322,11 +365,11 @@ import {
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 let roots: Root[] = []
-let clickTitleIndex: ((index: number) => void) | null = null
+let latestApi: ReturnType<typeof useCheatCodeTitleSequence> | null = null
 
 beforeEach(() => {
   vi.useFakeTimers()
-  clickTitleIndex = null
+  latestApi = null
 })
 
 afterEach(() => {
@@ -336,7 +379,7 @@ afterEach(() => {
     })
   }
   roots = []
-  clickTitleIndex = null
+  latestApi = null
   vi.useRealTimers()
 })
 
@@ -354,73 +397,109 @@ describe("useCheatCodeTitleSequence", () => {
     expect(trimTitleSequenceBuffer([1, 2], 0)).toEqual([])
   })
 
-  it("runs a matched cheat code and reports its name", () => {
+  it("arms title sequence entry after ten logo clicks", () => {
+    renderProbe()
+
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
+
+    expect(latestApi?.isArmed).toBe(true)
+  })
+
+  it("resets logo click count after the shared timeout before arming", () => {
+    renderProbe()
+
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD - 1)
+    advanceSharedTimeout()
+    clickLogoTimes(1)
+
+    expect(latestApi?.isArmed).toBe(false)
+  })
+
+  it("exits armed mode after the shared timeout with no title input", () => {
+    renderProbe()
+
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
+    expect(latestApi?.isArmed).toBe(true)
+
+    advanceSharedTimeout()
+
+    expect(latestApi?.isArmed).toBe(false)
+  })
+
+  it("ignores title clicks before arming", () => {
+    const enableRepositoryMaintenance = vi.fn()
+
+    renderProbe({ context: { enableRepositoryMaintenance } })
+
+    clickTitleSequence([0, 11, 8, 9])
+
+    expect(enableRepositoryMaintenance).not.toHaveBeenCalled()
+  })
+
+  it("runs a matched cheat code and exits armed mode", () => {
     const enableRepositoryMaintenance = vi.fn()
     const onTriggered = vi.fn()
 
     renderProbe({
-      cheatCodes: [
-        createRegistration("settings:repository-maintenance:enable", [0, 11, 8, 9]),
-      ],
       context: { enableRepositoryMaintenance },
       onTriggered,
     })
 
-    clickSequence([0, 11, 8, 9])
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
+    clickTitleSequence([0, 11, 8, 9])
 
     expect(onTriggered).toHaveBeenCalledWith("settings:repository-maintenance:enable")
     expect(enableRepositoryMaintenance).toHaveBeenCalledTimes(1)
+    expect(latestApi?.isArmed).toBe(false)
   })
 
   it("does not collapse repeated characters with different indexes", () => {
     const enableRepositoryMaintenance = vi.fn()
 
-    renderProbe({
-      cheatCodes: [
-        createRegistration("settings:repository-maintenance:enable", [0, 11, 8, 9]),
-      ],
-      context: { enableRepositoryMaintenance },
-    })
+    renderProbe({ context: { enableRepositoryMaintenance } })
 
-    clickSequence([0, 0, 8, 9])
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
+    clickTitleSequence([0, 0, 8, 9])
 
     expect(enableRepositoryMaintenance).not.toHaveBeenCalled()
+    expect(latestApi?.isArmed).toBe(true)
   })
 
-  it("clears partial input after ten seconds", () => {
+  it("clears partial input and exits armed mode after the shared timeout", () => {
     const enableRepositoryMaintenance = vi.fn()
 
-    renderProbe({
-      cheatCodes: [
-        createRegistration("settings:repository-maintenance:enable", [0, 11, 8, 9]),
-      ],
-      context: { enableRepositoryMaintenance },
-    })
+    renderProbe({ context: { enableRepositoryMaintenance } })
 
-    clickSequence([0, 11])
-
-    act(() => {
-      vi.advanceTimersByTime(CHEAT_CODE_TITLE_SEQUENCE_RESET_DELAY)
-    })
-
-    clickSequence([8, 9])
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
+    clickTitleSequence([0, 11])
+    advanceSharedTimeout()
+    clickTitleSequence([8, 9])
 
     expect(enableRepositoryMaintenance).not.toHaveBeenCalled()
+    expect(latestApi?.isArmed).toBe(false)
   })
 })
 
 function renderProbe(props: {
-  readonly cheatCodes: readonly CheatCodeRegistration[]
-  readonly context: CheatCodeContext
+  readonly cheatCodes?: readonly CheatCodeRegistration[]
+  readonly context?: CheatCodeContext
   readonly onTriggered?: (name: string) => void
-}): void {
+} = {}): void {
   const container = document.createElement("div")
   document.body.appendChild(container)
   const root = createRoot(container)
   roots.push(root)
 
   act(() => {
-    root.render(<Probe {...props} />)
+    root.render(
+      <Probe
+        cheatCodes={props.cheatCodes ?? [
+          createRegistration("settings:repository-maintenance:enable", [0, 11, 8, 9]),
+        ]}
+        context={props.context ?? { enableRepositoryMaintenance: vi.fn() }}
+        onTriggered={props.onTriggered}
+      />,
+    )
   })
 }
 
@@ -429,17 +508,32 @@ function Probe(props: {
   readonly context: CheatCodeContext
   readonly onTriggered?: (name: string) => void
 }) {
-  clickTitleIndex = useCheatCodeTitleSequence(props)
+  latestApi = useCheatCodeTitleSequence(props)
   return null
 }
 
-function clickSequence(sequence: readonly number[]): void {
-  for (const index of sequence) {
+function clickLogoTimes(count: number): void {
+  for (let index = 0; index < count; index += 1) {
     act(() => {
-      if (!clickTitleIndex) throw new Error("Probe not rendered")
-      clickTitleIndex(index)
+      if (!latestApi) throw new Error("Probe not rendered")
+      latestApi.handleLogoClick()
     })
   }
+}
+
+function clickTitleSequence(sequence: readonly number[]): void {
+  for (const index of sequence) {
+    act(() => {
+      if (!latestApi) throw new Error("Probe not rendered")
+      latestApi.handleTitleIndexClick(index)
+    })
+  }
+}
+
+function advanceSharedTimeout(): void {
+  act(() => {
+    vi.advanceTimersByTime(CHEAT_CODE_INTERACTION_RESET_DELAY)
+  })
 }
 
 function createRegistration(name: string, settingsTitleSequence: readonly number[]): CheatCodeRegistration {
@@ -468,26 +562,35 @@ Expected: FAIL because `use-cheat-code-title-sequence.ts` does not exist.
 Create `desktop/src/modules/settings/hooks/use-cheat-code-title-sequence.ts`:
 
 ```ts
-import { useCallback, useEffect, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import type { CheatCodeContext, CheatCodeRegistration } from "@/modules/settings/cheat-codes"
-
-export const CHEAT_CODE_TITLE_SEQUENCE_RESET_DELAY = 10000
+import {
+  CHEAT_CODE_INTERACTION_RESET_DELAY,
+  CHEAT_CODE_LOGO_CLICK_THRESHOLD,
+  type CheatCodeContext,
+  type CheatCodeRegistration,
+} from "@/modules/settings/cheat-codes"
 
 type UseCheatCodeTitleSequenceOptions = {
   readonly cheatCodes: readonly CheatCodeRegistration[]
   readonly context: CheatCodeContext
   readonly onTriggered?: (name: string) => void
-  readonly resetDelayMs?: number
+}
+
+type UseCheatCodeTitleSequenceResult = {
+  readonly isArmed: boolean
+  readonly handleLogoClick: () => void
+  readonly handleTitleIndexClick: (index: number) => void
 }
 
 export function useCheatCodeTitleSequence({
   cheatCodes,
   context,
   onTriggered,
-  resetDelayMs = CHEAT_CODE_TITLE_SEQUENCE_RESET_DELAY,
-}: UseCheatCodeTitleSequenceOptions): (index: number) => void {
+}: UseCheatCodeTitleSequenceOptions): UseCheatCodeTitleSequenceResult {
+  const [isArmed, setIsArmed] = useState(false)
   const bufferRef = useRef<readonly number[]>([])
+  const logoClickCountRef = useRef(0)
   const resetTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const maxSequenceLength = useMemo(
     () => getMaxTitleSequenceLength(cheatCodes),
@@ -501,15 +604,44 @@ export function useCheatCodeTitleSequence({
     }
   }, [])
 
-  const clearBuffer = useCallback(() => {
-    bufferRef.current = []
+  const resetInteraction = useCallback(() => {
     clearResetTimer()
+    bufferRef.current = []
+    logoClickCountRef.current = 0
+    setIsArmed(false)
   }, [clearResetTimer])
 
-  useEffect(() => clearBuffer, [clearBuffer])
-
-  return useCallback((index: number) => {
+  const scheduleReset = useCallback(() => {
     clearResetTimer()
+    resetTimerRef.current = setTimeout(() => {
+      resetInteraction()
+    }, CHEAT_CODE_INTERACTION_RESET_DELAY)
+  }, [clearResetTimer, resetInteraction])
+
+  useEffect(() => {
+    return () => {
+      clearResetTimer()
+    }
+  }, [clearResetTimer])
+
+  const handleLogoClick = useCallback(() => {
+    logoClickCountRef.current += 1
+
+    if (logoClickCountRef.current >= CHEAT_CODE_LOGO_CLICK_THRESHOLD) {
+      logoClickCountRef.current = 0
+      bufferRef.current = []
+      setIsArmed(true)
+      scheduleReset()
+      return
+    }
+
+    scheduleReset()
+  }, [scheduleReset])
+
+  const handleTitleIndexClick = useCallback((index: number) => {
+    if (!isArmed) {
+      return
+    }
 
     const nextBuffer = trimTitleSequenceBuffer(
       [...bufferRef.current, index],
@@ -518,18 +650,21 @@ export function useCheatCodeTitleSequence({
     const matchedCheatCode = findMatchingCheatCode(cheatCodes, nextBuffer)
 
     if (matchedCheatCode) {
-      bufferRef.current = []
+      resetInteraction()
       onTriggered?.(matchedCheatCode.name)
       matchedCheatCode.run(context)
       return
     }
 
     bufferRef.current = nextBuffer
-    resetTimerRef.current = setTimeout(() => {
-      bufferRef.current = []
-      resetTimerRef.current = null
-    }, resetDelayMs)
-  }, [cheatCodes, clearResetTimer, context, maxSequenceLength, onTriggered, resetDelayMs])
+    scheduleReset()
+  }, [cheatCodes, context, isArmed, maxSequenceLength, onTriggered, resetInteraction, scheduleReset])
+
+  return {
+    isArmed,
+    handleLogoClick,
+    handleTitleIndexClick,
+  }
 }
 
 export function findMatchingCheatCode(
@@ -604,6 +739,11 @@ import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import {
+  CHEAT_CODE_INTERACTION_RESET_DELAY,
+  CHEAT_CODE_LOGO_CLICK_THRESHOLD,
+  SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES,
+} from "@/modules/settings/cheat-codes"
 import { AboutPanel } from "@/modules/settings/components/about-panel"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -626,6 +766,7 @@ vi.mock("@/assets/icon.png", () => ({
 let roots: Root[] = []
 
 beforeEach(() => {
+  vi.useFakeTimers()
   vi.clearAllMocks()
   installUpdaterBridge()
 })
@@ -639,42 +780,84 @@ afterEach(() => {
   roots = []
   document.body.innerHTML = ""
   delete (window as unknown as { synapse?: unknown }).synapse
+  vi.useRealTimers()
 })
 
 describe("AboutPanel cheat codes", () => {
-  it("enables repository maintenance from the registered title index sequence", async () => {
+  it("arms title input from logo clicks and enlarges the title", async () => {
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
+
+    expect(getTitle().className).toContain("text-4xl")
+    expect(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES).toContain(getTitlePart(0).className)
+  })
+
+  it("does not enable repository maintenance from logo clicks alone", async () => {
     const onAdminModeChange = vi.fn()
     await renderAboutPanel({ onAdminModeChange })
 
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
+
+    expect(onAdminModeChange).not.toHaveBeenCalled()
+  })
+
+  it("enables repository maintenance from the registered title index sequence after arming", async () => {
+    const onAdminModeChange = vi.fn()
+    await renderAboutPanel({ onAdminModeChange })
+
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
     clickTitleSequence([0, 11, 8, 9])
 
     expect(onAdminModeChange).toHaveBeenCalledWith(true)
     expect(rendererLogger.info).toHaveBeenCalledWith("Cheat code activated.", {
       name: "settings:repository-maintenance:enable",
     })
+    expect(getTitle().className).toContain("text-lg")
+  })
+
+  it("ignores title clicks before arming", async () => {
+    const onAdminModeChange = vi.fn()
+    await renderAboutPanel({ onAdminModeChange })
+
+    clickTitleSequence([0, 11, 8, 9])
+
+    expect(onAdminModeChange).not.toHaveBeenCalled()
   })
 
   it("treats the first S and second S as different inputs", async () => {
     const onAdminModeChange = vi.fn()
     await renderAboutPanel({ onAdminModeChange })
 
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
     clickTitleSequence([0, 0, 8, 9])
 
     expect(onAdminModeChange).not.toHaveBeenCalled()
   })
 
-  it("does not enable repository maintenance from old logo clicks", async () => {
+  it("reverts title size and color after the shared timeout with no title input", async () => {
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
+    expect(getTitle().className).toContain("text-4xl")
+
+    advanceSharedTimeout()
+
+    expect(getTitle().className).toContain("text-lg")
+    expect(getTitlePart(0).className).not.toContain("text-red-500")
+  })
+
+  it("cancels partial title input after the shared timeout", async () => {
     const onAdminModeChange = vi.fn()
     await renderAboutPanel({ onAdminModeChange })
-    const logo = getLogo()
 
-    for (let clickIndex = 0; clickIndex < 10; clickIndex += 1) {
-      act(() => {
-        logo.click()
-      })
-    }
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
+    clickTitleSequence([0, 11])
+    advanceSharedTimeout()
+    clickTitleSequence([8, 9])
 
     expect(onAdminModeChange).not.toHaveBeenCalled()
+    expect(getTitle().className).toContain("text-lg")
   })
 })
 
@@ -697,12 +880,38 @@ async function renderAboutPanel(props: {
   })
 }
 
+function clickLogoTimes(count: number): void {
+  const logo = getLogo()
+
+  for (let clickIndex = 0; clickIndex < count; clickIndex += 1) {
+    act(() => {
+      logo.click()
+    })
+  }
+}
+
 function clickTitleSequence(sequence: readonly number[]): void {
   for (const index of sequence) {
     act(() => {
       getTitlePart(index).click()
     })
   }
+}
+
+function advanceSharedTimeout(): void {
+  act(() => {
+    vi.advanceTimersByTime(CHEAT_CODE_INTERACTION_RESET_DELAY)
+  })
+}
+
+function getTitle(): HTMLHeadingElement {
+  const title = document.body.querySelector("[data-settings-cheat-code-title]")
+
+  if (!(title instanceof HTMLHeadingElement)) {
+    throw new Error("Title not found")
+  }
+
+  return title
 }
 
 function getTitlePart(index: number): HTMLElement {
@@ -758,20 +967,23 @@ Run:
 pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/settings/components/__tests__/about-panel.test.tsx
 ```
 
-Expected: FAIL because title spans do not expose `data-settings-title-index` and the old logo click behavior still enables admin mode.
+Expected: FAIL because title spans do not expose `data-settings-title-index`, logo clicks still trigger the old admin behavior directly, and the title never enters `text-4xl`.
 
 - [ ] **Step 3: Integrate cheat codes into AboutPanel**
 
-Modify the import line in `desktop/src/modules/settings/components/about-panel.tsx`:
+Modify imports in `desktop/src/modules/settings/components/about-panel.tsx`:
 
 ```ts
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { cn } from "@/lib/utils"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
 import {
+  SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES,
   SETTINGS_CHEAT_CODE_TITLE,
+  getSettingsTitleActiveColorClass,
   settingsCheatCodes,
   settingsTitleParts,
   type CheatCodeContext,
@@ -781,14 +993,14 @@ import type { SynapseAppUpdateState } from "@/types/update"
 import synapseLogo from "@/assets/icon.png"
 ```
 
-Delete these old logo-click constants:
+Delete the old admin-click constants:
 
 ```ts
 const ADMIN_CLICK_THRESHOLD = 10
 const ADMIN_CLICK_RESET_DELAY = 2000
 ```
 
-Delete these old state and timer lines inside `AboutPanel`:
+Delete the old logo-click state and timer:
 
 ```ts
 const [clickCount, setClickCount] = useState(0)
@@ -797,9 +1009,11 @@ const resetTimerRef = useRef<NodeJS.Timeout | null>(null)
 
 Delete the old `handleLogoClick` callback and the timer cleanup effect.
 
-Add this callback wiring before `handleAction`:
+Add this state and hook wiring before `handleAction`:
 
 ```ts
+  const [activeTitleColorOffset, setActiveTitleColorOffset] = useState(0)
+
   const cheatCodeContext = useMemo<CheatCodeContext>(
     () => ({
       enableRepositoryMaintenance: () => {
@@ -815,20 +1029,43 @@ Add this callback wiring before `handleAction`:
     logger.info("Cheat code activated.", { name })
   }, [])
 
-  const handleTitleIndexClick = useCheatCodeTitleSequence({
+  const {
+    handleLogoClick,
+    handleTitleIndexClick,
+    isArmed: isCheatCodeEntryArmed,
+  } = useCheatCodeTitleSequence({
     cheatCodes: settingsCheatCodes,
     context: cheatCodeContext,
     onTriggered: handleCheatCodeTriggered,
   })
+
+  useEffect(() => {
+    if (!isCheatCodeEntryArmed) {
+      setActiveTitleColorOffset(0)
+      return
+    }
+
+    const interval = setInterval(() => {
+      setActiveTitleColorOffset(
+        (current) => (current + 1) % SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES.length,
+      )
+    }, 400)
+
+    return () => {
+      clearInterval(interval)
+    }
+  }, [isCheatCodeEntryArmed])
 ```
 
-Replace the logo image block with a non-clicking logo:
+Replace the logo image block with an arming-only logo click:
 
 ```tsx
+        {/* eslint-disable-next-line jsx-a11y/no-noninteractive-element-interactions, jsx-a11y/click-events-have-key-events */}
         <img
           src={synapseLogo}
           alt="Synapse"
           draggable={false}
+          onClick={handleLogoClick}
           className="size-24 shrink-0 object-contain select-none"
         />
 ```
@@ -838,13 +1075,22 @@ Replace the title `h1` with indexed title spans:
 ```tsx
           {/* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
           <h1
-            className="text-lg font-semibold tracking-tight"
+            className={cn(
+              "font-semibold tracking-tight",
+              isCheatCodeEntryArmed ? "text-4xl" : "text-lg",
+            )}
             aria-label={SETTINGS_CHEAT_CODE_TITLE}
+            data-settings-cheat-code-title
           >
             {settingsTitleParts.map((part) => (
               <span
                 key={part.index}
                 aria-hidden="true"
+                className={
+                  isCheatCodeEntryArmed && part.clickable
+                    ? getSettingsTitleActiveColorClass(part.index, activeTitleColorOffset)
+                    : undefined
+                }
                 data-settings-title-index={part.index}
                 onClick={part.clickable ? () => handleTitleIndexClick(part.index) : undefined}
               >
@@ -869,7 +1115,7 @@ Expected: PASS.
 
 ```bash
 git add desktop/src/modules/settings/components/about-panel.tsx desktop/src/modules/settings/components/__tests__/about-panel.test.tsx
-git commit -m "feat(settings): trigger maintenance from title cheat code"
+git commit -m "feat(settings): arm title cheat code from logo"
 ```
 
 ## Task 4: Release Notes and Verification
@@ -882,7 +1128,7 @@ git commit -m "feat(settings): trigger maintenance from title cheat code"
 Under `## 功能优化`, add:
 
 ```md
-- 关于页隐藏维护入口改为标题字符暗号，原来的 logo 连点入口不再触发。
+- 关于页隐藏维护入口改为 logo 连点后输入标题字符暗号，避免连点直接打开维护入口。
 ```
 
 - [ ] **Step 2: Run the focused test suite**
@@ -913,7 +1159,7 @@ Expected: PASS.
 Run:
 
 ```bash
-rg -n "style=|#[0-9a-fA-F]{3,8}|rgb\\(|hsl\\(|bg-\\[|text-\\[|from-|to-|gradient|console\\.log" \
+rg -n "style=|#[0-9a-fA-F]{3,8}|rgb\\(|hsl\\(|bg-\\[|text-\\[|from-|to-|gradient|glow|shadow-|console\\.log" \
   desktop/src/modules/settings/cheat-codes.ts \
   desktop/src/modules/settings/hooks/use-cheat-code-title-sequence.ts \
   desktop/src/modules/settings/components/about-panel.tsx \
@@ -928,12 +1174,14 @@ Expected: no output.
 
 ```bash
 git add RELEASE_NOTES_PENDING.md
-git commit -m "docs: note title cheat code entry"
+git commit -m "docs: note logo-armed title cheat code"
 ```
 
 ## Final Review
 
 - [ ] Confirm `AGENTS.md` already documents the cheat code guidance and does not reveal the title sequence.
-- [ ] Confirm `AboutPanel` no longer contains `ADMIN_CLICK_THRESHOLD`, `clickCount`, or `handleLogoClick`.
+- [ ] Confirm `AboutPanel` no longer contains `ADMIN_CLICK_THRESHOLD`, `ADMIN_CLICK_RESET_DELAY`, `clickCount`, or old direct-admin logo behavior.
+- [ ] Confirm the only 10000 ms cheat-code interaction timeout lives in `desktop/src/modules/settings/cheat-codes.ts`.
+- [ ] Confirm the active title feedback uses Tailwind default text color classes only, with no custom colors, glow, gradients, inline styles, or CSS keyframes.
 - [ ] Confirm logs contain only the cheat code name and never the clicked index buffer.
 - [ ] Confirm no development server, browser preview, Playwright, Chrome, or runtime debugger was started.
