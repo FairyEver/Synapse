@@ -18,7 +18,7 @@ const rendererLogger = vi.hoisted(() => ({
 const notifications = vi.hoisted(() => ({
   error: vi.fn(),
   success: vi.fn(),
-  promise: vi.fn(async <T,>(operation: () => Promise<T>) => operation()),
+  promise: vi.fn(async <T,>(operation: () => Promise<T>, _options?: unknown) => operation()),
 }))
 
 vi.mock("@/app-shell/logging", () => ({
@@ -40,7 +40,7 @@ beforeEach(() => {
   notifications.error.mockClear()
   notifications.success.mockClear()
   notifications.promise.mockClear()
-  notifications.promise.mockImplementation(async <T,>(operation: () => Promise<T>) => operation())
+  notifications.promise.mockImplementation(async <T,>(operation: () => Promise<T>, _options?: unknown) => operation())
   bridgeMocks = createBridgeMocks()
   Object.defineProperty(window, "synapse", {
     configurable: true,
@@ -174,6 +174,15 @@ function buttonByText(text: string): HTMLButtonElement {
     .find((candidate) => candidate.textContent?.trim() === text)
   if (!button) throw new Error(`Button not found: ${text}`)
   return button
+}
+
+function lastUploadSuccessMessage(result: SynapseKnowledgeBaseRawMutationResult): string | null {
+  const options = notifications.promise.mock.calls.at(-1)?.[1] as {
+    success?: string | null | ((value: SynapseKnowledgeBaseRawMutationResult) => string | null)
+  } | undefined
+  if (!options) throw new Error("Promise notification options not found.")
+  if (typeof options.success === "function") return options.success(result)
+  return options.success ?? null
 }
 
 function changeInput(input: HTMLInputElement, value: string): void {
@@ -318,6 +327,50 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
         filePaths: ["/tmp/diagram.png"],
       })
     })
+  })
+
+  it("reports skipped files in the upload success message", async () => {
+    const uploadResult: SynapseKnowledgeBaseRawMutationResult = {
+      projectId: "project-1",
+      entries: [{
+        relativePath: "客户/good.md",
+        name: "good.md",
+        kind: "file",
+        size: 12,
+        modifiedAt: "2026-05-26T00:00:00.000Z",
+      }],
+      skipped: [{ path: "/tmp/locked.pdf", reason: "read-error" }],
+    }
+    bridgeMocks.knowledgeBase.uploadRawFiles.mockResolvedValueOnce(uploadResult)
+    bridgeMocks.knowledgeBase.filePathForDroppedFile.mockReturnValue("/tmp/good.md")
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("客户")
+    })
+
+    const dropTarget = document.querySelector<HTMLElement>('[aria-label="拖拽上传资料"]')
+    if (!dropTarget) throw new Error("Drop target not found.")
+    const event = new Event("drop", { bubbles: true, cancelable: true })
+    Object.defineProperty(event, "dataTransfer", {
+      value: {
+        files: [new File(["file"], "good.md", { type: "text/markdown" })],
+      },
+    })
+
+    await act(async () => {
+      dropTarget.dispatchEvent(event)
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.uploadRawFiles).toHaveBeenCalledWith({
+        projectId: "project-1",
+        targetDirectoryPath: "",
+        filePaths: ["/tmp/good.md"],
+      })
+    })
+    expect(lastUploadSuccessMessage(uploadResult)).toBe("已上传 1 项，跳过 1 项（读取失败 1）")
   })
 
   it("creates folders and batch mutates selected entries", async () => {
