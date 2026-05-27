@@ -141,6 +141,17 @@ describe("Content MCP RPC", () => {
   })
 })
 
+describe("Model Price MCP RPC", () => {
+  it("returns model price dispatcher data without the internal envelope", async () => {
+    const payload = await callTool("model_price_rule_list", {
+      ok: true,
+      data: [{ id: "deepseek-v4-pro", modelPattern: "deepseek-v4-pro", inputPer1M: 3 }],
+    })
+
+    expect(payload).toEqual([{ id: "deepseek-v4-pro", modelPattern: "deepseek-v4-pro", inputPer1M: 3 }])
+  })
+})
+
 describe("Repository and Variable MCP RPC", () => {
   it("returns repository data without the internal dispatcher envelope", async () => {
     const payload = await callTool("repository_item_list", {

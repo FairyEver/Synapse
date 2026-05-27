@@ -55,6 +55,7 @@ function normalizeToolResult(action: string, result: unknown): unknown {
     action.startsWith("scheduler.")
     || action.startsWith("workflow.")
     || action.startsWith("content.")
+    || action.startsWith("model_price.")
     || action.startsWith("repository.")
     || action.startsWith("variable.")
   ) {
