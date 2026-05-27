@@ -42,6 +42,9 @@ type UsedModelRow = {
 type UsedModelAccumulator = Omit<UsedModelRow, "sources" | "priceKnown" | "matchedRuleId" | "matchedRulePattern"> & {
   readonly sources: Set<UsageSourceName>
 }
+type MutableUsageModelPriceRulePatch = {
+  -readonly [Key in keyof UsageModelPriceRulePatch]: UsageModelPriceRulePatch[Key]
+}
 
 const RANGE_PRESETS: readonly UsageRangePreset[] = ["today", "7d", "30d", "90d", "all"]
 const PRICE_FIELDS = ["inputPer1M", "outputPer1M", "cacheReadPer1M", "cacheWritePer1M", "reasoningPer1M"] as const
@@ -110,7 +113,7 @@ function readCreateParams(params: Record<string, unknown>) {
 }
 
 function readPatchParams(params: Record<string, unknown>): UsageModelPriceRulePatch {
-  const patch: UsageModelPriceRulePatch = {}
+  const patch: MutableUsageModelPriceRulePatch = {}
   if ("modelPattern" in params) patch.modelPattern = requireString(params, "modelPattern")
   for (const field of PRICE_FIELDS) {
     if (field in params) {
