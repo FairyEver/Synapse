@@ -76,6 +76,7 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.app-icon",
         "core.automation-ingress",
         "core.bridge-adapter",
+        "core.cheat-code-state",
         "core.config",
         "core.data-repository",
         "core.database",

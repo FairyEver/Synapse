@@ -21,6 +21,7 @@ This is a discovery barrier, not a security boundary. Anyone who reads the code 
 - Widen the title letter spacing while entry is armed so individual characters are easier to click without making the whole title oversized.
 - Show a temporary per-character color cycling effect while entry is armed, using Tailwind default text color utilities only.
 - Scale and bold each armed title character on hover with a CSS transition.
+- Fade other armed title characters to 50% opacity while one character is hovered, also with a CSS transition.
 - Match title input bindings by character index, not by character value. The first `S` and second `S` are different inputs.
 - Replace the existing ten-logo-click repository maintenance entry with a title-sequence cheat code.
 - Use one shared ten-second timeout constant for logo-click arming, armed-mode reset, and title-sequence inactivity reset.
@@ -172,7 +173,7 @@ Prefix conflicts are rejected so `[0, 11]` cannot accidentally trigger before `[
 
 The title should read as normal text before entry is armed. Character click targets should not add visible button styling, hover decoration, helper text, or cursor hints.
 
-After ten logo clicks, the title keeps its normal `text-lg` size, widens its letter spacing, and each visible character receives a cycling Tailwind default text color class. Armed characters scale up and become bold on hover. The spacing, scale, and weight changes must use CSS transitions so the feedback is smooth, not abrupt. The effect is intentionally temporary feedback for clickability, not a custom visual system. It must not use custom colors, glow, gradients, inline styles, or keyframes. Ten seconds without title input reverts the title to normal spacing and default text color.
+After ten logo clicks, the title keeps its normal `text-lg` size, widens its letter spacing, and each visible character receives a cycling Tailwind default text color class. Armed characters scale up and become bold on hover, while the other armed characters fade to 50% opacity. The spacing, scale, weight, and opacity changes must use CSS transitions so the feedback is smooth, not abrupt. The effect is intentionally temporary feedback for clickability, not a custom visual system. It must not use custom colors, glow, gradients, inline styles, or keyframes. Ten seconds without title input reverts the title to normal spacing and default text color.
 
 The logo click gesture should no longer trigger repository maintenance directly. It only arms title-sequence input.
 
@@ -189,6 +190,7 @@ Add focused tests for:
 - index matching distinguishes the first `S` from the second `S`
 - ten logo clicks arm title entry and widen the title letter spacing
 - armed title characters scale and bold on hover with a CSS transition
+- other armed title characters fade to 50% opacity while a character is hovered
 - armed title characters use only registered Tailwind default color classes
 - the repository maintenance cheat code sequence enables admin mode
 - logo clicks alone do not enable admin mode

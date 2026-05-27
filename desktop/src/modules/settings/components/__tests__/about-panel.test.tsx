@@ -78,11 +78,25 @@ describe("AboutPanel cheat codes", () => {
     clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
 
     expect(getTitlePart(0).className).toContain("inline-block")
-    expect(getTitlePart(0).className).toContain("transition-[color,transform,font-weight]")
+    expect(getTitlePart(0).className).toContain("transition-[color,transform,font-weight,opacity]")
     expect(getTitlePart(0).className).toContain("duration-200")
     expect(getTitlePart(0).className).toContain("ease-out")
     expect(getTitlePart(0).className).toContain("hover:scale-110")
     expect(getTitlePart(0).className).toContain("hover:font-bold")
+  })
+
+  it("dims other active title characters while one character is hovered", async () => {
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
+    hoverTitlePart(0)
+
+    expect(getTitlePart(0).className).not.toContain("opacity-50")
+    expect(getTitlePart(1).className).toContain("opacity-50")
+
+    leaveTitlePart(0)
+
+    expect(getTitlePart(1).className).not.toContain("opacity-50")
   })
 
   it("moves each active title color one character to the right on each tick", async () => {
@@ -238,6 +252,18 @@ function getLogo(): HTMLImageElement {
   }
 
   return logo
+}
+
+function hoverTitlePart(index: number): void {
+  act(() => {
+    getTitlePart(index).dispatchEvent(new MouseEvent("mouseover", { bubbles: true }))
+  })
+}
+
+function leaveTitlePart(index: number): void {
+  act(() => {
+    getTitlePart(index).dispatchEvent(new MouseEvent("mouseout", { bubbles: true }))
+  })
 }
 
 function installUpdaterBridge(): void {

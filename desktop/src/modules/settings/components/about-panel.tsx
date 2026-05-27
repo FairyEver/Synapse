@@ -119,6 +119,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   const [actionError, setActionError] = useState<string | null>(null)
   const [isRestarting, setIsRestarting] = useState(false)
   const [activeTitleColorOffset, setActiveTitleColorOffset] = useState(0)
+  const [hoveredTitleIndex, setHoveredTitleIndex] = useState<number | null>(null)
 
   useEffect(() => {
     const bridge = window.synapse?.updater
@@ -213,6 +214,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   useEffect(() => {
     if (!isCheatCodeEntryArmed) {
       setActiveTitleColorOffset(0)
+      setHoveredTitleIndex(null)
       return
     }
 
@@ -301,12 +303,15 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
                   isCheatCodeEntryArmed && part.clickable
                     ? cn(
                         getSettingsTitleActiveColorClass(part.index, activeTitleColorOffset),
-                        "inline-block origin-center transition-[color,transform,font-weight] duration-200 ease-out hover:scale-110 hover:font-bold",
+                        "inline-block origin-center transition-[color,transform,font-weight,opacity] duration-200 ease-out hover:scale-110 hover:font-bold",
+                        hoveredTitleIndex !== null && hoveredTitleIndex !== part.index ? "opacity-50" : "opacity-100",
                       )
                     : undefined
                 }
                 data-settings-title-index={part.index}
                 onClick={part.clickable ? () => handleTitleIndexClick(part.index) : undefined}
+                onMouseEnter={part.clickable ? () => setHoveredTitleIndex(part.index) : undefined}
+                onMouseLeave={part.clickable ? () => setHoveredTitleIndex(null) : undefined}
               >
                 {part.char}
               </span>

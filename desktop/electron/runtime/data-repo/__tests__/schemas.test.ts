@@ -36,6 +36,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "agent.commands",
         "agent.compress_state",
         "agent.events",
+        "cheat-code.states",
         "conversations",
         "core.config",
         "core.identity",
