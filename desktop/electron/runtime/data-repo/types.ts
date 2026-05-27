@@ -32,6 +32,7 @@ export interface DataNamespace<T> {
    */
   getSingleton(): Promise<T | null>
   setSingleton(value: T): Promise<void>
+  clearSingleton?(): Promise<void>
   /** List form — for collection namespaces (e.g. projects, conversations). */
   list(filter?: Partial<T>): Promise<T[]>
   get(id: string): Promise<T | null>

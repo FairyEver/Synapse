@@ -181,6 +181,45 @@ describe("DataRepositoryImpl (T2.13)", () => {
     }
   })
 
+  it("importAll() replace mode clears an existing singleton when the backup omits it", async () => {
+    const dir = await tempDir()
+    try {
+      const repo = createDataRepository()
+      const handle = new JsonNamespace<CoreConfigV1>({
+        name: coreConfigSchema.name,
+        schemaVersion: coreConfigSchema.currentVersion,
+        backend: "json",
+        filePath: path.join(dir, "core.config.json"),
+      })
+      repo.register(coreConfigSchema, handle)
+      await handle.setSingleton({
+        schemaVersion: 1,
+        activeRepoUuid: "old",
+        repositories: [],
+        global: {},
+      })
+
+      await repo.importAll({
+        format: "synapse-backup-v1",
+        exportedAt: "2026-04-25T00:00:00Z",
+        namespaces: [
+          {
+            name: "core.config",
+            schemaVersion: 1,
+            encrypted: false,
+            data: {
+              items: [],
+            },
+          },
+        ],
+      })
+
+      await expect(handle.getSingleton()).resolves.toBeNull()
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
   it("importAll() merge mode keeps existing items intact", async () => {
     const dir = await tempDir()
     try {
