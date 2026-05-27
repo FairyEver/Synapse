@@ -18,6 +18,9 @@ const mocks = vi.hoisted(() => ({
     info: vi.fn(),
     warn: vi.fn(),
   },
+  logStore: {
+    dispose: vi.fn(),
+  },
 }))
 
 vi.mock("node:fs/promises", () => mocks.fs)
@@ -50,9 +53,7 @@ vi.mock("../../../services/config-backup-service", () => ({
 
 vi.mock("../../../services/log-store", () => ({
   createMainLogger: () => mocks.logger,
-  logStore: {
-    dispose: vi.fn(),
-  },
+  logStore: mocks.logStore,
 }))
 
 vi.mock("../../../services/repository-store", () => ({
@@ -137,8 +138,15 @@ describe("configIpcModule", () => {
     ])
     mocks.fs.rm.mockRejectedValueOnce(new Error("locked"))
     const harness = createHarness()
+    const stderrWrite = vi.spyOn(process.stderr, "write")
+    stderrWrite.mockImplementation((() => true) as unknown as typeof process.stderr.write)
 
-    const result = await harness.invoke("synapse:config:reset-app", undefined)
+    let result: unknown
+    try {
+      result = await harness.invoke("synapse:config:reset-app", undefined)
+    } finally {
+      stderrWrite.mockRestore()
+    }
 
     expect(result).toEqual({
       success: false,
@@ -150,9 +158,54 @@ describe("configIpcModule", () => {
     expect(mocks.fs.unlink).toHaveBeenCalledTimes(1)
     expect(mocks.fs.unlink).toHaveBeenCalledWith(path.join("/tmp", "config.json"))
   })
+
+  it("records resetApp audit and system log before disposing local logs", async () => {
+    mocks.fs.readdir.mockResolvedValue([
+      { name: "logs", isDirectory: () => true },
+      { name: "config.json", isDirectory: () => false },
+      { name: "synapse-data.db", isDirectory: () => false },
+    ])
+    const auditSink = {
+      clearForTests: vi.fn(),
+      flush: vi.fn().mockResolvedValue(undefined),
+      list: vi.fn(() => []),
+      record: vi.fn(),
+    }
+    const stderrWrite = vi.spyOn(process.stderr, "write")
+    stderrWrite.mockImplementation((() => true) as unknown as typeof process.stderr.write)
+    const harness = createHarness({ auditSink })
+
+    try {
+      await harness.invoke("synapse:config:reset-app", undefined)
+
+      expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+        action: "fs.write",
+        actor: { kind: "user" },
+        resource: "app:userData",
+        outcome: "allowed",
+        metadata: expect.objectContaining({
+          operation: "app.reset",
+          source: "config.resetApp",
+          stage: "started",
+        }),
+      }))
+      expect(auditSink.flush).toHaveBeenCalled()
+      expect(auditSink.record.mock.invocationCallOrder[0]).toBeLessThan(mocks.logStore.dispose.mock.invocationCallOrder[0])
+      expect(stderrWrite).toHaveBeenCalledWith(expect.stringContaining("[synapse-reset] config.resetApp started"))
+    } finally {
+      stderrWrite.mockRestore()
+    }
+  })
 })
 
-function createHarness() {
+function createHarness(options: {
+  readonly auditSink?: {
+    readonly clearForTests: ReturnType<typeof vi.fn>
+    readonly flush?: ReturnType<typeof vi.fn>
+    readonly list: ReturnType<typeof vi.fn>
+    readonly record: ReturnType<typeof vi.fn>
+  }
+} = {}) {
   const harness = createInMemoryHarness()
   const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
     if (serviceId === "core.permission-guard") {
@@ -162,11 +215,11 @@ function createHarness() {
       } as T
     }
     if (serviceId === "core.audit-sink") {
-      return {
+      return (options.auditSink ?? {
         clearForTests: vi.fn(),
         list: vi.fn(() => []),
         record: vi.fn(),
-      } as T
+      }) as T
     }
     throw new Error(`Unexpected service id: ${serviceId}`)
   }

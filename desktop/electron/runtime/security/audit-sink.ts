@@ -104,8 +104,12 @@ export class DataRepositoryAuditSink implements AuditSink {
     this.pendingWrite = Promise.resolve()
   }
 
-  flushForTests(): Promise<void> {
+  flush(): Promise<void> {
     return this.pendingWrite
+  }
+
+  flushForTests(): Promise<void> {
+    return this.flush()
   }
 }
 
