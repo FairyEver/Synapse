@@ -13,6 +13,32 @@ import {
   dedupePath,
 } from "../controlled-runner"
 
+function createChildThatIgnoresSigterm(): {
+  readonly child: ChildProcessWithoutNullStreams
+  readonly kill: ReturnType<typeof vi.fn>
+} {
+  const stdout = new PassThrough()
+  const stderr = new PassThrough()
+  const child = new EventEmitter() as ChildProcessWithoutNullStreams
+  const kill = vi.fn((signal?: NodeJS.Signals) => {
+    if (signal === "SIGKILL") {
+      queueMicrotask(() => {
+        stdout.end()
+        stderr.end()
+        child.emit("close", null, "SIGKILL")
+      })
+    }
+    return true
+  })
+  Object.assign(child, {
+    stdout,
+    stderr,
+    stdin: new PassThrough(),
+    kill,
+  })
+  return { child, kill }
+}
+
 describe("ControlledProcessRunner (Phase 0.7)", () => {
   it("runs an allowed command and records an allowed audit event", async () => {
     const guard = createPermissionGuard()
@@ -87,6 +113,39 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
         outcome: "failed",
       }),
     ])
+  })
+
+  it("escalates timed out runs to SIGKILL when SIGTERM is ignored", async () => {
+    vi.useFakeTimers()
+    try {
+      const guard = createPermissionGuard()
+      const auditSink = new InMemoryAuditSink()
+      const { child, kill } = createChildThatIgnoresSigterm()
+      const runner = createControlledProcessRunner({
+        permissionGuard: guard,
+        auditSink,
+        spawnImpl: () => child,
+      })
+
+      const resultPromise = runner.run({
+        actor: { kind: "user" },
+        action: "shell.exec",
+        command: process.execPath,
+        timeoutMs: 10,
+      })
+
+      await vi.advanceTimersByTimeAsync(10)
+      expect(kill).toHaveBeenCalledWith("SIGTERM")
+
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(kill).toHaveBeenCalledWith("SIGKILL")
+      await expect(resultPromise).resolves.toMatchObject({
+        signal: "SIGKILL",
+        timedOut: true,
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("passes only allowlisted env keys to the spawned process", async () => {
@@ -324,6 +383,39 @@ describe("ControlledProcessRunner (Phase 0.7)", () => {
         metadata: expect.objectContaining({ longRunning: true }),
       }),
     ])
+  })
+
+  it("escalates timed out sessions to SIGKILL when SIGTERM is ignored", async () => {
+    vi.useFakeTimers()
+    try {
+      const guard = createPermissionGuard()
+      const auditSink = new InMemoryAuditSink()
+      const { child, kill } = createChildThatIgnoresSigterm()
+      const runner = createControlledProcessRunner({
+        permissionGuard: guard,
+        auditSink,
+        spawnImpl: () => child,
+      })
+
+      const session = await runner.start({
+        actor: { kind: "user" },
+        action: "shell.exec",
+        command: process.execPath,
+        timeoutMs: 10,
+      })
+
+      await vi.advanceTimersByTimeAsync(10)
+      expect(kill).toHaveBeenCalledWith("SIGTERM")
+
+      await vi.advanceTimersByTimeAsync(5_000)
+      expect(kill).toHaveBeenCalledWith("SIGKILL")
+      await expect(session.wait()).resolves.toMatchObject({
+        signal: "SIGKILL",
+        timedOut: true,
+      })
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
 

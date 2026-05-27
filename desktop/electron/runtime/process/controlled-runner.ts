@@ -54,6 +54,7 @@ const DEFAULT_RUN_AS_ENV_ALLOWLIST = [
 ]
 
 const DEFAULT_MAX_BUFFER_BYTES = 1024 * 1024
+const TERMINATION_GRACE_MS = 5_000
 
 export type ControlledProcessAction = Extract<
   PermissionAction,
@@ -135,6 +136,11 @@ type SpawnFn = (
   options: SpawnOptionsWithoutStdio,
 ) => ChildProcessWithoutNullStreams
 
+interface ProcessTerminator {
+  terminate(signal?: NodeJS.Signals): void
+  clear(): void
+}
+
 export class ControlledProcessPermissionError extends Error {
   readonly result: PermissionResult
 
@@ -149,6 +155,28 @@ export class ControlledProcessOutputError extends Error {
   constructor(message: string) {
     super(message)
     this.name = "ControlledProcessOutputError"
+  }
+}
+
+function createProcessTerminator(child: Pick<ChildProcessWithoutNullStreams, "kill">): ProcessTerminator {
+  let forceKillTimeout: ReturnType<typeof setTimeout> | null = null
+
+  return {
+    terminate(signal: NodeJS.Signals = "SIGTERM") {
+      child.kill(signal)
+      if (signal !== "SIGTERM" || forceKillTimeout !== null) return
+
+      forceKillTimeout = setTimeout(() => {
+        forceKillTimeout = null
+        child.kill("SIGKILL")
+      }, TERMINATION_GRACE_MS)
+    },
+    clear() {
+      if (forceKillTimeout) {
+        clearTimeout(forceKillTimeout)
+        forceKillTimeout = null
+      }
+    },
   }
 }
 
@@ -311,21 +339,22 @@ export class ControlledProcessRunner {
 
     const stdoutCollector = new OutputCollector(output.stdout ?? "buffer", maxBufferBytes)
     const stderrCollector = new OutputCollector(output.stderr ?? "buffer", maxBufferBytes)
+    const terminator = createProcessTerminator(child)
     let timedOut = false
     let outputError: Error | null = null
     let spawnError: Error | null = null
     const stdoutLines = new LineEmitter(request.onStdoutLine, (error) => {
       outputError = error
-      child.kill("SIGTERM")
+      terminator.terminate()
     })
     const stderrLines = new LineEmitter(request.onStderrLine, (error) => {
       outputError = error
-      child.kill("SIGTERM")
+      terminator.terminate()
     })
 
     const killForOutputFailure = (error: Error) => {
       outputError = error
-      child.kill("SIGTERM")
+      terminator.terminate()
     }
 
     child.stdout.on("data", (chunk: Buffer) => {
@@ -353,14 +382,14 @@ export class ControlledProcessRunner {
       ? null
       : setTimeout(() => {
         timedOut = true
-        child.kill("SIGTERM")
+        terminator.terminate()
       }, request.timeoutMs)
 
     const onAbort = () => {
-      child.kill("SIGTERM")
+      terminator.terminate()
     }
     if (request.abortSignal?.aborted) {
-      child.kill("SIGTERM")
+      terminator.terminate()
     } else {
       request.abortSignal?.addEventListener("abort", onAbort, { once: true })
     }
@@ -375,6 +404,7 @@ export class ControlledProcessRunner {
     })
 
     if (timeout) clearTimeout(timeout)
+    terminator.clear()
     request.abortSignal?.removeEventListener("abort", onAbort)
     try {
       stdoutLines.flush()
@@ -473,6 +503,7 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
   private readonly stderrCollector: OutputCollector
   private readonly stdoutLines: LineEmitter
   private readonly stderrLines: LineEmitter
+  private readonly terminator: ProcessTerminator
   private readonly waitPromise: Promise<ControlledProcessResult>
   private outputError: Error | null = null
   private spawnError: Error | null = null
@@ -493,13 +524,14 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
       deps.output.stderr ?? "buffer",
       deps.maxBufferBytes,
     )
+    this.terminator = createProcessTerminator(this.child)
     this.stdoutLines = new LineEmitter(deps.request.onStdoutLine, (error) => {
       this.outputError = error
-      this.child.kill("SIGTERM")
+      this.terminator.terminate()
     })
     this.stderrLines = new LineEmitter(deps.request.onStderrLine, (error) => {
       this.outputError = error
-      this.child.kill("SIGTERM")
+      this.terminator.terminate()
     })
 
     this.child.stdout.on("data", (chunk: Buffer) => {
@@ -517,14 +549,14 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
       ? null
       : setTimeout(() => {
         this.timedOut = true
-        this.child.kill("SIGTERM")
+        this.terminator.terminate()
       }, deps.request.timeoutMs)
 
     const onAbort = () => {
-      this.child.kill("SIGTERM")
+      this.terminator.terminate()
     }
     if (deps.request.abortSignal?.aborted) {
-      this.child.kill("SIGTERM")
+      this.terminator.terminate()
     } else {
       deps.request.abortSignal?.addEventListener("abort", onAbort, { once: true })
     }
@@ -539,6 +571,7 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
     }).then((closed) => {
       this.isAlive = false
       if (timeout) clearTimeout(timeout)
+      this.terminator.clear()
       deps.request.abortSignal?.removeEventListener("abort", onAbort)
       return this.finish(closed)
     })
@@ -573,7 +606,7 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
 
   async close(signal: NodeJS.Signals = "SIGTERM"): Promise<ControlledProcessResult> {
     if (this.isAlive) {
-      this.child.kill(signal)
+      this.terminator.terminate(signal)
     }
     return this.wait()
   }
@@ -592,7 +625,7 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
       lineEmitter.push(chunk)
     } catch (error) {
       this.outputError = error as Error
-      this.child.kill("SIGTERM")
+      this.terminator.terminate()
     }
   }
 
