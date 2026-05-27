@@ -490,6 +490,27 @@ class ContentSubmissionService {
 
     await contentIndexService.syncIndex(repository)
 
+    const latestDetail = await contentHistoryService.readCurrentDetail(
+      repository,
+      payload.type,
+      payload.id,
+    )
+
+    if (!latestDetail) {
+      throw new Error(`找不到对应的 ${getContentTypeDefinition(payload.type).singularLabel} 内容。`)
+    }
+
+    if (latestDetail.latestHistoryDirname !== payload.baseHistoryDirname || !latestDetail.deleted) {
+      return {
+        id: payload.id,
+        type: payload.type,
+        status: "conflict",
+        latestHistoryDirname: latestDetail.latestHistoryDirname,
+        latestModifiedAt: latestDetail.modifiedAt,
+        latestModifiedByDisplayName: latestDetail.modifiedByDisplayName,
+      }
+    }
+
     const writeResult = await contentWriteService.purgeContent(payload.type, payload.id, identity)
 
     return this.commitAndMaybePush("purge", writeResult)

@@ -535,6 +535,9 @@ class ContentWriteService {
     if (!baseline) {
       throw new Error(`找不到对应的 ${getContentTypeDefinition(contentType).singularLabel} 内容。`)
     }
+    if (!baseline.deleted) {
+      throw new Error(`只能永久删除已删除的 ${getContentTypeDefinition(contentType).singularLabel} 内容。`)
+    }
 
     const contentDirectoryPath = resolveContentDirectoryPath(context.repository, contentType, contentId)
     logger.info("Purging content directory.", {

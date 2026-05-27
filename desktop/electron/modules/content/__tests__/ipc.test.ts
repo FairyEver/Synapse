@@ -507,7 +507,7 @@ describe("contentIpcModule sync ownership", () => {
     ["update", "updateContent", { contentType: "rule", payload: { id: "rule-1", title: "Rule" } }],
     ["deleteContent", "deleteContent", { id: "rule-1", type: "rule" }],
     ["restore", "restoreContent", { id: "rule-1", type: "rule" }],
-    ["purge", "purgeContent", { id: "rule-1", type: "rule" }],
+    ["purge", "purgeContent", { id: "rule-1", type: "rule", baseHistoryDirname: "history-1" }],
   ] as const)("returns the %s result when pending push refresh fails", async (methodName, serviceName, payload) => {
     const { contentIpcModule } = await import("../ipc")
     const expectedResult = {

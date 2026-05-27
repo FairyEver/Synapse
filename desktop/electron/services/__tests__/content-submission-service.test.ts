@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
     syncIndex: vi.fn(),
   },
   contentWriteService: {
+    purgeContent: vi.fn(),
     updateContent: vi.fn(),
   },
   configStore: {
@@ -143,6 +144,72 @@ describe("contentSubmissionService", () => {
       type: "rule",
       status: "conflict",
       latestHistoryDirname: "remote-new",
+      latestModifiedAt: "2026-05-20T12:00:00.000Z",
+      latestModifiedByDisplayName: "Remote User",
+    })
+  })
+
+  it("pulls and syncs before purge conflict detection", async () => {
+    const { contentSubmissionService } = await import("../content-submission-service")
+    mocks.contentHistoryService.readCurrentDetail.mockResolvedValueOnce({
+      latestHistoryDirname: "remote-new",
+      modifiedAt: "2026-05-20T12:00:00.000Z",
+      modifiedByDisplayName: "Remote User",
+      deleted: true,
+    })
+
+    const result = await contentSubmissionService.purgeContent({
+      id: "rule-1",
+      type: "rule",
+      baseHistoryDirname: "local-old",
+    })
+
+    expect(mocks.runGitCommand).toHaveBeenCalledWith(expect.objectContaining({
+      args: ["pull", "--rebase", "-X", "theirs"],
+      cwd: "/repo",
+    }))
+    expect(mocks.contentIndexService.syncIndex).toHaveBeenCalledWith(mocks.repository)
+    expect(mocks.contentHistoryService.readCurrentDetail).toHaveBeenCalledWith(
+      mocks.repository,
+      "rule",
+      "rule-1",
+    )
+    expect(mocks.runGitCommand.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.contentIndexService.syncIndex.mock.invocationCallOrder[0])
+    expect(mocks.contentIndexService.syncIndex.mock.invocationCallOrder[0])
+      .toBeLessThan(mocks.contentHistoryService.readCurrentDetail.mock.invocationCallOrder[0])
+    expect(mocks.contentWriteService.purgeContent).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      id: "rule-1",
+      type: "rule",
+      status: "conflict",
+      latestHistoryDirname: "remote-new",
+      latestModifiedAt: "2026-05-20T12:00:00.000Z",
+      latestModifiedByDisplayName: "Remote User",
+    })
+  })
+
+  it("does not purge content that is no longer deleted after sync", async () => {
+    const { contentSubmissionService } = await import("../content-submission-service")
+    mocks.contentHistoryService.readCurrentDetail.mockResolvedValueOnce({
+      latestHistoryDirname: "local-old",
+      modifiedAt: "2026-05-20T12:00:00.000Z",
+      modifiedByDisplayName: "Remote User",
+      deleted: false,
+    })
+
+    const result = await contentSubmissionService.purgeContent({
+      id: "rule-1",
+      type: "rule",
+      baseHistoryDirname: "local-old",
+    })
+
+    expect(mocks.contentWriteService.purgeContent).not.toHaveBeenCalled()
+    expect(result).toEqual({
+      id: "rule-1",
+      type: "rule",
+      status: "conflict",
+      latestHistoryDirname: "local-old",
       latestModifiedAt: "2026-05-20T12:00:00.000Z",
       latestModifiedByDisplayName: "Remote User",
     })

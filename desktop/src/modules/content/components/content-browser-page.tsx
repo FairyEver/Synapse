@@ -340,7 +340,18 @@ function ContentBrowserPage({
     const startedAt = performance.now()
     logger.info("Content purge initiated.", { contentId: purgeTarget.id, contentType })
     try {
-      await purgeContent({ id: purgeTarget.id, type: contentType })
+      const result = await purgeContent({
+        id: purgeTarget.id,
+        type: contentType,
+        baseHistoryDirname: purgeTarget.latestHistoryDirname,
+      })
+      if (!isContentMutationSaved(result)) {
+        logger.warn("Content purge conflict detected.", { contentId: purgeTarget.id, contentType, latestHistoryDirname: result.latestHistoryDirname })
+        toast.warning("内容已变化，请刷新后重试。")
+        setPurgeTarget(null)
+        void Promise.all([deletedContent.refresh(), refresh()])
+        return
+      }
       logger.info("Content purged.", { contentId: purgeTarget.id, contentType, elapsedMs: Math.round(performance.now() - startedAt) })
       toast.success(`已永久删除「${purgeTarget.title}」`)
       setPurgeTarget(null)
@@ -370,20 +381,23 @@ function ContentBrowserPage({
           if (action === "restore") {
             results.push(await restoreContent({ id: item.id, type: contentType, baseHistoryDirname: item.latestHistoryDirname }))
           } else {
-            await purgeContent({ id: item.id, type: contentType })
-            successCount++
+            results.push(await purgeContent({
+              id: item.id,
+              type: contentType,
+              baseHistoryDirname: item.latestHistoryDirname,
+            }))
           }
         } catch (err) {
           logger.error("Batch action item failed.", { action, contentId: item.id, contentType, error: err })
         }
       }
-      if (action === "restore") successCount = countSavedContentMutations(results)
+      successCount = countSavedContentMutations(results)
+      const conflictCount = results.length - successCount
       logger.info("Batch action completed.", { action, contentType, successCount, total: targets.length, elapsedMs: Math.round(performance.now() - startedAt) })
-      if (action === "restore") void Promise.all([deletedContent.refresh(), refresh()])
-      else void deletedContent.refresh()
+      void Promise.all([deletedContent.refresh(), refresh()])
       const verb = action === "restore" ? "恢复" : "永久删除"
       if (successCount === targets.length) toast.success(`已${verb} ${successCount} 项内容`)
-      else if (action === "restore" && results.length > successCount) toast.warning(`已${verb} ${successCount}/${targets.length} 项，部分内容已变化`)
+      else if (conflictCount > 0) toast.warning(`已${verb} ${successCount}/${targets.length} 项，部分内容已变化`)
       else toast.warning(`${verb}了 ${successCount}/${targets.length} 项，部分操作失败`)
     } finally {
       setBusyBatchAction(null)

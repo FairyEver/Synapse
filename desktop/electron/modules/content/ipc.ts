@@ -118,6 +118,7 @@ const restoreContentPayloadSchema = z.object({
   type: contentTypeSchema,
 })
 const purgeContentPayloadSchema = z.object({
+  baseHistoryDirname: z.string(),
   id: z.string(),
   type: contentTypeSchema,
 })

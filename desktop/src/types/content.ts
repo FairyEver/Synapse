@@ -218,6 +218,7 @@ export type SynapseRestoreContentPayload = {
 export type SynapsePurgeContentPayload = {
   id: string
   type: SynapseContentType
+  baseHistoryDirname: string
 }
 
 type SynapseContentMutationResultBase = {
