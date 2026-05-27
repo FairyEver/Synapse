@@ -899,7 +899,13 @@ async function refreshUsageNamespace(options: {
   readonly roots: string[]
   readonly parseFile: (filePath: string, parseOptions?: { readonly startLine?: number; readonly priceRules?: readonly UsageModelPriceRule[] }) => Promise<ParsedFileWithTasks>
 }): Promise<UsageRefreshResult> {
-  if (options.prefix === "cc") return refreshClaudeUsageNamespace(options)
+  if (options.prefix === "cc") {
+    return refreshClaudeUsageNamespace({
+      db: options.db,
+      prefix: "cc",
+      roots: options.roots,
+    })
+  }
   return refreshLegacyUsageNamespace(options)
 }
 
@@ -942,8 +948,9 @@ async function refreshClaudeUsageNamespace(options: {
       }
 
       if (decision.kind === "legacy-upgrade") {
+        const fingerprint = fp
         await runWithUsageDatabaseLockRetry(() => {
-          markCcScanFile(options.db, file, fp.size, fp.mtimeMs, existing?.line_count ?? 0, {
+          markCcScanFile(options.db, file, fingerprint.size, fingerprint.mtimeMs, existing?.line_count ?? 0, {
             parsedOffset: decision.parsedOffset,
             pricingRulesHash,
           })
