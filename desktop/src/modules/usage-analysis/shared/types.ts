@@ -14,7 +14,7 @@ import type {
 export type UsageReportRangePreset = UsageAnalysisRangePreset
 export type UsageRangePreset = Exclude<UsageAnalysisRangePreset, "today">
 export type UsageTrendBucketGranularity = UsageAnalysisTimeBucketGranularity
-export type UsageViewId = "today" | "overview" | "time" | "models" | "projects" | "tools" | "details" | "conversations"
+export type UsageViewId = "today" | "overview" | "time" | "models" | "projects" | "tools" | "records"
 export type UsageOverviewReport = UsageAnalysisOverviewReport
 export type UsageTimeBucket = UsageAnalysisTimeBucket
 export type UsageModelRow = UsageAnalysisModelRow

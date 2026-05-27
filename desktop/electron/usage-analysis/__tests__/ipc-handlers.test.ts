@@ -5,6 +5,7 @@ import path from "node:path"
 import {
   normalizeConversationFocus,
   normalizeConversationListInput,
+  normalizeRecordDetailsInput,
   normalizeUsageRangeForIpc,
   resolveClaudeUsageRoots,
 } from "../ipc-handlers"
@@ -64,6 +65,38 @@ describe("usage analysis ipc handlers", () => {
       toolEventId: "tool-1",
       timestampMs: 1779860000000,
     })
+  })
+
+  it("defaults Claude Code record query inputs to a 50 item batch", () => {
+    expect(normalizeConversationListInput({
+      preset: "all",
+      limit: undefined,
+      offset: undefined,
+    })).toEqual({
+      preset: "all",
+      query: undefined,
+      rawText: false,
+      project: undefined,
+      model: undefined,
+      tool: undefined,
+      eventType: undefined,
+      limit: 50,
+      offset: 0,
+      cursor: undefined,
+    })
+  })
+
+  it("normalizes Claude Code record detail inputs", () => {
+    expect(normalizeRecordDetailsInput({
+      sessionId: " session-1 ",
+      limit: 400,
+      offset: 10,
+    })).toEqual({
+      sessionId: "session-1",
+      limit: 400,
+      offset: 10,
+    })
+    expect(() => normalizeRecordDetailsInput({ sessionId: " " })).toThrow("sessionId is required")
   })
 
   it("includes the default and configured Claude Code projects directories", () => {

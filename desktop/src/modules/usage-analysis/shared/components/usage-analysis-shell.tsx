@@ -32,8 +32,7 @@ const BASE_USAGE_VIEWS: readonly UsageViewOption[] = [
 
 const CC_USAGE_VIEWS: readonly UsageViewOption[] = [
   ...BASE_USAGE_VIEWS,
-  { id: "details", label: "明细" },
-  { id: "conversations", label: "对话" },
+  { id: "records", label: "记录" },
 ]
 
 export function UsageAnalysisShell(props: UsageAnalysisShellProps) {

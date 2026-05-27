@@ -10,9 +10,12 @@ import {
   CcUsageAnalysisService,
   CodexUsageAnalysisService,
   getCcConversationInWorker,
+  listCcRecordDetailsInWorker,
   listCcConversationsInWorker,
+  listCcRecordsInWorker,
   refreshUsageInWorker,
   searchCcConversationTextInWorker,
+  searchCcRecordsTextInWorker,
 } from "../services/usage-analysis"
 import type { UsageDetailInput, UsageModelPriceRuleInput, UsageRangeInput } from "../services/usage-analysis"
 import { ccConversationWindowService } from "../services/usage-analysis/cc-conversation-window-service"
@@ -20,6 +23,7 @@ import type {
   CcConversationFocus,
   CcConversationListInput,
   CcConversationWindowRequest,
+  CcRecordDetailsInput,
 } from "../../src/types/usage-analysis-conversations"
 
 let registered = false
@@ -74,6 +78,18 @@ export function normalizeConversationListInput(input: CcConversationListInput | 
     limit: Number.isFinite(limit) ? limit : 50,
     offset: Number.isFinite(offset) ? offset : 0,
     cursor: optionalString(input?.cursor),
+  }
+}
+
+export function normalizeRecordDetailsInput(input: CcRecordDetailsInput | undefined): CcRecordDetailsInput {
+  const sessionId = optionalString(input?.sessionId)
+  if (!sessionId) throw new Error("sessionId is required")
+  const limit = Number(input?.limit)
+  const offset = Number(input?.offset)
+  return {
+    sessionId,
+    limit: Number.isFinite(limit) ? limit : 200,
+    offset: Number.isFinite(offset) ? offset : 0,
   }
 }
 
@@ -202,6 +218,15 @@ export function registerUsageAnalysisHandlers(): void {
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccProjects, async (_event, range?: UsageRangeInput) => cc.getProjects(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccTools, async (_event, range?: UsageRangeInput) => cc.getTools(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccDetails, async (_event, range?: UsageDetailInput) => cc.getDetails(normalizeDetailsRange(range)))
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRecordsList, async (_event, input?: CcConversationListInput) => {
+    return listCcRecordsInWorker(dbPath, normalizeConversationListInput(input))
+  })
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRecordDetailsList, async (_event, input?: CcRecordDetailsInput) => {
+    return listCcRecordDetailsInWorker(dbPath, normalizeRecordDetailsInput(input))
+  })
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccRecordsSearchText, async (_event, input?: CcConversationListInput) => {
+    return searchCcRecordsTextInWorker(dbPath, { ...normalizeConversationListInput(input), rawText: true })
+  })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationsList, async (_event, input?: CcConversationListInput) => {
     return listCcConversationsInWorker(dbPath, normalizeConversationListInput(input))
   })

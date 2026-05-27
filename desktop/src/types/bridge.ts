@@ -48,6 +48,10 @@ import type {
   CcConversationListInput,
   CcConversationListResult,
   CcConversationWindowRequest,
+  CcRecordDetailsInput,
+  CcRecordDetailsResult,
+  CcRecordListInput,
+  CcRecordListResult,
 } from "./usage-analysis-conversations"
 import type {
   SynapseContentDownloadResult,
@@ -531,8 +535,11 @@ export type UsageAnalysisBridgeDomain = {
 }
 
 export type ClaudeCodeUsageAnalysisBridgeDomain = UsageAnalysisBridgeDomain & {
+  listRecords: (input: CcRecordListInput) => Promise<CcRecordListResult>
+  listRecordDetails: (input: CcRecordDetailsInput) => Promise<CcRecordDetailsResult>
   listConversations: (input: CcConversationListInput) => Promise<CcConversationListResult>
   getConversation: (sessionId: string, focus?: CcConversationFocus) => Promise<CcConversationDetail>
+  searchRecordsText: (input: CcRecordListInput) => Promise<CcRecordListResult>
   searchConversationText: (input: CcConversationListInput) => Promise<CcConversationListResult>
   openConversationWindow: (request: CcConversationWindowRequest) => Promise<void>
 }
