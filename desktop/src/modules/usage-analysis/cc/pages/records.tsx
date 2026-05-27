@@ -103,9 +103,16 @@ export function CcRecordsPage({
                 type="button"
                 size="sm"
                 variant="outline"
+                disabled={state.loading}
+                aria-busy={state.loading}
                 onClick={() => setLoadedLimit((current) => current + 50)}
               >
-                加载更多
+                {state.loading ? (
+                  <>
+                    <Spinner />
+                    加载中
+                  </>
+                ) : "加载更多"}
               </Button>
             ) : null}
           </div>

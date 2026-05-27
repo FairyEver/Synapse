@@ -90,4 +90,13 @@ describe("CcRecordsPage", () => {
     expect(html).toContain("正在读取记录")
     expect(html).toContain("打开对话")
   })
+
+  it("disables the load more button while loading the next record batch", () => {
+    recordsState = { ...recordsState, loading: true }
+
+    const html = renderToStaticMarkup(<CcRecordsPage range="30d" refreshKey={0} />)
+
+    expect(html).toContain("加载中")
+    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*加载中/)
+  })
 })
