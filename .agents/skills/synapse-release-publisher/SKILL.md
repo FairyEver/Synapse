@@ -258,7 +258,7 @@ Only run this section after:
 - The matching GitHub Release for `EXPECTED_TAG` was found in `FairyEver/SynapseAppRelease`.
 - Pending release notes were either published and consumed successfully, or were empty at release start.
 
-Open the matching release page in the system default browser:
+Open the matching release page in the user's system default browser. Do not use the Codex in-app browser, Browser plugin, browser MCP, or `node_repl` browser session for this step; on the user's Mac, `open "$RELEASE_URL"` should normally launch Google Chrome because it is the default browser.
 
 ```bash
 RELEASE_URL="https://github.com/FairyEver/SynapseAppRelease/releases/tag/$EXPECTED_TAG"
