@@ -105,7 +105,7 @@ export type WorkflowEvent =
   | { type: "workflow:cancelled"; runId: string; workflowId: string; result?: WorkflowRunResult }
   | { type: "workflow:snapshot-save-failed"; runId: string; workflowId: string; status: WorkflowRunResult["status"] }
 export interface ValidationError {
-  type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch" | "missing_end_node" | "multiple_end_nodes" | "missing_param"
+  type: "cycle" | "unreachable_reference" | "invalid_config" | "invalid_switch_edge" | "orphan_edge_branch" | "missing_end_node" | "multiple_end_nodes" | "missing_param" | "disconnected_node"
   nodeId?: string; nodeName?: string; edgeId?: string; field?: string; message: string
   retryable?: boolean
   details?: Record<string, unknown>

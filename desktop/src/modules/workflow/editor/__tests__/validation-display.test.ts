@@ -60,6 +60,23 @@ describe("buildWorkflowValidationDisplayItems", () => {
     })
     expect(items[1]).not.toHaveProperty("nodeId")
   })
+
+  it("shows disconnected node errors with a blocking summary", () => {
+    const errors: ValidationError[] = [{
+      type: "disconnected_node",
+      nodeId: "prompt-1",
+      message: '节点 "提示词节点" 未连接',
+    }]
+
+    const items = buildWorkflowValidationDisplayItems(definition(), errors)
+
+    expect(items[0]).toMatchObject({
+      summary: "节点未连接，无法运行。",
+      location: "提示词节点",
+      nodeId: "prompt-1",
+      type: "disconnected_node",
+    })
+  })
 })
 
 function definition(): WorkflowDefinition {
