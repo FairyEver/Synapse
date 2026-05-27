@@ -222,16 +222,23 @@ describe("CcConversationService", () => {
     const { db } = setupFixture()
     const service = new CcConversationService({ db })
 
-    for (let index = 2; index <= 250; index += 1) {
-      const sessionId = `session-${index}`
-      insertSession(db, { sessionId, filePath: `/tmp/${sessionId}.jsonl`, workspaceLabel: `/repo/${index}` })
-      insertUsage(db, {
-        id: `usage-${index}`,
-        sessionId,
-        timestampMs: Date.parse("2026-05-27T01:00:00.000Z") + index,
-        input: 1,
-        output: 1,
-      })
+    db.exec("BEGIN IMMEDIATE")
+    try {
+      for (let index = 2; index <= 250; index += 1) {
+        const sessionId = `session-${index}`
+        insertSession(db, { sessionId, filePath: `/tmp/${sessionId}.jsonl`, workspaceLabel: `/repo/${index}` })
+        insertUsage(db, {
+          id: `usage-${index}`,
+          sessionId,
+          timestampMs: Date.parse("2026-05-27T01:00:00.000Z") + index,
+          input: 1,
+          output: 1,
+        })
+      }
+      db.exec("COMMIT")
+    } catch (error) {
+      db.exec("ROLLBACK")
+      throw error
     }
 
     const result = service.listRecords({ preset: "all", limit: 250 })
