@@ -185,7 +185,7 @@ const router = createSynapseActionRouter({
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/synapse-capabilities.test.ts desktop/tests/unit/api-mcp-capability-surface.test.ts
+pnpm --filter @synapse/desktop exec vitest run tests/unit/synapse-capabilities.test.ts tests/unit/api-mcp-capability-surface.test.ts
 ```
 
 Expected: FAIL with missing `repository-domain`, missing `variable-domain`, invalid `upsert` capability id, or missing action router deps.
@@ -472,7 +472,7 @@ if (domainId === "variable") return deps.variableDispatch(action, params, contex
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/synapse-capabilities.test.ts desktop/tests/unit/api-mcp-capability-surface.test.ts
+pnpm --filter @synapse/desktop exec vitest run tests/unit/synapse-capabilities.test.ts tests/unit/api-mcp-capability-surface.test.ts
 ```
 
 Expected: PASS.
@@ -572,7 +572,7 @@ describe("repository capability dispatcher", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/capabilities/__tests__/repository-dispatcher.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/capabilities/__tests__/repository-dispatcher.test.ts
 ```
 
 Expected: FAIL because `repository-dispatcher.ts` does not exist.
@@ -641,7 +641,7 @@ function toRepositorySummary(
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/capabilities/__tests__/repository-dispatcher.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/capabilities/__tests__/repository-dispatcher.test.ts
 ```
 
 Expected: PASS.
@@ -906,7 +906,7 @@ describe("variable capability dispatcher", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/capabilities/__tests__/variable-dispatcher.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/capabilities/__tests__/variable-dispatcher.test.ts
 ```
 
 Expected: FAIL because `variable-dispatcher.ts` does not exist.
@@ -1305,7 +1305,7 @@ async function deleteVariable(
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/capabilities/__tests__/variable-dispatcher.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/capabilities/__tests__/variable-dispatcher.test.ts
 ```
 
 Expected: PASS.
@@ -1481,7 +1481,7 @@ function VariableProbe() {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/database-mcp-rpc.test.ts desktop/src/app-shell/__tests__/config.test.tsx
+pnpm --filter @synapse/desktop exec vitest run tests/unit/database-mcp-rpc.test.ts src/app-shell/__tests__/config.test.tsx
 ```
 
 Expected: FAIL because MCP normalizer and config subscription are not updated yet.
@@ -1574,7 +1574,7 @@ useEffect(() => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/database-mcp-rpc.test.ts desktop/src/app-shell/__tests__/config.test.tsx
+pnpm --filter @synapse/desktop exec vitest run tests/unit/database-mcp-rpc.test.ts src/app-shell/__tests__/config.test.tsx
 ```
 
 Expected: PASS.
@@ -1584,7 +1584,7 @@ Expected: PASS.
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/api-mcp-capability-surface.test.ts
+pnpm --filter @synapse/desktop exec vitest run tests/unit/api-mcp-capability-surface.test.ts
 ```
 
 Expected: PASS.
@@ -1632,7 +1632,7 @@ expect(synapseMcpSkills.map((seed) => ({
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/services/__tests__/repository-template-service.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/repository-template-service.test.ts
 ```
 
 Expected: FAIL because the two new built-in skill templates do not exist.
@@ -1989,7 +1989,7 @@ Run:
 
 ```bash
 node -e 'JSON.parse(require("fs").readFileSync("desktop/resources/templates/skills/synapse-repository-mcp/meta.json","utf8")); JSON.parse(require("fs").readFileSync("desktop/resources/templates/skills/synapse-variable-mcp/meta.json","utf8"))'
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/services/__tests__/repository-template-service.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/repository-template-service.test.ts
 ```
 
 Expected: PASS.
@@ -2060,7 +2060,7 @@ Modify `RELEASE_NOTES_PENDING.md` under `## 新增功能`:
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/api-mcp-capability-surface.test.ts
+pnpm --filter @synapse/desktop exec vitest run tests/unit/api-mcp-capability-surface.test.ts
 ```
 
 Expected: PASS, including docs checks for retired CLI wording.
@@ -2083,7 +2083,7 @@ git commit -m "docs: document repository variable mcp"
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/tests/unit/synapse-capabilities.test.ts desktop/tests/unit/api-mcp-capability-surface.test.ts desktop/tests/unit/database-mcp-rpc.test.ts desktop/electron/capabilities/__tests__/repository-dispatcher.test.ts desktop/electron/capabilities/__tests__/variable-dispatcher.test.ts desktop/electron/services/__tests__/repository-template-service.test.ts desktop/src/app-shell/__tests__/config.test.tsx
+pnpm --filter @synapse/desktop exec vitest run tests/unit/synapse-capabilities.test.ts tests/unit/api-mcp-capability-surface.test.ts tests/unit/database-mcp-rpc.test.ts electron/capabilities/__tests__/repository-dispatcher.test.ts electron/capabilities/__tests__/variable-dispatcher.test.ts electron/services/__tests__/repository-template-service.test.ts src/app-shell/__tests__/config.test.tsx
 ```
 
 Expected: PASS.
