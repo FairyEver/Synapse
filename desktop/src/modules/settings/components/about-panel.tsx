@@ -1,15 +1,22 @@
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
+import { cn } from "@/lib/utils"
 import { SettingsGroup } from "@/modules/settings/components/settings-group"
+import {
+  SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES,
+  SETTINGS_CHEAT_CODE_TITLE,
+  getSettingsTitleActiveColorClass,
+  settingsCheatCodes,
+  settingsTitleParts,
+  type CheatCodeContext,
+} from "@/modules/settings/cheat-codes"
+import { useCheatCodeTitleSequence } from "@/modules/settings/hooks/use-cheat-code-title-sequence"
 import type { SynapseAppUpdateState } from "@/types/update"
 import synapseLogo from "@/assets/icon.png"
 
 const logger = createRendererLogger("settings.about")
-
-const ADMIN_CLICK_THRESHOLD = 10
-const ADMIN_CLICK_RESET_DELAY = 2000
 
 const INITIAL_UPDATE_STATE: SynapseAppUpdateState = {
   currentVersion: "0.0.0",
@@ -110,8 +117,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   const [updateState, setUpdateState] = useState<SynapseAppUpdateState>(INITIAL_UPDATE_STATE)
   const [actionError, setActionError] = useState<string | null>(null)
   const [isRestarting, setIsRestarting] = useState(false)
-  const [clickCount, setClickCount] = useState(0)
-  const resetTimerRef = useRef<NodeJS.Timeout | null>(null)
+  const [activeTitleColorOffset, setActiveTitleColorOffset] = useState(0)
 
   useEffect(() => {
     const bridge = window.synapse?.updater
@@ -167,37 +173,47 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
   const downloadDetails = getDownloadDetails(updateState)
   const downloadProgressValue = Math.max(0, Math.min(100, updateState.downloadPercent ?? 0))
 
-  const handleLogoClick = useCallback(() => {
-    if (isAdminMode) {
+  const cheatCodeContext = useMemo<CheatCodeContext>(
+    () => ({
+      enableRepositoryMaintenance: () => {
+        if (!isAdminMode) {
+          onAdminModeChange(true)
+        }
+      },
+    }),
+    [isAdminMode, onAdminModeChange],
+  )
+
+  const handleCheatCodeTriggered = useCallback((name: string) => {
+    logger.info("Cheat code activated.", { name })
+  }, [])
+
+  const {
+    handleLogoClick,
+    handleTitleIndexClick,
+    isArmed: isCheatCodeEntryArmed,
+  } = useCheatCodeTitleSequence({
+    cheatCodes: settingsCheatCodes,
+    context: cheatCodeContext,
+    onTriggered: handleCheatCodeTriggered,
+  })
+
+  useEffect(() => {
+    if (!isCheatCodeEntryArmed) {
+      setActiveTitleColorOffset(0)
       return
     }
 
-    if (resetTimerRef.current) {
-      clearTimeout(resetTimerRef.current)
-    }
+    const interval = setInterval(() => {
+      setActiveTitleColorOffset(
+        (current) => (current + 1) % SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES.length,
+      )
+    }, 400)
 
-    const nextCount = clickCount + 1
-    setClickCount(nextCount)
-
-    if (nextCount >= ADMIN_CLICK_THRESHOLD) {
-      logger.info("Admin mode activated via logo clicks.")
-      onAdminModeChange(true)
-      setClickCount(0)
-    } else {
-      resetTimerRef.current = setTimeout(() => {
-        setClickCount(0)
-        resetTimerRef.current = null
-      }, ADMIN_CLICK_RESET_DELAY)
-    }
-  }, [clickCount, isAdminMode, onAdminModeChange])
-
-  useEffect(() => {
     return () => {
-      if (resetTimerRef.current) {
-        clearTimeout(resetTimerRef.current)
-      }
+      clearInterval(interval)
     }
-  }, [])
+  }, [isCheatCodeEntryArmed])
 
   const handleAction = async () => {
     const bridge = window.synapse?.updater
@@ -253,11 +269,35 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
           alt="Synapse"
           draggable={false}
           onClick={handleLogoClick}
-          className="size-24 shrink-0 cursor-pointer object-contain select-none"
-          title={isAdminMode ? "管理员模式已开启" : undefined}
+          className="size-24 shrink-0 object-contain select-none"
         />
         <div className="flex flex-col items-center gap-0.5">
-          <h1 className="text-lg font-semibold tracking-tight">Synapse AI Studio</h1>
+          {/* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
+          <h1
+            className={cn(
+              "font-semibold tracking-tight",
+              isCheatCodeEntryArmed ? "text-4xl" : "text-lg",
+            )}
+            aria-label={SETTINGS_CHEAT_CODE_TITLE}
+            data-settings-cheat-code-title
+          >
+            {settingsTitleParts.map((part) => (
+              <span
+                key={part.index}
+                aria-hidden="true"
+                className={
+                  isCheatCodeEntryArmed && part.clickable
+                    ? getSettingsTitleActiveColorClass(part.index, activeTitleColorOffset)
+                    : undefined
+                }
+                data-settings-title-index={part.index}
+                onClick={part.clickable ? () => handleTitleIndexClick(part.index) : undefined}
+              >
+                {part.char}
+              </span>
+            ))}
+          </h1>
+          {/* eslint-enable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
         </div>
       </div>
 

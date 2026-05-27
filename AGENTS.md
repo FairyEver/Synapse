@@ -31,6 +31,14 @@
 - 完成用户可感知或发版相关改动后，必须更新根目录 `RELEASE_NOTES_PENDING.md`。记录要面向后续发版说明，口语化说明用户得到什么、什么行为变了、修了什么问题；不要写代码路径、提交号或实现流水账。纯内部整理、版本 bump、无产品影响的文档规划通常不需要记录。
 - 修改 Electron 打包边界时必须把 `app.asar` 当成启动关键路径处理。凡是改动 `desktop/package.json` 的 `files`、`asarUnpack`、`extraResources`，或新增/移动 Electron worker、原生模块、可执行文件、运行时资源，都必须同步确认 sourcemap、unpacked 文件和 packed 文件不会错位；不要只把 `.js` 加入 `asarUnpack` 而忽略同目录产物如 `.js.map`。发版前必须用 `pnpm --filter @synapse/desktop run check:packaged-asar` 或等价校验证明 `package.json`、主进程入口、packed hash 和 unpacked 文件存在性正常。
 
+### 金手指系统
+
+- 金手指（cheat code）是代码内注册的隐藏指令身份，稳定名称使用命名空间字符串，例如 `model:flow:disable`；它只是隐蔽入口，不是权限或安全边界。
+- 新增或修改类似隐藏入口时，必须优先复用金手指注册层；不要把点击次数、键盘序列、菜单彩蛋等触发逻辑直接散落在组件里。
+- 注册项必须在对应模块的集中注册文件中同时声明：金手指字符串名、当前输入绑定和回调函数。输入绑定可以替换，金手指名称和回调语义应保持稳定。
+- 点击字符类输入必须按稳定 index 匹配，不按字符值匹配；重复字符必须可区分。不要在 UI 中暴露提示、tooltip 或说明文案。
+- 金手指触发可以记录金手指名称，但不得记录用户完整输入序列。若触发敏感操作，仍按敏感操作规则执行权限检查和审计。
+
 ### 模块硬边界摘要
 
 - Knowledge Base 是 Synapse 托管项目类型；新建知识库时用户只提供名称，真实目录由 Synapse 创建在 app-managed storage 中，项目路径对用户显示为虚拟 `synapse-kb://<id>`。
