@@ -163,7 +163,7 @@ function createRegistration(
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/settings/__tests__/cheat-codes.test.ts
+pnpm --filter @synapse/desktop exec vitest run src/modules/settings/__tests__/cheat-codes.test.ts
 ```
 
 Expected: FAIL because `@/modules/settings/cheat-codes` does not exist.
@@ -320,7 +320,7 @@ function positiveModulo(value: number, modulo: number): number {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/settings/__tests__/cheat-codes.test.ts
+pnpm --filter @synapse/desktop exec vitest run src/modules/settings/__tests__/cheat-codes.test.ts
 ```
 
 Expected: PASS.
@@ -552,7 +552,7 @@ function createRegistration(name: string, settingsTitleSequence: readonly number
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/settings/hooks/__tests__/use-cheat-code-title-sequence.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/settings/hooks/__tests__/use-cheat-code-title-sequence.test.tsx
 ```
 
 Expected: FAIL because `use-cheat-code-title-sequence.ts` does not exist.
@@ -709,7 +709,7 @@ function endsWithSequence(buffer: readonly number[], sequence: readonly number[]
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/settings/hooks/__tests__/use-cheat-code-title-sequence.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/settings/hooks/__tests__/use-cheat-code-title-sequence.test.tsx
 ```
 
 Expected: PASS.
@@ -964,7 +964,7 @@ function installUpdaterBridge(): void {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/settings/components/__tests__/about-panel.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/settings/components/__tests__/about-panel.test.tsx
 ```
 
 Expected: FAIL because title spans do not expose `data-settings-title-index`, logo clicks still trigger the old admin behavior directly, and the title never enters `text-4xl`.
@@ -1106,7 +1106,7 @@ Replace the title `h1` with indexed title spans:
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/settings/components/__tests__/about-panel.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/settings/components/__tests__/about-panel.test.tsx
 ```
 
 Expected: PASS.
