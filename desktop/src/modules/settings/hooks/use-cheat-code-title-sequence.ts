@@ -1,16 +1,20 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import { createCheatCodeManager, type CheatCodeStateStore } from "@/lib/cheat-codes/manager"
 import {
   CHEAT_CODE_INTERACTION_RESET_DELAY,
   CHEAT_CODE_LOGO_CLICK_THRESHOLD,
   type CheatCodeContext,
   type CheatCodeRegistration,
 } from "@/modules/settings/cheat-codes"
+import type { CheatCodeTriggerResult } from "@/types/cheat-code"
 
 type UseCheatCodeTitleSequenceOptions = {
   readonly cheatCodes: readonly CheatCodeRegistration[]
   readonly context: CheatCodeContext
-  readonly onTriggered?: (name: string) => void
+  readonly stateStore?: CheatCodeStateStore
+  readonly onTriggered?: (result: CheatCodeTriggerResult) => void
+  readonly onTriggerError?: (name: string, error: unknown) => void
 }
 
 type UseCheatCodeTitleSequenceResult = {
@@ -22,7 +26,9 @@ type UseCheatCodeTitleSequenceResult = {
 function useCheatCodeTitleSequence({
   cheatCodes,
   context,
+  stateStore,
   onTriggered,
+  onTriggerError,
 }: UseCheatCodeTitleSequenceOptions): UseCheatCodeTitleSequenceResult {
   const [isArmed, setIsArmed] = useState(false)
   const bufferRef = useRef<readonly number[]>([])
@@ -31,6 +37,10 @@ function useCheatCodeTitleSequence({
   const maxSequenceLength = useMemo(
     () => getMaxTitleSequenceLength(cheatCodes),
     [cheatCodes],
+  )
+  const manager = useMemo(
+    () => createCheatCodeManager({ registrations: cheatCodes, stateStore }),
+    [cheatCodes, stateStore],
   )
 
   const clearResetTimer = useCallback(() => {
@@ -87,14 +97,19 @@ function useCheatCodeTitleSequence({
 
     if (matchedCheatCode) {
       resetInteraction()
-      onTriggered?.(matchedCheatCode.name)
-      matchedCheatCode.run(context)
+      void manager.trigger(matchedCheatCode.definition.name, context)
+        .then((result) => {
+          onTriggered?.(result)
+        })
+        .catch((error: unknown) => {
+          onTriggerError?.(matchedCheatCode.definition.name, error)
+        })
       return
     }
 
     bufferRef.current = nextBuffer
     scheduleReset()
-  }, [cheatCodes, context, isArmed, maxSequenceLength, onTriggered, resetInteraction, scheduleReset])
+  }, [cheatCodes, context, isArmed, manager, maxSequenceLength, onTriggerError, onTriggered, resetInteraction, scheduleReset])
 
   return {
     isArmed,
@@ -107,7 +122,7 @@ function findMatchingCheatCode(
   cheatCodes: readonly CheatCodeRegistration[],
   buffer: readonly number[],
 ): CheatCodeRegistration | null {
-  return cheatCodes.find((cheatCode) => endsWithSequence(buffer, cheatCode.settingsTitleSequence)) ?? null
+  return cheatCodes.find((cheatCode) => endsWithSequence(buffer, cheatCode.binding.settingsTitleSequence)) ?? null
 }
 
 function trimTitleSequenceBuffer(buffer: readonly number[], maxLength: number): readonly number[] {
@@ -124,7 +139,7 @@ function trimTitleSequenceBuffer(buffer: readonly number[], maxLength: number): 
 
 function getMaxTitleSequenceLength(cheatCodes: readonly CheatCodeRegistration[]): number {
   return cheatCodes.reduce(
-    (maxLength, cheatCode) => Math.max(maxLength, cheatCode.settingsTitleSequence.length),
+    (maxLength, cheatCode) => Math.max(maxLength, cheatCode.binding.settingsTitleSequence.length),
     0,
   )
 }

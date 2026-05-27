@@ -12,6 +12,7 @@ import { identityIpcModule } from "../modules/identity/ipc"
 import { userProfileIpcModule } from "../modules/user-profile/ipc"
 import { logIpcModule } from "../modules/log/ipc"
 import { updateIpcModule } from "../modules/update/ipc"
+import { cheatCodeIpcModule } from "../modules/cheat-code/ipc"
 import { editorScanIpcModule } from "../modules/editor-scan/ipc"
 import { editorCopyIpcModule } from "../modules/editor-copy/ipc"
 import { editorInstallStatusIpcModule } from "../modules/editor-install-status/ipc"
@@ -41,6 +42,7 @@ export function createIpcRegistry(ctx: IpcHandlerContext): IpcRegistryImpl {
   registry.register(userProfileIpcModule, ctx)
   registry.register(logIpcModule, ctx)
   registry.register(updateIpcModule, ctx)
+  registry.register(cheatCodeIpcModule, ctx)
   registry.register(editorScanIpcModule, ctx)
   registry.register(editorCopyIpcModule, ctx)
   registry.register(editorInstallStatusIpcModule, ctx)
@@ -68,6 +70,7 @@ export const registeredIpcModules: readonly IpcModule[] = [
   userProfileIpcModule,
   logIpcModule,
   updateIpcModule,
+  cheatCodeIpcModule,
   editorScanIpcModule,
   editorCopyIpcModule,
   editorInstallStatusIpcModule,

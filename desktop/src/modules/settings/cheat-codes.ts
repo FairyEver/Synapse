@@ -1,3 +1,5 @@
+import type { CheatCodeRegistration as BaseCheatCodeRegistration } from "@/types/cheat-code"
+
 export const SETTINGS_CHEAT_CODE_TITLE = "Synapse AI Studio"
 export const CHEAT_CODE_INTERACTION_RESET_DELAY = 10000
 export const CHEAT_CODE_LOGO_CLICK_THRESHOLD = 10
@@ -22,11 +24,11 @@ export type CheatCodeContext = {
   readonly enableRepositoryMaintenance: () => void
 }
 
-export type CheatCodeRegistration = {
-  readonly name: string
+export type SettingsTitleSequenceBinding = {
   readonly settingsTitleSequence: readonly number[]
-  readonly run: (context: CheatCodeContext) => void
 }
+
+export type CheatCodeRegistration = BaseCheatCodeRegistration<SettingsTitleSequenceBinding, CheatCodeContext>
 
 export function buildSettingsTitleParts(title: string = SETTINGS_CHEAT_CODE_TITLE): readonly SettingsTitlePart[] {
   return Array.from(title, (char, index) => ({
@@ -45,10 +47,15 @@ export const settingsTitleParts = buildSettingsTitleParts()
 
 const registeredCheatCodes = [
   {
-    name: "settings:repository-maintenance:enable",
-    settingsTitleSequence: [0, 11, 8, 9],
-    run: ({ enableRepositoryMaintenance }) => {
-      enableRepositoryMaintenance()
+    definition: {
+      name: "settings:repository-maintenance:enable",
+      kind: "action",
+      run: ({ enableRepositoryMaintenance }) => {
+        enableRepositoryMaintenance()
+      },
+    },
+    binding: {
+      settingsTitleSequence: [0, 11, 8, 9],
     },
   },
 ] satisfies readonly CheatCodeRegistration[]
@@ -64,7 +71,7 @@ export function validateCheatCodeRegistrations(
   const sequences = new Map<string, string>()
 
   for (const registration of registrations) {
-    const name = registration.name.trim()
+    const name = registration.definition.name.trim()
 
     if (!name) {
       throw new Error("Cheat code name is required.")
@@ -76,11 +83,11 @@ export function validateCheatCodeRegistrations(
 
     names.add(name)
 
-    if (registration.settingsTitleSequence.length === 0) {
+    if (registration.binding.settingsTitleSequence.length === 0) {
       throw new Error(`Cheat code settingsTitleSequence is required for ${name}.`)
     }
 
-    for (const index of registration.settingsTitleSequence) {
+    for (const index of registration.binding.settingsTitleSequence) {
       if (!Number.isInteger(index)) {
         throw new Error(`Title sequence index ${index} is not an integer.`)
       }
@@ -96,7 +103,7 @@ export function validateCheatCodeRegistrations(
       }
     }
 
-    const sequenceKey = registration.settingsTitleSequence.join(",")
+    const sequenceKey = registration.binding.settingsTitleSequence.join(",")
     const existingName = sequences.get(sequenceKey)
 
     if (existingName) {
@@ -116,10 +123,10 @@ export function validateCheatCodeRegistrations(
       }
 
       if (
-        isPrefixSequence(left.settingsTitleSequence, right.settingsTitleSequence)
-        || isPrefixSequence(right.settingsTitleSequence, left.settingsTitleSequence)
+        isPrefixSequence(left.binding.settingsTitleSequence, right.binding.settingsTitleSequence)
+        || isPrefixSequence(right.binding.settingsTitleSequence, left.binding.settingsTitleSequence)
       ) {
-        throw new Error(`Title sequence prefix conflict: ${left.name} and ${right.name}`)
+        throw new Error(`Title sequence prefix conflict: ${left.definition.name} and ${right.definition.name}`)
       }
     }
   }

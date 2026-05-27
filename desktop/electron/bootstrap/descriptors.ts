@@ -40,6 +40,7 @@ import { configStore } from "../services/config-store"
 import { logStore, createMainLogger } from "../services/log-store"
 import { initializeAppIcon } from "../services/app-icon-service"
 import { updateService } from "../services/update-service"
+import { CheatCodeStateService, CHEAT_CODE_STATE_SERVICE_ID } from "../services/cheat-code-state-service"
 import { KnowledgeBaseService } from "../services/knowledge-base"
 import { convertFilesInWorker } from "../services/tools/file-conversion-runner"
 import { toolWindowService, type ToolWindowService } from "../services/tools/tool-window-service"
@@ -746,6 +747,19 @@ export const coreDataRepositoryDescriptor: ServiceDescriptor<DataRepository> = {
     return createFileBackedDataRepository({
       rootDir: path.join(app.getPath("userData"), "data-v1"),
       safeStorage,
+    })
+  },
+}
+
+export const coreCheatCodeStateDescriptor: ServiceDescriptor<CheatCodeStateService> = {
+  id: CHEAT_CODE_STATE_SERVICE_ID,
+  criticality: "degraded",
+  dependsOn: ["core.data-repository", "core.event-bus"],
+  create(ctx) {
+    const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
+    return new CheatCodeStateService({
+      states: dataRepository.namespace("cheat-code.states"),
+      eventBus: ctx.registry.get<EventBus>("core.event-bus"),
     })
   },
 }
