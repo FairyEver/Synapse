@@ -42,7 +42,8 @@ describe("settings cheat codes", () => {
       return className.startsWith("text-") && !className.includes("[") && !className.includes("#")
     })).toBe(true)
     expect(getSettingsTitleActiveColorClass(0, 0)).toBe(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES[0])
-    expect(getSettingsTitleActiveColorClass(0, 1)).toBe(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES[1])
+    expect(getSettingsTitleActiveColorClass(1, 1)).toBe(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES[0])
+    expect(getSettingsTitleActiveColorClass(2, 2)).toBe(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES[0])
   })
 
   it("registers repository maintenance through the centralized registry", () => {
