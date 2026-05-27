@@ -165,11 +165,25 @@ export function initUsageAnalysisSchema(database: DatabaseSync): void {
       time_to_first_token_ms INTEGER
     )
   `)
+  database.exec(`
+    CREATE TABLE IF NOT EXISTS cc_scan_file_state (
+      file_path TEXT PRIMARY KEY,
+      state_json TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT ''
+    )
+  `)
 
   ensureColumn(database, "usage_model_prices", "currency", "TEXT NOT NULL DEFAULT ''")
 
   for (const prefix of ["cc", "cx"] as const) {
     ensureColumn(database, `${prefix}_scan_files`, "line_count", "INTEGER NOT NULL DEFAULT 0")
+    if (prefix === "cc") {
+      ensureColumn(database, "cc_scan_files", "parsed_offset", "INTEGER NOT NULL DEFAULT 0")
+      ensureColumn(database, "cc_scan_files", "parser_version", "INTEGER NOT NULL DEFAULT 0")
+      ensureColumn(database, "cc_scan_files", "pricing_rules_hash", "TEXT NOT NULL DEFAULT ''")
+      ensureColumn(database, "cc_scan_files", "first_seen_at", "TEXT NOT NULL DEFAULT ''")
+      ensureColumn(database, "cc_scan_files", "last_changed_at", "TEXT NOT NULL DEFAULT ''")
+    }
     ensureColumn(database, `${prefix}_tool_events`, "hour", "TEXT NOT NULL DEFAULT ''")
     ensureColumn(database, `${prefix}_usage_events`, "price_known", "INTEGER NOT NULL DEFAULT 0")
     ensureColumn(database, `${prefix}_usage_events`, "cost_currency", "TEXT NOT NULL DEFAULT ''")
