@@ -74,14 +74,14 @@ describe("CcRecordsPage", () => {
     expect(html).toContain("加载更多")
   })
 
-  it("shows table-shaped placeholders while records load", () => {
+  it("shows a plain centered loading state while initial records load", () => {
     recordsState = { ...recordsState, data: null, loading: true }
 
     const html = renderToStaticMarkup(<CcRecordsPage range="30d" refreshKey={0} />)
 
-    expect(html).toContain("data-slot=\"skeleton\"")
-    expect(html).toContain("时间")
-    expect(html).not.toContain("正在读取记录")
+    expect(html).toContain("正在加载")
+    expect(html).not.toContain("data-slot=\"skeleton\"")
+    expect(html).not.toContain("时间")
   })
 
   it("keeps existing records visible while refreshing without a separate loading row", () => {

@@ -6,7 +6,7 @@ import type { CcRecordListInput } from "@/types/usage-analysis-conversations"
 import { ReportState } from "../../shared/components/report-state"
 import type { UsageRangePreset } from "../../shared/types"
 import { ConversationFilters } from "../components/conversation-filters"
-import { RecordTable, RecordTableSkeleton } from "../components/record-table"
+import { RecordTable } from "../components/record-table"
 import { useCcRecordDetails, useCcRecords } from "../hooks"
 
 export function CcRecordsPage({
@@ -63,7 +63,9 @@ export function CcRecordsPage({
         }}
       />
       {initialLoading ? (
-        <RecordTableSkeleton />
+        <div className="flex min-h-40 items-center justify-center text-sm text-muted-foreground">
+          正在加载
+        </div>
       ) : (
         <ReportState loading={false} error={state.error} empty={rows.length === 0}>
           <RecordTable

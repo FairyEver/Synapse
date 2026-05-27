@@ -215,6 +215,12 @@ export function initUsageAnalysisSchema(database: DatabaseSync): void {
     database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_tool_date_workspace ON ${prefix}_tool_events(date, workspace_key)`)
     database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_tool_session ON ${prefix}_tool_events(session_id)`)
     database.exec(`CREATE INDEX IF NOT EXISTS idx_${prefix}_tool_name ON ${prefix}_tool_events(category, tool_name)`)
+    if (prefix === "cc") {
+      database.exec("CREATE INDEX IF NOT EXISTS idx_cc_usage_session_date ON cc_usage_events(session_id, date)")
+      database.exec("CREATE INDEX IF NOT EXISTS idx_cc_usage_session_timestamp ON cc_usage_events(session_id, timestamp_ms DESC)")
+      database.exec("CREATE INDEX IF NOT EXISTS idx_cc_tool_session_timestamp ON cc_tool_events(session_id, timestamp_ms)")
+      database.exec("CREATE INDEX IF NOT EXISTS idx_cc_sessions_activity ON cc_sessions(COALESCE(NULLIF(ended_at, ''), started_at) DESC)")
+    }
   }
   migrateUsageAnalysisCostsToCny(database)
 }

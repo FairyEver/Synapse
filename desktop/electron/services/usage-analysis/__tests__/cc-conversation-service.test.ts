@@ -101,7 +101,7 @@ function insertSession(db: DatabaseSync, input: { sessionId: string; filePath: s
 
 function insertUsage(
   db: DatabaseSync,
-  input: { id: string; sessionId: string; timestampMs: number; input: number; output: number },
+  input: { id: string; sessionId: string; timestampMs: number; input: number; output: number; cost?: number },
 ): void {
   const total = input.input + input.output
   db.prepare(`
@@ -109,7 +109,7 @@ function insertUsage(
       id, session_id, timestamp_ms, date, hour, workspace_key, workspace_label, model, provider,
       input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, reasoning_tokens,
       priced_tokens, unpriced_tokens, total_cost, price_known
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, 0, 0, 1)
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 0, ?, 0, ?, 1)
   `).run(
     input.id,
     input.sessionId,
@@ -123,6 +123,7 @@ function insertUsage(
     input.input,
     input.output,
     total,
+    input.cost ?? 0,
   )
 }
 
@@ -172,6 +173,48 @@ describe("CcConversationService", () => {
       sessionId: "session-1",
       requestCount: 2,
       tokens: 40,
+    }))
+  })
+
+  it("returns batched record aggregates for visible sessions", () => {
+    const { db } = setupFixture()
+    const service = new CcConversationService({ db })
+    insertUsage(db, {
+      id: "usage-2",
+      sessionId: "session-1",
+      timestampMs: Date.parse("2026-05-27T01:02:00.000Z"),
+      input: 20,
+      output: 5,
+      cost: 0.02,
+    })
+    insertSession(db, { sessionId: "session-2", filePath: "/tmp/session-2.jsonl", workspaceLabel: "/repo/two" })
+    db.prepare("UPDATE cc_sessions SET ended_at = ? WHERE session_id = ?").run("2026-05-27T02:10:00.000Z", "session-2")
+    insertUsage(db, {
+      id: "usage-3",
+      sessionId: "session-2",
+      timestampMs: Date.parse("2026-05-27T02:05:00.000Z"),
+      input: 7,
+      output: 3,
+      cost: 0.03,
+    })
+
+    const result = service.listRecords({ preset: "all", limit: 2 })
+    const sessionOne = result.items.find((item) => item.sessionId === "session-1")
+    const sessionTwo = result.items.find((item) => item.sessionId === "session-2")
+
+    expect(result.total).toBe(2)
+    expect(result.items.map((item) => item.sessionId)).toEqual(["session-2", "session-1"])
+    expect(sessionOne).toEqual(expect.objectContaining({
+      requestCount: 2,
+      tokens: 40,
+      estimatedCost: 0.03,
+      lastUsedAt: "2026-05-27T01:02:00.000Z",
+    }))
+    expect(sessionTwo).toEqual(expect.objectContaining({
+      requestCount: 1,
+      tokens: 10,
+      estimatedCost: 0.03,
+      lastUsedAt: "2026-05-27T02:05:00.000Z",
     }))
   })
 

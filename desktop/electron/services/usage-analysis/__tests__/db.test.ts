@@ -65,4 +65,29 @@ describe("usage analysis db", () => {
       db.close()
     }
   })
+
+  it("creates indexes for CC record session queries", () => {
+    const db = new DatabaseSync(":memory:")
+    try {
+      initUsageAnalysisSchema(db)
+
+      const indexes = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index' AND tbl_name IN ('cc_usage_events', 'cc_tool_events', 'cc_sessions')").all() as { name: string }[]
+      expect(indexes.map((row) => row.name)).toEqual(expect.arrayContaining([
+        "idx_cc_usage_session_date",
+        "idx_cc_usage_session_timestamp",
+        "idx_cc_tool_session_timestamp",
+        "idx_cc_sessions_activity",
+      ]))
+
+      const usageDatePlan = db.prepare("EXPLAIN QUERY PLAN SELECT 1 FROM cc_usage_events WHERE session_id = ? AND date >= ? AND date <= ?").all("s1", "2026-05-01", "2026-05-31") as { detail: string }[]
+      const usageTimestampPlan = db.prepare("EXPLAIN QUERY PLAN SELECT 1 FROM cc_usage_events WHERE session_id = ? ORDER BY timestamp_ms DESC LIMIT 1").all("s1") as { detail: string }[]
+      const toolTimestampPlan = db.prepare("EXPLAIN QUERY PLAN SELECT 1 FROM cc_tool_events WHERE session_id = ? GROUP BY session_id, timestamp_ms").all("s1") as { detail: string }[]
+
+      expect(usageDatePlan.map((row) => row.detail).join("\n")).toContain("idx_cc_usage_session_date")
+      expect(usageTimestampPlan.map((row) => row.detail).join("\n")).toContain("idx_cc_usage_session_timestamp")
+      expect(toolTimestampPlan.map((row) => row.detail).join("\n")).toContain("idx_cc_tool_session_timestamp")
+    } finally {
+      db.close()
+    }
+  })
 })
