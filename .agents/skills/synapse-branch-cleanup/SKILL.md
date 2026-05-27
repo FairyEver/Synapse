@@ -9,7 +9,7 @@ description: Use when working in the Synapse repository and the user says 整理
 
 This skill is only for `/Users/liyang/Documents/code/github/Synapse`.
 
-Use it to consolidate all local branches, linked worktrees, and remote branches into `main`, then clean up everything except `main`.
+Use it to consolidate all local branches, linked worktrees, and remote branches into `main`, then clean up everything except `main`. In this repository, a plain request such as "整理分支" is authorization for the non-force cleanup path described here.
 
 ## Hard Rules
 
@@ -17,7 +17,8 @@ Use it to consolidate all local branches, linked worktrees, and remote branches 
 - Stop if the `origin` remote is missing or does not point to `FairyEver/Synapse`.
 - Never delete or force-update `main`.
 - Never use `git reset --hard`, `git branch -D`, `git worktree remove --force`, `git push --force`, or `rm -rf` unless the user explicitly authorizes that exact destructive operation in the current turn.
-- Do not discard uncommitted changes. If any worktree is dirty, stop and ask whether to commit, stash, or exclude it. If the user explicitly permits stashing, use a clear stash message and report the stash ref.
+- Do not discard uncommitted changes. Never stash unless the user explicitly permits stashing; if stashing is permitted, use a clear stash message and report the stash ref.
+- Automatically commit safe dirty changes in the main Synapse worktree before cleanup when all of these are true: the current branch is `main`, there are no untracked files, no linked worktree is dirty, no merge/rebase/cherry-pick/bisect is in progress, and `git diff --check` passes. Inspect the diff, use a concise conventional commit message that matches the changed area, and include the commit in the final summary. If the dirty changes are ambiguous, include untracked files, or belong to another worktree, stop and ask whether to commit, stash, or exclude them.
 - Do not delete any branch or worktree until the branch tip is verified as an ancestor of `main`.
 - Do not delete any remote branch until the merged `main` has been pushed to `origin/main`.
 - If a merge, push, verification, or delete fails, stop immediately. Report what completed and what remains.
@@ -39,7 +40,17 @@ git branch -r --format='%(refname:short)'
 
 Also check for an in-progress merge, rebase, cherry-pick, or bisect. Stop if one exists.
 
-If the request is vague, such as only "整理分支", summarize the local branches, worktrees, and remote branches that would be merged/deleted, then ask for confirmation before deleting anything. A direct request to merge into `main` and delete non-main branches counts as authorization for the non-force path only.
+For this Synapse repository, a request like "整理分支" or "清理分支" counts as authorization for the non-force path only. Still summarize what will be merged/deleted before taking destructive steps in an update, but do not stop for a second confirmation unless a hard rule requires it.
+
+If the main worktree is dirty and meets the safe auto-commit criteria from the Hard Rules, commit it before fetching or merging:
+
+```bash
+git diff --check
+git add <changed tracked files>
+git commit -m "<type>: <short description>"
+```
+
+If dirty changes do not meet the criteria, stop and ask whether to commit, stash, or exclude them.
 
 ### 2. Prepare `main`
 
@@ -90,7 +101,11 @@ For each queued ref:
    git merge-base --is-ancestor <ref> main
    ```
 
-If there is a conflict, do not continue deleting branches. Leave the repository in a recoverable state, list the conflicted files, and ask the user how to resolve it.
+If there is a conflict, handle only this safe recurring case automatically:
+
+- When the only conflicted file is `RELEASE_NOTES_PENDING.md`, resolve it by preserving unique Markdown bullet lines from both sides under the matching headings, removing conflict markers, and keeping existing section order. Then run `git diff --check`, `git add RELEASE_NOTES_PENDING.md`, and complete the merge with `git commit --no-edit`.
+
+For any other conflicted file, non-list release-note conflict, delete/rename conflict, or uncertainty, do not continue deleting branches. Leave the repository in a recoverable state, list the conflicted files, and ask the user how to resolve it.
 
 ### 5. Verify And Push `main`
 
