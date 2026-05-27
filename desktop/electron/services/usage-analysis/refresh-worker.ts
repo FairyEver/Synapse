@@ -1,6 +1,6 @@
 import { DatabaseSync } from "node:sqlite"
 import { parentPort, workerData } from "node:worker_threads"
-import { CcUsageAnalysisService } from "./cc-service"
+import { CcUsageAnalysisService, runWithUsageDatabaseLockRetry } from "./cc-service"
 import { CodexUsageAnalysisService } from "./codex-service"
 import { initUsageAnalysisSchema } from "./db-schema"
 import type { UsageRefreshResult } from "./types"
@@ -30,7 +30,9 @@ async function runRefresh(): Promise<UsageRefreshResult> {
     db.exec("PRAGMA journal_mode = WAL")
     db.exec("PRAGMA busy_timeout = 5000")
     db.exec("PRAGMA foreign_keys = ON")
-    initUsageAnalysisSchema(db)
+    await runWithUsageDatabaseLockRetry(() => {
+      initUsageAnalysisSchema(db)
+    })
     const service = input.prefix === "cc"
       ? new CcUsageAnalysisService({ db, roots: [...input.roots] })
       : new CodexUsageAnalysisService({ db, roots: [...input.roots] })

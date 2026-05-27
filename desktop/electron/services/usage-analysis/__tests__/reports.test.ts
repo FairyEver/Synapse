@@ -5,7 +5,7 @@ import path from "node:path"
 import { DatabaseSync } from "node:sqlite"
 import { closeUsageAnalysisDbForTests, getUsageAnalysisDb } from "../db"
 import { initUsageAnalysisSchema } from "../db-schema"
-import { CcUsageAnalysisService } from "../cc-service"
+import { CcUsageAnalysisService, runWithUsageDatabaseLockRetry } from "../cc-service"
 
 const tempDirs: string[] = []
 
@@ -17,6 +17,31 @@ afterEach(() => {
 })
 
 describe("usage analysis reports", () => {
+  it("retries transient database write locks during refresh writes", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const dbPath = path.join(dir, "usage.db")
+    const writer = new DatabaseSync(dbPath)
+    const blocked = new DatabaseSync(dbPath)
+    try {
+      writer.exec("CREATE TABLE records (id INTEGER PRIMARY KEY, value TEXT NOT NULL)")
+      blocked.exec("PRAGMA busy_timeout = 1")
+      writer.exec("BEGIN IMMEDIATE")
+      setTimeout(() => {
+        writer.exec("COMMIT")
+      }, 20)
+
+      await runWithUsageDatabaseLockRetry(() => {
+        blocked.prepare("INSERT INTO records (value) VALUES (?)").run("ok")
+      })
+
+      expect(blocked.prepare("SELECT value FROM records").get()).toEqual({ value: "ok" })
+    } finally {
+      writer.close()
+      blocked.close()
+    }
+  })
+
   it("keeps refreshing when an enumerated JSONL file disappears before fingerprinting", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)

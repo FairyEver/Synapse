@@ -12,7 +12,33 @@ type UsageRefreshWorkerMessage =
   | { readonly type: "success"; readonly result: UsageRefreshResult }
   | { readonly type: "error"; readonly error: { readonly name?: string; readonly message?: string; readonly stack?: string } }
 
+type UsageRefreshRunner = (input: UsageRefreshWorkerInput) => Promise<UsageRefreshResult>
+
+const inFlightRefreshes = new Map<string, Promise<UsageRefreshResult>>()
+
 export function refreshUsageInWorker(input: UsageRefreshWorkerInput): Promise<UsageRefreshResult> {
+  return runSingleFlightUsageRefresh(input, startUsageRefreshWorker)
+}
+
+export function runSingleFlightUsageRefresh(input: UsageRefreshWorkerInput, runner: UsageRefreshRunner): Promise<UsageRefreshResult> {
+  const key = `${input.dbPath}\0${input.prefix}`
+  const existing = inFlightRefreshes.get(key)
+  if (existing) return existing
+
+  const promise = runner(input).finally(() => {
+    if (inFlightRefreshes.get(key) === promise) {
+      inFlightRefreshes.delete(key)
+    }
+  })
+  inFlightRefreshes.set(key, promise)
+  return promise
+}
+
+export function resetUsageRefreshSingleFlightForTests(): void {
+  inFlightRefreshes.clear()
+}
+
+function startUsageRefreshWorker(input: UsageRefreshWorkerInput): Promise<UsageRefreshResult> {
   return new Promise((resolve, reject) => {
     const worker = new Worker(resolveUsageRefreshWorkerPath(__dirname), {
       workerData: {

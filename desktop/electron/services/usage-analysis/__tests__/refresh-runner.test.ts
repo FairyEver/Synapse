@@ -1,7 +1,15 @@
 import path from "node:path"
 import { readFileSync } from "node:fs"
-import { describe, expect, it } from "vitest"
-import { resolveUsageRefreshWorkerPath } from "../refresh-runner"
+import { afterEach, describe, expect, it } from "vitest"
+import {
+  resetUsageRefreshSingleFlightForTests,
+  resolveUsageRefreshWorkerPath,
+  runSingleFlightUsageRefresh,
+} from "../refresh-runner"
+
+afterEach(() => {
+  resetUsageRefreshSingleFlightForTests()
+})
 
 describe("usage analysis refresh runner", () => {
   it("uses the compiled worker next to the runner in development", () => {
@@ -30,5 +38,36 @@ describe("usage analysis refresh runner", () => {
     expect(packageJson.build?.asarUnpack).toContain("dist-electron/electron/services/usage-analysis/**")
     expect(packageJson.build?.asarUnpack).toContain("dist-electron/action-packages/shared/**")
     expect(packageJson.build?.asarUnpack).not.toContain("dist-electron/electron/services/usage-analysis/refresh-worker.js")
+  })
+
+  it("coalesces concurrent refreshes for the same database namespace", async () => {
+    let calls = 0
+    const input = { dbPath: "/tmp/usage.db", prefix: "cc" as const, roots: ["/tmp/projects"] }
+    const result = {
+      scannedFiles: 1,
+      parsedFiles: 1,
+      skippedFiles: 0,
+      failedFiles: 0,
+      usageEvents: 1,
+      toolEvents: 0,
+      elapsedMs: 1,
+    }
+    let resolveRefresh: (value: typeof result) => void = () => {
+      throw new Error("Refresh promise was not created")
+    }
+    const runner = async () => {
+      calls += 1
+      return await new Promise<typeof result>((resolve) => {
+        resolveRefresh = resolve
+      })
+    }
+
+    const first = runSingleFlightUsageRefresh(input, runner)
+    const second = runSingleFlightUsageRefresh(input, runner)
+    resolveRefresh(result)
+
+    await expect(first).resolves.toBe(result)
+    await expect(second).resolves.toBe(result)
+    expect(calls).toBe(1)
   })
 })

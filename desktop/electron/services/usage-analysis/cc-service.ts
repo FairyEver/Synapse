@@ -86,6 +86,8 @@ interface AggregateValue {
 }
 
 const TOOL_CALLS_AGGREGATE_MODEL = "__synapse_tool_calls__"
+const DATABASE_LOCK_RETRY_DELAY_MS = 250
+const DATABASE_LOCK_RETRY_MAX_ELAPSED_MS = 60_000
 
 function tokenTotal(row: UsageEventRow): number {
   return row.input_tokens + row.output_tokens + row.cache_read_tokens + row.cache_write_tokens + row.reasoning_tokens
@@ -892,28 +894,25 @@ async function refreshUsageNamespace(options: {
         skippedFiles += 1
         continue
       }
-      persistParsedFile(options.db, options.prefix, file, fp.size, fp.mtimeMs, parsed, canAppend ? "append" : "replace", pricedAt)
+      const fingerprint = fp
+      await runWithUsageDatabaseLockRetry(() => {
+        persistParsedFile(options.db, options.prefix, file, fingerprint.size, fingerprint.mtimeMs, parsed, canAppend ? "append" : "replace", pricedAt)
+      })
       parsedFiles += 1
       usageEvents += parsed.usageEvents.length
       toolEvents += parsed.toolEvents.length
     } catch (error) {
       failedFiles += 1
       const errorKind = error instanceof Error ? error.name : "ParseError"
-      options.db.prepare(`
-        INSERT INTO ${options.prefix}_scan_files (file_path, size, mtime_ms, line_count, parse_status, error_kind, last_scanned_at)
-        VALUES (?, ?, ?, 0, 'failed', ?, ?)
-        ON CONFLICT(file_path) DO UPDATE SET
-          size = excluded.size,
-          mtime_ms = excluded.mtime_ms,
-          line_count = excluded.line_count,
-          parse_status = excluded.parse_status,
-          error_kind = excluded.error_kind,
-          last_scanned_at = excluded.last_scanned_at
-      `).run(file, fp?.size ?? 0, fp?.mtimeMs ?? 0, errorKind, new Date().toISOString())
+      await runWithUsageDatabaseLockRetry(() => {
+        markFailedScanFile(options.db, options.prefix, file, fp?.size ?? 0, fp?.mtimeMs ?? 0, errorKind)
+      })
     }
   }
 
-  rebuildAggregates(options.db, options.prefix)
+  await runWithUsageDatabaseLockRetry(() => {
+    rebuildAggregates(options.db, options.prefix)
+  })
 
   return {
     scannedFiles: files.length,
@@ -936,7 +935,9 @@ function persistParsedFile(
   mode: "append" | "replace",
   pricedAt: string,
 ): void {
+  let transactionStarted = false
   db.exec("BEGIN IMMEDIATE")
+  transactionStarted = true
   try {
     const oldSessions = db.prepare(`SELECT session_id FROM ${prefix}_sessions WHERE file_path = ?`).all(filePath) as { session_id: string }[]
     const sessionIds = new Set([...oldSessions.map((row) => row.session_id), ...parsed.sessions.map((session) => session.sessionId)])
@@ -1064,8 +1065,9 @@ function persistParsedFile(
     refreshSessionSummaries(db, prefix, [...sessionIds])
     markScanFile(db, prefix, filePath, size, mtimeMs, parsed.lineCount)
     db.exec("COMMIT")
+    transactionStarted = false
   } catch (error) {
-    db.exec("ROLLBACK")
+    if (transactionStarted) db.exec("ROLLBACK")
     throw error
   }
 }
@@ -1082,6 +1084,20 @@ function markScanFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: string, s
       error_kind = excluded.error_kind,
       last_scanned_at = excluded.last_scanned_at
   `).run(filePath, size, mtimeMs, lineCount, new Date().toISOString())
+}
+
+function markFailedScanFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: string, size: number, mtimeMs: number, errorKind: string): void {
+  db.prepare(`
+    INSERT INTO ${prefix}_scan_files (file_path, size, mtime_ms, line_count, parse_status, error_kind, last_scanned_at)
+    VALUES (?, ?, ?, 0, 'failed', ?, ?)
+    ON CONFLICT(file_path) DO UPDATE SET
+      size = excluded.size,
+      mtime_ms = excluded.mtime_ms,
+      line_count = excluded.line_count,
+      parse_status = excluded.parse_status,
+      error_kind = excluded.error_kind,
+      last_scanned_at = excluded.last_scanned_at
+  `).run(filePath, size, mtimeMs, errorKind, new Date().toISOString())
 }
 
 function refreshSessionSummaries(db: DatabaseSync, prefix: "cc" | "cx", sessionIds: readonly string[]): void {
@@ -1101,7 +1117,9 @@ function refreshSessionSummaries(db: DatabaseSync, prefix: "cc" | "cx", sessionI
 }
 
 function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
+  let transactionStarted = false
   db.exec("BEGIN IMMEDIATE")
+  transactionStarted = true
   try {
     db.exec(`DELETE FROM ${prefix}_daily_usage`)
     db.exec(`DELETE FROM ${prefix}_hourly_usage`)
@@ -1234,10 +1252,34 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
       GROUP BY hour, workspace_key
     `)
     db.exec("COMMIT")
+    transactionStarted = false
   } catch (error) {
-    db.exec("ROLLBACK")
+    if (transactionStarted) db.exec("ROLLBACK")
     throw error
   }
 }
 
 export { refreshUsageNamespace, rebuildAggregates }
+
+export async function runWithUsageDatabaseLockRetry<T>(operation: () => T): Promise<T> {
+  const startedAt = Date.now()
+  while (true) {
+    try {
+      return operation()
+    } catch (error) {
+      if (!isUsageDatabaseLockError(error) || Date.now() - startedAt >= DATABASE_LOCK_RETRY_MAX_ELAPSED_MS) {
+        throw error
+      }
+      await delay(DATABASE_LOCK_RETRY_DELAY_MS)
+    }
+  }
+}
+
+function isUsageDatabaseLockError(error: unknown): boolean {
+  const message = error instanceof Error ? `${error.name} ${error.message}` : String(error)
+  return /database is locked|SQLITE_BUSY|SQLITE_LOCKED/i.test(message)
+}
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}

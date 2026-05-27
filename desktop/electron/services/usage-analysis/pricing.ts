@@ -229,7 +229,9 @@ export function saveUsagePriceRules(database: DatabaseSync, inputs: readonly Usa
     sortIndex: index,
     updatedAt: new Date().toISOString(),
   })))
+  let transactionStarted = false
   database.exec("BEGIN IMMEDIATE")
+  transactionStarted = true
   try {
     database.exec("DELETE FROM usage_model_prices")
     insertUsagePriceRules(database, rules)
@@ -238,8 +240,9 @@ export function saveUsagePriceRules(database: DatabaseSync, inputs: readonly Usa
       VALUES (?, ?, ?)
     `).run(PRICING_SEED_META_KEY, "1", new Date().toISOString())
     database.exec("COMMIT")
+    transactionStarted = false
   } catch (error) {
-    database.exec("ROLLBACK")
+    if (transactionStarted) database.exec("ROLLBACK")
     throw error
   }
   return rules

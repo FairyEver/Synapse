@@ -11,7 +11,9 @@ export function migrateUsageAnalysisCostsToCny(database: DatabaseSync): void {
   if (marker?.value) return
 
   const migratedAt = new Date().toISOString()
+  let transactionStarted = false
   database.exec("BEGIN IMMEDIATE")
+  transactionStarted = true
   try {
     if (countRows(database, "usage_model_prices") === 0) {
       seedDefaultUsagePriceRules(database)
@@ -63,8 +65,9 @@ export function migrateUsageAnalysisCostsToCny(database: DatabaseSync): void {
       VALUES (?, ?, ?)
     `).run(RMB_MIGRATION_META_KEY, JSON.stringify({ currency: SYNAPSE_COST_CURRENCY, rate: USD_TO_CNY_RATE, migratedAt }), migratedAt)
     database.exec("COMMIT")
+    transactionStarted = false
   } catch (error) {
-    database.exec("ROLLBACK")
+    if (transactionStarted) database.exec("ROLLBACK")
     throw error
   }
 }
