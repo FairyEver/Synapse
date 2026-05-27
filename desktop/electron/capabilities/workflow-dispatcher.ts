@@ -268,11 +268,13 @@ const ACTION_HANDLERS: Record<string, ActionHandler> = {
 
   "workflow.definition.delete": async (params, deps) => {
     const workflowId = requireString(params, "workflowId")
-    await deps.cancelRunsForWorkflow(workflowId)
-    await deps.workflowService.delete(workflowId)
-    await deps.snapshotService.deleteWorkflow(workflowId)
-    emitDefinitionUpdated(deps.eventBus, workflowId, "mcp", "")
-    return { ok: true }
+    return withWorkflowMutationLock(deps, workflowId, async () => {
+      await deps.cancelRunsForWorkflow(workflowId)
+      await deps.workflowService.delete(workflowId)
+      await deps.snapshotService.deleteWorkflow(workflowId)
+      emitDefinitionUpdated(deps.eventBus, workflowId, "mcp", "")
+      return { ok: true }
+    })
   },
 
   "workflow.run.execute": async (params, deps) => {
