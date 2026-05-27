@@ -1,4 +1,7 @@
 import { EventEmitter } from "node:events"
+import { access, chmod, mkdtemp, rm, writeFile } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
 import { PassThrough } from "node:stream"
 import type { ChildProcessWithoutNullStreams } from "node:child_process"
 
@@ -7,6 +10,7 @@ import { describe, expect, it, vi } from "vitest"
 import { InMemoryAuditSink, createPermissionGuard } from "../../security"
 import {
   ControlledProcessPermissionError,
+  type ControlledProcessRunRequest,
   createControlledProcessRunner,
   computePath,
   splitPath,
@@ -39,7 +43,59 @@ function createChildThatIgnoresSigterm(): {
   return { child, kill }
 }
 
+async function fileExists(filePath: string): Promise<boolean> {
+  return access(filePath).then(() => true, () => false)
+}
+
 describe("ControlledProcessRunner (Phase 0.7)", () => {
+  it.skipIf(process.platform === "win32")("checks permission before resolving login shell PATH", async () => {
+    const tempDir = await mkdtemp(path.join(os.tmpdir(), "synapse-runner-"))
+    const markerPath = path.join(tempDir, "shell-was-run")
+    const shellPath = path.join(tempDir, "login-shell")
+    const previousShell = process.env.SHELL
+    let markerAtPermissionCheck = false
+
+    try {
+      await writeFile(
+        shellPath,
+        [
+          "#!/bin/sh",
+          `printf hit > ${JSON.stringify(markerPath)}`,
+          "printf '__SYNAPSE_PATH_BEGIN__/tmp__SYNAPSE_PATH_END__\\n'",
+        ].join("\n"),
+      )
+      await chmod(shellPath, 0o755)
+      process.env.SHELL = shellPath
+
+      const permissionGuard = {
+        registerPolicy: () => () => {},
+        check: async () => {
+          markerAtPermissionCheck = await fileExists(markerPath)
+          return { allowed: false, reason: "denied before launch" } as const
+        },
+      }
+      const auditSink = new InMemoryAuditSink()
+      const runner = createControlledProcessRunner({ permissionGuard, auditSink })
+
+      const request: ControlledProcessRunRequest = {
+        actor: { kind: "user" },
+        action: "shell.exec",
+        command: process.execPath,
+      }
+      await expect(runner.run(request)).rejects.toBeInstanceOf(ControlledProcessPermissionError)
+
+      expect(markerAtPermissionCheck).toBe(false)
+      await expect(fileExists(markerPath)).resolves.toBe(false)
+    } finally {
+      if (previousShell === undefined) {
+        delete process.env.SHELL
+      } else {
+        process.env.SHELL = previousShell
+      }
+      await rm(tempDir, { recursive: true, force: true })
+    }
+  })
+
   it("runs an allowed command and records an allowed audit event", async () => {
     const guard = createPermissionGuard()
     const auditSink = new InMemoryAuditSink()

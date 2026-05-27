@@ -197,32 +197,13 @@ export class ControlledProcessRunner {
     const args = request.args ?? []
     const output = request.output ?? {}
     const maxBufferBytes = output.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES
-    const launch = buildLaunch(request)
+    const permissionContext = buildPermissionContext(request, args, output, { longRunning: true })
 
     const permission = await this.permissionGuard.check({
       action: request.action,
       actor: request.actor,
       resource: request.command,
-      context: {
-        args,
-        launchCommand: launch.command,
-        launchArgs: launch.args,
-        cwd: request.cwd,
-        envKeys: Object.keys(launch.env).sort(),
-        output: {
-          stdout: output.stdout ?? "buffer",
-          stderr: output.stderr ?? "buffer",
-        },
-        stdinBytes: stdinBytes(request.stdin),
-        stream: {
-          stdoutLine: request.onStdoutLine !== undefined,
-          stderrLine: request.onStderrLine !== undefined,
-        },
-        timeoutMs: request.timeoutMs,
-        longRunning: true,
-        isolation: launch.isolationMetadata,
-        ...request.metadata,
-      },
+      context: permissionContext,
     })
 
     if (!permission.allowed) {
@@ -241,6 +222,7 @@ export class ControlledProcessRunner {
       throw new ControlledProcessPermissionError(permission)
     }
 
+    const launch = buildLaunch(request)
     let child: ChildProcessWithoutNullStreams
     try {
       child = this.spawnImpl(launch.command, launch.args, {
@@ -270,41 +252,13 @@ export class ControlledProcessRunner {
     const args = request.args ?? []
     const output = request.output ?? {}
     const maxBufferBytes = output.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES
-    const launch = buildLaunch(request)
-    const launchPathEntries = splitPath(launch.env.PATH ?? "", process.platform === "win32" ? ";" : ":")
-    const launchDiagnostics: ControlledProcessDiagnostics = {
-      envKeys: Object.keys(launch.env).sort(),
-      pathSummary: launchPathEntries.length > 0
-        ? `${launchPathEntries[0]}${launchPathEntries.length > 1 ? ` ... (${String(launchPathEntries.length)} entries)` : ""}`
-        : "(empty)",
-      pathEntries: launchPathEntries,
-      shell: launch.command,
-      args: [...launch.args],
-    }
+    const permissionContext = buildPermissionContext(request, args, output)
 
     const permission = await this.permissionGuard.check({
       action: request.action,
       actor: request.actor,
       resource: request.command,
-      context: {
-        args,
-        launchCommand: launch.command,
-        launchArgs: launch.args,
-        cwd: request.cwd,
-        envKeys: Object.keys(launch.env).sort(),
-        output: {
-          stdout: output.stdout ?? "buffer",
-          stderr: output.stderr ?? "buffer",
-        },
-        stdinBytes: stdinBytes(request.stdin),
-        stream: {
-          stdoutLine: request.onStdoutLine !== undefined,
-          stderrLine: request.onStderrLine !== undefined,
-        },
-        timeoutMs: request.timeoutMs,
-        isolation: launch.isolationMetadata,
-        ...request.metadata,
-      },
+      context: permissionContext,
     })
 
     if (!permission.allowed) {
@@ -321,6 +275,18 @@ export class ControlledProcessRunner {
         },
       })
       throw new ControlledProcessPermissionError(permission)
+    }
+
+    const launch = buildLaunch(request)
+    const launchPathEntries = splitPath(launch.env.PATH ?? "", process.platform === "win32" ? ";" : ":")
+    const launchDiagnostics: ControlledProcessDiagnostics = {
+      envKeys: Object.keys(launch.env).sort(),
+      pathSummary: launchPathEntries.length > 0
+        ? `${launchPathEntries[0]}${launchPathEntries.length > 1 ? ` ... (${String(launchPathEntries.length)} entries)` : ""}`
+        : "(empty)",
+      pathEntries: launchPathEntries,
+      shell: launch.command,
+      args: [...launch.args],
     }
 
     let child: ChildProcessWithoutNullStreams
@@ -789,6 +755,93 @@ function buildAllowedEnv(
   }
 
   return nextEnv
+}
+
+function buildPermissionContext(
+  request: ControlledProcessRunRequest,
+  args: readonly string[],
+  output: ControlledProcessOutputOptions,
+  options: { readonly longRunning?: boolean } = {},
+): Record<string, unknown> {
+  const launchPreview = previewLaunchForPermission(request, args)
+  return {
+    args,
+    launchCommand: launchPreview.command,
+    launchArgs: launchPreview.args,
+    cwd: request.cwd,
+    envKeys: buildPermissionEnvKeys(request.env, request.envAllowlist),
+    output: {
+      stdout: output.stdout ?? "buffer",
+      stderr: output.stderr ?? "buffer",
+    },
+    stdinBytes: stdinBytes(request.stdin),
+    stream: {
+      stdoutLine: request.onStdoutLine !== undefined,
+      stderrLine: request.onStderrLine !== undefined,
+    },
+    timeoutMs: request.timeoutMs,
+    ...(options.longRunning ? { longRunning: true } : undefined),
+    isolation: launchPreview.isolationMetadata,
+    ...request.metadata,
+  }
+}
+
+function buildPermissionEnvKeys(
+  env: Record<string, string | undefined> | undefined,
+  envAllowlist: readonly string[] | undefined,
+): string[] {
+  const allowlist = new Set([...DEFAULT_ENV_ALLOWLIST, ...(envAllowlist ?? [])])
+  const keys = new Set<string>()
+
+  for (const key of allowlist) {
+    if (!key) continue
+    if (key === "PATH") {
+      keys.add(findEnvEntry(env, "PATH")?.key ?? "PATH")
+      continue
+    }
+    let entry = findEnvEntry(env, key)
+    if (!entry) entry = findEnvEntry(process.env, key)
+    if (entry) keys.add(entry.key)
+  }
+
+  return [...keys].sort()
+}
+
+function previewLaunchForPermission(
+  request: ControlledProcessRunRequest,
+  args: readonly string[],
+): Pick<ControlledProcessLaunch, "command" | "args" | "isolationMetadata"> {
+  const isolation = request.isolation
+  if (isolation?.kind === "run_as_user" && process.platform !== "win32") {
+    const user = isolation.user.trim()
+    const envAllowlist = uniqueStrings(isolation.envAllowlist ?? DEFAULT_RUN_AS_ENV_ALLOWLIST)
+    const preserveArg = envAllowlist.length > 0
+      ? [`--preserve-env=${envAllowlist.join(",")}`]
+      : []
+    return {
+      command: "sudo",
+      args: [
+        "-n",
+        "-iu",
+        user,
+        ...preserveArg,
+        "--",
+        request.command,
+        ...args,
+      ],
+      isolationMetadata: {
+        kind: "run_as_user",
+        user,
+        envKeys: envAllowlist,
+      },
+    }
+  }
+
+  return {
+    command: request.command,
+    args,
+    isolationMetadata: isolation ? { kind: isolation.kind } : undefined,
+  }
 }
 
 function findEnvEntry(
