@@ -165,6 +165,7 @@ export class AgentRuntimeService {
       logger: deps.logger,
       now: deps.now,
       createSession: deps.createSession,
+      getReplyTargetEnv: (projectId, sessionKey) => deps.replyTargets?.getAgentEnv(projectId, sessionKey),
       sdkPlugins: deps.sdkPlugins,
       allowPluginHooks: deps.allowPluginHooks,
       sdkAgents: deps.sdkAgents,
@@ -968,13 +969,16 @@ export class AgentRuntimeService {
     const shell = resolveShellCommand(command.shell, `${command.exec} ${escapedArgs}`.trim(), {
       ...shellOptions,
     })
+    const sessionEnv = this.replyTargetEnv(message)
+    const sessionEnvKeys = Object.keys(sessionEnv ?? {})
     const result = await this.deps.commandRunner.run({
       actor: { kind: "user", id: message.userId },
       action: "shell.exec",
       command: shell.command,
       args: [...shell.args],
       cwd: workDir,
-      isolation: await this.resolveProcessIsolation(message),
+      ...(sessionEnv ? { env: sessionEnv, envAllowlist: sessionEnvKeys } : {}),
+      isolation: await this.resolveProcessIsolation(message, sessionEnvKeys),
       timeoutMs: 60_000,
       output: { stdout: "buffer", stderr: "buffer" },
       metadata: {
@@ -1033,11 +1037,15 @@ export class AgentRuntimeService {
     return message.workspacePath ?? this.deps.workDir
   }
 
-  private async resolveProcessIsolation(message: AgentMessage) {
-    const sessionEnv = this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey)
+  private replyTargetEnv(message: AgentMessage): Record<string, string> | undefined {
+    return this.deps.replyTargets?.getAgentEnv(this.deps.projectId, message.sessionKey)
+  }
+
+  private async resolveProcessIsolation(message: AgentMessage, extraEnvKeys?: readonly string[]) {
+    const sessionEnvKeys = extraEnvKeys ?? Object.keys(this.replyTargetEnv(message) ?? {})
     return this.deps.executionIsolation?.resolveProcessIsolation(
       this.deps.projectId,
-      Object.keys(sessionEnv ?? {}),
+      sessionEnvKeys,
     )
   }
 

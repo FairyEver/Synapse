@@ -54,6 +54,10 @@ export interface SessionManagerDeps {
   readonly logger?: StructuredLogger
   readonly now?: () => Date
   readonly createSession?: AgentLiveSessionFactory
+  readonly getReplyTargetEnv?: (
+    projectId: string,
+    sessionKey: string,
+  ) => Record<string, string> | undefined
   readonly sdkPlugins?: (message: AgentMessage, conversation: ConversationEntryV1) =>
     readonly AgentSdkPluginSpec[] | Promise<readonly AgentSdkPluginSpec[]>
   readonly allowPluginHooks?: (message: AgentMessage, conversation: ConversationEntryV1) =>
@@ -154,10 +158,15 @@ export class SessionManager {
     if (!cwd) {
       throw new Error("Project workspace path is required")
     }
-    const env = await this.deps.providerService.buildEnv(providerId, {
+    const providerEnv = await this.deps.providerService.buildEnv(providerId, {
       actor: { kind: "user", id: input.message.userId },
       projectId: this.deps.projectId,
     })
+    const replyTargetEnv = this.deps.getReplyTargetEnv?.(this.deps.projectId, input.message.sessionKey) ?? {}
+    const env = {
+      ...replyTargetEnv,
+      ...providerEnv,
+    }
     const effectiveTier = input.message.modelTier ?? input.conversation.agentConfig?.modelTier
     if (effectiveTier) {
       const tierModel = resolveTierFromEnv(env, effectiveTier)

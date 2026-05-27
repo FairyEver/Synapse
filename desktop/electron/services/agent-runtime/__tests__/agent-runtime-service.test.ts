@@ -72,6 +72,46 @@ describe("AgentRuntimeService", () => {
     })
   })
 
+  it("passes side-channel reply environment into live SDK sessions", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const session = new ScriptedSession([
+      { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+    ], "sdk-1")
+    const replyTargets = replyTargetsMock({
+      CC_PROJECT: "side-project",
+      CC_SESSION_KEY: "s1",
+      SYNAPSE_SIDE_CHANNEL_URL: "http://127.0.0.1:10000/send",
+      SYNAPSE_SIDE_CHANNEL_TOKEN: "side-token",
+    })
+    const factoryCalls: Array<{ env: Record<string, string> }> = []
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {
+        ANTHROPIC_API_KEY: "sk-test",
+        CC_PROJECT: "provider-project",
+      }) as unknown as ProviderService,
+      createSession: (input) => {
+        factoryCalls.push({ env: input.env })
+        return session
+      },
+      replyTargets,
+      now: fixedNow,
+    })
+
+    await service.send(baseMessage("hello"))
+
+    expect(replyTargets.getAgentEnv).toHaveBeenCalledWith("project-1", "s1")
+    expect(factoryCalls[0]?.env).toEqual({
+      CC_PROJECT: "provider-project",
+      CC_SESSION_KEY: "s1",
+      SYNAPSE_SIDE_CHANNEL_URL: "http://127.0.0.1:10000/send",
+      SYNAPSE_SIDE_CHANNEL_TOKEN: "side-token",
+      ANTHROPIC_API_KEY: "sk-test",
+    })
+  })
+
   it("checks agent.spawn before creating a renderer session and audits denial", async () => {
     const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
     const permissionGuard = {
@@ -296,6 +336,66 @@ describe("AgentRuntimeService", () => {
     } finally {
       if (platformDescriptor) Object.defineProperty(process, "platform", platformDescriptor)
     }
+  })
+
+  it("passes side-channel reply environment into custom command execution", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const commands = new MemoryNamespace<AgentCommandEntryV1>("agent.commands")
+    const customCommands = new CustomCommandRegistry({
+      projectId: "project-1",
+      commands,
+      now: fixedNow,
+    })
+    await customCommands.addExec({
+      name: "reply-env",
+      exec: "env",
+      createdBy: "user-1",
+    })
+    const sessionEnv = {
+      CC_PROJECT: "project-1",
+      CC_SESSION_KEY: "s1",
+      SYNAPSE_SIDE_CHANNEL_URL: "http://127.0.0.1:10000/send",
+      SYNAPSE_SIDE_CHANNEL_TOKEN: "side-token",
+    }
+    const run = vi.fn(async () => ({
+      exitCode: 0,
+      signal: null,
+      stdout: "ok",
+      stderr: "",
+      timedOut: false,
+      durationMs: 1,
+    }))
+    const executionIsolation = {
+      resolveProcessIsolation: vi.fn(async (_projectId: string, envKeys: readonly string[]) => ({
+        kind: "run_as_user" as const,
+        user: "agent-user",
+        envAllowlist: envKeys,
+      })),
+    }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      customCommands,
+      commandRunner: { run },
+      executionIsolation,
+      replyTargets: replyTargetsMock(sessionEnv),
+      now: fixedNow,
+    })
+
+    await service.send({ ...baseMessage("/reply-env"), platform: "local-renderer" })
+
+    expect(executionIsolation.resolveProcessIsolation).toHaveBeenCalledWith("project-1", Object.keys(sessionEnv))
+    expect(run).toHaveBeenCalledWith(expect.objectContaining({
+      env: sessionEnv,
+      envAllowlist: Object.keys(sessionEnv),
+      isolation: {
+        kind: "run_as_user",
+        user: "agent-user",
+        envAllowlist: Object.keys(sessionEnv),
+      },
+    }))
   })
 
   it("cancelTurn interrupts before forceKillTurn hard closes the session", async () => {
@@ -1220,6 +1320,16 @@ function fixedNow(): Date {
 
 function fixedLocalNameNow(): Date {
   return new Date(2026, 3, 26, 8, 0, 0, 0)
+}
+
+function replyTargetsMock(
+  env: Record<string, string>,
+): NonNullable<ConstructorParameters<typeof AgentRuntimeService>[0]["replyTargets"]> {
+  return {
+    rememberReplyTarget: vi.fn(),
+    dispatchAgentEvent: vi.fn(async () => undefined),
+    getAgentEnv: vi.fn(() => env),
+  }
 }
 
 class FakeProviderService {
