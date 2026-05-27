@@ -17,6 +17,26 @@ afterEach(() => {
 })
 
 describe("usage analysis reports", () => {
+  it("includes stable focus fields in CC details rows", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const db = getUsageAnalysisDb(dir)
+    const service = new CcUsageAnalysisService({ db, roots: [] })
+    db.prepare(`
+      INSERT INTO cc_usage_events (
+        id, session_id, timestamp_ms, date, hour, workspace_key, workspace_label, model, provider,
+        input_tokens, output_tokens
+      ) VALUES ('usage-1', 'session-1', 1779843600000, '2026-05-27', '2026-05-27 09', '-repo', '/repo', 'claude-opus-4.6', 'anthropic', 10, 5)
+    `).run()
+
+    expect(service.getDetails({ preset: "all", limit: 10 })[0]).toEqual(expect.objectContaining({
+      id: "usage-1",
+      usageEventId: "usage-1",
+      sessionId: "session-1",
+      timestampMs: 1779843600000,
+    }))
+  })
+
   it("retries transient database write locks during refresh writes", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)

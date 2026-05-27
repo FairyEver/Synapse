@@ -131,7 +131,9 @@ export interface UsageToolRow {
 
 export interface UsageDetailRow {
   readonly id: string
+  readonly usageEventId?: string
   readonly timestamp: string
+  readonly timestampMs?: number
   readonly sessionId: string
   readonly workspaceLabel: string
   readonly model: string

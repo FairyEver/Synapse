@@ -9,6 +9,7 @@ import type { UsageRangePreset, UsageViewId } from "../types"
 interface UsageAnalysisShellProps {
   title: string
   view: UsageViewId
+  views?: readonly UsageViewOption[]
   range: UsageRangePreset
   refreshing: boolean
   onViewChange: (view: UsageViewId) => void
@@ -18,7 +19,9 @@ interface UsageAnalysisShellProps {
   children: ReactNode
 }
 
-const VIEWS: { readonly id: UsageViewId; readonly label: string }[] = [
+type UsageViewOption = { readonly id: UsageViewId; readonly label: string }
+
+const BASE_USAGE_VIEWS: readonly UsageViewOption[] = [
   { id: "today", label: "今日" },
   { id: "overview", label: "概览" },
   { id: "time", label: "时间" },
@@ -27,7 +30,15 @@ const VIEWS: { readonly id: UsageViewId; readonly label: string }[] = [
   { id: "tools", label: "工具" },
 ]
 
+const CC_USAGE_VIEWS: readonly UsageViewOption[] = [
+  ...BASE_USAGE_VIEWS,
+  { id: "details", label: "明细" },
+  { id: "conversations", label: "对话" },
+]
+
 export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
+  const views = props.views ?? BASE_USAGE_VIEWS
+
   return (
     <div className="flex h-full min-h-0 min-w-0 max-w-full flex-col overflow-hidden bg-surface">
       <div className="flex min-w-0 shrink-0 flex-wrap items-center justify-between gap-2 px-2 py-2.5">
@@ -35,7 +46,7 @@ export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
           <h2 className="shrink-0 text-sm font-medium">{props.title}</h2>
           <Tabs value={props.view} onValueChange={(next) => props.onViewChange(next as UsageViewId)}>
             <TabsList>
-              {VIEWS.map((view) => (
+              {views.map((view) => (
                 <TabsTrigger key={view.id} value={view.id}>{view.label}</TabsTrigger>
               ))}
             </TabsList>
@@ -77,3 +88,5 @@ export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
     </div>
   )
 }
+
+export { BASE_USAGE_VIEWS, CC_USAGE_VIEWS }

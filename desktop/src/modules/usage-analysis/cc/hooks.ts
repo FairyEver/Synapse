@@ -1,4 +1,5 @@
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import type { CcConversationListInput } from "@/types/usage-analysis-conversations"
 import { toUsageRangeInput } from "../shared/range"
 import { useReportLoader } from "../shared/use-report-loader"
 import type { UsageReportRangePreset, UsageTrendBucketGranularity } from "../shared/types"
@@ -42,5 +43,26 @@ export function useCcDetails(range: UsageReportRangePreset, refreshKey: number) 
   return useReportLoader(
     () => requireSynapseBridge().usageAnalysis.cc.getDetails({ ...toUsageRangeInput(range), limit: 200 }),
     [range, refreshKey],
+  )
+}
+
+export function useCcConversations(input: CcConversationListInput, refreshKey: number) {
+  return useReportLoader(
+    () => input.rawText
+      ? requireSynapseBridge().usageAnalysis.cc.searchConversationText(input)
+      : requireSynapseBridge().usageAnalysis.cc.listConversations(input),
+    [
+      input.preset,
+      input.query,
+      input.rawText,
+      input.project,
+      input.model,
+      input.tool,
+      input.eventType,
+      input.limit,
+      input.offset,
+      input.cursor,
+      refreshKey,
+    ],
   )
 }

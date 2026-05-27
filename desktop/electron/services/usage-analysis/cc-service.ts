@@ -604,7 +604,9 @@ export class CcUsageAnalysisService {
     `).all(...toolFilter.params, ...usageFilter.params, limit, offset) as unknown as (UsageEventRow & { tool_calls: number })[]
     return rows.map((row) => ({
       id: row.id,
+      usageEventId: row.id,
       timestamp: isoFromTimestamp(row.timestamp_ms),
+      timestampMs: row.timestamp_ms,
       sessionId: row.session_id,
       workspaceLabel: row.workspace_label || row.workspace_key || "unknown",
       model: row.model,

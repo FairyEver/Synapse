@@ -1,3 +1,5 @@
+import { ExternalLink } from "lucide-react"
+import { Button } from "@/components/ui/button"
 import {
   Table,
   TableBody,
@@ -259,7 +261,13 @@ export function ToolsReportView({ state }: { readonly state: LoaderState<UsageTo
   )
 }
 
-export function DetailsReportView({ state }: { readonly state: LoaderState<UsageDetailRow[]> }) {
+export function DetailsReportView({
+  state,
+  onOpenConversation,
+}: {
+  readonly state: LoaderState<UsageDetailRow[]>
+  readonly onOpenConversation?: (row: UsageDetailRow) => void
+}) {
   const rows = state.data ?? []
   return (
     <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
@@ -276,6 +284,7 @@ export function DetailsReportView({ state }: { readonly state: LoaderState<Usage
               <TableHead className="text-right">Token</TableHead>
               <TableHead className="text-right">估算费用</TableHead>
               <TableHead className="text-right">工具</TableHead>
+              {onOpenConversation ? <TableHead className="text-right">操作</TableHead> : null}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -288,6 +297,14 @@ export function DetailsReportView({ state }: { readonly state: LoaderState<Usage
                 <TableCell className="text-right tabular-nums">{formatInteger(row.tokens)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatEstimatedCost(row.estimatedCost, row.tokens, row.unpricedTokens)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatInteger(row.toolCalls)}</TableCell>
+                {onOpenConversation ? (
+                  <TableCell className="text-right">
+                    <Button type="button" size="sm" variant="outline" onClick={() => onOpenConversation(row)}>
+                      <ExternalLink data-icon="inline-start" />
+                      打开对话
+                    </Button>
+                  </TableCell>
+                ) : null}
               </TableRow>
             ))}
           </TableBody>

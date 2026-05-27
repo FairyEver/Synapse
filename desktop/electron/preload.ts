@@ -241,6 +241,10 @@ const IPC_CHANNELS = {
     "ccProjects": "synapse:usage-analysis:cc:projects",
     "ccTools": "synapse:usage-analysis:cc:tools",
     "ccDetails": "synapse:usage-analysis:cc:details",
+    "ccConversationsList": "synapse:usage-analysis:cc:conversations:list",
+    "ccConversationGet": "synapse:usage-analysis:cc:conversation:get",
+    "ccConversationSearchText": "synapse:usage-analysis:cc:conversation:search-text",
+    "ccConversationWindowOpen": "synapse:usage-analysis:cc:conversation-window:open",
     "codexRefresh": "synapse:usage-analysis:codex:refresh",
     "codexOverview": "synapse:usage-analysis:codex:overview",
     "codexTime": "synapse:usage-analysis:codex:time",
@@ -836,6 +840,11 @@ const synapseBridge: SynapseBridge = {
       getProjects: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccProjects)(range),
       getTools: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccTools)(range),
       getDetails: (range) => invoke(IPC_CHANNELS["usage-analysis"].ccDetails)(range),
+      listConversations: (input) => invoke(IPC_CHANNELS["usage-analysis"].ccConversationsList)(input),
+      getConversation: (sessionId, focus) =>
+        invoke(IPC_CHANNELS["usage-analysis"].ccConversationGet)({ sessionId, focus }),
+      searchConversationText: (input) => invoke(IPC_CHANNELS["usage-analysis"].ccConversationSearchText)(input),
+      openConversationWindow: (request) => invoke(IPC_CHANNELS["usage-analysis"].ccConversationWindowOpen)(request),
     },
     codex: {
       refresh: invoke(IPC_CHANNELS["usage-analysis"].codexRefresh),

@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
-import { normalizeUsageRangeForIpc, resolveClaudeUsageRoots } from "../ipc-handlers"
+import {
+  normalizeConversationFocus,
+  normalizeConversationListInput,
+  normalizeUsageRangeForIpc,
+  resolveClaudeUsageRoots,
+} from "../ipc-handlers"
 
 describe("usage analysis ipc handlers", () => {
   it("accepts today range preset", () => {
@@ -22,6 +27,43 @@ describe("usage analysis ipc handlers", () => {
 
   it("falls back to 30d for unknown range preset", () => {
     expect(normalizeUsageRangeForIpc({ preset: "unknown" })).toEqual({ preset: "30d" })
+  })
+
+  it("normalizes Claude Code conversation query inputs", () => {
+    expect(normalizeConversationListInput({
+      preset: "all",
+      query: "  登录  ",
+      rawText: true,
+      project: "-repo",
+      model: "opus",
+      tool: "Read",
+      eventType: "user",
+      limit: 20,
+      offset: 5,
+      cursor: "next",
+    })).toEqual({
+      preset: "all",
+      query: "登录",
+      rawText: true,
+      project: "-repo",
+      model: "opus",
+      tool: "Read",
+      eventType: "user",
+      limit: 20,
+      offset: 5,
+      cursor: "next",
+    })
+    expect(normalizeConversationFocus({
+      eventId: "event-1",
+      usageEventId: "usage-1",
+      toolEventId: "tool-1",
+      timestampMs: 1779860000000.9,
+    })).toEqual({
+      eventId: "event-1",
+      usageEventId: "usage-1",
+      toolEventId: "tool-1",
+      timestampMs: 1779860000000,
+    })
   })
 
   it("includes the default and configured Claude Code projects directories", () => {

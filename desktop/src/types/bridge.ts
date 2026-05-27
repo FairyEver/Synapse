@@ -43,6 +43,13 @@ import type {
   WorkflowModelMapping,
 } from "./workflow-package"
 import type {
+  CcConversationDetail,
+  CcConversationFocus,
+  CcConversationListInput,
+  CcConversationListResult,
+  CcConversationWindowRequest,
+} from "./usage-analysis-conversations"
+import type {
   SynapseContentDownloadResult,
   SynapseContentChangedEvent,
   SynapseContentDetail,
@@ -478,7 +485,9 @@ export type UsageAnalysisToolRow = {
 
 export type UsageAnalysisDetailRow = {
   readonly id: string
+  readonly usageEventId?: string
   readonly timestamp: string
+  readonly timestampMs?: number
   readonly sessionId: string
   readonly workspaceLabel: string
   readonly model: string
@@ -519,6 +528,13 @@ export type UsageAnalysisBridgeDomain = {
   getProjects: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisProjectRow[]>
   getTools: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisToolRow[]>
   getDetails: (range: UsageAnalysisDetailInput) => Promise<UsageAnalysisDetailRow[]>
+}
+
+export type ClaudeCodeUsageAnalysisBridgeDomain = UsageAnalysisBridgeDomain & {
+  listConversations: (input: CcConversationListInput) => Promise<CcConversationListResult>
+  getConversation: (sessionId: string, focus?: CcConversationFocus) => Promise<CcConversationDetail>
+  searchConversationText: (input: CcConversationListInput) => Promise<CcConversationListResult>
+  openConversationWindow: (request: CcConversationWindowRequest) => Promise<void>
 }
 
 export type SynapseBridge = {
@@ -981,7 +997,7 @@ export type SynapseBridge = {
     onEditorRefocus: (listener: (payload: { runId?: string }) => void) => () => void
   }
   usageAnalysis: {
-    cc: UsageAnalysisBridgeDomain
+    cc: ClaudeCodeUsageAnalysisBridgeDomain
     codex: UsageAnalysisBridgeDomain
     getPricingRules: () => Promise<UsageAnalysisModelPriceRule[]>
     savePricingRules: (rules: UsageAnalysisModelPriceRuleInput[]) => Promise<UsageAnalysisModelPriceRule[]>

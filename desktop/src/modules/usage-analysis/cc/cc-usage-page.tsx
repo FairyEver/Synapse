@@ -2,10 +2,12 @@ import { useState } from "react"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { PricingRulesDialog } from "../shared/components/pricing-rules-dialog"
-import { UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
+import { CC_USAGE_VIEWS, UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
 import { TodayReportView } from "../shared/components/today-report-view"
 import type { UsageRangePreset, UsageTrendBucketGranularity, UsageViewId } from "../shared/types"
 import { useCcModels, useCcOverview, useCcTime } from "./hooks"
+import { CcConversationsPage } from "./pages/conversations"
+import { CcDetailsPage } from "./pages/details"
 import { CcModelsPage } from "./pages/models"
 import { CcOverviewPage } from "./pages/overview"
 import { CcProjectsPage } from "./pages/projects"
@@ -37,6 +39,7 @@ export function CcUsagePage() {
     <UsageAnalysisShell
       title="CC"
       view={view}
+      views={CC_USAGE_VIEWS}
       range={range}
       refreshing={refreshing}
       onViewChange={setView}
@@ -57,6 +60,8 @@ export function CcUsagePage() {
       {view === "models" ? <CcModelsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "projects" ? <CcProjectsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "tools" ? <CcToolsPage range={range} refreshKey={refreshKey} /> : null}
+      {view === "details" ? <CcDetailsPage range={range} refreshKey={refreshKey} /> : null}
+      {view === "conversations" ? <CcConversationsPage range={range} refreshKey={refreshKey} /> : null}
     </UsageAnalysisShell>
   )
 }

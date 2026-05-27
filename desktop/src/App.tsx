@@ -32,6 +32,7 @@ import {
 import { getAllContentTypeIds } from "@/config/content-types"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { ErrorBoundary } from "@/components/error-boundary"
+import { parseCcConversationWindowRequest } from "@/lib/cc-conversation-window"
 import { parseContentWindowRequest } from "@/lib/content-window"
 import { ContentWindowPage } from "@/modules/content/components/content-window-page"
 import { RulesModule } from "@/modules/rules"
@@ -42,6 +43,7 @@ import { DatabaseModule } from "@/modules/database"
 import { EditorScanModule } from "@/modules/editor-scan"
 import { AgentModule } from "@/modules/agent"
 import { TaskSchedulerModule } from "@/modules/task-scheduler"
+import { CcConversationDetailWindowPage } from "@/modules/usage-analysis/cc/components/conversation-detail-window-page"
 import { CcUsageAnalysisModule, CodexUsageAnalysisModule } from "@/modules/usage-analysis"
 import { WorkflowModule } from "@/modules/workflow"
 import { ToolsModule } from "@/modules/tools"
@@ -432,11 +434,23 @@ function MainApp() {
 
 function App() {
   const { resetKey } = useAppConfig()
+  const [ccConversationWindowRequest, setCcConversationWindowRequest] = useState<ReturnType<typeof parseCcConversationWindowRequest>>(null)
   const [standaloneContentWindowRequest, setStandaloneContentWindowRequest] = useState<ReturnType<typeof parseContentWindowRequest>>(null)
 
   useEffect(() => {
+    setCcConversationWindowRequest(parseCcConversationWindowRequest(window.location.search))
     setStandaloneContentWindowRequest(parseContentWindowRequest(window.location.search))
   }, [])
+
+  if (ccConversationWindowRequest) {
+    return (
+      <IdentityGate>
+        <ErrorBoundary fallbackTitle="对话窗口出现问题">
+          <CcConversationDetailWindowPage request={ccConversationWindowRequest} />
+        </ErrorBoundary>
+      </IdentityGate>
+    )
+  }
 
   if (standaloneContentWindowRequest) {
     return (

@@ -7,11 +7,18 @@ import { handleValidatedIpc } from "../ipc/validated-ipc"
 import {
   getUsageAnalysisDb,
   getUsageAnalysisDbPath,
+  CcConversationService,
   CcUsageAnalysisService,
   CodexUsageAnalysisService,
   refreshUsageInWorker,
 } from "../services/usage-analysis"
 import type { UsageDetailInput, UsageModelPriceRuleInput, UsageRangeInput } from "../services/usage-analysis"
+import { ccConversationWindowService } from "../services/usage-analysis/cc-conversation-window-service"
+import type {
+  CcConversationFocus,
+  CcConversationListInput,
+  CcConversationWindowRequest,
+} from "../../src/types/usage-analysis-conversations"
 
 let registered = false
 
@@ -41,6 +48,48 @@ function normalizeDetailsRange(range: UsageDetailInput | undefined): UsageDetail
     limit: Number.isFinite(limit) ? limit : 200,
     offset: Number.isFinite(offset) ? offset : 0,
   }
+}
+
+function optionalString(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+export function normalizeConversationListInput(input: CcConversationListInput | undefined): CcConversationListInput {
+  const range = normalizeUsageRangeForIpc(input)
+  const limit = Number(input?.limit)
+  const offset = Number(input?.offset)
+
+  return {
+    ...range,
+    query: optionalString(input?.query),
+    rawText: input?.rawText === true,
+    project: optionalString(input?.project),
+    model: optionalString(input?.model),
+    tool: optionalString(input?.tool),
+    eventType: optionalString(input?.eventType),
+    limit: Number.isFinite(limit) ? limit : 50,
+    offset: Number.isFinite(offset) ? offset : 0,
+    cursor: optionalString(input?.cursor),
+  }
+}
+
+export function normalizeConversationFocus(focus: CcConversationFocus | undefined): CcConversationFocus | undefined {
+  if (!focus) return undefined
+  const timestampMs = Number(focus.timestampMs)
+  const normalized: CcConversationFocus = {
+    eventId: optionalString(focus.eventId),
+    usageEventId: optionalString(focus.usageEventId),
+    toolEventId: optionalString(focus.toolEventId),
+    timestampMs: Number.isFinite(timestampMs) ? Math.trunc(timestampMs) : undefined,
+  }
+
+  if (!normalized.eventId && !normalized.usageEventId && !normalized.toolEventId && normalized.timestampMs === undefined) {
+    return undefined
+  }
+
+  return normalized
 }
 
 function uniquePaths(paths: readonly string[]): string[] {
@@ -131,6 +180,7 @@ export function registerUsageAnalysisHandlers(): void {
     db,
     roots: ccRoots,
   })
+  const ccConversations = new CcConversationService({ db })
   const codexHome = process.env.CODEX_HOME || path.join(home, ".codex")
   const codexRoots = [path.join(codexHome, "sessions"), path.join(codexHome, "archived_sessions")]
   const codex = new CodexUsageAnalysisService({
@@ -151,6 +201,26 @@ export function registerUsageAnalysisHandlers(): void {
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccProjects, async (_event, range?: UsageRangeInput) => cc.getProjects(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccTools, async (_event, range?: UsageRangeInput) => cc.getTools(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccDetails, async (_event, range?: UsageDetailInput) => cc.getDetails(normalizeDetailsRange(range)))
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationsList, async (_event, input?: CcConversationListInput) => {
+    return ccConversations.listConversations(normalizeConversationListInput(input))
+  })
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationGet, async (_event, payload?: { sessionId?: string; focus?: CcConversationFocus }) => {
+    const sessionId = optionalString(payload?.sessionId)
+    if (!sessionId) throw new Error("sessionId is required")
+    return ccConversations.getConversation(sessionId)
+  })
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationSearchText, async (_event, input?: CcConversationListInput) => {
+    return ccConversations.searchConversationText({ ...normalizeConversationListInput(input), rawText: true })
+  })
+  handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationWindowOpen, async (_event, request?: CcConversationWindowRequest) => {
+    const sessionId = optionalString(request?.sessionId)
+    if (!sessionId) throw new Error("sessionId is required")
+    await ccConversationWindowService.openConversationWindow({
+      sessionId,
+      title: optionalString(request?.title),
+      focus: normalizeConversationFocus(request?.focus),
+    })
+  })
 
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.codexRefresh, async () => refreshUsageInWorker({
     dbPath,
