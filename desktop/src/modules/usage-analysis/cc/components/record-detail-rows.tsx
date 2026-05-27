@@ -2,6 +2,7 @@ import { ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { TableCell, TableRow } from "@/components/ui/table"
 import { formatSynapseCost } from "@/lib/cost-currency"
+import { formatDateTime } from "@/lib/date-time"
 import type { CcRecordDetailRow } from "@/types/usage-analysis-conversations"
 
 function formatInteger(value: number): string {
@@ -24,7 +25,7 @@ export function RecordDetailRows({
   if (loading) {
     return (
       <TableRow>
-        <TableCell colSpan={9} className="text-muted-foreground">正在读取明细</TableCell>
+        <TableCell colSpan={10} className="text-muted-foreground">正在读取明细</TableCell>
       </TableRow>
     )
   }
@@ -32,7 +33,7 @@ export function RecordDetailRows({
   if (rows.length === 0) {
     return (
       <TableRow>
-        <TableCell colSpan={9} className="text-muted-foreground">暂无请求明细</TableCell>
+        <TableCell colSpan={10} className="text-muted-foreground">暂无请求明细</TableCell>
       </TableRow>
     )
   }
@@ -41,8 +42,9 @@ export function RecordDetailRows({
     <>
       {rows.map((row) => (
         <TableRow key={row.id}>
-          <TableCell>{row.timestamp}</TableCell>
           <TableCell />
+          <TableCell />
+          <TableCell className="text-muted-foreground">{formatDateTime(row.timestamp)}</TableCell>
           <TableCell>{row.model}</TableCell>
           <TableCell className="text-right tabular-nums">{formatInteger(row.tokens)}</TableCell>
           <TableCell className="text-right tabular-nums">{formatSynapseCost(row.estimatedCost)}</TableCell>
@@ -59,7 +61,7 @@ export function RecordDetailRows({
       ))}
       {rows.length < total ? (
         <TableRow>
-          <TableCell colSpan={9} className="text-right">
+          <TableCell colSpan={10} className="text-right">
             <div className="flex items-center justify-end gap-3 text-sm text-muted-foreground">
               <span>已显示 {rows.length} / {total}</span>
               <Button type="button" size="sm" variant="outline" onClick={onLoadMore}>

@@ -24,6 +24,42 @@ describe("RecordTable", () => {
     expect(html).toContain("打开对话")
   })
 
+  it("renders session and request timestamps in a visible time column", () => {
+    const html = renderToStaticMarkup(
+      <RecordTable
+        rows={[record({
+          sessionId: "s1",
+          lastUsedAt: "2026-05-27T01:00:01",
+        })]}
+        expandedSessionId="s1"
+        detailRows={[{
+          id: "u1",
+          usageEventId: "u1",
+          timestamp: "2026-05-27T01:00:00",
+          timestampMs: 1779843600000,
+          sessionId: "s1",
+          workspaceLabel: "/repo",
+          model: "claude-opus-4.6",
+          tokens: 15,
+          pricedTokens: 15,
+          unpricedTokens: 0,
+          estimatedCost: 0.01,
+          tokenBreakdown: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, reasoning: 0 },
+          toolCalls: 1,
+        }]}
+        detailTotal={1}
+        detailLoading={false}
+        onToggleExpanded={() => undefined}
+        onOpenConversation={() => undefined}
+        onOpenDetail={() => undefined}
+        onLoadMoreDetails={() => undefined}
+      />,
+    )
+
+    expect(html).toContain("时间")
+    expect(html).toContain("2026/05/27 01:00")
+  })
+
   it("removes shared path prefixes from title and project columns", () => {
     const html = renderToStaticMarkup(
       <RecordTable

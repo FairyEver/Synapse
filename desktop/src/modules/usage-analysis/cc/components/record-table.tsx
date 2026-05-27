@@ -10,6 +10,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { formatSynapseCost } from "@/lib/cost-currency"
+import { formatDateTime } from "@/lib/date-time"
 import type {
   CcRecordDetailRow,
   CcRecordListItem,
@@ -83,6 +84,7 @@ export function RecordTable({
         <TableRow>
           <TableHead>标题</TableHead>
           <TableHead>项目</TableHead>
+          <TableHead>时间</TableHead>
           <TableHead>模型</TableHead>
           <TableHead className="text-right">Token</TableHead>
           <TableHead className="text-right">费用</TableHead>
@@ -121,6 +123,7 @@ export function RecordTable({
                   </div>
                 </TableCell>
                 <TableCell title={projectValues[index]}>{displayProjects[index]}</TableCell>
+                <TableCell className="text-muted-foreground">{formatDateTime(row.lastUsedAt)}</TableCell>
                 <TableCell>{row.modelSummary || "-"}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatInteger(row.tokens)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatSynapseCost(row.estimatedCost)}</TableCell>
