@@ -34,6 +34,7 @@
 - 修复 MCP/API 数据库变更缺少权限检查与审计的问题；外部数据库写入现在会经过 PermissionGuard 并记录允许、拒绝或失败结果。
 - 修复 Agent 权限列表刷新失败会阻断已有会话选中的问题；权限刷新失败时仍会打开会话并加载历史消息。
 - 修复 Agent side-channel 回复环境变量未注入运行会话的问题；Agent 会话和自定义命令现在能拿到 side-channel 回复地址与 token。
+- 修复 Agent Relay 运行历史持久化源和目标 sessionKey 的问题；新记录只保存短 hash，诊断列表会脱敏旧记录。
 
 ## 技术调整
 

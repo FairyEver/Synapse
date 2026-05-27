@@ -754,8 +754,10 @@ export interface RelayRunEntryV1 extends Record<string, unknown> {
   requestId: string
   sourceProjectId: string
   targetProjectId: string
-  sourceSessionKey: string
-  targetSessionKey: string
+  sourceSessionKey?: string
+  targetSessionKey?: string
+  sourceSessionKeyHash?: string
+  targetSessionKeyHash?: string
   status: RelayRunStatusV1
   visible: boolean
   startedAt: string
@@ -780,8 +782,18 @@ export const relayRunsSchema: NamespaceSchema<RelayRunEntryV1> = {
     && typeof (v as RelayRunEntryV1).requestId === "string"
     && typeof (v as RelayRunEntryV1).sourceProjectId === "string"
     && typeof (v as RelayRunEntryV1).targetProjectId === "string"
-    && typeof (v as RelayRunEntryV1).sourceSessionKey === "string"
-    && typeof (v as RelayRunEntryV1).targetSessionKey === "string"
+    && isOptionalString((v as RelayRunEntryV1).sourceSessionKey)
+    && isOptionalString((v as RelayRunEntryV1).targetSessionKey)
+    && isOptionalString((v as RelayRunEntryV1).sourceSessionKeyHash)
+    && isOptionalString((v as RelayRunEntryV1).targetSessionKeyHash)
+    && (
+      typeof (v as RelayRunEntryV1).sourceSessionKey === "string"
+      || typeof (v as RelayRunEntryV1).sourceSessionKeyHash === "string"
+    )
+    && (
+      typeof (v as RelayRunEntryV1).targetSessionKey === "string"
+      || typeof (v as RelayRunEntryV1).targetSessionKeyHash === "string"
+    )
     && isRelayRunStatus((v as RelayRunEntryV1).status)
     && typeof (v as RelayRunEntryV1).visible === "boolean"
     && typeof (v as RelayRunEntryV1).startedAt === "string"
