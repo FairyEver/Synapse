@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
-import { UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
+import { CC_USAGE_VIEWS, UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
 
 describe("UsageAnalysisShell", () => {
   it("shows today before overview", () => {
@@ -78,6 +78,26 @@ describe("UsageAnalysisShell", () => {
     )
 
     expect(html).toContain("价格规则")
+  })
+
+  it("shows details and conversation tabs for CC analysis", () => {
+    const html = renderToStaticMarkup(
+      <UsageAnalysisShell
+        title="CC"
+        view="conversations"
+        views={CC_USAGE_VIEWS}
+        range="30d"
+        refreshing={false}
+        onViewChange={() => undefined}
+        onRangeChange={() => undefined}
+        onRefresh={() => undefined}
+      >
+        <div>content</div>
+      </UsageAnalysisShell>,
+    )
+
+    expect(html).toContain("明细")
+    expect(html).toContain("对话")
   })
 
   it("shows a disabled loading refresh button while refreshing", () => {
