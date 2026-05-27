@@ -4,7 +4,7 @@ import { WORKFLOW_ENTRY_CHEAT_CODE_NAME } from "@/lib/cheat-codes/names"
 export const SETTINGS_CHEAT_CODE_TITLE = "Synapse AI Studio"
 export const CHEAT_CODE_INTERACTION_RESET_DELAY = 10000
 export const CHEAT_CODE_LOGO_CLICK_THRESHOLD = 10
-export const WORKFLOW_ENTRY_TITLE_SEQUENCE = [11, 12, 13, 14, 15, 16] as const
+export const WORKFLOW_ENTRY_TITLE_SEQUENCE = [8, 9, 4, 16, 5, 6] as const
 
 export const SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES = [
   "text-red-500",

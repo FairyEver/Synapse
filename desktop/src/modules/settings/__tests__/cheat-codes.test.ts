@@ -59,6 +59,9 @@ describe("settings cheat codes", () => {
   it("registers repository maintenance and workflow entry through the centralized registry", () => {
     const enableRepositoryMaintenance = vi.fn()
 
+    expect(WORKFLOW_ENTRY_TITLE_SEQUENCE).toEqual([8, 9, 4, 16, 5, 6])
+    expect(WORKFLOW_ENTRY_TITLE_SEQUENCE.map((index) => settingsTitleParts[index]?.char).join("")).toBe("AIpose")
+
     expect(settingsCheatCodes).toHaveLength(2)
     expect(settingsCheatCodes[0]?.definition.name).toBe("settings:repository-maintenance:enable")
     expect(settingsCheatCodes[0]?.definition.kind).toBe("action")
