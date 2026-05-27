@@ -118,7 +118,7 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
 
   return (
     <Dialog open={open} onOpenChange={(o) => !o && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent className="max-h-[calc(100vh-4rem)] overflow-hidden sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>运行历史</DialogTitle>
           <DialogDescription className="sr-only">查看该工作流的历史运行记录。</DialogDescription>
@@ -138,40 +138,40 @@ export function RunHistoryDialog({ open, workflowId, onClose }: RunHistoryDialog
         ) : snapshots.length === 0 ? (
           <p className="text-sm text-muted-foreground py-4">暂无运行记录。</p>
         ) : (
-          <ScrollArea className="max-h-[60vh]">
-            <div className="space-y-2">
-            {snapshots.map((s) => {
-              const firstError = getFirstError(s)
-              const duration = formatDuration(s.startedAt, s.endedAt)
-              return (
-              <div
-                key={s.runId}
-                className="flex items-center gap-2 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                tabIndex={0}
-                role="button"
-                onClick={() => handleOpenRunner(s.runId)}
-                onKeyDown={(e) => handleKeyDown(e, s.runId)}
-              >
-                <Badge variant={STATUS_VARIANT[s.status] ?? "outline"} className="text-xs shrink-0">
-                  {STATUS_LABEL[s.status] ?? s.status}
-                </Badge>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs text-muted-foreground truncate">{formatTime(s.startedAt)}</p>
-                  {firstError && (
-                    <p className="text-xs text-destructive truncate mt-0.5" title={firstError}>{firstError}</p>
-                  )}
-                </div>
-                {duration && (
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    {duration}
-                  </span>
-                )}
-                <span className="text-xs text-muted-foreground shrink-0">
-                  {Object.keys(s.nodeResults).length} 个节点
-                </span>
-              </div>
-              )
-            })}
+          <ScrollArea className="min-h-0 max-h-[60vh]">
+            <div className="flex flex-col gap-2 pr-3">
+              {snapshots.map((s) => {
+                const firstError = getFirstError(s)
+                const duration = formatDuration(s.startedAt, s.endedAt)
+                return (
+                  <div
+                    key={s.runId}
+                    className="flex min-w-0 items-center gap-2 p-2 rounded-md border cursor-pointer hover:bg-muted/50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                    tabIndex={0}
+                    role="button"
+                    onClick={() => handleOpenRunner(s.runId)}
+                    onKeyDown={(e) => handleKeyDown(e, s.runId)}
+                  >
+                    <Badge variant={STATUS_VARIANT[s.status] ?? "outline"} className="text-xs shrink-0">
+                      {STATUS_LABEL[s.status] ?? s.status}
+                    </Badge>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs text-muted-foreground truncate">{formatTime(s.startedAt)}</p>
+                      {firstError && (
+                        <p className="text-xs text-destructive truncate mt-0.5" title={firstError}>{firstError}</p>
+                      )}
+                    </div>
+                    {duration && (
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        {duration}
+                      </span>
+                    )}
+                    <span className="text-xs text-muted-foreground shrink-0">
+                      {Object.keys(s.nodeResults).length} 个节点
+                    </span>
+                  </div>
+                )
+              })}
             </div>
           </ScrollArea>
         )}
