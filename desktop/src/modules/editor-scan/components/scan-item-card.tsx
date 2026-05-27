@@ -38,7 +38,12 @@ function ScanItemCard({
   const handleOpenInFinder = (e: MouseEvent) => {
     e.stopPropagation()
     const bridge = getSynapseBridge()
-    bridge?.shell.showItemInFolder(itemPath).catch(() => {
+    if (!bridge) {
+      toast.error("无法在访达中打开文件。")
+      return
+    }
+
+    void bridge.shell.showItemInFolder(itemPath).catch(() => {
       toast.error("无法在访达中打开文件。")
     })
   }
