@@ -13,7 +13,8 @@ This is a discovery barrier, not a security boundary. Anyone who reads the code 
 ## Goals
 
 - Add a small cheat code layer whose stable identity is a code-defined string.
-- Register each cheat code in one place with its name, settings title click sequence, and callback.
+- Register each cheat code in one place with its stable definition, current settings title click binding, and callback.
+- Support one-shot action cheat codes and persistent state cheat codes.
 - Document the cheat code rules in `AGENTS.md` so later AI sessions know to reuse the cheat code layer.
 - Repurpose ten logo clicks to arm title-sequence entry instead of directly enabling repository maintenance.
 - Make each visible title character clickable while entry is armed.
@@ -29,6 +30,7 @@ This is a discovery barrier, not a security boundary. Anyone who reads the code 
 - Do not add a configurable UI for cheat codes.
 - Do not add authentication, encryption, or permission enforcement.
 - Do not add alternate cheat code input methods in this iteration.
+- Do not build a full plugin platform for dynamic third-party cheat code registration.
 - Do not show tooltips, helper text, badges, or other UI hints for the hidden entry.
 - Do not use custom colors, hex/rgb/hsl literals, glow shadows, gradients, or CSS keyframes for the color cycling effect.
 
@@ -80,24 +82,37 @@ This means: first `S`, second `S`, `A`, `I`.
 
 ## Architecture
 
-Add a settings-local registry file at `desktop/src/modules/settings/cheat-codes.ts`.
+Add shared cheat code types and a small manager in the renderer/shared layer. The manager owns registration validation and trigger semantics, but it does not know about title indexes or any other input method.
+
+Each cheat code definition contains:
+
+- `name`: stable string identifier, for example `settings:repository-maintenance:enable`
+- `kind`: `action` for one-shot commands or `state` for persistent toggles
+- `run`: callback function that receives a small action context; state callbacks also receive `{ active }`
+
+Each registration joins a definition with a current input binding. For settings title input, that binding contains the title index sequence. This keeps the stable command identity separate from the hidden gesture used to invoke it.
+
+State cheat codes use a persistent DataRepository-backed state service:
+
+- namespace: `cheat-code.states`
+- shape: `{ schemaVersion: 1, states: Record<string, boolean> }`
+- APIs: get states, set state, and toggle state
+- event: `cheat-code.stateChanged` with only `{ name, active }`
+
+The state service persists before a state callback runs. If persistence fails, the callback does not run. If the callback fails, persisted state is not rolled back.
+
+Keep a settings-local registry file at `desktop/src/modules/settings/cheat-codes.ts`.
 
 It owns:
 
-- the cheat code registry
+- the settings cheat code registrations
 - the shared `CHEAT_CODE_INTERACTION_RESET_DELAY` value, set to 10000 ms
 - the source title string
 - the list of clickable title parts for the settings title input binding
 - the Tailwind default color classes used for armed title feedback
-- registry validation helpers
+- settings title binding validation helpers
 
-Each cheat code contains:
-
-- `name`: stable string identifier, for example `settings:repository-maintenance:enable`
-- `settingsTitleSequence`: readonly number array of title indexes
-- `run`: callback function that receives a small action context and executes the feature
-
-The registry is the only place where cheat code names, title sequences, and callbacks are joined together.
+The registry is the only place where settings cheat code definitions, title sequences, and callbacks are joined together.
 
 Add a hook at `desktop/src/modules/settings/hooks/use-cheat-code-title-sequence.ts`.
 
@@ -111,7 +126,7 @@ It owns:
 - suffix matching against registered title sequences
 - clearing the buffer and leaving armed mode after a timeout or successful match
 
-`AboutPanel` remains responsible for rendering and providing the callback context. It passes logo clicks and title index clicks into the hook. When the hook matches a cheat code, the registered `run` callback receives the context and can call the existing `onAdminModeChange(true)` through `enableRepositoryMaintenance`.
+`AboutPanel` remains responsible for rendering and providing the callback context. It passes logo clicks and title index clicks into the hook. When the hook matches a cheat code, the hook delegates to the cheat code manager. The registered action callback receives the context and can call the existing `onAdminModeChange(true)` through `enableRepositoryMaintenance`.
 
 The title-sequence hook should depend on the registry interface, not on repository maintenance directly. This keeps the input method replaceable without changing cheat code identities.
 
@@ -120,10 +135,12 @@ The title-sequence hook should depend on the registry interface, not on reposito
 Implementation must add a concise `AGENTS.md` rule explaining that hidden entries should register through the cheat code layer instead of scattering click-count or sequence logic through components. The rule should describe:
 
 - cheat code names as stable code-defined strings
-- each registration joining the name, current input binding, and callback
+- each registration joining the stable definition, current input binding, and callback
+- `action` as one-shot behavior and `state` as persistent toggle behavior
+- state persistence through the shared state manager, not component-local state or `localStorage`
 - input bindings as replaceable details
 - title-character input matching by index, not character value
-- logging the cheat code name without logging the raw sequence
+- logging the cheat code name and state result without logging the raw sequence
 
 The guidance should not include the actual repository maintenance title sequence.
 
@@ -162,7 +179,7 @@ This hidden entry does not need to be advertised to assistive technologies becau
 
 ## Logging
 
-When a cheat code triggers, log the cheat code name. Do not log the raw click buffer or full sequence.
+When a cheat code triggers, log the cheat code name and, for state cheat codes, the new active state. Do not log the raw click buffer or full sequence.
 
 ## Testing
 

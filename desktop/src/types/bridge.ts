@@ -77,6 +77,11 @@ import type {
   SynapseUserProfile,
 } from "./identity"
 import type {
+  SynapseCheatCodeStateChangedEvent,
+  SynapseCheatCodeStateMap,
+  SynapseCheatCodeStateResult,
+} from "./cheat-code"
+import type {
   SynapseEditorAdapterSummary,
   SynapseContentInstallResult,
   SynapseEditorGlobalDirectory,
@@ -735,6 +740,12 @@ export type SynapseBridge = {
     installUpdate: () => Promise<void>
     onStateChanged: (listener: (payload: SynapseAppUpdateState) => void) => () => void
     onOpenUpdatePage: (listener: () => void) => () => void
+  }
+  cheatCodes: {
+    getStates: (names?: readonly string[]) => Promise<SynapseCheatCodeStateMap>
+    setState: (payload: SynapseCheatCodeStateResult) => Promise<SynapseCheatCodeStateResult>
+    toggleState: (name: string) => Promise<SynapseCheatCodeStateResult>
+    onStateChanged: (listener: (payload: SynapseCheatCodeStateChangedEvent) => void) => () => void
   }
   database: {
     databaseTableList: () => Promise<DatabaseTableInfo[]>

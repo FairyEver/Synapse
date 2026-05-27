@@ -23,6 +23,7 @@ import {
   coreAuditSinkDescriptor,
   coreAutomationIngressDescriptor,
   coreBridgeAdapterDescriptor,
+  coreCheatCodeStateDescriptor,
   coreConfigDescriptor,
   coreDataRepositoryDescriptor,
   coreDatabaseDescriptor,
@@ -87,6 +88,7 @@ export function buildServiceRegistry(
   registry.register(coreAppIconDescriptor)
   registry.register(coreWindowManagerDescriptor)
   registry.register(coreEventBusDescriptor)
+  registry.register(coreCheatCodeStateDescriptor)
   registry.register(coreProjectContainerRegistryDescriptor)
   registry.register(coreExecutionIsolationDescriptor)
   registry.register(coreSideChannelDescriptor)

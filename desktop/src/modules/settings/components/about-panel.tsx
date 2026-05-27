@@ -13,6 +13,7 @@ import {
   type CheatCodeContext,
 } from "@/modules/settings/cheat-codes"
 import { useCheatCodeTitleSequence } from "@/modules/settings/hooks/use-cheat-code-title-sequence"
+import type { CheatCodeTriggerResult } from "@/types/cheat-code"
 import type { SynapseAppUpdateState } from "@/types/update"
 import synapseLogo from "@/assets/icon.png"
 
@@ -184,8 +185,18 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     [isAdminMode, onAdminModeChange],
   )
 
-  const handleCheatCodeTriggered = useCallback((name: string) => {
-    logger.info("Cheat code activated.", { name })
+  const handleCheatCodeTriggered = useCallback((result: CheatCodeTriggerResult) => {
+    logger.info("Cheat code activated.", {
+      name: result.name,
+      ...(result.kind === "state" ? { active: result.active } : undefined),
+    })
+  }, [])
+
+  const handleCheatCodeTriggerError = useCallback((name: string, error: unknown) => {
+    logger.error("Cheat code activation failed.", {
+      name,
+      error,
+    })
   }, [])
 
   const {
@@ -196,6 +207,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
     cheatCodes: settingsCheatCodes,
     context: cheatCodeContext,
     onTriggered: handleCheatCodeTriggered,
+    onTriggerError: handleCheatCodeTriggerError,
   })
 
   useEffect(() => {

@@ -7,6 +7,10 @@
  */
 
 export {
+  cheatCodeStatesSchema,
+  type CheatCodeStatesEntryV1,
+} from "./cheat-code-states"
+export {
   coreConfigSchema,
   isLegacyCoreConfigV0,
   type CoreConfigV1,
@@ -85,6 +89,7 @@ export {
 } from "./placeholders"
 
 import { coreConfigSchema } from "./core-config"
+import { cheatCodeStatesSchema } from "./cheat-code-states"
 import { coreIdentitySchema } from "./core-identity"
 import { repoPendingPushesSchema } from "./repo-pending-pushes"
 import { repoRepositoriesSchema } from "./repo-repositories"
@@ -118,6 +123,7 @@ export const allSchemas: readonly NamespaceSchema<unknown>[] = [
   coreIdentitySchema,
   repoRepositoriesSchema,
   repoPendingPushesSchema,
+  cheatCodeStatesSchema,
   secretsSchema,
   providersSchema,
   projectsSchema,

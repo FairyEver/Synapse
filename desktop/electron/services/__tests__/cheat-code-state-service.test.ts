@@ -1,0 +1,98 @@
+import { describe, expect, it, vi } from "vitest"
+
+import { CheatCodeStateService } from "../cheat-code-state-service"
+import type { DataChangeListener, DataNamespace } from "../../runtime/data-repo"
+import type { CheatCodeStatesEntryV1 } from "../../runtime/data-repo/schemas"
+import type { EventBus } from "../../runtime/event-bus"
+
+type TestEventBus = Pick<EventBus, "emit"> & {
+  readonly emit: ReturnType<typeof vi.fn>
+}
+
+describe("CheatCodeStateService", () => {
+  it("returns canonical false values for missing requested states", async () => {
+    const service = createService()
+
+    await expect(service.getStates(["settings:missing"])).resolves.toEqual({
+      "settings:missing": false,
+    })
+  })
+
+  it("sets and toggles state through the DataRepository namespace", async () => {
+    const service = createService()
+
+    await expect(service.setState({ name: "settings:test-state", active: true })).resolves.toEqual({
+      active: true,
+      name: "settings:test-state",
+    })
+    await expect(service.toggleState("settings:test-state")).resolves.toEqual({
+      active: false,
+      name: "settings:test-state",
+    })
+
+    await expect(service.getStates(["settings:test-state"])).resolves.toEqual({
+      "settings:test-state": false,
+    })
+  })
+
+  it("emits state change events without exposing input sequences", async () => {
+    const eventBus = { emit: vi.fn() } as unknown as TestEventBus
+    const service = createService({ eventBus })
+
+    await service.toggleState("settings:test-state")
+
+    expect(eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "cheat-code",
+      payload: {
+        active: true,
+        name: "settings:test-state",
+      },
+      type: "cheat-code.stateChanged",
+    }))
+    expect(JSON.stringify(eventBus.emit.mock.calls)).not.toContain("sequence")
+  })
+})
+
+function createService(options: {
+  readonly eventBus?: Pick<EventBus, "emit">
+} = {}): CheatCodeStateService {
+  return new CheatCodeStateService({
+    eventBus: options.eventBus,
+    states: new MemoryNamespace(),
+  })
+}
+
+class MemoryNamespace implements DataNamespace<CheatCodeStatesEntryV1> {
+  readonly name = "cheat-code.states"
+  readonly schemaVersion = 1
+  readonly backend = "json" as const
+  private value: CheatCodeStatesEntryV1 | null = null
+
+  async getSingleton(): Promise<CheatCodeStatesEntryV1 | null> {
+    return this.value
+  }
+
+  async setSingleton(value: CheatCodeStatesEntryV1): Promise<void> {
+    this.value = value
+  }
+
+  async list(): Promise<CheatCodeStatesEntryV1[]> {
+    return this.value ? [this.value] : []
+  }
+
+  async get(): Promise<CheatCodeStatesEntryV1 | null> {
+    return this.value
+  }
+
+  async upsert(item: CheatCodeStatesEntryV1 & { id: string }): Promise<void> {
+    this.value = item
+  }
+
+  async remove(): Promise<void> {
+    this.value = null
+  }
+
+  onChange(_listener: DataChangeListener<CheatCodeStatesEntryV1>): () => void {
+    return () => {}
+  }
+}

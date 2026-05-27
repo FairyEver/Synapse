@@ -104,7 +104,7 @@ describe("AboutPanel cheat codes", () => {
     await renderAboutPanel({ onAdminModeChange })
 
     clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
-    clickTitleSequence([0, 11, 8, 9])
+    await clickTitleSequence([0, 11, 8, 9])
 
     expect(onAdminModeChange).toHaveBeenCalledWith(true)
     expect(rendererLogger.info).toHaveBeenCalledWith("Cheat code activated.", {
@@ -117,7 +117,7 @@ describe("AboutPanel cheat codes", () => {
     const onAdminModeChange = vi.fn()
     await renderAboutPanel({ onAdminModeChange })
 
-    clickTitleSequence([0, 11, 8, 9])
+    await clickTitleSequence([0, 11, 8, 9])
 
     expect(onAdminModeChange).not.toHaveBeenCalled()
   })
@@ -127,7 +127,7 @@ describe("AboutPanel cheat codes", () => {
     await renderAboutPanel({ onAdminModeChange })
 
     clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
-    clickTitleSequence([0, 0, 8, 9])
+    await clickTitleSequence([0, 0, 8, 9])
 
     expect(onAdminModeChange).not.toHaveBeenCalled()
   })
@@ -149,9 +149,9 @@ describe("AboutPanel cheat codes", () => {
     await renderAboutPanel({ onAdminModeChange })
 
     clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
-    clickTitleSequence([0, 11])
+    await clickTitleSequence([0, 11])
     advanceSharedTimeout()
-    clickTitleSequence([8, 9])
+    await clickTitleSequence([8, 9])
 
     expect(onAdminModeChange).not.toHaveBeenCalled()
     expect(getTitle().className).toContain("text-lg")
@@ -187,10 +187,11 @@ function clickLogoTimes(count: number): void {
   }
 }
 
-function clickTitleSequence(sequence: readonly number[]): void {
+async function clickTitleSequence(sequence: readonly number[]): Promise<void> {
   for (const index of sequence) {
-    act(() => {
+    await act(async () => {
       getTitlePart(index).click()
+      await Promise.resolve()
     })
   }
 }

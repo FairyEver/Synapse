@@ -116,6 +116,11 @@ export const IPC_CHANNELS = {
     "cancelDownload": "synapse:update:cancel-download",
     "installUpdate": "synapse:update:install-update",
   },
+  "cheat-code": {
+    "getStates": "synapse:cheat-code:states:get",
+    "setState": "synapse:cheat-code:state:set",
+    "toggleState": "synapse:cheat-code:state:toggle",
+  },
   "agent": {
     "status": "synapse:agent:status",
     "listSessions": "synapse:agent:list-sessions",

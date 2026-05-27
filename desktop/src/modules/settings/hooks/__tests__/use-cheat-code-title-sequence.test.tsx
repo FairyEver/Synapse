@@ -16,6 +16,7 @@ import {
   trimTitleSequenceBuffer,
   useCheatCodeTitleSequence,
 } from "@/modules/settings/hooks/use-cheat-code-title-sequence"
+import type { CheatCodeTriggerResult } from "@/types/cheat-code"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -42,7 +43,7 @@ describe("useCheatCodeTitleSequence", () => {
   it("matches registered cheat codes by sequence suffix", () => {
     const registration = createRegistration("settings:test", [0, 11, 8, 9])
 
-    expect(findMatchingCheatCode([registration], [4, 0, 11, 8, 9])?.name).toBe("settings:test")
+    expect(findMatchingCheatCode([registration], [4, 0, 11, 8, 9])?.definition.name).toBe("settings:test")
     expect(findMatchingCheatCode([registration], [0, 0, 8, 9])).toBeNull()
   })
 
@@ -81,17 +82,17 @@ describe("useCheatCodeTitleSequence", () => {
     expect(latestApi?.isArmed).toBe(false)
   })
 
-  it("ignores title clicks before arming", () => {
+  it("ignores title clicks before arming", async () => {
     const enableRepositoryMaintenance = vi.fn()
 
     renderProbe({ context: { enableRepositoryMaintenance } })
 
-    clickTitleSequence([0, 11, 8, 9])
+    await clickTitleSequence([0, 11, 8, 9])
 
     expect(enableRepositoryMaintenance).not.toHaveBeenCalled()
   })
 
-  it("runs a matched cheat code and exits armed mode", () => {
+  it("runs a matched cheat code and exits armed mode", async () => {
     const enableRepositoryMaintenance = vi.fn()
     const onTriggered = vi.fn()
 
@@ -101,34 +102,38 @@ describe("useCheatCodeTitleSequence", () => {
     })
 
     clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
-    clickTitleSequence([0, 11, 8, 9])
+    await clickTitleSequence([0, 11, 8, 9])
 
-    expect(onTriggered).toHaveBeenCalledWith("settings:repository-maintenance:enable")
+    expect(onTriggered).toHaveBeenCalledWith({
+      changed: true,
+      kind: "action",
+      name: "settings:repository-maintenance:enable",
+    })
     expect(enableRepositoryMaintenance).toHaveBeenCalledTimes(1)
     expect(latestApi?.isArmed).toBe(false)
   })
 
-  it("does not collapse repeated characters with different indexes", () => {
+  it("does not collapse repeated characters with different indexes", async () => {
     const enableRepositoryMaintenance = vi.fn()
 
     renderProbe({ context: { enableRepositoryMaintenance } })
 
     clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
-    clickTitleSequence([0, 0, 8, 9])
+    await clickTitleSequence([0, 0, 8, 9])
 
     expect(enableRepositoryMaintenance).not.toHaveBeenCalled()
     expect(latestApi?.isArmed).toBe(true)
   })
 
-  it("clears partial input and exits armed mode after the shared timeout", () => {
+  it("clears partial input and exits armed mode after the shared timeout", async () => {
     const enableRepositoryMaintenance = vi.fn()
 
     renderProbe({ context: { enableRepositoryMaintenance } })
 
     clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
-    clickTitleSequence([0, 11])
+    await clickTitleSequence([0, 11])
     advanceSharedTimeout()
-    clickTitleSequence([8, 9])
+    await clickTitleSequence([8, 9])
 
     expect(enableRepositoryMaintenance).not.toHaveBeenCalled()
     expect(latestApi?.isArmed).toBe(false)
@@ -138,7 +143,7 @@ describe("useCheatCodeTitleSequence", () => {
 function renderProbe(props: {
   readonly cheatCodes?: readonly CheatCodeRegistration[]
   readonly context?: CheatCodeContext
-  readonly onTriggered?: (name: string) => void
+  readonly onTriggered?: (result: CheatCodeTriggerResult) => void
 } = {}): void {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -161,7 +166,7 @@ function renderProbe(props: {
 function Probe(props: {
   readonly cheatCodes: readonly CheatCodeRegistration[]
   readonly context: CheatCodeContext
-  readonly onTriggered?: (name: string) => void
+  readonly onTriggered?: (result: CheatCodeTriggerResult) => void
 }) {
   latestApi = useCheatCodeTitleSequence(props)
   return null
@@ -176,11 +181,12 @@ function clickLogoTimes(count: number): void {
   }
 }
 
-function clickTitleSequence(sequence: readonly number[]): void {
+async function clickTitleSequence(sequence: readonly number[]): Promise<void> {
   for (const index of sequence) {
-    act(() => {
+    await act(async () => {
       if (!latestApi) throw new Error("Probe not rendered")
       latestApi.handleTitleIndexClick(index)
+      await Promise.resolve()
     })
   }
 }
@@ -193,10 +199,15 @@ function advanceSharedTimeout(): void {
 
 function createRegistration(name: string, settingsTitleSequence: readonly number[]): CheatCodeRegistration {
   return {
-    name,
-    settingsTitleSequence,
-    run: ({ enableRepositoryMaintenance }) => {
-      enableRepositoryMaintenance()
+    definition: {
+      name,
+      kind: "action",
+      run: ({ enableRepositoryMaintenance }) => {
+        enableRepositoryMaintenance()
+      },
+    },
+    binding: {
+      settingsTitleSequence,
     },
   }
 }

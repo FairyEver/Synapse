@@ -19,6 +19,7 @@ import type {
 } from "../src/types/repository"
 import type { SynapseAppUpdateState } from "../src/types/update"
 import type { WorkflowEvent } from "../src/types/workflow"
+import type { SynapseCheatCodeStateChangedEvent } from "../src/types/cheat-code"
 import type { IpcChannelMap } from "./generated/ipc-channels.generated"
 import type { DomainEvent, EventDomain, Unsubscribe } from "./runtime/event-bus"
 
@@ -133,6 +134,11 @@ const IPC_CHANNELS = {
     "checkForUpdates": "synapse:update:check-for-updates",
     "cancelDownload": "synapse:update:cancel-download",
     "installUpdate": "synapse:update:install-update",
+  },
+  "cheat-code": {
+    "getStates": "synapse:cheat-code:states:get",
+    "setState": "synapse:cheat-code:state:set",
+    "toggleState": "synapse:cheat-code:state:toggle",
   },
   "agent": {
     "status": "synapse:agent:status",
@@ -638,6 +644,17 @@ const synapseBridge: SynapseBridge = {
     onOpenUpdatePage: createRawPayloadSubscription<void>(
       subscribe,
       EVENT_CHANNELS.update.openUpdatePage,
+    ),
+  },
+  cheatCodes: {
+    getStates: (names?: readonly string[]) =>
+      invoke(IPC_CHANNELS["cheat-code"].getStates)(names ? { names } : undefined),
+    setState: (payload) => invoke(IPC_CHANNELS["cheat-code"].setState)(payload),
+    toggleState: (name) => invoke(IPC_CHANNELS["cheat-code"].toggleState)({ name }),
+    onStateChanged: createDomainEventPayloadSubscription<SynapseCheatCodeStateChangedEvent>(
+      subscribe,
+      "cheat-code",
+      "cheat-code.stateChanged",
     ),
   },
   database: {

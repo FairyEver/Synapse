@@ -58,10 +58,14 @@ describe("settings cheat codes", () => {
     const enableRepositoryMaintenance = vi.fn()
 
     expect(settingsCheatCodes).toHaveLength(1)
-    expect(settingsCheatCodes[0]?.name).toBe("settings:repository-maintenance:enable")
-    expect(settingsCheatCodes[0]?.settingsTitleSequence).toEqual([0, 11, 8, 9])
+    expect(settingsCheatCodes[0]?.definition.name).toBe("settings:repository-maintenance:enable")
+    expect(settingsCheatCodes[0]?.definition.kind).toBe("action")
+    expect(settingsCheatCodes[0]?.binding.settingsTitleSequence).toEqual([0, 11, 8, 9])
 
-    settingsCheatCodes[0]?.run({ enableRepositoryMaintenance })
+    const definition = settingsCheatCodes[0]?.definition
+    if (definition?.kind === "action") {
+      definition.run({ enableRepositoryMaintenance })
+    }
 
     expect(enableRepositoryMaintenance).toHaveBeenCalledTimes(1)
   })
@@ -123,12 +127,19 @@ describe("settings cheat codes", () => {
 })
 
 function createRegistration(
-  overrides: Partial<Omit<CheatCodeRegistration, "run">> = {},
+  overrides: {
+    readonly name?: string
+    readonly settingsTitleSequence?: readonly number[]
+  } = {},
 ): CheatCodeRegistration {
   return {
-    name: "settings:test",
-    settingsTitleSequence: [0],
-    run: () => {},
-    ...overrides,
+    definition: {
+      name: overrides.name ?? "settings:test",
+      kind: "action",
+      run: () => {},
+    },
+    binding: {
+      settingsTitleSequence: overrides.settingsTitleSequence ?? [0],
+    },
   }
 }
