@@ -7,7 +7,7 @@ description: Use when working in the Synapse repository and the user asks to rel
 
 ## Purpose
 
-Run the Synapse release loop: commit and push a version bump, watch GitHub Actions, fix failures, repeat until CI and Release pass, then report download links from the release repository.
+Run the Synapse release loop: commit and push a version bump, watch GitHub Actions, fix failures, repeat until CI and Release pass, then report download links from the release repository and open the matching GitHub Release page.
 
 Use this skill only for release/publish commands in `/Users/liyang/Documents/code/github/Synapse`.
 
@@ -21,6 +21,7 @@ Use this skill only for release/publish commands in `/Users/liyang/Documents/cod
 - Working directory: `/Users/liyang/Documents/code/github/Synapse/desktop`
 - Pending notes file: `/Users/liyang/Documents/code/github/Synapse/RELEASE_NOTES_PENDING.md`
 - Release notes archive directory: `/Users/liyang/Documents/code/github/Synapse/docs/releases`
+- Release page URL template: `https://github.com/FairyEver/SynapseAppRelease/releases/tag/$EXPECTED_TAG`
 
 ## Release Loop
 
@@ -147,7 +148,7 @@ Analyze, fix, commit, and return to workflow discovery.
 
 ### 8. Fetch Download Links
 
-After Release succeeds, wait up to 3 minutes for the matching release in `FairyEver/SynapseAppRelease`:
+After Release succeeds, wait up to 3 minutes for the matching release in `FairyEver/SynapseAppRelease`. Record whether the matching `EXPECTED_TAG` release was found:
 
 ```bash
 for i in $(seq 1 18); do
@@ -160,7 +161,7 @@ for i in $(seq 1 18); do
 done
 ```
 
-If the matching release is still unavailable, fall back to the latest release:
+If the matching release is still unavailable, fall back to the latest release and record that the matching release was not found:
 
 ```bash
 RELEASE_JSON=$(gh release list --repo FairyEver/SynapseAppRelease \
@@ -248,9 +249,35 @@ This consume commit must happen after the package release succeeds. It must not 
 
 If pending release notes were empty at release start, skip archive/reset and say that no pending release notes were consumed.
 
+### 10. Open The GitHub Release Page
+
+Only run this section after:
+
+- CI succeeded.
+- Release succeeded.
+- The matching GitHub Release for `EXPECTED_TAG` was found in `FairyEver/SynapseAppRelease`.
+- Pending release notes were either published and consumed successfully, or were empty at release start.
+
+Open the matching release page in the system default browser:
+
+```bash
+RELEASE_URL="https://github.com/FairyEver/SynapseAppRelease/releases/tag/$EXPECTED_TAG"
+if command -v open >/dev/null 2>&1; then
+  open "$RELEASE_URL"
+elif command -v xdg-open >/dev/null 2>&1; then
+  xdg-open "$RELEASE_URL" >/dev/null 2>&1 &
+elif command -v cmd.exe >/dev/null 2>&1; then
+  cmd.exe /c start "" "$RELEASE_URL"
+else
+  echo "未找到系统默认浏览器打开命令: $RELEASE_URL"
+fi
+```
+
+If opening the browser fails or no opener command exists, keep the release successful and include the release URL in the final response.
+
 ## Exit Conditions
 
-- Success: CI and Release both pass, release assets are found or explicitly missing, pending release notes are either published and consumed or explicitly empty, and the final response includes version and download links.
+- Success: CI and Release both pass, release assets are found or explicitly missing, pending release notes are either published and consumed or explicitly empty, the matching GitHub Release page was opened in the system default browser or its URL was reported, and the final response includes version and download links.
 - Loop limit: after 10 loops, stop and report unresolved status plus the latest failure summary.
 - Commit failure: if `pnpm bump:commit:push` fails, report the command output and stop.
 - Release notes failure: if GitHub Release body update, archive, reset, commit, or push fails after the package release succeeds, report the failure and do not clear pending notes unless the successful state can be proven.
