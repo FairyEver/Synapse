@@ -34,6 +34,13 @@ Canonical capability ids use `<domain>.<resource>.<action>`. The local HTTP API 
 | `database.folder.delete` | `database_folder_delete` | `database.folder.delete` | `databaseFolderDelete` |
 | `database.folder.reorder` | `database_folder_reorder` | `database.folder.reorder` | `databaseFolderReorder` |
 | `database.table.move` | `database_table_move` | `database.table.move` | `databaseTableMove` |
+| `repository.item.list` | `repository_item_list` | `repository.item.list` | `repositoryItemList` |
+| `variable.item.list` | `variable_item_list` | `variable.item.list` | `variableItemList` |
+| `variable.item.get` | `variable_item_get` | `variable.item.get` | `variableItemGet` |
+| `variable.item.create` | `variable_item_create` | `variable.item.create` | `variableItemCreate` |
+| `variable.item.update` | `variable_item_update` | `variable.item.update` | `variableItemUpdate` |
+| `variable.item.upsert` | `variable_item_upsert` | `variable.item.upsert` | `variableItemUpsert` |
+| `variable.item.delete` | `variable_item_delete` | `variable.item.delete` | `variableItemDelete` |
 | `scheduler.task.list` | `scheduler_task_list` | `scheduler.task.list` | `schedulerTaskList` |
 | `scheduler.task.get` | `scheduler_task_get` | `scheduler.task.get` | `schedulerTaskGet` |
 | `scheduler.task.create` | `scheduler_task_create` | `scheduler.task.create` | `schedulerTaskCreate` |
