@@ -1,6 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
-import { Button } from "@/components/ui/button"
-import { Spinner } from "@/components/ui/spinner"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { CcRecordListInput } from "@/types/usage-analysis-conversations"
 import { ReportState } from "../../shared/components/report-state"
@@ -8,6 +6,11 @@ import type { UsageRangePreset } from "../../shared/types"
 import { ConversationFilters } from "../components/conversation-filters"
 import { RecordTable } from "../components/record-table"
 import { useCcRecordDetails, useCcRecords } from "../hooks"
+import {
+  CC_RECORD_PAGE_SIZE,
+  formatRecordLoadStatus,
+  shouldRequestNextRecords,
+} from "../record-loading"
 
 export function CcRecordsPage({
   range,
@@ -18,12 +21,15 @@ export function CcRecordsPage({
 }) {
   const [query, setQuery] = useState("")
   const [rawText, setRawText] = useState(false)
-  const [loadedLimit, setLoadedLimit] = useState(50)
+  const [loadedLimit, setLoadedLimit] = useState(CC_RECORD_PAGE_SIZE)
   const [expandedSessionId, setExpandedSessionId] = useState<string | null>(null)
   const [detailLimit, setDetailLimit] = useState(200)
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  const lastRequestedShownRef = useRef<number | null>(null)
 
   useEffect(() => {
-    setLoadedLimit(50)
+    setLoadedLimit(CC_RECORD_PAGE_SIZE)
+    lastRequestedShownRef.current = null
   }, [range])
 
   useEffect(() => {
@@ -45,21 +51,45 @@ export function CcRecordsPage({
   const rows = state.data?.items ?? []
   const total = state.data?.total ?? 0
   const shown = rows.length
-  const canLoadMore = shown > 0 && shown < total
   const initialLoading = state.loading && !state.data
+  const statusText = formatRecordLoadStatus({ shown, total, loading: state.loading })
+
+  useEffect(() => {
+    const target = loadMoreRef.current
+    if (!target) return undefined
+
+    const observer = new IntersectionObserver((entries) => {
+      if (!entries.some((entry) => entry.isIntersecting)) return
+      if (!shouldRequestNextRecords({
+        shown,
+        total,
+        loading: state.loading,
+        lastRequestedShown: lastRequestedShownRef.current,
+      })) return
+
+      lastRequestedShownRef.current = shown
+      setLoadedLimit((current) => current + CC_RECORD_PAGE_SIZE)
+    }, { rootMargin: "160px 0px" })
+
+    observer.observe(target)
+    return () => observer.disconnect()
+  }, [shown, total, state.loading])
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
       <ConversationFilters
         query={query}
         rawText={rawText}
+        statusText={!initialLoading ? statusText : undefined}
         onQueryChange={(next) => {
           setQuery(next)
-          setLoadedLimit(50)
+          setLoadedLimit(CC_RECORD_PAGE_SIZE)
+          lastRequestedShownRef.current = null
         }}
         onRawTextChange={(next) => {
           setRawText(next)
-          setLoadedLimit(50)
+          setLoadedLimit(CC_RECORD_PAGE_SIZE)
+          lastRequestedShownRef.current = null
         }}
       />
       {initialLoading ? (
@@ -96,25 +126,12 @@ export function CcRecordsPage({
             onLoadMoreDetails={() => setDetailLimit((current) => current + 200)}
           />
           {shown > 0 ? (
-            <div className="flex items-center justify-between border-t border-border px-3 py-2 text-sm text-muted-foreground">
-              <span>已显示 {shown} / {total} 条记录</span>
-              {canLoadMore ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="outline"
-                  disabled={state.loading}
-                  aria-busy={state.loading}
-                  onClick={() => setLoadedLimit((current) => current + 50)}
-                >
-                  {state.loading ? (
-                    <>
-                      <Spinner />
-                      加载中
-                    </>
-                  ) : "加载更多"}
-                </Button>
-              ) : null}
+            <div
+              ref={loadMoreRef}
+              className="flex items-center justify-center border-t border-border px-3 py-2 text-sm text-muted-foreground"
+              aria-busy={state.loading}
+            >
+              {statusText}
             </div>
           ) : null}
         </ReportState>

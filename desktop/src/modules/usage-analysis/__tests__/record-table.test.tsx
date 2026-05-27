@@ -140,6 +140,43 @@ describe("RecordTable", () => {
     expect(html).toContain("已显示 1 / 2")
     expect(html).toContain("加载更多请求")
   })
+
+  it("keeps the action column sticky on the right", () => {
+    const html = renderToStaticMarkup(
+      <RecordTable
+        rows={[record({ requestCount: 2 })]}
+        expandedSessionId={null}
+        detailRows={[]}
+        detailTotal={0}
+        detailLoading={false}
+        onToggleExpanded={() => undefined}
+        onOpenConversation={() => undefined}
+        onOpenDetail={() => undefined}
+        onLoadMoreDetails={() => undefined}
+      />,
+    )
+
+    expect(html).toMatch(/<th[^>]*class="[^"]*sticky[^"]*right-0[^"]*bg-surface[^"]*"[^>]*>操作<\/th>/)
+    expect(html).toMatch(/<td[^>]*class="[^"]*sticky[^"]*right-0[^"]*bg-surface[^"]*"[^>]*>[\s\S]*打开对话/)
+  })
+
+  it("aligns the expand control with the record title", () => {
+    const html = renderToStaticMarkup(
+      <RecordTable
+        rows={[record({ title: "github/Synapse" })]}
+        expandedSessionId={null}
+        detailRows={[]}
+        detailTotal={0}
+        detailLoading={false}
+        onToggleExpanded={() => undefined}
+        onOpenConversation={() => undefined}
+        onOpenDetail={() => undefined}
+        onLoadMoreDetails={() => undefined}
+      />,
+    )
+
+    expect(html).toContain("flex min-w-0 items-center gap-2")
+  })
 })
 
 function record(overrides: Partial<CcRecordListItem>): CcRecordListItem {

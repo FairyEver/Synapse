@@ -64,14 +64,15 @@ describe("CcRecordsPage", () => {
     detailState = createDetailState()
   })
 
-  it("renders record filters, batch footer, and session summary actions", () => {
+  it("renders record filters, progress status, and session summary actions", () => {
     const html = renderToStaticMarkup(<CcRecordsPage range="30d" refreshKey={0} />)
 
     expect(html).toContain("原文")
+    expect(html).toContain("搜标题 / 项目 / 模型 / Session ID；打开原文后搜对话内容")
     expect(html).toContain("请求")
     expect(html).toContain("打开对话")
-    expect(html).toContain("已显示 1 / 128 条记录")
-    expect(html).toContain("加载更多")
+    expect(html).toContain("已显示 1 / 128")
+    expect(html).not.toContain("加载更多")
   })
 
   it("shows a plain centered loading state while initial records load", () => {
@@ -93,12 +94,28 @@ describe("CcRecordsPage", () => {
     expect(html).not.toContain("正在读取记录")
   })
 
-  it("disables the load more button while loading the next record batch", () => {
+  it("shows the next loading range while loading another record batch", () => {
     recordsState = { ...recordsState, loading: true }
 
     const html = renderToStaticMarkup(<CcRecordsPage range="30d" refreshKey={0} />)
 
-    expect(html).toContain("加载中")
-    expect(html).toMatch(/<button[^>]*disabled=""[^>]*>[\s\S]*加载中/)
+    expect(html).toContain("正在加载 2-51 / 128")
+    expect(html).not.toContain("加载更多")
+    expect(html).not.toContain("加载中")
+  })
+
+  it("shows an all-loaded footer when every matching record is visible", () => {
+    recordsState = {
+      ...recordsState,
+      data: {
+        ...recordData,
+        total: 1,
+      },
+    }
+
+    const html = renderToStaticMarkup(<CcRecordsPage range="30d" refreshKey={0} />)
+
+    expect(html).toContain("已显示全部 1 条")
+    expect(html).not.toContain("加载更多")
   })
 })
