@@ -169,6 +169,13 @@ function buttonByLabel(label: string): HTMLButtonElement {
   return button
 }
 
+function buttonByText(text: string): HTMLButtonElement {
+  const button = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+    .find((candidate) => candidate.textContent?.trim() === text)
+  if (!button) throw new Error(`Button not found: ${text}`)
+  return button
+}
+
 function changeInput(input: HTMLInputElement, value: string): void {
   const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set
   setter?.call(input, value)
@@ -373,6 +380,78 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     expect(bridgeMocks.knowledgeBase.trashRawEntries).toHaveBeenCalledWith({
       projectId: "project-1",
       relativePaths: ["brief.md"],
+    })
+  })
+
+  it("refreshes cached target tree nodes after moving a directory", async () => {
+    const rootDirectory = {
+      relativePath: "2026",
+      name: "2026",
+      kind: "directory" as const,
+      size: null,
+      modifiedAt: "2026-05-24T16:05:00.000Z",
+    }
+    const targetDirectory = {
+      relativePath: "客户",
+      name: "客户",
+      kind: "directory" as const,
+      size: null,
+      modifiedAt: "2026-05-22T11:03:00.000Z",
+    }
+    const entriesByDirectory = new Map<string, SynapseKnowledgeBaseListRawDirectoryResult>([
+      ["", { projectId: "project-1", directoryPath: "", entries: [rootDirectory, targetDirectory] }],
+      ["客户", { projectId: "project-1", directoryPath: "客户", entries: [] }],
+    ])
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) =>
+      entriesByDirectory.get(directoryPath) ?? { projectId: "project-1", directoryPath, entries: [] })
+    bridgeMocks.knowledgeBase.moveRawEntries.mockImplementation(async ({ relativePaths, targetDirectoryPath }) => {
+      if (relativePaths.includes("2026") && targetDirectoryPath === "客户") {
+        entriesByDirectory.set("", { projectId: "project-1", directoryPath: "", entries: [targetDirectory] })
+        entriesByDirectory.set("客户", {
+          projectId: "project-1",
+          directoryPath: "客户",
+          entries: [{ ...rootDirectory, relativePath: "客户/2026" }],
+        })
+      }
+      return { projectId: "project-1", entries: [], skipped: [] }
+    })
+
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("客户")
+    })
+
+    await act(async () => {
+      buttonByLabel("展开 客户").click()
+      await Promise.resolve()
+    })
+    await waitForExpectation(() => {
+      expect(bridgeMocks.knowledgeBase.listRawDirectory).toHaveBeenCalledWith({
+        projectId: "project-1",
+        directoryPath: "客户",
+      })
+    })
+
+    await act(async () => {
+      buttonByLabel("选择 2026").click()
+    })
+    await act(async () => {
+      buttonByLabel("移动所选").click()
+    })
+    await act(async () => {
+      buttonByLabel("选择目标文件夹 客户").click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      buttonByLabel("确认移动").click()
+    })
+    await act(async () => {
+      buttonByText("确认").click()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("2026")
     })
   })
 

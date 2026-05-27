@@ -153,6 +153,26 @@ function directoriesOnly(entries: SynapseKnowledgeBaseRawEntry[]): SynapseKnowle
   return entries.filter((entry) => entry.kind === "directory")
 }
 
+function hasDirectoryCache(tree: DirectoryTree, directoryPath: string): boolean {
+  return Object.prototype.hasOwnProperty.call(tree, directoryPath)
+}
+
+function uniqueDirectoryPaths(directoryPaths: readonly string[]): string[] {
+  const seen = new Set<string>()
+  const result: string[] = []
+  for (const directoryPath of directoryPaths) {
+    if (seen.has(directoryPath)) continue
+    seen.add(directoryPath)
+    result.push(directoryPath)
+  }
+  return result
+}
+
+function isPathOrDescendant(path: string, rootPath: string): boolean {
+  if (!rootPath) return path === ""
+  return path === rootPath || path.startsWith(`${rootPath}/`)
+}
+
 function needsRawMutationConfirmation(
   entries: SynapseKnowledgeBaseRawEntry[],
   relativePaths: string[],
@@ -396,8 +416,49 @@ function KnowledgeBaseSourceManagerWindow() {
     setSelectedPaths(new Set())
   }, [currentDirectory])
 
+  const pruneTreeDirectories = useCallback((directoryPaths: readonly string[]) => {
+    const stalePaths = uniqueDirectoryPaths(directoryPaths.filter(Boolean))
+    if (stalePaths.length === 0) return
+    setDirectoryTree((previous) => {
+      const next = { ...previous }
+      let changed = false
+      for (const cachedPath of Object.keys(previous)) {
+        if (stalePaths.some((stalePath) => isPathOrDescendant(cachedPath, stalePath))) {
+          delete next[cachedPath]
+          changed = true
+        }
+      }
+      return changed ? next : previous
+    })
+  }, [])
+
+  const refreshTreeDirectories = useCallback(async (directoryPaths: readonly string[]) => {
+    if (!payload || !bridge) return
+    const pathsToRefresh = uniqueDirectoryPaths(directoryPaths)
+    if (pathsToRefresh.length === 0) return
+    try {
+      const results = await Promise.all(pathsToRefresh.map(async (directoryPath) => {
+        const result = await bridge.knowledgeBase.listRawDirectory({
+          projectId: payload.projectId,
+          directoryPath,
+        })
+        return [directoryPath, directoriesOnly(result.entries)] as const
+      }))
+      setDirectoryTree((previous) => {
+        const next = { ...previous }
+        for (const [directoryPath, childDirectories] of results) {
+          next[directoryPath] = childDirectories
+        }
+        return next
+      })
+    } catch (error) {
+      logger.error("Failed to refresh knowledge base raw tree directories.", { error })
+      showError("读取资料失败")
+    }
+  }, [bridge, payload, showError])
+
   const loadTreeDirectory = useCallback(async (directoryPath: string) => {
-    if (!payload || !bridge || directoryTree[directoryPath]) return
+    if (!payload || !bridge || hasDirectoryCache(directoryTree, directoryPath)) return
     try {
       const result = await bridge.knowledgeBase.listRawDirectory({
         projectId: payload.projectId,
@@ -513,6 +574,9 @@ function KnowledgeBaseSourceManagerWindow() {
           relativePath: renameTarget.relativePath,
           newName,
         })
+        if (renameTarget.kind === "directory") {
+          pruneTreeDirectories([renameTarget.relativePath])
+        }
         await refreshDirectory()
         return result
       },
@@ -524,7 +588,7 @@ function KnowledgeBaseSourceManagerWindow() {
     )
     setRenameTarget(null)
     setRenameValue("")
-  }, [bridge, payload, promise, refreshDirectory, renameTarget, renameValue])
+  }, [bridge, payload, promise, pruneTreeDirectories, refreshDirectory, renameTarget, renameValue])
 
   const runMoveRawEntries = useCallback(async (relativePaths: string[], targetDirectoryPath: string) => {
     if (!payload || !bridge || relativePaths.length === 0) return
@@ -535,8 +599,12 @@ function KnowledgeBaseSourceManagerWindow() {
           relativePaths,
           targetDirectoryPath,
         })
+        pruneTreeDirectories(relativePaths)
         setSelectedPaths(new Set())
         await refreshDirectory()
+        if (targetDirectoryPath !== currentDirectory) {
+          await refreshTreeDirectories([targetDirectoryPath])
+        }
         return result
       },
       {
@@ -545,7 +613,7 @@ function KnowledgeBaseSourceManagerWindow() {
         error: "移动失败",
       },
     )
-  }, [bridge, payload, promise, refreshDirectory])
+  }, [bridge, currentDirectory, payload, promise, pruneTreeDirectories, refreshDirectory, refreshTreeDirectories])
 
   const moveSelected = useCallback(async () => {
     if (selectedList.length === 0) return
@@ -568,6 +636,7 @@ function KnowledgeBaseSourceManagerWindow() {
           projectId: payload.projectId,
           relativePaths,
         })
+        pruneTreeDirectories(relativePaths)
         setSelectedPaths(new Set())
         await refreshDirectory()
         return result
@@ -578,7 +647,7 @@ function KnowledgeBaseSourceManagerWindow() {
         error: "移动失败",
       },
     )
-  }, [bridge, payload, promise, refreshDirectory])
+  }, [bridge, payload, promise, pruneTreeDirectories, refreshDirectory])
 
   const trashSelected = useCallback(async () => {
     await runTrashRawEntries(trashPaths)
