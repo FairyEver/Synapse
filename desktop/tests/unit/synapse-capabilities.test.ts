@@ -2,6 +2,11 @@ import { describe, expect, it } from "vitest"
 
 import { DATABASE_DOMAIN } from "../../database/shared/capability-registry"
 import {
+  MODEL_PRICE_DOMAIN,
+  MODEL_PRICE_MCP_TOOL_ACTIONS,
+  buildModelPriceTools,
+} from "../../synapse-capabilities/shared/model-price-domain"
+import {
   SCHEDULER_DOMAIN,
   SCHEDULER_MCP_TOOL_ACTIONS,
   buildSchedulerTools,
@@ -23,6 +28,36 @@ describe("Synapse capability domains", () => {
     expect(DATABASE_DOMAIN.id).toBe("database")
     expect(DATABASE_DOMAIN.capabilities.map((capability) => capability.id)).toContain("database.table.list")
     expect(DATABASE_DOMAIN.capabilities.some((capability) => capability.id.startsWith("scheduler."))).toBe(false)
+  })
+})
+
+describe("Model price capability domain", () => {
+  it("registers model price actions separately from usage analysis internals", () => {
+    expect(MODEL_PRICE_DOMAIN.id).toBe("model_price")
+    expect(MODEL_PRICE_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
+      "model_price.used_model.list",
+      "model_price.rule.list",
+      "model_price.rule.get",
+      "model_price.rule.create",
+      "model_price.rule.update",
+      "model_price.rule.delete",
+      "model_price.rule.enable",
+      "model_price.rule.disable",
+    ])
+  })
+
+  it("maps model price MCP tools to canonical actions", () => {
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_used_model_list).toBe("model_price.used_model.list")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_update).toBe("model_price.rule.update")
+    expect(MODEL_PRICE_MCP_TOOL_ACTIONS.model_price_rule_disable).toBe("model_price.rule.disable")
+  })
+
+  it("defines model price MCP schemas with ruleId-based mutations", () => {
+    const tools = buildModelPriceTools()
+    expect(tools.find((tool) => tool.name === "model_price_rule_get")?.inputSchema.required).toEqual(["ruleId"])
+    expect(tools.find((tool) => tool.name === "model_price_rule_update")?.inputSchema.required).toEqual(["ruleId"])
+    expect(tools.find((tool) => tool.name === "model_price_rule_delete")?.inputSchema.required).toEqual(["ruleId"])
+    expect(tools.find((tool) => tool.name === "model_price_rule_update")?.inputSchema.properties).not.toHaveProperty("enabled")
   })
 })
 
