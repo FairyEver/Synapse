@@ -235,6 +235,8 @@ function validateRepository(
   const localPath = readRequiredField(rawValue, "localPath", itemPath, errors)
   const rawContentDirs = rawValue.contentDirs
   const variables = validateVariables(rawValue.variables, `${itemPath}.variables`, errors)
+  const rulesDir = rawValue.rulesDir
+  const skillsDir = rawValue.skillsDir
 
   if (!isNonEmptyString(uuid)) {
     errors.push(`${itemPath}.uuid 必须是非空字符串。`)
@@ -250,6 +252,14 @@ function validateRepository(
 
   if (rawContentDirs !== undefined && !isRecord(rawContentDirs)) {
     errors.push(`${itemPath}.contentDirs 必须是对象。`)
+  }
+
+  if (rulesDir !== undefined && !isNonEmptyString(rulesDir)) {
+    errors.push(`${itemPath}.rulesDir 必须是非空字符串。`)
+  }
+
+  if (skillsDir !== undefined && !isNonEmptyString(skillsDir)) {
+    errors.push(`${itemPath}.skillsDir 必须是非空字符串。`)
   }
 
   if (
@@ -288,6 +298,8 @@ function validateRepository(
     name: name.trim(),
     localPath: localPath.trim(),
     contentDirs,
+    ...(isNonEmptyString(rulesDir) ? { rulesDir: rulesDir.trim() } : undefined),
+    ...(isNonEmptyString(skillsDir) ? { skillsDir: skillsDir.trim() } : undefined),
     ...(variables ? { variables } : undefined),
   }
 }
@@ -694,6 +706,9 @@ async function createConfigBackupPayload(exportedAt = new Date()): Promise<Synap
         name: repository.name,
         localPath: repository.localPath,
         contentDirs: repository.contentDirs,
+        ...(repository.rulesDir !== undefined ? { rulesDir: repository.rulesDir } : undefined),
+        ...(repository.skillsDir !== undefined ? { skillsDir: repository.skillsDir } : undefined),
+        ...(repository.variables !== undefined ? { variables: repository.variables } : undefined),
       })),
     },
     identity: await userIdentityService.exportIdentity(),

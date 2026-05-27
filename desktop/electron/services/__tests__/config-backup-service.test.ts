@@ -111,7 +111,7 @@ describe("ConfigBackupService quick inputs", () => {
     }
   })
 
-  it("preserves repository variables, global lists, sort order, and agent defaults when importing a backup", async () => {
+  it("preserves repository variables, custom directories, global lists, sort order, and agent defaults when importing a backup", async () => {
     const filePath = await writeBackupFile({
       favorites: { rule: ["rule-1"], skill: ["skill-1"], prompt: ["prompt-1"] },
       recentlyViewed: { rule: ["rule-2"], skill: ["skill-2"], prompt: ["prompt-2"] },
@@ -123,6 +123,8 @@ describe("ConfigBackupService quick inputs", () => {
         name: "Repo",
         localPath: "/repo",
         contentDirs: { rule: "rules", skill: "skills", prompt: "prompts" },
+        rulesDir: "custom-rules",
+        skillsDir: "custom-skills",
         variables: [{ name: "API_HOST", value: "https://example.test", description: "API" }],
       }],
       agent: {
@@ -138,6 +140,8 @@ describe("ConfigBackupService quick inputs", () => {
         activeRepoUuid: "repo-1",
         repositories: [expect.objectContaining({
           uuid: "repo-1",
+          rulesDir: "custom-rules",
+          skillsDir: "custom-skills",
           variables: [{ name: "API_HOST", value: "https://example.test", description: "API" }],
         })],
         global: expect.objectContaining({
@@ -185,6 +189,28 @@ describe("ConfigBackupService quick inputs", () => {
     expect(backup.config.global.quickInputs).toEqual([
       { id: "quick-1", content: "第一行\n第二行", directSend: true },
     ])
+  })
+
+  it("preserves repository variables and custom content directories in export payloads", async () => {
+    const repository = {
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: "/repo",
+      contentDirs: { rule: "rules", skill: "skills", prompt: "prompts" },
+      rulesDir: "custom-rules",
+      skillsDir: "custom-skills",
+      variables: [{ name: "API_HOST", value: "https://example.test", description: "API" }],
+    }
+    const config: SynapseConfig = {
+      ...createDefaultConfig(),
+      activeRepoUuid: "repo-1",
+      repositories: [repository],
+    }
+    vi.mocked(configStore.load).mockResolvedValue(config)
+
+    const backup = await createConfigBackupPayload(new Date("2026-05-25T00:00:00.000Z"))
+
+    expect(backup.config.repositories).toEqual([repository])
   })
 
   it("redacts selected backup paths in import and export logs", async () => {
