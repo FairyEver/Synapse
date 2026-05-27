@@ -123,7 +123,9 @@ function createTool(type: ContentResourceType): McpToolDefinition {
     inputSchema: {
       type: "object",
       properties,
-      required,
+      ...(type === "skill"
+        ? { anyOf: [{ required }, { required: ["sourceDirectoryPath"] }] }
+        : { required }),
     },
   }
 }
@@ -141,7 +143,12 @@ function updateTool(type: ContentResourceType): McpToolDefinition {
         baseHistoryDirname: stringField("Version token from latestHistoryDirname."),
         ...create.inputSchema.properties,
       },
-      required: ["id", "baseHistoryDirname", ...(create.inputSchema.required ?? [])],
+      required: type === "skill"
+        ? ["id", "baseHistoryDirname"]
+        : ["id", "baseHistoryDirname", ...(create.inputSchema.required ?? [])],
+      ...(type === "skill" && create.inputSchema.anyOf
+        ? { anyOf: create.inputSchema.anyOf }
+        : {}),
     },
   }
 }
