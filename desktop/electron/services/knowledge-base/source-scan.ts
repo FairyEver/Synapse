@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
+import { createReadStream } from "node:fs"
 import type { Dirent } from "node:fs"
-import { lstat, readdir, readFile } from "node:fs/promises"
+import { lstat, readdir } from "node:fs/promises"
 import path from "node:path"
 
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger } from "./logging"
@@ -17,6 +18,8 @@ const SUPPORTED_SOURCE_EXTENSIONS = new Set([
   ".html",
   ".xml",
 ])
+const DEFAULT_MAX_SOURCE_BYTES = 16 * 1024 * 1024
+const DEFAULT_MAX_SCAN_BYTES = 64 * 1024 * 1024
 
 export type KnowledgeBaseSourceState = "new" | "changed" | "unchanged"
 
@@ -28,7 +31,7 @@ export interface KnowledgeBaseSourceScanItem {
 
 export interface KnowledgeBaseSkippedSource {
   readonly relativePath: string
-  readonly reason: "unsupported-extension" | "symlink" | "read-error"
+  readonly reason: "unsupported-extension" | "symlink" | "read-error" | "too-large" | "scan-size-limit"
 }
 
 export interface KnowledgeBaseSourceScanResult {
@@ -39,10 +42,16 @@ export interface KnowledgeBaseSourceScanResult {
 
 export async function scanKnowledgeBaseSources(
   projectPath: string,
-  options: { readonly force?: boolean } = {},
+  options: {
+    readonly force?: boolean
+    readonly maxScanBytes?: number
+    readonly maxSourceBytes?: number
+  } = {},
 ): Promise<KnowledgeBaseSourceScanResult> {
   const manifest = await readKnowledgeBaseManifest(projectPath)
   const rawPath = path.join(projectPath, ".raw")
+  const maxSourceBytes = options.maxSourceBytes ?? DEFAULT_MAX_SOURCE_BYTES
+  const maxScanBytes = options.maxScanBytes ?? DEFAULT_MAX_SCAN_BYTES
   const rawDirectory = await inspectRawDirectory(rawPath)
   if (rawDirectory !== "directory") {
     return {
@@ -54,11 +63,29 @@ export async function scanKnowledgeBaseSources(
   const discovered = await walkRawSources(projectPath, rawPath)
   const sources: KnowledgeBaseSourceScanItem[] = []
   const skippedSources: KnowledgeBaseSkippedSource[] = [...discovered.skippedSources]
+  let scannedBytes = 0
 
-  for (const relativePath of discovered.relativePaths) {
+  for (const relativePath of [...discovered.relativePaths].sort((a, b) => a.localeCompare(b))) {
     try {
       const absolutePath = path.join(projectPath, relativePath)
-      const hash = sha256(await readFile(absolutePath))
+      const stat = await lstat(absolutePath)
+      if (stat.isSymbolicLink()) {
+        skippedSources.push({ relativePath, reason: "symlink" })
+        continue
+      }
+      if (!stat.isFile()) {
+        continue
+      }
+      if (stat.size > maxSourceBytes) {
+        skippedSources.push({ relativePath, reason: "too-large" })
+        continue
+      }
+      if (scannedBytes + stat.size > maxScanBytes) {
+        skippedSources.push({ relativePath, reason: "scan-size-limit" })
+        continue
+      }
+      const hash = await sha256File(absolutePath)
+      scannedBytes += stat.size
       const manifestEntry = manifest.manifest.sources[relativePath]
       sources.push({
         relativePath,
@@ -135,8 +162,18 @@ function normalizeRelativePath(value: string): string {
   return value.split(path.sep).join("/")
 }
 
-function sha256(content: Buffer): string {
-  return createHash("sha256").update(content).digest("hex")
+function sha256File(filePath: string): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const hash = createHash("sha256")
+    const stream = createReadStream(filePath)
+    stream.on("data", (chunk: Buffer | string) => {
+      hash.update(chunk)
+    })
+    stream.on("error", reject)
+    stream.on("end", () => {
+      resolve(hash.digest("hex"))
+    })
+  })
 }
 
 async function inspectRawDirectory(rawPath: string): Promise<"directory" | "missing" | KnowledgeBaseSkippedSource["reason"]> {
