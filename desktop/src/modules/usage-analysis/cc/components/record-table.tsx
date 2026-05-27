@@ -1,6 +1,7 @@
 import { Fragment } from "react"
 import { ChevronDown, ChevronRight, ExternalLink } from "lucide-react"
 import { Button } from "@/components/ui/button"
+import { Skeleton } from "@/components/ui/skeleton"
 import {
   Table,
   TableBody,
@@ -16,6 +17,8 @@ import type {
   CcRecordListItem,
 } from "@/types/usage-analysis-conversations"
 import { RecordDetailRows } from "./record-detail-rows"
+
+const SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index)
 
 function formatInteger(value: number): string {
   return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 }).format(value)
@@ -52,6 +55,54 @@ function shortenCommonPathPrefixes(values: readonly string[]): string[] {
   )
 }
 
+function RecordTableHeader() {
+  return (
+    <TableHeader>
+      <TableRow>
+        <TableHead>标题</TableHead>
+        <TableHead>项目</TableHead>
+        <TableHead>时间</TableHead>
+        <TableHead>模型</TableHead>
+        <TableHead className="text-right">Token</TableHead>
+        <TableHead className="text-right">费用</TableHead>
+        <TableHead className="text-right">工具</TableHead>
+        <TableHead className="text-right">请求</TableHead>
+        <TableHead className="text-right">事件</TableHead>
+        <TableHead className="text-right">操作</TableHead>
+      </TableRow>
+    </TableHeader>
+  )
+}
+
+export function RecordTableSkeleton() {
+  return (
+    <Table>
+      <RecordTableHeader />
+      <TableBody>
+        {SKELETON_ROWS.map((row) => (
+          <TableRow key={row}>
+            <TableCell>
+              <div className="flex items-center gap-2">
+                <Skeleton className="size-7" />
+                <Skeleton className="h-4 w-40" />
+              </div>
+            </TableCell>
+            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+            <TableCell><Skeleton className="h-4 w-32" /></TableCell>
+            <TableCell><Skeleton className="h-4 w-28" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-4 w-20" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-4 w-16" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-4 w-10" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-4 w-10" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-4 w-10" /></TableCell>
+            <TableCell><Skeleton className="ml-auto h-7 w-24" /></TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+  )
+}
+
 export function RecordTable({
   rows,
   expandedSessionId,
@@ -80,20 +131,7 @@ export function RecordTable({
 
   return (
     <Table>
-      <TableHeader>
-        <TableRow>
-          <TableHead>标题</TableHead>
-          <TableHead>项目</TableHead>
-          <TableHead>时间</TableHead>
-          <TableHead>模型</TableHead>
-          <TableHead className="text-right">Token</TableHead>
-          <TableHead className="text-right">费用</TableHead>
-          <TableHead className="text-right">工具</TableHead>
-          <TableHead className="text-right">请求</TableHead>
-          <TableHead className="text-right">事件</TableHead>
-          <TableHead className="text-right">操作</TableHead>
-        </TableRow>
-      </TableHeader>
+      <RecordTableHeader />
       <TableBody>
         {rows.map((row, index) => {
           const expanded = row.sessionId === expandedSessionId

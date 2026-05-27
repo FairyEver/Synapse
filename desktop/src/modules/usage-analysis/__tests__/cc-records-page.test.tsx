@@ -74,21 +74,23 @@ describe("CcRecordsPage", () => {
     expect(html).toContain("加载更多")
   })
 
-  it("shows a visible loading status while records load", () => {
+  it("shows table-shaped placeholders while records load", () => {
     recordsState = { ...recordsState, data: null, loading: true }
 
     const html = renderToStaticMarkup(<CcRecordsPage range="30d" refreshKey={0} />)
 
-    expect(html).toContain("正在读取记录")
+    expect(html).toContain("data-slot=\"skeleton\"")
+    expect(html).toContain("时间")
+    expect(html).not.toContain("正在读取记录")
   })
 
-  it("keeps the loading status visible while refreshing existing records", () => {
+  it("keeps existing records visible while refreshing without a separate loading row", () => {
     recordsState = { ...recordsState, loading: true }
 
     const html = renderToStaticMarkup(<CcRecordsPage range="30d" refreshKey={0} />)
 
-    expect(html).toContain("正在读取记录")
     expect(html).toContain("打开对话")
+    expect(html).not.toContain("正在读取记录")
   })
 
   it("disables the load more button while loading the next record batch", () => {

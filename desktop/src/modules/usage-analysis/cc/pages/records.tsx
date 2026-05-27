@@ -6,7 +6,7 @@ import type { CcRecordListInput } from "@/types/usage-analysis-conversations"
 import { ReportState } from "../../shared/components/report-state"
 import type { UsageRangePreset } from "../../shared/types"
 import { ConversationFilters } from "../components/conversation-filters"
-import { RecordTable } from "../components/record-table"
+import { RecordTable, RecordTableSkeleton } from "../components/record-table"
 import { useCcRecordDetails, useCcRecords } from "../hooks"
 
 export function CcRecordsPage({
@@ -46,6 +46,7 @@ export function CcRecordsPage({
   const total = state.data?.total ?? 0
   const shown = rows.length
   const canLoadMore = shown > 0 && shown < total
+  const initialLoading = state.loading && !state.data
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
@@ -61,63 +62,61 @@ export function CcRecordsPage({
           setLoadedLimit(50)
         }}
       />
-      {state.loading ? (
-        <div className="flex items-center gap-2 text-sm text-muted-foreground">
-          <Spinner />
-          正在读取记录
-        </div>
-      ) : null}
-      <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
-        <RecordTable
-          rows={rows}
-          expandedSessionId={expandedSessionId}
-          detailRows={detailState.data?.rows ?? []}
-          detailTotal={detailState.data?.total ?? 0}
-          detailLoading={detailState.loading && Boolean(expandedSessionId)}
-          onToggleExpanded={(row) => {
-            setExpandedSessionId((current) => current === row.sessionId ? null : row.sessionId)
-          }}
-          onOpenConversation={(row) => {
-            void requireSynapseBridge().usageAnalysis.cc.openConversationWindow({
-              sessionId: row.sessionId,
-              title: row.title,
-            })
-          }}
-          onOpenDetail={(row) => {
-            void requireSynapseBridge().usageAnalysis.cc.openConversationWindow({
-              sessionId: row.sessionId,
-              title: row.workspaceLabel,
-              focus: {
-                usageEventId: row.usageEventId ?? row.id,
-                timestampMs: row.timestampMs,
-              },
-            })
-          }}
-          onLoadMoreDetails={() => setDetailLimit((current) => current + 200)}
-        />
-        {shown > 0 ? (
-          <div className="flex items-center justify-between border-t border-border px-3 py-2 text-sm text-muted-foreground">
-            <span>已显示 {shown} / {total} 条记录</span>
-            {canLoadMore ? (
-              <Button
-                type="button"
-                size="sm"
-                variant="outline"
-                disabled={state.loading}
-                aria-busy={state.loading}
-                onClick={() => setLoadedLimit((current) => current + 50)}
-              >
-                {state.loading ? (
-                  <>
-                    <Spinner />
-                    加载中
-                  </>
-                ) : "加载更多"}
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-      </ReportState>
+      {initialLoading ? (
+        <RecordTableSkeleton />
+      ) : (
+        <ReportState loading={false} error={state.error} empty={rows.length === 0}>
+          <RecordTable
+            rows={rows}
+            expandedSessionId={expandedSessionId}
+            detailRows={detailState.data?.rows ?? []}
+            detailTotal={detailState.data?.total ?? 0}
+            detailLoading={detailState.loading && Boolean(expandedSessionId)}
+            onToggleExpanded={(row) => {
+              setExpandedSessionId((current) => current === row.sessionId ? null : row.sessionId)
+            }}
+            onOpenConversation={(row) => {
+              void requireSynapseBridge().usageAnalysis.cc.openConversationWindow({
+                sessionId: row.sessionId,
+                title: row.title,
+              })
+            }}
+            onOpenDetail={(row) => {
+              void requireSynapseBridge().usageAnalysis.cc.openConversationWindow({
+                sessionId: row.sessionId,
+                title: row.workspaceLabel,
+                focus: {
+                  usageEventId: row.usageEventId ?? row.id,
+                  timestampMs: row.timestampMs,
+                },
+              })
+            }}
+            onLoadMoreDetails={() => setDetailLimit((current) => current + 200)}
+          />
+          {shown > 0 ? (
+            <div className="flex items-center justify-between border-t border-border px-3 py-2 text-sm text-muted-foreground">
+              <span>已显示 {shown} / {total} 条记录</span>
+              {canLoadMore ? (
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  disabled={state.loading}
+                  aria-busy={state.loading}
+                  onClick={() => setLoadedLimit((current) => current + 50)}
+                >
+                  {state.loading ? (
+                    <>
+                      <Spinner />
+                      加载中
+                    </>
+                  ) : "加载更多"}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
+        </ReportState>
+      )}
     </div>
   )
 }
