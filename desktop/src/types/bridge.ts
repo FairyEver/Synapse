@@ -43,6 +43,13 @@ import type {
   WorkflowModelMapping,
 } from "./workflow-package"
 import type {
+  CcConversationDetail,
+  CcConversationFocus,
+  CcConversationListInput,
+  CcConversationListResult,
+  CcConversationWindowRequest,
+} from "./usage-analysis-conversations"
+import type {
   SynapseContentDownloadResult,
   SynapseContentChangedEvent,
   SynapseContentDetail,
@@ -519,6 +526,10 @@ export type UsageAnalysisBridgeDomain = {
   getProjects: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisProjectRow[]>
   getTools: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisToolRow[]>
   getDetails: (range: UsageAnalysisDetailInput) => Promise<UsageAnalysisDetailRow[]>
+  listConversations?: (input: CcConversationListInput) => Promise<CcConversationListResult>
+  getConversation?: (sessionId: string, focus?: CcConversationFocus) => Promise<CcConversationDetail>
+  searchConversationText?: (input: CcConversationListInput) => Promise<CcConversationListResult>
+  openConversationWindow?: (request: CcConversationWindowRequest) => Promise<void>
 }
 
 export type SynapseBridge = {
