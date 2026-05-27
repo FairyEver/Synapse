@@ -14,6 +14,7 @@ This is a discovery barrier, not a security boundary. Anyone who reads the code 
 
 - Add a small cheat code layer whose stable identity is a code-defined string.
 - Register each cheat code in one place with its name, settings title click sequence, and callback.
+- Document the cheat code rules in `AGENTS.md` so later AI sessions know to reuse the cheat code layer.
 - Make each visible title character clickable without changing the title's visual appearance.
 - Match title input bindings by character index, not by character value. The first `S` and second `S` are different inputs.
 - Replace the existing ten-logo-click repository maintenance entry with a title-sequence cheat code.
@@ -104,6 +105,18 @@ It owns:
 `AboutPanel` remains responsible for rendering and providing the callback context. It passes clicked title indexes into the hook. When the hook matches a cheat code, the registered `run` callback receives the context and can call the existing `onAdminModeChange(true)` through `enableRepositoryMaintenance`.
 
 The title-sequence hook should depend on the registry interface, not on repository maintenance directly. This keeps the input method replaceable without changing cheat code identities.
+
+## Agent Guidance
+
+Implementation must add a concise `AGENTS.md` rule explaining that hidden entries should register through the cheat code layer instead of scattering click-count or sequence logic through components. The rule should describe:
+
+- cheat code names as stable code-defined strings
+- each registration joining the name, current input binding, and callback
+- input bindings as replaceable details
+- title-character input matching by index, not character value
+- logging the cheat code name without logging the raw sequence
+
+The guidance should not include the actual repository maintenance title sequence.
 
 ## Matching Rules
 
