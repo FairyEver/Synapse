@@ -1,0 +1,134 @@
+import { app, BrowserWindow } from "electron"
+import path from "node:path"
+import { DEFAULT_WINDOW_BOUNDS } from "../../../src/constants/defaults"
+import { buildCcConversationWindowSearchParams } from "../../../src/lib/cc-conversation-window"
+import type { CcConversationWindowRequest } from "../../../src/types/usage-analysis-conversations"
+import { getWindowIconPath } from "../app-icon-service"
+import { createMainLogger } from "../log-store"
+import { RendererHealthService } from "../renderer-health"
+
+const WINDOW_BOUNDS = {
+  width: 1360,
+  height: 820,
+  minWidth: 1120,
+  minHeight: DEFAULT_WINDOW_BOUNDS.minHeight,
+}
+
+type Logger = {
+  info: (message: string, meta?: unknown) => void
+  warn: (message: string, meta?: unknown) => void
+  error: (message: string, meta?: unknown) => void
+}
+
+type Health = {
+  attach: (webContents: Electron.WebContents) => void
+  detach: () => void
+}
+
+type Deps = {
+  createWindow: (options: Electron.BrowserWindowConstructorOptions) => BrowserWindow
+  createHealthService: (payload: CcConversationWindowRequest) => Health
+  getAppPath: () => string
+  getIconPath: () => string | null
+  getPreloadPath: () => string
+  logger: Logger
+  loadWindow?: (window: BrowserWindow, payload: CcConversationWindowRequest) => Promise<void>
+}
+
+async function loadConversationWindow(
+  window: BrowserWindow,
+  payload: CcConversationWindowRequest,
+  appPath: string,
+): Promise<void> {
+  const searchParams = buildCcConversationWindowSearchParams(payload)
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL
+
+  if (devServerUrl) {
+    const url = new URL(devServerUrl)
+    for (const [key, value] of searchParams.entries()) {
+      url.searchParams.set(key, value)
+    }
+    await window.loadURL(url.toString())
+    return
+  }
+
+  await window.loadFile(path.join(appPath, "dist/index.html"), {
+    query: Object.fromEntries(searchParams.entries()),
+  })
+}
+
+export function createCcConversationWindowService(deps: Deps) {
+  const windowsBySession = new Map<string, BrowserWindow>()
+
+  return {
+    async openConversationWindow(payload: CcConversationWindowRequest): Promise<void> {
+      const existingWindow = windowsBySession.get(payload.sessionId)
+
+      if (existingWindow && !existingWindow.isDestroyed()) {
+        if (existingWindow.isMinimized()) {
+          existingWindow.restore()
+        }
+        existingWindow.focus()
+        deps.logger.info("Focused existing CC conversation window.", { sessionId: payload.sessionId })
+        return
+      }
+
+      const icon = deps.getIconPath()
+      const window = deps.createWindow({
+        ...WINDOW_BOUNDS,
+        show: false,
+        title: payload.title || "对话",
+        ...(icon ? { icon } : {}),
+        webPreferences: {
+          preload: deps.getPreloadPath(),
+          contextIsolation: true,
+          nodeIntegration: false,
+          sandbox: true,
+        },
+      })
+      const health = deps.createHealthService(payload)
+      health.attach(window.webContents)
+      windowsBySession.set(payload.sessionId, window)
+
+      window.webContents.on("preload-error", (_event, _preloadPath, error) => {
+        deps.logger.error("CC conversation window preload script failed.", { error })
+      })
+
+      window.once("ready-to-show", () => {
+        window.show()
+      })
+
+      window.on("closed", () => {
+        health.detach()
+        windowsBySession.delete(payload.sessionId)
+      })
+
+      await (deps.loadWindow ?? ((targetWindow, targetPayload) =>
+        loadConversationWindow(targetWindow, targetPayload, deps.getAppPath())))(window, payload)
+    },
+  }
+}
+
+type CcConversationWindowService = ReturnType<typeof createCcConversationWindowService>
+
+let defaultService: CcConversationWindowService | null = null
+
+function getDefaultService(): CcConversationWindowService {
+  defaultService ??= createCcConversationWindowService({
+    createWindow: (options) => new BrowserWindow(options),
+    createHealthService: (payload) => new RendererHealthService({
+      logger: createMainLogger(`renderer-health.cc-conversation.${payload.sessionId}`),
+    }),
+    getAppPath: () => app.getAppPath(),
+    getIconPath: () => getWindowIconPath() ?? null,
+    getPreloadPath: () => path.join(__dirname, "../preload.js"),
+    logger: createMainLogger("cc-conversation-window"),
+  })
+  return defaultService
+}
+
+export const ccConversationWindowService = {
+  openConversationWindow(payload: CcConversationWindowRequest): Promise<void> {
+    return getDefaultService().openConversationWindow(payload)
+  },
+}

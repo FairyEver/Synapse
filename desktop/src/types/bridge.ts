@@ -526,10 +526,13 @@ export type UsageAnalysisBridgeDomain = {
   getProjects: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisProjectRow[]>
   getTools: (range: UsageAnalysisRangeInput) => Promise<UsageAnalysisToolRow[]>
   getDetails: (range: UsageAnalysisDetailInput) => Promise<UsageAnalysisDetailRow[]>
-  listConversations?: (input: CcConversationListInput) => Promise<CcConversationListResult>
-  getConversation?: (sessionId: string, focus?: CcConversationFocus) => Promise<CcConversationDetail>
-  searchConversationText?: (input: CcConversationListInput) => Promise<CcConversationListResult>
-  openConversationWindow?: (request: CcConversationWindowRequest) => Promise<void>
+}
+
+export type ClaudeCodeUsageAnalysisBridgeDomain = UsageAnalysisBridgeDomain & {
+  listConversations: (input: CcConversationListInput) => Promise<CcConversationListResult>
+  getConversation: (sessionId: string, focus?: CcConversationFocus) => Promise<CcConversationDetail>
+  searchConversationText: (input: CcConversationListInput) => Promise<CcConversationListResult>
+  openConversationWindow: (request: CcConversationWindowRequest) => Promise<void>
 }
 
 export type SynapseBridge = {
@@ -992,7 +995,7 @@ export type SynapseBridge = {
     onEditorRefocus: (listener: (payload: { runId?: string }) => void) => () => void
   }
   usageAnalysis: {
-    cc: UsageAnalysisBridgeDomain
+    cc: ClaudeCodeUsageAnalysisBridgeDomain
     codex: UsageAnalysisBridgeDomain
     getPricingRules: () => Promise<UsageAnalysisModelPriceRule[]>
     savePricingRules: (rules: UsageAnalysisModelPriceRuleInput[]) => Promise<UsageAnalysisModelPriceRule[]>

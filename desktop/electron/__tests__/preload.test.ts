@@ -148,6 +148,32 @@ describe("preload bridge", () => {
     )
   })
 
+  it("maps Claude Code conversation methods to usage analysis IPC channels", async () => {
+    const bridge = await loadPreloadBridge()
+
+    await bridge.usageAnalysis.cc.listConversations({ preset: "all", limit: 5 })
+    await bridge.usageAnalysis.cc.getConversation("session-1", { eventId: "event-1" })
+    await bridge.usageAnalysis.cc.searchConversationText({ preset: "all", query: "登录", rawText: true })
+    await bridge.usageAnalysis.cc.openConversationWindow({ sessionId: "session-1", title: "对话" })
+
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:usage-analysis:cc:conversations:list",
+      { preset: "all", limit: 5 },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:usage-analysis:cc:conversation:get",
+      { sessionId: "session-1", focus: { eventId: "event-1" } },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:usage-analysis:cc:conversation:search-text",
+      { preset: "all", query: "登录", rawText: true },
+    )
+    expect(electronMock.ipcRenderer.invoke).toHaveBeenCalledWith(
+      "synapse:usage-analysis:cc:conversation-window:open",
+      { sessionId: "session-1", title: "对话" },
+    )
+  })
+
   it("writes a renderer IPC failure log when bridge invoke rejects", async () => {
     const bridge = await loadPreloadBridge()
     const failure = new Error("main failed")
