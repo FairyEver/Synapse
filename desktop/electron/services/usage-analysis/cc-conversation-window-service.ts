@@ -57,6 +57,10 @@ async function loadConversationWindow(
   })
 }
 
+export function resolveCcConversationWindowPreloadPath(baseDir: string): string {
+  return path.join(baseDir, "../../preload.js")
+}
+
 export function createCcConversationWindowService(deps: Deps) {
   const windowsBySession = new Map<string, BrowserWindow>()
 
@@ -121,7 +125,7 @@ function getDefaultService(): CcConversationWindowService {
     }),
     getAppPath: () => app.getAppPath(),
     getIconPath: () => getWindowIconPath() ?? null,
-    getPreloadPath: () => path.join(__dirname, "../preload.js"),
+    getPreloadPath: () => resolveCcConversationWindowPreloadPath(__dirname),
     logger: createMainLogger("cc-conversation-window"),
   })
   return defaultService

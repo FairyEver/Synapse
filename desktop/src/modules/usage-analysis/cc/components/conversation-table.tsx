@@ -15,6 +15,37 @@ function formatInteger(value: number): string {
   return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 }).format(value)
 }
 
+function normalizePath(value: string): string {
+  return value.trim().replaceAll("\\", "/")
+}
+
+function pathParts(value: string): string[] {
+  return normalizePath(value).split("/").filter(Boolean)
+}
+
+function shortenCommonPathPrefixes(values: readonly string[]): string[] {
+  const normalizedValues = values.map(normalizePath)
+  if (normalizedValues.length < 2) return normalizedValues
+
+  const partsByValue = normalizedValues.map(pathParts)
+  const minLength = Math.min(...partsByValue.map((parts) => parts.length))
+  const maxPrefixLength = Math.max(0, minLength - 1)
+  let prefixLength = 0
+
+  while (
+    prefixLength < maxPrefixLength
+    && partsByValue.every((parts) => parts[prefixLength] === partsByValue[0]?.[prefixLength])
+  ) {
+    prefixLength += 1
+  }
+
+  if (prefixLength === 0) return normalizedValues
+
+  return partsByValue.map((parts, index) =>
+    parts.slice(prefixLength).join("/") || normalizedValues[index],
+  )
+}
+
 export function ConversationTable({
   rows,
   onOpen,
@@ -22,6 +53,11 @@ export function ConversationTable({
   readonly rows: readonly CcConversationListItem[]
   readonly onOpen: (row: CcConversationListItem) => void
 }) {
+  const titleValues = rows.map((row) => row.title || row.sessionId)
+  const projectValues = rows.map((row) => row.workspaceLabel || row.workspaceKey || "-")
+  const displayTitles = shortenCommonPathPrefixes(titleValues)
+  const displayProjects = shortenCommonPathPrefixes(projectValues)
+
   return (
     <Table>
       <TableHeader>
@@ -37,11 +73,11 @@ export function ConversationTable({
         </TableRow>
       </TableHeader>
       <TableBody>
-        {rows.map((row) => (
+        {rows.map((row, index) => (
           <TableRow key={row.sessionId}>
             <TableCell>
               <div className="flex min-w-0 flex-col gap-1">
-                <span className="font-medium">{row.title || row.sessionId}</span>
+                <span className="font-medium" title={titleValues[index]}>{displayTitles[index]}</span>
                 {row.matchSnippets?.map((snippet) => (
                   <span key={`${row.sessionId}:${snippet.eventId}`} className="max-w-xl truncate text-xs text-muted-foreground">
                     {snippet.text}
@@ -49,7 +85,7 @@ export function ConversationTable({
                 ))}
               </div>
             </TableCell>
-            <TableCell>{row.workspaceLabel || row.workspaceKey || "-"}</TableCell>
+            <TableCell title={projectValues[index]}>{displayProjects[index]}</TableCell>
             <TableCell>{row.modelSummary || "-"}</TableCell>
             <TableCell className="text-right tabular-nums">{formatInteger(row.tokens)}</TableCell>
             <TableCell className="text-right tabular-nums">{formatSynapseCost(row.estimatedCost)}</TableCell>

@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react"
+import { Spinner } from "@/components/ui/spinner"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import type { CcConversationListInput } from "@/types/usage-analysis-conversations"
 import { ReportState } from "../../shared/components/report-state"
@@ -34,6 +35,12 @@ export function CcConversationsPage({
         onQueryChange={setQuery}
         onRawTextChange={setRawText}
       />
+      {state.loading ? (
+        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+          <Spinner />
+          正在读取对话
+        </div>
+      ) : null}
       <ReportState loading={state.loading && !state.data} error={state.error} empty={rows.length === 0}>
         <ConversationTable
           rows={rows}

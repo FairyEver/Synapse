@@ -7,10 +7,12 @@ import { handleValidatedIpc } from "../ipc/validated-ipc"
 import {
   getUsageAnalysisDb,
   getUsageAnalysisDbPath,
-  CcConversationService,
   CcUsageAnalysisService,
   CodexUsageAnalysisService,
+  getCcConversationInWorker,
+  listCcConversationsInWorker,
   refreshUsageInWorker,
+  searchCcConversationTextInWorker,
 } from "../services/usage-analysis"
 import type { UsageDetailInput, UsageModelPriceRuleInput, UsageRangeInput } from "../services/usage-analysis"
 import { ccConversationWindowService } from "../services/usage-analysis/cc-conversation-window-service"
@@ -180,7 +182,6 @@ export function registerUsageAnalysisHandlers(): void {
     db,
     roots: ccRoots,
   })
-  const ccConversations = new CcConversationService({ db })
   const codexHome = process.env.CODEX_HOME || path.join(home, ".codex")
   const codexRoots = [path.join(codexHome, "sessions"), path.join(codexHome, "archived_sessions")]
   const codex = new CodexUsageAnalysisService({
@@ -202,15 +203,15 @@ export function registerUsageAnalysisHandlers(): void {
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccTools, async (_event, range?: UsageRangeInput) => cc.getTools(normalizeUsageRangeForIpc(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccDetails, async (_event, range?: UsageDetailInput) => cc.getDetails(normalizeDetailsRange(range)))
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationsList, async (_event, input?: CcConversationListInput) => {
-    return ccConversations.listConversations(normalizeConversationListInput(input))
+    return listCcConversationsInWorker(dbPath, normalizeConversationListInput(input))
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationGet, async (_event, payload?: { sessionId?: string; focus?: CcConversationFocus }) => {
     const sessionId = optionalString(payload?.sessionId)
     if (!sessionId) throw new Error("sessionId is required")
-    return ccConversations.getConversation(sessionId)
+    return getCcConversationInWorker(dbPath, sessionId)
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationSearchText, async (_event, input?: CcConversationListInput) => {
-    return ccConversations.searchConversationText({ ...normalizeConversationListInput(input), rawText: true })
+    return searchCcConversationTextInWorker(dbPath, { ...normalizeConversationListInput(input), rawText: true })
   })
   handleValidatedIpc(USAGE_ANALYSIS_CHANNELS.ccConversationWindowOpen, async (_event, request?: CcConversationWindowRequest) => {
     const sessionId = optionalString(request?.sessionId)

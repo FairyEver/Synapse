@@ -1,11 +1,34 @@
+import path from "node:path"
 import { describe, expect, it, vi } from "vitest"
-import { createCcConversationWindowService } from "../usage-analysis/cc-conversation-window-service"
+import {
+  createCcConversationWindowService,
+  resolveCcConversationWindowPreloadPath,
+} from "../usage-analysis/cc-conversation-window-service"
 
 vi.mock("../log-store", () => ({
   createMainLogger: () => ({ info: vi.fn(), warn: vi.fn(), error: vi.fn() }),
 }))
 
 describe("createCcConversationWindowService", () => {
+  it("resolves the preload script from the compiled Electron root", () => {
+    expect(resolveCcConversationWindowPreloadPath("/repo/desktop/dist-electron/electron/services/usage-analysis")).toBe(
+      path.join("/repo/desktop/dist-electron/electron", "preload.js"),
+    )
+  })
+
+  it("keeps packaged preload paths inside app.asar", () => {
+    expect(
+      resolveCcConversationWindowPreloadPath(
+        "/Applications/Synapse.app/Contents/Resources/app.asar/dist-electron/electron/services/usage-analysis",
+      ),
+    ).toBe(
+      path.join(
+        "/Applications/Synapse.app/Contents/Resources/app.asar/dist-electron/electron",
+        "preload.js",
+      ),
+    )
+  })
+
   it("opens one window per session and focuses duplicates", async () => {
     const webContents = { on: vi.fn() }
     const window = {
