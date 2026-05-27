@@ -19,6 +19,7 @@ import type {
 import { RecordDetailRows } from "./record-detail-rows"
 
 const SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index)
+const ACTION_COLUMN_CLASS = "sticky right-0 z-10 bg-background text-right"
 
 function formatInteger(value: number): string {
   return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 }).format(value)
@@ -68,7 +69,7 @@ function RecordTableHeader() {
         <TableHead className="text-right">工具</TableHead>
         <TableHead className="text-right">请求</TableHead>
         <TableHead className="text-right">事件</TableHead>
-        <TableHead className="text-right">操作</TableHead>
+        <TableHead className={ACTION_COLUMN_CLASS}>操作</TableHead>
       </TableRow>
     </TableHeader>
   )
@@ -95,7 +96,7 @@ export function RecordTableSkeleton() {
             <TableCell><Skeleton className="ml-auto h-4 w-10" /></TableCell>
             <TableCell><Skeleton className="ml-auto h-4 w-10" /></TableCell>
             <TableCell><Skeleton className="ml-auto h-4 w-10" /></TableCell>
-            <TableCell><Skeleton className="ml-auto h-7 w-24" /></TableCell>
+            <TableCell className={ACTION_COLUMN_CLASS}><Skeleton className="ml-auto h-7 w-24" /></TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -140,7 +141,7 @@ export function RecordTable({
             <Fragment key={row.sessionId}>
               <TableRow>
                 <TableCell>
-                  <div className="flex min-w-0 items-start gap-2">
+                  <div className="flex min-w-0 items-center gap-2">
                     <Button
                       type="button"
                       size="icon-sm"
@@ -168,7 +169,7 @@ export function RecordTable({
                 <TableCell className="text-right tabular-nums">{formatInteger(row.toolCalls)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatInteger(row.requestCount)}</TableCell>
                 <TableCell className="text-right tabular-nums">{formatInteger(row.eventCount)}</TableCell>
-                <TableCell className="text-right">
+                <TableCell className={ACTION_COLUMN_CLASS}>
                   <Button type="button" size="sm" variant="outline" onClick={() => onOpenConversation(row)}>
                     <ExternalLink data-icon="inline-start" />
                     打开对话
