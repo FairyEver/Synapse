@@ -1044,11 +1044,12 @@ export class ConversationRouter {
     // (or fails), update the status to "sent" or "failed" so outbox accurately
     // reflects delivery outcome rather than pre-emptively marking as "sent".
     const outbox = this.deps.outbox
-    const outboxId = outbox?.recordAgentEvent(target, event)
-    if (outbox && outboxId) {
-      const replyTargets = this.deps.replyTargets
-      if (replyTargets) {
-        replyTargets.dispatchAgentEvent(target, event).then(
+    if (!outbox) return
+    const replyTargets = this.deps.replyTargets
+    void outbox.recordAgentEvent(target, event)
+      .then((outboxId) => {
+        if (!replyTargets) return undefined
+        return replyTargets.dispatchAgentEvent(target, event).then(
           () => outbox.updateRecordStatus(outboxId, "sent"),
           (error: unknown) => outbox.updateRecordStatus(
             outboxId,
@@ -1056,8 +1057,8 @@ export class ConversationRouter {
             error instanceof Error ? error.message : String(error),
           ),
         )
-      }
-    }
+      })
+      .catch(() => undefined)
   }
 
   private emitConversationUpdated(conversation: ConversationEntryV1): void {

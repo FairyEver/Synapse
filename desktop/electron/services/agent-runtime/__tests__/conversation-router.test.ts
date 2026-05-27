@@ -93,6 +93,33 @@ describe("ConversationRouter", () => {
     })
   })
 
+  it("does not dispatch reply targets when the outbox record fails", async () => {
+    const outbox = {
+      recordAgentEvent: vi.fn(async () => {
+        throw new Error("outbox unavailable")
+      }),
+      updateRecordStatus: vi.fn(),
+    } as unknown as NonNullable<ConversationRouterDeps["outbox"]>
+    const replyTargets = {
+      rememberReplyTarget: vi.fn(),
+      dispatchAgentEvent: vi.fn(async () => {}),
+    }
+    const { router } = createRouter({
+      outbox,
+      replyTargets,
+      session: new ScriptedSession([
+        { type: "result", content: "done", done: true },
+      ]),
+    })
+
+    await router.send(baseMessage("hello"))
+    await flushAsync()
+
+    expect(outbox.recordAgentEvent).toHaveBeenCalled()
+    expect(replyTargets.dispatchAgentEvent).not.toHaveBeenCalled()
+    expect(outbox.updateRecordStatus).not.toHaveBeenCalled()
+  })
+
   it("returns an error event when governance blocks a message", async () => {
     const governance = new AgentGovernanceService({
       bannedWords: ["blocked"],
@@ -929,6 +956,8 @@ function createRouter(input: {
   readonly commandRouter?: AgentCommandRouter
   readonly eventBus?: ConversationRouterDeps["eventBus"]
   readonly logger?: ConversationRouterDeps["logger"]
+  readonly outbox?: ConversationRouterDeps["outbox"]
+  readonly replyTargets?: ConversationRouterDeps["replyTargets"]
   readonly prepareMessage?: ConversationRouterDeps["prepareMessage"]
   readonly afterTurn?: ConversationRouterDeps["afterTurn"]
 } = {}) {
@@ -976,6 +1005,8 @@ function createRouter(input: {
       agentEvents: input.agentEvents,
       eventBus: input.eventBus,
       logger: input.logger,
+      outbox: input.outbox,
+      replyTargets: input.replyTargets,
       now: fixedNow,
       prepareMessage: input.prepareMessage,
       afterTurn: input.afterTurn,
@@ -1041,6 +1072,10 @@ function baseMessage(content: string): AgentMessage {
 
 function fixedNow(): Date {
   return new Date("2026-04-26T00:00:00.000Z")
+}
+
+async function flushAsync(): Promise<void> {
+  await new Promise((resolve) => setTimeout(resolve, 0))
 }
 
 class FakeProviderService {

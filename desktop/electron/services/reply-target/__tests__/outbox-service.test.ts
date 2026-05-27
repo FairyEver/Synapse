@@ -18,7 +18,7 @@ describe("ReplyOutboxService", () => {
       now: () => new Date("2026-04-26T00:00:00.000Z"),
     })
 
-    service.recordAgentEvent({
+    await service.recordAgentEvent({
       projectId: "project-1",
       sessionKey: "local:renderer",
       conversationId: "conv-1",
@@ -63,7 +63,7 @@ describe("ReplyOutboxService", () => {
       idFactory: () => "outbox-2",
     })
 
-    service.recordAgentEvent({
+    await service.recordAgentEvent({
       projectId: "project-1",
       sessionKey: "local:renderer",
       transport: { kind: "local-renderer" },
@@ -92,7 +92,7 @@ describe("ReplyOutboxService", () => {
       idFactory: () => "outbox-3",
     })
 
-    service.recordAgentEvent({
+    await service.recordAgentEvent({
       projectId: "project-1",
       sessionKey: "local:renderer",
       conversationId: "conv-1",
@@ -135,7 +135,7 @@ describe("ReplyOutboxService", () => {
       idFactory: () => "outbox-4",
     })
 
-    service.recordAgentEvent({
+    await expect(service.recordAgentEvent({
       projectId: "project-1",
       sessionKey: "local:renderer",
       transport: { kind: "local-renderer" },
@@ -143,7 +143,7 @@ describe("ReplyOutboxService", () => {
       type: "result",
       content: "done",
       done: true,
-    })
+    })).rejects.toThrow("SDK failed for secret prompt at /Users/liyang/token.txt")
     await service.flushForTests()
 
     expect(logger.warn).toHaveBeenCalledWith(

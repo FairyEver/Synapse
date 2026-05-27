@@ -43,7 +43,7 @@ export class ReplyOutboxService {
     this.deps = deps
   }
 
-  record(input: ReplyOutboxRecordInput): string {
+  record(input: ReplyOutboxRecordInput): Promise<string> {
     const now = this.isoNow()
     const id = this.nextId()
     const entry: OutboxEntryV1 = {
@@ -65,8 +65,8 @@ export class ReplyOutboxService {
       updatedAt: now,
     }
 
-    this.pendingWrite = this.pendingWrite
-      .then(() => this.deps.outbox.upsert(entry))
+    const write = this.pendingWrite.then(() => this.deps.outbox.upsert(entry))
+    this.pendingWrite = write
       .catch((error) => {
         this.deps.logger?.warn("Outbox persistence failed.", {
           projectId: input.target.projectId,
@@ -75,10 +75,10 @@ export class ReplyOutboxService {
         })
       })
 
-    return id
+    return write.then(() => id)
   }
 
-  recordAgentEvent(target: ReplyTarget, event: AgentEvent): string {
+  recordAgentEvent(target: ReplyTarget, event: AgentEvent): Promise<string> {
     const payload = payloadFromAgentEvent(event)
     const failed = event.type === "error"
     return this.record({
@@ -93,9 +93,9 @@ export class ReplyOutboxService {
     id: string,
     status: ReplyOutboxStatus,
     lastError?: string,
-  ): void {
+  ): Promise<void> {
     const now = this.isoNow()
-    this.pendingWrite = this.pendingWrite
+    const write = this.pendingWrite
       .then(async () => {
         const entry = await this.deps.outbox.get(id)
         if (!entry) return
@@ -106,6 +106,7 @@ export class ReplyOutboxService {
           updatedAt: now,
         })
       })
+    this.pendingWrite = write
       .catch((error) => {
         this.deps.logger?.warn("Outbox status update failed.", {
           outboxId: id,
@@ -113,6 +114,7 @@ export class ReplyOutboxService {
           ...errorDiagnostic(error),
         })
       })
+    return write
   }
 
   async list(filter?: Partial<OutboxEntryV1>): Promise<OutboxEntryV1[]> {

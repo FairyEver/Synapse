@@ -236,6 +236,46 @@ describe("SideChannelService", () => {
     expect(JSON.stringify(auditSink.list())).not.toContain("bridge:s1")
   })
 
+  it("reports when a dispatched side-channel send cannot be recorded in the outbox", async () => {
+    const outbox = new FailingNamespace<OutboxEntryV1>("outbox", new Error("write failed for secret session"))
+    const warn = vi.fn()
+    const service = new SideChannelService({
+      projectContainers: fakeProjectContainers(),
+      networkRegistry: createNetworkServiceRegistry(),
+      dataRepository: fakeDataRepository(outbox),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      logger: fakeLogger({ warn }),
+      token: "tok",
+    })
+    const dispatcher = new FakeDispatcher()
+    service.registerDispatcher("bridge", dispatcher)
+    service.rememberReplyTarget(bridgeTarget())
+
+    const result = await service.send({
+      project: "project-1",
+      sessionKey: "bridge:s1",
+      message: "generated file is ready",
+    })
+
+    expect(result).toEqual({
+      ok: true,
+      projectId: "project-1",
+      sessionKey: "bridge:s1",
+      outboxRecorded: false,
+    })
+    expect(dispatcher.sideChannelPayloads).toHaveLength(1)
+    expect(warn).toHaveBeenCalledWith(
+      "Outbox persistence failed.",
+      expect.objectContaining({
+        projectId: "project-1",
+        sessionKey: "bridge:s1",
+        errorName: "Error",
+        errorLength: "write failed for secret session".length,
+      }),
+    )
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("write failed for secret session")
+  })
+
   it("sanitizes failed side-channel send dispatch diagnostics", async () => {
     const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
     const auditSink = new InMemoryAuditSink()
@@ -801,5 +841,15 @@ class MemoryNamespace<T extends { id: string }> implements DataNamespace<T> {
 
   private emit(event: DataChangeEvent<T>): void {
     for (const listener of this.listeners) listener(event)
+  }
+}
+
+class FailingNamespace<T extends { id: string }> extends MemoryNamespace<T> {
+  constructor(name: string, private readonly error: Error) {
+    super(name)
+  }
+
+  override async upsert(): Promise<void> {
+    throw this.error
   }
 }
