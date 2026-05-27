@@ -201,6 +201,140 @@ describe("usage analysis reports", () => {
     })
   })
 
+  it("parses only appended CC usage and preserves historical event costs", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const projectDir = path.join(dir, ".claude", "projects", "-tmp-project")
+    fs.mkdirSync(projectDir, { recursive: true })
+    const file = path.join(projectDir, "session.jsonl")
+    fs.writeFileSync(file, `${JSON.stringify({
+      type: "assistant",
+      sessionId: "session",
+      timestamp: "2026-05-19T01:00:01.000Z",
+      message: {
+        id: "msg-1",
+        role: "assistant",
+        model: "local-model",
+        usage: { input_tokens: 1_000_000, output_tokens: 0 },
+      },
+    })}\n`)
+
+    const db = getUsageAnalysisDb(dir)
+    const service = new CcUsageAnalysisService({ db, roots: [path.join(dir, ".claude", "projects")] })
+    await service.refresh()
+    service.savePricingRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 0 }])
+    fs.appendFileSync(file, `${JSON.stringify({
+      type: "assistant",
+      sessionId: "session",
+      timestamp: "2026-05-19T02:00:01.000Z",
+      message: {
+        id: "msg-2",
+        role: "assistant",
+        model: "local-model",
+        usage: { input_tokens: 1_000_000, output_tokens: 0 },
+      },
+    })}\n`)
+
+    const refresh = await service.refresh()
+
+    expect(refresh).toMatchObject({ parsedFiles: 1, usageEvents: 1 })
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cc_usage_events").get()).toEqual({ count: 2 })
+    expect(db.prepare("SELECT total_cost, price_known FROM cc_usage_events ORDER BY timestamp_ms ASC").all()).toEqual([
+      { total_cost: 0, price_known: 0 },
+      { total_cost: 14.4, price_known: 1 },
+    ])
+    const scan = db.prepare("SELECT parsed_offset, size, parser_version FROM cc_scan_files WHERE file_path = ?").get(file) as { parsed_offset: number; size: number; parser_version: number }
+    expect(scan.parsed_offset).toBe(scan.size)
+    expect(scan.parser_version).toBeGreaterThan(0)
+  })
+
+  it("upgrades legacy parsed CC scan rows without reparsing historical events", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const projectDir = path.join(dir, ".claude", "projects", "-tmp-project")
+    fs.mkdirSync(projectDir, { recursive: true })
+    const file = path.join(projectDir, "session.jsonl")
+    fs.writeFileSync(file, `${JSON.stringify({
+      type: "assistant",
+      sessionId: "session",
+      timestamp: "2026-05-19T01:00:01.000Z",
+      message: {
+        id: "msg-1",
+        role: "assistant",
+        model: "local-model",
+        usage: { input_tokens: 1_000_000, output_tokens: 0 },
+      },
+    })}\n`)
+
+    const db = getUsageAnalysisDb(dir)
+    const service = new CcUsageAnalysisService({ db, roots: [path.join(dir, ".claude", "projects")] })
+    await service.refresh()
+    db.exec("UPDATE cc_scan_files SET parsed_offset = 0, parser_version = 0, pricing_rules_hash = ''")
+    service.savePricingRules([{ modelPattern: "local-model", inputPer1M: 14.4, outputPer1M: 0 }])
+
+    const refresh = await service.refresh()
+
+    expect(refresh).toMatchObject({ parsedFiles: 0, skippedFiles: 1, usageEvents: 0 })
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cc_usage_events").get()).toEqual({ count: 1 })
+    expect(db.prepare("SELECT total_cost, price_known FROM cc_usage_events").get()).toEqual({ total_cost: 0, price_known: 0 })
+    const scan = db.prepare("SELECT parsed_offset, size, parser_version FROM cc_scan_files WHERE file_path = ?").get(file) as { parsed_offset: number; size: number; parser_version: number }
+    expect(scan.parsed_offset).toBe(scan.size)
+    expect(scan.parser_version).toBeGreaterThan(0)
+  })
+
+  it("rebuilds only affected CC aggregate buckets after append refresh", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const projectDir = path.join(dir, ".claude", "projects", "-tmp-project")
+    fs.mkdirSync(projectDir, { recursive: true })
+    const file = path.join(projectDir, "session.jsonl")
+    fs.writeFileSync(file, [
+      JSON.stringify({
+        type: "assistant",
+        sessionId: "session",
+        timestamp: "2026-05-18T01:00:01.000Z",
+        message: {
+          id: "msg-1",
+          role: "assistant",
+          model: "claude-opus-4.6",
+          usage: { input_tokens: 10, output_tokens: 5 },
+        },
+      }),
+      JSON.stringify({
+        type: "assistant",
+        sessionId: "session",
+        timestamp: "2026-05-19T01:00:01.000Z",
+        message: {
+          id: "msg-2",
+          role: "assistant",
+          model: "claude-opus-4.6",
+          usage: { input_tokens: 20, output_tokens: 5 },
+        },
+      }),
+    ].join("\n") + "\n")
+
+    const db = getUsageAnalysisDb(dir)
+    const service = new CcUsageAnalysisService({ db, roots: [path.join(dir, ".claude", "projects")] })
+    await service.refresh()
+    db.exec("UPDATE cc_daily_usage SET input_tokens = 999 WHERE date = '2026-05-18'")
+    fs.appendFileSync(file, `${JSON.stringify({
+      type: "assistant",
+      sessionId: "session",
+      timestamp: "2026-05-19T02:00:01.000Z",
+      message: {
+        id: "msg-3",
+        role: "assistant",
+        model: "claude-opus-4.6",
+        usage: { input_tokens: 30, output_tokens: 5 },
+      },
+    })}\n`)
+
+    await service.refresh()
+
+    expect(db.prepare("SELECT input_tokens FROM cc_daily_usage WHERE date = '2026-05-18' AND model != '__synapse_tool_calls__'").get()).toEqual({ input_tokens: 999 })
+    expect(db.prepare("SELECT input_tokens FROM cc_daily_usage WHERE date = '2026-05-19' AND model != '__synapse_tool_calls__'").get()).toEqual({ input_tokens: 50 })
+  })
+
   it("rebuilds missing aggregates before reading reports", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)

@@ -1,8 +1,19 @@
 import type { DatabaseSync } from "node:sqlite"
 import {
   parseClaudeUsageFile,
+  parseClaudeUsageFileSegment,
+  type ClaudeUsageParserState,
   type ParsedUsageFile,
 } from "./cc-parser"
+import {
+  CC_SCAN_STATE_VERSION,
+  classifyCcScanFile,
+  hashUsagePriceRules,
+  mergeUniqueBuckets,
+  parseCcFileParserState,
+  serializeCcFileParserState,
+  type CcStoredScanFile,
+} from "./cc-scan-state"
 import { SYNAPSE_COST_CURRENCY, USD_TO_CNY_RATE } from "../../../action-packages/shared/cost-currency"
 import { listUsagePriceRules, saveUsagePriceRules, type UsageModelPriceRule, type UsageModelPriceRuleInput } from "./pricing"
 import { createUsageRangeFilter } from "./range"
@@ -24,11 +35,25 @@ interface UsageAnalysisServiceOptions {
   readonly roots: string[]
 }
 
-interface ScanFileRow {
+interface ScanFileRow extends CcStoredScanFile {
   readonly size: number
   readonly mtime_ms: number
   readonly line_count: number
   readonly parse_status: string
+  readonly parsed_offset: number
+  readonly parser_version: number
+  readonly pricing_rules_hash: string
+}
+
+interface LegacyScanFileRow {
+  readonly size: number
+  readonly mtime_ms: number
+  readonly line_count: number
+  readonly parse_status: string
+}
+
+interface ScanFileStateRow {
+  readonly state_json: string
 }
 
 interface UsageEventRow {
@@ -70,6 +95,13 @@ interface ParsedTaskLike {
 
 interface ParsedFileWithTasks extends ParsedUsageFile {
   readonly taskEvents?: readonly ParsedTaskLike[]
+}
+
+interface PersistScanStateOptions {
+  readonly lineCount?: number
+  readonly parsedOffset?: number
+  readonly pricingRulesHash?: string
+  readonly parserState?: ClaudeUsageParserState
 }
 
 interface AggregateValue {
@@ -867,6 +899,123 @@ async function refreshUsageNamespace(options: {
   readonly roots: string[]
   readonly parseFile: (filePath: string, parseOptions?: { readonly startLine?: number; readonly priceRules?: readonly UsageModelPriceRule[] }) => Promise<ParsedFileWithTasks>
 }): Promise<UsageRefreshResult> {
+  if (options.prefix === "cc") return refreshClaudeUsageNamespace(options)
+  return refreshLegacyUsageNamespace(options)
+}
+
+async function refreshClaudeUsageNamespace(options: {
+  readonly db: DatabaseSync
+  readonly prefix: "cc"
+  readonly roots: string[]
+}): Promise<UsageRefreshResult> {
+  const startedAt = Date.now()
+  const files = collectJsonlFiles(options.roots)
+  const priceRules = listUsagePriceRules(options.db)
+  const pricingRulesHash = hashUsagePriceRules(priceRules)
+  const pricedAt = new Date().toISOString()
+  let parsedFiles = 0
+  let skippedFiles = 0
+  let failedFiles = 0
+  let usageEvents = 0
+  let toolEvents = 0
+  const affectedDates: string[] = []
+  const affectedHours: string[] = []
+
+  for (const file of files) {
+    let fp: ReturnType<typeof fingerprintFile> | null = null
+    try {
+      fp = fingerprintFile(file)
+      const existing = options.db.prepare(`
+        SELECT size, mtime_ms, line_count, parse_status, parsed_offset, parser_version, pricing_rules_hash
+        FROM cc_scan_files
+        WHERE file_path = ?
+      `).get(file) as ScanFileRow | undefined
+      const decision = classifyCcScanFile({
+        existing,
+        fingerprint: { filePath: file, size: fp.size, mtimeMs: fp.mtimeMs },
+        pricingRulesHash,
+      })
+
+      if (decision.kind === "unchanged") {
+        skippedFiles += 1
+        continue
+      }
+
+      if (decision.kind === "legacy-upgrade") {
+        await runWithUsageDatabaseLockRetry(() => {
+          markCcScanFile(options.db, file, fp.size, fp.mtimeMs, existing?.line_count ?? 0, {
+            parsedOffset: decision.parsedOffset,
+            pricingRulesHash,
+          })
+        })
+        skippedFiles += 1
+        continue
+      }
+
+      const previousState = decision.kind === "append" ? getCcFileParserState(options.db, file) : { recentDedupeKeys: [] }
+      const parsed = await parseClaudeUsageFileSegment({
+        filePath: file,
+        startOffset: decision.kind === "append" ? decision.startOffset : 0,
+        mode: decision.kind === "append" ? "append" : "replace",
+        previousState,
+        priceRules,
+      })
+      const lineCount = decision.kind === "append" ? (existing?.line_count ?? 0) + parsed.lineCount : parsed.lineCount
+      const fingerprint = fp
+
+      await runWithUsageDatabaseLockRetry(() => {
+        const oldBuckets = decision.kind === "replace" ? queryBucketsForFile(options.db, options.prefix, file) : { dates: [], hours: [] }
+        persistParsedFile(options.db, options.prefix, file, fingerprint.size, fingerprint.mtimeMs, parsed, decision.kind === "append" ? "append" : "replace", pricedAt, {
+          lineCount,
+          parsedOffset: parsed.nextOffset,
+          pricingRulesHash,
+          parserState: parsed.parserState,
+        })
+        affectedDates.push(...mergeUniqueBuckets(oldBuckets.dates, parsed.affectedDates))
+        affectedHours.push(...mergeUniqueBuckets(oldBuckets.hours, parsed.affectedHours))
+      })
+
+      if (decision.kind === "append" && parsed.usageEvents.length === 0 && parsed.toolEvents.length === 0) {
+        skippedFiles += 1
+      } else {
+        parsedFiles += 1
+      }
+      usageEvents += parsed.usageEvents.length
+      toolEvents += parsed.toolEvents.length
+    } catch (error) {
+      failedFiles += 1
+      const errorKind = error instanceof Error ? error.name : "ParseError"
+      await runWithUsageDatabaseLockRetry(() => {
+        markFailedScanFile(options.db, options.prefix, file, fp?.size ?? 0, fp?.mtimeMs ?? 0, errorKind)
+      })
+    }
+  }
+
+  const dates = mergeUniqueBuckets(affectedDates)
+  const hours = mergeUniqueBuckets(affectedHours)
+  if (dates.length > 0 || hours.length > 0) {
+    await runWithUsageDatabaseLockRetry(() => {
+      rebuildAffectedAggregates(options.db, options.prefix, { dates, hours })
+    })
+  }
+
+  return {
+    scannedFiles: files.length,
+    parsedFiles,
+    skippedFiles,
+    failedFiles,
+    usageEvents,
+    toolEvents,
+    elapsedMs: Date.now() - startedAt,
+  }
+}
+
+async function refreshLegacyUsageNamespace(options: {
+  readonly db: DatabaseSync
+  readonly prefix: "cc" | "cx"
+  readonly roots: string[]
+  readonly parseFile: (filePath: string, parseOptions?: { readonly startLine?: number; readonly priceRules?: readonly UsageModelPriceRule[] }) => Promise<ParsedFileWithTasks>
+}): Promise<UsageRefreshResult> {
   const startedAt = Date.now()
   const files = collectJsonlFiles(options.roots)
   const priceRules = listUsagePriceRules(options.db)
@@ -881,7 +1030,7 @@ async function refreshUsageNamespace(options: {
     let fp: ReturnType<typeof fingerprintFile> | null = null
     try {
       fp = fingerprintFile(file)
-      const existing = options.db.prepare(`SELECT size, mtime_ms, line_count, parse_status FROM ${options.prefix}_scan_files WHERE file_path = ?`).get(file) as ScanFileRow | undefined
+      const existing = options.db.prepare(`SELECT size, mtime_ms, line_count, parse_status FROM ${options.prefix}_scan_files WHERE file_path = ?`).get(file) as LegacyScanFileRow | undefined
       if (existing?.size === fp.size && existing.mtime_ms === fp.mtimeMs && existing.parse_status === "parsed") {
         skippedFiles += 1
         continue
@@ -934,6 +1083,7 @@ function persistParsedFile(
   parsed: ParsedFileWithTasks,
   mode: "append" | "replace",
   pricedAt: string,
+  scanOptions: PersistScanStateOptions = {},
 ): void {
   let transactionStarted = false
   db.exec("BEGIN IMMEDIATE")
@@ -1063,7 +1213,17 @@ function persistParsedFile(
     }
 
     refreshSessionSummaries(db, prefix, [...sessionIds])
-    markScanFile(db, prefix, filePath, size, mtimeMs, parsed.lineCount)
+    if (prefix === "cc") {
+      markCcScanFile(db, filePath, size, mtimeMs, scanOptions.lineCount ?? parsed.lineCount, {
+        parsedOffset: scanOptions.parsedOffset ?? size,
+        pricingRulesHash: scanOptions.pricingRulesHash ?? "",
+      })
+      if (scanOptions.parserState) {
+        saveCcFileParserState(db, filePath, scanOptions.parserState)
+      }
+    } else {
+      markScanFile(db, prefix, filePath, size, mtimeMs, parsed.lineCount)
+    }
     db.exec("COMMIT")
     transactionStarted = false
   } catch (error) {
@@ -1084,6 +1244,75 @@ function markScanFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: string, s
       error_kind = excluded.error_kind,
       last_scanned_at = excluded.last_scanned_at
   `).run(filePath, size, mtimeMs, lineCount, new Date().toISOString())
+}
+
+function markCcScanFile(
+  db: DatabaseSync,
+  filePath: string,
+  size: number,
+  mtimeMs: number,
+  lineCount: number,
+  options: {
+    readonly parsedOffset: number
+    readonly pricingRulesHash: string
+  },
+): void {
+  const now = new Date().toISOString()
+  db.prepare(`
+    INSERT INTO cc_scan_files (
+      file_path, size, mtime_ms, line_count, parse_status, error_kind, last_scanned_at,
+      parsed_offset, parser_version, pricing_rules_hash, first_seen_at, last_changed_at
+    )
+    VALUES (?, ?, ?, ?, 'parsed', NULL, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(file_path) DO UPDATE SET
+      size = excluded.size,
+      mtime_ms = excluded.mtime_ms,
+      line_count = excluded.line_count,
+      parse_status = excluded.parse_status,
+      error_kind = excluded.error_kind,
+      last_scanned_at = excluded.last_scanned_at,
+      parsed_offset = excluded.parsed_offset,
+      parser_version = excluded.parser_version,
+      pricing_rules_hash = excluded.pricing_rules_hash,
+      first_seen_at = CASE
+        WHEN cc_scan_files.first_seen_at = '' THEN excluded.first_seen_at
+        ELSE cc_scan_files.first_seen_at
+      END,
+      last_changed_at = CASE
+        WHEN cc_scan_files.size != excluded.size
+          OR cc_scan_files.mtime_ms != excluded.mtime_ms
+          OR cc_scan_files.parsed_offset != excluded.parsed_offset
+          OR cc_scan_files.parser_version != excluded.parser_version
+        THEN excluded.last_changed_at
+        ELSE cc_scan_files.last_changed_at
+      END
+  `).run(
+    filePath,
+    size,
+    mtimeMs,
+    lineCount,
+    now,
+    options.parsedOffset,
+    CC_SCAN_STATE_VERSION,
+    options.pricingRulesHash,
+    now,
+    now,
+  )
+}
+
+function getCcFileParserState(db: DatabaseSync, filePath: string): ClaudeUsageParserState {
+  const row = db.prepare("SELECT state_json FROM cc_scan_file_state WHERE file_path = ?").get(filePath) as ScanFileStateRow | undefined
+  return parseCcFileParserState(row?.state_json)
+}
+
+function saveCcFileParserState(db: DatabaseSync, filePath: string, state: ClaudeUsageParserState): void {
+  db.prepare(`
+    INSERT INTO cc_scan_file_state (file_path, state_json, updated_at)
+    VALUES (?, ?, ?)
+    ON CONFLICT(file_path) DO UPDATE SET
+      state_json = excluded.state_json,
+      updated_at = excluded.updated_at
+  `).run(filePath, serializeCcFileParserState(state), new Date().toISOString())
 }
 
 function markFailedScanFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: string, size: number, mtimeMs: number, errorKind: string): void {
@@ -1113,6 +1342,191 @@ function refreshSessionSummaries(db: DatabaseSync, prefix: "cc" | "cx", sessionI
   `)
   for (const sessionId of sessionIds) {
     update.run(sessionId, sessionId, sessionId, sessionId)
+  }
+}
+
+function queryBucketsForFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: string): { dates: string[]; hours: string[] } {
+  const sessions = db.prepare(`SELECT session_id FROM ${prefix}_sessions WHERE file_path = ?`).all(filePath) as { session_id: string }[]
+  const sessionIds = sessions.map((row) => row.session_id)
+  if (sessionIds.length === 0) return { dates: [], hours: [] }
+
+  const bindList = sqlBindList(sessionIds)
+  const usageDates = db.prepare(`SELECT DISTINCT date FROM ${prefix}_usage_events WHERE session_id IN (${bindList})`).all(...sessionIds) as { date: string }[]
+  const toolDates = db.prepare(`SELECT DISTINCT date FROM ${prefix}_tool_events WHERE session_id IN (${bindList})`).all(...sessionIds) as { date: string }[]
+  const usageHours = db.prepare(`SELECT DISTINCT hour FROM ${prefix}_usage_events WHERE session_id IN (${bindList})`).all(...sessionIds) as { hour: string }[]
+  const toolHours = db.prepare(`SELECT DISTINCT hour FROM ${prefix}_tool_events WHERE session_id IN (${bindList})`).all(...sessionIds) as { hour: string }[]
+
+  return {
+    dates: mergeUniqueBuckets(usageDates.map((row) => row.date), toolDates.map((row) => row.date)),
+    hours: mergeUniqueBuckets(usageHours.map((row) => row.hour), toolHours.map((row) => row.hour)),
+  }
+}
+
+function sqlBindList(values: readonly string[]): string {
+  return values.map(() => "?").join(", ")
+}
+
+function runIfValues(values: readonly string[], operation: (values: readonly string[]) => void): void {
+  if (values.length === 0) return
+  operation(values)
+}
+
+function rebuildAffectedAggregates(
+  db: DatabaseSync,
+  prefix: "cc" | "cx",
+  affected: { readonly dates: readonly string[]; readonly hours: readonly string[] },
+): void {
+  const dates = mergeUniqueBuckets(affected.dates)
+  const hours = mergeUniqueBuckets(affected.hours)
+  let transactionStarted = false
+  db.exec("BEGIN IMMEDIATE")
+  transactionStarted = true
+  try {
+    runIfValues(dates, (values) => {
+      db.prepare(`DELETE FROM ${prefix}_daily_usage WHERE date IN (${sqlBindList(values)})`).run(...values)
+      db.prepare(`
+        INSERT INTO ${prefix}_daily_usage (
+          date, model, provider, workspace_key, input_tokens, output_tokens, cache_read_tokens,
+          cache_write_tokens, reasoning_tokens, priced_tokens, unpriced_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
+          cost_reasoning, total_cost, price_known, cost_currency, requests, conversations, tool_calls
+        )
+        SELECT
+          date,
+          model,
+          provider,
+          workspace_key,
+          SUM(input_tokens),
+          SUM(output_tokens),
+          SUM(cache_read_tokens),
+          SUM(cache_write_tokens),
+          SUM(reasoning_tokens),
+          SUM(CASE WHEN price_known = 1 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END),
+          SUM(CASE WHEN price_known = 0 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END),
+          SUM(cost_input),
+          SUM(cost_output),
+          SUM(cost_cache_read),
+          SUM(cost_cache_write),
+          SUM(cost_reasoning),
+          SUM(total_cost),
+          MAX(price_known),
+          '${SYNAPSE_COST_CURRENCY}',
+          COUNT(*),
+          COUNT(DISTINCT session_id),
+          0
+        FROM ${prefix}_usage_events
+        WHERE date IN (${sqlBindList(values)})
+        GROUP BY date, model, provider, workspace_key
+      `).run(...values)
+      db.prepare(`
+        INSERT INTO ${prefix}_daily_usage (
+          date, model, provider, workspace_key, input_tokens, output_tokens, cache_read_tokens,
+          cache_write_tokens, reasoning_tokens, priced_tokens, unpriced_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
+          cost_reasoning, total_cost, price_known, cost_currency, requests, conversations, tool_calls
+        )
+        SELECT
+          date,
+          '${TOOL_CALLS_AGGREGATE_MODEL}',
+          '',
+          workspace_key,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          '${SYNAPSE_COST_CURRENCY}',
+          0,
+          0,
+          COUNT(*)
+        FROM ${prefix}_tool_events
+        WHERE date IN (${sqlBindList(values)})
+        GROUP BY date, workspace_key
+      `).run(...values)
+    })
+
+    runIfValues(hours, (values) => {
+      db.prepare(`DELETE FROM ${prefix}_hourly_usage WHERE hour IN (${sqlBindList(values)})`).run(...values)
+      db.prepare(`
+        INSERT INTO ${prefix}_hourly_usage (
+          hour, model, provider, workspace_key, input_tokens, output_tokens, cache_read_tokens,
+          cache_write_tokens, reasoning_tokens, priced_tokens, unpriced_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
+          cost_reasoning, total_cost, price_known, cost_currency, requests, conversations, tool_calls
+        )
+        SELECT
+          hour,
+          model,
+          provider,
+          workspace_key,
+          SUM(input_tokens),
+          SUM(output_tokens),
+          SUM(cache_read_tokens),
+          SUM(cache_write_tokens),
+          SUM(reasoning_tokens),
+          SUM(CASE WHEN price_known = 1 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END),
+          SUM(CASE WHEN price_known = 0 THEN input_tokens + output_tokens + cache_read_tokens + cache_write_tokens + reasoning_tokens ELSE 0 END),
+          SUM(cost_input),
+          SUM(cost_output),
+          SUM(cost_cache_read),
+          SUM(cost_cache_write),
+          SUM(cost_reasoning),
+          SUM(total_cost),
+          MAX(price_known),
+          '${SYNAPSE_COST_CURRENCY}',
+          COUNT(*),
+          COUNT(DISTINCT session_id),
+          0
+        FROM ${prefix}_usage_events
+        WHERE hour IN (${sqlBindList(values)})
+        GROUP BY hour, model, provider, workspace_key
+      `).run(...values)
+      db.prepare(`
+        INSERT INTO ${prefix}_hourly_usage (
+          hour, model, provider, workspace_key, input_tokens, output_tokens, cache_read_tokens,
+          cache_write_tokens, reasoning_tokens, priced_tokens, unpriced_tokens, cost_input, cost_output, cost_cache_read, cost_cache_write,
+          cost_reasoning, total_cost, price_known, cost_currency, requests, conversations, tool_calls
+        )
+        SELECT
+          hour,
+          '${TOOL_CALLS_AGGREGATE_MODEL}',
+          '',
+          workspace_key,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          0,
+          '${SYNAPSE_COST_CURRENCY}',
+          0,
+          0,
+          COUNT(*)
+        FROM ${prefix}_tool_events
+        WHERE hour IN (${sqlBindList(values)})
+        GROUP BY hour, workspace_key
+      `).run(...values)
+    })
+
+    db.exec("COMMIT")
+    transactionStarted = false
+  } catch (error) {
+    if (transactionStarted) db.exec("ROLLBACK")
+    throw error
   }
 }
 
