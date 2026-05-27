@@ -222,6 +222,53 @@ describe("UpdateService", () => {
     expect(updateService.getState().status).toBe("not-available")
   })
 
+  it("keeps automatic update check failures out of visible update state", async () => {
+    vi.useFakeTimers()
+    const { updateService } = await importUpdateService()
+    let rejectAutoCheck: ((error: Error) => void) | undefined
+
+    expect(updateService.getState().status).toBe("idle")
+
+    updaterMock.autoUpdater.checkForUpdates.mockImplementationOnce(() => new Promise((_resolve, reject) => {
+      rejectAutoCheck = reject
+    }))
+
+    updateService.startAutoCheck()
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(updaterMock.autoUpdater.checkForUpdates).toHaveBeenCalledTimes(1)
+    expect(rejectAutoCheck).toBeTypeOf("function")
+
+    rejectAutoCheck?.(new Error("Cannot find latest-mac.yml in the latest release artifacts"))
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(updateService.getState()).toEqual(expect.objectContaining({
+      status: "idle",
+      message: "可以检查新版本。",
+      error: null,
+      canCheck: true,
+    }))
+  })
+
+  it("sanitizes manual update errors before exposing renderer state", async () => {
+    const { updateService } = await importUpdateService()
+
+    updaterMock.autoUpdater.checkForUpdates.mockRejectedValueOnce(
+      new Error("Cannot find latest-mac.yml in the latest release artifacts at /Applications/Synapse.app Headers: { token: secret }"),
+    )
+
+    const state = await updateService.checkForUpdates()
+
+    expect(state).toEqual(expect.objectContaining({
+      status: "error",
+      message: "检查更新失败，请稍后再试。",
+      error: "检查更新失败，请稍后再试。",
+      canCheck: true,
+    }))
+    expect(state.message).not.toContain("latest-mac.yml")
+    expect(state.error).not.toContain("/Applications/Synapse.app")
+  })
+
   it("prepares app quit before installing a downloaded update", async () => {
     const { updateService } = await importUpdateService()
     const beforeInstallQuit = vi.fn()

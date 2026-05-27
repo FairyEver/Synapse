@@ -22,6 +22,7 @@ const logger = createMainLogger("updater")
 
 const AUTO_CHECK_INTERVAL_MS = 60_000
 const AUTO_CHECK_INITIAL_DELAY_MS = 60_000
+const UPDATE_ERROR_MESSAGE = "检查更新失败，请稍后再试。"
 
 function isSupportedPlatform(): boolean {
   return process.platform === "darwin" || process.platform === "win32"
@@ -264,7 +265,7 @@ class UpdateService {
       }
 
       if (this.isAutoUpdateFlow()) {
-        this.handleError(error)
+        this.handleAutoCheckError()
       }
     })
 
@@ -410,25 +411,25 @@ class UpdateService {
     })
   }
 
-  private handleError(error: unknown): void {
+  private handleError(_error: unknown): void {
     this.clearDownloadTracking()
     this.clearUpdateFlow()
 
-    const message =
-      error instanceof Error && error.message.trim()
-        ? error.message
-        : "检查更新失败，请稍后再试。"
-
     this.setState({
       status: "error",
-      message,
-      error: message,
+      message: UPDATE_ERROR_MESSAGE,
+      error: UPDATE_ERROR_MESSAGE,
       downloadPercent: null,
       bytesPerSecond: null,
       transferredBytes: null,
       totalBytes: null,
       canCheck: isUpdateSupportedInCurrentEnvironment(),
     })
+  }
+
+  private handleAutoCheckError(): void {
+    this.clearDownloadTracking()
+    this.clearUpdateFlow("auto")
   }
 
   private setState(patch: Partial<SynapseAppUpdateState>): void {
@@ -471,7 +472,7 @@ class UpdateService {
       this.beginUpdateFlow("auto")
       autoUpdater.checkForUpdates().catch((error) => {
         logger.warn("Auto update check failed.", { error })
-        this.handleError(error)
+        this.handleAutoCheckError()
       })
     }
 

@@ -21,7 +21,7 @@ defaults:
     shell: bash
 
 jobs:
-  build-and-publish:
+  build-installers:
     name: Build ${{ matrix.label }} installer
     runs-on: ${{ matrix.os }}
     strategy:
@@ -34,8 +34,6 @@ jobs:
           - label: Windows
             os: windows-latest
             package_script: package:win
-    env:
-      GH_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
     steps:
       - name: Checkout repository
         run: |
@@ -98,17 +96,7 @@ jobs:
         if: matrix.os == 'windows-latest'
         run: pnpm --filter @synapse/desktop run ${{ matrix.package_script }}
 
-      - name: Read package version
-        id: version
-        run: |
-          VERSION="$(node -p "require('./desktop/package.json').version")"
-          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
-          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
-
-      - name: Collect and publish release artifacts
-        env:
-          RELEASE_NAME: Synapse v${{ steps.version.outputs.version }}
-          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+      - name: Collect release artifacts
         run: |
           mkdir -p release-artifacts
           shopt -s nullglob
@@ -117,6 +105,49 @@ jobs:
             cp "$file" release-artifacts/
           done
 
+          ls -la release-artifacts
+          test -n "$(ls -A release-artifacts)"
+
+      - name: Upload release artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.label }}
+          path: release-artifacts/*
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    name: Publish release
+    runs-on: ubuntu-latest
+    needs: build-installers
+    env:
+      GH_TOKEN: ${{ secrets.RELEASE_REPO_TOKEN }}
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: desktop/package.json
+          sparse-checkout-cone-mode: false
+
+      - name: Read package version
+        id: version
+        run: |
+          VERSION="$(node -p "require('./desktop/package.json').version")"
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "tag=v$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Download release artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: Publish release artifacts
+        env:
+          RELEASE_NAME: Synapse v${{ steps.version.outputs.version }}
+          RELEASE_TAG: ${{ steps.version.outputs.tag }}
+        run: |
           ls -la release-artifacts
           test -n "$(ls -A release-artifacts)"
 
@@ -129,7 +160,7 @@ jobs:
   notify:
     name: Notify package completion
     runs-on: ubuntu-latest
-    needs: build-and-publish
+    needs: publish
     steps:
       - name: Checkout repository
         uses: actions/checkout@v5
