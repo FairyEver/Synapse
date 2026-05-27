@@ -1,4 +1,4 @@
-import { readdirSync } from "node:fs"
+import { existsSync, readdirSync } from "node:fs"
 import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { DatabaseSync } from "node:sqlite"
 import os from "node:os"
@@ -392,6 +392,50 @@ describe("DatabaseService legacy database migration", () => {
     }))
   })
 
+  it("imports committed source WAL data", async () => {
+    const sourcePath = path.join(tempDir, "wal-source.db")
+    createEmptyCurrentDatabaseWithOperationLog(sourcePath)
+
+    const module = await import("../service")
+    service = module.databaseService
+    service.open()
+    service.databaseTableCreate("existing_before_import", [{ name: "title", kind: "text" }])
+    const sourceDb = new DatabaseSync(sourcePath)
+    const now = "2026-04-24T07:33:41.375Z"
+
+    try {
+      sourceDb.exec(`
+        PRAGMA journal_mode=WAL;
+        PRAGMA wal_autocheckpoint=0;
+        CREATE TABLE "wal_items" (
+          "id" INTEGER PRIMARY KEY AUTOINCREMENT,
+          "created_at" TEXT NOT NULL DEFAULT '',
+          "updated_at" TEXT NOT NULL DEFAULT '',
+          "title" TEXT
+        );
+      `)
+      sourceDb.prepare(`INSERT INTO "_meta_tables" (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)`)
+        .run("wal_items", "WAL items", now, now)
+      sourceDb.prepare(`INSERT INTO "_meta_columns" (table_name, column_name, kind, choices, description) VALUES (?, ?, ?, ?, ?)`)
+        .run("wal_items", "title", "text", null, "")
+      sourceDb.prepare(`INSERT INTO "wal_items" (created_at, updated_at, title) VALUES (?, ?, ?)`)
+        .run(now, now, "from wal")
+
+      expect(existsSync(`${sourcePath}-wal`)).toBe(true)
+      service.importDatabase(sourcePath)
+    } finally {
+      sourceDb.close()
+    }
+
+    expect(service.databaseTableList()).toContainEqual(expect.objectContaining({
+      name: "wal_items",
+      rowCount: 1,
+    }))
+    expect(service.databaseRowList({ table: "wal_items" }).rows).toContainEqual(expect.objectContaining({
+      title: "from wal",
+    }))
+  })
+
   it("keeps the current database open when import replacement and backup restore both fail", async () => {
     const sourcePath = path.join(tempDir, "valid-import.db")
     createEmptyCurrentDatabaseWithOperationLog(sourcePath)
@@ -407,7 +451,7 @@ describe("DatabaseService legacy database migration", () => {
         actualFs.copyFileSync(source, target)
         return
       }
-      if (sourceFilePath === sourcePath && targetFilePath.endsWith("synapse-database.db")) {
+      if (sourceFilePath !== backupPath && targetFilePath.endsWith("synapse-database.db")) {
         throw new Error("simulated source copy failure")
       }
       if (backupPath && sourceFilePath === backupPath) {
