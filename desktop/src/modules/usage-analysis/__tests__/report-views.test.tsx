@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { renderToStaticMarkup } from "react-dom/server"
-import { OverviewReportView } from "../shared/components/report-views"
+import { DetailsReportView, OverviewReportView } from "../shared/components/report-views"
 import type { ReportState, UsageOverviewReport } from "../shared/types"
 
 describe("usage analysis report views", () => {
@@ -51,6 +51,31 @@ describe("usage analysis report views", () => {
 
     expect(html).toContain("¥0.01")
     expect(html).not.toContain("US$")
+  })
+
+  it("renders detail rows with an open conversation action", () => {
+    const html = renderToStaticMarkup(
+      <DetailsReportView
+        state={state([{
+          id: "usage-1",
+          usageEventId: "usage-1",
+          timestamp: "2026-05-27T01:00:00.000Z",
+          timestampMs: 1779843600000,
+          sessionId: "session-1",
+          workspaceLabel: "/repo",
+          model: "claude-opus-4.6",
+          tokens: 15,
+          pricedTokens: 15,
+          unpricedTokens: 0,
+          estimatedCost: 0.01,
+          tokenBreakdown: { input: 10, output: 5, cacheRead: 0, cacheWrite: 0, reasoning: 0 },
+          toolCalls: 1,
+        }], false)}
+        onOpenConversation={() => undefined}
+      />,
+    )
+
+    expect(html).toContain("打开对话")
   })
 })
 

@@ -485,7 +485,9 @@ export type UsageAnalysisToolRow = {
 
 export type UsageAnalysisDetailRow = {
   readonly id: string
+  readonly usageEventId?: string
   readonly timestamp: string
+  readonly timestampMs?: number
   readonly sessionId: string
   readonly workspaceLabel: string
   readonly model: string
