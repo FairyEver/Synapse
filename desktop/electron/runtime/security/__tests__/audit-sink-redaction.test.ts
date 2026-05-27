@@ -93,6 +93,42 @@ describe("DataRepositoryAuditSink metadata redaction", () => {
     expect(JSON.stringify(namespace.items)).not.toContain("/Users/alice")
     expect(JSON.stringify(namespace.items)).not.toContain("sk-test-secret")
   })
+
+  it("redacts command args and sensitive string values before persistence", async () => {
+    const namespace = new FakeAuditNamespace()
+    const sink = new DataRepositoryAuditSink({
+      audit: namespace,
+      idFactory: () => "audit-command-args",
+      now: () => new Date("2026-05-19T00:00:00.000Z"),
+    })
+
+    sink.record({
+      action: "shell.exec",
+      actor: { kind: "user" },
+      resource: "cmd.exe",
+      outcome: "allowed",
+      metadata: {
+        args: ["/c", "curl -H Authorization: Bearer sk-live-secret https://example.test"],
+        launchArgs: ["-Command", "Write-Output token=one-time-secret"],
+        nested: {
+          note: "Authorization: Bearer nested-secret apiKey=nested-api-key",
+        },
+      },
+    })
+    await sink.flushForTests()
+
+    expect(namespace.items[0]?.metadata).toEqual({
+      args: "[redacted]",
+      launchArgs: "[redacted]",
+      nested: {
+        note: "Authorization: [redacted] apiKey=[redacted]",
+      },
+    })
+    expect(JSON.stringify(namespace.items)).not.toContain("sk-live-secret")
+    expect(JSON.stringify(namespace.items)).not.toContain("one-time-secret")
+    expect(JSON.stringify(namespace.items)).not.toContain("nested-secret")
+    expect(JSON.stringify(namespace.items)).not.toContain("nested-api-key")
+  })
 })
 
 class FakeAuditNamespace implements DataNamespace<AuditEntryV1> {
