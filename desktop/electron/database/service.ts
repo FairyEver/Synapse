@@ -104,6 +104,42 @@ function uniqueStrings(values: readonly unknown[]): string[] {
 }
 
 const SYSTEM_TABLES = ["_meta_tables", "_meta_columns", "_operation_log"]
+const READ_ONLY_PRAGMA_NAMES = new Set([
+  "application_id",
+  "collation_list",
+  "compile_options",
+  "data_version",
+  "database_list",
+  "foreign_key_check",
+  "foreign_key_list",
+  "freelist_count",
+  "function_list",
+  "index_info",
+  "index_list",
+  "index_xinfo",
+  "integrity_check",
+  "module_list",
+  "page_count",
+  "pragma_list",
+  "quick_check",
+  "schema_version",
+  "table_info",
+  "table_list",
+  "table_xinfo",
+  "user_version",
+])
+const READ_ONLY_PRAGMA_ARGUMENT_NAMES = new Set([
+  "foreign_key_check",
+  "foreign_key_list",
+  "index_info",
+  "index_list",
+  "index_xinfo",
+  "integrity_check",
+  "quick_check",
+  "table_info",
+  "table_list",
+  "table_xinfo",
+])
 
 function referencesSystemTable(sql: string): boolean {
   const normalized = sql.toLowerCase()
@@ -121,6 +157,24 @@ function referencesSystemTable(sql: string): boolean {
     }
   }
   return false
+}
+
+function isReadOnlyPragma(normalizedSql: string): boolean {
+  const match = /^pragma\s+(?:(?:main|temp)\.)?([a-z_][a-z0-9_]*)\b/.exec(normalizedSql)
+  if (!match) return false
+
+  const pragmaName = match[1]
+  if (!READ_ONLY_PRAGMA_NAMES.has(pragmaName)) return false
+
+  const suffix = normalizedSql.slice(match[0].length).trim().replace(/;$/, "").trim()
+  if (suffix.length === 0) return true
+  if (!READ_ONLY_PRAGMA_ARGUMENT_NAMES.has(pragmaName)) return false
+  if (suffix.includes("=") || suffix.includes(";")) return false
+  return suffix.startsWith("(") && suffix.endsWith(")")
+}
+
+function isReadOnlySqlStatement(normalizedSql: string): boolean {
+  return /^(select|explain)\b/.test(normalizedSql) || isReadOnlyPragma(normalizedSql)
 }
 
 function parseLegacyChoices(raw: unknown): string[] {
@@ -1052,7 +1106,7 @@ class DatabaseService {
 
   databaseSqlRead(sql: string, params?: unknown[]): { rows: Record<string, unknown>[] } {
     const normalized = sql.trim().toLowerCase()
-    if (!/^(select|pragma|explain)\b/.test(normalized)) {
+    if (!isReadOnlySqlStatement(normalized)) {
       throw new Error("database.sql.read is read-only. Use database.sql.execute when you explicitly need to write.")
     }
     if (/\b(attach|detach)\b/i.test(normalized)) {

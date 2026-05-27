@@ -40,4 +40,17 @@ describe("DatabaseService databaseSqlRead", () => {
   it("rejects write statements", () => {
     expect(() => service.databaseSqlRead("DELETE FROM tasks")).toThrow(/read-only/i)
   })
+
+  it("rejects write-mode PRAGMA statements", () => {
+    expect(() => service.databaseSqlRead("PRAGMA user_version = 7")).toThrow(/read-only/i)
+    expect(service.databaseSqlRead("PRAGMA user_version")).toEqual({
+      rows: [{ user_version: 0 }],
+    })
+  })
+
+  it("allows read-only PRAGMA statements", () => {
+    const result = service.databaseSqlRead(`PRAGMA table_info("tasks")`)
+
+    expect(result.rows.map((row) => row.name)).toContain("title")
+  })
 })

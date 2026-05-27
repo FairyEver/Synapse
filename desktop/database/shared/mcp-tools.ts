@@ -444,7 +444,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "database_sql_read",
-      description: "Execute a read-only SQL statement with optional positional bind params. Allows SELECT, PRAGMA, and EXPLAIN. Prefer this over database_sql_execute for inspection and reporting.",
+      description: "Execute a read-only SQL statement with optional positional bind params. Allows SELECT, EXPLAIN, and read-only PRAGMA inspection. Prefer this over database_sql_execute for inspection and reporting.",
       inputSchema: {
         type: "object",
         properties: {
