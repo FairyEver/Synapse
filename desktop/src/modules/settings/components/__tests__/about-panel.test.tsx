@@ -51,13 +51,18 @@ afterEach(() => {
 })
 
 describe("AboutPanel cheat codes", () => {
-  it("arms title input from logo clicks without enlarging the title", async () => {
+  it("arms title input from logo clicks with subtle animated letter spacing", async () => {
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    expect(getTitle().className).toContain("tracking-tight")
 
     clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
 
     expect(getTitle().className).toContain("text-lg")
     expect(getTitle().className).not.toContain("text-4xl")
+    expect(getTitle().className).toContain("tracking-wide")
+    expect(getTitle().className).toContain("transition-[letter-spacing]")
+    expect(getTitle().className).toContain("duration-300")
     expect(
       getTitlePart(0).className.split(/\s+/).some((className) =>
         SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES.includes(
@@ -67,14 +72,16 @@ describe("AboutPanel cheat codes", () => {
     ).toBe(true)
   })
 
-  it("smooths active title color changes with a color transition", async () => {
+  it("smooths active title color and hover scale changes", async () => {
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
     clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
 
-    expect(getTitlePart(0).className).toContain("transition-colors")
-    expect(getTitlePart(0).className).toContain("duration-300")
-    expect(getTitlePart(0).className).toContain("ease-linear")
+    expect(getTitlePart(0).className).toContain("inline-block")
+    expect(getTitlePart(0).className).toContain("transition-[color,transform]")
+    expect(getTitlePart(0).className).toContain("duration-200")
+    expect(getTitlePart(0).className).toContain("ease-out")
+    expect(getTitlePart(0).className).toContain("hover:scale-105")
   })
 
   it("moves each active title color one character to the right on each tick", async () => {
