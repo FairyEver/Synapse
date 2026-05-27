@@ -21,6 +21,7 @@ export type PermissionAction =
   | "agent.spawn"
   | "secret.read"
   | "secret.write"
+  | "scheduler.mutate"
   | "workflow.mutate"
 
 export type ActorIdentity =

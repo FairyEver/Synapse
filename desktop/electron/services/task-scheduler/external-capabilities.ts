@@ -1,4 +1,5 @@
 import type { MainActionRegistry } from "../../action-runtime/action-registry"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type {
   SchedulerSchedule,
   SchedulerTaskCreateParams,
@@ -8,7 +9,7 @@ import type {
   SchedulerTaskRuntimeStatusParams,
   SchedulerTaskUpdateParams,
 } from "../../../synapse-capabilities/shared/scheduler-domain"
-import type { DispatchResult } from "../../../synapse-capabilities/shared/types"
+import type { DispatchContext, DispatchResult } from "../../../synapse-capabilities/shared/types"
 import type { TaskSchedulerService } from "./task-scheduler-service"
 import type {
   ScheduledTaskCreateInput,
@@ -45,83 +46,191 @@ export type SchedulerTaskSummary = {
   readonly runCount: number
 }
 
+export type SchedulerDispatchSecurityDeps = {
+  readonly permissionGuard?: PermissionGuard
+  readonly auditSink?: AuditSink
+}
+
+type SchedulerMutationSecurity = {
+  readonly actor: { kind: "user"; id: string }
+  readonly resource: string
+  readonly metadata: Record<string, unknown>
+}
+
+const MUTATING_SCHEDULER_ACTIONS = new Set([
+  "scheduler.task.create",
+  "scheduler.task.enable",
+  "scheduler.task.disable",
+  "scheduler.task.update",
+])
+
 export async function dispatchSchedulerAction(
   service: SchedulerServicePort,
   actions: MainActionRegistry,
   action: string,
   params: Record<string, unknown>,
+  context: DispatchContext = {},
+  securityDeps: SchedulerDispatchSecurityDeps = {},
 ): Promise<DispatchResult> {
-  switch (action) {
-    case "scheduler.task.list": {
-      const input = parseListParams(params)
-      const tasks = await service.schedulerTaskList()
-      const filtered = tasks
-        .filter((task) => input.enabled === undefined || task.enabled === input.enabled)
-        .filter((task) => {
-          if (!input.scope) return true
-          if (input.scope.type !== task.scope.type) return false
-          if (input.scope.type === "project" && input.scope.projectId) {
-            return task.scope.type === "project" && task.scope.projectId === input.scope.projectId
-          }
-          return true
-        })
-        .slice(0, input.limit ?? tasks.length)
-        .map(toPublicTaskSummary)
-      return { ok: true, data: filtered, total: filtered.length }
+  const security = schedulerMutationSecurity(action, params, context)
+  if (security) await authorizeSchedulerMutation(securityDeps, security)
+
+  try {
+    let result: DispatchResult
+    switch (action) {
+      case "scheduler.task.list": {
+        const input = parseListParams(params)
+        const tasks = await service.schedulerTaskList()
+        const filtered = tasks
+          .filter((task) => input.enabled === undefined || task.enabled === input.enabled)
+          .filter((task) => {
+            if (!input.scope) return true
+            if (input.scope.type !== task.scope.type) return false
+            if (input.scope.type === "project" && input.scope.projectId) {
+              return task.scope.type === "project" && task.scope.projectId === input.scope.projectId
+            }
+            return true
+          })
+          .slice(0, input.limit ?? tasks.length)
+          .map(toPublicTaskSummary)
+        result = { ok: true, data: filtered, total: filtered.length }
+        break
+      }
+
+      case "scheduler.task.get": {
+        const { taskId } = parseTaskIdParams(params)
+        const task = await service.schedulerTaskGet(taskId)
+        result = { ok: true, data: task ? toPublicTaskSummary(task) : null }
+        break
+      }
+
+      case "scheduler.task.create": {
+        const input = toCreateInput(parseCreateParams(params), actions)
+        result = { ok: true, data: toPublicTaskSummary(await service.schedulerTaskCreate(input)) }
+        break
+      }
+
+      case "scheduler.task.enable": {
+        const { taskId } = parseTaskIdParams(params)
+        result = { ok: true, data: toPublicTaskSummary(await service.schedulerTaskEnable(taskId)) }
+        break
+      }
+
+      case "scheduler.task.disable": {
+        const { taskId } = parseTaskIdParams(params)
+        result = { ok: true, data: toPublicTaskSummary(await service.schedulerTaskDisable(taskId)) }
+        break
+      }
+
+      case "scheduler.run.list": {
+        const input = parseRunsListParams(params)
+        const task = await service.schedulerTaskGet(input.taskId)
+        if (!task) throw new Error(`Scheduled task "${input.taskId}" was not found`)
+        const runs = await service.schedulerRunList(input.taskId, { limit: input.limit })
+        result = { ok: true, data: runs.map(toRunSummary), total: runs.length }
+        break
+      }
+
+      case "scheduler.runtime.inspect": {
+        const input = parseRuntimeStatusParams(params)
+        result = { ok: true, data: await buildRuntimeStatus(service, input) }
+        break
+      }
+
+      case "scheduler.action_type.list": {
+        const summaries = actions.list().map((definition) => ({
+          type: definition.manifest.id,
+          title: definition.manifest.title,
+          permissions: [...definition.manifest.permissions],
+          defaultConfig: definition.manifest.defaultConfig,
+          configFields: definition.manifest.configFields,
+        }))
+        result = { ok: true, data: summaries, total: summaries.length }
+        break
+      }
+
+      case "scheduler.task.update": {
+        const input = parseUpdateParams(params)
+        result = { ok: true, data: toPublicTaskSummary(await service.schedulerTaskUpdate(input.taskId, toUpdatePatch(input))) }
+        break
+      }
+
+      default:
+        throw new Error(`Unknown scheduler action: ${action}`)
     }
 
-    case "scheduler.task.get": {
-      const { taskId } = parseTaskIdParams(params)
-      const task = await service.schedulerTaskGet(taskId)
-      return { ok: true, data: task ? toPublicTaskSummary(task) : null }
+    if (security) {
+      securityDeps.auditSink?.record({
+        action: "scheduler.mutate",
+        actor: security.actor,
+        resource: security.resource,
+        outcome: "allowed",
+        metadata: security.metadata,
+      })
     }
-
-    case "scheduler.task.create": {
-      const input = toCreateInput(parseCreateParams(params), actions)
-      return { ok: true, data: toPublicTaskSummary(await service.schedulerTaskCreate(input)) }
+    return result
+  } catch (error) {
+    if (security) {
+      securityDeps.auditSink?.record({
+        action: "scheduler.mutate",
+        actor: security.actor,
+        resource: security.resource,
+        outcome: "failed",
+        metadata: {
+          ...security.metadata,
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorLength: String(error).length,
+        },
+      })
     }
+    throw error
+  }
+}
 
-    case "scheduler.task.enable": {
-      const { taskId } = parseTaskIdParams(params)
-      return { ok: true, data: toPublicTaskSummary(await service.schedulerTaskEnable(taskId)) }
-    }
+async function authorizeSchedulerMutation(
+  deps: SchedulerDispatchSecurityDeps,
+  security: SchedulerMutationSecurity,
+): Promise<void> {
+  const permission = await deps.permissionGuard?.check({
+    action: "scheduler.mutate",
+    actor: security.actor,
+    resource: security.resource,
+    context: security.metadata,
+  })
+  if (permission && !permission.allowed) {
+    deps.auditSink?.record({
+      action: "scheduler.mutate",
+      actor: security.actor,
+      resource: security.resource,
+      outcome: "denied",
+      metadata: {
+        ...security.metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    throw new Error(permission.reason)
+  }
+}
 
-    case "scheduler.task.disable": {
-      const { taskId } = parseTaskIdParams(params)
-      return { ok: true, data: toPublicTaskSummary(await service.schedulerTaskDisable(taskId)) }
-    }
-
-    case "scheduler.run.list": {
-      const input = parseRunsListParams(params)
-      const task = await service.schedulerTaskGet(input.taskId)
-      if (!task) throw new Error(`Scheduled task "${input.taskId}" was not found`)
-      const runs = await service.schedulerRunList(input.taskId, { limit: input.limit })
-      return { ok: true, data: runs.map(toRunSummary), total: runs.length }
-    }
-
-    case "scheduler.runtime.inspect": {
-      const input = parseRuntimeStatusParams(params)
-      return { ok: true, data: await buildRuntimeStatus(service, input) }
-    }
-
-    case "scheduler.action_type.list": {
-      const summaries = actions.list().map((definition) => ({
-        type: definition.manifest.id,
-        title: definition.manifest.title,
-        permissions: [...definition.manifest.permissions],
-        defaultConfig: definition.manifest.defaultConfig,
-        configFields: definition.manifest.configFields,
-      }))
-      return { ok: true, data: summaries, total: summaries.length }
-    }
-
-    case "scheduler.task.update": {
-      const input = parseUpdateParams(params)
-      return { ok: true, data: toPublicTaskSummary(await service.schedulerTaskUpdate(input.taskId, toUpdatePatch(input))) }
-    }
-
-    default:
-      throw new Error(`Unknown scheduler action: ${action}`)
+function schedulerMutationSecurity(
+  action: string,
+  params: Record<string, unknown>,
+  context: DispatchContext,
+): SchedulerMutationSecurity | null {
+  if (!MUTATING_SCHEDULER_ACTIONS.has(action)) return null
+  const source = context.source ?? "api"
+  const taskId = typeof params.taskId === "string" && params.taskId.trim()
+    ? params.taskId.trim()
+    : action
+  return {
+    actor: { kind: "user", id: `scheduler-dispatch:${source}` },
+    resource: `scheduler:${taskId}`,
+    metadata: {
+      source,
+      schedulerAction: action,
+      taskId,
+    },
   }
 }
 
