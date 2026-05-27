@@ -51,13 +51,30 @@ afterEach(() => {
 })
 
 describe("AboutPanel cheat codes", () => {
-  it("arms title input from logo clicks and enlarges the title", async () => {
+  it("arms title input from logo clicks without enlarging the title", async () => {
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
     clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
 
-    expect(getTitle().className).toContain("text-4xl")
-    expect(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES).toContain(getTitlePart(0).className)
+    expect(getTitle().className).toContain("text-lg")
+    expect(getTitle().className).not.toContain("text-4xl")
+    expect(
+      getTitlePart(0).className.split(/\s+/).some((className) =>
+        SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES.includes(
+          className as (typeof SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES)[number],
+        ),
+      ),
+    ).toBe(true)
+  })
+
+  it("smooths active title color changes with a color transition", async () => {
+    await renderAboutPanel({ onAdminModeChange: vi.fn() })
+
+    clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
+
+    expect(getTitlePart(0).className).toContain("transition-colors")
+    expect(getTitlePart(0).className).toContain("duration-300")
+    expect(getTitlePart(0).className).toContain("ease-linear")
   })
 
   it("moves each active title color one character to the right on each tick", async () => {
@@ -115,11 +132,11 @@ describe("AboutPanel cheat codes", () => {
     expect(onAdminModeChange).not.toHaveBeenCalled()
   })
 
-  it("reverts title size and color after the shared timeout with no title input", async () => {
+  it("reverts title color after the shared timeout with no title input", async () => {
     await renderAboutPanel({ onAdminModeChange: vi.fn() })
 
     clickLogoTimes(CHEAT_CODE_LOGO_CLICK_THRESHOLD)
-    expect(getTitle().className).toContain("text-4xl")
+    expect(getTitle().className).toContain("text-lg")
 
     advanceSharedTimeout()
 

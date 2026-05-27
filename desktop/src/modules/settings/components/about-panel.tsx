@@ -274,10 +274,7 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
         <div className="flex flex-col items-center gap-0.5">
           {/* eslint-disable jsx-a11y/no-static-element-interactions, jsx-a11y/click-events-have-key-events */}
           <h1
-            className={cn(
-              "font-semibold tracking-tight",
-              isCheatCodeEntryArmed ? "text-4xl" : "text-lg",
-            )}
+            className="text-lg font-semibold tracking-tight"
             aria-label={SETTINGS_CHEAT_CODE_TITLE}
             data-settings-cheat-code-title
           >
@@ -287,7 +284,10 @@ function AboutPanel({ isAdminMode, onAdminModeChange }: AboutPanelProps) {
                 aria-hidden="true"
                 className={
                   isCheatCodeEntryArmed && part.clickable
-                    ? getSettingsTitleActiveColorClass(part.index, activeTitleColorOffset)
+                    ? cn(
+                        getSettingsTitleActiveColorClass(part.index, activeTitleColorOffset),
+                        "transition-colors duration-300 ease-linear",
+                      )
                     : undefined
                 }
                 data-settings-title-index={part.index}
