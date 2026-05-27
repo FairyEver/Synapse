@@ -6,8 +6,8 @@ import type { DispatchContext, DispatchResult } from "../../synapse-capabilities
 type VariableCapabilityDispatcherDeps = {
   readonly loadConfig: () => Promise<SynapseConfig>
   readonly updateConfig: (patch: SynapseConfigPatch) => Promise<SynapseConfig>
-  readonly permissionGuard?: PermissionGuard
-  readonly auditSink?: AuditSink
+  readonly permissionGuard: PermissionGuard
+  readonly auditSink: AuditSink
   readonly eventBus?: Pick<EventBus, "emit">
   readonly actor?: ActorIdentity
 }
@@ -157,30 +157,28 @@ async function authorizeSecret(
     includeValue,
   }
 
-  if (deps.permissionGuard) {
-    const permission = await deps.permissionGuard.check({
+  const permission = await deps.permissionGuard.check({
+    action,
+    actor,
+    resource,
+    context: metadata,
+  })
+  if (!permission.allowed) {
+    deps.auditSink.record({
       action,
       actor,
       resource,
-      context: metadata,
+      outcome: "denied",
+      metadata: {
+        ...metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
     })
-    if (!permission.allowed) {
-      deps.auditSink?.record({
-        action,
-        actor,
-        resource,
-        outcome: "denied",
-        metadata: {
-          ...metadata,
-          reason: permission.reason,
-          policyId: permission.policyId,
-        },
-      })
-      throw new Error(permission.reason)
-    }
+    throw new Error(permission.reason)
   }
 
-  deps.auditSink?.record({
+  deps.auditSink.record({
     action,
     actor,
     resource,
