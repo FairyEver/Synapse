@@ -36,8 +36,16 @@ describe("settings cheat codes", () => {
     ])
   })
 
-  it("uses only Tailwind default text color classes for active title feedback", () => {
-    expect(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES.length).toBeGreaterThan(3)
+  it("uses the Claude Code ROYGBIV order with Tailwind default text color classes", () => {
+    expect(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES).toEqual([
+      "text-red-500",
+      "text-orange-500",
+      "text-yellow-500",
+      "text-green-500",
+      "text-blue-500",
+      "text-indigo-500",
+      "text-violet-500",
+    ])
     expect(SETTINGS_CHEAT_CODE_ACTIVE_TITLE_COLOR_CLASSES.every((className) => {
       return className.startsWith("text-") && !className.includes("[") && !className.includes("#")
     })).toBe(true)
