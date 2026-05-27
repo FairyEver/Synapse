@@ -7,6 +7,7 @@ import type { ScheduledTaskRepository } from "./task-repository"
 import type {
   ScheduledTaskEntry,
   ScheduledTaskRunEntry,
+  ScheduledTaskRunFinishInput,
   ScheduledTaskRunTrigger,
 } from "./types"
 
@@ -206,7 +207,7 @@ export class TaskSchedulerExecutionService {
       const visibleError = permissionDenied
         ? message
         : visibleFailureMessage(status, diagnostic.errorName)
-      const finished = await this.deps.runs.finish(run.id, {
+      const finishInput: ScheduledTaskRunFinishInput = {
         status,
         error: visibleError,
         result: {
@@ -214,8 +215,14 @@ export class TaskSchedulerExecutionService {
           error: visibleError,
           summary: status === "cancelled" ? "已停止" : "执行失败",
         },
+      }
+      const finished = await this.finishFailedRun(run, finishInput, {
+        actionType: task.action.type,
+        status,
+        taskId: task.id,
+        triggeredBy,
       })
-      await this.deps.tasks.markRunResult(task.id, { status })
+      await this.markFailedRunResult(task.id, run.id, status, task.action.type, triggeredBy)
       return finished
     } finally {
       this.activeRuns.delete(run.id)
@@ -246,6 +253,76 @@ export class TaskSchedulerExecutionService {
     const runs = await this.deps.runs.listByTask(taskId, { limit: 10 })
     const lastSuccess = runs.find((r) => r.status === "success" && r.result?.outputs)
     return lastSuccess?.result?.outputs
+  }
+
+  private async finishFailedRun(
+    run: ScheduledTaskRunEntry,
+    input: ScheduledTaskRunFinishInput,
+    context: {
+      readonly actionType: string
+      readonly status: ScheduledTaskRunFinishInput["status"]
+      readonly taskId: string
+      readonly triggeredBy: ScheduledTaskRunTrigger
+    },
+  ): Promise<ScheduledTaskRunEntry> {
+    try {
+      return await this.deps.runs.finish(run.id, input)
+    } catch (error) {
+      this.logger.warn("runs.finish failed after failed task execution; retrying once.", {
+        source: "task-scheduler",
+        taskId: context.taskId,
+        runId: run.id,
+        actionType: context.actionType,
+        triggeredBy: context.triggeredBy,
+        status: context.status,
+        boundary: "task-scheduler-finish-failed-run",
+        ...errorDiagnostic(error),
+      })
+    }
+
+    try {
+      return await this.deps.runs.finish(run.id, input)
+    } catch (error) {
+      this.logger.warn("runs.finish retry failed after failed task execution.", {
+        source: "task-scheduler",
+        taskId: context.taskId,
+        runId: run.id,
+        actionType: context.actionType,
+        triggeredBy: context.triggeredBy,
+        status: context.status,
+        boundary: "task-scheduler-finish-failed-run",
+        ...errorDiagnostic(error),
+      })
+      return {
+        ...run,
+        status: input.status,
+        result: input.result,
+        error: input.error,
+      }
+    }
+  }
+
+  private async markFailedRunResult(
+    taskId: string,
+    runId: string,
+    status: ScheduledTaskRunFinishInput["status"],
+    actionType: string,
+    triggeredBy: ScheduledTaskRunTrigger,
+  ): Promise<void> {
+    try {
+      await this.deps.tasks.markRunResult(taskId, { status })
+    } catch (error) {
+      this.logger.warn("markRunResult failed after failed task execution.", {
+        source: "task-scheduler",
+        taskId,
+        runId,
+        actionType,
+        triggeredBy,
+        status,
+        boundary: "task-scheduler-mark-run-result",
+        ...errorDiagnostic(error),
+      })
+    }
   }
 }
 

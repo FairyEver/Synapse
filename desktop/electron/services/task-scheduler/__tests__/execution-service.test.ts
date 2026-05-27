@@ -185,6 +185,40 @@ describe("TaskSchedulerExecutionService", () => {
     expect(JSON.stringify(run)).not.toContain("secret prompt")
   })
 
+  it("retries failed-run persistence and still marks task result after action exceptions", async () => {
+    const logger = { warn: vi.fn() }
+    const harness = await createExecutionHarness({
+      action: throwingAction,
+      logger,
+    })
+    const finish = vi.spyOn(harness.runs, "finish")
+    finish.mockRejectedValueOnce(new Error("data namespace busy"))
+
+    const run = await harness.service.runTask(harness.task, "schedule")
+
+    expect(finish).toHaveBeenCalledTimes(2)
+    expect(run.status).toBe("failed")
+    expect(await harness.runs.get("run:1")).toEqual(expect.objectContaining({
+      status: "failed",
+      error: "执行失败（Error）",
+    }))
+    expect(await harness.tasks.get("task:1")).toEqual(expect.objectContaining({
+      lastStatus: "failed",
+      runCount: 1,
+    }))
+    expect(logger.warn).toHaveBeenCalledWith(
+      "runs.finish failed after failed task execution; retrying once.",
+      expect.objectContaining({
+        source: "task-scheduler",
+        taskId: "task:1",
+        runId: "run:1",
+        status: "failed",
+        errorName: "Error",
+        errorLength: "data namespace busy".length,
+      }),
+    )
+  })
+
   it("records returned action failures without leaking raw error text", async () => {
     const logger = { warn: vi.fn() }
     const harness = await createExecutionHarness({
