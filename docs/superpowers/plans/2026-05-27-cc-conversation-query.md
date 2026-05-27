@@ -99,7 +99,7 @@ describe("cc conversation window helpers", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/lib/__tests__/cc-conversation-window.test.ts
+pnpm --filter @synapse/desktop exec vitest run src/lib/__tests__/cc-conversation-window.test.ts
 ```
 
 Expected: FAIL because `desktop/src/lib/cc-conversation-window.ts` does not exist.
@@ -302,7 +302,7 @@ Use optional methods in this task so existing preload implementation still typec
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/lib/__tests__/cc-conversation-window.test.ts
+pnpm --filter @synapse/desktop exec vitest run src/lib/__tests__/cc-conversation-window.test.ts
 pnpm --filter @synapse/desktop run typecheck
 ```
 
@@ -432,7 +432,7 @@ describe("parseCcConversationFile", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/services/usage-analysis/__tests__/cc-conversation-parser.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/__tests__/cc-conversation-parser.test.ts
 ```
 
 Expected: FAIL because the parser module does not exist.
@@ -569,7 +569,7 @@ export async function parseCcConversationFile(filePath: string): Promise<ParsedC
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/services/usage-analysis/__tests__/cc-conversation-parser.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/__tests__/cc-conversation-parser.test.ts
 ```
 
 Expected: PASS.
@@ -695,7 +695,7 @@ describe("CcConversationService", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/services/usage-analysis/__tests__/cc-conversation-service.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/__tests__/cc-conversation-service.test.ts
 ```
 
 Expected: FAIL because `CcConversationService` does not exist.
@@ -916,7 +916,7 @@ export { parseCcConversationFile } from "./cc-conversation-parser"
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/services/usage-analysis/__tests__/cc-conversation-parser.test.ts desktop/electron/services/usage-analysis/__tests__/cc-conversation-service.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/__tests__/cc-conversation-parser.test.ts electron/services/usage-analysis/__tests__/cc-conversation-service.test.ts
 pnpm --filter @synapse/desktop run typecheck
 ```
 
@@ -987,7 +987,7 @@ describe("createCcConversationWindowService", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/services/__tests__/cc-conversation-window-service.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/cc-conversation-window-service.test.ts
 ```
 
 Expected: FAIL because the window service does not exist.
@@ -1210,7 +1210,7 @@ In `desktop/src/types/bridge.ts`, remove `?` from the four conversation methods 
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/services/__tests__/cc-conversation-window-service.test.ts desktop/electron/usage-analysis/__tests__/ipc-handlers.test.ts desktop/electron/__tests__/preload.test.ts
+pnpm --filter @synapse/desktop exec vitest run electron/services/__tests__/cc-conversation-window-service.test.ts electron/usage-analysis/__tests__/ipc-handlers.test.ts electron/__tests__/preload.test.ts
 pnpm --filter @synapse/desktop run typecheck
 ```
 
@@ -1315,7 +1315,7 @@ describe("CcConversationsPage", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/usage-analysis/__tests__/usage-analysis-shell.test.tsx desktop/src/modules/usage-analysis/__tests__/cc-conversations-page.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/usage-analysis/__tests__/usage-analysis-shell.test.tsx src/modules/usage-analysis/__tests__/cc-conversations-page.test.tsx
 ```
 
 Expected: FAIL because `conversations` view and page do not exist.
@@ -1542,7 +1542,7 @@ In `desktop/src/modules/usage-analysis/cc/cc-usage-page.tsx`, import `CcDetailsP
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/usage-analysis/__tests__/usage-analysis-shell.test.tsx desktop/src/modules/usage-analysis/__tests__/cc-conversations-page.test.tsx desktop/src/modules/usage-analysis/__tests__/cc-page.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/usage-analysis/__tests__/usage-analysis-shell.test.tsx src/modules/usage-analysis/__tests__/cc-conversations-page.test.tsx src/modules/usage-analysis/__tests__/cc-page.test.tsx
 pnpm --filter @synapse/desktop run typecheck
 ```
 
@@ -1632,7 +1632,7 @@ describe("CcConversationDetailWindowPage", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/usage-analysis/__tests__/cc-conversation-detail-window-page.test.tsx
+pnpm --filter @synapse/desktop exec vitest run src/modules/usage-analysis/__tests__/cc-conversation-detail-window-page.test.tsx
 ```
 
 Expected: FAIL because components do not exist.
@@ -1825,7 +1825,7 @@ Before the content window branch, add:
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/src/modules/usage-analysis/__tests__/cc-conversation-detail-window-page.test.tsx desktop/src/lib/__tests__/cc-conversation-window.test.ts
+pnpm --filter @synapse/desktop exec vitest run src/modules/usage-analysis/__tests__/cc-conversation-detail-window-page.test.tsx src/lib/__tests__/cc-conversation-window.test.ts
 pnpm --filter @synapse/desktop run typecheck
 ```
 
@@ -1910,7 +1910,7 @@ it("renders detail rows with an open conversation action", () => {
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/services/usage-analysis/__tests__/reports.test.ts desktop/src/modules/usage-analysis/__tests__/report-views.test.tsx
+pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/__tests__/reports.test.ts src/modules/usage-analysis/__tests__/report-views.test.tsx
 ```
 
 Expected: FAIL because detail rows do not expose all focus fields and no button exists.
@@ -2003,7 +2003,7 @@ export function CcDetailsPage({ range, refreshKey }: { readonly range: UsageRang
 Run:
 
 ```bash
-pnpm --filter @synapse/desktop exec vitest run desktop/electron/services/usage-analysis/__tests__/reports.test.ts desktop/src/modules/usage-analysis/__tests__/report-views.test.tsx
+pnpm --filter @synapse/desktop exec vitest run electron/services/usage-analysis/__tests__/reports.test.ts src/modules/usage-analysis/__tests__/report-views.test.tsx
 pnpm --filter @synapse/desktop run typecheck
 ```
 
@@ -2037,18 +2037,18 @@ Run:
 
 ```bash
 pnpm --filter @synapse/desktop exec vitest run \
-  desktop/electron/services/usage-analysis/__tests__/cc-conversation-parser.test.ts \
-  desktop/electron/services/usage-analysis/__tests__/cc-conversation-service.test.ts \
-  desktop/electron/services/__tests__/cc-conversation-window-service.test.ts \
-  desktop/electron/usage-analysis/__tests__/ipc-handlers.test.ts \
-  desktop/electron/__tests__/preload.test.ts \
-  desktop/src/lib/__tests__/cc-conversation-window.test.ts \
-  desktop/src/modules/usage-analysis/__tests__/usage-analysis-shell.test.tsx \
-  desktop/src/modules/usage-analysis/__tests__/cc-conversations-page.test.tsx \
-  desktop/src/modules/usage-analysis/__tests__/cc-conversation-detail-window-page.test.tsx \
-  desktop/src/modules/usage-analysis/__tests__/report-views.test.tsx \
-  desktop/src/modules/usage-analysis/__tests__/cc-page.test.tsx \
-  desktop/src/modules/usage-analysis/__tests__/codex-page.test.tsx
+  electron/services/usage-analysis/__tests__/cc-conversation-parser.test.ts \
+  electron/services/usage-analysis/__tests__/cc-conversation-service.test.ts \
+  electron/services/__tests__/cc-conversation-window-service.test.ts \
+  electron/usage-analysis/__tests__/ipc-handlers.test.ts \
+  electron/__tests__/preload.test.ts \
+  src/lib/__tests__/cc-conversation-window.test.ts \
+  src/modules/usage-analysis/__tests__/usage-analysis-shell.test.tsx \
+  src/modules/usage-analysis/__tests__/cc-conversations-page.test.tsx \
+  src/modules/usage-analysis/__tests__/cc-conversation-detail-window-page.test.tsx \
+  src/modules/usage-analysis/__tests__/report-views.test.tsx \
+  src/modules/usage-analysis/__tests__/cc-page.test.tsx \
+  src/modules/usage-analysis/__tests__/codex-page.test.tsx
 ```
 
 Expected: PASS.
