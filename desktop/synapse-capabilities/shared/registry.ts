@@ -11,10 +11,20 @@ import {
   buildModelPriceTools,
 } from "./model-price-domain"
 import {
+  REPOSITORY_DOMAIN,
+  REPOSITORY_MCP_TOOL_ACTIONS,
+  buildRepositoryTools,
+} from "./repository-domain"
+import {
   WORKFLOW_DOMAIN,
   WORKFLOW_MCP_TOOL_ACTIONS,
   buildWorkflowTools,
 } from "./workflow-domain"
+import {
+  VARIABLE_DOMAIN,
+  VARIABLE_MCP_TOOL_ACTIONS,
+  buildVariableTools,
+} from "./variable-domain"
 import {
   CONTENT_DOMAIN,
   CONTENT_MCP_TOOL_ACTIONS,
@@ -25,7 +35,9 @@ import type { CapabilityDomainDefinition, McpToolDefinition } from "./types"
 export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
   DATABASE_DOMAIN,
   MODEL_PRICE_DOMAIN,
+  REPOSITORY_DOMAIN,
   SCHEDULER_DOMAIN,
+  VARIABLE_DOMAIN,
   WORKFLOW_DOMAIN,
   CONTENT_DOMAIN,
 ]
@@ -33,7 +45,9 @@ export const CAPABILITY_DOMAINS: readonly CapabilityDomainDefinition[] = [
 export const MCP_TOOL_ACTIONS: Record<string, string> = {
   ...buildDatabaseMcpToolActions(),
   ...MODEL_PRICE_MCP_TOOL_ACTIONS,
+  ...REPOSITORY_MCP_TOOL_ACTIONS,
   ...SCHEDULER_MCP_TOOL_ACTIONS,
+  ...VARIABLE_MCP_TOOL_ACTIONS,
   ...WORKFLOW_MCP_TOOL_ACTIONS,
   ...CONTENT_MCP_TOOL_ACTIONS,
 }
@@ -42,7 +56,9 @@ export function buildAllMcpTools(): McpToolDefinition[] {
   return [
     ...buildDatabaseTools(),
     ...buildModelPriceTools(),
+    ...buildRepositoryTools(),
     ...buildSchedulerTools(),
+    ...buildVariableTools(),
     ...buildWorkflowTools(),
     ...buildContentTools(),
   ]

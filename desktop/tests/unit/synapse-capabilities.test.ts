@@ -7,10 +7,20 @@ import {
   buildModelPriceTools,
 } from "../../synapse-capabilities/shared/model-price-domain"
 import {
+  REPOSITORY_DOMAIN,
+  REPOSITORY_MCP_TOOL_ACTIONS,
+  buildRepositoryTools,
+} from "../../synapse-capabilities/shared/repository-domain"
+import {
   SCHEDULER_DOMAIN,
   SCHEDULER_MCP_TOOL_ACTIONS,
   buildSchedulerTools,
 } from "../../synapse-capabilities/shared/scheduler-domain"
+import {
+  VARIABLE_DOMAIN,
+  VARIABLE_MCP_TOOL_ACTIONS,
+  buildVariableTools,
+} from "../../synapse-capabilities/shared/variable-domain"
 import {
   CONTENT_DOMAIN,
   CONTENT_MCP_TOOL_ACTIONS,
@@ -67,6 +77,55 @@ describe("Model price capability domain", () => {
     expect(toolNames).toContain("model_price_rule_delete")
     expect(MCP_TOOL_ACTIONS.model_price_rule_enable).toBe("model_price.rule.enable")
     expect(getActionDomainId("model_price.rule.list")).toBe("model_price")
+  })
+})
+
+describe("Repository capability domain", () => {
+  it("registers read-only repository discovery", () => {
+    expect(REPOSITORY_DOMAIN.id).toBe("repository")
+    expect(REPOSITORY_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
+      "repository.item.list",
+    ])
+    expect(REPOSITORY_DOMAIN.capabilities.every((capability) => capability.mutates === false)).toBe(true)
+  })
+
+  it("maps repository MCP tools to canonical actions", () => {
+    expect(REPOSITORY_MCP_TOOL_ACTIONS.repository_item_list).toBe("repository.item.list")
+    expect(buildRepositoryTools().map((tool) => tool.name)).toEqual(["repository_item_list"])
+  })
+})
+
+describe("Variable capability domain", () => {
+  it("registers repository-scoped variable CRUD actions", () => {
+    expect(VARIABLE_DOMAIN.id).toBe("variable")
+    expect(VARIABLE_DOMAIN.capabilities.map((capability) => capability.id)).toEqual([
+      "variable.item.list",
+      "variable.item.get",
+      "variable.item.create",
+      "variable.item.update",
+      "variable.item.upsert",
+      "variable.item.delete",
+    ])
+  })
+
+  it("maps variable MCP tools to canonical actions", () => {
+    expect(VARIABLE_MCP_TOOL_ACTIONS.variable_item_list).toBe("variable.item.list")
+    expect(VARIABLE_MCP_TOOL_ACTIONS.variable_item_get).toBe("variable.item.get")
+    expect(VARIABLE_MCP_TOOL_ACTIONS.variable_item_upsert).toBe("variable.item.upsert")
+    expect(buildVariableTools().map((tool) => tool.name)).toEqual([
+      "variable_item_list",
+      "variable_item_get",
+      "variable_item_create",
+      "variable_item_update",
+      "variable_item_upsert",
+      "variable_item_delete",
+    ])
+  })
+
+  it("keeps variable list from exposing a value field", () => {
+    const listTool = buildVariableTools().find((tool) => tool.name === "variable_item_list")
+    expect(listTool?.inputSchema.properties).not.toHaveProperty("includeValue")
+    expect(listTool?.inputSchema.properties).not.toHaveProperty("value")
   })
 })
 
@@ -134,6 +193,19 @@ describe("Scheduler capability domain", () => {
     const getTool = tools.find((tool) => tool.name === "scheduler_task_get")
     expect(getTool?.inputSchema.required).toEqual(["taskId"])
     expect(Object.keys(getTool?.inputSchema.properties ?? {})).toEqual(["taskId"])
+  })
+})
+
+describe("Repository and Variable combined MCP tools", () => {
+  it("combines Repository and Variable tools with all MCP tools", () => {
+    const toolNames = buildAllMcpTools().map((tool) => tool.name)
+    expect(toolNames).toContain("repository_item_list")
+    expect(toolNames).toContain("variable_item_list")
+    expect(toolNames).toContain("variable_item_upsert")
+    expect(MCP_TOOL_ACTIONS.repository_item_list).toBe("repository.item.list")
+    expect(MCP_TOOL_ACTIONS.variable_item_delete).toBe("variable.item.delete")
+    expect(getActionDomainId("repository.item.list")).toBe("repository")
+    expect(getActionDomainId("variable.item.upsert")).toBe("variable")
   })
 })
 

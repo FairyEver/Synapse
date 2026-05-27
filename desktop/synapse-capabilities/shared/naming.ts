@@ -3,6 +3,7 @@ const CAPABILITY_ACTIONS = [
   "get",
   "create",
   "update",
+  "upsert",
   "delete",
   "count",
   "rename",
