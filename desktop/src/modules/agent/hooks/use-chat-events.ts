@@ -102,6 +102,8 @@ function useChatEvents(
         if (isTerminalPhase(payload.phase, payload.status) && payload.conversationId) {
           pendingConversationIdsRef.current.delete(payload.conversationId)
           dispatch({ type: "REMOVE_SENDING_CONVERSATION", conversationId: payload.conversationId })
+        } else if (payload.status === "in-progress" && payload.conversationId) {
+          dispatch({ type: "ADD_SENDING_CONVERSATION", conversationId: payload.conversationId })
         }
         const selectedProject = selectedProjectIdRef.current
         const selectedConv = selectedConversationIdRef.current

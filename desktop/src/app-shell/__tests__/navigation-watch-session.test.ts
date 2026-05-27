@@ -1,6 +1,9 @@
 import { readFile } from "node:fs/promises"
 import { describe, expect, it } from "vitest"
-import { isWatchedAgentSessionEvent } from "../use-watch-next-agent-session"
+import {
+  isWatchedAgentSessionEvent,
+  openAgentSessionPayloadFromWatchedEvent,
+} from "../use-watch-next-agent-session"
 
 describe("navigation watch-next-agent-session", () => {
   it("exports requestWatchNextAgentSession", async () => {
@@ -76,5 +79,26 @@ describe("navigation watch-next-agent-session", () => {
       sessionKey: "scheduled:project-2:123",
       conversationId: "conversation-3",
     }, 100)).toBe(false)
+  })
+
+  it("opens watched scheduled sessions with their source and session key", () => {
+    const watch = {
+      projectId: "project-1",
+      platform: "scheduled",
+      sessionKeyPrefix: "scheduled:project-1:",
+      expiresAt: 200,
+    }
+
+    expect(openAgentSessionPayloadFromWatchedEvent(watch, {
+      projectId: "project-1",
+      platform: "scheduled",
+      sessionKey: "scheduled:project-1:123",
+      conversationId: "conversation-1",
+    }, 100)).toEqual({
+      projectId: "project-1",
+      conversationId: "conversation-1",
+      sessionKey: "scheduled:project-1:123",
+      sourceFilter: "scheduled",
+    })
   })
 })

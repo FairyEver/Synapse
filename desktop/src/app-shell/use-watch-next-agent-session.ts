@@ -7,6 +7,7 @@ import {
   subscribeWatchNextAgentSession,
 } from "@/app-shell/navigation"
 import type { SynapseAgentConversationUpdatedPayload } from "@/types/agent"
+import type { OpenAgentSessionPayload } from "@/types/agent-navigation"
 
 type PendingAgentSessionWatch = WatchNextAgentSessionPayload & {
   expiresAt: number
@@ -22,6 +23,21 @@ function isWatchedAgentSessionEvent(
   if (watch.platform && payload.platform !== watch.platform) return false
   if (watch.sessionKeyPrefix && !payload.sessionKey.startsWith(watch.sessionKeyPrefix)) return false
   return true
+}
+
+function openAgentSessionPayloadFromWatchedEvent(
+  watch: PendingAgentSessionWatch | null,
+  payload: SynapseAgentConversationUpdatedPayload,
+  now = Date.now(),
+): OpenAgentSessionPayload | null {
+  if (!isWatchedAgentSessionEvent(watch, payload, now)) return null
+  const sourceFilter = sourceFilterForPlatform(payload.platform)
+  return {
+    projectId: payload.projectId,
+    conversationId: payload.conversationId,
+    sessionKey: payload.sessionKey,
+    ...(sourceFilter ? { sourceFilter } : {}),
+  }
 }
 
 export function useWatchNextAgentSession(): void {
@@ -60,15 +76,32 @@ export function useWatchNextAgentSession(): void {
     return bridge.agent.onEvent((domainEvent) => {
       if (domainEvent.type !== "conversationUpdated") return
       const watch = pendingWatchRef.current
-      if (isWatchedAgentSessionEvent(watch, domainEvent.payload)) {
+      const payload = openAgentSessionPayloadFromWatchedEvent(watch, domainEvent.payload)
+      if (payload) {
         pendingWatchRef.current = null
-        requestOpenAgentSession({
-          projectId: domainEvent.payload.projectId,
-          conversationId: domainEvent.payload.conversationId,
-        })
+        requestOpenAgentSession(payload)
       }
     })
   }, [])
 }
 
-export { isWatchedAgentSessionEvent }
+function sourceFilterForPlatform(
+  platform: string | undefined,
+): OpenAgentSessionPayload["sourceFilter"] | undefined {
+  switch (platform) {
+    case "local":
+    case "local-renderer":
+      return "user"
+    case "scheduled":
+    case "workflow":
+    case "webhook":
+    case "relay":
+      return platform
+    case undefined:
+      return undefined
+    default:
+      return "bridge"
+  }
+}
+
+export { isWatchedAgentSessionEvent, openAgentSessionPayloadFromWatchedEvent }

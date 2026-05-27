@@ -44,6 +44,17 @@ const nextSession: SynapseAgentSessionSummary = {
   updatedAt: "2026-05-13T00:01:00.000Z",
 }
 
+const scheduledSession: SynapseAgentSessionSummary = {
+  projectId: "project-1",
+  id: "scheduled-conversation-1",
+  sessionKey: "scheduled:project-1:123",
+  platform: "scheduled",
+  active: true,
+  historyCount: 1,
+  createdAt: "2026-05-13T00:03:00.000Z",
+  updatedAt: "2026-05-13T00:03:00.000Z",
+}
+
 const projectScope: AgentProjectScope = {
   projectIds: ["project-1"],
   defaultProjectId: "project-1",
@@ -207,6 +218,86 @@ describe("useAgentChat", () => {
         pendingConversation: true,
       }),
     )
+  })
+
+  it("marks selected automated conversations as sending while their phase is in progress", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          getTimeline: ReturnType<typeof vi.fn>
+          listSessions: ReturnType<typeof vi.fn>
+          onEvent: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.listSessions.mockResolvedValue([scheduledSession])
+    bridge.getTimeline.mockResolvedValue({
+      projectId: scheduledSession.projectId,
+      sessionKey: scheduledSession.sessionKey,
+      conversationId: scheduledSession.id,
+      entries: [],
+    })
+    let emitAgentEvent: ((event: SynapseAgentDomainEvent) => void) | undefined
+    bridge.onEvent.mockImplementation((callback) => {
+      emitAgentEvent = callback
+      return () => {}
+    })
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === scheduledSession.id)
+
+    await act(async () => {
+      emitAgentEvent?.({
+        domain: "agent",
+        type: "phase.update",
+        timestamp: "2026-05-13T00:04:00.000Z",
+        payload: {
+          projectId: scheduledSession.projectId,
+          sessionKey: scheduledSession.sessionKey,
+          conversationId: scheduledSession.id,
+          runId: "run-scheduled",
+          phase: "received",
+          status: "in-progress",
+          startedAt: "2026-05-13T00:04:00.000Z",
+        },
+      })
+    })
+
+    expect(chat?.sending).toBe(true)
+    expect(chat?.sendingConversationIds.has(scheduledSession.id)).toBe(true)
+
+    await act(async () => {
+      emitAgentEvent?.({
+        domain: "agent",
+        type: "phase.update",
+        timestamp: "2026-05-13T00:04:10.000Z",
+        payload: {
+          projectId: scheduledSession.projectId,
+          sessionKey: scheduledSession.sessionKey,
+          conversationId: scheduledSession.id,
+          runId: "run-scheduled",
+          phase: "completed",
+          status: "done",
+          startedAt: "2026-05-13T00:04:00.000Z",
+          completedAt: "2026-05-13T00:04:10.000Z",
+        },
+      })
+    })
+
+    expect(chat?.sending).toBe(false)
+    expect(chat?.sendingConversationIds.has(scheduledSession.id)).toBe(false)
   })
 
   it("logs archived session refresh failures without exposing the error message", async () => {
