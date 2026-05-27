@@ -52,11 +52,12 @@ export class TaskSchedulerService {
     this.started = true
   }
 
-  stop(): void {
+  async stop(): Promise<void> {
     for (const timer of this.timers.values()) {
       clearTimeout(timer)
     }
     this.timers.clear()
+    await this.stopActiveRuns()
     this.started = false
   }
 
@@ -163,6 +164,15 @@ export class TaskSchedulerService {
       boundary: "task-scheduler-stop-run",
     })
     return { stopped }
+  }
+
+  private async stopActiveRuns(): Promise<void> {
+    const runIds = new Set(this.deps.execution.getActiveRunIds())
+    for (const taskId of this.runningTaskIds) {
+      const runId = this.deps.execution.getActiveRunIdForTask(taskId)
+      if (runId) runIds.add(runId)
+    }
+    await Promise.all([...runIds].map((runId) => this.stopRun(runId)))
   }
 
   schedulerRunList(

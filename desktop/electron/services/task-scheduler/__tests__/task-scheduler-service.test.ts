@@ -29,7 +29,7 @@ describe("TaskSchedulerService", () => {
     await harness.service.start()
 
     expect(harness.service.schedulerRuntimeInspect().timers).toContain("task:1")
-    harness.service.stop()
+    await harness.service.stop()
   })
 
   it("skips overlapping scheduled runs", async () => {
@@ -149,6 +149,22 @@ describe("TaskSchedulerService", () => {
     })
   })
 
+  it("stops active runs when the scheduler service stops", async () => {
+    const harness = createHarness({ action: longRunningAction() })
+    await harness.taskItems.upsert(createTask({ id: "task:1" }))
+
+    const runPromise = harness.service.runNow("task:1")
+    await waitFor(async () => harness.service.schedulerRuntimeInspect().runningTaskIds.includes("task:1"))
+    const running = (await harness.runs.listByTask("task:1")).find((run) => run.status === "running")
+    expect(running).toBeDefined()
+
+    await harness.service.stop()
+    await runPromise
+
+    expect(await harness.runs.get(running!.id)).toEqual(expect.objectContaining({ status: "cancelled" }))
+    expect(harness.service.schedulerRuntimeInspect().runningTaskIds).toEqual([])
+  })
+
   it("skips scheduled run when current day is not in activeDays", async () => {
     // 2026-04-29 is a Wednesday (day 3). activeDays excludes Wednesday.
     const harness = createHarness()
@@ -161,7 +177,7 @@ describe("TaskSchedulerService", () => {
     const result = await harness.service.triggerForTest("task:1", "schedule")
     expect(result!.status).toBe("skipped")
     expect(result!.error).toBe("day not in activeDays")
-    harness.service.stop()
+    await harness.service.stop()
   })
 
   it("logs missed-run background failures with sanitized task context", async () => {

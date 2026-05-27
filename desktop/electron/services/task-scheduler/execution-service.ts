@@ -243,6 +243,10 @@ export class TaskSchedulerExecutionService {
     return this.taskToRunId.get(taskId)
   }
 
+  getActiveRunIds(): string[] {
+    return [...this.activeRuns.keys()]
+  }
+
   waitForRunToSettle(runId: string): Promise<boolean> {
     const completion = this.activeRunCompletions.get(runId)
     if (!completion) return Promise.resolve(false)
