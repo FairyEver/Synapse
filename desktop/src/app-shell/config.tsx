@@ -11,7 +11,7 @@ import {
 import { LoaderCircle } from "lucide-react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { Button } from "@/components/ui/button"
-import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import type {
   SynapseConfig,
   SynapseConfigPatch,
@@ -130,6 +130,21 @@ function AppConfigProvider({ children }: { children: ReactNode }) {
 
     void loadInitialConfig()
   }, [loadInitialConfig])
+
+  useEffect(() => {
+    const unsubscribe = getSynapseBridge()?.repository?.onUpdated?.((event) => {
+      if (event.operation !== "variables") {
+        return
+      }
+      void refreshConfig().catch((refreshError) => {
+        logger.error("Failed to refresh app config after variable update.", refreshError)
+      })
+    })
+
+    return () => {
+      unsubscribe?.()
+    }
+  }, [refreshConfig])
 
   useEffect(() => {
     const mediaQueryList =

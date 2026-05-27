@@ -140,3 +140,36 @@ describe("Content MCP RPC", () => {
     expect(payload).toEqual([{ id: "skill-1", title: "Skill" }])
   })
 })
+
+describe("Repository and Variable MCP RPC", () => {
+  it("returns repository data without the internal dispatcher envelope", async () => {
+    const payload = await callTool("repository_item_list", {
+      ok: true,
+      data: {
+        activeRepositoryUuid: "repo-1",
+        repositories: [{ uuid: "repo-1", name: "Main", localPath: "/repo", isActive: true, variableCount: 1 }],
+      },
+      total: 1,
+    })
+
+    expect(payload).toEqual({
+      activeRepositoryUuid: "repo-1",
+      repositories: [{ uuid: "repo-1", name: "Main", localPath: "/repo", isActive: true, variableCount: 1 }],
+    })
+  })
+
+  it("returns variable data without the internal dispatcher envelope", async () => {
+    const payload = await callTool("variable_item_get", {
+      ok: true,
+      data: {
+        repository: { uuid: "repo-1", name: "Main", isActive: true },
+        variable: { name: "TOKEN", hasValue: true },
+      },
+    })
+
+    expect(payload).toEqual({
+      repository: { uuid: "repo-1", name: "Main", isActive: true },
+      variable: { name: "TOKEN", hasValue: true },
+    })
+  })
+})

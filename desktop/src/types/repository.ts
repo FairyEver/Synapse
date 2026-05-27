@@ -1,6 +1,12 @@
 import type { SynapseRepositoryConfig } from "./config"
 
-export type SynapseRepositoryOperationKind = "sync" | "push" | "maintenance" | "initialize" | "disappeared"
+export type SynapseRepositoryOperationKind =
+  | "sync"
+  | "push"
+  | "maintenance"
+  | "initialize"
+  | "disappeared"
+  | "variables"
 
 export const SYNAPSE_REPOSITORY_SYNC_FAILURE_CATEGORIES = [
   "network",

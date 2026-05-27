@@ -33,6 +33,8 @@ import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter } from "../capabilities/action-router"
 import { createContentCapabilityDispatcher } from "../capabilities/content-dispatcher"
 import { createModelPriceCapabilityDispatcher } from "../capabilities/model-price-dispatcher"
+import { createRepositoryCapabilityDispatcher } from "../capabilities/repository-dispatcher"
+import { createVariableCapabilityDispatcher } from "../capabilities/variable-dispatcher"
 import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
 import { logStore, createMainLogger } from "../services/log-store"
@@ -504,10 +506,22 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     const modelPriceDispatcher = createModelPriceCapabilityDispatcher({
       db: getUsageAnalysisDb(app.getPath("userData")),
     })
+    const repositoryDispatcher = createRepositoryCapabilityDispatcher({
+      loadConfig: () => configStore.load(),
+    })
+    const variableDispatcher = createVariableCapabilityDispatcher({
+      loadConfig: () => configStore.load(),
+      updateConfig: (patch) => configStore.update(patch),
+      eventBus,
+      permissionGuard,
+      auditSink,
+      actor: { kind: "user", id: "synapse-mcp", display: "Synapse MCP" },
+    })
 
     const actionRouter = createSynapseActionRouter({
       contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
       modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),
+      repositoryDispatch: (action, params, context) => repositoryDispatcher.dispatch(action, params, context),
       databaseDispatch: (action, params, context) => dispatchDatabaseAction(
         action,
         params,
@@ -522,6 +536,7 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
         context,
         { permissionGuard, auditSink },
       ),
+      variableDispatch: (action, params, context) => variableDispatcher.dispatch(action, params, context),
       workflowDispatch: (action, params, context) => workflowDispatcher.dispatch(action, params, context),
     })
     await initDatabase(eventBus, actionRouter, { permissionGuard, auditSink })
