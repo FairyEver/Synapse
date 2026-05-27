@@ -18,7 +18,7 @@ function createHarness(config: SynapseConfig) {
   const emitted: unknown[] = []
   const permissionGuard: PermissionGuard = {
     registerPolicy: vi.fn(),
-    check: vi.fn(async () => ({ allowed: true })),
+    check: vi.fn(async () => ({ allowed: true as const })),
   }
   const auditSink: AuditSink = {
     record: (event) => {
