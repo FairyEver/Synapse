@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import {
   buildTaskCreateInput,
   createDefaultAgentActionConfig,
+  createDefaultTaskActionConfig,
   createTaskFormState,
   DEFAULT_TASK_FORM_STATE,
   formatTaskAction,
@@ -136,6 +137,20 @@ describe("task scheduler utils", () => {
 
   it("defaults new tasks to command actions", () => {
     expect(createTaskFormState().actionType).toBe("builtin.command")
+  })
+
+  it("defaults new Windows command tasks to cmd", () => {
+    expect(createTaskFormState(undefined, "", "win32").actionConfig).toMatchObject({
+      command: "",
+      shell: "cmd",
+    })
+  })
+
+  it("defaults new Windows script tasks to cmd", () => {
+    expect(createDefaultTaskActionConfig("builtin.script", "win32")).toMatchObject({
+      script: "",
+      shell: "cmd",
+    })
   })
 
   it("derives project scope from agent action config", () => {
