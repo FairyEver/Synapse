@@ -59,6 +59,15 @@ describe("Model price capability domain", () => {
     expect(tools.find((tool) => tool.name === "model_price_rule_delete")?.inputSchema.required).toEqual(["ruleId"])
     expect(tools.find((tool) => tool.name === "model_price_rule_update")?.inputSchema.properties).not.toHaveProperty("enabled")
   })
+
+  it("combines model price tools with all MCP tools", () => {
+    const toolNames = buildAllMcpTools().map((tool) => tool.name)
+    expect(toolNames).toContain("model_price_used_model_list")
+    expect(toolNames).toContain("model_price_rule_create")
+    expect(toolNames).toContain("model_price_rule_delete")
+    expect(MCP_TOOL_ACTIONS.model_price_rule_enable).toBe("model_price.rule.enable")
+    expect(getActionDomainId("model_price.rule.list")).toBe("model_price")
+  })
 })
 
 describe("Scheduler capability domain", () => {

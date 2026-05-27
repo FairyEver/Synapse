@@ -32,6 +32,7 @@ import type { ServiceDescriptor } from "../runtime/service-registry"
 import { createZipArchive } from "../runtime/archive"
 import { createSynapseActionRouter } from "../capabilities/action-router"
 import { createContentCapabilityDispatcher } from "../capabilities/content-dispatcher"
+import { createModelPriceCapabilityDispatcher } from "../capabilities/model-price-dispatcher"
 import { createWorkflowDispatcher } from "../capabilities/workflow-dispatcher"
 import { configStore } from "../services/config-store"
 import { logStore, createMainLogger } from "../services/log-store"
@@ -69,6 +70,7 @@ import { contentService } from "../services/content-service"
 import { contentSubmissionService } from "../services/content-submission-service"
 import { prepareContentIconImageBytes } from "../services/content-icon-image-service"
 import { readSkillDraftFromDirectory } from "../services/content-skill-source-service"
+import { getUsageAnalysisDb } from "../services/usage-analysis"
 import { userIdentityService } from "../services/user-identity-service"
 import { clearDeprecatedStores } from "./deprecated-store-cleanup"
 import {
@@ -499,10 +501,14 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
         permissionGuard,
       },
     })
+    const modelPriceDispatcher = createModelPriceCapabilityDispatcher({
+      db: getUsageAnalysisDb(app.getPath("userData")),
+    })
 
     const actionRouter = createSynapseActionRouter({
       contentDispatch: (action, params, context) => contentDispatcher.dispatch(action, params, context),
       databaseDispatch: dispatchDatabaseAction,
+      modelPriceDispatch: (action, params, context) => modelPriceDispatcher.dispatch(action, params, context),
       schedulerDispatch: (action, params) => dispatchSchedulerAction(taskScheduler, actionRuntime, action, params),
       workflowDispatch: (action, params, context) => workflowDispatcher.dispatch(action, params, context),
     })
