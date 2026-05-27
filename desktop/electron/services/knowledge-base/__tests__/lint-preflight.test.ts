@@ -136,4 +136,82 @@ describe("KnowledgeBaseLintPreflightService", () => {
       reviews: 0,
     })
   })
+
+  it("reports ambiguous wikilinks when duplicate page stems exist", async () => {
+    const root = await tempDir()
+    const frontmatter = [
+      "---",
+      "type: concept",
+      "title: Network",
+      "created: 2026-05-01",
+      "updated: 2026-05-24",
+      "tags: [network]",
+      "status: active",
+      "---",
+      "",
+    ].join("\n")
+    await writePage(root, "wiki/concepts/Network.md", `${frontmatter}# Network Concept\n`)
+    await writePage(root, "wiki/entities/Network.md", `${frontmatter}# Network Entity\n`)
+    await writePage(root, "wiki/Home.md", [
+      "---",
+      "type: hub",
+      "title: Home",
+      "created: 2026-05-01",
+      "updated: 2026-05-24",
+      "tags: [home]",
+      "status: active",
+      "---",
+      "",
+      "[[Network]]",
+      "",
+    ].join("\n"))
+
+    const result = await new KnowledgeBaseLintPreflightService({
+      now: () => new Date("2026-05-24T00:00:00.000Z"),
+      addressLint: {
+        lint: async () => ({
+          counter: 1,
+          highestCAddress: null,
+          postRolloutPagesChecked: 0,
+          legacyPagesPendingBackfill: 0,
+          issues: [],
+        }),
+      },
+      tilingService: {
+        peek: async () => ({
+          status: "ollama-unreachable",
+          vaultPath: root,
+          ollamaUrl: "http://127.0.0.1:11434",
+          ollamaReachable: false,
+          modelRequested: "nomic-embed-text",
+          modelPresent: false,
+          cachePresent: false,
+          cacheReadable: false,
+          cacheEntries: 0,
+          cacheModel: null,
+          thresholdsPresent: false,
+          thresholdsReadable: false,
+        }) satisfies DragonScaleTilingPeekResult,
+        check: async () => {
+          throw new Error("should not check")
+        },
+      },
+    }).run(root)
+
+    expect(result.pagesScanned).toBe(3)
+    expect(result.issues).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        severity: "warning",
+        code: "wikilink.ambiguous",
+        path: "wiki/Home.md",
+        message: "Ambiguous wikilink: [[Network]]",
+      }),
+    ]))
+    expect(result.issues).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        code: "wikilink.dead",
+        path: "wiki/Home.md",
+      }),
+    ]))
+  })
 })

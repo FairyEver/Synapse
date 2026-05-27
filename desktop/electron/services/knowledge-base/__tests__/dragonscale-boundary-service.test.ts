@@ -217,7 +217,7 @@ describe("DragonScaleBoundaryService", () => {
     await expect(service.score(root, { page: "Missing" })).rejects.toThrow("No scoreable DragonScale page")
   })
 
-  it("uses the later sorted path for duplicate stems to match upstream behavior", async () => {
+  it("keeps duplicate stems as separate scoreable pages", async () => {
     const root = await tempDir()
     await writePage(root, "wiki/a/Dupe.md", "---\ntype: concept\ntitle: First\ncreated: 2026-05-24\n---\n\n# First\n")
     await writePage(root, "wiki/z/Dupe.md", "---\ntype: concept\ntitle: Second\ncreated: 2026-05-24\n---\n\n# Second\n")
@@ -227,9 +227,10 @@ describe("DragonScaleBoundaryService", () => {
       today: "2026-05-24",
     })
 
-    expect(result.pageCountScoreable).toBe(1)
-    expect(result.results).toEqual([
-      expect.objectContaining({ title: "Second", path: "wiki/z/Dupe.md" }),
+    expect(result.pageCountScoreable).toBe(2)
+    expect(result.results.map((item) => item.path).sort()).toEqual([
+      "wiki/a/Dupe.md",
+      "wiki/z/Dupe.md",
     ])
   })
 

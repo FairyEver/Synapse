@@ -163,14 +163,14 @@ async function readWikiPages(root: string): Promise<readonly WikiPage[]> {
 
 function basicWikiIssues(pages: readonly WikiPage[]): KnowledgeBaseLintIssue[] {
   const issues: KnowledgeBaseLintIssue[] = []
-  const pagesByStem = new Map(pages.map((page) => [page.titleKey, page]))
+  const pagesByStem = groupPagesByStem(pages)
   const inbound = new Map<string, number>()
-  for (const page of pages) inbound.set(page.titleKey, 0)
+  for (const page of pages) inbound.set(page.relativePath, 0)
 
   for (const page of pages) {
     for (const link of extractWikilinks(page.body)) {
-      const target = pagesByStem.get(link)
-      if (!target) {
+      const targets = pagesByStem.get(link) ?? []
+      if (targets.length === 0) {
         issues.push({
           severity: "warning",
           code: "wikilink.dead",
@@ -179,8 +179,18 @@ function basicWikiIssues(pages: readonly WikiPage[]): KnowledgeBaseLintIssue[] {
         })
         continue
       }
-      if (target.titleKey !== page.titleKey) {
-        inbound.set(target.titleKey, (inbound.get(target.titleKey) ?? 0) + 1)
+      if (targets.length > 1) {
+        issues.push({
+          severity: "warning",
+          code: "wikilink.ambiguous",
+          path: page.relativePath,
+          message: `Ambiguous wikilink: [[${link}]]`,
+        })
+        continue
+      }
+      const target = targets[0]
+      if (target && target.relativePath !== page.relativePath) {
+        inbound.set(target.relativePath, (inbound.get(target.relativePath) ?? 0) + 1)
       }
     }
 
@@ -207,7 +217,7 @@ function basicWikiIssues(pages: readonly WikiPage[]): KnowledgeBaseLintIssue[] {
   }
 
   for (const page of pages) {
-    if (!page.system && (inbound.get(page.titleKey) ?? 0) === 0) {
+    if (!page.system && (inbound.get(page.relativePath) ?? 0) === 0) {
       issues.push({
         severity: "info",
         code: "page.orphan",
@@ -217,6 +227,14 @@ function basicWikiIssues(pages: readonly WikiPage[]): KnowledgeBaseLintIssue[] {
     }
   }
   return issues
+}
+
+function groupPagesByStem(pages: readonly WikiPage[]): Map<string, WikiPage[]> {
+  const result = new Map<string, WikiPage[]>()
+  for (const page of pages) {
+    result.set(page.titleKey, [...result.get(page.titleKey) ?? [], page])
+  }
+  return result
 }
 
 function manifestIssues(manifest: Awaited<ReturnType<typeof readKnowledgeBaseManifest>>): KnowledgeBaseLintIssue[] {
