@@ -53,4 +53,13 @@ describe("DatabaseService databaseSqlRead", () => {
 
     expect(result.rows.map((row) => row.name)).toContain("title")
   })
+
+  it("blocks raw SQL access to folder system tables", () => {
+    expect(() => service.databaseSqlExecute(`DELETE FROM "_table_folders"`))
+      .toThrow(/system tables/i)
+    expect(() => service.databaseSqlExecute("UPDATE _table_folder_members SET folder_id = 999"))
+      .toThrow(/system tables/i)
+    expect(() => service.databaseSqlRead(`SELECT * FROM "_table_folders"`))
+      .toThrow(/system tables/i)
+  })
 })

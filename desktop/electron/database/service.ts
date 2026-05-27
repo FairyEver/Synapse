@@ -103,7 +103,13 @@ function uniqueStrings(values: readonly unknown[]): string[] {
   return result
 }
 
-const SYSTEM_TABLES = ["_meta_tables", "_meta_columns", "_operation_log"]
+const SYSTEM_TABLES = [
+  "_meta_tables",
+  "_meta_columns",
+  "_operation_log",
+  "_table_folders",
+  "_table_folder_members",
+]
 const READ_ONLY_PRAGMA_NAMES = new Set([
   "application_id",
   "collation_list",
