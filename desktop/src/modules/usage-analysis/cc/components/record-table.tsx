@@ -19,7 +19,7 @@ import type {
 import { RecordDetailRows } from "./record-detail-rows"
 
 const SKELETON_ROWS = Array.from({ length: 8 }, (_, index) => index)
-const ACTION_COLUMN_CLASS = "sticky right-0 z-10 bg-background text-right"
+const ACTION_COLUMN_CLASS = "sticky right-0 z-10 bg-surface text-right"
 
 function formatInteger(value: number): string {
   return new Intl.NumberFormat("zh-CN", { maximumFractionDigits: 0 }).format(value)

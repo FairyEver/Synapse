@@ -156,8 +156,8 @@ describe("RecordTable", () => {
       />,
     )
 
-    expect(html).toMatch(/<th[^>]*class="[^"]*sticky[^"]*right-0[^"]*bg-background[^"]*"[^>]*>操作<\/th>/)
-    expect(html).toMatch(/<td[^>]*class="[^"]*sticky[^"]*right-0[^"]*bg-background[^"]*"[^>]*>[\s\S]*打开对话/)
+    expect(html).toMatch(/<th[^>]*class="[^"]*sticky[^"]*right-0[^"]*bg-surface[^"]*"[^>]*>操作<\/th>/)
+    expect(html).toMatch(/<td[^>]*class="[^"]*sticky[^"]*right-0[^"]*bg-surface[^"]*"[^>]*>[\s\S]*打开对话/)
   })
 
   it("aligns the expand control with the record title", () => {
