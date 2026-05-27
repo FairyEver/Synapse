@@ -219,4 +219,18 @@ describe("Content capability domain", () => {
       expect(tools.find((tool) => tool.name === `content_${type}_delete`)?.inputSchema.required).toEqual(["id", "baseHistoryDirname"])
     }
   })
+
+  it("allows Skill create and update schemas to use sourceDirectoryPath instead of inline fields", () => {
+    const tools = buildContentTools()
+    const create = tools.find((tool) => tool.name === "content_skill_create")
+    const update = tools.find((tool) => tool.name === "content_skill_update")
+
+    expect(create?.inputSchema.required).toBeUndefined()
+    expect(create?.inputSchema.anyOf).toEqual([
+      { required: ["name", "title", "description", "category", "content"] },
+      { required: ["sourceDirectoryPath"] },
+    ])
+    expect(update?.inputSchema.required).toEqual(["id", "baseHistoryDirname"])
+    expect(update?.inputSchema.anyOf).toEqual(create?.inputSchema.anyOf)
+  })
 })

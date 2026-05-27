@@ -6,6 +6,7 @@ import {
   type ActionExecutionInput,
   type MainActionDefinition,
 } from "../../../action-runtime/action-registry"
+import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import { dispatchSchedulerAction, toPublicTaskSummary } from "../external-api"
 import type { TaskSchedulerService } from "../task-scheduler-service"
 import type { ScheduledTaskEntry, ScheduledTaskRunEntry } from "../types"
@@ -375,4 +376,132 @@ describe("task scheduler external api", () => {
     expect(result.ok).toBe(true)
     expect((result.data as { activeDays: number[] }).activeDays).toEqual([6, 0])
   })
+
+  it("checks permission and audits allowed scheduler mutations", async () => {
+    const service = serviceMock()
+    const permissionGuard = permissionGuardMock({ allowed: true })
+    const auditSink = auditSinkMock()
+
+    await dispatchSchedulerAction(
+      service,
+      actionRegistry(),
+      "scheduler.task.enable",
+      { taskId: "task:1" },
+      { source: "mcp-stdio" },
+      { permissionGuard, auditSink },
+    )
+
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "scheduler.mutate",
+      actor: { kind: "user", id: "scheduler-dispatch:mcp-stdio" },
+      resource: "scheduler:task:1",
+      context: {
+        source: "mcp-stdio",
+        schedulerAction: "scheduler.task.enable",
+        taskId: "task:1",
+      },
+    })
+    expect(service.schedulerTaskEnable).toHaveBeenCalledWith("task:1")
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "scheduler.mutate",
+      actor: { kind: "user", id: "scheduler-dispatch:mcp-stdio" },
+      resource: "scheduler:task:1",
+      outcome: "allowed",
+      metadata: expect.objectContaining({
+        source: "mcp-stdio",
+        schedulerAction: "scheduler.task.enable",
+        taskId: "task:1",
+      }),
+    }))
+  })
+
+  it("denies scheduler mutations before persistence", async () => {
+    const service = serviceMock()
+    const permissionGuard = permissionGuardMock({
+      allowed: false,
+      reason: "denied by policy",
+      policyId: "test-policy",
+    })
+    const auditSink = auditSinkMock()
+
+    await expect(dispatchSchedulerAction(
+      service,
+      actionRegistry(),
+      "scheduler.task.disable",
+      { taskId: "task:1" },
+      { source: "mcp-http" },
+      { permissionGuard, auditSink },
+    )).rejects.toThrow("denied by policy")
+
+    expect(service.schedulerTaskDisable).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "scheduler.mutate",
+      resource: "scheduler:task:1",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        reason: "denied by policy",
+        policyId: "test-policy",
+      }),
+    }))
+  })
+
+  it("audits failed scheduler mutations without raw error text", async () => {
+    const service = serviceMock()
+    vi.mocked(service.schedulerTaskEnable).mockRejectedValueOnce(new Error("failed with secret schedule details"))
+    const auditSink = auditSinkMock()
+
+    await expect(dispatchSchedulerAction(
+      service,
+      actionRegistry(),
+      "scheduler.task.enable",
+      { taskId: "task:1" },
+      { source: "api" },
+      { permissionGuard: permissionGuardMock({ allowed: true }), auditSink },
+    )).rejects.toThrow("failed with secret schedule details")
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "scheduler.mutate",
+      resource: "scheduler:task:1",
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        errorName: "Error",
+        errorLength: "Error: failed with secret schedule details".length,
+      }),
+    }))
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret schedule")
+  })
+
+  it("does not check permissions for read-only scheduler actions", async () => {
+    const permissionGuard = permissionGuardMock({ allowed: true })
+    const auditSink = auditSinkMock()
+
+    await dispatchSchedulerAction(
+      serviceMock(),
+      actionRegistry(),
+      "scheduler.task.list",
+      {},
+      { source: "mcp-stdio" },
+      { permissionGuard, auditSink },
+    )
+
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(auditSink.record).not.toHaveBeenCalled()
+  })
 })
+
+function permissionGuardMock(
+  result: Awaited<ReturnType<PermissionGuard["check"]>>,
+): PermissionGuard {
+  return {
+    registerPolicy: vi.fn(() => () => {}),
+    check: vi.fn(async () => result),
+  }
+}
+
+function auditSinkMock(): AuditSink {
+  return {
+    record: vi.fn(),
+    list: vi.fn(() => []),
+    clearForTests: vi.fn(),
+  }
+}

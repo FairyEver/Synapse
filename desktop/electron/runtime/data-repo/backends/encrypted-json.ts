@@ -148,6 +148,17 @@ export class EncryptedJsonNamespace<T extends Record<string, unknown>>
     })
   }
 
+  async clearSingleton(): Promise<void> {
+    this.ensureEncryptionAvailable()
+    const env = await this.loadEnvelope()
+    if (env.singleton === null) return
+    const previous = env.singleton
+    const next = { ...env, singleton: null }
+    await this.persist(next)
+    this.cache = next
+    this.emit({ kind: "clear", previous })
+  }
+
   async list(filter?: Partial<T>): Promise<T[]> {
     const env = await this.loadEnvelope()
     return this.applyFilter(Object.values(env.items), filter)

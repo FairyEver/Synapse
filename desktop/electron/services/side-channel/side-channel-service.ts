@@ -226,13 +226,13 @@ export class SideChannelService implements ReplyTargetRuntime {
     const dispatcher = this.dispatchers.get(target.transport.kind)
     const outbox = this.outbox(project.projectId)
     if (isMutedTarget(target)) {
-      outbox.record({ target, payload, status: "sent" })
+      const outboxRecorded = await this.recordOutbox(outbox, { target, payload, status: "sent" })
       this.recordSendAudit("allowed", target, attachments.length)
       return {
         ok: true,
         projectId: project.projectId,
         sessionKey,
-        outboxRecorded: true,
+        outboxRecorded,
       }
     }
 
@@ -241,17 +241,17 @@ export class SideChannelService implements ReplyTargetRuntime {
         throw new SideChannelError("dispatch_unavailable", "dispatcher is unavailable", 502)
       }
       await dispatcher.dispatchSideChannelSend(target, { message, attachments })
-      outbox.record({ target, payload, status: "sent" })
+      const outboxRecorded = await this.recordOutbox(outbox, { target, payload, status: "sent" })
       this.recordSendAudit("allowed", target, attachments.length)
       return {
         ok: true,
         projectId: project.projectId,
         sessionKey,
-        outboxRecorded: true,
+        outboxRecorded,
       }
     } catch (error) {
       const diagnostic = errorDiagnostic(error)
-      outbox.record({ target, payload, status: "failed", lastError: outboxLastError(error) })
+      await this.recordOutbox(outbox, { target, payload, status: "failed", lastError: outboxLastError(error) })
       this.recordSendAudit("failed", target, attachments.length, diagnostic)
       this.deps.logger?.warn("Side-channel send dispatch failed.", {
         projectId: target.projectId,
@@ -262,6 +262,18 @@ export class SideChannelService implements ReplyTargetRuntime {
         ...diagnostic,
       })
       throw new SideChannelError("dispatch_failed", "dispatch failed", 502)
+    }
+  }
+
+  private async recordOutbox(
+    outbox: ReplyOutboxService,
+    input: Parameters<ReplyOutboxService["record"]>[0],
+  ): Promise<boolean> {
+    try {
+      await outbox.record(input)
+      return true
+    } catch {
+      return false
     }
   }
 

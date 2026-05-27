@@ -1,5 +1,7 @@
 import { DatabaseSync, type SQLInputValue } from "node:sqlite"
-import { copyFileSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
+import { copyFileSync, mkdtempSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs"
+import os from "node:os"
+import path from "node:path"
 import type { Column, DatabaseTableImportInspection } from "./types"
 import { kindToAffinity } from "./column-kind"
 import {
@@ -59,6 +61,27 @@ function q(name: string): string {
 
 function sqlString(value: string): string {
   return `'${value.replace(/'/g, "''")}'`
+}
+
+function createImportSnapshot(sourcePath: string): string {
+  const tempDir = mkdtempSync(path.join(os.tmpdir(), "synapse-db-import-"))
+  const snapshotPath = path.join(tempDir, "source.db")
+  let sourceDb: DatabaseSync | null = null
+
+  try {
+    sourceDb = new DatabaseSync(sourcePath)
+    sourceDb.exec(`VACUUM INTO ${sqlString(snapshotPath)}`)
+    return snapshotPath
+  } catch (error) {
+    rmSync(tempDir, { recursive: true, force: true })
+    throw error
+  } finally {
+    sourceDb?.close()
+  }
+}
+
+function removeImportSnapshot(snapshotPath: string): void {
+  rmSync(path.dirname(snapshotPath), { recursive: true, force: true })
 }
 
 function sqlLiteral(value: unknown): string {
@@ -229,9 +252,10 @@ export class ImportExportManager {
   }
 
   importDatabase(sourcePath: string): void {
+    const snapshotPath = createImportSnapshot(sourcePath)
     let tempDb: DatabaseSync | null = null
     try {
-      tempDb = new DatabaseSync(sourcePath)
+      tempDb = new DatabaseSync(snapshotPath)
       const tables = tempDb.prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='_meta_tables'`).all()
       if (tables.length === 0) {
         throw new Error("Invalid database: _meta_tables not found")
@@ -258,12 +282,15 @@ export class ImportExportManager {
           throw new Error(`Invalid database: _meta_columns missing column "${required}"`)
         }
       }
+      tempDb?.close()
+      tempDb = null
+
+      this.reopenDatabase(snapshotPath)
+      logger.info("Database imported.", { source: sourcePath })
     } finally {
       tempDb?.close()
+      removeImportSnapshot(snapshotPath)
     }
-
-    this.reopenDatabase(sourcePath)
-    logger.info("Database imported.", { source: sourcePath })
   }
 
   exportTable(table: string, targetPath: string): void {

@@ -9,6 +9,7 @@
 
 import { databaseService } from "./service"
 import { getMutatingActions } from "../../database/shared/capability-registry"
+import type { AuditSink, PermissionGuard } from "../runtime/security"
 import type { Column, DatabaseOperationSource, DatabaseQueryParams, DatabaseWhereClause } from "./types"
 
 type DispatchResult = {
@@ -20,6 +21,15 @@ type DispatchResult = {
 
 type ActionHandler = (params: Record<string, unknown>) => DispatchResult
 type DispatchContext = { source?: DatabaseOperationSource }
+type DatabaseDispatchSecurityDeps = {
+  readonly permissionGuard?: PermissionGuard
+  readonly auditSink?: AuditSink
+}
+type DatabaseMutationSecurity = {
+  readonly actor: { kind: "user"; id: string }
+  readonly resource: string
+  readonly metadata: Record<string, unknown>
+}
 
 // --- parameter validation helpers ---
 
@@ -303,31 +313,112 @@ function extractTableName(action: string, params: Record<string, unknown>): stri
   return undefined
 }
 
-function dispatchDatabaseAction(action: string, params: Record<string, unknown>, context: DispatchContext = {}): DispatchResult {
+async function dispatchDatabaseAction(
+  action: string,
+  params: Record<string, unknown>,
+  context: DispatchContext = {},
+  securityDeps: DatabaseDispatchSecurityDeps = {},
+): Promise<DispatchResult> {
   const handler = ACTION_HANDLERS[action]
   if (!handler) throw new Error(`Unknown action: ${action}`)
-  const result = handler(params)
-  if (MUTATING_ACTIONS.has(action)) {
-    try {
-      databaseService.recordOperation({
-        source: context.source ?? "api",
-        action,
-        table: extractTableName(action, params),
-        affected: result.affected,
-        dryRun: params.dryRun === true,
+  const security = databaseMutationSecurity(action, params, context)
+  if (security) await authorizeDatabaseMutation(securityDeps, security)
+
+  try {
+    const result = handler(params)
+    if (MUTATING_ACTIONS.has(action)) {
+      try {
+        databaseService.recordOperation({
+          source: context.source ?? "api",
+          action,
+          table: extractTableName(action, params),
+          affected: result.affected,
+          dryRun: params.dryRun === true,
+        })
+      } catch {
+        // Never let an operation log failure break the dispatch result.
+      }
+    }
+    if (MUTATING_ACTIONS.has(action) && params.dryRun !== true && changeListener) {
+      try {
+        changeListener({ action, table: extractTableName(action, params) })
+      } catch {
+        // Never let a broadcast failure break the dispatch result.
+      }
+    }
+    if (security) {
+      securityDeps.auditSink?.record({
+        action: "database.mutate",
+        actor: security.actor,
+        resource: security.resource,
+        outcome: "allowed",
+        metadata: security.metadata,
       })
-    } catch {
-      // Never let an operation log failure break the dispatch result.
     }
-  }
-  if (MUTATING_ACTIONS.has(action) && params.dryRun !== true && changeListener) {
-    try {
-      changeListener({ action, table: extractTableName(action, params) })
-    } catch {
-      // Never let a broadcast failure break the dispatch result.
+    return result
+  } catch (error) {
+    if (security) {
+      securityDeps.auditSink?.record({
+        action: "database.mutate",
+        actor: security.actor,
+        resource: security.resource,
+        outcome: "failed",
+        metadata: {
+          ...security.metadata,
+          errorName: error instanceof Error ? error.name : typeof error,
+          errorLength: String(error).length,
+        },
+      })
     }
+    throw error
   }
-  return result
+}
+
+async function authorizeDatabaseMutation(
+  deps: DatabaseDispatchSecurityDeps,
+  security: DatabaseMutationSecurity,
+): Promise<void> {
+  const permission = await deps.permissionGuard?.check({
+    action: "database.mutate",
+    actor: security.actor,
+    resource: security.resource,
+    context: security.metadata,
+  })
+  if (permission && !permission.allowed) {
+    deps.auditSink?.record({
+      action: "database.mutate",
+      actor: security.actor,
+      resource: security.resource,
+      outcome: "denied",
+      metadata: {
+        ...security.metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    throw new Error(permission.reason)
+  }
+}
+
+function databaseMutationSecurity(
+  action: string,
+  params: Record<string, unknown>,
+  context: DispatchContext,
+): DatabaseMutationSecurity | null {
+  if (!MUTATING_ACTIONS.has(action)) return null
+  const source = context.source ?? "api"
+  const table = extractTableName(action, params)
+  const dryRun = params.dryRun === true
+  return {
+    actor: { kind: "user", id: `database-dispatch:${source}` },
+    resource: `database:${table ?? action}`,
+    metadata: {
+      source,
+      databaseAction: action,
+      ...(table ? { table } : {}),
+      dryRun,
+    },
+  }
 }
 
 function hasDatabaseAction(action: string): boolean {
@@ -335,4 +426,10 @@ function hasDatabaseAction(action: string): boolean {
 }
 
 export { dispatchDatabaseAction, hasDatabaseAction, setDatabaseChangeListener }
-export type { DispatchContext, DispatchResult, DatabaseChangeEvent, DatabaseChangeListener }
+export type {
+  DatabaseDispatchSecurityDeps,
+  DispatchContext,
+  DispatchResult,
+  DatabaseChangeEvent,
+  DatabaseChangeListener,
+}

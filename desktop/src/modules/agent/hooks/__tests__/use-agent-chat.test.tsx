@@ -333,6 +333,49 @@ describe("useAgentChat", () => {
     expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("archive secret failure")
   })
 
+  it("keeps the selected session when pending permission refresh fails", async () => {
+    const bridge = (window as unknown as {
+      synapse: {
+        agent: {
+          getTimeline: ReturnType<typeof vi.fn>
+          listPendingPermissions: ReturnType<typeof vi.fn>
+        }
+      }
+    }).synapse.agent
+    bridge.listPendingPermissions.mockRejectedValue(new Error("permission refresh token=sk-permission"))
+    let chat: ReturnType<typeof useAgentChat> | undefined
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <HookProbe onChange={(next) => {
+          chat = next
+        }}
+        />,
+      )
+    })
+    await waitFor(() => chat?.selectedConversationId === session.id)
+
+    expect(chat?.error).toBe("权限刷新失败")
+    expect(bridge.getTimeline).toHaveBeenCalledWith({
+      projectId: session.projectId,
+      sessionKey: session.sessionKey,
+      conversationId: session.id,
+      limit: 100,
+    })
+    expect(rendererLogger.warn).toHaveBeenCalledWith("Agent pending permissions refresh failed.", expect.objectContaining({
+      projectIds: ["project-1"],
+      activeProjectId: session.projectId,
+      boundary: "renderer.agent.pending-permissions",
+      errorName: "Error",
+      errorLength: "permission refresh token=sk-permission".length,
+    }))
+    expect(JSON.stringify(rendererLogger.warn.mock.calls)).not.toContain("sk-permission")
+  })
+
   it("logs Agent refresh failures with sanitized target context", async () => {
     const bridge = (window as unknown as {
       synapse: {

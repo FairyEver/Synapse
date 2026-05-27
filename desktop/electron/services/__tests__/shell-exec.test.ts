@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { resolveShellCommand } from "../shell-exec"
+import { resolveEffectiveShell, resolveShellCommand } from "../shell-exec"
 
 describe("resolveShellCommand", () => {
   it("defaults to cmd on Windows when requested", () => {
@@ -12,6 +12,13 @@ describe("resolveShellCommand", () => {
       command: "cmd.exe",
       args: ["/d", "/s", "/c", "echo ok"],
     })
+  })
+
+  it("resolves the same effective Windows shell before command construction", () => {
+    expect(resolveEffectiveShell(undefined, {
+      platform: "win32",
+      windowsDefault: "powershell",
+    })).toBe("powershell")
   })
 
   it("can select PowerShell explicitly", () => {

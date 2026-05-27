@@ -15,6 +15,7 @@ import {
 interface BoundaryPage {
   readonly title: string
   readonly titleKey: string
+  readonly pageKey: string
   readonly path: string
   readonly body: string
   readonly updated?: string
@@ -76,7 +77,10 @@ export class DragonScaleBoundaryService {
       if (options.includeScoreZero !== true) {
         results = results.filter((result) => result.score > 0)
       }
-      results.sort((left, right) => right.score - left.score || left.titleKey.localeCompare(right.titleKey))
+      results.sort((left, right) =>
+        right.score - left.score
+        || left.titleKey.localeCompare(right.titleKey)
+        || left.path.localeCompare(right.path))
       results = results.slice(0, top)
     }
 
@@ -106,9 +110,11 @@ async function collectPages(root: string): Promise<Map<string, BoundaryPage>> {
     const parsed = parseFrontmatterFields(frontmatter)
     if (!included(relativePath, parsed)) continue
     const titleKey = path.parse(markdownPath).name
-    pages.set(titleKey, {
+    const pageKey = relativePath
+    pages.set(pageKey, {
       title: parsed.title ?? titleKey,
       titleKey,
+      pageKey,
       path: relativePath,
       body,
       ...(parsed.updated ? { updated: parsed.updated } : undefined),
@@ -197,20 +203,32 @@ function buildGraph(pages: Map<string, BoundaryPage>): {
 } {
   const outEdges = new Map<string, Set<string>>()
   const inEdges = new Map<string, Set<string>>()
-  for (const titleKey of pages.keys()) {
-    outEdges.set(titleKey, new Set())
-    inEdges.set(titleKey, new Set())
+  const pagesByTitleKey = pagesByStem(pages)
+  for (const pageKey of pages.keys()) {
+    outEdges.set(pageKey, new Set())
+    inEdges.set(pageKey, new Set())
   }
 
   for (const [sourceKey, page] of pages.entries()) {
     for (const targetKey of extractWikilinks(page.body)) {
-      if (targetKey === sourceKey || !pages.has(targetKey)) continue
-      outEdges.get(sourceKey)?.add(targetKey)
-      inEdges.get(targetKey)?.add(sourceKey)
+      const targets = pagesByTitleKey.get(targetKey) ?? []
+      if (targets.length !== 1) continue
+      const target = targets[0]
+      if (!target || target.pageKey === sourceKey) continue
+      outEdges.get(sourceKey)?.add(target.pageKey)
+      inEdges.get(target.pageKey)?.add(sourceKey)
     }
   }
 
   return { outEdges, inEdges }
+}
+
+function pagesByStem(pages: Map<string, BoundaryPage>): Map<string, BoundaryPage[]> {
+  const result = new Map<string, BoundaryPage[]>()
+  for (const page of pages.values()) {
+    result.set(page.titleKey, [...result.get(page.titleKey) ?? [], page])
+  }
+  return result
 }
 
 function extractWikilinks(body: string): Set<string> {
@@ -254,8 +272,8 @@ function scorePage(
   inEdges: Map<string, Set<string>>,
   today: string,
 ): DragonScaleBoundaryScoreResult {
-  const outDegree = outEdges.get(page.titleKey)?.size ?? 0
-  const inDegree = inEdges.get(page.titleKey)?.size ?? 0
+  const outDegree = outEdges.get(page.pageKey)?.size ?? 0
+  const inDegree = inEdges.get(page.pageKey)?.size ?? 0
   const ageDays = daysSince(page.updated ?? page.created, today)
   const recencyWeight = round4(Math.exp(-ageDays / DRAGONSCALE_BOUNDARY_HALFLIFE_DAYS))
   return {

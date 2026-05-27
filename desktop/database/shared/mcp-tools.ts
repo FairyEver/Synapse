@@ -444,7 +444,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "database_sql_read",
-      description: "Execute a read-only SQL statement with optional positional bind params. Allows SELECT, PRAGMA, and EXPLAIN. Prefer this over database_sql_execute for inspection and reporting.",
+      description: "Execute a read-only SQL statement with optional positional bind params. Allows SELECT, EXPLAIN, and read-only PRAGMA inspection. Prefer this over database_sql_execute for inspection and reporting. System tables such as _table_folders and _table_folder_members are blocked.",
       inputSchema: {
         type: "object",
         properties: {
@@ -467,7 +467,7 @@ function buildTools(): McpTool[] {
     },
     {
       name: "database_sql_execute",
-      description: "Execute raw SQL with optional positional bind params. Prefer database_sql_read for inspection and structured tools for normal writes. Use only when the user explicitly needs SQL-level DDL/DML or advanced repair. System tables prefixed with _ and ATTACH or DETACH are blocked.",
+      description: "Execute raw SQL with optional positional bind params. Prefer database_sql_read for inspection and structured tools for normal writes. Use only when the user explicitly needs SQL-level DDL/DML or advanced repair. System tables such as _table_folders and _table_folder_members, plus ATTACH or DETACH, are blocked.",
       inputSchema: {
         type: "object",
         properties: {

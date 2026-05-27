@@ -128,6 +128,16 @@ export class JsonNamespace<T extends Record<string, unknown>>
     })
   }
 
+  async clearSingleton(): Promise<void> {
+    const env = await this.loadEnvelope()
+    if (env.singleton === null) return
+    const previous = env.singleton
+    const next = { ...env, singleton: null }
+    await this.persist(next)
+    this.cache = next
+    this.emit({ kind: "clear", previous })
+  }
+
   async list(filter?: Partial<T>): Promise<T[]> {
     const env = await this.loadEnvelope()
     const items = Object.values(env.items)

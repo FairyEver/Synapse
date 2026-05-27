@@ -35,7 +35,7 @@ export interface SideChannelSendResult {
   readonly ok: true
   readonly projectId: string
   readonly sessionKey: string
-  readonly outboxRecorded: true
+  readonly outboxRecorded: boolean
 }
 
 export interface SideChannelRelaySendRequest {

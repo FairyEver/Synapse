@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
+import fs from "node:fs/promises"
 import path from "node:path"
 
 const logStoreMock = vi.hoisted(() => ({
@@ -14,6 +15,7 @@ import { createInMemoryHarness } from "../../../runtime/ipc"
 import type { IpcHandlerContext } from "../../../runtime/ipc"
 import type { ProjectContainer, ProjectContainerRegistry } from "../../../runtime/project-container"
 import { AGENT_RUNTIME_SERVICE_ID } from "../../../services/agent-runtime"
+import { defaultKnowledgeBaseUserDataPath } from "../../../services/knowledge-base/managed-path"
 import { PROVIDER_SERVICE_ID } from "../../../services/provider"
 import { agentIpcModule } from "../ipc"
 import { configStore } from "../../../services/config-store"
@@ -104,6 +106,9 @@ describe("agentIpcModule", () => {
   })
 
   it("opens managed knowledge base projects with their hidden runtime path", async () => {
+    const backingPath = path.join(defaultKnowledgeBaseUserDataPath(), "knowledge-bases", "kb-1")
+    await fs.rm(backingPath, { recursive: true, force: true })
+    await fs.mkdir(backingPath, { recursive: true })
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [],
       global: {
@@ -151,6 +156,66 @@ describe("agentIpcModule", () => {
       workspacePath: expect.stringContaining(path.join("knowledge-bases", "kb-1")),
       managedKnowledgeBase: true,
     })
+  })
+
+  it("rejects managed knowledge base projects when their hidden runtime path is missing", async () => {
+    const runtimeId = "missing-kb-agent-ipc-test"
+    const backingPath = path.join(defaultKnowledgeBaseUserDataPath(), "knowledge-bases", runtimeId)
+    await fs.rm(backingPath, { recursive: true, force: true })
+    vi.mocked(configStore.load).mockResolvedValue({
+      repositories: [],
+      global: {
+        themeMode: "system",
+        projects: [{
+          id: "kb-missing",
+          name: "Knowledge",
+          path: `synapse-kb://${runtimeId}`,
+          capabilities: {
+            knowledgeBase: {
+              enabled: true,
+              schemaVersion: 1,
+              templateVersion: "2026-05-24",
+              managed: true,
+              runtimeId,
+            },
+          },
+        }],
+        favorites: { rule: [], skill: [], prompt: [] },
+        recentlyViewed: { rule: [], skill: [], prompt: [] },
+        contentSortOrder: "modified-desc",
+      },
+      agent: {
+        defaultPermissionMode: "default",
+      },
+    } as never)
+    const send = vi.fn().mockResolvedValue({
+      conversationId: "conv-1",
+      resultText: "done",
+      events: [{ type: "result", content: "done", done: true }],
+    })
+    const harness = createHarness({
+      agent: {
+        send,
+      },
+    })
+
+    await expect(harness.invoke("synapse:agent:send", {
+      projectId: "kb-missing",
+      content: "hello",
+    })).rejects.toThrow("知识库运行目录不存在")
+
+    expect(harness.projectContainers.open).not.toHaveBeenCalled()
+    expect(send).not.toHaveBeenCalled()
+    expect(logStoreMock.logger.warn).toHaveBeenCalledWith(
+      "Managed knowledge base workspace unavailable.",
+      expect.objectContaining({
+        boundary: "agent.managed-knowledge-base.workspace",
+        projectId: "kb-missing",
+        projectName: "Knowledge",
+        errorCode: "ENOENT",
+      }),
+    )
+    expect(JSON.stringify(logStoreMock.logger.warn.mock.calls)).not.toContain(backingPath)
   })
 
   it("passes optional providerId through local renderer sends", async () => {

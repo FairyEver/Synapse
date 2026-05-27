@@ -507,7 +507,7 @@ describe("contentIpcModule sync ownership", () => {
     ["update", "updateContent", { contentType: "rule", payload: { id: "rule-1", title: "Rule" } }],
     ["deleteContent", "deleteContent", { id: "rule-1", type: "rule" }],
     ["restore", "restoreContent", { id: "rule-1", type: "rule" }],
-    ["purge", "purgeContent", { id: "rule-1", type: "rule" }],
+    ["purge", "purgeContent", { id: "rule-1", type: "rule", baseHistoryDirname: "history-1" }],
   ] as const)("returns the %s result when pending push refresh fails", async (methodName, serviceName, payload) => {
     const { contentIpcModule } = await import("../ipc")
     const expectedResult = {
@@ -552,6 +552,37 @@ describe("contentIpcModule sync ownership", () => {
         latestHistoryDirname: "20260522000000Z__user__abc123",
         modifiedAt: "2026-05-22T12:00:00.000Z",
         operation: "create",
+      },
+    }))
+  })
+
+  it.each([
+    ["deleteContent", "deleteContent", "delete", { id: "rule-1", type: "rule", baseHistoryDirname: "history-1" }],
+    ["restore", "restoreContent", "restore", { id: "rule-1", type: "rule" }],
+    ["purge", "purgeContent", "purge", { id: "rule-1", type: "rule", baseHistoryDirname: "history-1" }],
+  ] as const)("emits content.changed after %s saves", async (methodName, serviceName, operation, payload) => {
+    const { contentIpcModule } = await import("../ipc")
+    mocks.contentSubmissionService[serviceName].mockResolvedValueOnce({
+      id: "rule-1",
+      latestHistoryDirname: "20260522000000Z__user__abc123",
+      modifiedAt: "2026-05-22T12:00:00.000Z",
+      pendingPushCount: 0,
+      status: "saved",
+      title: "Rule",
+      type: "rule",
+    })
+
+    await contentIpcModule.methods[methodName].handler(createContext() as never, payload as never)
+
+    expect(mocks.eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "content",
+      type: "content.changed",
+      payload: {
+        contentId: "rule-1",
+        contentType: "rule",
+        latestHistoryDirname: "20260522000000Z__user__abc123",
+        modifiedAt: "2026-05-22T12:00:00.000Z",
+        operation,
       },
     }))
   })

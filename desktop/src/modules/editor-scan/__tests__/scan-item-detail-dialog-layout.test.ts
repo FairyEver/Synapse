@@ -149,4 +149,14 @@ describe("scan item detail dialog layout", () => {
     expect(source).toContain("setFallbackReason")
     expect(source).toContain("handlePublishOverwrite")
   })
+
+  it("does not call catch on an optional showItemInFolder result", async () => {
+    const source = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(source).not.toContain("getSynapseBridge()?.shell.showItemInFolder")
+    expect(source).not.toMatch(/bridge\?\.shell\.showItemInFolder\([^)]*\)\.catch/)
+  })
 })

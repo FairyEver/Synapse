@@ -907,6 +907,7 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
       type: "card",
       session_key: target.sessionKey,
       reply_ctx: target.replyCtx?.replyCtx,
+      project: target.projectId,
       card: {
         title: "Permission required",
         body,

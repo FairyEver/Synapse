@@ -12,9 +12,11 @@ import type { SynapseAgentGlobalConfig, SynapseProjectConfig } from "@/types/con
 import { createRendererLogger } from "@/app-shell/logging"
 import { rendererActionRegistry } from "@/action-runtime/builtin-actions"
 import type { AgentActionConfig } from "../../../action-packages/builtin/agent"
+import type { ActionConfig } from "../../../action-packages/types"
 import type { TaskExportFile, TaskFormState } from "./types"
 
 const DEFAULT_ACTION_TYPE = "builtin.command"
+const WINDOWS_DEFAULT_SHELL = "cmd"
 const logger = createRendererLogger("task-scheduler.utils")
 
 const DEFAULT_TASK_FORM_STATE: TaskFormState = {
@@ -28,17 +30,20 @@ const DEFAULT_TASK_FORM_STATE: TaskFormState = {
   everyMinutes: "60",
   intervalAnchor: "created_at",
   actionType: DEFAULT_ACTION_TYPE,
-  actionConfig: rendererActionRegistry.getDefaultConfig(DEFAULT_ACTION_TYPE),
+  actionConfig: createDefaultTaskActionConfig(DEFAULT_ACTION_TYPE),
   missedRunPolicy: "skip",
 }
 
 function createTaskFormState(
   task?: ScheduledTask,
   _defaultProjectId = "",
-  _platform?: string,
+  platform?: string,
 ): TaskFormState {
   if (!task) {
-    return { ...DEFAULT_TASK_FORM_STATE }
+    return {
+      ...DEFAULT_TASK_FORM_STATE,
+      actionConfig: createDefaultTaskActionConfig(DEFAULT_ACTION_TYPE, platform),
+    }
   }
 
   return {
@@ -59,6 +64,21 @@ function createTaskFormState(
     actionConfig: task.action.config,
     missedRunPolicy: task.missedRunPolicy,
   }
+}
+
+function createDefaultTaskActionConfig(actionType: string, platform?: string): ActionConfig {
+  const baseConfig = rendererActionRegistry.getDefaultConfig(actionType)
+  if (platform === "win32" && isShellActionType(actionType)) {
+    return {
+      ...baseConfig,
+      shell: WINDOWS_DEFAULT_SHELL,
+    }
+  }
+  return { ...baseConfig }
+}
+
+function isShellActionType(actionType: string): boolean {
+  return actionType === "builtin.command" || actionType === "builtin.script"
 }
 
 function createDefaultAgentActionConfig(
@@ -342,6 +362,7 @@ export {
   buildTaskCreateInput,
   buildTaskUpdateInput,
   createDefaultAgentActionConfig,
+  createDefaultTaskActionConfig,
   createTaskFormState,
   formatTaskNextRun,
   formatRunStatus,

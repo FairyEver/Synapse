@@ -54,6 +54,7 @@ const DEFAULT_RUN_AS_ENV_ALLOWLIST = [
 ]
 
 const DEFAULT_MAX_BUFFER_BYTES = 1024 * 1024
+const TERMINATION_GRACE_MS = 5_000
 
 export type ControlledProcessAction = Extract<
   PermissionAction,
@@ -135,6 +136,11 @@ type SpawnFn = (
   options: SpawnOptionsWithoutStdio,
 ) => ChildProcessWithoutNullStreams
 
+interface ProcessTerminator {
+  terminate(signal?: NodeJS.Signals): void
+  clear(): void
+}
+
 export class ControlledProcessPermissionError extends Error {
   readonly result: PermissionResult
 
@@ -149,6 +155,28 @@ export class ControlledProcessOutputError extends Error {
   constructor(message: string) {
     super(message)
     this.name = "ControlledProcessOutputError"
+  }
+}
+
+function createProcessTerminator(child: Pick<ChildProcessWithoutNullStreams, "kill">): ProcessTerminator {
+  let forceKillTimeout: ReturnType<typeof setTimeout> | null = null
+
+  return {
+    terminate(signal: NodeJS.Signals = "SIGTERM") {
+      child.kill(signal)
+      if (signal !== "SIGTERM" || forceKillTimeout !== null) return
+
+      forceKillTimeout = setTimeout(() => {
+        forceKillTimeout = null
+        child.kill("SIGKILL")
+      }, TERMINATION_GRACE_MS)
+    },
+    clear() {
+      if (forceKillTimeout) {
+        clearTimeout(forceKillTimeout)
+        forceKillTimeout = null
+      }
+    },
   }
 }
 
@@ -169,32 +197,13 @@ export class ControlledProcessRunner {
     const args = request.args ?? []
     const output = request.output ?? {}
     const maxBufferBytes = output.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES
-    const launch = buildLaunch(request)
+    const permissionContext = buildPermissionContext(request, args, output, { longRunning: true })
 
     const permission = await this.permissionGuard.check({
       action: request.action,
       actor: request.actor,
       resource: request.command,
-      context: {
-        args,
-        launchCommand: launch.command,
-        launchArgs: launch.args,
-        cwd: request.cwd,
-        envKeys: Object.keys(launch.env).sort(),
-        output: {
-          stdout: output.stdout ?? "buffer",
-          stderr: output.stderr ?? "buffer",
-        },
-        stdinBytes: stdinBytes(request.stdin),
-        stream: {
-          stdoutLine: request.onStdoutLine !== undefined,
-          stderrLine: request.onStderrLine !== undefined,
-        },
-        timeoutMs: request.timeoutMs,
-        longRunning: true,
-        isolation: launch.isolationMetadata,
-        ...request.metadata,
-      },
+      context: permissionContext,
     })
 
     if (!permission.allowed) {
@@ -213,6 +222,7 @@ export class ControlledProcessRunner {
       throw new ControlledProcessPermissionError(permission)
     }
 
+    const launch = buildLaunch(request)
     let child: ChildProcessWithoutNullStreams
     try {
       child = this.spawnImpl(launch.command, launch.args, {
@@ -242,41 +252,13 @@ export class ControlledProcessRunner {
     const args = request.args ?? []
     const output = request.output ?? {}
     const maxBufferBytes = output.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES
-    const launch = buildLaunch(request)
-    const launchPathEntries = splitPath(launch.env.PATH ?? "", process.platform === "win32" ? ";" : ":")
-    const launchDiagnostics: ControlledProcessDiagnostics = {
-      envKeys: Object.keys(launch.env).sort(),
-      pathSummary: launchPathEntries.length > 0
-        ? `${launchPathEntries[0]}${launchPathEntries.length > 1 ? ` ... (${String(launchPathEntries.length)} entries)` : ""}`
-        : "(empty)",
-      pathEntries: launchPathEntries,
-      shell: launch.command,
-      args: [...launch.args],
-    }
+    const permissionContext = buildPermissionContext(request, args, output)
 
     const permission = await this.permissionGuard.check({
       action: request.action,
       actor: request.actor,
       resource: request.command,
-      context: {
-        args,
-        launchCommand: launch.command,
-        launchArgs: launch.args,
-        cwd: request.cwd,
-        envKeys: Object.keys(launch.env).sort(),
-        output: {
-          stdout: output.stdout ?? "buffer",
-          stderr: output.stderr ?? "buffer",
-        },
-        stdinBytes: stdinBytes(request.stdin),
-        stream: {
-          stdoutLine: request.onStdoutLine !== undefined,
-          stderrLine: request.onStderrLine !== undefined,
-        },
-        timeoutMs: request.timeoutMs,
-        isolation: launch.isolationMetadata,
-        ...request.metadata,
-      },
+      context: permissionContext,
     })
 
     if (!permission.allowed) {
@@ -295,6 +277,18 @@ export class ControlledProcessRunner {
       throw new ControlledProcessPermissionError(permission)
     }
 
+    const launch = buildLaunch(request)
+    const launchPathEntries = splitPath(launch.env.PATH ?? "", process.platform === "win32" ? ";" : ":")
+    const launchDiagnostics: ControlledProcessDiagnostics = {
+      envKeys: Object.keys(launch.env).sort(),
+      pathSummary: launchPathEntries.length > 0
+        ? `${launchPathEntries[0]}${launchPathEntries.length > 1 ? ` ... (${String(launchPathEntries.length)} entries)` : ""}`
+        : "(empty)",
+      pathEntries: launchPathEntries,
+      shell: launch.command,
+      args: [...launch.args],
+    }
+
     let child: ChildProcessWithoutNullStreams
     try {
       child = this.spawnImpl(launch.command, launch.args, {
@@ -311,21 +305,22 @@ export class ControlledProcessRunner {
 
     const stdoutCollector = new OutputCollector(output.stdout ?? "buffer", maxBufferBytes)
     const stderrCollector = new OutputCollector(output.stderr ?? "buffer", maxBufferBytes)
+    const terminator = createProcessTerminator(child)
     let timedOut = false
     let outputError: Error | null = null
     let spawnError: Error | null = null
     const stdoutLines = new LineEmitter(request.onStdoutLine, (error) => {
       outputError = error
-      child.kill("SIGTERM")
+      terminator.terminate()
     })
     const stderrLines = new LineEmitter(request.onStderrLine, (error) => {
       outputError = error
-      child.kill("SIGTERM")
+      terminator.terminate()
     })
 
     const killForOutputFailure = (error: Error) => {
       outputError = error
-      child.kill("SIGTERM")
+      terminator.terminate()
     }
 
     child.stdout.on("data", (chunk: Buffer) => {
@@ -353,14 +348,14 @@ export class ControlledProcessRunner {
       ? null
       : setTimeout(() => {
         timedOut = true
-        child.kill("SIGTERM")
+        terminator.terminate()
       }, request.timeoutMs)
 
     const onAbort = () => {
-      child.kill("SIGTERM")
+      terminator.terminate()
     }
     if (request.abortSignal?.aborted) {
-      child.kill("SIGTERM")
+      terminator.terminate()
     } else {
       request.abortSignal?.addEventListener("abort", onAbort, { once: true })
     }
@@ -375,6 +370,7 @@ export class ControlledProcessRunner {
     })
 
     if (timeout) clearTimeout(timeout)
+    terminator.clear()
     request.abortSignal?.removeEventListener("abort", onAbort)
     try {
       stdoutLines.flush()
@@ -473,6 +469,7 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
   private readonly stderrCollector: OutputCollector
   private readonly stdoutLines: LineEmitter
   private readonly stderrLines: LineEmitter
+  private readonly terminator: ProcessTerminator
   private readonly waitPromise: Promise<ControlledProcessResult>
   private outputError: Error | null = null
   private spawnError: Error | null = null
@@ -493,13 +490,14 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
       deps.output.stderr ?? "buffer",
       deps.maxBufferBytes,
     )
+    this.terminator = createProcessTerminator(this.child)
     this.stdoutLines = new LineEmitter(deps.request.onStdoutLine, (error) => {
       this.outputError = error
-      this.child.kill("SIGTERM")
+      this.terminator.terminate()
     })
     this.stderrLines = new LineEmitter(deps.request.onStderrLine, (error) => {
       this.outputError = error
-      this.child.kill("SIGTERM")
+      this.terminator.terminate()
     })
 
     this.child.stdout.on("data", (chunk: Buffer) => {
@@ -517,14 +515,14 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
       ? null
       : setTimeout(() => {
         this.timedOut = true
-        this.child.kill("SIGTERM")
+        this.terminator.terminate()
       }, deps.request.timeoutMs)
 
     const onAbort = () => {
-      this.child.kill("SIGTERM")
+      this.terminator.terminate()
     }
     if (deps.request.abortSignal?.aborted) {
-      this.child.kill("SIGTERM")
+      this.terminator.terminate()
     } else {
       deps.request.abortSignal?.addEventListener("abort", onAbort, { once: true })
     }
@@ -539,6 +537,7 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
     }).then((closed) => {
       this.isAlive = false
       if (timeout) clearTimeout(timeout)
+      this.terminator.clear()
       deps.request.abortSignal?.removeEventListener("abort", onAbort)
       return this.finish(closed)
     })
@@ -573,7 +572,7 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
 
   async close(signal: NodeJS.Signals = "SIGTERM"): Promise<ControlledProcessResult> {
     if (this.isAlive) {
-      this.child.kill(signal)
+      this.terminator.terminate(signal)
     }
     return this.wait()
   }
@@ -592,7 +591,7 @@ class ControlledProcessSessionImpl implements ControlledProcessSession {
       lineEmitter.push(chunk)
     } catch (error) {
       this.outputError = error as Error
-      this.child.kill("SIGTERM")
+      this.terminator.terminate()
     }
   }
 
@@ -756,6 +755,93 @@ function buildAllowedEnv(
   }
 
   return nextEnv
+}
+
+function buildPermissionContext(
+  request: ControlledProcessRunRequest,
+  args: readonly string[],
+  output: ControlledProcessOutputOptions,
+  options: { readonly longRunning?: boolean } = {},
+): Record<string, unknown> {
+  const launchPreview = previewLaunchForPermission(request, args)
+  return {
+    args,
+    launchCommand: launchPreview.command,
+    launchArgs: launchPreview.args,
+    cwd: request.cwd,
+    envKeys: buildPermissionEnvKeys(request.env, request.envAllowlist),
+    output: {
+      stdout: output.stdout ?? "buffer",
+      stderr: output.stderr ?? "buffer",
+    },
+    stdinBytes: stdinBytes(request.stdin),
+    stream: {
+      stdoutLine: request.onStdoutLine !== undefined,
+      stderrLine: request.onStderrLine !== undefined,
+    },
+    timeoutMs: request.timeoutMs,
+    ...(options.longRunning ? { longRunning: true } : undefined),
+    isolation: launchPreview.isolationMetadata,
+    ...request.metadata,
+  }
+}
+
+function buildPermissionEnvKeys(
+  env: Record<string, string | undefined> | undefined,
+  envAllowlist: readonly string[] | undefined,
+): string[] {
+  const allowlist = new Set([...DEFAULT_ENV_ALLOWLIST, ...(envAllowlist ?? [])])
+  const keys = new Set<string>()
+
+  for (const key of allowlist) {
+    if (!key) continue
+    if (key === "PATH") {
+      keys.add(findEnvEntry(env, "PATH")?.key ?? "PATH")
+      continue
+    }
+    let entry = findEnvEntry(env, key)
+    if (!entry) entry = findEnvEntry(process.env, key)
+    if (entry) keys.add(entry.key)
+  }
+
+  return [...keys].sort()
+}
+
+function previewLaunchForPermission(
+  request: ControlledProcessRunRequest,
+  args: readonly string[],
+): Pick<ControlledProcessLaunch, "command" | "args" | "isolationMetadata"> {
+  const isolation = request.isolation
+  if (isolation?.kind === "run_as_user" && process.platform !== "win32") {
+    const user = isolation.user.trim()
+    const envAllowlist = uniqueStrings(isolation.envAllowlist ?? DEFAULT_RUN_AS_ENV_ALLOWLIST)
+    const preserveArg = envAllowlist.length > 0
+      ? [`--preserve-env=${envAllowlist.join(",")}`]
+      : []
+    return {
+      command: "sudo",
+      args: [
+        "-n",
+        "-iu",
+        user,
+        ...preserveArg,
+        "--",
+        request.command,
+        ...args,
+      ],
+      isolationMetadata: {
+        kind: "run_as_user",
+        user,
+        envKeys: envAllowlist,
+      },
+    }
+  }
+
+  return {
+    command: request.command,
+    args,
+    isolationMetadata: isolation ? { kind: isolation.kind } : undefined,
+  }
 }
 
 function findEnvEntry(

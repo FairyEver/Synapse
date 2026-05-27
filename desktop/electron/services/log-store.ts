@@ -31,6 +31,9 @@ import { createWindowsCompatibilitySnapshot } from "./windows-compatibility"
 const LOG_DIR_NAME = "logs"
 const MAX_LOG_FILE_SIZE = 10 * 1024 * 1024 // 10MB
 const MAX_LOG_FILES = 30
+const REDACTED_LOG_VALUE = "[redacted]"
+const SENSITIVE_LOG_ASSIGNMENT_PATTERN =
+  /\b(session[_-]?key|sourceSessionKey|targetSessionKey|token|secret|api[-_]?key|authorization|cookie|password|credential)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi
 
 interface LogWriteInput {
   source: SynapseLogSource
@@ -46,20 +49,62 @@ type LogFileDescriptor = {
   mtimeMs: number
 }
 
+function isSensitiveLogKey(key: string): boolean {
+  const normalized = key.replace(/[-_\s]/g, "").toLowerCase()
+  if (normalized.includes("sessionkey")) return true
+  return /^(token|secret|apikey|authorization|cookie|password|credential)$/.test(normalized)
+}
+
+function redactLogText(value: string): string {
+  return value.replace(
+    SENSITIVE_LOG_ASSIGNMENT_PATTERN,
+    (_match, key: string, separator: string) => `${key}${separator}${REDACTED_LOG_VALUE}`,
+  )
+}
+
+function isPlainRecord(value: object): value is Record<string, unknown> {
+  return Object.prototype.toString.call(value) === "[object Object]"
+}
+
+function sanitizeLogValue(value: unknown, seen = new WeakSet<object>()): unknown {
+  if (typeof value === "string") return redactLogText(value)
+  if (Array.isArray(value)) return value.map((item) => sanitizeLogValue(item, seen))
+  if (value instanceof Error) {
+    return {
+      name: value.name,
+      message: redactLogText(value.message),
+      stack: value.stack ? redactLogText(value.stack) : undefined,
+    }
+  }
+  if (typeof value !== "object" || value === null || !isPlainRecord(value)) {
+    return value
+  }
+  if (seen.has(value)) return "[Circular]"
+  seen.add(value)
+
+  const sanitized: Record<string, unknown> = {}
+  for (const [key, entry] of Object.entries(value)) {
+    sanitized[key] = isSensitiveLogKey(key)
+      ? REDACTED_LOG_VALUE
+      : sanitizeLogValue(entry, seen)
+  }
+  return sanitized
+}
+
 function formatDetails(details: unknown): string | null {
   if (details === undefined || details === null) {
     return null
   }
 
   if (details instanceof Error) {
-    return details.stack ?? details.message
+    return redactLogText(details.stack ?? details.message)
   }
 
   if (typeof details === "string") {
-    return details
+    return redactLogText(details)
   }
 
-  return inspect(details, {
+  return inspect(sanitizeLogValue(details), {
     breakLength: 120,
     depth: 5,
     maxArrayLength: 50,
@@ -70,14 +115,14 @@ function formatDetails(details: unknown): string | null {
 function normalizeLogInput(message: unknown, details: unknown): { message: string; details?: unknown } {
   if (typeof message === "string") {
     return {
-      message: message.trim() || "(empty message)",
+      message: redactLogText(message).trim() || "(empty message)",
       details,
     }
   }
 
   if (message instanceof Error) {
     return {
-      message: message.message.trim() || message.name || "(error)",
+      message: redactLogText(message.message).trim() || message.name || "(error)",
       details: details ?? message,
     }
   }
@@ -96,15 +141,16 @@ function normalizeLogInput(message: unknown, details: unknown): { message: strin
     }
   }
 
+  const sanitizedMessage = sanitizeLogValue(message)
   return {
     message:
-      inspect(message, {
+      inspect(sanitizedMessage, {
         breakLength: 120,
         depth: 1,
         maxArrayLength: 10,
         sorted: true,
       }).trim() || "(empty message)",
-    details: details ?? message,
+    details: details ?? sanitizedMessage,
   }
 }
 

@@ -118,6 +118,7 @@ const restoreContentPayloadSchema = z.object({
   type: contentTypeSchema,
 })
 const purgeContentPayloadSchema = z.object({
+  baseHistoryDirname: z.string(),
   id: z.string(),
   type: contentTypeSchema,
 })
@@ -523,6 +524,7 @@ export const contentIpcModule: IpcModule = {
         const repository = await resolveActiveRepositoryIfPossible("delete")
 
         await notifyPendingPushesUpdatedAfterContentMutation(eventBus, repository, "delete")
+        emitContentChanged(eventBus, "delete", result)
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
           requestContentSavedPush(ctx, eventBus, repository)
@@ -553,6 +555,7 @@ export const contentIpcModule: IpcModule = {
         const repository = await resolveActiveRepositoryIfPossible("restore")
 
         await notifyPendingPushesUpdatedAfterContentMutation(eventBus, repository, "restore")
+        emitContentChanged(eventBus, "restore", result)
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
           requestContentSavedPush(ctx, eventBus, repository)
@@ -574,6 +577,7 @@ export const contentIpcModule: IpcModule = {
         const repository = await resolveActiveRepositoryIfPossible("purge")
 
         await notifyPendingPushesUpdatedAfterContentMutation(eventBus, repository, "purge")
+        emitContentChanged(eventBus, "purge", result)
 
         if (result.status === "saved" && result.pendingPushCount > 0 && repository) {
           requestContentSavedPush(ctx, eventBus, repository)

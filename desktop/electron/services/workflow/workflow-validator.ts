@@ -214,7 +214,7 @@ export function validateWorkflow(def: WorkflowDefinition): ValidationResult {
 
   for (const node of def.nodes) {
     if (!def.edges.some((e) => e.to === node.id || e.from === node.id) && def.nodes.length > 1)
-      warnings.push({ type: "disconnected_node", nodeId: node.id, message: `节点 "${node.name}" 未连接` })
+      errors.push({ type: "disconnected_node", nodeId: node.id, nodeName: node.name, message: `节点 "${node.name}" 未连接` })
 
     try {
       const manifest = nodeTypeRegistry.getManifest(node.type)

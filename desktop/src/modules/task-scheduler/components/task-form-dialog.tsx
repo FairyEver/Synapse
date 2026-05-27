@@ -63,6 +63,7 @@ import {
   buildTaskCreateInput,
   buildTaskUpdateInput,
   createDefaultAgentActionConfig,
+  createDefaultTaskActionConfig,
   createTaskFormState,
 } from "../utils"
 import { CronInput } from "./cron-input"
@@ -131,10 +132,9 @@ function TaskFormDialog({
   }
 
   const updateActionType = (actionType: string) => {
-    const baseConfig = rendererActionRegistry.getDefaultConfig(actionType)
     const actionConfig = actionType === "builtin.agent"
       ? createDefaultAgentActionConfig(appConfig.agent)
-      : baseConfig
+      : createDefaultTaskActionConfig(actionType, platform)
     setForm((current) => ({
       ...current,
       actionType,

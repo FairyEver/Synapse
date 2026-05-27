@@ -115,6 +115,8 @@ export class DataRepositoryImpl implements DataRepository {
         // restore if the import fails partway through.
         const snapshot = await entry.handle.list()
         const singletonSnapshot = await entry.handle.getSingleton()
+        const shouldClearSingleton = !Object.prototype.hasOwnProperty.call(data, "singleton")
+          || data.singleton === null
 
         const existing = snapshot
         for (const item of existing) {
@@ -125,6 +127,9 @@ export class DataRepositoryImpl implements DataRepository {
         }
 
         try {
+          if (shouldClearSingleton) {
+            await this.clearNamespaceSingleton(entry)
+          }
           await this.importNamespaceData(entry, data)
         } catch (err) {
           // Restore from snapshot to prevent data loss.
@@ -142,6 +147,16 @@ export class DataRepositoryImpl implements DataRepository {
       } else {
         await this.importNamespaceData(entry, data)
       }
+    }
+  }
+
+  private async clearNamespaceSingleton(entry: RegistrationEntry<unknown>): Promise<void> {
+    if (entry.handle.clearSingleton) {
+      await entry.handle.clearSingleton()
+      return
+    }
+    if (await entry.handle.getSingleton() !== null) {
+      throw new Error(`Namespace "${entry.schema.name}" does not support clearing singleton data`)
     }
   }
 

@@ -12,6 +12,7 @@
  */
 
 export type PermissionAction =
+  | "database.mutate"
   | "fs.write"
   | "fs.read.outside-userdata"
   | "shell.exec"
@@ -21,7 +22,9 @@ export type PermissionAction =
   | "agent.spawn"
   | "secret.read"
   | "secret.write"
+  | "scheduler.mutate"
   | "workflow.mutate"
+  | "content.mutate"
 
 export type ActorIdentity =
   | { kind: "user"; id?: string; display?: string }

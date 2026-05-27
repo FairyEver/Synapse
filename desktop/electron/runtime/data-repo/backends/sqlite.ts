@@ -161,6 +161,14 @@ export class SqliteNamespace<T extends Record<string, unknown> & { id: string }>
     })
   }
 
+  async clearSingleton(): Promise<void> {
+    const previous = await this.getSingleton()
+    this.prep().delete.run(SINGLETON_ID)
+    if (previous !== null) {
+      this.emit({ kind: "clear", previous })
+    }
+  }
+
   async list(filter?: Partial<T>): Promise<T[]> {
     const rows = this.prep().list.all(SINGLETON_ID) as Array<{ value?: unknown }>
     const items = rows.map((r) => this.parseRow(r.value))

@@ -22,7 +22,7 @@ function resolveShellCommand(
   options: ResolveShellCommandOptions = {},
 ): ResolvedShellCommand {
   const platform = options.platform ?? process.platform
-  const effectiveShell = shell ?? (platform === "win32" ? options.windowsDefault ?? "cmd" : "posix")
+  const effectiveShell = resolveEffectiveShell(shell, options)
 
   if (effectiveShell === "powershell") {
     return {
@@ -47,5 +47,13 @@ function resolveShellCommand(
   }
 }
 
-export { isShellKind, resolveShellCommand }
+function resolveEffectiveShell(
+  shell: ShellKind | undefined,
+  options: ResolveShellCommandOptions = {},
+): ShellKind {
+  const platform = options.platform ?? process.platform
+  return shell ?? (platform === "win32" ? options.windowsDefault ?? "cmd" : "posix")
+}
+
+export { isShellKind, resolveEffectiveShell, resolveShellCommand }
 export type { ResolvedShellCommand, ResolveShellCommandOptions, ShellKind }

@@ -147,7 +147,13 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
 
   const handleOpenInFinder = useCallback(() => {
     if (!item) return
-    getSynapseBridge()?.shell.showItemInFolder(item.path).catch(() => {
+    const bridge = getSynapseBridge()
+    if (!bridge) {
+      notifyError("无法在访达中打开文件。")
+      return
+    }
+
+    void bridge.shell.showItemInFolder(item.path).catch(() => {
       notifyError("无法在访达中打开文件。")
     })
   }, [item, notifyError])

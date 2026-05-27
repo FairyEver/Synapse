@@ -246,14 +246,33 @@ export const configIpcModule: IpcModule = {
       channel: "synapse:config:reset-app",
       request: z.void(),
       response: z.union([z.object({ success: z.literal(true) }), z.object({ success: z.literal(false), failedCount: z.number(), failedEntries: z.array(z.string()) })]),
-      handler: async (_ctx) => {
+      handler: async (ctx) => {
         logger.info("Handling config.resetApp request. Wiping all user data except database files.")
+
+        const auditSink = ctx.resolve<AuditSink>("core.audit-sink")
+        const actor = { kind: "user" } as const
+        const userDataPath = app.getPath("userData")
+        auditSink.record({
+          action: "fs.write",
+          actor,
+          resource: "app:userData",
+          outcome: "allowed",
+          metadata: {
+            operation: "app.reset",
+            source: "config.resetApp",
+            stage: "started",
+          },
+        })
+        await flushAuditSink(auditSink)
+        writeResetAppSystemLog("config.resetApp started", {
+          operation: "app.reset",
+          source: "config.resetApp",
+        })
 
         repositoryStore.unwatchAll()
         await shutdownDatabase()
         await logStore.dispose()
 
-        const userDataPath = app.getPath("userData")
         const entries = await readdir(userDataPath, { withFileTypes: true })
 
         const failedEntries: string[] = []
@@ -274,6 +293,11 @@ export const configIpcModule: IpcModule = {
           } catch {
             failedEntries.push(entry.name)
             logger.warn("Failed to delete entry during app reset.", { entryName: entry.name })
+            writeResetAppSystemLog("config.resetApp delete failed", {
+              entryName: entry.name,
+              operation: "app.reset",
+              source: "config.resetApp",
+            })
           }
         }
 
@@ -282,11 +306,23 @@ export const configIpcModule: IpcModule = {
             failedCount: failedEntries.length,
             failedEntries,
           })
+          await recordResetCompletionAudit(auditSink, "failed", { failedCount: failedEntries.length, failedEntries })
+          writeResetAppSystemLog("config.resetApp completed with failures", {
+            failedCount: failedEntries.length,
+            operation: "app.reset",
+            source: "config.resetApp",
+          })
           app.relaunch()
           app.exit(0)
           return { success: false as const, failedCount: failedEntries.length, failedEntries }
         }
 
+        await recordResetCompletionAudit(auditSink, "allowed", { failedCount: 0 })
+        writeResetAppSystemLog("config.resetApp completed", {
+          failedCount: 0,
+          operation: "app.reset",
+          source: "config.resetApp",
+        })
         app.relaunch()
         app.exit(0)
         return { success: true as const }
@@ -294,6 +330,48 @@ export const configIpcModule: IpcModule = {
     },
   },
   events: {},
+}
+
+async function flushAuditSink(auditSink: AuditSink): Promise<void> {
+  const flush = (auditSink as { flush?: () => Promise<void> }).flush
+  if (typeof flush === "function") {
+    await flush.call(auditSink)
+  }
+}
+
+async function recordResetCompletionAudit(
+  auditSink: AuditSink,
+  outcome: "allowed" | "failed",
+  metadata: Record<string, unknown>,
+): Promise<void> {
+  try {
+    auditSink.record({
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "app:userData",
+      outcome,
+      metadata: {
+        ...metadata,
+        operation: "app.reset",
+        source: "config.resetApp",
+        stage: "completed",
+      },
+    })
+    await flushAuditSink(auditSink)
+  } catch (error) {
+    writeResetAppSystemLog("config.resetApp completion audit failed", {
+      errorName: error instanceof Error ? error.name : typeof error,
+      operation: "app.reset",
+      source: "config.resetApp",
+    })
+  }
+}
+
+function writeResetAppSystemLog(message: string, details: Record<string, unknown>): void {
+  process.stderr.write(`[synapse-reset] ${message} ${JSON.stringify({
+    timestamp: new Date().toISOString(),
+    ...details,
+  })}\n`)
 }
 
 function sanitizePatchForLog(patch: SynapseConfigPatch): SynapseConfigPatch {

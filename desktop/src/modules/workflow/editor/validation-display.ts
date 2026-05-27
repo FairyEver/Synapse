@@ -64,6 +64,8 @@ function friendlySummary(error: ValidationError, fieldKey: string | undefined): 
       return "工作流只能保留一个结束节点。"
     case "cycle":
       return "工作流不能包含循环连接。"
+    case "disconnected_node":
+      return "节点未连接，无法运行。"
     case "missing_param":
       return ensurePeriod(error.message)
     case "invalid_config":

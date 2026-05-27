@@ -40,4 +40,26 @@ describe("DatabaseService databaseSqlRead", () => {
   it("rejects write statements", () => {
     expect(() => service.databaseSqlRead("DELETE FROM tasks")).toThrow(/read-only/i)
   })
+
+  it("rejects write-mode PRAGMA statements", () => {
+    expect(() => service.databaseSqlRead("PRAGMA user_version = 7")).toThrow(/read-only/i)
+    expect(service.databaseSqlRead("PRAGMA user_version")).toEqual({
+      rows: [{ user_version: 0 }],
+    })
+  })
+
+  it("allows read-only PRAGMA statements", () => {
+    const result = service.databaseSqlRead(`PRAGMA table_info("tasks")`)
+
+    expect(result.rows.map((row) => row.name)).toContain("title")
+  })
+
+  it("blocks raw SQL access to folder system tables", () => {
+    expect(() => service.databaseSqlExecute(`DELETE FROM "_table_folders"`))
+      .toThrow(/system tables/i)
+    expect(() => service.databaseSqlExecute("UPDATE _table_folder_members SET folder_id = 999"))
+      .toThrow(/system tables/i)
+    expect(() => service.databaseSqlRead(`SELECT * FROM "_table_folders"`))
+      .toThrow(/system tables/i)
+  })
 })

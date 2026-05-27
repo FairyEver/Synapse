@@ -2,6 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import type { AuditSink, PermissionGuard } from "../../electron/runtime/security"
 
 const electronMock = vi.hoisted(() => ({ app: { getPath: vi.fn() } }))
 
@@ -32,9 +33,9 @@ describe("Database operation log", () => {
   it("records mutating dispatcher actions with source and affected count", async () => {
     const { dispatchDatabaseAction } = await import("../../electron/database/dispatcher")
 
-    dispatchDatabaseAction("database.row.create", { tableName: "tasks", data: { title: "Ship" } }, { source: "mcp-stdio" })
+    await dispatchDatabaseAction("database.row.create", { tableName: "tasks", data: { title: "Ship" } }, { source: "mcp-stdio" })
 
-    const result = dispatchDatabaseAction("database.log.list", { limit: 5 })
+    const result = await dispatchDatabaseAction("database.log.list", { limit: 5 })
     expect(result.data).toEqual([
       expect.objectContaining({
         source: "mcp-stdio",
@@ -45,4 +46,126 @@ describe("Database operation log", () => {
       }),
     ])
   })
+
+  it("checks permission and audits allowed database mutations", async () => {
+    const { dispatchDatabaseAction } = await import("../../electron/database/dispatcher")
+    const permissionGuard = permissionGuardMock({ allowed: true })
+    const auditSink = auditSinkMock()
+
+    await dispatchDatabaseAction(
+      "database.row.create",
+      { tableName: "tasks", data: { title: "Ship" } },
+      { source: "mcp-http" },
+      { permissionGuard, auditSink },
+    )
+
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "database.mutate",
+      actor: { kind: "user", id: "database-dispatch:mcp-http" },
+      resource: "database:tasks",
+      context: {
+        source: "mcp-http",
+        databaseAction: "database.row.create",
+        table: "tasks",
+        dryRun: false,
+      },
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "database.mutate",
+      actor: { kind: "user", id: "database-dispatch:mcp-http" },
+      resource: "database:tasks",
+      outcome: "allowed",
+      metadata: expect.objectContaining({
+        source: "mcp-http",
+        databaseAction: "database.row.create",
+        table: "tasks",
+        dryRun: false,
+      }),
+    }))
+  })
+
+  it("denies database mutations before persistence", async () => {
+    const { dispatchDatabaseAction } = await import("../../electron/database/dispatcher")
+    const permissionGuard = permissionGuardMock({
+      allowed: false,
+      reason: "denied by policy",
+      policyId: "test-policy",
+    })
+    const auditSink = auditSinkMock()
+
+    await expect(dispatchDatabaseAction(
+      "database.row.create",
+      { tableName: "tasks", data: { title: "Blocked" } },
+      { source: "mcp-stdio" },
+      { permissionGuard, auditSink },
+    )).rejects.toThrow("denied by policy")
+
+    const rows = await dispatchDatabaseAction("database.row.list", { tableName: "tasks" })
+    expect(rows.total).toBe(0)
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "database.mutate",
+      actor: { kind: "user", id: "database-dispatch:mcp-stdio" },
+      resource: "database:tasks",
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        reason: "denied by policy",
+        policyId: "test-policy",
+      }),
+    }))
+  })
+
+  it("audits failed database mutations without raw error text", async () => {
+    const { dispatchDatabaseAction } = await import("../../electron/database/dispatcher")
+    const auditSink = auditSinkMock()
+
+    await expect(dispatchDatabaseAction(
+      "database.row.create",
+      { tableName: "missing_table", data: { title: "secret row detail" } },
+      { source: "api" },
+      { permissionGuard: permissionGuardMock({ allowed: true }), auditSink },
+    )).rejects.toThrow()
+
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "database.mutate",
+      resource: "database:missing_table",
+      outcome: "failed",
+      metadata: expect.objectContaining({
+        errorName: "Error",
+      }),
+    }))
+    expect(JSON.stringify(vi.mocked(auditSink.record).mock.calls)).not.toContain("secret row detail")
+  })
+
+  it("does not check permissions for read-only database actions", async () => {
+    const { dispatchDatabaseAction } = await import("../../electron/database/dispatcher")
+    const permissionGuard = permissionGuardMock({ allowed: true })
+    const auditSink = auditSinkMock()
+
+    await dispatchDatabaseAction(
+      "database.row.list",
+      { tableName: "tasks" },
+      { source: "mcp-stdio" },
+      { permissionGuard, auditSink },
+    )
+
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(auditSink.record).not.toHaveBeenCalled()
+  })
 })
+
+function permissionGuardMock(
+  result: Awaited<ReturnType<PermissionGuard["check"]>>,
+): PermissionGuard {
+  return {
+    registerPolicy: vi.fn(() => () => {}),
+    check: vi.fn(async () => result),
+  }
+}
+
+function auditSinkMock(): AuditSink {
+  return {
+    record: vi.fn(),
+    list: vi.fn(() => []),
+    clearForTests: vi.fn(),
+  }
+}

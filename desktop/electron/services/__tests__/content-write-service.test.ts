@@ -287,6 +287,47 @@ describe("contentWriteService", () => {
     })
   })
 
+  it("refuses to purge content that is no longer deleted", async () => {
+    const root = await createTempRoot()
+    const historyDirname = "20260519000000Z__user__abc123"
+    const repository: SynapseRepositoryConfig = {
+      uuid: "repo-1",
+      name: "Repo",
+      localPath: root,
+      contentDirs: { skill: "skills" },
+    }
+    const config = createDefaultConfig()
+    config.activeRepoUuid = repository.uuid
+    config.repositories = [repository]
+
+    await writeContentFixture(root, {
+      contentDir: "skills",
+      contentId: "skill-1",
+      contentType: "skill",
+      historyDirname,
+      snapshot: {
+        title: "Skill",
+        name: "skill",
+        deleted: false,
+      },
+    })
+    vi.spyOn(configStore, "load").mockResolvedValue(config)
+    vi.spyOn(repositoryStore, "getRepositoryState").mockResolvedValue({
+      repositoryUuid: repository.uuid,
+      localPath: root,
+      status: "ready",
+      isGitRepository: false,
+      gitRootPath: null,
+    })
+
+    await expect(contentWriteService.purgeContent("skill", "skill-1", {
+      displayName: "User",
+      userId: "user",
+    })).rejects.toThrow("只能永久删除已删除的 技能 内容。")
+    await expect(readFile(path.join(root, "skills", "skill-1", HISTORY_DIRECTORY_NAME, historyDirname, CONTENT_MAIN_FILE_NAME), "utf8"))
+      .resolves.toBe("# Content\n")
+  })
+
   it("rejects skill attachments with case-only duplicate paths before writing content", async () => {
     const root = await createTempRoot()
     const repository: SynapseRepositoryConfig = {

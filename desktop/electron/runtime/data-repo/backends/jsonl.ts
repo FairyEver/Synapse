@@ -167,6 +167,18 @@ export class JsonLinesNamespace<T extends Record<string, unknown> & { id: string
     this.emit({ kind: "replace", value, previous: previous ?? undefined })
   }
 
+  async clearSingleton(): Promise<void> {
+    if (!this.allowSingleton) {
+      throw new DataRepositoryError(
+        `clearSingleton is not supported on append-only namespace "${this.name}"`,
+      )
+    }
+    const previous = this.singleton
+    if (previous === null) return
+    this.singleton = null
+    this.emit({ kind: "clear", previous })
+  }
+
   async list(filter?: Partial<T>): Promise<T[]> {
     const cache = await this.load()
     return this.applyFilter([...cache.values()], filter)

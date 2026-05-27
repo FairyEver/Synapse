@@ -40,7 +40,10 @@ describe("Database MCP tool descriptions", () => {
   it("guides agents toward overview, read SQL, and logs before riskier tools", () => {
     expect(getTool("database_overview_get").description).toContain("Use this first")
     expect(getTool("database_sql_read").description).toContain("Prefer this over database_sql_execute")
+    expect(getTool("database_sql_read").description).toContain("read-only PRAGMA")
+    expect(getTool("database_sql_read").description).toContain("_table_folders")
     expect(getTool("database_sql_execute").description).toContain("Use only")
+    expect(getTool("database_sql_execute").description).toContain("_table_folder_members")
     expect(getTool("database_log_list").description).toContain("recently changed")
   })
 

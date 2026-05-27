@@ -17,7 +17,8 @@ export interface DataRepositoryAuditSinkDeps {
 }
 
 const MAX_MEMORY_EVENTS = 10_000
-const SENSITIVE_RESOURCE_VALUE_PATTERN = /(?<=\b(?:token|secret|authorization|api[_-]?key|password|bearer|auth)\s*[:=]\s*)\S+/gi
+const SENSITIVE_TEXT_VALUE_PATTERN = /\b(token|secret|authorization|api[_-]?key|password|auth)\b(\s*[:=]\s*)(Bearer\s+[^\s"'`<>),;]+|"[^"]*"|'[^']*'|[^\s"'`<>),;]+)/gi
+const BEARER_TEXT_VALUE_PATTERN = /\bBearer\s+[^\s"'`<>),;]+/gi
 const POSIX_PATH_PATTERN = /(?:\/Users|\/home|\/Volumes|\/private|\/tmp)\/[^\s"'`<>),;]+/g
 
 export class DataRepositoryAuditSink implements AuditSink {
@@ -103,8 +104,12 @@ export class DataRepositoryAuditSink implements AuditSink {
     this.pendingWrite = Promise.resolve()
   }
 
-  flushForTests(): Promise<void> {
+  flush(): Promise<void> {
     return this.pendingWrite
+  }
+
+  flushForTests(): Promise<void> {
+    return this.flush()
   }
 }
 
@@ -116,7 +121,7 @@ function sanitizeMetadata(
 }
 
 function sanitizeResource(resource: string): string {
-  return sanitizePathText(resource.replace(SENSITIVE_RESOURCE_VALUE_PATTERN, "[redacted]"))
+  return sanitizeText(resource)
 }
 
 function sanitizeRecord(record: Record<string, unknown>): Record<string, unknown> {
@@ -135,9 +140,18 @@ function sanitizeValue(value: unknown): unknown {
     return sanitizeRecord(value as Record<string, unknown>)
   }
   if (typeof value === "string") {
-    return sanitizePathText(value)
+    return sanitizeText(value)
   }
   return value
+}
+
+function sanitizeText(value: string): string {
+  return sanitizePathText(
+    value
+      .replace(SENSITIVE_TEXT_VALUE_PATTERN, (_match, key: string, separator: string) =>
+        `${key}${separator}[redacted]`)
+      .replace(BEARER_TEXT_VALUE_PATTERN, "Bearer [redacted]"),
+  )
 }
 
 function sanitizePathText(value: string): string {
@@ -147,6 +161,7 @@ function sanitizePathText(value: string): string {
 function isSensitiveKey(key: string): boolean {
   const normalized = key.replace(/[-_\s]/g, "").toLowerCase()
   if (normalized.includes("sessionkey")) return true
+  if (normalized === "args" || normalized.endsWith("args")) return true
   if (/^(prompt|message|content|body|text|reason|error|errors|stack)$/.test(normalized)) return true
   return /\b(token|secret|authorization|api[_-]?key|password|bearer)\b/i.test(key)
 }

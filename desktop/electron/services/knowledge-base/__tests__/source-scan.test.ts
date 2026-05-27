@@ -179,4 +179,31 @@ describe("knowledge base source scan", () => {
       { relativePath: ".raw", reason: "read-error" },
     ])
   })
+
+  it("skips supported raw sources above the per-file size limit", async () => {
+    const root = await tempDir()
+    await mkdir(path.join(root, ".raw"), { recursive: true })
+    await writeFile(path.join(root, ".raw", "large.md"), "alpha bravo\n")
+
+    const result = await scanKnowledgeBaseSources(root, { maxSourceBytes: 5 })
+
+    expect(result.sources).toEqual([])
+    expect(result.skippedSources).toEqual([
+      { relativePath: ".raw/large.md", reason: "too-large" },
+    ])
+  })
+
+  it("skips supported raw sources after the total scan size limit is reached", async () => {
+    const root = await tempDir()
+    await mkdir(path.join(root, ".raw"), { recursive: true })
+    await writeFile(path.join(root, ".raw", "a.md"), "alpha")
+    await writeFile(path.join(root, ".raw", "b.md"), "bravo")
+
+    const result = await scanKnowledgeBaseSources(root, { maxScanBytes: 6 })
+
+    expect(result.sources.map((source) => source.relativePath)).toEqual([".raw/a.md"])
+    expect(result.skippedSources).toEqual([
+      { relativePath: ".raw/b.md", reason: "scan-size-limit" },
+    ])
+  })
 })

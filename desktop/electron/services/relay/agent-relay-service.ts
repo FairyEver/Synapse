@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 
 import type {
   DataNamespace,
@@ -179,9 +179,10 @@ export class AgentRelayService {
 
   async listRuns(projectId?: string): Promise<readonly RelayRunEntryV1[]> {
     const runs = await this.deps.runs.list()
-    return projectId
+    const filtered = projectId
       ? runs.filter((run) => run.sourceProjectId === projectId || run.targetProjectId === projectId)
       : runs
+    return filtered.map(sanitizeRelayRunForDiagnostics)
   }
 
   private async trySendVisible(target: ReplyTarget, message: string): Promise<void> {
@@ -214,12 +215,12 @@ export class AgentRelayService {
       requestId: randomUUID(),
       sourceProjectId: request.sourceProjectId,
       targetProjectId: request.targetProjectId,
-      sourceSessionKey: request.sourceSessionKey,
-      targetSessionKey,
+      sourceSessionKeyHash: sessionKeyHash(request.sourceProjectId, request.sourceSessionKey),
+      targetSessionKeyHash: sessionKeyHash(request.targetProjectId, targetSessionKey),
       status: "running",
       visible: request.visible ?? false,
       startedAt: now,
-      metadata: request.metadata,
+      metadata: sanitizeRelayMetadata(request.metadata),
       createdAt: now,
       updatedAt: now,
     }
@@ -343,6 +344,57 @@ function relaySessionKey(sourceProjectId: string, sourceSessionKey: string): str
 
 function relayAuditResource(targetProjectId: string, targetSessionKey: string): string {
   return `relay:${targetProjectId}:${targetSessionKey}`
+}
+
+function sessionKeyHash(projectId: string, sessionKey: string): string {
+  return createHash("sha256")
+    .update(projectId)
+    .update("\0")
+    .update(sessionKey)
+    .digest("hex")
+    .slice(0, 16)
+}
+
+function sanitizeRelayRunForDiagnostics(run: RelayRunEntryV1): RelayRunEntryV1 {
+  const sourceSessionKey = typeof run.sourceSessionKey === "string" ? run.sourceSessionKey : undefined
+  const targetSessionKey = typeof run.targetSessionKey === "string" ? run.targetSessionKey : undefined
+  const sanitized: Record<string, unknown> = { ...run }
+  delete sanitized.sourceSessionKey
+  delete sanitized.targetSessionKey
+  sanitized.sourceSessionKeyHash = typeof run.sourceSessionKeyHash === "string"
+    ? run.sourceSessionKeyHash
+    : sourceSessionKey
+      ? sessionKeyHash(run.sourceProjectId, sourceSessionKey)
+      : undefined
+  sanitized.targetSessionKeyHash = typeof run.targetSessionKeyHash === "string"
+    ? run.targetSessionKeyHash
+    : targetSessionKey
+      ? sessionKeyHash(run.targetProjectId, targetSessionKey)
+      : undefined
+  if (run.metadata) sanitized.metadata = sanitizeRelayMetadata(run.metadata)
+  if (sanitized.sourceSessionKeyHash === undefined) delete sanitized.sourceSessionKeyHash
+  if (sanitized.targetSessionKeyHash === undefined) delete sanitized.targetSessionKeyHash
+  return sanitized as RelayRunEntryV1
+}
+
+function sanitizeRelayMetadata(metadata: Record<string, unknown> | undefined): Record<string, unknown> | undefined {
+  if (!metadata) return undefined
+  return sanitizeRelayValue(metadata, 0) as Record<string, unknown>
+}
+
+function sanitizeRelayValue(value: unknown, depth: number): unknown {
+  if (depth > 6) return "[truncated]"
+  if (Array.isArray(value)) return value.map((item) => sanitizeRelayValue(item, depth + 1))
+  if (!value || typeof value !== "object") return value
+  const output: Record<string, unknown> = {}
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    output[key] = isSessionKeyField(key) ? "[redacted]" : sanitizeRelayValue(item, depth + 1)
+  }
+  return output
+}
+
+function isSessionKeyField(key: string): boolean {
+  return key.replace(/[-_]/g, "").toLowerCase().endsWith("sessionkey")
 }
 
 function truncate(value: string): string {

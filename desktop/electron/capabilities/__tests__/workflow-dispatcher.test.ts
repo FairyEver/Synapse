@@ -115,6 +115,49 @@ describe("createWorkflowDispatcher", () => {
     expect(save).toHaveBeenCalledTimes(2)
   })
 
+  it("serializes workflow.definition.delete behind in-flight workflow mutations", async () => {
+    const releaseFirstSave = deferred<{ versionHash: string }>()
+    const baseDefinition: WorkflowDefinition = {
+      id: "wf-1", name: "Test", description: "", version: "v1",
+      createdAt: 1, updatedAt: 2, params: [],
+      nodes: [
+        { id: "n1", name: "Prompt", type: "prompt", position: { x: 100, y: 200 }, config: {} },
+        { id: "end", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} },
+      ],
+      edges: [],
+    }
+    const save = vi.fn(async () => releaseFirstSave.promise)
+    const deleteWorkflow = vi.fn(async () => {})
+    const deps = makeDeps({
+      workflowService: {
+        ...makeDeps().workflowService,
+        get: vi.fn(async () => structuredClone(baseDefinition)),
+        save,
+        delete: deleteWorkflow,
+      } as unknown as WorkflowDispatchDeps["workflowService"],
+    })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const firstMutation = dispatcher.dispatch(
+      "workflow.node.update",
+      { workflowId: "wf-1", nodeId: "n1", patch: { name: "Updated Prompt" } },
+      { source: "api" },
+    )
+    await vi.waitFor(() => expect(save).toHaveBeenCalledTimes(1))
+
+    const deletion = dispatcher.dispatch("workflow.definition.delete", { workflowId: "wf-1" }, { source: "api" })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(deps.cancelRunsForWorkflow).not.toHaveBeenCalled()
+    expect(deleteWorkflow).not.toHaveBeenCalled()
+    releaseFirstSave.resolve({ versionHash: "v_first" })
+    await firstMutation
+    await deletion
+    expect(deps.cancelRunsForWorkflow).toHaveBeenCalledWith("wf-1")
+    expect(deleteWorkflow).toHaveBeenCalledWith("wf-1")
+  })
+
   it("rejects workflow.definition.update before saving when definition id is missing", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)

@@ -3,6 +3,7 @@
  */
 import { act } from "react"
 import { createRoot, type Root } from "react-dom/client"
+import { toast } from "sonner"
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { ScanItemCard } from "../components/scan-item-card"
 
@@ -78,5 +79,18 @@ describe("ScanItemCard selection", () => {
     })
 
     expect(onClick).toHaveBeenCalledTimes(1)
+  })
+
+  it("reports an open-in-folder error when the bridge is unavailable", async () => {
+    const { onClick } = await renderCard()
+    const pathButton = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent?.includes("/skills/jenkins"))
+
+    await act(async () => {
+      pathButton?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(toast.error).toHaveBeenCalledWith("无法在访达中打开文件。")
+    expect(onClick).not.toHaveBeenCalled()
   })
 })

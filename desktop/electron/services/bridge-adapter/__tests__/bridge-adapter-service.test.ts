@@ -207,6 +207,52 @@ describe("BridgeAdapterService", () => {
     await service.stop()
   })
 
+  it("includes project in generated permission cards for multi-project responses", async () => {
+    const agent = new FakeAgentRuntime()
+    const { service, port } = await startBridge(agent, {
+      projects: [
+        { projectId: "project-1", name: "Project 1", workspacePath: "/repo-1" },
+        { projectId: "project-2", name: "Project 2", workspacePath: "/repo-2" },
+      ],
+    })
+    const ws = await registeredBridge(port, "tok", ["text", "card"])
+    const cardMessage = readJson(ws) as Promise<{
+      readonly type: "card"
+      readonly session_key: string
+      readonly reply_ctx: unknown
+      readonly project?: string
+      readonly card: {
+        readonly actions: readonly { readonly action: string }[]
+      }
+    }>
+
+    await service.dispatchAgentEvent(bridgeTarget(), {
+      type: "permissionRequest",
+      requestId: "req-1",
+      toolName: "Bash",
+    })
+
+    const card = await cardMessage
+    expect(card.project).toBe("project-1")
+    const action = card.card.actions[0]?.action
+    expect(action).toBe("perm:req-1:allow")
+    ws.send(JSON.stringify({
+      type: "card_action",
+      session_key: card.session_key,
+      action,
+      reply_ctx: card.reply_ctx,
+      project: card.project,
+    }))
+
+    await expectEventually(() => agent.permissions.length, 1)
+    expect(agent.permissions[0]).toEqual(expect.objectContaining({
+      requestId: "req-1",
+      behavior: "allow",
+    }))
+    ws.close()
+    await service.stop()
+  })
+
   it("does not expose raw permission response failures to bridge adapters", async () => {
     const agent = new FailingPermissionAgentRuntime("permission failed at /Users/liyang/private token=secret")
     const { service, port } = await startBridge(agent)
@@ -508,7 +554,10 @@ describe("BridgeAdapterService", () => {
 
 async function startBridge(
   agent = new FakeAgentRuntime(),
-  options: { readonly logger?: StructuredLogger } = {},
+  options: {
+    readonly logger?: StructuredLogger
+    readonly projects?: readonly { readonly projectId: string; readonly name: string; readonly workspacePath: string }[]
+  } = {},
 ): Promise<{
   readonly service: BridgeAdapterService
   readonly port: number
@@ -520,7 +569,7 @@ async function startBridge(
     projectContainers: fakeProjectContainers(agent),
     networkRegistry: createNetworkServiceRegistry(),
     sideChannel: sideChannel as unknown as SideChannelService,
-    listProjects: async () => [{ projectId: "project-1", name: "Project", workspacePath: "/repo" }],
+    listProjects: async () => options.projects ?? [{ projectId: "project-1", name: "Project", workspacePath: "/repo" }],
     auditSink: new InMemoryAuditSink(),
     logger: options.logger,
     token: "tok",
