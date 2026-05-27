@@ -358,8 +358,8 @@ describe("NodeResultPanel", () => {
     expect(container.textContent).toContain("7,890")
     expect(container.textContent).toContain("缓存写")
     expect(container.textContent).toContain("12")
-    expect(container.textContent).toContain("费用")
-    expect(container.textContent).toContain("¥0.072")
+    expect(container.textContent).not.toContain("费用")
+    expect(container.textContent).not.toContain("¥0.072")
 
     await act(async () => {
       root.unmount()

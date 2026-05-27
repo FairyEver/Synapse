@@ -1,5 +1,4 @@
 import type { NodeRunResult, WorkflowDefinition, WorkflowNode, WorkflowRunStatus } from "@/types/workflow"
-import { formatSynapseCost, resolveSynapseCostCny } from "@/lib/cost-currency"
 import { formatTokenUsageValue, tokenUsageFields } from "@/lib/token-usage"
 import { sanitizeError } from "@/lib/error-sanitize"
 import { resolveBranchLabel } from "../lib/branch-label"
@@ -34,7 +33,6 @@ export function formatWorkflowRunReport(input: WorkflowRunReportInput): string {
   const endedTimes = Object.values(input.nodeResults)
     .map((result) => result.endedAt)
     .filter((value): value is number => typeof value === "number")
-  const totalCostCny = resolveTotalCostCny(input.nodeResults)
 
   const sections = [
     `# 工作流运行报告：${input.definition.name}`,
@@ -47,7 +45,6 @@ export function formatWorkflowRunReport(input: WorkflowRunReportInput): string {
       `- 开始时间：${formatTimestamp(startedTimes.length > 0 ? Math.min(...startedTimes) : undefined)}`,
       `- 结束时间：${formatTimestamp(endedTimes.length > 0 ? Math.max(...endedTimes) : undefined)}`,
       `- 总耗时：${formatDuration(resolveTotalDuration(input.nodeResults))}`,
-      ...(totalCostCny !== undefined ? [`- 总费用：${formatSynapseCost(totalCostCny)}`] : []),
       ...(input.runError ? [`- 错误：${sanitizeError(input.runError)}`] : []),
       "",
       "### 运行参数",
@@ -111,12 +108,10 @@ export function formatNodeRunReport(input: NodeRunReportInput): string {
   }
 
   const usageFields = tokenUsageFields(result.usage)
-  const costCny = resolveNodeCostCny(result)
-  if (usageFields || costCny !== undefined) {
+  if (usageFields) {
     sections.push([
       "## Token 消耗",
       ...(usageFields?.map((field) => `- ${field.label}：${formatTokenUsageValue(field.value)}`) ?? []),
-      ...(costCny !== undefined ? [`- 费用：${formatSynapseCost(costCny)}`] : []),
     ].join("\n"))
   }
 
@@ -189,18 +184,6 @@ function resolveTotalDuration(nodeResults: Record<string, NodeRunResult>): numbe
     .filter((value): value is number => typeof value === "number")
   if (durations.length === 0) return undefined
   return durations.reduce((total, duration) => total + duration, 0)
-}
-
-function resolveTotalCostCny(nodeResults: Record<string, NodeRunResult>): number | undefined {
-  const costs = Object.values(nodeResults)
-    .map(resolveNodeCostCny)
-    .filter((value): value is number => typeof value === "number")
-  if (costs.length === 0) return undefined
-  return costs.reduce((total, cost) => total + cost, 0)
-}
-
-function resolveNodeCostCny(result: NodeRunResult): number | undefined {
-  return resolveSynapseCostCny({ costCny: result.costCny, costUsd: result.costUsd })
 }
 
 function formatTimestamp(value: number | undefined): string {

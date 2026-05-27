@@ -1,5 +1,3 @@
-import { formatSynapseCost, resolveSynapseCostCny } from "@/lib/cost-currency"
-
 export interface TokenUsageField {
   readonly label: string
   readonly value: number
@@ -28,14 +26,6 @@ export function tokenUsageFields(usage: Record<string, unknown> | undefined): re
 
 export function formatTokenUsageValue(value: number): string {
   return tokenNumberFormatter.format(value)
-}
-
-export function normalizeCostUsd(value: unknown): number | undefined {
-  return resolveSynapseCostCny({ costUsd: value })
-}
-
-export function formatCostUsd(value: number): string {
-  return formatSynapseCost(value)
 }
 
 function tokenNumber(usage: Record<string, unknown>, keys: readonly string[]): number | undefined {
