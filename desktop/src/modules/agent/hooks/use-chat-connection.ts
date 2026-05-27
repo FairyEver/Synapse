@@ -226,6 +226,21 @@ function useChatConnection(
     dispatch({ type: "SET_COMMANDS", commands: nextCommands })
   }, [dispatch])
 
+  const refreshPendingPermissionsForPageLoad = useCallback(async (activeProjectId: string | undefined) => {
+    try {
+      await refreshPendingPermissions()
+    } catch (rawError) {
+      logger.warn("Agent pending permissions refresh failed.", {
+        projectIds: projectIdsRef.current,
+        activeProjectId,
+        boundary: "renderer.agent.pending-permissions",
+        errorName: rawError instanceof Error ? rawError.name : typeof rawError,
+        errorLength: errorMessage(rawError).length,
+      })
+      dispatch({ type: "SET_ERROR", error: "权限刷新失败" })
+    }
+  }, [dispatch, projectIdsRef, refreshPendingPermissions])
+
   const refreshConversationSnapshot = useCallback(async (target: TimelineTarget) => {
     const bridge = requireSynapseBridge()
     try {
@@ -286,7 +301,7 @@ function useChatConnection(
       const nextSessionKey = nextSession?.sessionKey ?? DEFAULT_LOCAL_SESSION_KEY
       dispatch({ type: "SET_SESSIONS", sessions: nextSessions })
       await Promise.all([
-        refreshPendingPermissions(),
+        refreshPendingPermissionsForPageLoad(nextProjectId),
         refreshProjectMeta(nextProjectId),
         loadArchivedSessions(),
       ])
@@ -335,7 +350,7 @@ function useChatConnection(
     loadSessionsForProjects,
     loadTimeline,
     projectIdsRef,
-    refreshPendingPermissions,
+    refreshPendingPermissionsForPageLoad,
     refreshProjectMeta,
     selectRequestIdRef,
     selectedConversationIdRef,
