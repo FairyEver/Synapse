@@ -1,8 +1,9 @@
 import type {
   AgentCommandEntryV1,
   AgentCompressStateEntryV1,
-  ConversationEntryV1,
   AgentEventEntryV1,
+  AgentUsageEntryV1,
+  ConversationEntryV1,
   DataNamespace,
 } from "../../runtime/data-repo"
 import type {
@@ -81,6 +82,7 @@ export interface AgentRuntimeServiceDeps {
   readonly agentType?: string
   readonly sessionRepository?: AgentSessionRepository
   readonly agentEvents?: DataNamespace<AgentEventEntryV1>
+  readonly agentUsage?: DataNamespace<AgentUsageEntryV1>
   readonly eventBus?: ScopedEventBus
   readonly logger?: StructuredLogger
   readonly now?: () => Date
@@ -153,6 +155,7 @@ export class AgentRuntimeService {
     this.repository = deps.sessionRepository ?? new AgentSessionRepository({
       projectId: deps.projectId,
       conversations: deps.conversations,
+      agentUsage: deps.agentUsage,
       now: deps.now,
     })
     this.sessionManager = new SessionManager({

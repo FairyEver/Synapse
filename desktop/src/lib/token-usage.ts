@@ -3,11 +3,24 @@ export interface TokenUsageField {
   readonly value: number
 }
 
-const TOKEN_USAGE_DEFINITIONS: readonly { readonly label: string; readonly keys: readonly string[] }[] = [
+export interface ClaudeSdkUsageSummary {
+  readonly inputTokens: number
+  readonly outputTokens: number
+  readonly cacheReadInputTokens: number
+  readonly cacheCreationInputTokens: number
+  readonly totalTokens: number
+}
+
+const TOKEN_USAGE_DEFINITIONS: readonly {
+  readonly label: string
+  readonly keys: readonly string[]
+  readonly optional?: boolean
+}[] = [
   { label: "输入", keys: ["input_tokens", "inputTokens"] },
   { label: "输出", keys: ["output_tokens", "outputTokens"] },
   { label: "缓存读", keys: ["cache_read_input_tokens", "cacheReadInputTokens", "cacheRead"] },
   { label: "缓存写", keys: ["cache_creation_input_tokens", "cacheCreationInputTokens", "cacheWrite"] },
+  { label: "思考", keys: ["reasoning_output_tokens", "reasoningOutputTokens", "reasoning_tokens", "reasoningTokens"], optional: true },
 ]
 
 const tokenNumberFormatter = new Intl.NumberFormat("en-US", {
@@ -19,9 +32,63 @@ export function tokenUsageFields(usage: Record<string, unknown> | undefined): re
   const fields = TOKEN_USAGE_DEFINITIONS.map((definition) => ({
     label: definition.label,
     value: tokenNumber(usage, definition.keys),
+    optional: definition.optional,
   }))
   if (!fields.some((field) => field.value !== undefined)) return undefined
-  return fields.map((field) => ({ label: field.label, value: field.value ?? 0 }))
+  return fields.flatMap((field) => {
+    if (field.optional && field.value === undefined) return []
+    return [{ label: field.label, value: field.value ?? 0 }]
+  })
+}
+
+export function normalizeClaudeSdkUsage(
+  usage: Record<string, unknown> | undefined,
+): ClaudeSdkUsageSummary | undefined {
+  if (!usage) return undefined
+  const inputTokens = tokenNumber(usage, ["input_tokens"])
+  const outputTokens = tokenNumber(usage, ["output_tokens"])
+  const cacheReadInputTokens = tokenNumber(usage, ["cache_read_input_tokens"])
+  const cacheCreationInputTokens = tokenNumber(usage, ["cache_creation_input_tokens"])
+  if (
+    inputTokens === undefined
+    && outputTokens === undefined
+    && cacheReadInputTokens === undefined
+    && cacheCreationInputTokens === undefined
+  ) {
+    return undefined
+  }
+  return usageSummary({
+    inputTokens: inputTokens ?? 0,
+    outputTokens: outputTokens ?? 0,
+    cacheReadInputTokens: cacheReadInputTokens ?? 0,
+    cacheCreationInputTokens: cacheCreationInputTokens ?? 0,
+  })
+}
+
+export function sumClaudeSdkUsage(
+  usages: readonly (Record<string, unknown> | undefined)[],
+): ClaudeSdkUsageSummary | undefined {
+  return sumClaudeSdkUsageSummaries(usages.flatMap((usage) => {
+    const summary = normalizeClaudeSdkUsage(usage)
+    return summary ? [summary] : []
+  }))
+}
+
+export function sumClaudeSdkUsageSummaries(
+  summaries: readonly ClaudeSdkUsageSummary[],
+): ClaudeSdkUsageSummary | undefined {
+  if (summaries.length === 0) return undefined
+  return usageSummary(summaries.reduce((total, summary) => ({
+    inputTokens: total.inputTokens + summary.inputTokens,
+    outputTokens: total.outputTokens + summary.outputTokens,
+    cacheReadInputTokens: total.cacheReadInputTokens + summary.cacheReadInputTokens,
+    cacheCreationInputTokens: total.cacheCreationInputTokens + summary.cacheCreationInputTokens,
+  }), {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadInputTokens: 0,
+    cacheCreationInputTokens: 0,
+  }))
 }
 
 export function formatTokenUsageValue(value: number): string {
@@ -34,4 +101,14 @@ function tokenNumber(usage: Record<string, unknown>, keys: readonly string[]): n
     if (typeof value === "number" && Number.isFinite(value)) return Math.max(0, value)
   }
   return undefined
+}
+
+function usageSummary(input: Omit<ClaudeSdkUsageSummary, "totalTokens">): ClaudeSdkUsageSummary {
+  return {
+    ...input,
+    totalTokens: input.inputTokens
+      + input.outputTokens
+      + input.cacheReadInputTokens
+      + input.cacheCreationInputTokens,
+  }
 }

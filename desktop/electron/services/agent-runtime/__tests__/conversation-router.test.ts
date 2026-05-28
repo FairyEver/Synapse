@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from "vitest"
 
 import type {
   AgentEventEntryV1,
+  AgentUsageEntryV1,
   ConversationEntryV1,
   DataChangeEvent,
   DataChangeListener,
@@ -335,12 +336,15 @@ describe("ConversationRouter", () => {
   })
 
   it("persists result usage on the assistant history entry", async () => {
-    const { conversations, router } = createRouter({
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { conversations, router, repository } = createRouter({
+      agentUsage,
       session: new ScriptedSession([
         {
           type: "result",
           content: "usage answer",
           done: true,
+          sdkResultUuid: "result-1",
           sdkSessionId: "sdk-1",
           usage: {
             input_tokens: 10,
@@ -355,6 +359,7 @@ describe("ConversationRouter", () => {
 
     const result = await router.send(baseMessage("hello"))
     const savedConversation = await conversations.get(result.conversationId)
+    const usageRows = await agentUsage.list()
 
     expect(result).toMatchObject({
       usage: {
@@ -379,6 +384,149 @@ describe("ConversationRouter", () => {
         }),
       }),
     ])
+    expect(usageRows).toEqual([
+      expect.objectContaining({
+        id: "result-1",
+        schemaVersion: 1,
+        projectId: "project-1",
+        conversationId: result.conversationId,
+        turnId: expect.any(String),
+        sdkResultUuid: "result-1",
+        sdkSessionId: "sdk-1",
+        usage: {
+          input_tokens: 10,
+          output_tokens: 2,
+          cache_read_input_tokens: 30,
+          cache_creation_input_tokens: 4,
+        },
+        usageSummary: {
+          inputTokens: 10,
+          outputTokens: 2,
+          cacheReadInputTokens: 30,
+          cacheCreationInputTokens: 4,
+          totalTokens: 46,
+        },
+      }),
+    ])
+    await expect(repository.getUsageSummary(result.conversationId)).resolves.toEqual({
+      inputTokens: 10,
+      outputTokens: 2,
+      cacheReadInputTokens: 30,
+      cacheCreationInputTokens: 4,
+      totalTokens: 46,
+    })
+  })
+
+  it("deduplicates SDK result usage by result uuid when aggregating a conversation", async () => {
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { router, repository } = createRouter({
+      agentUsage,
+      session: new ScriptedSession([
+        {
+          type: "result",
+          content: "first",
+          done: true,
+          sdkResultUuid: "result-duplicate",
+          sdkSessionId: "sdk-1",
+          usage: {
+            input_tokens: 10,
+            output_tokens: 2,
+            cache_read_input_tokens: 30,
+            cache_creation_input_tokens: 4,
+          },
+        },
+      ], "sdk-1"),
+    })
+
+    const first = await router.send(baseMessage("hello"))
+    await agentUsage.upsert({
+      ...(await agentUsage.get("result-duplicate"))!,
+      turnId: "replayed-turn",
+    })
+
+    await expect(repository.getUsageSummary(first.conversationId)).resolves.toEqual({
+      inputTokens: 10,
+      outputTokens: 2,
+      cacheReadInputTokens: 30,
+      cacheCreationInputTokens: 4,
+      totalTokens: 46,
+    })
+  })
+
+  it("records SDK result usage when the SDK result is an error event", async () => {
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { router, repository } = createRouter({
+      agentUsage,
+      session: new ScriptedSession([
+        {
+          type: "error",
+          message: "failed",
+          sdkResultUuid: "result-error",
+          sdkSessionId: "sdk-1",
+          usage: {
+            input_tokens: 5,
+            output_tokens: 1,
+            cache_read_input_tokens: 2,
+            cache_creation_input_tokens: 3,
+          },
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.send(baseMessage("hello"))
+
+    expect(result.error).toBe("failed")
+    await expect(repository.getUsageSummary(result.conversationId)).resolves.toEqual({
+      inputTokens: 5,
+      outputTokens: 1,
+      cacheReadInputTokens: 2,
+      cacheCreationInputTokens: 3,
+      totalTokens: 11,
+    })
+  })
+
+  it("records workflow run ids for SDK result usage aggregation", async () => {
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const { router, repository } = createRouter({
+      agentUsage,
+      session: new ScriptedSession([
+        {
+          type: "result",
+          content: "workflow answer",
+          done: true,
+          sdkResultUuid: "workflow-result",
+          sdkSessionId: "sdk-1",
+          usage: {
+            input_tokens: 6,
+            output_tokens: 7,
+            cache_read_input_tokens: 8,
+            cache_creation_input_tokens: 9,
+          },
+        },
+      ], "sdk-1"),
+    })
+
+    await router.send({
+      ...baseMessage("hello"),
+      userMeta: {
+        source: "workflow",
+        workflowRunId: "workflow-run-1",
+        workflowNodeId: "node-1",
+      },
+    })
+
+    await expect(repository.getWorkflowRunUsageSummary("workflow-run-1")).resolves.toEqual({
+      inputTokens: 6,
+      outputTokens: 7,
+      cacheReadInputTokens: 8,
+      cacheCreationInputTokens: 9,
+      totalTokens: 30,
+    })
+    await expect(agentUsage.get("workflow-result")).resolves.toMatchObject({
+      source: "workflow",
+      workflowRunId: "workflow-run-1",
+      workflowNodeId: "node-1",
+    })
   })
 
   it("uses streamed SDK text as the turn result when the final result has no content", async () => {
@@ -947,6 +1095,7 @@ describe("ConversationRouter", () => {
 function createRouter(input: {
   readonly conversations?: MemoryNamespace<ConversationEntryV1>
   readonly agentEvents?: MemoryNamespace<AgentEventEntryV1>
+  readonly agentUsage?: MemoryNamespace<AgentUsageEntryV1>
   readonly activeProviderId?: string
   readonly env?: Record<string, string>
   readonly session?: AgentLiveSession
@@ -966,6 +1115,7 @@ function createRouter(input: {
   const repository = new AgentSessionRepository({
     projectId: "project-1",
     conversations,
+    agentUsage: input.agentUsage,
     now: fixedNow,
   })
   const states = new Map()
@@ -1017,7 +1167,7 @@ function createRouter(input: {
     pendingPermissions,
   })
 
-  return { conversations, router, providerService, factoryCalls }
+  return { conversations, router, repository, providerService, factoryCalls }
 }
 
 function createEventBusRecorder(): {

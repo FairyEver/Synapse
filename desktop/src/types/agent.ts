@@ -58,11 +58,15 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
         workDir?: string
         cancelled?: boolean
         usage?: Record<string, unknown>
+        modelUsage?: Record<string, unknown>
+        sdkResultUuid?: string
         costUsd?: number
         costCny?: number
         costCurrency?: "CNY"
       }
       usage?: Record<string, unknown>
+      modelUsage?: Record<string, unknown>
+      sdkResultUuid?: string
       costUsd?: number
       costCny?: number
       costCurrency?: "CNY"
@@ -70,6 +74,12 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
   | {
       type: "error"
       message: string
+      usage?: Record<string, unknown>
+      modelUsage?: Record<string, unknown>
+      sdkResultUuid?: string
+      costUsd?: number
+      costCny?: number
+      costCurrency?: "CNY"
     }
   | {
       type: "assistant"
@@ -151,6 +161,8 @@ export interface SynapseAgentResultMetadata {
   readonly workDir?: string
   readonly cancelled?: boolean
   readonly usage?: Record<string, unknown>
+  readonly modelUsage?: Record<string, unknown>
+  readonly sdkResultUuid?: string
   readonly costUsd?: number
   readonly costCny?: number
   readonly costCurrency?: "CNY"

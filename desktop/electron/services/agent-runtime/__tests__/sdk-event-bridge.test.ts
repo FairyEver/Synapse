@@ -16,18 +16,44 @@ describe("SDK event bridge", () => {
       type: "result",
       subtype: "success",
       session_id: "sdk-1",
+      uuid: "result-1",
       result: "done",
       total_cost_usd: 0.01,
       usage: { input_tokens: 1, output_tokens: 2 },
+      modelUsage: { "claude-sonnet": { inputTokens: 1, outputTokens: 2 } },
     } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
       type: "result",
       content: "done",
       done: true,
       sdkSessionId: "sdk-1",
+      sdkResultUuid: "result-1",
       costUsd: 0.01,
       costCny: expect.closeTo(0.072, 6),
       costCurrency: "CNY",
       usage: { input_tokens: 1, output_tokens: 2 },
+      modelUsage: { "claude-sonnet": { inputTokens: 1, outputTokens: 2 } },
+      ...baseEnvelope,
+    })
+  })
+
+  it("preserves SDK result usage on error result messages", () => {
+    expect(bridgeSdkMessage({
+      type: "result",
+      subtype: "error_during_execution",
+      session_id: "sdk-error",
+      uuid: "result-error",
+      is_error: true,
+      errors: ["failed"],
+      total_cost_usd: 0.01,
+      usage: { input_tokens: 3, output_tokens: 4 },
+      modelUsage: { "claude-sonnet": { inputTokens: 3, outputTokens: 4 } },
+    } as unknown as SDKMessage, baseEnvelope)).toMatchObject({
+      type: "error",
+      message: "failed",
+      sdkSessionId: "sdk-error",
+      sdkResultUuid: "result-error",
+      usage: { input_tokens: 3, output_tokens: 4 },
+      modelUsage: { "claude-sonnet": { inputTokens: 3, outputTokens: 4 } },
       ...baseEnvelope,
     })
   })

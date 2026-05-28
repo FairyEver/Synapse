@@ -559,6 +559,15 @@ export class ConversationRouter {
         resultCostUsd = resultCostFromEvent(event)
         resultCostCny = resultCostCnyFromEvent(event)
         resultCostCurrency = resultCostCurrencyFromEvent(event)
+        await this.repository.recordSdkResultUsage({
+          conversationId: conversation.id,
+          turnId,
+          sdkResultUuid: resultSdkResultUuidFromEvent(event),
+          sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
+          usage: resultUsage,
+          modelUsage: resultModelUsageFromEvent(event),
+          userMeta: message.userMeta ?? conversation.userMeta,
+        })
         await this.repository.saveUsage({
           conversationId: conversation.id,
           usage: resultUsage as ConversationEntryV1["usage"] | undefined,
@@ -569,6 +578,22 @@ export class ConversationRouter {
         break
       }
       if (event.type === "error") {
+        const sdkResultUsage = sdkResultUsageFromError(event)
+        if (sdkResultUsage) {
+          resultUsage = sdkResultUsage
+          resultCostUsd = event.costUsd
+          resultCostCny = event.costCny
+          resultCostCurrency = event.costCurrency
+          await this.repository.recordSdkResultUsage({
+            conversationId: conversation.id,
+            turnId,
+            sdkResultUuid: event.sdkResultUuid,
+            sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
+            usage: sdkResultUsage,
+            modelUsage: event.modelUsage,
+            userMeta: message.userMeta ?? conversation.userMeta,
+          })
+        }
         error = event.message
         break
       }
@@ -739,6 +764,15 @@ export class ConversationRouter {
           resultCostUsd = resultCostFromEvent(event)
           resultCostCny = resultCostCnyFromEvent(event)
           resultCostCurrency = resultCostCurrencyFromEvent(event)
+          await this.repository.recordSdkResultUsage({
+            conversationId: conversation.id,
+            turnId,
+            sdkResultUuid: resultSdkResultUuidFromEvent(event),
+            sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
+            usage: resultUsage,
+            modelUsage: resultModelUsageFromEvent(event),
+            userMeta: message.userMeta ?? conversation.userMeta,
+          })
           await this.repository.saveUsage({
             conversationId: conversation.id,
             usage: resultUsage as ConversationEntryV1["usage"] | undefined,
@@ -749,6 +783,22 @@ export class ConversationRouter {
           break
         }
         if (event.type === "error") {
+          const sdkResultUsage = sdkResultUsageFromError(event)
+          if (sdkResultUsage) {
+            resultUsage = sdkResultUsage
+            resultCostUsd = event.costUsd
+            resultCostCny = event.costCny
+            resultCostCurrency = event.costCurrency
+            await this.repository.recordSdkResultUsage({
+              conversationId: conversation.id,
+              turnId,
+              sdkResultUuid: event.sdkResultUuid,
+              sdkSessionId: event.sdkSessionId ?? liveSession.currentSessionId(),
+              usage: sdkResultUsage,
+              modelUsage: event.modelUsage,
+              userMeta: message.userMeta ?? conversation.userMeta,
+            })
+          }
           error = event.message
           break
         }
@@ -1274,6 +1324,8 @@ function resultHistoryMetadata(
   const metadata = compactMetadata({
     ...event.metadata,
     usage: resultUsageFromEvent(event),
+    modelUsage: resultModelUsageFromEvent(event),
+    sdkResultUuid: resultSdkResultUuidFromEvent(event),
     costUsd: resultCostFromEvent(event),
     costCny: resultCostCnyFromEvent(event),
     costCurrency: resultCostCurrencyFromEvent(event),
@@ -1283,6 +1335,18 @@ function resultHistoryMetadata(
 
 function resultUsageFromEvent(event: Extract<AgentEvent, { type: "result" }>): Record<string, unknown> | undefined {
   return event.metadata?.usage ?? event.usage
+}
+
+function sdkResultUsageFromError(event: Extract<AgentEvent, { type: "error" }>): Record<string, unknown> | undefined {
+  return event.usage
+}
+
+function resultModelUsageFromEvent(event: Extract<AgentEvent, { type: "result" }>): Record<string, unknown> | undefined {
+  return event.metadata?.modelUsage ?? event.modelUsage
+}
+
+function resultSdkResultUuidFromEvent(event: Extract<AgentEvent, { type: "result" }>): string | undefined {
+  return event.metadata?.sdkResultUuid ?? event.sdkResultUuid
 }
 
 function resultCostFromEvent(event: Extract<AgentEvent, { type: "result" }>): number | undefined {

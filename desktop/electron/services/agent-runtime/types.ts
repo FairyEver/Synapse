@@ -114,6 +114,8 @@ export interface AgentResultMetadata {
   readonly workDir?: string
   readonly cancelled?: boolean
   readonly usage?: Record<string, unknown>
+  readonly modelUsage?: Record<string, unknown>
+  readonly sdkResultUuid?: string
   readonly costUsd?: number
   readonly costCny?: number
   readonly costCurrency?: "CNY"
@@ -128,12 +130,20 @@ export interface AgentResultEvent extends AgentEventBase {
   readonly costCny?: number
   readonly costCurrency?: "CNY"
   readonly usage?: Record<string, unknown>
+  readonly modelUsage?: Record<string, unknown>
+  readonly sdkResultUuid?: string
   readonly payload?: Record<string, unknown>
 }
 
 export interface AgentErrorEvent extends AgentEventBase {
   readonly type: "error"
   readonly message: string
+  readonly usage?: Record<string, unknown>
+  readonly modelUsage?: Record<string, unknown>
+  readonly sdkResultUuid?: string
+  readonly costUsd?: number
+  readonly costCny?: number
+  readonly costCurrency?: "CNY"
   readonly payload?: Record<string, unknown>
 }
 

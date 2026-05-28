@@ -183,6 +183,8 @@ export type ConversationResumePolicyV1 = "resume" | "fresh" | "continue"
 export interface ConversationUsageV1 extends Record<string, unknown> {
   inputTokens?: number
   outputTokens?: number
+  cacheReadInputTokens?: number
+  cacheCreationInputTokens?: number
   totalTokens?: number
 }
 
@@ -276,6 +278,62 @@ export const agentEventsSchema: NamespaceSchema<AgentEventEntryV1> = {
     && typeof (v as AgentEventEntryV1).eventType === "string"
     && isAnyRecord((v as AgentEventEntryV1).payload)
     && typeof (v as AgentEventEntryV1).createdAt === "string",
+}
+
+export interface AgentUsageSummaryV1 extends Record<string, unknown> {
+  inputTokens: number
+  outputTokens: number
+  cacheReadInputTokens: number
+  cacheCreationInputTokens: number
+  totalTokens: number
+}
+
+export interface AgentUsageEntryV1 extends Record<string, unknown> {
+  id: string
+  schemaVersion: 1
+  projectId: string
+  conversationId: string
+  turnId: string
+  sdkResultUuid?: string
+  sdkSessionId?: string
+  source?: string
+  taskId?: string
+  taskRunId?: string
+  workflowId?: string
+  workflowRunId?: string
+  workflowNodeId?: string
+  workflowNodeName?: string
+  usage: Record<string, unknown>
+  usageSummary: AgentUsageSummaryV1
+  modelUsage?: Record<string, unknown>
+  createdAt: string
+}
+
+export const agentUsageSchema: NamespaceSchema<AgentUsageEntryV1> = {
+  name: "agent.usage",
+  backend: "sqlite",
+  currentVersion: 1,
+  migrations: noMigrations,
+  validate: (v): v is AgentUsageEntryV1 =>
+    isAnyRecord<AgentUsageEntryV1>(v)
+    && (v as AgentUsageEntryV1).schemaVersion === 1
+    && typeof (v as AgentUsageEntryV1).id === "string"
+    && typeof (v as AgentUsageEntryV1).projectId === "string"
+    && typeof (v as AgentUsageEntryV1).conversationId === "string"
+    && typeof (v as AgentUsageEntryV1).turnId === "string"
+    && isOptionalString((v as AgentUsageEntryV1).sdkResultUuid)
+    && isOptionalString((v as AgentUsageEntryV1).sdkSessionId)
+    && isOptionalString((v as AgentUsageEntryV1).source)
+    && isOptionalString((v as AgentUsageEntryV1).taskId)
+    && isOptionalString((v as AgentUsageEntryV1).taskRunId)
+    && isOptionalString((v as AgentUsageEntryV1).workflowId)
+    && isOptionalString((v as AgentUsageEntryV1).workflowRunId)
+    && isOptionalString((v as AgentUsageEntryV1).workflowNodeId)
+    && isOptionalString((v as AgentUsageEntryV1).workflowNodeName)
+    && isPlainRecord((v as AgentUsageEntryV1).usage)
+    && isAgentUsageSummary((v as AgentUsageEntryV1).usageSummary)
+    && isOptionalRecord((v as AgentUsageEntryV1).modelUsage)
+    && typeof (v as AgentUsageEntryV1).createdAt === "string",
 }
 
 export interface AuditActorV1 extends Record<string, unknown> {
@@ -1006,7 +1064,22 @@ function isConversationUsage(value: unknown): value is ConversationUsageV1 {
   return isPlainRecord<ConversationUsageV1>(value)
     && isOptionalNonNegativeInteger(value.inputTokens)
     && isOptionalNonNegativeInteger(value.outputTokens)
+    && isOptionalNonNegativeInteger(value.cacheReadInputTokens)
+    && isOptionalNonNegativeInteger(value.cacheCreationInputTokens)
     && isOptionalNonNegativeInteger(value.totalTokens)
+}
+
+function isAgentUsageSummary(value: unknown): value is AgentUsageSummaryV1 {
+  return isPlainRecord<AgentUsageSummaryV1>(value)
+    && isRequiredNonNegativeInteger(value.inputTokens)
+    && isRequiredNonNegativeInteger(value.outputTokens)
+    && isRequiredNonNegativeInteger(value.cacheReadInputTokens)
+    && isRequiredNonNegativeInteger(value.cacheCreationInputTokens)
+    && isRequiredNonNegativeInteger(value.totalTokens)
+}
+
+function isRequiredNonNegativeInteger(value: unknown): boolean {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0
 }
 
 function isConversationResumePolicy(value: unknown): value is ConversationResumePolicyV1 {

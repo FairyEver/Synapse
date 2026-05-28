@@ -1,13 +1,20 @@
 import type {
+  AgentUsageEntryV1,
   ConversationEntryV1,
   ConversationResumePolicyV1,
   DataNamespace,
 } from "../../runtime/data-repo"
+import {
+  normalizeClaudeSdkUsage,
+  sumClaudeSdkUsageSummaries,
+  type ClaudeSdkUsageSummary,
+} from "../../../src/lib/token-usage"
 import type { AgentMessage } from "./types"
 
 export interface AgentSessionRepositoryOptions {
   readonly projectId: string
   readonly conversations: DataNamespace<ConversationEntryV1>
+  readonly agentUsage?: DataNamespace<AgentUsageEntryV1>
   readonly now?: () => Date
   readonly idFactory?: () => string
 }
@@ -49,12 +56,14 @@ export interface SaveAgentSessionInput {
 export class AgentSessionRepository {
   private readonly projectId: string
   private readonly conversations: DataNamespace<ConversationEntryV1>
+  private readonly agentUsage: DataNamespace<AgentUsageEntryV1> | undefined
   private readonly now: () => Date
   private readonly idFactory: () => string
 
   constructor(options: AgentSessionRepositoryOptions) {
     this.projectId = options.projectId
     this.conversations = options.conversations
+    this.agentUsage = options.agentUsage
     this.now = options.now ?? (() => new Date())
     this.idFactory = options.idFactory ?? (() => randomId())
   }
@@ -290,6 +299,71 @@ export class AgentSessionRepository {
     return updated
   }
 
+  async recordSdkResultUsage(input: {
+    readonly conversationId: string
+    readonly turnId: string
+    readonly sdkResultUuid?: string
+    readonly sdkSessionId?: string
+    readonly usage?: Record<string, unknown>
+    readonly modelUsage?: Record<string, unknown>
+    readonly userMeta?: ConversationEntryV1["userMeta"]
+  }): Promise<AgentUsageEntryV1 | undefined> {
+    if (!this.agentUsage) return undefined
+    const summary = normalizeClaudeSdkUsage(input.usage)
+    if (!input.usage || !summary) return undefined
+    const conversation = await this.requireConversation(input.conversationId)
+    const source = usageSourceFields(input.userMeta ?? conversation.userMeta)
+    const row: AgentUsageEntryV1 = {
+      id: input.sdkResultUuid ?? `${input.conversationId}:${input.turnId}`,
+      schemaVersion: 1,
+      projectId: this.projectId,
+      conversationId: input.conversationId,
+      turnId: input.turnId,
+      sdkResultUuid: input.sdkResultUuid,
+      sdkSessionId: input.sdkSessionId ?? conversation.sdkSessionId,
+      ...source,
+      usage: input.usage,
+      usageSummary: {
+        inputTokens: summary.inputTokens,
+        outputTokens: summary.outputTokens,
+        cacheReadInputTokens: summary.cacheReadInputTokens,
+        cacheCreationInputTokens: summary.cacheCreationInputTokens,
+        totalTokens: summary.totalTokens,
+      },
+      modelUsage: input.modelUsage,
+      createdAt: this.isoNow(),
+    }
+    await this.agentUsage.upsert(row)
+    return row
+  }
+
+  async getUsageSummary(conversationIdValue: string): Promise<ClaudeSdkUsageSummary | undefined> {
+    return this.getUsageSummaryByFilter({ conversationId: conversationIdValue })
+  }
+
+  async getTaskRunUsageSummary(taskRunId: string): Promise<ClaudeSdkUsageSummary | undefined> {
+    return this.getUsageSummaryByFilter({ taskRunId })
+  }
+
+  async getWorkflowRunUsageSummary(workflowRunId: string): Promise<ClaudeSdkUsageSummary | undefined> {
+    return this.getUsageSummaryByFilter({ workflowRunId })
+  }
+
+  private async getUsageSummaryByFilter(
+    filter: Partial<AgentUsageEntryV1>,
+  ): Promise<ClaudeSdkUsageSummary | undefined> {
+    if (!this.agentUsage) return undefined
+    const rows = await this.agentUsage.list({
+      projectId: this.projectId,
+      ...filter,
+    } as Partial<AgentUsageEntryV1>)
+    const unique = new Map<string, AgentUsageEntryV1>()
+    for (const row of rows) {
+      unique.set(row.sdkResultUuid ?? row.id, row)
+    }
+    return sumClaudeSdkUsageSummaries([...unique.values()].map((row) => row.usageSummary))
+  }
+
   async savePermissionMode(
     conversationIdValue: string,
     mode: string,
@@ -467,6 +541,27 @@ function pastAgentSessionIds(
   const values = current ? [...current] : []
   if (!values.includes(previous)) values.push(previous)
   return values.length > 0 ? values : undefined
+}
+
+function usageSourceFields(
+  userMeta: ConversationEntryV1["userMeta"] | undefined,
+): Pick<
+  AgentUsageEntryV1,
+  "source" | "taskId" | "taskRunId" | "workflowId" | "workflowRunId" | "workflowNodeId" | "workflowNodeName"
+> {
+  return {
+    source: stringField(userMeta?.source),
+    taskId: stringField(userMeta?.taskId),
+    taskRunId: stringField(userMeta?.taskRunId),
+    workflowId: stringField(userMeta?.workflowId),
+    workflowRunId: stringField(userMeta?.workflowRunId),
+    workflowNodeId: stringField(userMeta?.workflowNodeId),
+    workflowNodeName: stringField(userMeta?.workflowNodeName),
+  }
+}
+
+function stringField(value: unknown): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined
 }
 
 function randomId(): string {

@@ -22,6 +22,12 @@ export function bridgeSdkMessage(
   const sdkSessionId = stringValue(raw.session_id)
 
   if (raw.type === "result") {
+    const costUsd = numberValue(raw.total_cost_usd)
+    const costCny = costUsd === undefined ? undefined : usdToCny(costUsd)
+    const costCurrency = costCny === undefined ? undefined : SYNAPSE_COST_CURRENCY
+    const usage = recordValue(raw.usage)
+    const modelUsage = recordValue(raw.modelUsage)
+    const sdkResultUuid = stringValue(raw.uuid)
     if (raw.subtype !== "success" || raw.is_error === true) {
       const errors = Array.isArray(raw.errors)
         ? raw.errors.filter((error): error is string => typeof error === "string")
@@ -31,6 +37,12 @@ export function bridgeSdkMessage(
           type: "error",
           message: errors.map(sanitizeDiagnosticText).join("\n"),
           sdkSessionId,
+          usage,
+          modelUsage,
+          sdkResultUuid,
+          costUsd,
+          costCny,
+          costCurrency,
           payload: sanitizeResultErrorPayload(payload),
           ...envelope,
         }
@@ -40,8 +52,6 @@ export function bridgeSdkMessage(
       // a stop_reason are treated as success.
     }
 
-    const costUsd = numberValue(raw.total_cost_usd)
-    const costCny = costUsd === undefined ? undefined : usdToCny(costUsd)
     return {
       type: "result",
       content: typeof raw.result === "string" ? raw.result : "",
@@ -49,8 +59,10 @@ export function bridgeSdkMessage(
       sdkSessionId,
       costUsd,
       costCny,
-      costCurrency: costCny === undefined ? undefined : SYNAPSE_COST_CURRENCY,
-      usage: recordValue(raw.usage),
+      costCurrency,
+      usage,
+      modelUsage,
+      sdkResultUuid,
       payload: sanitizeResultSuccessPayload(payload),
       ...envelope,
     }
