@@ -28,6 +28,12 @@ type ResolvedRepository = {
   readonly config: SynapseConfig
   readonly repository: SynapseRepositoryConfig
 }
+type SecretAuditContext = {
+  readonly action: PermissionAction
+  readonly actor: ActorIdentity
+  readonly resource: string
+  readonly metadata: Record<string, unknown>
+}
 
 const VARIABLE_NAME_REGEX = /^[A-Za-z0-9_]+$/
 const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
@@ -194,7 +200,7 @@ async function authorizeSecret(
   repositoryUuid: string,
   variableName: string,
   includeValue: boolean,
-): Promise<void> {
+): Promise<SecretAuditContext> {
   const actor = deps.actor ?? DEFAULT_ACTOR
   const resource = `variable:${repositoryUuid}:${variableName}`
   const metadata = {
@@ -226,12 +232,26 @@ async function authorizeSecret(
     throw new Error(permission.reason)
   }
 
-  deps.auditSink.record({
+  return {
     action,
     actor,
     resource,
-    outcome: "allowed",
     metadata,
+  }
+}
+
+function recordSecretAudit(
+  deps: VariableCapabilityDispatcherDeps,
+  audit: SecretAuditContext,
+  outcome: "allowed" | "failed",
+  metadata?: Record<string, unknown>,
+): void {
+  deps.auditSink.record({
+    action: audit.action,
+    actor: audit.actor,
+    resource: audit.resource,
+    outcome,
+    metadata: metadata ? { ...audit.metadata, ...metadata } : audit.metadata,
   })
 }
 
@@ -259,6 +279,25 @@ async function persistVariables(
     },
     timestamp,
   })
+}
+
+async function persistVariablesWithAudit(
+  deps: VariableCapabilityDispatcherDeps,
+  config: SynapseConfig,
+  repository: SynapseRepositoryConfig,
+  variables: SynapseVariable[],
+  audit: SecretAuditContext,
+): Promise<void> {
+  try {
+    await persistVariables(deps, config, repository, variables)
+    recordSecretAudit(deps, audit, "allowed")
+  } catch (error) {
+    recordSecretAudit(deps, audit, "failed", {
+      errorName: error instanceof Error ? error.name : typeof error,
+      errorLength: String(error).length,
+    })
+    throw error
+  }
 }
 
 function variableResponse(config: SynapseConfig, repository: SynapseRepositoryConfig, variable: SynapseVariable) {
@@ -296,7 +335,8 @@ async function getVariable(
   const { config, repository } = await resolveRepository(deps, params)
   const { variable } = requireExistingVariable(repository.variables ?? [], name)
   if (includeValue) {
-    await authorizeSecret(deps, "secret.read", action, context, repository.uuid, variable.name, true)
+    const audit = await authorizeSecret(deps, "secret.read", action, context, repository.uuid, variable.name, true)
+    recordSecretAudit(deps, audit, "allowed")
   }
   return {
     ok: true,
@@ -324,8 +364,8 @@ async function createVariable(
       value,
       ...(description ? { description } : undefined),
     }
-    await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
-    await persistVariables(deps, config, repository, [...variables, variable])
+    const audit = await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
+    await persistVariablesWithAudit(deps, config, repository, [...variables, variable], audit)
     return { ok: true, data: { ...variableResponse(config, repository, variable), created: true } }
   })
 }
@@ -353,8 +393,8 @@ async function updateVariable(
       ...(description ? { description } : undefined),
     }
     variables[index] = updated
-    await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
-    await persistVariables(deps, config, repository, variables)
+    const audit = await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
+    await persistVariablesWithAudit(deps, config, repository, variables, audit)
     return { ok: true, data: { ...variableResponse(config, repository, updated), updated: true } }
   })
 }
@@ -379,8 +419,8 @@ async function upsertVariable(
         value: requireString(params, "value"),
         ...(description ? { description } : undefined),
       }
-      await authorizeSecret(deps, "secret.write", action, context, repository.uuid, created.name, false)
-      await persistVariables(deps, config, repository, [...variables, created])
+      const audit = await authorizeSecret(deps, "secret.write", action, context, repository.uuid, created.name, false)
+      await persistVariablesWithAudit(deps, config, repository, [...variables, created], audit)
       return { ok: true, data: { ...variableResponse(config, repository, created), created: true, updated: false } }
     }
 
@@ -395,8 +435,8 @@ async function upsertVariable(
       ...(description ? { description } : undefined),
     }
     variables[index] = updated
-    await authorizeSecret(deps, "secret.write", action, context, repository.uuid, current.name, false)
-    await persistVariables(deps, config, repository, variables)
+    const audit = await authorizeSecret(deps, "secret.write", action, context, repository.uuid, current.name, false)
+    await persistVariablesWithAudit(deps, config, repository, variables, audit)
     return { ok: true, data: { ...variableResponse(config, repository, updated), created: false, updated: true } }
   })
 }
@@ -411,9 +451,9 @@ async function deleteVariable(
   return mutateRepositoryVariables(deps, params, async (config, repository) => {
     const variables = [...(repository.variables ?? [])]
     const { index, variable } = requireExistingVariable(variables, name)
-    await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
+    const audit = await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
     variables.splice(index, 1)
-    await persistVariables(deps, config, repository, variables)
+    await persistVariablesWithAudit(deps, config, repository, variables, audit)
     return { ok: true, data: { ...variableResponse(config, repository, variable), deleted: true } }
   })
 }

@@ -249,6 +249,30 @@ describe("variable capability dispatcher", () => {
     expect(getConfig().repositories[0]?.variables?.map((variable) => variable.name)).toEqual(["FIRST", "SECOND"])
   })
 
+  it("records failed instead of allowed when a secret write persist fails", async () => {
+    const { auditEvents, dispatcher, getConfig, updateConfig } = createHarness(baseConfig)
+    updateConfig.mockRejectedValueOnce(new Error("disk unavailable"))
+
+    await expect(
+      dispatcher.dispatch("variable.item.create", { name: "BROKEN", value: "secret" }, { source: "mcp-http" }),
+    ).rejects.toThrow("disk unavailable")
+
+    expect(getConfig().repositories[0]?.variables?.map((variable) => variable.name)).toEqual(["TOKEN", "EMPTY"])
+    expect(auditEvents).not.toContainEqual(expect.objectContaining({
+      action: "secret.write",
+      outcome: "allowed",
+      resource: "variable:repo-1:BROKEN",
+    }))
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "secret.write",
+      outcome: "failed",
+      resource: "variable:repo-1:BROKEN",
+      metadata: expect.objectContaining({
+        errorName: "Error",
+      }),
+    }))
+  })
+
   it("rejects invalid scopes names duplicates and missing creation values", async () => {
     const { dispatcher } = createHarness(configFixture({
       activeRepoUuid: null,
