@@ -1,3 +1,4 @@
+import { timingSafeEqual } from "node:crypto"
 import { BadRequestException, Inject, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { Cron } from "@nestjs/schedule"
@@ -43,6 +44,18 @@ function addDays(date: Date, days: number): Date {
 }
 
 const revokedSessionRetentionMs = 7 * 24 * 60 * 60 * 1000
+const desktopLoginCodeTtlMs = 5 * 60 * 1000
+
+function buildDesktopDeepLink(code: string, state: string): string {
+  const query = new URLSearchParams({ code, state })
+  return `synapse://auth/callback?${query.toString()}`
+}
+
+function timingSafeEqualText(left: string, right: string): boolean {
+  const leftBuffer = Buffer.from(left)
+  const rightBuffer = Buffer.from(right)
+  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer)
+}
 
 @Injectable()
 export class UserAuthService {
@@ -133,6 +146,94 @@ export class UserAuthService {
       targetType: "user",
       targetId: user.id,
       ipAddress,
+    })
+    return tokens
+  }
+
+  async issueDesktopLoginCode(input: {
+    readonly userId: string
+    readonly state: string
+    readonly ipAddress: string
+    readonly userAgent?: string
+  }): Promise<{ code: string; deepLinkUrl: string; expiresAt: Date }> {
+    const state = input.state.trim()
+    if (!state) {
+      throw new BadRequestException("登录状态无效。")
+    }
+    const user = await this.prisma.user.findUnique({
+      where: { id: input.userId },
+      select: { id: true, email: true, status: true },
+    })
+    if (!user || user.status !== "active") {
+      throw new UnauthorizedException("未登录或登录已过期。")
+    }
+
+    const code = createOpaqueToken()
+    const expiresAt = new Date(Date.now() + desktopLoginCodeTtlMs)
+    await this.prisma.desktopLoginCode.create({
+      data: {
+        codeHash: hashToken(code),
+        userId: user.id,
+        state,
+        expiresAt,
+        ipAddress: input.ipAddress,
+        userAgent: input.userAgent,
+      },
+    })
+    await this.auditLog?.record({
+      adminEmail: user.email,
+      action: "user.desktop_login.issue",
+      targetType: "user",
+      targetId: user.id,
+      ipAddress: input.ipAddress,
+    })
+
+    return { code, deepLinkUrl: buildDesktopDeepLink(code, state), expiresAt }
+  }
+
+  async exchangeDesktopLoginCode(input: {
+    readonly code: string
+    readonly state: string
+    readonly ipAddress: string
+  }): Promise<UserTokenPair> {
+    const code = input.code.trim()
+    const state = input.state.trim()
+    if (!code || !state) {
+      throw new UnauthorizedException("登录凭证无效或已过期。")
+    }
+
+    const record = await this.prisma.desktopLoginCode.findUnique({
+      where: { codeHash: hashToken(code) },
+      include: { user: true },
+    })
+    const now = new Date()
+    if (
+      !record ||
+      record.usedAt ||
+      record.expiresAt <= now ||
+      !timingSafeEqualText(record.state, state) ||
+      record.user.status !== "active"
+    ) {
+      await this.recordDesktopLoginExchangeFailure(record, input.ipAddress)
+      throw new UnauthorizedException("登录凭证无效或已过期。")
+    }
+
+    const result = await this.prisma.desktopLoginCode.updateMany({
+      where: { id: record.id, usedAt: null },
+      data: { usedAt: now },
+    })
+    if (result.count !== 1) {
+      await this.recordDesktopLoginExchangeFailure(record, input.ipAddress)
+      throw new UnauthorizedException("登录凭证无效或已过期。")
+    }
+
+    const tokens = await this.issueTokenPair(record.user)
+    await this.auditLog?.record({
+      adminEmail: record.user.email,
+      action: "user.desktop_login.exchange.success",
+      targetType: "user",
+      targetId: record.user.id,
+      ipAddress: input.ipAddress,
     })
     return tokens
   }
@@ -327,6 +428,19 @@ export class UserAuthService {
       targetId: "unknown",
       detail: { reason: input.reason },
       ipAddress: input.ipAddress,
+    })
+  }
+
+  private async recordDesktopLoginExchangeFailure(
+    record: { user?: Pick<User, "id" | "email"> } | null,
+    ipAddress: string,
+  ): Promise<void> {
+    await this.auditLog?.record({
+      adminEmail: record?.user?.email ?? "unknown",
+      action: "user.desktop_login.exchange.failure",
+      targetType: "user",
+      targetId: record?.user?.id ?? "unknown",
+      ipAddress,
     })
   }
 

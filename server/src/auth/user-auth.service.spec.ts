@@ -36,6 +36,11 @@ function createPrismaMock() {
       update: vi.fn(),
       updateMany: vi.fn(),
     },
+    desktopLoginCode: {
+      create: vi.fn(),
+      findUnique: vi.fn(),
+      updateMany: vi.fn(),
+    },
   }
 }
 
@@ -128,6 +133,89 @@ describe("UserAuthService", () => {
       targetId: "user-1",
       ipAddress: "203.0.113.24",
     })
+  })
+
+  it("issues and exchanges a desktop login code without returning user profile", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.findUnique.mockResolvedValue({ id: "user-1", email: "desktop@example.com", status: "active" })
+    prisma.desktopLoginCode.create.mockResolvedValue({ id: "code-1" })
+    prisma.desktopLoginCode.findUnique.mockResolvedValue({
+      id: "code-1",
+      userId: "user-1",
+      codeHash: "hash",
+      state: "state-1234567890",
+      usedAt: null,
+      expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+      user: { id: "user-1", email: "desktop@example.com", status: "active" },
+    })
+    prisma.desktopLoginCode.updateMany.mockResolvedValue({ count: 1 })
+    const service = createService(prisma)
+
+    const issued = await service.issueDesktopLoginCode({
+      userId: "user-1",
+      state: "state-1234567890",
+      ipAddress: "127.0.0.1",
+      userAgent: "vitest",
+    })
+
+    expect(issued.code).toHaveLength(43)
+    expect(issued.deepLinkUrl).toBe(`synapse://auth/callback?code=${encodeURIComponent(issued.code)}&state=state-1234567890`)
+
+    const exchanged = await service.exchangeDesktopLoginCode({
+      code: issued.code,
+      state: "state-1234567890",
+      ipAddress: "127.0.0.1",
+    })
+
+    expect(exchanged.accessToken).toEqual(expect.any(String))
+    expect(exchanged.refreshToken).toEqual(expect.any(String))
+    expect(exchanged).not.toHaveProperty("user")
+  })
+
+  it("rejects desktop login code replay", async () => {
+    const prisma = createPrismaMock()
+    prisma.desktopLoginCode.findUnique.mockResolvedValue({
+      id: "code-1",
+      userId: "user-1",
+      codeHash: "hash",
+      state: "state-1234567890",
+      usedAt: new Date("2026-05-28T00:00:00.000Z"),
+      expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+      user: { id: "user-1", email: "desktop@example.com", status: "active" },
+    })
+    const service = createService(prisma)
+
+    await expect(service.exchangeDesktopLoginCode({
+      code: "desktop-code",
+      state: "state-1234567890",
+      ipAddress: "127.0.0.1",
+    }))
+      .rejects
+      .toThrow("登录凭证无效或已过期。")
+    expect(prisma.desktopLoginCode.updateMany).not.toHaveBeenCalled()
+  })
+
+  it("rejects desktop login code state mismatch", async () => {
+    const prisma = createPrismaMock()
+    prisma.desktopLoginCode.findUnique.mockResolvedValue({
+      id: "code-1",
+      userId: "user-1",
+      codeHash: "hash",
+      state: "state-1234567890",
+      usedAt: null,
+      expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+      user: { id: "user-1", email: "desktop@example.com", status: "active" },
+    })
+    const service = createService(prisma)
+
+    await expect(service.exchangeDesktopLoginCode({
+      code: "desktop-code",
+      state: "state-0000000000",
+      ipAddress: "127.0.0.1",
+    }))
+      .rejects
+      .toThrow("登录凭证无效或已过期。")
+    expect(prisma.desktopLoginCode.updateMany).not.toHaveBeenCalled()
   })
 
   it("records logout audits with the request ip", async () => {

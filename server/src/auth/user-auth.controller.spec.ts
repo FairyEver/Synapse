@@ -97,4 +97,67 @@ describe("UserAuthController", () => {
 
     expect(auth.logout).toHaveBeenCalledWith({ refreshToken: "refresh-token" }, "203.0.113.23")
   })
+
+  it("passes valid desktop issue-code requests to the service", () => {
+    const auth = {
+      issueDesktopLoginCode: vi.fn().mockResolvedValue({
+        code: "desktop-code",
+        deepLinkUrl: "synapse://auth/callback?code=desktop-code&state=state-1234567890",
+        expiresAt: new Date("2999-01-01T00:00:00.000Z"),
+      }),
+    }
+    const controller = new UserAuthController(auth as unknown as UserAuthService)
+
+    controller.issueDesktopCode(
+      { state: "state-1234567890" },
+      {
+        ip: "203.0.113.24",
+        headers: { "user-agent": "vitest" },
+        user: { id: "user-1" },
+      } as never,
+    )
+
+    expect(auth.issueDesktopLoginCode).toHaveBeenCalledWith({
+      userId: "user-1",
+      state: "state-1234567890",
+      ipAddress: "203.0.113.24",
+      userAgent: "vitest",
+    })
+  })
+
+  it("passes valid desktop exchange requests to the service", () => {
+    const auth = {
+      exchangeDesktopLoginCode: vi.fn().mockResolvedValue({ accessToken: "access", refreshToken: "refresh" }),
+    }
+    const controller = new UserAuthController(auth as unknown as UserAuthService)
+
+    controller.exchangeDesktopCode(
+      { code: "desktop-code", state: "state-1234567890" },
+      { ip: "203.0.113.25" } as never,
+    )
+
+    expect(auth.exchangeDesktopLoginCode).toHaveBeenCalledWith({
+      code: "desktop-code",
+      state: "state-1234567890",
+      ipAddress: "203.0.113.25",
+    })
+  })
+
+  it("rejects invalid desktop issue-code state before calling the service", () => {
+    const auth = {
+      issueDesktopLoginCode: vi.fn(),
+    }
+    const controller = new UserAuthController(auth as unknown as UserAuthService)
+
+    expect(() => controller.issueDesktopCode(
+      { state: "short" },
+      {
+        ip: "203.0.113.24",
+        headers: { "user-agent": "vitest" },
+        user: { id: "user-1" },
+      } as never,
+    ))
+      .toThrow(BadRequestException)
+    expect(auth.issueDesktopLoginCode).not.toHaveBeenCalled()
+  })
 })

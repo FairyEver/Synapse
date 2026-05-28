@@ -20,6 +20,15 @@ const refreshSchema = z.object({
   refreshToken: z.string().min(1),
 }).strict()
 
+const desktopIssueCodeSchema = z.object({
+  state: z.string().trim().min(16),
+}).strict()
+
+const desktopExchangeSchema = z.object({
+  code: z.string().trim().min(1),
+  state: z.string().trim().min(16),
+}).strict()
+
 @Controller("/api/auth")
 export class UserAuthController {
   constructor(private readonly auth: UserAuthService) {}
@@ -49,6 +58,30 @@ export class UserAuthController {
   }
 
   @UseGuards(UserAuthGuard)
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @Post("/desktop/issue-code")
+  issueDesktopCode(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const input = parseBody(desktopIssueCodeSchema, body, "登录请求无效。")
+    return this.auth.issueDesktopLoginCode({
+      userId: request.user!.id,
+      state: input.state,
+      ipAddress: request.ip,
+      userAgent: readHeaderText(request.headers["user-agent"]),
+    })
+  }
+
+  @Throttle({ default: { ttl: 60000, limit: 10 } })
+  @Post("/desktop/exchange")
+  exchangeDesktopCode(@Body() body: unknown, @Req() request: Request) {
+    const input = parseBody(desktopExchangeSchema, body, "登录请求无效。")
+    return this.auth.exchangeDesktopLoginCode({
+      code: input.code,
+      state: input.state,
+      ipAddress: request.ip,
+    })
+  }
+
+  @UseGuards(UserAuthGuard)
   @Get("/me")
   me(@Req() request: AuthenticatedUserRequest) {
     return this.auth.getMe(request.user!.id)
@@ -61,4 +94,8 @@ function parseBody<T extends z.ZodType>(schema: T, body: unknown, message: strin
     throw badRequestFromZodError(result.error, message)
   }
   return result.data
+}
+
+function readHeaderText(header: string | string[] | undefined): string | undefined {
+  return Array.isArray(header) ? header.join(", ") : header
 }
