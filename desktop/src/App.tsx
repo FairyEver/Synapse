@@ -162,6 +162,9 @@ function MainApp() {
       })
       .catch((error) => {
         logger.error("Failed to read workflow entry cheat code state.", error)
+        if (!cancelled) {
+          setWorkflowEntryVisible(false)
+        }
       })
 
     const unsubscribe = bridge.cheatCodes.onStateChanged((state) => {
