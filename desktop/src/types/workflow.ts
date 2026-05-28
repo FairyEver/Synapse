@@ -32,7 +32,6 @@ export interface WorkflowFileConversionNodeResult {
   readonly format: string
   readonly kind: string
   readonly title: string
-  readonly markdown: string
   readonly text: string
   readonly metadata: Record<string, unknown>
   readonly warnings: readonly { readonly code: string; readonly message: string }[]

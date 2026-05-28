@@ -68,7 +68,10 @@ export interface NodeRuntimeDeps {
   }
   sendHttpRequest: (request: import("../electron/runtime/network").OutboundHttpRequest) => Promise<import("../electron/runtime/network").OutboundHttpResponse>
   fileConversionService?: {
-    convert: (input: import("../electron/services/file-conversion").FileConversionInput) => Promise<import("../electron/services/file-conversion").FileConversionResult>
+    convert: (
+      input: import("../electron/services/file-conversion").FileConversionInput,
+      context?: import("../electron/services/workflow/file-conversion-input-service").WorkflowFileConversionContext,
+    ) => Promise<import("../electron/services/file-conversion").FileConversionResult>
   }
   writeWorkflowFileConversionOutput?: (request: {
     readonly outputPath: string

@@ -194,6 +194,7 @@ export const IPC_CHANNELS = {
     "exportPackage": "synapse:workflow:export-package",
     "inspectImportPackage": "synapse:workflow:inspect-import-package",
     "importPackage": "synapse:workflow:import-package",
+    "selectFileConversionInputFile": "synapse:workflow:file-conversion:select-input-file",
     "list": "synapse:workflow:list",
     "get": "synapse:workflow:get",
     "create": "synapse:workflow:create",

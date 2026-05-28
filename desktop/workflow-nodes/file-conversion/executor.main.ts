@@ -4,6 +4,7 @@ import type { FileConversionErrorCode, FileConversionResult } from "../../electr
 import { FileConversionError } from "../../electron/services/file-conversion"
 import { sanitizeError } from "../../electron/services/error-sanitize"
 import { interpolatePrompt } from "../../electron/services/workflow/variable-resolver"
+import { WorkflowFileConversionInputReadError } from "../../electron/services/workflow/file-conversion-input-service"
 import { createMainLogger } from "../../electron/services/log-store"
 import { truncateWithEllipsis } from "../../electron/services/workflow/workflow-utils"
 import type { NodeExecutionInput, NodeExecutionResult, NodeExecutor } from "../types"
@@ -44,6 +45,9 @@ export const fileConversionNodeExecutor: NodeExecutor<FileConversionNodeConfig> 
         filePath: inputPath,
         preferredOutput: "markdown",
         ocr: normalizeOcrOptions(interpolated.ocr),
+      }, {
+        actor: context.actor,
+        runId: context.runId,
       })
 
       input.onProgress?.("processing_output", "处理输出…")
@@ -116,7 +120,12 @@ export const fileConversionNodeExecutor: NodeExecutor<FileConversionNodeConfig> 
         errorMessage: truncateWithEllipsis(sanitizeError(message), 200),
         durationMs,
       })
-      return fileConversionFailure({ start, inputPath, code, message })
+      return fileConversionFailure({
+        start,
+        inputPath: error instanceof WorkflowFileConversionInputReadError ? "" : inputPath,
+        code,
+        message,
+      })
     }
   },
 }

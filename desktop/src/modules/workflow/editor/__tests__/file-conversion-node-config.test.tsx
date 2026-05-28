@@ -193,6 +193,38 @@ describe("file conversion workflow node UI", () => {
     expect(lastConfig(onConfigChange)).toMatchObject({ ocr: { maxPages: 3 } })
   })
 
+  it("selects a file conversion input through the workflow bridge", async () => {
+    const selectFileConversionInputFile = vi.fn(async () => "/tmp/selected.pdf")
+    ;(window as unknown as { synapse: { workflow: { selectFileConversionInputFile: typeof selectFileConversionInputFile } } }).synapse = {
+      workflow: { selectFileConversionInputFile },
+    }
+    const onConfigChange = vi.fn()
+    const definition = workflowWithFileConversionNode({
+      inputPath: "",
+      outputMode: "result",
+      outputPath: "",
+      outputDirectory: "",
+      ocr: { enabled: false, languages: [] },
+    })
+
+    const container = render(
+      <NodeConfigPanel
+        nodeId="convert-1"
+        definition={definition}
+        projects={[]}
+        onConfigChange={onConfigChange}
+        onNameChange={() => undefined}
+      />,
+    )
+
+    await act(async () => {
+      clickByLabel(container, "选择输入文件")
+    })
+
+    expect(selectFileConversionInputFile).toHaveBeenCalledTimes(1)
+    expect(lastConfig(onConfigChange)).toMatchObject({ inputPath: "/tmp/selected.pdf" })
+  })
+
   it("renders file conversion node card in the editor wrapper", async () => {
     const Wrapper = (nodeTypes as unknown as Record<string, React.ComponentType<{
       readonly id: string

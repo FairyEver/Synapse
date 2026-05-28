@@ -1,4 +1,7 @@
 import { useState } from "react"
+import { FileInput } from "lucide-react"
+import { createRendererLogger } from "@/app-shell/logging"
+import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -19,6 +22,7 @@ const OUTPUT_LABELS: Record<NonNullable<FileConversionNodeConfig["outputMode"]>,
   result: "仅返回结果",
   "markdown-file": "Markdown 文件",
 }
+const logger = createRendererLogger("workflow.file-conversion-node-panel")
 
 export function FileConversionNodePanel({
   config,
@@ -38,6 +42,19 @@ export function FileConversionNodePanel({
     commit({ ocr: { ...(draft.ocr ?? {}), ...overrides } })
   }
 
+  const selectInputFile = async () => {
+    try {
+      const filePath = await window.synapse?.workflow.selectFileConversionInputFile()
+      if (filePath) commit({ inputPath: filePath })
+    } catch (error) {
+      logger.warn("File conversion input selection failed.", {
+        boundary: "renderer.workflow.file-conversion.select-input",
+        errorName: error instanceof Error ? error.name : typeof error,
+        errorLength: (error instanceof Error ? error.message : String(error)).length,
+      })
+    }
+  }
+
   const ocr = draft.ocr ?? { enabled: false, languages: [] }
   const outputMode = draft.outputMode ?? "result"
 
@@ -47,12 +64,24 @@ export function FileConversionNodePanel({
         <div className="grid gap-3">
           <div className="grid gap-1.5">
             <Label htmlFor="wf-node-file-conversion-input-path" className="text-xs">输入路径</Label>
-            <Input
-              id="wf-node-file-conversion-input-path"
-              className="h-7 text-xs"
-              value={draft.inputPath}
-              onChange={(event) => commit({ inputPath: event.target.value })}
-            />
+            <div className="flex items-center gap-2">
+              <Input
+                id="wf-node-file-conversion-input-path"
+                className="h-7 text-xs"
+                value={draft.inputPath}
+                onChange={(event) => commit({ inputPath: event.target.value })}
+              />
+              <Button
+                type="button"
+                size="icon"
+                variant="outline"
+                className="h-7 w-7 shrink-0"
+                aria-label="选择输入文件"
+                onClick={() => void selectInputFile()}
+              >
+                <FileInput className="h-3.5 w-3.5" />
+              </Button>
+            </div>
           </div>
 
           <div className="grid gap-1.5">

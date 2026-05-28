@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto"
 import { readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
 import { pathToFileURL } from "node:url"
-import { app, BrowserWindow, dialog } from "electron"
+import { app, BrowserWindow, dialog, type OpenDialogOptions } from "electron"
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
@@ -25,6 +25,7 @@ const logger = createMainLogger("workflow.ipc")
 const DELETE_ABORT_WAIT_MS = 5_000
 const runCompletions = new Map<string, Promise<unknown>>()
 const deletedWorkflows = new Set<string>()
+const WORKFLOW_FILE_CONVERSION_INPUT_EXTENSIONS = ["doc", "docx", "xlsx", "pdf", "ppt", "pptx", "png", "jpg", "jpeg", "webp"]
 
 /**
  * Maximum number of terminal (completed/failed/cancelled) run statuses to keep
@@ -624,6 +625,24 @@ export const workflowIpcModule: IpcModule = {
           })
           throw error
         }
+      },
+    },
+    selectFileConversionInputFile: {
+      channel: "synapse:workflow:file-conversion:select-input-file", kind: "invoke",
+      request: z.void().optional(),
+      response: z.object({ path: z.string() }).nullable(),
+      handler: async () => {
+        const parentWindow = focusedWindow()
+        const options: OpenDialogOptions = {
+          title: "选择文件",
+          filters: [{ name: "支持的文件", extensions: WORKFLOW_FILE_CONVERSION_INPUT_EXTENSIONS }],
+          properties: ["openFile"],
+        }
+        const result = parentWindow
+          ? await dialog.showOpenDialog(parentWindow, options)
+          : await dialog.showOpenDialog(options)
+        if (result.canceled || result.filePaths.length === 0) return null
+        return { path: result.filePaths[0] }
       },
     },
     list: {
