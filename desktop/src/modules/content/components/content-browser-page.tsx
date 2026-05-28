@@ -485,6 +485,25 @@ function ContentBrowserPage({
                 </h2>
               </div>
               <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                {!isDeletedView && (
+                  <Select
+                    data-track="content-sort-order"
+                    value={sortOrder}
+                    onValueChange={(value) => setSortOrder(value as SynapseContentSortOrder)}
+                  >
+                    <SelectTrigger size="sm">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {SORT_OPTIONS.map((option) => (
+                        <SelectItem key={option.value} value={option.value}>
+                          {option.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+                <p className="text-sm text-muted-foreground">{summaryLabel}</p>
                 <RepositoryToolbarActions
                   activeRepository={activeRepository}
                   activityLabel={toolbarState.activityLabel}
@@ -506,25 +525,6 @@ function ContentBrowserPage({
                     openRepositorySwitchDialog()
                   }}
                 />
-                {!isDeletedView && (
-                  <Select
-                    data-track="content-sort-order"
-                    value={sortOrder}
-                    onValueChange={(value) => setSortOrder(value as SynapseContentSortOrder)}
-                  >
-                    <SelectTrigger size="sm">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {SORT_OPTIONS.map((option) => (
-                        <SelectItem key={option.value} value={option.value}>
-                          {option.label}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                )}
-                <p className="text-sm text-muted-foreground">{summaryLabel}</p>
               </div>
             </div>
 
