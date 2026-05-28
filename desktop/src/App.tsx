@@ -4,8 +4,6 @@ import { EmptyRepositoryState } from "@/app-shell/components/empty-repository-st
 import { IdentityGate } from "@/app-shell/components/identity-gate"
 import { AppShellLayout } from "@/app-shell/components/app-shell-layout"
 import { AppShellNavigation } from "@/app-shell/components/app-shell-navigation"
-import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
-import { useAppShellToolbarState } from "@/app-shell/use-app-shell-toolbar-state"
 import { useAppConfig } from "@/app-shell/config"
 import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { subscribeContentOpenRequest } from "@/app-shell/content-navigation"
@@ -17,17 +15,14 @@ import {
   publishActiveAppTab,
   requestOpenSettingsAccount,
   requestOpenSettingsAbout,
-  requestOpenSettingsStorage,
   subscribeOpenAgentSession,
   subscribeOpenSettingsTab,
 } from "@/app-shell/navigation"
 import { useWatchNextAgentSession } from "@/app-shell/use-watch-next-agent-session"
-import { useAppNotifications } from "@/app-shell/notifications"
 import { isWorkflowEntryVisible } from "@/app-shell/workflow-entry-visibility"
 import {
   useActiveRepository,
   useHasRepositories,
-  useRepositoryActions,
   useRepositoryManager,
   useRepositoryState,
 } from "@/app-shell/use-repository-manager"
@@ -83,6 +78,7 @@ function createEmptyDialogStateMap(): ContentDialogStateMap {
 }
 
 const CONTENT_MODULE_COMPONENTS: Record<SynapseContentType, ComponentType<{
+  hasBlockingModalOpen?: boolean
   onInstallDialogOpenChange?: (open: boolean) => void
   pendingContentOpenRequest?: ContentOpenRequest | null
   onPendingContentOpenRequestConsumed?: (requestId: string) => void
@@ -95,13 +91,7 @@ const CONTENT_MODULE_COMPONENTS: Record<SynapseContentType, ComponentType<{
 function MainApp() {
   const activeRepository = useActiveRepository()
   const hasRepositories = useHasRepositories()
-  const {
-    isSwitchingRepository,
-    openRepositorySwitchDialog,
-  } = useActiveRepositorySwitch()
-  const { promise } = useAppNotifications()
   const manager = useRepositoryManager()
-  const { syncRepository } = useRepositoryActions()
   const [activeTab, setActiveTabRaw] = useState<AppTabId>(DEFAULT_APP_TAB)
   const [contentDialogStates, setContentDialogStates] = useState<ContentDialogStateMap>(
     createEmptyDialogStateMap,
@@ -326,31 +316,6 @@ function MainApp() {
     })
   }, [setActiveTab])
 
-  const hasBlockingModalOpen = hasContentDialogOpen
-  const toolbarState = useAppShellToolbarState({
-    hasBlockingModalOpen,
-  })
-  const handleManualRepositorySync = useCallback((source: "refresh" | "sync-status") => {
-    if (!activeRepository) {
-      return
-    }
-
-    logger.info("Manual repository sync requested from app shell.", {
-      repositoryUuid: activeRepository.uuid,
-      source,
-    })
-    void promise(
-      () => syncRepository(activeRepository.uuid),
-      {
-        loading: "正在同步仓库...",
-        success: (result) => result.message ?? "仓库同步完成。",
-        error: (error) => error instanceof Error ? error.message : "同步仓库失败。",
-      },
-    ).catch((error) => {
-      logger.error("Manual repository sync failed from app shell.", error)
-    })
-  }, [activeRepository, promise, syncRepository])
-
   // 如果没有仓库或当前仓库缺失，显示空状态页面
   if (hasNoRepositories) {
     return <EmptyRepositoryState reason="no-repositories" />
@@ -372,32 +337,7 @@ function MainApp() {
         }
         actions={
           <AppShellActions
-            activeRepository={activeRepository}
-            activityLabel={toolbarState.activityLabel}
-            pendingPushCount={toolbarState.pendingPushCount}
-            refreshBusy={toolbarState.refreshBusy}
-            refreshDisabled={toolbarState.refreshDisabled}
-            refreshTitle={toolbarState.refreshTitle}
-            repositorySwitchDisabled={toolbarState.repositorySwitchDisabled}
-            repositorySwitchTitle={toolbarState.repositorySwitchTitle}
-            showRefresh={toolbarState.showRefresh}
-            showRepositorySwitch={toolbarState.showRepositorySwitch}
-            syncSnapshot={toolbarState.syncSnapshot}
-            syncStatus={toolbarState.syncStatus}
             onOpenAccountSettings={requestOpenSettingsAccount}
-            onOpenRepositorySettings={() => {
-              setActiveTab("settings", "sync-status")
-              requestOpenSettingsStorage()
-            }}
-            onSyncStatusRetry={() => handleManualRepositorySync("sync-status")}
-            onRefresh={() => handleManualRepositorySync("refresh")}
-            onRepositorySwitch={() => {
-              if (toolbarState.repositorySwitchDisabled || isSwitchingRepository) {
-                return
-              }
-
-              openRepositorySwitchDialog()
-            }}
           />
         }
       >
@@ -414,6 +354,7 @@ function MainApp() {
               <ErrorBoundary key={contentType} fallbackTitle={`${CONTENT_TAB_LABELS[contentType]}模块出现问题`}>
                 <ModuleComponent
                   key={contentType}
+                  hasBlockingModalOpen={hasContentDialogOpen}
                   onInstallDialogOpenChange={dialogHandlers.install}
                   pendingContentOpenRequest={pendingContentOpenRequest}
                   onPendingContentOpenRequestConsumed={handlePendingContentOpenRequestConsumed}

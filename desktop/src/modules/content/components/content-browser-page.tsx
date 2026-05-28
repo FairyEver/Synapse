@@ -1,11 +1,20 @@
 import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react"
 import Fuse from "fuse.js"
 import { toast } from "sonner"
+import { useActiveRepositorySwitch } from "@/app-shell/active-repository-switch"
 import { openContentDetailWindow, openContentEditWindow, purgeContent, restoreContent } from "@/app-shell/content"
 import type { ContentOpenRequest } from "@/app-shell/content-navigation"
 import { useCurrentRepoProfile, useIdentity } from "@/app-shell/identity-context"
 import { createRendererLogger } from "@/app-shell/logging"
-import { useActiveRepository, useRepositoryState } from "@/app-shell/use-repository-manager"
+import { requestOpenSettingsStorage } from "@/app-shell/navigation"
+import { useAppNotifications } from "@/app-shell/notifications"
+import { RepositoryToolbarActions } from "@/app-shell/components/repository-toolbar-actions"
+import { useRepositoryToolbarState } from "@/app-shell/use-repository-toolbar-state"
+import {
+  useActiveRepository,
+  useRepositoryActions,
+  useRepositoryState,
+} from "@/app-shell/use-repository-manager"
 import { SidebarContentLayout } from "@/components/sidebar-content-layout"
 import {
   Select,
@@ -48,6 +57,7 @@ import type { SynapseContentMeta, SynapseContentMutationResult, SynapseContentTy
 
 type ContentBrowserPageProps = {
   contentType: SynapseContentType
+  hasBlockingModalOpen?: boolean
   onCreateClick?: () => void
   onInstallDialogOpenChange?: (open: boolean) => void
   pendingContentOpenRequest?: ContentOpenRequest | null
@@ -56,6 +66,7 @@ type ContentBrowserPageProps = {
 
 function ContentBrowserPage({
   contentType,
+  hasBlockingModalOpen = false,
   onCreateClick,
   onInstallDialogOpenChange,
   pendingContentOpenRequest,
@@ -64,6 +75,12 @@ function ContentBrowserPage({
   const definition = getContentTypeDefinition(contentType)
   const logger = useMemo(() => createRendererLogger(`content.browser.${contentType}`), [contentType])
   const activeRepository = useActiveRepository()
+  const {
+    isSwitchingRepository,
+    openRepositorySwitchDialog,
+  } = useActiveRepositorySwitch()
+  const { promise } = useAppNotifications()
+  const { syncRepository } = useRepositoryActions()
   const { currentRepoProfileState } = useCurrentRepoProfile()
   const activeRepositoryState = useRepositoryState(activeRepository?.uuid ?? "")
   const { categories, error, isLoading, items, refresh, totalCount } = useContentCatalog(contentType)
@@ -102,6 +119,9 @@ function ContentBrowserPage({
   const isDeletedView = activeCategoryId === SYNAPSE_DELETED_CATEGORY_ID
   const { localIdentityState } = useIdentity()
   const currentUserId = localIdentityState?.status === "ready" ? localIdentityState.identity.userId : null
+  const toolbarState = useRepositoryToolbarState({
+    hasBlockingModalOpen,
+  })
 
   const repositoryStatus = activeRepositoryState?.status ?? "checking"
   const canBrowseContent = repositoryStatus === "ready"
@@ -296,6 +316,26 @@ function ContentBrowserPage({
     }
   }, [addRecentlyViewed, contentType, logger])
 
+  const handleManualRepositorySync = useCallback((source: "refresh" | "sync-status") => {
+    if (!activeRepository) return
+
+    logger.info("Manual repository sync requested from content browser.", {
+      contentType,
+      repositoryUuid: activeRepository.uuid,
+      source,
+    })
+    void promise(
+      () => syncRepository(activeRepository.uuid),
+      {
+        loading: "正在同步仓库...",
+        success: (result) => result.message ?? "仓库同步完成。",
+        error: (syncError) => syncError instanceof Error ? syncError.message : "同步仓库失败。",
+      },
+    ).catch((syncError) => {
+      logger.error("Manual repository sync failed from content browser.", syncError)
+    })
+  }, [activeRepository, contentType, logger, promise, syncRepository])
+
   if (activeRepository === null) {
     return (
       <div className="flex h-full items-center justify-center p-6">
@@ -444,7 +484,28 @@ function ContentBrowserPage({
                   {isDeletedView ? "最近删除" : definition.pluralLabel}
                 </h2>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex min-w-0 flex-wrap items-center justify-end gap-2">
+                <RepositoryToolbarActions
+                  activeRepository={activeRepository}
+                  activityLabel={toolbarState.activityLabel}
+                  pendingPushCount={toolbarState.pendingPushCount}
+                  refreshBusy={toolbarState.refreshBusy}
+                  refreshDisabled={toolbarState.refreshDisabled}
+                  refreshTitle={toolbarState.refreshTitle}
+                  repositorySwitchDisabled={toolbarState.repositorySwitchDisabled}
+                  repositorySwitchTitle={toolbarState.repositorySwitchTitle}
+                  showRefresh={toolbarState.showRefresh}
+                  showRepositorySwitch={toolbarState.showRepositorySwitch}
+                  syncSnapshot={toolbarState.syncSnapshot}
+                  syncStatus={toolbarState.syncStatus}
+                  onOpenRepositorySettings={requestOpenSettingsStorage}
+                  onSyncStatusRetry={() => handleManualRepositorySync("sync-status")}
+                  onRefresh={() => handleManualRepositorySync("refresh")}
+                  onRepositorySwitch={() => {
+                    if (toolbarState.repositorySwitchDisabled || isSwitchingRepository) return
+                    openRepositorySwitchDialog()
+                  }}
+                />
                 {!isDeletedView && (
                   <Select
                     data-track="content-sort-order"

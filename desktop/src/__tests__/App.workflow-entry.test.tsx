@@ -72,28 +72,6 @@ vi.mock("@/app-shell/config", () => ({
   useAppConfig: () => ({ resetKey: "test" }),
 }))
 
-vi.mock("@/app-shell/notifications", () => ({
-  useAppNotifications: () => ({
-    promise: vi.fn((task: () => Promise<unknown>) => task()),
-  }),
-}))
-
-vi.mock("@/app-shell/use-app-shell-toolbar-state", () => ({
-  useAppShellToolbarState: () => ({
-    activityLabel: null,
-    pendingPushCount: 0,
-    refreshBusy: false,
-    refreshDisabled: false,
-    refreshTitle: "刷新",
-    repositorySwitchDisabled: false,
-    repositorySwitchTitle: "切换仓库",
-    showRefresh: false,
-    showRepositorySwitch: false,
-    syncSnapshot: null,
-    syncStatus: null,
-  }),
-}))
-
 vi.mock("@/app-shell/use-repository-manager", () => ({
   useActiveRepository: () => ({ uuid: "repo-1", name: "Repo" }),
   useHasRepositories: () => true,

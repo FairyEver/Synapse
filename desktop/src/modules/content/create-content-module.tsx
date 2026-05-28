@@ -16,6 +16,7 @@ type ContentModuleConfig<T extends SynapseContentType> = {
 }
 
 type ContentModuleProps = {
+  hasBlockingModalOpen?: boolean
   onInstallDialogOpenChange?: (open: boolean) => void
   pendingContentOpenRequest?: ContentOpenRequest | null
   onPendingContentOpenRequestConsumed?: (requestId: string) => void
@@ -25,6 +26,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
   const definition = getContentTypeDefinition(config.contentType)
 
   function ContentModule({
+    hasBlockingModalOpen = false,
     onInstallDialogOpenChange,
     pendingContentOpenRequest,
     onPendingContentOpenRequestConsumed,
@@ -91,6 +93,7 @@ function createContentModule<T extends SynapseContentType>(config: ContentModule
       <InstallStatusProvider>
         <ContentBrowserPage
           contentType={config.contentType}
+          hasBlockingModalOpen={hasBlockingModalOpen}
           pendingContentOpenRequest={pendingContentOpenRequest}
           onPendingContentOpenRequestConsumed={onPendingContentOpenRequestConsumed}
           onCreateClick={() => {
