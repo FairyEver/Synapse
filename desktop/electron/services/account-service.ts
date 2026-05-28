@@ -119,15 +119,19 @@ export class AccountService {
       parsed = new URL(rawUrl)
     } catch (error) {
       logger.warn("Ignored malformed account auth callback.", { error })
+      const persisted = await this.readPersisted("Failed to read stored account for malformed auth callback.")
+      this.setInvalidCallbackState(persisted)
       return this.state
     }
 
     if (parsed.protocol !== "synapse:" || parsed.hostname !== "auth" || parsed.pathname !== "/callback") {
+      const persisted = await this.readPersisted("Failed to read stored account for unknown auth callback.")
       logger.warn("Ignored unknown account auth callback.", {
         protocol: parsed.protocol,
         host: parsed.hostname,
         pathname: parsed.pathname,
       })
+      this.setInvalidCallbackState(persisted)
       return this.state
     }
 
@@ -262,6 +266,14 @@ export class AccountService {
   private async clearStoredAccount(): Promise<void> {
     await this.namespace.clearSingleton().catch((error) => {
       logger.warn("Failed to clear stored account.", { error })
+    })
+  }
+
+  private setInvalidCallbackState(persisted: PersistedAccount | null): void {
+    this.setState({
+      status: "error",
+      message: "登录已失效，请重试。",
+      profile: persisted?.lastProfile,
     })
   }
 

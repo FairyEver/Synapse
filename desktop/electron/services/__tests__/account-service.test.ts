@@ -55,6 +55,12 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+const storedProfile: SynapseAccountProfile = {
+  user: { id: "u1", email: "u@example.com", status: "active" },
+  teams: [],
+  syncedAt: "2026-05-28T00:00:00.000Z",
+}
+
 async function createTestAccountService(input: {
   fetch?: typeof fetch
   isPackaged?: boolean
@@ -128,6 +134,36 @@ describe("AccountService", () => {
     const state = await service.handleAuthCallback("synapse://auth/callback?code=code-1&state=wrong")
 
     expect(state.status).toBe("error")
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it("reports malformed callback URLs as errors without exchanging", async () => {
+    const fetch = vi.fn()
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await namespace.setSingleton({ lastProfile: storedProfile })
+
+    const state = await service.handleAuthCallback("not a url")
+
+    expect(state).toMatchObject({
+      status: "error",
+      message: "登录已失效，请重试。",
+      profile: storedProfile,
+    })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it("reports wrong callback routes as errors without exchanging", async () => {
+    const fetch = vi.fn()
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await namespace.setSingleton({ lastProfile: storedProfile })
+
+    const state = await service.handleAuthCallback("synapse://auth/other?code=code-1&state=state-1")
+
+    expect(state).toMatchObject({
+      status: "error",
+      message: "登录已失效，请重试。",
+      profile: storedProfile,
+    })
     expect(fetch).not.toHaveBeenCalled()
   })
 
