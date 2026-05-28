@@ -6,6 +6,7 @@ import {
   agentCommandSettingsSchema,
   agentCommandsSchema,
   agentEventsSchema,
+  agentUsageSchema,
   conversationsSchema,
   coreConfigSchema,
   coreIdentitySchema,
@@ -36,6 +37,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         "agent.commands",
         "agent.compress_state",
         "agent.events",
+        "agent.usage",
         "cheat-code.states",
         "conversations",
         "core.config",
@@ -91,6 +93,7 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
     expect(relayRunsSchema.backend).toBe("sqlite")
     expect(agentCompressStateSchema.backend).toBe("json")
     expect(agentEventsSchema.backend).toBe("sqlite")
+    expect(agentUsageSchema.backend).toBe("sqlite")
     expect(opsDiagnosticsSchema.backend).toBe("jsonl")
   })
 
@@ -310,6 +313,24 @@ describe("Phase 0.2 schema registration (T2.8 + T2.9)", () => {
         agentNativeSlashAllowlist: ["help"],
         remoteAgentNativeSlashAllowlist: [],
         updatedAt: "2026-04-25T00:00:00Z",
+      }),
+    ).toBe(true)
+    expect(
+      agentUsageSchema.validate({
+        id: "usage-1",
+        schemaVersion: 1,
+        projectId: "proj-1",
+        conversationId: "conv-1",
+        turnId: "turn-1",
+        usage: {},
+        usageSummary: {
+          inputTokens: 10,
+          outputTokens: 20,
+          cacheReadInputTokens: 0,
+          cacheCreationInputTokens: 0,
+          totalTokens: 30,
+        },
+        createdAt: "2026-05-28T00:00:00Z",
       }),
     ).toBe(true)
   })
