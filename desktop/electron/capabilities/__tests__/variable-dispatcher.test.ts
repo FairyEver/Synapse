@@ -228,6 +228,27 @@ describe("variable capability dispatcher", () => {
     }))
   })
 
+  it("preserves concurrent creates in the same repository", async () => {
+    const { dispatcher, getConfig } = createHarness(configFixture({
+      activeRepoUuid: "repo-1",
+      repositories: [
+        {
+          uuid: "repo-1",
+          name: "Main",
+          localPath: "/repo/main",
+          contentDirs: {},
+        },
+      ],
+    }))
+
+    await Promise.all([
+      dispatcher.dispatch("variable.item.create", { name: "FIRST", value: "one" }, { source: "mcp-http" }),
+      dispatcher.dispatch("variable.item.create", { name: "SECOND", value: "two" }, { source: "mcp-http" }),
+    ])
+
+    expect(getConfig().repositories[0]?.variables?.map((variable) => variable.name)).toEqual(["FIRST", "SECOND"])
+  })
+
   it("rejects invalid scopes names duplicates and missing creation values", async () => {
     const { dispatcher } = createHarness(configFixture({
       activeRepoUuid: null,

@@ -31,6 +31,7 @@ type ResolvedRepository = {
 
 const VARIABLE_NAME_REGEX = /^[A-Za-z0-9_]+$/
 const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
+const variableMutationChains = new WeakMap<VariableCapabilityDispatcherDeps, Map<string, Promise<void>>>()
 
 export function createVariableCapabilityDispatcher(deps: VariableCapabilityDispatcherDeps) {
   return {
@@ -65,6 +66,53 @@ async function resolveRepository(
   const repository = config.repositories.find((item) => item.uuid === repositoryUuid)
   if (!repository) throw new Error(`Repository not found: ${repositoryUuid}`)
   return { config, repository }
+}
+
+async function resolveRepositoryByUuid(
+  deps: VariableCapabilityDispatcherDeps,
+  repositoryUuid: string,
+): Promise<ResolvedRepository> {
+  const config = await deps.loadConfig()
+  const repository = config.repositories.find((item) => item.uuid === repositoryUuid)
+  if (!repository) throw new Error(`Repository not found: ${repositoryUuid}`)
+  return { config, repository }
+}
+
+async function withVariableMutationLock<T>(
+  deps: VariableCapabilityDispatcherDeps,
+  repositoryUuid: string,
+  task: () => Promise<T>,
+): Promise<T> {
+  let chains = variableMutationChains.get(deps)
+  if (!chains) {
+    chains = new Map()
+    variableMutationChains.set(deps, chains)
+  }
+
+  const previous = chains.get(repositoryUuid) ?? Promise.resolve()
+  const run = previous.catch(() => undefined).then(task)
+  const done = run.then(() => undefined, () => undefined)
+  chains.set(repositoryUuid, done)
+
+  try {
+    return await run
+  } finally {
+    if (chains.get(repositoryUuid) === done) {
+      chains.delete(repositoryUuid)
+    }
+  }
+}
+
+async function mutateRepositoryVariables<T>(
+  deps: VariableCapabilityDispatcherDeps,
+  params: Record<string, unknown>,
+  task: (config: SynapseConfig, repository: SynapseRepositoryConfig) => Promise<T>,
+): Promise<T> {
+  const { repository } = await resolveRepository(deps, params)
+  return withVariableMutationLock(deps, repository.uuid, async () => {
+    const latest = await resolveRepositoryByUuid(deps, repository.uuid)
+    return task(latest.config, latest.repository)
+  })
 }
 
 function requireVariableName(params: Record<string, unknown>, key: string): string {
@@ -268,17 +316,18 @@ async function createVariable(
   const name = requireVariableName(params, "name")
   const value = requireString(params, "value")
   const description = optionalDescription(params)
-  const { config, repository } = await resolveRepository(deps, params)
-  const variables = [...(repository.variables ?? [])]
-  assertNoDuplicate(variables, name)
-  const variable: SynapseVariable = {
-    name,
-    value,
-    ...(description ? { description } : undefined),
-  }
-  await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
-  await persistVariables(deps, config, repository, [...variables, variable])
-  return { ok: true, data: { ...variableResponse(config, repository, variable), created: true } }
+  return mutateRepositoryVariables(deps, params, async (config, repository) => {
+    const variables = [...(repository.variables ?? [])]
+    assertNoDuplicate(variables, name)
+    const variable: SynapseVariable = {
+      name,
+      value,
+      ...(description ? { description } : undefined),
+    }
+    await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
+    await persistVariables(deps, config, repository, [...variables, variable])
+    return { ok: true, data: { ...variableResponse(config, repository, variable), created: true } }
+  })
 }
 
 async function updateVariable(
@@ -292,21 +341,22 @@ async function updateVariable(
   const hasValue = Object.prototype.hasOwnProperty.call(params, "value")
   const hasDescription = Object.prototype.hasOwnProperty.call(params, "description")
   if (!hasNewName && !hasValue && !hasDescription) throw new Error("No variable fields provided for update")
-  const { config, repository } = await resolveRepository(deps, params)
-  const variables = [...(repository.variables ?? [])]
-  const { index, variable } = requireExistingVariable(variables, name)
-  const newName = hasNewName ? requireVariableName(params, "newName") : variable.name
-  assertNoDuplicate(variables, newName, variable.name)
-  const description = hasDescription ? optionalDescription(params) : variable.description
-  const updated: SynapseVariable = {
-    name: newName,
-    value: hasValue ? requireString(params, "value") : variable.value,
-    ...(description ? { description } : undefined),
-  }
-  variables[index] = updated
-  await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
-  await persistVariables(deps, config, repository, variables)
-  return { ok: true, data: { ...variableResponse(config, repository, updated), updated: true } }
+  return mutateRepositoryVariables(deps, params, async (config, repository) => {
+    const variables = [...(repository.variables ?? [])]
+    const { index, variable } = requireExistingVariable(variables, name)
+    const newName = hasNewName ? requireVariableName(params, "newName") : variable.name
+    assertNoDuplicate(variables, newName, variable.name)
+    const description = hasDescription ? optionalDescription(params) : variable.description
+    const updated: SynapseVariable = {
+      name: newName,
+      value: hasValue ? requireString(params, "value") : variable.value,
+      ...(description ? { description } : undefined),
+    }
+    variables[index] = updated
+    await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
+    await persistVariables(deps, config, repository, variables)
+    return { ok: true, data: { ...variableResponse(config, repository, updated), updated: true } }
+  })
 }
 
 async function upsertVariable(
@@ -316,38 +366,39 @@ async function upsertVariable(
   context: DispatchContext,
 ): Promise<DispatchResult> {
   const name = requireVariableName(params, "name")
-  const { config, repository } = await resolveRepository(deps, params)
-  const variables = [...(repository.variables ?? [])]
-  const index = findVariableIndex(variables, name)
-  if (index < 0) {
-    if (!Object.prototype.hasOwnProperty.call(params, "value")) {
-      throw new Error("Creating a variable through upsert requires 'value'.")
+  return mutateRepositoryVariables(deps, params, async (config, repository) => {
+    const variables = [...(repository.variables ?? [])]
+    const index = findVariableIndex(variables, name)
+    if (index < 0) {
+      if (!Object.prototype.hasOwnProperty.call(params, "value")) {
+        throw new Error("Creating a variable through upsert requires 'value'.")
+      }
+      const description = optionalDescription(params)
+      const created: SynapseVariable = {
+        name,
+        value: requireString(params, "value"),
+        ...(description ? { description } : undefined),
+      }
+      await authorizeSecret(deps, "secret.write", action, context, repository.uuid, created.name, false)
+      await persistVariables(deps, config, repository, [...variables, created])
+      return { ok: true, data: { ...variableResponse(config, repository, created), created: true, updated: false } }
     }
-    const description = optionalDescription(params)
-    const created: SynapseVariable = {
-      name,
-      value: requireString(params, "value"),
+
+    const current = variables[index]
+    if (!current) throw new Error(`Variable not found: ${name}`)
+    const hasValue = Object.prototype.hasOwnProperty.call(params, "value")
+    const hasDescription = Object.prototype.hasOwnProperty.call(params, "description")
+    const description = hasDescription ? optionalDescription(params) : current.description
+    const updated: SynapseVariable = {
+      name: current.name,
+      value: hasValue ? requireString(params, "value") : current.value,
       ...(description ? { description } : undefined),
     }
-    await authorizeSecret(deps, "secret.write", action, context, repository.uuid, created.name, false)
-    await persistVariables(deps, config, repository, [...variables, created])
-    return { ok: true, data: { ...variableResponse(config, repository, created), created: true, updated: false } }
-  }
-
-  const current = variables[index]
-  if (!current) throw new Error(`Variable not found: ${name}`)
-  const hasValue = Object.prototype.hasOwnProperty.call(params, "value")
-  const hasDescription = Object.prototype.hasOwnProperty.call(params, "description")
-  const description = hasDescription ? optionalDescription(params) : current.description
-  const updated: SynapseVariable = {
-    name: current.name,
-    value: hasValue ? requireString(params, "value") : current.value,
-    ...(description ? { description } : undefined),
-  }
-  variables[index] = updated
-  await authorizeSecret(deps, "secret.write", action, context, repository.uuid, current.name, false)
-  await persistVariables(deps, config, repository, variables)
-  return { ok: true, data: { ...variableResponse(config, repository, updated), created: false, updated: true } }
+    variables[index] = updated
+    await authorizeSecret(deps, "secret.write", action, context, repository.uuid, current.name, false)
+    await persistVariables(deps, config, repository, variables)
+    return { ok: true, data: { ...variableResponse(config, repository, updated), created: false, updated: true } }
+  })
 }
 
 async function deleteVariable(
@@ -357,11 +408,12 @@ async function deleteVariable(
   context: DispatchContext,
 ): Promise<DispatchResult> {
   const name = requireVariableName(params, "name")
-  const { config, repository } = await resolveRepository(deps, params)
-  const variables = [...(repository.variables ?? [])]
-  const { index, variable } = requireExistingVariable(variables, name)
-  await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
-  variables.splice(index, 1)
-  await persistVariables(deps, config, repository, variables)
-  return { ok: true, data: { ...variableResponse(config, repository, variable), deleted: true } }
+  return mutateRepositoryVariables(deps, params, async (config, repository) => {
+    const variables = [...(repository.variables ?? [])]
+    const { index, variable } = requireExistingVariable(variables, name)
+    await authorizeSecret(deps, "secret.write", action, context, repository.uuid, variable.name, false)
+    variables.splice(index, 1)
+    await persistVariables(deps, config, repository, variables)
+    return { ok: true, data: { ...variableResponse(config, repository, variable), deleted: true } }
+  })
 }
