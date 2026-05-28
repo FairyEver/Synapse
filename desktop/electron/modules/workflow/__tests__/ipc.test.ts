@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import path from "node:path"
+import { pathToFileURL } from "node:url"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const logStoreMock = vi.hoisted(() => ({
@@ -11,10 +12,23 @@ const logStoreMock = vi.hoisted(() => ({
   },
 }))
 
+const electronMock = vi.hoisted(() => ({
+  app: {
+    getAppPath: vi.fn(() => "/Applications/Synapse.app/Contents/Resources/app.asar"),
+  },
+  BrowserWindow: {
+    getFocusedWindow: vi.fn(() => undefined),
+    getAllWindows: vi.fn(() => []),
+  },
+  dialog: {},
+}))
+
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
 import type { WorkflowRunStatus } from "../../../../src/types/workflow"
 import { configStore } from "../../../services/config-store"
 import { workflowIpcModule } from "../ipc"
+
+vi.mock("electron", () => electronMock)
 
 vi.mock("../../../services/log-store", () => ({
   createMainLogger: vi.fn(() => logStoreMock.logger),
@@ -338,6 +352,36 @@ describe("workflowIpcModule", () => {
       { runId: "active-run" },
     )
     expect(ac.signal.aborted).toBe(true)
+  })
+
+  it("uses the packaged renderer file URL when opening workflow windows outside dev mode", async () => {
+    const previousDevServerUrl = process.env.VITE_DEV_SERVER_URL
+    delete process.env.VITE_DEV_SERVER_URL
+    const expectedBaseUrl = pathToFileURL(path.join(electronMock.app.getAppPath(), "dist/index.html")).toString()
+    const windowManager = {
+      open: vi.fn(async () => undefined),
+      openRunner: vi.fn(async () => undefined),
+    }
+    const harness = createInMemoryHarness()
+    const resolve: IpcHandlerContext["resolve"] = <T,>(serviceId: string): T => {
+      if (serviceId === "core.workflow.window-manager") return windowManager as T
+      throw new Error(`Unknown service: ${serviceId}`)
+    }
+    harness.registry.register(workflowIpcModule, { moduleId: "workflow", resolve })
+
+    try {
+      await harness.invoke("synapse:workflow:open-editor", { id: "workflow-1" })
+      await harness.invoke("synapse:workflow:open-runner", { workflowId: "workflow-1", runId: "run-1" })
+
+      expect(windowManager.open).toHaveBeenCalledWith("workflow-1", expectedBaseUrl, undefined)
+      expect(windowManager.openRunner).toHaveBeenCalledWith("workflow-1", "run-1", expectedBaseUrl)
+    } finally {
+      if (previousDevServerUrl === undefined) {
+        delete process.env.VITE_DEV_SERVER_URL
+      } else {
+        process.env.VITE_DEV_SERVER_URL = previousDevServerUrl
+      }
+    }
   })
 
   it("logs workflow package imports at the IPC boundary", async () => {

@@ -1,7 +1,8 @@
 import { randomUUID } from "node:crypto"
 import { readFile, writeFile } from "node:fs/promises"
 import path from "node:path"
-import { BrowserWindow, dialog } from "electron"
+import { pathToFileURL } from "node:url"
+import { app, BrowserWindow, dialog } from "electron"
 import { z } from "zod"
 import type { IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
@@ -81,7 +82,8 @@ function visibleEngineRejectionError(error: unknown): string {
 }
 
 function rendererBaseUrl(): string {
-  return process.env.VITE_DEV_SERVER_URL ?? "app://-"
+  return process.env.VITE_DEV_SERVER_URL
+    ?? pathToFileURL(path.join(app.getAppPath(), "dist/index.html")).toString()
 }
 
 function focusedWindow(): Electron.BrowserWindow | undefined {
