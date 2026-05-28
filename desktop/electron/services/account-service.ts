@@ -138,14 +138,17 @@ export class AccountService {
     const persisted = await this.readPersisted("Failed to read stored account for auth callback.")
     const attempt = persisted?.activeAttempt
 
-    if (
-      !code ||
-      !callbackState ||
-      !attempt ||
-      attempt.state !== callbackState ||
-      new Date(attempt.expiresAt).getTime() <= Date.now()
-    ) {
-      await this.clearActiveAttempt(persisted)
+    if (!code || !callbackState || !attempt || attempt.state !== callbackState) {
+      this.setState({
+        status: "error",
+        message: "登录已失效，请重试。",
+        profile: persisted?.lastProfile,
+      })
+      return this.state
+    }
+
+    if (new Date(attempt.expiresAt).getTime() <= Date.now()) {
+      await this.clearActiveAttemptIfState(callbackState)
       this.setState({
         status: "error",
         message: "登录已失效，请重试。",
@@ -163,7 +166,7 @@ export class AccountService {
     } catch (error) {
       logger.warn("Desktop account callback exchange failed.", { error })
       this.accessToken = null
-      await this.clearActiveAttempt(persisted)
+      await this.clearActiveAttemptIfState(callbackState)
       this.setState({
         status: "error",
         message: "登录失败，请重试。",
@@ -295,8 +298,9 @@ export class AccountService {
     }
   }
 
-  private async clearActiveAttempt(persisted: PersistedAccount | null): Promise<void> {
-    if (!persisted?.activeAttempt) return
+  private async clearActiveAttemptIfState(expectedState: string): Promise<void> {
+    const persisted = await this.readPersisted("Failed to read stored account before clearing login attempt.")
+    if (persisted?.activeAttempt?.state !== expectedState) return
     const nextPersisted: PersistedAccount = { ...persisted }
     delete nextPersisted.activeAttempt
     await this.namespace.setSingleton(nextPersisted).catch((error) => {

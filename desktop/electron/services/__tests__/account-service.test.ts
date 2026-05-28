@@ -137,6 +137,45 @@ describe("AccountService", () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it("preserves newer login attempts when an older callback arrives", async () => {
+    const fetch = vi.fn(async (url, init) => {
+      if (String(url).endsWith("/auth/desktop/exchange")) {
+        expect(init?.method).toBe("POST")
+        return jsonResponse({ accessToken: "access-2", refreshToken: "refresh-2" })
+      }
+      if (String(url).endsWith("/auth/me")) {
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer access-2" })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await service.startLogin()
+    const firstAttempt = (await namespace.getSingleton())?.activeAttempt
+    expect(firstAttempt).toBeTruthy()
+    await service.startLogin()
+    const secondAttempt = (await namespace.getSingleton())?.activeAttempt
+    expect(secondAttempt).toBeTruthy()
+    expect(secondAttempt!.state).not.toBe(firstAttempt!.state)
+
+    const firstState = await service.handleAuthCallback(
+      `synapse://auth/callback?code=code-1&state=${firstAttempt!.state}`,
+    )
+
+    expect(firstState.status).toBe("error")
+    expect(fetch).not.toHaveBeenCalled()
+    expect((await namespace.getSingleton())?.activeAttempt?.state).toBe(secondAttempt!.state)
+
+    const secondState = await service.handleAuthCallback(
+      `synapse://auth/callback?code=code-2&state=${secondAttempt!.state}`,
+    )
+
+    expect(secondState.status).toBe("authenticated")
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect((await namespace.getSingleton())?.refreshToken).toBe("refresh-2")
+    expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
+  })
+
   it("reports malformed callback URLs as errors without exchanging", async () => {
     const fetch = vi.fn()
     const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
