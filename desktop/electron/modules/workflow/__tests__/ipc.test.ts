@@ -20,7 +20,9 @@ const electronMock = vi.hoisted(() => ({
     getFocusedWindow: vi.fn(() => undefined),
     getAllWindows: vi.fn(() => []),
   },
-  dialog: {},
+  dialog: {
+    showOpenDialog: vi.fn(),
+  },
 }))
 
 import { createInMemoryHarness, type IpcHandlerContext } from "../../../runtime/ipc"
@@ -51,6 +53,7 @@ describe("workflowIpcModule", () => {
     logStoreMock.logger.error.mockClear()
     logStoreMock.logger.info.mockClear()
     logStoreMock.logger.warn.mockClear()
+    electronMock.dialog.showOpenDialog.mockReset()
     vi.mocked(configStore.load).mockResolvedValue({
       repositories: [{
         uuid: "project-1",
@@ -67,6 +70,50 @@ describe("workflowIpcModule", () => {
         contentSortOrder: "modified-desc",
       },
     } as never)
+  })
+
+  it("selects a supported file conversion input file", async () => {
+    electronMock.dialog.showOpenDialog.mockResolvedValue({
+      canceled: false,
+      filePaths: ["/tmp/source.docx"],
+    })
+    const harness = createInMemoryHarness()
+    harness.registry.register(workflowIpcModule, {
+      moduleId: "workflow",
+      resolve: <T,>(serviceId: string): T => {
+        throw new Error(`Unknown service: ${serviceId}`)
+      },
+    })
+
+    const result = await harness.invoke("synapse:workflow:file-conversion:select-input-file", undefined)
+
+    expect(result).toEqual({ path: "/tmp/source.docx" })
+    expect(electronMock.dialog.showOpenDialog).toHaveBeenCalledWith({
+      title: "选择文件",
+      filters: [{
+        name: "支持的文件",
+        extensions: ["doc", "docx", "xlsx", "pdf", "ppt", "pptx", "png", "jpg", "jpeg", "webp"],
+      }],
+      properties: ["openFile"],
+    })
+  })
+
+  it("returns null when file conversion input selection is cancelled", async () => {
+    electronMock.dialog.showOpenDialog.mockResolvedValue({
+      canceled: true,
+      filePaths: [],
+    })
+    const harness = createInMemoryHarness()
+    harness.registry.register(workflowIpcModule, {
+      moduleId: "workflow",
+      resolve: <T,>(serviceId: string): T => {
+        throw new Error(`Unknown service: ${serviceId}`)
+      },
+    })
+
+    const result = await harness.invoke("synapse:workflow:file-conversion:select-input-file", undefined)
+
+    expect(result).toBeNull()
   })
 
   it("sanitizes workflow engine rejection diagnostics and visible failure state", async () => {

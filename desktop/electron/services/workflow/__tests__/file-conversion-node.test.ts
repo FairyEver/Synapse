@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { validateWorkflow } from "../workflow-validator"
 import { createWorkflowFileConversionOutputWriter } from "../file-conversion-output-writer"
+import { createWorkflowFileConversionService } from "../file-conversion-input-service"
 import type { WorkflowDefinition } from "../../../../src/types/workflow"
 import { FileConversionError, type FileConversionResult } from "../../file-conversion"
 import { getWorkflowFileConversionOutputRoot } from "../../../../workflow-nodes/file-conversion/output-boundary"
@@ -94,7 +95,10 @@ describe("file conversion workflow node", () => {
     const result = await fileConversionNodeExecutor.execute(makeInput({ inputPath: "/tmp/source.docx" }, makeRuntimeDeps({ convert })))
 
     expect(result.status).toBe("success")
-    expect(convert).toHaveBeenCalledWith({ filePath: "/tmp/source.docx", preferredOutput: "markdown" })
+    expect(convert).toHaveBeenCalledWith(
+      { filePath: "/tmp/source.docx", preferredOutput: "markdown" },
+      { actor: undefined, runId: "run-1" },
+    )
     expect(result.output).toBe(conversionResult.markdown)
   })
 
@@ -116,7 +120,7 @@ describe("file conversion workflow node", () => {
     expect(convert).toHaveBeenCalledWith({
       filePath: "/tmp/from-variable.pdf",
       preferredOutput: "markdown",
-    })
+    }, { actor: undefined, runId: "run-1" })
     expect(result.outputs).toEqual(expect.objectContaining({
       outputPath: join(getWorkflowFileConversionOutputRoot(), "run-1", "Source.md"),
     }))
@@ -133,7 +137,7 @@ describe("file conversion workflow node", () => {
       filePath: "/tmp/source.docx",
       preferredOutput: "markdown",
       ocr: { enabled: true, languages: ["eng", "chi_sim"], maxPages: 3 },
-    })
+    }, { actor: undefined, runId: "run-1" })
   })
 
   it("returns structured conversion output and propagates warnings", async () => {
@@ -149,6 +153,91 @@ describe("file conversion workflow node", () => {
       metadata: conversionResult.metadata,
       warnings: conversionResult.warnings,
     })
+    expect(result.outputs).not.toHaveProperty("markdown")
+  })
+
+  it("checks read permission before converting a workflow file input", async () => {
+    const convert = vi.fn().mockResolvedValue(conversionResult)
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn().mockResolvedValue({ allowed: true }),
+    }
+    const auditSink = { record: vi.fn(), list: vi.fn(() => []), clearForTests: vi.fn() }
+    const fileConversionService = createWorkflowFileConversionService({
+      fileConversionService: { convert },
+      permissionGuard,
+      auditSink,
+    })
+
+    const result = await fileConversionNodeExecutor.execute(makeInput(
+      { inputPath: "/tmp/source.docx" },
+      {
+        processRunner: { run: vi.fn() },
+        sendHttpRequest: vi.fn(),
+        fileConversionService,
+      },
+    ))
+
+    expect(result.status).toBe("success")
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: "/tmp/source.docx",
+      context: { source: "workflow.fileConversionInput", runId: "run-1" },
+    }))
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: "/tmp/source.docx",
+      outcome: "allowed",
+      metadata: { source: "workflow.fileConversionInput", runId: "run-1" },
+    }))
+    expect(convert).toHaveBeenCalledWith({
+      filePath: "/tmp/source.docx",
+      preferredOutput: "markdown",
+    })
+  })
+
+  it("fails without leaking the input path when workflow file read permission is denied", async () => {
+    const sensitivePath = "/Users/example/private/source.docx"
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn().mockResolvedValue({ allowed: false, reason: "denied by policy", policyId: "policy-1" }),
+    }
+    const auditSink = { record: vi.fn(), list: vi.fn(() => []), clearForTests: vi.fn() }
+    const convert = vi.fn()
+    const fileConversionService = createWorkflowFileConversionService({
+      fileConversionService: { convert },
+      permissionGuard,
+      auditSink,
+    })
+
+    const result = await fileConversionNodeExecutor.execute(makeInput(
+      { inputPath: sensitivePath },
+      {
+        processRunner: { run: vi.fn() },
+        sendHttpRequest: vi.fn(),
+        fileConversionService,
+      },
+    ))
+
+    expect(result.status).toBe("failed")
+    expect(result.outputs).toEqual(expect.objectContaining({
+      ok: false,
+      code: "read_failed",
+      sourcePath: "",
+    }))
+    expect(convert).not.toHaveBeenCalled()
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.read.outside-userdata",
+      resource: sensitivePath,
+      outcome: "denied",
+      metadata: expect.objectContaining({
+        source: "workflow.fileConversionInput",
+        runId: "run-1",
+        reason: "denied by policy",
+        policyId: "policy-1",
+      }),
+    }))
+    expect(JSON.stringify(result)).not.toContain(sensitivePath)
   })
 
   it.each(["unsupported_format", "encrypted", "size_limit_exceeded"] as const)(
