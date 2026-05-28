@@ -1,0 +1,2697 @@
+{
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/main.ts": {
+    "mtime": 1779798081.558528,
+    "ast_hash": "bbd5abbad2d0e8d56aad2a3128892c74",
+    "semantic_hash": "bbd5abbad2d0e8d56aad2a3128892c74"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/preload.ts": {
+    "mtime": 1779937854.8331919,
+    "ast_hash": "22c0cb6eb433675b388278bae24a757e",
+    "semantic_hash": "22c0cb6eb433675b388278bae24a757e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/generated/ipc-channels.generated.ts": {
+    "mtime": 1779937895.0030239,
+    "ast_hash": "532584ca16f1680f9e733f63fae8a31f",
+    "semantic_hash": "532584ca16f1680f9e733f63fae8a31f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/mcp-server.ts": {
+    "mtime": 1779293361.8019843,
+    "ast_hash": "1ef3d7caec17fc35e78df16b8af762b6",
+    "semantic_hash": "1ef3d7caec17fc35e78df16b8af762b6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/schema-manager.ts": {
+    "mtime": 1779293361.8024757,
+    "ast_hash": "8eaf9c7c6b81b5c539e8cd3e454017cd",
+    "semantic_hash": "8eaf9c7c6b81b5c539e8cd3e454017cd"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/channels.ts": {
+    "mtime": 1779703757.403563,
+    "ast_hash": "eb96e6280d9dd27ae74790875b960f8a",
+    "semantic_hash": "eb96e6280d9dd27ae74790875b960f8a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/mcp-installer.ts": {
+    "mtime": 1779798081.557561,
+    "ast_hash": "275b03793d40e7d4189cff8da35ce9d7",
+    "semantic_hash": "275b03793d40e7d4189cff8da35ce9d7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/ipc-handlers.ts": {
+    "mtime": 1779798081.5571046,
+    "ast_hash": "76d61dada95d5713b530b722c43805e2",
+    "semantic_hash": "76d61dada95d5713b530b722c43805e2"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/types.ts": {
+    "mtime": 1779703757.4056144,
+    "ast_hash": "87bae2a557fd5c9f4f2756c1166c6eaa",
+    "semantic_hash": "87bae2a557fd5c9f4f2756c1166c6eaa"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/import-export.ts": {
+    "mtime": 1779860253.291127,
+    "ast_hash": "93f27fe243e319094ca7f6c20dcbd140",
+    "semantic_hash": "93f27fe243e319094ca7f6c20dcbd140"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/type-coercion.ts": {
+    "mtime": 1779293361.8031561,
+    "ast_hash": "1cc44200746548711d40ea0f6e13ae4e",
+    "semantic_hash": "1cc44200746548711d40ea0f6e13ae4e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/validators.ts": {
+    "mtime": 1779293361.803538,
+    "ast_hash": "238c305e6f457322272b686d77158611",
+    "semantic_hash": "238c305e6f457322272b686d77158611"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/http-server.ts": {
+    "mtime": 1779703757.404094,
+    "ast_hash": "3540457dc5bb2f341e730612bea84a4b",
+    "semantic_hash": "3540457dc5bb2f341e730612bea84a4b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/column-kind.ts": {
+    "mtime": 1779293361.7993393,
+    "ast_hash": "c7409c39b5eb3299e84e03e4aa9b18df",
+    "semantic_hash": "c7409c39b5eb3299e84e03e4aa9b18df"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/index.ts": {
+    "mtime": 1779798081.5564153,
+    "ast_hash": "4f8e8d1ef3ba1dd17dce707c239f8ae7",
+    "semantic_hash": "4f8e8d1ef3ba1dd17dce707c239f8ae7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/query-builder.ts": {
+    "mtime": 1779293361.8021202,
+    "ast_hash": "5a8fea571094c72b49bc9bc0abc43e6e",
+    "semantic_hash": "5a8fea571094c72b49bc9bc0abc43e6e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/service.ts": {
+    "mtime": 1779860253.2918384,
+    "ast_hash": "7c7bee1307be62b118f30c8445a1a0fc",
+    "semantic_hash": "7c7bee1307be62b118f30c8445a1a0fc"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/dispatcher.ts": {
+    "mtime": 1779860253.290379,
+    "ast_hash": "27104cd9fafeaca276bb583c0141ca03",
+    "semantic_hash": "27104cd9fafeaca276bb583c0141ca03"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/__tests__/mcp-server.test.ts": {
+    "mtime": 1779293361.7970343,
+    "ast_hash": "a4320ebf6d7341ccef640f5e4f3a30d6",
+    "semantic_hash": "a4320ebf6d7341ccef640f5e4f3a30d6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/__tests__/folder-service.test.ts": {
+    "mtime": 1779293361.7949042,
+    "ast_hash": "a53bbb33d083a7f20abc857ebbf2aa0f",
+    "semantic_hash": "a53bbb33d083a7f20abc857ebbf2aa0f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/__tests__/service.test.ts": {
+    "mtime": 1779860253.2895353,
+    "ast_hash": "2b185e0c8bafa44b6d253e879f60e351",
+    "semantic_hash": "2b185e0c8bafa44b6d253e879f60e351"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/database/__tests__/mcp-installer.test.ts": {
+    "mtime": 1779798081.55601,
+    "ast_hash": "4711fcf9373ba3e2ce3b2beacb1295fd",
+    "semantic_hash": "4711fcf9373ba3e2ce3b2beacb1295fd"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/action-runtime/action-registry.ts": {
+    "mtime": 1779455348.5691705,
+    "ast_hash": "92fdb8696865614abdad50370e216c16",
+    "semantic_hash": "92fdb8696865614abdad50370e216c16"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/action-runtime/builtin-actions.ts": {
+    "mtime": 1779293361.7889159,
+    "ast_hash": "ef3e839f38d027e7665e12b1e8e21caa",
+    "semantic_hash": "ef3e839f38d027e7665e12b1e8e21caa"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/action-runtime/__tests__/action-registry.test.ts": {
+    "mtime": 1779293361.78856,
+    "ast_hash": "85037673044af833320170989814e4a7",
+    "semantic_hash": "85037673044af833320170989814e4a7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/before-quit.ts": {
+    "mtime": 1779697920.0004663,
+    "ast_hash": "1f925985ccfb4d532f19fc9a13c606d8",
+    "semantic_hash": "1f925985ccfb4d532f19fc9a13c606d8"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/app-events.ts": {
+    "mtime": 1779293361.7906768,
+    "ast_hash": "c7f72eb034416302559d7fde77e1c82b",
+    "semantic_hash": "c7f72eb034416302559d7fde77e1c82b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/singleton-lock.ts": {
+    "mtime": 1779293361.7934144,
+    "ast_hash": "7a0f4bdb9f0657bd1cd2293742c72abe",
+    "semantic_hash": "7a0f4bdb9f0657bd1cd2293742c72abe"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/extensions.ts": {
+    "mtime": 1779293361.7918737,
+    "ast_hash": "2bd80e9fe0b147f59f05faa4b5c93b69",
+    "semantic_hash": "2bd80e9fe0b147f59f05faa4b5c93b69"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/descriptors.ts": {
+    "mtime": 1779940192.4832265,
+    "ast_hash": "6ca37d5fc07ed7db5d019ef229ef040f",
+    "semantic_hash": "6ca37d5fc07ed7db5d019ef229ef040f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/ipc-registry.ts": {
+    "mtime": 1779876679.8172023,
+    "ast_hash": "1f647060e98fd5a826065afd80797fc3",
+    "semantic_hash": "1f647060e98fd5a826065afd80797fc3"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/deprecated-store-cleanup.ts": {
+    "mtime": 1779293361.7913465,
+    "ast_hash": "d4ef30a83d8c58c1b1496d28ac514eb7",
+    "semantic_hash": "d4ef30a83d8c58c1b1496d28ac514eb7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/registry.ts": {
+    "mtime": 1779876672.620547,
+    "ast_hash": "2355667efcce91ee73f01c72768d9200",
+    "semantic_hash": "2355667efcce91ee73f01c72768d9200"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/index.ts": {
+    "mtime": 1779355822.8214912,
+    "ast_hash": "150dcf1f88d17c7e4ee933790e361020",
+    "semantic_hash": "150dcf1f88d17c7e4ee933790e361020"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/main-window.ts": {
+    "mtime": 1779293361.7928734,
+    "ast_hash": "5d7b57cb297f268ced49ed20212b9451",
+    "semantic_hash": "5d7b57cb297f268ced49ed20212b9451"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/__tests__/before-quit.test.ts": {
+    "mtime": 1779697920.0001276,
+    "ast_hash": "077af78769dce74e0e864b5eee94f912",
+    "semantic_hash": "077af78769dce74e0e864b5eee94f912"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/__tests__/deprecated-store-cleanup.test.ts": {
+    "mtime": 1779293361.7895815,
+    "ast_hash": "f95880396bde772aedf76c6db9a52b89",
+    "semantic_hash": "f95880396bde772aedf76c6db9a52b89"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/__tests__/registry.test.ts": {
+    "mtime": 1779885921.4007938,
+    "ast_hash": "a519ad2bdb924002cef1c5660ae2a029",
+    "semantic_hash": "a519ad2bdb924002cef1c5660ae2a029"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/__tests__/extensions.test.ts": {
+    "mtime": 1779293361.7902014,
+    "ast_hash": "ed4066bee7b5e670bb9c590fbdb79eb6",
+    "semantic_hash": "ed4066bee7b5e670bb9c590fbdb79eb6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/bootstrap/__tests__/descriptors.test.ts": {
+    "mtime": 1779780314.3218484,
+    "ast_hash": "f9b76be2b30c24016bd00d8281f8800f",
+    "semantic_hash": "f9b76be2b30c24016bd00d8281f8800f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/capabilities/content-dispatcher.ts": {
+    "mtime": 1779860253.287544,
+    "ast_hash": "edcc40f57ae043694e9d9a01e06f2e74",
+    "semantic_hash": "edcc40f57ae043694e9d9a01e06f2e74"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/capabilities/variable-dispatcher.ts": {
+    "mtime": 1779940040.3828213,
+    "ast_hash": "55753f5472433d82b58f85209ca83d81",
+    "semantic_hash": "55753f5472433d82b58f85209ca83d81"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/capabilities/model-price-dispatcher.ts": {
+    "mtime": 1779939881.1742435,
+    "ast_hash": "2cd6b4708df4663f3a60b6864fc1b805",
+    "semantic_hash": "2cd6b4708df4663f3a60b6864fc1b805"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/capabilities/workflow-dispatcher.ts": {
+    "mtime": 1779860253.2885418,
+    "ast_hash": "985829adf34ea8eb541e21063a6bc4a7",
+    "semantic_hash": "985829adf34ea8eb541e21063a6bc4a7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/capabilities/action-router.ts": {
+    "mtime": 1779869412.2419615,
+    "ast_hash": "740930dcd2d260caab2dd84c6f72e8c6",
+    "semantic_hash": "740930dcd2d260caab2dd84c6f72e8c6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/capabilities/repository-dispatcher.ts": {
+    "mtime": 1779940186.4232965,
+    "ast_hash": "030c4742494478505c4f9ed23018d999",
+    "semantic_hash": "030c4742494478505c4f9ed23018d999"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/capabilities/__tests__/variable-dispatcher.test.ts": {
+    "mtime": 1779940006.2335773,
+    "ast_hash": "9d7a4ad55bba754e69f0ffe841d58b01",
+    "semantic_hash": "9d7a4ad55bba754e69f0ffe841d58b01"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/capabilities/__tests__/model-price-dispatcher.test.ts": {
+    "mtime": 1779939904.5897708,
+    "ast_hash": "347d0f9f6c747e9c29a95d4e7eb467f8",
+    "semantic_hash": "347d0f9f6c747e9c29a95d4e7eb467f8"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/capabilities/__tests__/action-router.test.ts": {
+    "mtime": 1779869412.2409396,
+    "ast_hash": "8127bc845e0b0163e9cab959a7d47181",
+    "semantic_hash": "8127bc845e0b0163e9cab959a7d47181"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/capabilities/__tests__/workflow-dispatcher.test.ts": {
+    "mtime": 1779860253.28666,
+    "ast_hash": "f468b65ea6284d080c8bc86d44a76dd6",
+    "semantic_hash": "f468b65ea6284d080c8bc86d44a76dd6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/capabilities/__tests__/content-dispatcher.test.ts": {
+    "mtime": 1779860253.2855628,
+    "ast_hash": "498038a9589ec56aa0b4e398f0f91050",
+    "semantic_hash": "498038a9589ec56aa0b4e398f0f91050"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/capabilities/__tests__/repository-dispatcher.test.ts": {
+    "mtime": 1779940196.8281722,
+    "ast_hash": "82a4ad8642c0fbd94fb054f9f68da54c",
+    "semantic_hash": "82a4ad8642c0fbd94fb054f9f68da54c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/usage-analysis/channels.ts": {
+    "mtime": 1779876097.605965,
+    "ast_hash": "0393bbdc5fe2e186593a89288c358cd9",
+    "semantic_hash": "0393bbdc5fe2e186593a89288c358cd9"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/usage-analysis/ipc-handlers.ts": {
+    "mtime": 1779876360.2559874,
+    "ast_hash": "540c7797dee20e2ce64755aec4083069",
+    "semantic_hash": "540c7797dee20e2ce64755aec4083069"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/usage-analysis/__tests__/ipc-handlers.test.ts": {
+    "mtime": 1779876370.587125,
+    "ast_hash": "045824abed7d0074109a2ccaaafdecfc",
+    "semantic_hash": "045824abed7d0074109a2ccaaafdecfc"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/runtime-mode.ts": {
+    "mtime": 1779293361.8595617,
+    "ast_hash": "6826aa8e75a481b63a48f942e50e8c80",
+    "semantic_hash": "6826aa8e75a481b63a48f942e50e8c80"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/bootstrap.ts": {
+    "mtime": 1779711952.3380194,
+    "ast_hash": "15fe4ef63bbece431cdc54dd89a6e156",
+    "semantic_hash": "15fe4ef63bbece431cdc54dd89a6e156"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/extension/registry.ts": {
+    "mtime": 1779293361.8437917,
+    "ast_hash": "c116d828f7b452d860f25fd841a6e243",
+    "semantic_hash": "c116d828f7b452d860f25fd841a6e243"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/extension/index.ts": {
+    "mtime": 1779293361.843642,
+    "ast_hash": "8e56419fd6ebd55326f3e3d1fca484da",
+    "semantic_hash": "8e56419fd6ebd55326f3e3d1fca484da"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/extension/__tests__/registry.test.ts": {
+    "mtime": 1779293361.8433719,
+    "ast_hash": "d6930297535ccadda3d851678506e4a0",
+    "semantic_hash": "d6930297535ccadda3d851678506e4a0"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/archive/index.ts": {
+    "mtime": 1779293361.828318,
+    "ast_hash": "37af7e30e8251cd36a206bc406a55ee7",
+    "semantic_hash": "37af7e30e8251cd36a206bc406a55ee7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/archive/__tests__/archive.test.ts": {
+    "mtime": 1779293361.8279388,
+    "ast_hash": "8f5c4397204309c4ce9ace51f8c00845",
+    "semantic_hash": "8f5c4397204309c4ce9ace51f8c00845"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/scheduling/scheduling.ts": {
+    "mtime": 1779293361.8600602,
+    "ast_hash": "133b25dc60067c213c485464d9375112",
+    "semantic_hash": "133b25dc60067c213c485464d9375112"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/scheduling/index.ts": {
+    "mtime": 1779293361.8598952,
+    "ast_hash": "e36d0a2092f7bf5f7889f1499108df59",
+    "semantic_hash": "e36d0a2092f7bf5f7889f1499108df59"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/scheduling/__tests__/scheduling.test.ts": {
+    "mtime": 1779293361.859811,
+    "ast_hash": "12b8096afae93c0ff154d2f35b5a7a53",
+    "semantic_hash": "12b8096afae93c0ff154d2f35b5a7a53"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/security/permission-guard.ts": {
+    "mtime": 1779860253.3074958,
+    "ast_hash": "f94c91b20c59322b5223891add9d1385",
+    "semantic_hash": "f94c91b20c59322b5223891add9d1385"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/security/index.ts": {
+    "mtime": 1779293361.8617194,
+    "ast_hash": "4b4122b726a357df4b3982024549a8a1",
+    "semantic_hash": "4b4122b726a357df4b3982024549a8a1"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/security/audit-sink.ts": {
+    "mtime": 1779860253.306352,
+    "ast_hash": "477c26f179997634661cf15871d8b531",
+    "semantic_hash": "477c26f179997634661cf15871d8b531"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/security/__tests__/security.test.ts": {
+    "mtime": 1779293361.8611386,
+    "ast_hash": "cb14856f5e2eb76302be0371dcbbf12d",
+    "semantic_hash": "cb14856f5e2eb76302be0371dcbbf12d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/security/__tests__/audit-sink-redaction.test.ts": {
+    "mtime": 1779860253.3050568,
+    "ast_hash": "197d7eae25122bfad9236f9522a98bbf",
+    "semantic_hash": "197d7eae25122bfad9236f9522a98bbf"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/network/ports.ts": {
+    "mtime": 1779293361.8490365,
+    "ast_hash": "6a92901d7efc20266385f7a50bc16921",
+    "semantic_hash": "6a92901d7efc20266385f7a50bc16921"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/network/local-host.ts": {
+    "mtime": 1779697920.0082853,
+    "ast_hash": "d11ecaaf32b724f6d5be2ff88321be9a",
+    "semantic_hash": "d11ecaaf32b724f6d5be2ff88321be9a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/network/registry.ts": {
+    "mtime": 1779293361.8496194,
+    "ast_hash": "082c6be61ce48832df2bd2570c2bcc80",
+    "semantic_hash": "082c6be61ce48832df2bd2570c2bcc80"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/network/index.ts": {
+    "mtime": 1779293361.8484113,
+    "ast_hash": "58d8bc14ea87a7e8b9d844b3f1111679",
+    "semantic_hash": "58d8bc14ea87a7e8b9d844b3f1111679"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/network/outbound-http.ts": {
+    "mtime": 1779697920.0087798,
+    "ast_hash": "d033089d6867e1895d4b3aab3b4d8485",
+    "semantic_hash": "d033089d6867e1895d4b3aab3b4d8485"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/network/__tests__/local-host.test.ts": {
+    "mtime": 1779697920.007331,
+    "ast_hash": "440328d445c55c3c333bf205a6cd5a47",
+    "semantic_hash": "440328d445c55c3c333bf205a6cd5a47"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/network/__tests__/outbound-http.test.ts": {
+    "mtime": 1779697920.0077465,
+    "ast_hash": "1cec5da8d1fe990c86cb3b9263e7d072",
+    "semantic_hash": "1cec5da8d1fe990c86cb3b9263e7d072"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/network/__tests__/registry.test.ts": {
+    "mtime": 1779293361.8483288,
+    "ast_hash": "93c82b73c479e7fee9ce2aae83da99de",
+    "semantic_hash": "93c82b73c479e7fee9ce2aae83da99de"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/observability/tracer.ts": {
+    "mtime": 1779293361.8538444,
+    "ast_hash": "33b2baaf2f54c3506f6d99b44d9010cf",
+    "semantic_hash": "33b2baaf2f54c3506f6d99b44d9010cf"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/observability/diagnostics.ts": {
+    "mtime": 1779293361.8534267,
+    "ast_hash": "cf4cf3c80cb62c27447cb7c0696b168d",
+    "semantic_hash": "cf4cf3c80cb62c27447cb7c0696b168d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/observability/health.ts": {
+    "mtime": 1779293361.8535256,
+    "ast_hash": "df3ec88b7d16eb59913b505d6c5aac24",
+    "semantic_hash": "df3ec88b7d16eb59913b505d6c5aac24"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/observability/index.ts": {
+    "mtime": 1779293361.8536098,
+    "ast_hash": "0f40512b73634449f6d2fda29b861aeb",
+    "semantic_hash": "0f40512b73634449f6d2fda29b861aeb"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/observability/metrics.ts": {
+    "mtime": 1779293361.8537476,
+    "ast_hash": "7d48d1d70f9fb87ccefcce70922ef09d",
+    "semantic_hash": "7d48d1d70f9fb87ccefcce70922ef09d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/observability/__tests__/observability.test.ts": {
+    "mtime": 1779293361.8531373,
+    "ast_hash": "65f0d57608f43317c5420006cce822da",
+    "semantic_hash": "65f0d57608f43317c5420006cce822da"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/window/manager.ts": {
+    "mtime": 1779293361.8639023,
+    "ast_hash": "c130ee7b76786c3f0a85f903b289b605",
+    "semantic_hash": "c130ee7b76786c3f0a85f903b289b605"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/window/index.ts": {
+    "mtime": 1779293361.8634346,
+    "ast_hash": "0f124aeb716e56b9a0a8337c4a1b72d9",
+    "semantic_hash": "0f124aeb716e56b9a0a8337c4a1b72d9"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/window/electron-window.ts": {
+    "mtime": 1779293361.8633544,
+    "ast_hash": "face8268ae7f44ab46f7036dc4d449b3",
+    "semantic_hash": "face8268ae7f44ab46f7036dc4d449b3"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/window/__tests__/manager.test.ts": {
+    "mtime": 1779293361.863272,
+    "ast_hash": "6a3ffd9f09da831a9f29790e9b68dab7",
+    "semantic_hash": "6a3ffd9f09da831a9f29790e9b68dab7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/service-registry/topo.ts": {
+    "mtime": 1779293361.8629367,
+    "ast_hash": "eb7b49453d596ae7d41f10cfc09f61a9",
+    "semantic_hash": "eb7b49453d596ae7d41f10cfc09f61a9"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/service-registry/errors.ts": {
+    "mtime": 1779293361.8626378,
+    "ast_hash": "67bfd19bfbc89c0409007889feb7ebe4",
+    "semantic_hash": "67bfd19bfbc89c0409007889feb7ebe4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/service-registry/types.ts": {
+    "mtime": 1779293361.863035,
+    "ast_hash": "7dd18c90508a56c3437cdec48aaf6fbc",
+    "semantic_hash": "7dd18c90508a56c3437cdec48aaf6fbc"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/service-registry/registry.ts": {
+    "mtime": 1779293361.8628495,
+    "ast_hash": "092db9456cf3d7ab518110c30db46fa3",
+    "semantic_hash": "092db9456cf3d7ab518110c30db46fa3"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/service-registry/index.ts": {
+    "mtime": 1779293361.8627214,
+    "ast_hash": "9a81f1982562437bd0b332cd6ac90842",
+    "semantic_hash": "9a81f1982562437bd0b332cd6ac90842"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/service-registry/__tests__/topo.test.ts": {
+    "mtime": 1779293361.8624465,
+    "ast_hash": "0cbde0b5f5d41882204830c768b9b2aa",
+    "semantic_hash": "0cbde0b5f5d41882204830c768b9b2aa"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/service-registry/__tests__/types.test.ts": {
+    "mtime": 1779293361.8625445,
+    "ast_hash": "0e262d56cfefd9b225665ba480d3432a",
+    "semantic_hash": "0e262d56cfefd9b225665ba480d3432a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/service-registry/__tests__/registry.test.ts": {
+    "mtime": 1779293361.8623538,
+    "ast_hash": "f74eac03030a3b4b54761092b5617902",
+    "semantic_hash": "f74eac03030a3b4b54761092b5617902"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/service-registry/__tests__/lifecycle.test.ts": {
+    "mtime": 1779293361.8622189,
+    "ast_hash": "d50fcf84c9f459a8041a349c49a10e5a",
+    "semantic_hash": "d50fcf84c9f459a8041a349c49a10e5a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/lib/test-helpers.ts": {
+    "mtime": 1779293361.8471608,
+    "ast_hash": "1cfeabc7efc6f2dc56f76fc72c1c3610",
+    "semantic_hash": "1cfeabc7efc6f2dc56f76fc72c1c3610"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/lib/index.ts": {
+    "mtime": 1779293361.846961,
+    "ast_hash": "103c830062761608248a69abd0766750",
+    "semantic_hash": "103c830062761608248a69abd0766750"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/lib/__tests__/lib.test.ts": {
+    "mtime": 1779293361.8468637,
+    "ast_hash": "2c0dcdf21f5add373f906d7e7d70a656",
+    "semantic_hash": "2c0dcdf21f5add373f906d7e7d70a656"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/ipc/validation.ts": {
+    "mtime": 1779293361.8466306,
+    "ast_hash": "d56d3757b7160600ff4823103af2d042",
+    "semantic_hash": "d56d3757b7160600ff4823103af2d042"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/ipc/errors.ts": {
+    "mtime": 1779293361.8456423,
+    "ast_hash": "2a1b9e916956308a233fc0100496e9c5",
+    "semantic_hash": "2a1b9e916956308a233fc0100496e9c5"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/ipc/schemas.ts": {
+    "mtime": 1779293361.8463285,
+    "ast_hash": "2dfe934a24f7b4f6941a21f8005e3e4b",
+    "semantic_hash": "2dfe934a24f7b4f6941a21f8005e3e4b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/ipc/types.ts": {
+    "mtime": 1779293361.846533,
+    "ast_hash": "d6fe1463d4d46cac7cf004bf5552b13d",
+    "semantic_hash": "d6fe1463d4d46cac7cf004bf5552b13d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/ipc/electron-adapter.ts": {
+    "mtime": 1779293361.8453877,
+    "ast_hash": "253f05eeec1ccfc19da5ab7ec945c930",
+    "semantic_hash": "253f05eeec1ccfc19da5ab7ec945c930"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/ipc/registry.ts": {
+    "mtime": 1779293361.8461325,
+    "ast_hash": "05333abfc2716e9f65fad7769cce39b1",
+    "semantic_hash": "05333abfc2716e9f65fad7769cce39b1"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/ipc/index.ts": {
+    "mtime": 1779293361.8459988,
+    "ast_hash": "443277d86d63940b6b823eb5eac3510f",
+    "semantic_hash": "443277d86d63940b6b823eb5eac3510f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/ipc/handshake.ts": {
+    "mtime": 1779293361.8457727,
+    "ast_hash": "38c4d866c8618e46b0f1732d53c0395d",
+    "semantic_hash": "38c4d866c8618e46b0f1732d53c0395d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/ipc/__tests__/codegen.test.ts": {
+    "mtime": 1779293361.8440342,
+    "ast_hash": "cdd4388d0d65125f5c99702e55c349a5",
+    "semantic_hash": "cdd4388d0d65125f5c99702e55c349a5"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/ipc/__tests__/handshake.test.ts": {
+    "mtime": 1779293361.8446167,
+    "ast_hash": "7e44ab876088926ad2871d69204bf7d6",
+    "semantic_hash": "7e44ab876088926ad2871d69204bf7d6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/ipc/__tests__/types.test.ts": {
+    "mtime": 1779293361.8449717,
+    "ast_hash": "98f80dbfae73cc2021b9495685b0ec5f",
+    "semantic_hash": "98f80dbfae73cc2021b9495685b0ec5f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/ipc/__tests__/electron-adapter.test.ts": {
+    "mtime": 1779293361.8443604,
+    "ast_hash": "fa1b9a379533efc1b6a9e2f2f016d6c6",
+    "semantic_hash": "fa1b9a379533efc1b6a9e2f2f016d6c6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/ipc/__tests__/registry.test.ts": {
+    "mtime": 1779293361.8447633,
+    "ast_hash": "9b43e3d2e8541f1e3847a61b89b290ea",
+    "semantic_hash": "9b43e3d2e8541f1e3847a61b89b290ea"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/event-bus/bus.ts": {
+    "mtime": 1779293361.8428338,
+    "ast_hash": "24f6c3d4a6f20f69e0ea7e4d3a87cf83",
+    "semantic_hash": "24f6c3d4a6f20f69e0ea7e4d3a87cf83"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/event-bus/broadcaster.ts": {
+    "mtime": 1779293361.8418446,
+    "ast_hash": "801218c054425bfe45d6bddc39c7d3f8",
+    "semantic_hash": "801218c054425bfe45d6bddc39c7d3f8"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/event-bus/types.ts": {
+    "mtime": 1779876660.613358,
+    "ast_hash": "3bec4354270cdab64be7aaf423c76432",
+    "semantic_hash": "3bec4354270cdab64be7aaf423c76432"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/event-bus/index.ts": {
+    "mtime": 1779293361.8429394,
+    "ast_hash": "f1e7542e15cd5c2a2a6b047ca182eba3",
+    "semantic_hash": "f1e7542e15cd5c2a2a6b047ca182eba3"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/event-bus/__tests__/bus.test.ts": {
+    "mtime": 1779293361.8417442,
+    "ast_hash": "33cf2475fb2f1ffdc1ba6f6c12bd6c98",
+    "semantic_hash": "33cf2475fb2f1ffdc1ba6f6c12bd6c98"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/logging/logger.ts": {
+    "mtime": 1779293361.8476152,
+    "ast_hash": "426cdf768207dfd87bab39b96905504a",
+    "semantic_hash": "426cdf768207dfd87bab39b96905504a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/logging/index.ts": {
+    "mtime": 1779293361.8474803,
+    "ast_hash": "aa68a8924b48ba2c32676497020bbc9b",
+    "semantic_hash": "aa68a8924b48ba2c32676497020bbc9b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/logging/__tests__/logger.test.ts": {
+    "mtime": 1779293361.8473957,
+    "ast_hash": "35814ba714497c04b7abf69281eb6ef2",
+    "semantic_hash": "35814ba714497c04b7abf69281eb6ef2"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/envelope.ts": {
+    "mtime": 1779293361.8368063,
+    "ast_hash": "58f4d3f8a3a96c7a214e1b302f4ddf93",
+    "semantic_hash": "58f4d3f8a3a96c7a214e1b302f4ddf93"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/namespace-base.ts": {
+    "mtime": 1779293361.8379283,
+    "ast_hash": "c3e6270bb979a3ac98c96a6b511b55f9",
+    "semantic_hash": "c3e6270bb979a3ac98c96a6b511b55f9"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/repository.ts": {
+    "mtime": 1779860253.3015592,
+    "ast_hash": "6af5f7aac650c6350352b3049ecb5478",
+    "semantic_hash": "6af5f7aac650c6350352b3049ecb5478"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/exporters.ts": {
+    "mtime": 1779293361.836992,
+    "ast_hash": "a668351f33b8e0fab053e4c99a450926",
+    "semantic_hash": "a668351f33b8e0fab053e4c99a450926"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/layered-config.ts": {
+    "mtime": 1779293361.8377125,
+    "ast_hash": "103e175da7ccef89233858a861d4731b",
+    "semantic_hash": "103e175da7ccef89233858a861d4731b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/errors.ts": {
+    "mtime": 1779293361.8369007,
+    "ast_hash": "1d27f1184873a52927f5a2a79af1563f",
+    "semantic_hash": "1d27f1184873a52927f5a2a79af1563f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/atomic-io.ts": {
+    "mtime": 1779293361.8346684,
+    "ast_hash": "fb573b6502318901fdd39349efeedf38",
+    "semantic_hash": "fb573b6502318901fdd39349efeedf38"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/migrations.ts": {
+    "mtime": 1779293361.837828,
+    "ast_hash": "64b2f754b854d91d714c130c54a6a18e",
+    "semantic_hash": "64b2f754b854d91d714c130c54a6a18e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/factory.ts": {
+    "mtime": 1779607670.727449,
+    "ast_hash": "5f1b7842c281589559898b4fa9bef5a0",
+    "semantic_hash": "5f1b7842c281589559898b4fa9bef5a0"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/types.ts": {
+    "mtime": 1779860253.3026788,
+    "ast_hash": "202cd7f2c786c5f9794c6916e096e994",
+    "semantic_hash": "202cd7f2c786c5f9794c6916e096e994"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/index.ts": {
+    "mtime": 1779607666.795968,
+    "ast_hash": "ea53c4593fde1a138798fa5ba10e8f1c",
+    "semantic_hash": "ea53c4593fde1a138798fa5ba10e8f1c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/backup.ts": {
+    "mtime": 1779293361.8364487,
+    "ast_hash": "cf3de99a4f6c834c7e01cfa343af3485",
+    "semantic_hash": "cf3de99a4f6c834c7e01cfa343af3485"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/backends/json.ts": {
+    "mtime": 1779860253.299802,
+    "ast_hash": "822f462a5759067c6a8a37c3cd9d14e2",
+    "semantic_hash": "822f462a5759067c6a8a37c3cd9d14e2"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/backends/encrypted-json.ts": {
+    "mtime": 1779860253.2992053,
+    "ast_hash": "374b0390c3272ea907f8e1bc9efa0bbe",
+    "semantic_hash": "374b0390c3272ea907f8e1bc9efa0bbe"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/backends/jsonl.ts": {
+    "mtime": 1779860253.3005562,
+    "ast_hash": "d2821df1eb14d17a41a62da061318713",
+    "semantic_hash": "d2821df1eb14d17a41a62da061318713"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/backends/sqlite.ts": {
+    "mtime": 1779860253.3010433,
+    "ast_hash": "c6304585874d28e40864d98d0a9bbe9b",
+    "semantic_hash": "c6304585874d28e40864d98d0a9bbe9b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/schemas/placeholders.ts": {
+    "mtime": 1779860253.3022685,
+    "ast_hash": "873d93bd53ce31934e1a49c1d6268171",
+    "semantic_hash": "873d93bd53ce31934e1a49c1d6268171"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/schemas/cheat-code-states.ts": {
+    "mtime": 1779876647.9778664,
+    "ast_hash": "247ce763cfa9f6e2ae9174bd8286d5aa",
+    "semantic_hash": "247ce763cfa9f6e2ae9174bd8286d5aa"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/schemas/core-config.ts": {
+    "mtime": 1779293361.8384914,
+    "ast_hash": "8f0d44ebf3f2ad37cf1c7195a5689b5e",
+    "semantic_hash": "8f0d44ebf3f2ad37cf1c7195a5689b5e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/schemas/repo-pending-pushes.ts": {
+    "mtime": 1779293361.8412545,
+    "ast_hash": "f74fdbb9f4cd8200ef5025ca4ff9b997",
+    "semantic_hash": "f74fdbb9f4cd8200ef5025ca4ff9b997"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/schemas/core-identity.ts": {
+    "mtime": 1779293361.8385875,
+    "ast_hash": "93da283982299fa50ac53c54b71f42f8",
+    "semantic_hash": "93da283982299fa50ac53c54b71f42f8"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/schemas/index.ts": {
+    "mtime": 1779876654.0942774,
+    "ast_hash": "247e832d11c492a5e5b0613be94e047f",
+    "semantic_hash": "247e832d11c492a5e5b0613be94e047f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/schemas/repo-repositories.ts": {
+    "mtime": 1779293361.841349,
+    "ast_hash": "b1e1080bab941aaf445c77d82371eb48",
+    "semantic_hash": "b1e1080bab941aaf445c77d82371eb48"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/__tests__/schemas.test.ts": {
+    "mtime": 1779885921.4013283,
+    "ast_hash": "d0fdfe98c03bf025c287d89866b1f2e0",
+    "semantic_hash": "d0fdfe98c03bf025c287d89866b1f2e0"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/__tests__/extras.test.ts": {
+    "mtime": 1779293361.83233,
+    "ast_hash": "df56637670cdf7e4cf94ca21f32f63dc",
+    "semantic_hash": "df56637670cdf7e4cf94ca21f32f63dc"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/__tests__/jsonl-backend.test.ts": {
+    "mtime": 1779697920.0064657,
+    "ast_hash": "9476ae41607c37632d89b64349b38390",
+    "semantic_hash": "9476ae41607c37632d89b64349b38390"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/__tests__/encrypted-json-backend.test.ts": {
+    "mtime": 1779293361.8321671,
+    "ast_hash": "4f616163756fd9125072e4b8532bdc31",
+    "semantic_hash": "4f616163756fd9125072e4b8532bdc31"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/__tests__/namespace-base.test.ts": {
+    "mtime": 1779293361.8337085,
+    "ast_hash": "b59f64ac6625478e3e93d55336f56d01",
+    "semantic_hash": "b59f64ac6625478e3e93d55336f56d01"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/__tests__/core-config-migration.test.ts": {
+    "mtime": 1779293361.8287177,
+    "ast_hash": "398ae60e03c7ac64059bd9cb48adf6ef",
+    "semantic_hash": "398ae60e03c7ac64059bd9cb48adf6ef"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/__tests__/json-backend.test.ts": {
+    "mtime": 1779293361.8326461,
+    "ast_hash": "da30333341100beb80b655b85e5d0119",
+    "semantic_hash": "da30333341100beb80b655b85e5d0119"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/__tests__/sqlite-backend.test.ts": {
+    "mtime": 1779293361.8342962,
+    "ast_hash": "cd0bdee653cb8dfbe67476d31c2158f5",
+    "semantic_hash": "cd0bdee653cb8dfbe67476d31c2158f5"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/__tests__/repository.test.ts": {
+    "mtime": 1779860253.298437,
+    "ast_hash": "f44680ae8eb312c8b173c5f5e0580cc2",
+    "semantic_hash": "f44680ae8eb312c8b173c5f5e0580cc2"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/__tests__/cheat-code-states-schema.test.ts": {
+    "mtime": 1779876510.5263968,
+    "ast_hash": "898a75f9d990d5d8a5630e966f33193f",
+    "semantic_hash": "898a75f9d990d5d8a5630e966f33193f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/data-repo/__tests__/migrations.test.ts": {
+    "mtime": 1779293361.8335688,
+    "ast_hash": "0518e851214963f0fc651b7fe1ee2adf",
+    "semantic_hash": "0518e851214963f0fc651b7fe1ee2adf"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/project-container/scoped-data-repo.ts": {
+    "mtime": 1779607674.2246375,
+    "ast_hash": "36b32ff133bafa1ac7a8d73d8b8a5470",
+    "semantic_hash": "36b32ff133bafa1ac7a8d73d8b8a5470"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/project-container/types.ts": {
+    "mtime": 1779697920.0136678,
+    "ast_hash": "0f2f1b870c786bdc7fc028f6e27d25c4",
+    "semantic_hash": "0f2f1b870c786bdc7fc028f6e27d25c4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/project-container/scoped-event-bus.ts": {
+    "mtime": 1779293361.8592172,
+    "ast_hash": "f7c80ff172cca89f3dca0284ae40a313",
+    "semantic_hash": "f7c80ff172cca89f3dca0284ae40a313"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/project-container/idle-reaper.ts": {
+    "mtime": 1779293361.8582032,
+    "ast_hash": "945783e1323663e96c7b137af08c2896",
+    "semantic_hash": "945783e1323663e96c7b137af08c2896"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/project-container/registry.ts": {
+    "mtime": 1779697920.010069,
+    "ast_hash": "2e2e75f4867981dba26e70263b16b8ec",
+    "semantic_hash": "2e2e75f4867981dba26e70263b16b8ec"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/project-container/index.ts": {
+    "mtime": 1779293361.8584173,
+    "ast_hash": "ada2a656ddcec728ec0de9f449cf9753",
+    "semantic_hash": "ada2a656ddcec728ec0de9f449cf9753"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/project-container/__tests__/registry.test.ts": {
+    "mtime": 1779293361.8573565,
+    "ast_hash": "0e1c06e30434989a0df1d65344e46322",
+    "semantic_hash": "0e1c06e30434989a0df1d65344e46322"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/project-container/__tests__/scoped-data-repo.test.ts": {
+    "mtime": 1779607689.3517296,
+    "ast_hash": "d4339ff84a1779c20b168fb8cd62ef51",
+    "semantic_hash": "d4339ff84a1779c20b168fb8cd62ef51"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/process/controlled-runner.ts": {
+    "mtime": 1779860253.3041837,
+    "ast_hash": "e0178e0ee572a56286d74457a218ab4a",
+    "semantic_hash": "e0178e0ee572a56286d74457a218ab4a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/process/runtime.ts": {
+    "mtime": 1779293361.8553672,
+    "ast_hash": "d835019ccd0cd0c42c3342efd765c9af",
+    "semantic_hash": "d835019ccd0cd0c42c3342efd765c9af"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/process/shell-environment.ts": {
+    "mtime": 1779360811.4551668,
+    "ast_hash": "64641deece5efc947ed04d561f2f10a7",
+    "semantic_hash": "64641deece5efc947ed04d561f2f10a7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/process/index.ts": {
+    "mtime": 1779355792.4862344,
+    "ast_hash": "3a198e24fd16f76cceac930d324823a6",
+    "semantic_hash": "3a198e24fd16f76cceac930d324823a6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/process/__tests__/controlled-runner.test.ts": {
+    "mtime": 1779860253.3033984,
+    "ast_hash": "9aca5fa12188f2449631d937f8e36a99",
+    "semantic_hash": "9aca5fa12188f2449631d937f8e36a99"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/process/__tests__/shell-environment.test.ts": {
+    "mtime": 1779360713.090044,
+    "ast_hash": "287a947a4f99d9fb0ef1082e44a5fa9f",
+    "semantic_hash": "287a947a4f99d9fb0ef1082e44a5fa9f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/runtime/process/__tests__/runtime.test.ts": {
+    "mtime": 1779293361.854589,
+    "ast_hash": "9ed6a739fea9bd27eff2b7e89978f956",
+    "semantic_hash": "9ed6a739fea9bd27eff2b7e89978f956"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/__tests__/preload.test.ts": {
+    "mtime": 1779876038.5792043,
+    "ast_hash": "02a03ba9881a8ce28e8acbf704d12d19",
+    "semantic_hash": "02a03ba9881a8ce28e8acbf704d12d19"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/workers/file-conversion-worker.ts": {
+    "mtime": 1779700275.027036,
+    "ast_hash": "351861d7190eebff8cdf874eb2af9993",
+    "semantic_hash": "351861d7190eebff8cdf874eb2af9993"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/ipc/validated-ipc.ts": {
+    "mtime": 1779293361.8043103,
+    "ast_hash": "0853b5cedd073428eb2e7c0bddd13157",
+    "semantic_hash": "0853b5cedd073428eb2e7c0bddd13157"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/repository/ipc.ts": {
+    "mtime": 1779798081.562877,
+    "ast_hash": "2ad55c6b4c5f9f59938f2dfadfe02fd1",
+    "semantic_hash": "2ad55c6b4c5f9f59938f2dfadfe02fd1"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/repository/__tests__/ipc.test.ts": {
+    "mtime": 1779798081.5624187,
+    "ast_hash": "fb457356afc906055d2a188f920d7ff4",
+    "semantic_hash": "fb457356afc906055d2a188f920d7ff4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/tools/ipc.ts": {
+    "mtime": 1779702433.0389957,
+    "ast_hash": "523b3e0b6fc26d38cc30401245311127",
+    "semantic_hash": "523b3e0b6fc26d38cc30401245311127"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/tools/__tests__/ipc.test.ts": {
+    "mtime": 1779702433.0386403,
+    "ast_hash": "7fa69e2494f778a9a819030dbb5ab89b",
+    "semantic_hash": "7fa69e2494f778a9a819030dbb5ab89b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/identity/ipc.ts": {
+    "mtime": 1779293361.819982,
+    "ast_hash": "58955620a9bc4fc322d4b561fade909c",
+    "semantic_hash": "58955620a9bc4fc322d4b561fade909c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/update/ipc.ts": {
+    "mtime": 1779293361.8256702,
+    "ast_hash": "5b470e03bdaec17b9db11b4bc33f2ea7",
+    "semantic_hash": "5b470e03bdaec17b9db11b4bc33f2ea7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/cheat-code/ipc.ts": {
+    "mtime": 1779877103.3651607,
+    "ast_hash": "cecd7853bb4616a33d62fd28393d23cb",
+    "semantic_hash": "cecd7853bb4616a33d62fd28393d23cb"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/cheat-code/__tests__/ipc.test.ts": {
+    "mtime": 1779877152.4072387,
+    "ast_hash": "3ba62cb484dc0e4e0f80e17dc4674a2e",
+    "semantic_hash": "3ba62cb484dc0e4e0f80e17dc4674a2e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/task-scheduler/ipc.ts": {
+    "mtime": 1779806313.8100445,
+    "ast_hash": "a5822a68ff1db9f03e28a74665713f66",
+    "semantic_hash": "a5822a68ff1db9f03e28a74665713f66"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/task-scheduler/__tests__/ipc.test.ts": {
+    "mtime": 1779765379.1014688,
+    "ast_hash": "35929c332ba8b2d02fe712c9eb523900",
+    "semantic_hash": "35929c332ba8b2d02fe712c9eb523900"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/config/ipc.ts": {
+    "mtime": 1779860253.2963,
+    "ast_hash": "028564481ce63efaae62eb53416ece76",
+    "semantic_hash": "028564481ce63efaae62eb53416ece76"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/config/__tests__/ipc.test.ts": {
+    "mtime": 1779860253.2956557,
+    "ast_hash": "7791192d21ce2f7290110e124f8f1d56",
+    "semantic_hash": "7791192d21ce2f7290110e124f8f1d56"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/shell/guarded-shell.ts": {
+    "mtime": 1779293361.8242452,
+    "ast_hash": "b1865be00e7121aea9c820a95dcdea3d",
+    "semantic_hash": "b1865be00e7121aea9c820a95dcdea3d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/shell/ipc.ts": {
+    "mtime": 1779798081.5633647,
+    "ast_hash": "0089b38bf976b8473d01c4035e6430c4",
+    "semantic_hash": "0089b38bf976b8473d01c4035e6430c4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/shell/__tests__/ipc.test.ts": {
+    "mtime": 1779798081.563175,
+    "ast_hash": "49df1477fa42a66e4dd7ae9d5f0a1f1e",
+    "semantic_hash": "49df1477fa42a66e4dd7ae9d5f0a1f1e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/editor-scan/ipc.ts": {
+    "mtime": 1779293361.8165941,
+    "ast_hash": "63391212ecd8539334e7ce66f251ab6a",
+    "semantic_hash": "63391212ecd8539334e7ce66f251ab6a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/content/ipc.ts": {
+    "mtime": 1779860253.2975416,
+    "ast_hash": "181fcdefe5f037bd99c4abc005ec2264",
+    "semantic_hash": "181fcdefe5f037bd99c4abc005ec2264"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/content/__tests__/ipc.test.ts": {
+    "mtime": 1779860253.2970045,
+    "ast_hash": "d25539a9f905db1f72b18fac4f901937",
+    "semantic_hash": "d25539a9f905db1f72b18fac4f901937"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/agent/ipc-shared.ts": {
+    "mtime": 1779860253.2945952,
+    "ast_hash": "691291f31fd1eecdfc1dffa97c85e22e",
+    "semantic_hash": "691291f31fd1eecdfc1dffa97c85e22e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/agent/ipc-sessions.ts": {
+    "mtime": 1779803663.0917072,
+    "ast_hash": "904b816c7f56a6d362782be14380b3a3",
+    "semantic_hash": "904b816c7f56a6d362782be14380b3a3"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/agent/ipc-tools.ts": {
+    "mtime": 1779549762.7607877,
+    "ast_hash": "445961eef7d979f130aa7520358dd58a",
+    "semantic_hash": "445961eef7d979f130aa7520358dd58a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/agent/ipc-messages.ts": {
+    "mtime": 1779293361.8098302,
+    "ast_hash": "24764726d4b225d2d5e16e7824554a8e",
+    "semantic_hash": "24764726d4b225d2d5e16e7824554a8e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/agent/ipc.ts": {
+    "mtime": 1779293361.8124862,
+    "ast_hash": "e5453219cb16a3684690c5cbbe748ffb",
+    "semantic_hash": "e5453219cb16a3684690c5cbbe748ffb"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/agent/__tests__/ipc.test.ts": {
+    "mtime": 1779860253.2930079,
+    "ast_hash": "615abb907c50cab6c30ee834362324cf",
+    "semantic_hash": "615abb907c50cab6c30ee834362324cf"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/agent/__tests__/ipc-schema.test.ts": {
+    "mtime": 1779293361.8072398,
+    "ast_hash": "c204b3b3a70075aa7677df23919c4924",
+    "semantic_hash": "c204b3b3a70075aa7677df23919c4924"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/agent/__tests__/ipc-tools.test.ts": {
+    "mtime": 1779293361.8091376,
+    "ast_hash": "d1876de94b7679d2110a954643d9e0bf",
+    "semantic_hash": "d1876de94b7679d2110a954643d9e0bf"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/agent/__tests__/ipc-sessions.test.ts": {
+    "mtime": 1779803663.0912645,
+    "ast_hash": "c811b1db586172e9b6f095ed74300402",
+    "semantic_hash": "c811b1db586172e9b6f095ed74300402"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/agent/__tests__/ipc-event-schema.test.ts": {
+    "mtime": 1779293361.8070588,
+    "ast_hash": "61ff23b7caf506795ddb51b7d0de1337",
+    "semantic_hash": "61ff23b7caf506795ddb51b7d0de1337"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/user-profile/ipc.ts": {
+    "mtime": 1779694092.9920464,
+    "ast_hash": "5947b47568444c26e135d24656bc9143",
+    "semantic_hash": "5947b47568444c26e135d24656bc9143"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/knowledge-base/ipc.ts": {
+    "mtime": 1779798081.5620196,
+    "ast_hash": "a160eedfaa8674b3cba31b471d4db838",
+    "semantic_hash": "a160eedfaa8674b3cba31b471d4db838"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/knowledge-base/__tests__/ipc.test.ts": {
+    "mtime": 1779798081.561533,
+    "ast_hash": "05ad41af13c04bb6ae4e3dd365e677d4",
+    "semantic_hash": "05ad41af13c04bb6ae4e3dd365e677d4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/workflow/ipc.ts": {
+    "mtime": 1779937854.8327804,
+    "ast_hash": "31408ad46ffbcdfde318e7f781f2ba5e",
+    "semantic_hash": "31408ad46ffbcdfde318e7f781f2ba5e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/workflow/__tests__/ipc.test.ts": {
+    "mtime": 1779937854.8323774,
+    "ast_hash": "d3515ab3686e8f219ab79a1cb9a3394e",
+    "semantic_hash": "d3515ab3686e8f219ab79a1cb9a3394e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/install-status/ipc.ts": {
+    "mtime": 1779798081.5609813,
+    "ast_hash": "d928d50c98a8b78bd8afb96af2fc6036",
+    "semantic_hash": "d928d50c98a8b78bd8afb96af2fc6036"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/install-status/__tests__/ipc.test.ts": {
+    "mtime": 1779798081.5606022,
+    "ast_hash": "9f5cb292a0ee6bcf11e601bd2546838d",
+    "semantic_hash": "9f5cb292a0ee6bcf11e601bd2546838d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/log/ipc.ts": {
+    "mtime": 1779293361.8207488,
+    "ast_hash": "b2fb3d6d5244b1401ab084cef30b5d7e",
+    "semantic_hash": "b2fb3d6d5244b1401ab084cef30b5d7e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/ops/status.ts": {
+    "mtime": 1779293361.82338,
+    "ast_hash": "1ae19d89a2b4129d4820a7c5836b0ebb",
+    "semantic_hash": "1ae19d89a2b4129d4820a7c5836b0ebb"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/ops/ipc.ts": {
+    "mtime": 1779697920.0046067,
+    "ast_hash": "bff9c4bc0962f7da307179c7e5015e56",
+    "semantic_hash": "bff9c4bc0962f7da307179c7e5015e56"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/ops/__tests__/status.test.ts": {
+    "mtime": 1779293361.8225477,
+    "ast_hash": "f05c648385055211275963348e8fee0a",
+    "semantic_hash": "f05c648385055211275963348e8fee0a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/ops/__tests__/ipc.test.ts": {
+    "mtime": 1779697920.004314,
+    "ast_hash": "ee743845a464bb18ad4de6e86210a3d5",
+    "semantic_hash": "ee743845a464bb18ad4de6e86210a3d5"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/editor-copy/ipc.ts": {
+    "mtime": 1779293361.8145742,
+    "ast_hash": "f3e3ba11db4bb1932c315f3c37480c52",
+    "semantic_hash": "f3e3ba11db4bb1932c315f3c37480c52"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/http-test/ipc.ts": {
+    "mtime": 1779697920.003965,
+    "ast_hash": "fbc0ac025a7bfb025e12a6fe877cad4d",
+    "semantic_hash": "fbc0ac025a7bfb025e12a6fe877cad4d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/http-test/__tests__/ipc.test.ts": {
+    "mtime": 1779697920.003463,
+    "ast_hash": "ea5f024335d292924ba0b7dfc2e70daa",
+    "semantic_hash": "ea5f024335d292924ba0b7dfc2e70daa"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/editor-install-status/ipc.ts": {
+    "mtime": 1779410344.2290318,
+    "ast_hash": "3d910ed2eadeeefc73f458bedc0133b1",
+    "semantic_hash": "3d910ed2eadeeefc73f458bedc0133b1"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/editor/ipc.ts": {
+    "mtime": 1779293361.818745,
+    "ast_hash": "b6e0d00188965c97bac7c3da82850931",
+    "semantic_hash": "b6e0d00188965c97bac7c3da82850931"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/modules/editor/__tests__/ipc.test.ts": {
+    "mtime": 1779293361.8169944,
+    "ast_hash": "4a623143d300bee04dd6e161cbdd3397",
+    "semantic_hash": "4a623143d300bee04dd6e161cbdd3397"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/config-store.ts": {
+    "mtime": 1779869412.2444537,
+    "ast_hash": "0042b753686666e92593f1e10427894a",
+    "semantic_hash": "0042b753686666e92593f1e10427894a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/pending-pushes-service.ts": {
+    "mtime": 1779293361.9088254,
+    "ast_hash": "81578120eae67d2dbf9b365e71dda71a",
+    "semantic_hash": "81578120eae67d2dbf9b365e71dda71a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/repository-maintenance-service.ts": {
+    "mtime": 1779798081.5778048,
+    "ast_hash": "f5590b5b818f5628c5814792fe4bb6fc",
+    "semantic_hash": "f5590b5b818f5628c5814792fe4bb6fc"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/repository-lock-manager.ts": {
+    "mtime": 1779293361.9211445,
+    "ast_hash": "1cdf4462c91398237c084d6599242221",
+    "semantic_hash": "1cdf4462c91398237c084d6599242221"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/content-icon-image-service.ts": {
+    "mtime": 1779410344.2369356,
+    "ast_hash": "8ba4fcf74cde05d71d8e402f9da5fcb9",
+    "semantic_hash": "8ba4fcf74cde05d71d8e402f9da5fcb9"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/app-icon-service.ts": {
+    "mtime": 1779293361.8902764,
+    "ast_hash": "f98afb05f301608688272f73a4a66074",
+    "semantic_hash": "f98afb05f301608688272f73a4a66074"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/content-history-service.ts": {
+    "mtime": 1779776611.030246,
+    "ast_hash": "fe5f9575e7363eff537624a2e888afe1",
+    "semantic_hash": "fe5f9575e7363eff537624a2e888afe1"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/repository-sync-coordinator.ts": {
+    "mtime": 1779293361.9222872,
+    "ast_hash": "a0ea72d48459b519e5b4c0105bb6b697",
+    "semantic_hash": "a0ea72d48459b519e5b4c0105bb6b697"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/git-paths.ts": {
+    "mtime": 1779293361.9077883,
+    "ast_hash": "5c655bd62665b0999651d9637781c164",
+    "semantic_hash": "5c655bd62665b0999651d9637781c164"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/content-service.ts": {
+    "mtime": 1779429324.0130224,
+    "ast_hash": "72b6c6d23c98cbae27f2ad3156ef3460",
+    "semantic_hash": "72b6c6d23c98cbae27f2ad3156ef3460"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/content-skill-source-service.ts": {
+    "mtime": 1779798081.5695076,
+    "ast_hash": "2a41a9ebce0cb06454bec26a1970a3c5",
+    "semantic_hash": "2a41a9ebce0cb06454bec26a1970a3c5"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/mac-compatibility.ts": {
+    "mtime": 1779293361.9086785,
+    "ast_hash": "10ac1f73834ba92dddfa812e1f80801a",
+    "semantic_hash": "10ac1f73834ba92dddfa812e1f80801a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/config-backup-service.ts": {
+    "mtime": 1779860253.317719,
+    "ast_hash": "e024c8d7da4a0ddee9f6ef1487d4f617",
+    "semantic_hash": "e024c8d7da4a0ddee9f6ef1487d4f617"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/windows-compatibility.ts": {
+    "mtime": 1779293361.942958,
+    "ast_hash": "92e94e2770534ba406fb0b209adf620e",
+    "semantic_hash": "92e94e2770534ba406fb0b209adf620e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/content-write-service.ts": {
+    "mtime": 1779860253.3187194,
+    "ast_hash": "f5cdf08fc99bb91034093f3e41bb1e29",
+    "semantic_hash": "f5cdf08fc99bb91034093f3e41bb1e29"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/cheat-code-state-service.ts": {
+    "mtime": 1779876647.9781218,
+    "ast_hash": "b403a96943c573b46de3111738b44af6",
+    "semantic_hash": "b403a96943c573b46de3111738b44af6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/error-sanitize.ts": {
+    "mtime": 1779293361.905036,
+    "ast_hash": "e676e93a7e6f0049a126cf54f1a9c777",
+    "semantic_hash": "e676e93a7e6f0049a126cf54f1a9c777"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/git-error-utils.ts": {
+    "mtime": 1779293361.907678,
+    "ast_hash": "98b1d1a5f7859b617b44d825211754dd",
+    "semantic_hash": "98b1d1a5f7859b617b44d825211754dd"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/git-command.ts": {
+    "mtime": 1779798081.5716608,
+    "ast_hash": "7e70264958ce90eaf1b93cca219bf8ec",
+    "semantic_hash": "7e70264958ce90eaf1b93cca219bf8ec"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/error-utils.ts": {
+    "mtime": 1779293361.906551,
+    "ast_hash": "dac1fd2bab98a1ba4bfaeede9324add6",
+    "semantic_hash": "dac1fd2bab98a1ba4bfaeede9324add6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/user-identity-service.ts": {
+    "mtime": 1779293361.9422522,
+    "ast_hash": "e4c1f88cd2274acf71e9cef18372b633",
+    "semantic_hash": "e4c1f88cd2274acf71e9cef18372b633"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/builtin-content-service.ts": {
+    "mtime": 1779429391.1380966,
+    "ast_hash": "89f96a6dd595248d218ccdeb69264287",
+    "semantic_hash": "89f96a6dd595248d218ccdeb69264287"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/repository-initialization-safety.ts": {
+    "mtime": 1779778071.4084427,
+    "ast_hash": "0d8200ab59823329388c7724ffe2532e",
+    "semantic_hash": "0d8200ab59823329388c7724ffe2532e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/repository-template-service.ts": {
+    "mtime": 1779293361.9224808,
+    "ast_hash": "da7e075b5c4b2c8df1e3ab618bb4860f",
+    "semantic_hash": "da7e075b5c4b2c8df1e3ab618bb4860f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/content-capability-validator.ts": {
+    "mtime": 1779776048.2718968,
+    "ast_hash": "2c9529b979370b7b0ceb3b4adc89173c",
+    "semantic_hash": "2c9529b979370b7b0ceb3b4adc89173c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/editor-copy-service.ts": {
+    "mtime": 1779697920.0213504,
+    "ast_hash": "3b3fa88e5c323bb583246a373aae8231",
+    "semantic_hash": "3b3fa88e5c323bb583246a373aae8231"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/repository-structure-service.ts": {
+    "mtime": 1779778184.5597453,
+    "ast_hash": "2689b7af3338750d7d64bf4518c05d01",
+    "semantic_hash": "2689b7af3338750d7d64bf4518c05d01"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/shell-exec.ts": {
+    "mtime": 1779860253.3263965,
+    "ast_hash": "a4699ab4de00994bac73c15bd525b7db",
+    "semantic_hash": "a4699ab4de00994bac73c15bd525b7db"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/content-index-service.ts": {
+    "mtime": 1779293361.8987398,
+    "ast_hash": "bfc8207aa78e660fbd057bb560995ec0",
+    "semantic_hash": "bfc8207aa78e660fbd057bb560995ec0"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/content-capability-errors.ts": {
+    "mtime": 1779410344.2362978,
+    "ast_hash": "95e8a4593c45c74bdfe50eba9d9915f4",
+    "semantic_hash": "95e8a4593c45c74bdfe50eba9d9915f4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/diagnostics-service.ts": {
+    "mtime": 1779714406.5561247,
+    "ast_hash": "6c1f2a54f9ef1edcd46bf26447a085c4",
+    "semantic_hash": "6c1f2a54f9ef1edcd46bf26447a085c4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/content-install-service.ts": {
+    "mtime": 1779436421.660571,
+    "ast_hash": "dfda66434e78315fae10a84cad06b163",
+    "semantic_hash": "dfda66434e78315fae10a84cad06b163"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/content-skill-attachment-constraints.ts": {
+    "mtime": 1779410344.2375047,
+    "ast_hash": "d92b783276967129437591635f174262",
+    "semantic_hash": "d92b783276967129437591635f174262"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/user-profile-service.ts": {
+    "mtime": 1779694092.9944756,
+    "ast_hash": "7af6d01133f28c00c3f4d4a9c34491cb",
+    "semantic_hash": "7af6d01133f28c00c3f4d4a9c34491cb"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/content-submission-service.ts": {
+    "mtime": 1779860253.3181314,
+    "ast_hash": "bccea06f092e51a09f087da7937894e0",
+    "semantic_hash": "bccea06f092e51a09f087da7937894e0"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/editor-file-write-utils.ts": {
+    "mtime": 1779293361.9042332,
+    "ast_hash": "63249f5fe299f5724e03871eb521ff2a",
+    "semantic_hash": "63249f5fe299f5724e03871eb521ff2a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/editor-scan-service.ts": {
+    "mtime": 1779798081.570306,
+    "ast_hash": "332d8eb59bf9f30314b7b68050a87d41",
+    "semantic_hash": "332d8eb59bf9f30314b7b68050a87d41"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/log-store.ts": {
+    "mtime": 1779860253.3235693,
+    "ast_hash": "6c0276b52a732e4e5d671910c80af4e2",
+    "semantic_hash": "6c0276b52a732e4e5d671910c80af4e2"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/attachments-pool-service.ts": {
+    "mtime": 1779776580.126918,
+    "ast_hash": "b2fc76ef7711d97201b6c6e99f28b277",
+    "semantic_hash": "b2fc76ef7711d97201b6c6e99f28b277"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/update-service.ts": {
+    "mtime": 1779842431.579362,
+    "ast_hash": "6c44e813e099d2c43330ba0706ab1caf",
+    "semantic_hash": "6c44e813e099d2c43330ba0706ab1caf"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/tray-service.ts": {
+    "mtime": 1779293361.9318924,
+    "ast_hash": "23f93a0598e74bba80d2c7b62c4563c2",
+    "semantic_hash": "23f93a0598e74bba80d2c7b62c4563c2"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/fs-utils.ts": {
+    "mtime": 1779293361.907281,
+    "ast_hash": "b5cbfc673a2f198c610674432816165b",
+    "semantic_hash": "b5cbfc673a2f198c610674432816165b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/install-status-cache-service.ts": {
+    "mtime": 1779410344.2394035,
+    "ast_hash": "419d499824e76863d1eda408845cea50",
+    "semantic_hash": "419d499824e76863d1eda408845cea50"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/content-window-service.ts": {
+    "mtime": 1779458335.8733552,
+    "ast_hash": "8aa648fb212647657110c3d25d12a14b",
+    "semantic_hash": "8aa648fb212647657110c3d25d12a14b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/user-profile-cache.ts": {
+    "mtime": 1779293361.9425533,
+    "ast_hash": "d3c30ca9b12338455f8da67b9c4d79d3",
+    "semantic_hash": "d3c30ca9b12338455f8da67b9c4d79d3"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/editor-install-status-service.ts": {
+    "mtime": 1779410344.2385576,
+    "ast_hash": "39f322d7a80ef3926434567a510f1166",
+    "semantic_hash": "39f322d7a80ef3926434567a510f1166"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/editor-adapter-service.ts": {
+    "mtime": 1779293361.9028807,
+    "ast_hash": "43484ec5149a9f8a1e6e73d3d075f47a",
+    "semantic_hash": "43484ec5149a9f8a1e6e73d3d075f47a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/repository-git-service.ts": {
+    "mtime": 1779798081.5775888,
+    "ast_hash": "d8c7c410af8edf33fa8c57b1b15c21c7",
+    "semantic_hash": "d8c7c410af8edf33fa8c57b1b15c21c7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/content-download-service.ts": {
+    "mtime": 1779293361.8967664,
+    "ast_hash": "c4c47da1ccc9ce9e6cd83abb08ac8072",
+    "semantic_hash": "c4c47da1ccc9ce9e6cd83abb08ac8072"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/repository-cache-database.ts": {
+    "mtime": 1779293361.920257,
+    "ast_hash": "26ab3d71a7a92cbdbf28f319b4bb2abe",
+    "semantic_hash": "26ab3d71a7a92cbdbf28f319b4bb2abe"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/repository-store.ts": {
+    "mtime": 1779293361.9217072,
+    "ast_hash": "307da49caa5aaae14592352c79919721",
+    "semantic_hash": "307da49caa5aaae14592352c79919721"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/source-acquisition/guarded-fetch-url.ts": {
+    "mtime": 1779601610.0042388,
+    "ast_hash": "50f74ad4bad90b2edb5e0e11bc2e6de5",
+    "semantic_hash": "50f74ad4bad90b2edb5e0e11bc2e6de5"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/source-acquisition/html-to-source-markdown.ts": {
+    "mtime": 1779601610.0045078,
+    "ast_hash": "70b165f2542ec553f9bf1da25908a886",
+    "semantic_hash": "70b165f2542ec553f9bf1da25908a886"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/source-acquisition/url-source.ts": {
+    "mtime": 1779601610.0048835,
+    "ast_hash": "a5a1a370db44407e0a9a678a203aaf85",
+    "semantic_hash": "a5a1a370db44407e0a9a678a203aaf85"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/source-acquisition/__tests__/url-source.test.ts": {
+    "mtime": 1779601610.0039213,
+    "ast_hash": "d819a6536f101b477b7929adfb28a4d8",
+    "semantic_hash": "d819a6536f101b477b7929adfb28a4d8"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/source-acquisition/__tests__/guarded-fetch-url.test.ts": {
+    "mtime": 1779601610.0036142,
+    "ast_hash": "1b78f20e65e99a57e92d4934f0ad0534",
+    "semantic_hash": "1b78f20e65e99a57e92d4934f0ad0534"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/tools/file-conversion-types.ts": {
+    "mtime": 1779700275.02607,
+    "ast_hash": "a2fa50465496c564fa1cd6c860cb3cdf",
+    "semantic_hash": "a2fa50465496c564fa1cd6c860cb3cdf"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/tools/file-conversion-runner.ts": {
+    "mtime": 1779700275.0258853,
+    "ast_hash": "886281e08527e50d63fe37a7dc86da6d",
+    "semantic_hash": "886281e08527e50d63fe37a7dc86da6d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/tools/tool-registry.ts": {
+    "mtime": 1779702433.040395,
+    "ast_hash": "ae41396dc4db3b3a99a8d05cf49272e4",
+    "semantic_hash": "ae41396dc4db3b3a99a8d05cf49272e4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/tools/tool-window-service.ts": {
+    "mtime": 1779700275.0266342,
+    "ast_hash": "7a219ac52825be4638de2207c14859bb",
+    "semantic_hash": "7a219ac52825be4638de2207c14859bb"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/tools/file-conversion-output.ts": {
+    "mtime": 1779700275.0256517,
+    "ast_hash": "0a28fcb74ab29d739b5d489636c49ef3",
+    "semantic_hash": "0a28fcb74ab29d739b5d489636c49ef3"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/tools/__tests__/tool-window-service.test.ts": {
+    "mtime": 1779702433.0401118,
+    "ast_hash": "b298051f48155f816fb53c0d46a692d8",
+    "semantic_hash": "b298051f48155f816fb53c0d46a692d8"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/tools/__tests__/file-conversion-output.test.ts": {
+    "mtime": 1779700275.0247157,
+    "ast_hash": "ef7faeda944245387e23fb02e68d07e8",
+    "semantic_hash": "ef7faeda944245387e23fb02e68d07e8"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/tools/__tests__/file-conversion-runner.test.ts": {
+    "mtime": 1779704096.8215451,
+    "ast_hash": "ac6c3b3483cd8e5ee43a7c69c1307c7e",
+    "semantic_hash": "ac6c3b3483cd8e5ee43a7c69c1307c7e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/tools/__tests__/tool-registry.test.ts": {
+    "mtime": 1779702433.0398173,
+    "ast_hash": "56fc1e4ffb9c972b99d8bfe2a2619be7",
+    "semantic_hash": "56fc1e4ffb9c972b99d8bfe2a2619be7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/execution-isolation/types.ts": {
+    "mtime": 1779293361.9070685,
+    "ast_hash": "80a616fcf6d44fa44b6ccb63887b9114",
+    "semantic_hash": "80a616fcf6d44fa44b6ccb63887b9114"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/execution-isolation/execution-isolation-service.ts": {
+    "mtime": 1779798081.5712476,
+    "ast_hash": "0fdd09bc108f05eca262792351a94ab4",
+    "semantic_hash": "0fdd09bc108f05eca262792351a94ab4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/execution-isolation/index.ts": {
+    "mtime": 1779293361.9069817,
+    "ast_hash": "cc9c55e41dd1790ef7a09003f3ba4109",
+    "semantic_hash": "cc9c55e41dd1790ef7a09003f3ba4109"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/execution-isolation/__tests__/execution-isolation-service.test.ts": {
+    "mtime": 1779799034.2323387,
+    "ast_hash": "44583eb65f8953786dee0fed30b2eae2",
+    "semantic_hash": "44583eb65f8953786dee0fed30b2eae2"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/external-capabilities.ts": {
+    "mtime": 1779860253.3314526,
+    "ast_hash": "039a850a5f8be40f086e529922951a7f",
+    "semantic_hash": "039a850a5f8be40f086e529922951a7f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/task-repository.ts": {
+    "mtime": 1779293361.9310524,
+    "ast_hash": "bfbaa3722dad5718e7adc5a92e01e848",
+    "semantic_hash": "bfbaa3722dad5718e7adc5a92e01e848"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/run-repository.ts": {
+    "mtime": 1779293361.930773,
+    "ast_hash": "8a8ddd060dc4b06d7348e8e98f4a4abe",
+    "semantic_hash": "8a8ddd060dc4b06d7348e8e98f4a4abe"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/external-api.ts": {
+    "mtime": 1779293361.9302576,
+    "ast_hash": "5e75c4d8cbac6d9481772ff5554d08ef",
+    "semantic_hash": "5e75c4d8cbac6d9481772ff5554d08ef"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/types.ts": {
+    "mtime": 1779293361.9316702,
+    "ast_hash": "01ed6ec9f40504a104fe01569f267fb5",
+    "semantic_hash": "01ed6ec9f40504a104fe01569f267fb5"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/cron-expression.ts": {
+    "mtime": 1779293361.9286203,
+    "ast_hash": "02e1401e1148bf8ac2c091622704e599",
+    "semantic_hash": "02e1401e1148bf8ac2c091622704e599"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/execution-service.ts": {
+    "mtime": 1779860253.3308053,
+    "ast_hash": "5e7c1d502a7ec77a4f7b3f48c66561fb",
+    "semantic_hash": "5e7c1d502a7ec77a4f7b3f48c66561fb"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/schedule-calculator.ts": {
+    "mtime": 1779860253.3319442,
+    "ast_hash": "07e9ef38b9525249c569331292530aba",
+    "semantic_hash": "07e9ef38b9525249c569331292530aba"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/index.ts": {
+    "mtime": 1779293361.9306593,
+    "ast_hash": "699873407af0dd60aec1e465f5fa9d3f",
+    "semantic_hash": "699873407af0dd60aec1e465f5fa9d3f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/task-scheduler-service.ts": {
+    "mtime": 1779860253.3326042,
+    "ast_hash": "298eee77a89090938d19c0268afe906e",
+    "semantic_hash": "298eee77a89090938d19c0268afe906e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/__tests__/schedule-calculator.test.ts": {
+    "mtime": 1779860253.329397,
+    "ast_hash": "b35cdbe462bdafb6ce5ca18fc7309d58",
+    "semantic_hash": "b35cdbe462bdafb6ce5ca18fc7309d58"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/__tests__/run-repository.test.ts": {
+    "mtime": 1779293361.926145,
+    "ast_hash": "695dc7812ec800ce071b8ef1c70ddcf5",
+    "semantic_hash": "695dc7812ec800ce071b8ef1c70ddcf5"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/__tests__/task-repository.test.ts": {
+    "mtime": 1779293361.9267876,
+    "ast_hash": "de7c946f12a6615160cddfc6caccb7ab",
+    "semantic_hash": "de7c946f12a6615160cddfc6caccb7ab"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/__tests__/external-api.test.ts": {
+    "mtime": 1779860253.3288507,
+    "ast_hash": "b19d164011ae7b5310ab06057c836302",
+    "semantic_hash": "b19d164011ae7b5310ab06057c836302"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/__tests__/task-scheduler-service.test.ts": {
+    "mtime": 1779860253.3300316,
+    "ast_hash": "8377e148961f2c25009a31ac70b47893",
+    "semantic_hash": "8377e148961f2c25009a31ac70b47893"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/__tests__/cron-expression.test.ts": {
+    "mtime": 1779293361.925241,
+    "ast_hash": "6a4ae0b2e00a44909d64b1f9ce932ccc",
+    "semantic_hash": "6a4ae0b2e00a44909d64b1f9ce932ccc"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/task-scheduler/__tests__/execution-service.test.ts": {
+    "mtime": 1779860253.328298,
+    "ast_hash": "faf88e0271a141d34176bba95eaac916",
+    "semantic_hash": "faf88e0271a141d34176bba95eaac916"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/bridge-adapter/bridge-adapter-service.ts": {
+    "mtime": 1779860253.3171542,
+    "ast_hash": "81411be53e7f93dff18bc49a93373a35",
+    "semantic_hash": "81411be53e7f93dff18bc49a93373a35"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/bridge-adapter/types.ts": {
+    "mtime": 1779293361.8937907,
+    "ast_hash": "9ae3fa340849b67adfcb3505cebf7478",
+    "semantic_hash": "9ae3fa340849b67adfcb3505cebf7478"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/bridge-adapter/bridge-protocol.ts": {
+    "mtime": 1779293361.893413,
+    "ast_hash": "67b63b109047e5b11964b326b1763792",
+    "semantic_hash": "67b63b109047e5b11964b326b1763792"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/bridge-adapter/index.ts": {
+    "mtime": 1779293361.8936615,
+    "ast_hash": "aaaf8e825766defca66d16b7599ad930",
+    "semantic_hash": "aaaf8e825766defca66d16b7599ad930"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/bridge-adapter/__tests__/bridge-adapter-service.test.ts": {
+    "mtime": 1779860253.316663,
+    "ast_hash": "ca8f5db4215e47c73f57fcf2d5f4b983",
+    "semantic_hash": "ca8f5db4215e47c73f57fcf2d5f4b983"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/bridge-adapter/__tests__/bridge-protocol.test.ts": {
+    "mtime": 1779293361.8928108,
+    "ast_hash": "6d3eb254be6411885c1b3106a3843665",
+    "semantic_hash": "6d3eb254be6411885c1b3106a3843665"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/renderer-health/constants.ts": {
+    "mtime": 1779293361.9156551,
+    "ast_hash": "6a7e283d96ec6063ba83b0282a96438b",
+    "semantic_hash": "6a7e283d96ec6063ba83b0282a96438b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/renderer-health/index.ts": {
+    "mtime": 1779293361.9157774,
+    "ast_hash": "8a6856213d8e6518ff72c0e81d6d764c",
+    "semantic_hash": "8a6856213d8e6518ff72c0e81d6d764c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/renderer-health/renderer-health-service.ts": {
+    "mtime": 1779293361.9161105,
+    "ast_hash": "a3a69e5830c489075698a7771bd372ef",
+    "semantic_hash": "a3a69e5830c489075698a7771bd372ef"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/renderer-health/__tests__/renderer-health-service.test.ts": {
+    "mtime": 1779293361.9153981,
+    "ast_hash": "ec23d1c4b611abf04bc7557306cd57ea",
+    "semantic_hash": "ec23d1c4b611abf04bc7557306cd57ea"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/conversation-runner.ts": {
+    "mtime": 1779876295.0859292,
+    "ast_hash": "e314d332ba174b57a79ab68e4b24f71b",
+    "semantic_hash": "e314d332ba174b57a79ab68e4b24f71b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/conversation-worker.ts": {
+    "mtime": 1779876314.2476902,
+    "ast_hash": "db3f27c49973f72c36fac5a3d79dc46f",
+    "semantic_hash": "db3f27c49973f72c36fac5a3d79dc46f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/codex-service.ts": {
+    "mtime": 1779293361.9358096,
+    "ast_hash": "725b2cdd5eb0baa31eb958e7bb35ed01",
+    "semantic_hash": "725b2cdd5eb0baa31eb958e7bb35ed01"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/scan.ts": {
+    "mtime": 1779293361.939409,
+    "ast_hash": "fdd845adcb632023b8603f89c2b79837",
+    "semantic_hash": "fdd845adcb632023b8603f89c2b79837"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/cc-scan-state.ts": {
+    "mtime": 1779844132.764408,
+    "ast_hash": "9425d2a54c27568b17eec611ccff65a1",
+    "semantic_hash": "9425d2a54c27568b17eec611ccff65a1"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/cc-service.ts": {
+    "mtime": 1779869734.3204892,
+    "ast_hash": "ee838dc5b3b7f424f4f1b0310a789239",
+    "semantic_hash": "ee838dc5b3b7f424f4f1b0310a789239"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/pricing.ts": {
+    "mtime": 1779852057.947741,
+    "ast_hash": "917249b029191e27562faed42a9989bc",
+    "semantic_hash": "917249b029191e27562faed42a9989bc"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/cc-conversation-parser.ts": {
+    "mtime": 1779869734.3192449,
+    "ast_hash": "f46d96df04a037373097a21c89bab8f1",
+    "semantic_hash": "f46d96df04a037373097a21c89bab8f1"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/cc-conversation-service.ts": {
+    "mtime": 1779887045.1236556,
+    "ast_hash": "b1c06a9a9553e884de9f1c933cc74f43",
+    "semantic_hash": "b1c06a9a9553e884de9f1c933cc74f43"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/codex-parser.ts": {
+    "mtime": 1779805512.5548167,
+    "ast_hash": "439bb56d85008ffbc5df32d5b20fe86a",
+    "semantic_hash": "439bb56d85008ffbc5df32d5b20fe86a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/types.ts": {
+    "mtime": 1779869734.3215067,
+    "ast_hash": "5326237ab1fdd3996ce61f998719b6b4",
+    "semantic_hash": "5326237ab1fdd3996ce61f998719b6b4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/range.ts": {
+    "mtime": 1779293361.9390364,
+    "ast_hash": "25f007e0b264d89eeeb70a3264c1c5e3",
+    "semantic_hash": "25f007e0b264d89eeeb70a3264c1c5e3"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/db-schema.ts": {
+    "mtime": 1779887045.124038,
+    "ast_hash": "c0b0a7f3037300bf25268d233ef05e45",
+    "semantic_hash": "c0b0a7f3037300bf25268d233ef05e45"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/index.ts": {
+    "mtime": 1779876341.971603,
+    "ast_hash": "30aa30498a861a67ee0b6af4694ca911",
+    "semantic_hash": "30aa30498a861a67ee0b6af4694ca911"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/currency-migration.ts": {
+    "mtime": 1779840422.5297315,
+    "ast_hash": "62867a42c934c44115ca4c03b4b9b6e2",
+    "semantic_hash": "62867a42c934c44115ca4c03b4b9b6e2"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/refresh-runner.ts": {
+    "mtime": 1779840333.1681182,
+    "ast_hash": "9b233a33a1319b2b36cbaa7ee8ba8019",
+    "semantic_hash": "9b233a33a1319b2b36cbaa7ee8ba8019"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/db.ts": {
+    "mtime": 1779669758.7258432,
+    "ast_hash": "66ec4ca3bc6b8d5f1e6ba946a4ef2db4",
+    "semantic_hash": "66ec4ca3bc6b8d5f1e6ba946a4ef2db4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/refresh-worker.ts": {
+    "mtime": 1779840404.575574,
+    "ast_hash": "7fe16e62df8cba3467affa660bfe442c",
+    "semantic_hash": "7fe16e62df8cba3467affa660bfe442c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/cc-parser.ts": {
+    "mtime": 1779844313.0952117,
+    "ast_hash": "93acb199915b4459d0860a6a83fb8326",
+    "semantic_hash": "93acb199915b4459d0860a6a83fb8326"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/cc-conversation-window-service.ts": {
+    "mtime": 1779870788.555518,
+    "ast_hash": "0d976fd7d9ba1cf99162a6e2c477e624",
+    "semantic_hash": "0d976fd7d9ba1cf99162a6e2c477e624"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/__tests__/refresh-runner.test.ts": {
+    "mtime": 1779840566.83886,
+    "ast_hash": "3ad2e09717f4a1a74b5de416bfa5d31a",
+    "semantic_hash": "3ad2e09717f4a1a74b5de416bfa5d31a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/__tests__/range.test.ts": {
+    "mtime": 1779293361.9337761,
+    "ast_hash": "c6f0075d85b8a87438ffad6694ff8968",
+    "semantic_hash": "c6f0075d85b8a87438ffad6694ff8968"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/__tests__/reports.test.ts": {
+    "mtime": 1779869734.318949,
+    "ast_hash": "7a28481b6882fcd23d68780adb8fcb14",
+    "semantic_hash": "7a28481b6882fcd23d68780adb8fcb14"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/__tests__/cc-parser.test.ts": {
+    "mtime": 1779844218.3941946,
+    "ast_hash": "b3d167453a0e617a5b51a3863e5d3892",
+    "semantic_hash": "b3d167453a0e617a5b51a3863e5d3892"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/__tests__/db.test.ts": {
+    "mtime": 1779887045.1230993,
+    "ast_hash": "ce18066a037e27a5f8c94d31b1378ff7",
+    "semantic_hash": "ce18066a037e27a5f8c94d31b1378ff7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/__tests__/cc-conversation-service.test.ts": {
+    "mtime": 1779897467.3068774,
+    "ast_hash": "944338928b7d30e0d4a24b6bb729709d",
+    "semantic_hash": "944338928b7d30e0d4a24b6bb729709d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/__tests__/codex-parser.test.ts": {
+    "mtime": 1779293361.933003,
+    "ast_hash": "076fe7671b7181cd2a2674a09f667783",
+    "semantic_hash": "076fe7671b7181cd2a2674a09f667783"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/__tests__/cc-scan-state.test.ts": {
+    "mtime": 1779844010.3716629,
+    "ast_hash": "ca7422ae3b0e71fdc74609f6096ff6b1",
+    "semantic_hash": "ca7422ae3b0e71fdc74609f6096ff6b1"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/__tests__/pricing.test.ts": {
+    "mtime": 1779852057.9468777,
+    "ast_hash": "3b8053e227b8312461744def937d144c",
+    "semantic_hash": "3b8053e227b8312461744def937d144c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/__tests__/cc-conversation-parser.test.ts": {
+    "mtime": 1779869734.317939,
+    "ast_hash": "b74f623dbc83957af8f8ea15d04c36f0",
+    "semantic_hash": "b74f623dbc83957af8f8ea15d04c36f0"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/__tests__/scan.test.ts": {
+    "mtime": 1779293361.9344957,
+    "ast_hash": "0a3a116fa644379e0edc2e7e9f024b9b",
+    "semantic_hash": "0a3a116fa644379e0edc2e7e9f024b9b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/usage-analysis/__tests__/conversation-runner.test.ts": {
+    "mtime": 1779876381.1441553,
+    "ast_hash": "8dfff6032920d362a4df91a5c031ecf9",
+    "semantic_hash": "8dfff6032920d362a4df91a5c031ecf9"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/provider/provider-service.ts": {
+    "mtime": 1779798081.5772753,
+    "ast_hash": "0ec900c7599f66df7efc57ca013f2153",
+    "semantic_hash": "0ec900c7599f66df7efc57ca013f2153"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/provider/claude-provider-presets.ts": {
+    "mtime": 1779293361.9122941,
+    "ast_hash": "0f594b3430b00b3c6263a7fc42ddf199",
+    "semantic_hash": "0f594b3430b00b3c6263a7fc42ddf199"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/provider/provider-presets.ts": {
+    "mtime": 1779293361.9127798,
+    "ast_hash": "6eaed1457bcfbf882cb315d6787554a1",
+    "semantic_hash": "6eaed1457bcfbf882cb315d6787554a1"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/provider/provider-preset-adapter.ts": {
+    "mtime": 1779293361.91262,
+    "ast_hash": "5309b496377fc54de37ad2831fd631dc",
+    "semantic_hash": "5309b496377fc54de37ad2831fd631dc"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/provider/types.ts": {
+    "mtime": 1779293361.9136384,
+    "ast_hash": "193f453dcd2d4ffe6817c57641e78630",
+    "semantic_hash": "193f453dcd2d4ffe6817c57641e78630"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/provider/provider-reference-scanner.ts": {
+    "mtime": 1779293361.9129543,
+    "ast_hash": "21d6bc4caf9db854312133140abe6bea",
+    "semantic_hash": "21d6bc4caf9db854312133140abe6bea"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/provider/index.ts": {
+    "mtime": 1779293361.91245,
+    "ast_hash": "66326d337b1a27b5f25ee77bcbf5d1ce",
+    "semantic_hash": "66326d337b1a27b5f25ee77bcbf5d1ce"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/provider/cc-switch-importer.ts": {
+    "mtime": 1779293361.911795,
+    "ast_hash": "36ab77d23d8ed2fbb2b688eb04a0229f",
+    "semantic_hash": "36ab77d23d8ed2fbb2b688eb04a0229f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/provider/__tests__/cc-switch-importer.test.ts": {
+    "mtime": 1779293361.9105937,
+    "ast_hash": "8da174d69cb73a64b775d9458ee1ba4e",
+    "semantic_hash": "8da174d69cb73a64b775d9458ee1ba4e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/provider/__tests__/provider-delete.test.ts": {
+    "mtime": 1779798081.5765676,
+    "ast_hash": "11ebca58171ab2690db053b20fe2abf9",
+    "semantic_hash": "11ebca58171ab2690db053b20fe2abf9"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/provider/__tests__/provider-service.test.ts": {
+    "mtime": 1779798081.5770326,
+    "ast_hash": "7d0031b337c2eb3792f7e9e18e9d0726",
+    "semantic_hash": "7d0031b337c2eb3792f7e9e18e9d0726"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/provider/__tests__/provider-reference-scanner.test.ts": {
+    "mtime": 1779293361.9113114,
+    "ast_hash": "5238085175476d1bba648a688ca062d6",
+    "semantic_hash": "5238085175476d1bba648a688ca062d6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/provider/__tests__/provider-presets.test.ts": {
+    "mtime": 1779293361.9111662,
+    "ast_hash": "4f8f9e80dd53f5f8306bb088ce911059",
+    "semantic_hash": "4f8f9e80dd53f5f8306bb088ce911059"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/provider/__tests__/provider-preset-adapter.test.ts": {
+    "mtime": 1779293361.911025,
+    "ast_hash": "6ec1ee693c6e8f54f68ac75ed694c52c",
+    "semantic_hash": "6ec1ee693c6e8f54f68ac75ed694c52c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/automation-ingress/types.ts": {
+    "mtime": 1779293361.8920078,
+    "ast_hash": "8c416340a9a46a105850d2ad60ef855f",
+    "semantic_hash": "8c416340a9a46a105850d2ad60ef855f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/automation-ingress/automation-ingress-service.ts": {
+    "mtime": 1779798081.5677838,
+    "ast_hash": "e1402439c875151865584e1df8e66a8f",
+    "semantic_hash": "e1402439c875151865584e1df8e66a8f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/automation-ingress/index.ts": {
+    "mtime": 1779293361.8918817,
+    "ast_hash": "abe03d16f9b8a5be7a7584890bf87018",
+    "semantic_hash": "abe03d16f9b8a5be7a7584890bf87018"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/automation-ingress/__tests__/automation-ingress-service.test.ts": {
+    "mtime": 1779798081.567373,
+    "ast_hash": "d499e1a85d20c1882eb2995f49872706",
+    "semantic_hash": "d499e1a85d20c1882eb2995f49872706"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/reply-target/index.ts": {
+    "mtime": 1779293361.9166782,
+    "ast_hash": "2bda7419b7f79189b30e9932f409c002",
+    "semantic_hash": "2bda7419b7f79189b30e9932f409c002"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/reply-target/outbox-service.ts": {
+    "mtime": 1779860253.3257716,
+    "ast_hash": "1280ec97095229706fd9e42e350a67d0",
+    "semantic_hash": "1280ec97095229706fd9e42e350a67d0"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/reply-target/__tests__/outbox-service.test.ts": {
+    "mtime": 1779860253.325291,
+    "ast_hash": "15cd02f6e1ae9317001f8c0bb0d8cbf6",
+    "semantic_hash": "15cd02f6e1ae9317001f8c0bb0d8cbf6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/git-error-utils.test.ts": {
+    "mtime": 1779293361.868739,
+    "ast_hash": "8c442c21adfeebf09cce634e29a71533",
+    "semantic_hash": "8c442c21adfeebf09cce634e29a71533"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/content-icon-image-service.test.ts": {
+    "mtime": 1779410344.230952,
+    "ast_hash": "246f95e28005d858190c2872fd43b824",
+    "semantic_hash": "246f95e28005d858190c2872fd43b824"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/workflow-validator.test.ts": {
+    "mtime": 1779860698.761133,
+    "ast_hash": "3a504809145c1e0c698368ac38a6fdf3",
+    "semantic_hash": "3a504809145c1e0c698368ac38a6fdf3"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/cc-conversation-window-service.test.ts": {
+    "mtime": 1779870768.0867548,
+    "ast_hash": "40b6d0ede6876f4ae69e9b3c677cef46",
+    "semantic_hash": "40b6d0ede6876f4ae69e9b3c677cef46"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/workflow-window-manager.test.ts": {
+    "mtime": 1779777241.7107868,
+    "ast_hash": "8c28b23122fb3eb91f408bac9e767032",
+    "semantic_hash": "8c28b23122fb3eb91f408bac9e767032"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/content-write-service.test.ts": {
+    "mtime": 1779860253.3111665,
+    "ast_hash": "b9a6a6dc0a4a1b6536c6866fdb296baf",
+    "semantic_hash": "b9a6a6dc0a4a1b6536c6866fdb296baf"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/content-skill-source-service.test.ts": {
+    "mtime": 1779798081.566194,
+    "ast_hash": "cb1e8b8d037ff4b694a1a4671e3f46ec",
+    "semantic_hash": "cb1e8b8d037ff4b694a1a4671e3f46ec"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/update-service.test.ts": {
+    "mtime": 1779842280.255732,
+    "ast_hash": "a0c0e520fd915d4df9e32e45e1bd8717",
+    "semantic_hash": "a0c0e520fd915d4df9e32e45e1bd8717"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/editor-scan-service.test.ts": {
+    "mtime": 1779798081.5667589,
+    "ast_hash": "a27ff849358ce0069c029022a9150403",
+    "semantic_hash": "a27ff849358ce0069c029022a9150403"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/content-submission-service.test.ts": {
+    "mtime": 1779860253.309969,
+    "ast_hash": "5a40fa7956f0731d6c0e3dfa7d14391e",
+    "semantic_hash": "5a40fa7956f0731d6c0e3dfa7d14391e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/content-install-service-path-security.test.ts": {
+    "mtime": 1779293361.8652878,
+    "ast_hash": "a37b129a12c604ef25f0257b1634d71b",
+    "semantic_hash": "a37b129a12c604ef25f0257b1634d71b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/content-capability-validator.test.ts": {
+    "mtime": 1779776061.5319905,
+    "ast_hash": "08d0e57c62e7bc9c4daab1380cfe359c",
+    "semantic_hash": "08d0e57c62e7bc9c4daab1380cfe359c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/repository-structure-service.test.ts": {
+    "mtime": 1779778140.556896,
+    "ast_hash": "6dd0ca64cdc5337e23d137b5d65db267",
+    "semantic_hash": "6dd0ca64cdc5337e23d137b5d65db267"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/content-download-service.test.ts": {
+    "mtime": 1779293361.864751,
+    "ast_hash": "9e3506fd76103725d8751d8b5090cafc",
+    "semantic_hash": "9e3506fd76103725d8751d8b5090cafc"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/pending-pushes-service.test.ts": {
+    "mtime": 1779293361.8692265,
+    "ast_hash": "e37e7638c31f4e24fc8e064628a1efea",
+    "semantic_hash": "e37e7638c31f4e24fc8e064628a1efea"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/shell-exec.test.ts": {
+    "mtime": 1779860253.3122509,
+    "ast_hash": "b6e2c5ac15642d7a77c96ac6a0affbd1",
+    "semantic_hash": "b6e2c5ac15642d7a77c96ac6a0affbd1"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/log-store.test.ts": {
+    "mtime": 1779860253.3115177,
+    "ast_hash": "565d28d8da903ebe8cf3d2ecabfbe01d",
+    "semantic_hash": "565d28d8da903ebe8cf3d2ecabfbe01d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/workflow-package-service.test.ts": {
+    "mtime": 1779780314.3246098,
+    "ast_hash": "be00e627ce0fa76d5ff2205646d01bd4",
+    "semantic_hash": "be00e627ce0fa76d5ff2205646d01bd4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/diagnostics-service.test.ts": {
+    "mtime": 1779714497.3401399,
+    "ast_hash": "19575fafe1d6adc5a0f3c1822d5f0025",
+    "semantic_hash": "19575fafe1d6adc5a0f3c1822d5f0025"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/content-install-service-security.test.ts": {
+    "mtime": 1779436374.6760066,
+    "ast_hash": "3d19ac533e9daeb4af4b71a6bfc1635b",
+    "semantic_hash": "3d19ac533e9daeb4af4b71a6bfc1635b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/workflow-service.test.ts": {
+    "mtime": 1779772575.806033,
+    "ast_hash": "17ffb784f8eeeba82301dc679962e436",
+    "semantic_hash": "17ffb784f8eeeba82301dc679962e436"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/editor-copy-service.test.ts": {
+    "mtime": 1779697920.016138,
+    "ast_hash": "17aa4d9914f599616121f01c2435095a",
+    "semantic_hash": "17aa4d9914f599616121f01c2435095a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/git-command.test.ts": {
+    "mtime": 1779798081.5669193,
+    "ast_hash": "556d0596e2bee156a22aa4c7c0274dd1",
+    "semantic_hash": "556d0596e2bee156a22aa4c7c0274dd1"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/install-status-cache-service.test.ts": {
+    "mtime": 1779410344.232769,
+    "ast_hash": "1492da998e95d28cd403b38de2f12bb4",
+    "semantic_hash": "1492da998e95d28cd403b38de2f12bb4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/knowledge-base-source-manager-window-service.test.ts": {
+    "mtime": 1779607033.03787,
+    "ast_hash": "8f418717c0751a26e77721e1cece37c4",
+    "semantic_hash": "8f418717c0751a26e77721e1cece37c4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/workflow-scheduler.test.ts": {
+    "mtime": 1779776353.1401896,
+    "ast_hash": "c92a0de0372530f759eeeea05f35170c",
+    "semantic_hash": "c92a0de0372530f759eeeea05f35170c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/content-history-service.test.ts": {
+    "mtime": 1779776870.9599543,
+    "ast_hash": "a242ec3f65b5a10805532e76a934b63b",
+    "semantic_hash": "a242ec3f65b5a10805532e76a934b63b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/workflow-engine.test.ts": {
+    "mtime": 1779803663.0936763,
+    "ast_hash": "813b60abce35e2959ecbe82a15844f19",
+    "semantic_hash": "813b60abce35e2959ecbe82a15844f19"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/editor-install-status-service.test.ts": {
+    "mtime": 1779410344.2320457,
+    "ast_hash": "9e9d441e4bc8662e5c34f3be2a3128c3",
+    "semantic_hash": "9e9d441e4bc8662e5c34f3be2a3128c3"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/repository-sync-coordinator.test.ts": {
+    "mtime": 1779293361.8696203,
+    "ast_hash": "84d3b014ad43801abcee73104ab9c81c",
+    "semantic_hash": "84d3b014ad43801abcee73104ab9c81c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/user-profile-service-security.test.ts": {
+    "mtime": 1779694092.992409,
+    "ast_hash": "03f9fc6623a48fb4980f2f4d1341232c",
+    "semantic_hash": "03f9fc6623a48fb4980f2f4d1341232c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/run-snapshot-service.test.ts": {
+    "mtime": 1779776188.6049752,
+    "ast_hash": "cc06d88a025a9d7b4290db3cc4d44e72",
+    "semantic_hash": "cc06d88a025a9d7b4290db3cc4d44e72"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/repository-template-service.test.ts": {
+    "mtime": 1779869412.2437341,
+    "ast_hash": "62da33127859e4d1ff3c695239b46652",
+    "semantic_hash": "62da33127859e4d1ff3c695239b46652"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/config-store.test.ts": {
+    "mtime": 1779293361.8643663,
+    "ast_hash": "dfdb7f841a81405385fdd2bfdb7d2b8e",
+    "semantic_hash": "dfdb7f841a81405385fdd2bfdb7d2b8e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/git-paths.test.ts": {
+    "mtime": 1779293361.868829,
+    "ast_hash": "1ab14e0dc2073481020ea4c41eb692e6",
+    "semantic_hash": "1ab14e0dc2073481020ea4c41eb692e6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/config-backup-service.test.ts": {
+    "mtime": 1779860253.3081431,
+    "ast_hash": "ad4d8175d3ff79c9056d63457f416cc1",
+    "semantic_hash": "ad4d8175d3ff79c9056d63457f416cc1"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/error-sanitize.test.ts": {
+    "mtime": 1779293361.8685198,
+    "ast_hash": "ac0f0162e2a24104aee7291f6a548b2b",
+    "semantic_hash": "ac0f0162e2a24104aee7291f6a548b2b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/content-window-service.test.ts": {
+    "mtime": 1779458335.873061,
+    "ast_hash": "363dfa32213f5591c0ca3e45cdf3232e",
+    "semantic_hash": "363dfa32213f5591c0ca3e45cdf3232e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/attachments-pool-service.test.ts": {
+    "mtime": 1779776865.2819088,
+    "ast_hash": "586c8dc35acf6641b584a6fe5d8b6b63",
+    "semantic_hash": "586c8dc35acf6641b584a6fe5d8b6b63"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/config-store-redaction.test.ts": {
+    "mtime": 1779869412.2429724,
+    "ast_hash": "014a28c5b69d3ac1f4f9efbc029c0575",
+    "semantic_hash": "014a28c5b69d3ac1f4f9efbc029c0575"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/workflow-variable-resolver.test.ts": {
+    "mtime": 1779293361.8741972,
+    "ast_hash": "212a594dbdf68b90a155f664077381c6",
+    "semantic_hash": "212a594dbdf68b90a155f664077381c6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/__tests__/cheat-code-state-service.test.ts": {
+    "mtime": 1779877152.4074953,
+    "ast_hash": "f76b58a082f65c17ea2c0d2f02ab4d05",
+    "semantic_hash": "f76b58a082f65c17ea2c0d2f02ab4d05"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/editor-adapters/utils.ts": {
+    "mtime": 1779293361.9037514,
+    "ast_hash": "c267edd74020bf00194cdbb039733d14",
+    "semantic_hash": "c267edd74020bf00194cdbb039733d14"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/editor-adapters/skill-identity.ts": {
+    "mtime": 1779293361.9034505,
+    "ast_hash": "efff37d758d2cd5f17d7b1befaf12094",
+    "semantic_hash": "efff37d758d2cd5f17d7b1befaf12094"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/editor-adapters/types.ts": {
+    "mtime": 1779293361.9036248,
+    "ast_hash": "f6643ae701ac23a50208148c806330dc",
+    "semantic_hash": "f6643ae701ac23a50208148c806330dc"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/editor-adapters/skill-slug.ts": {
+    "mtime": 1779293361.9035423,
+    "ast_hash": "91de088f51488317f7a51d9fdf975964",
+    "semantic_hash": "91de088f51488317f7a51d9fdf975964"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/editor-adapters/index.ts": {
+    "mtime": 1779293361.9031646,
+    "ast_hash": "51429c1060ad10de5cfecbca061cbb5c",
+    "semantic_hash": "51429c1060ad10de5cfecbca061cbb5c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/raw-file-manager.ts": {
+    "mtime": 1779798081.5751987,
+    "ast_hash": "36defc2d51b32408b9d324be9cefa57c",
+    "semantic_hash": "36defc2d51b32408b9d324be9cefa57c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/source-staging.ts": {
+    "mtime": 1779798081.5761793,
+    "ast_hash": "2eb30a1aed7e493ef27e4c82515cde46",
+    "semantic_hash": "2eb30a1aed7e493ef27e4c82515cde46"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/source-scan.ts": {
+    "mtime": 1779860253.3231277,
+    "ast_hash": "6ceac718ada6ec04a6ca843200a04223",
+    "semantic_hash": "6ceac718ada6ec04a6ca843200a04223"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/knowledge-base-service.ts": {
+    "mtime": 1779798081.5743608,
+    "ast_hash": "fa51cddd6e5bdc2d0ce07a98a360183f",
+    "semantic_hash": "fa51cddd6e5bdc2d0ce07a98a360183f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/lint-preflight.ts": {
+    "mtime": 1779860253.3223438,
+    "ast_hash": "4f0c0b0652b2579cd6d7845eda01a2ee",
+    "semantic_hash": "4f0c0b0652b2579cd6d7845eda01a2ee"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/managed-path.ts": {
+    "mtime": 1779607784.235781,
+    "ast_hash": "16f03c8a4ab4dc6d1ac9a14d3664507a",
+    "semantic_hash": "16f03c8a4ab4dc6d1ac9a14d3664507a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/source-manager-window-service.ts": {
+    "mtime": 1779606951.2915196,
+    "ast_hash": "0552a706cb900486e05ea3295c4803fe",
+    "semantic_hash": "0552a706cb900486e05ea3295c4803fe"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/lint-addresses.ts": {
+    "mtime": 1779581287.6758008,
+    "ast_hash": "01445b929dc23b5d1fdb3a85a2180f49",
+    "semantic_hash": "01445b929dc23b5d1fdb3a85a2180f49"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/atomic-write.ts": {
+    "mtime": 1779798081.5736454,
+    "ast_hash": "d5750e6317c7003cd78f1cde29d605e6",
+    "semantic_hash": "d5750e6317c7003cd78f1cde29d605e6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/wiki-snapshot.ts": {
+    "mtime": 1779583827.3705316,
+    "ast_hash": "fa08a1866fd1a6759c21e21f68f82c13",
+    "semantic_hash": "fa08a1866fd1a6759c21e21f68f82c13"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/manifest.ts": {
+    "mtime": 1779798081.574899,
+    "ast_hash": "4a71a7a3113c2bff93065bd30ed14cba",
+    "semantic_hash": "4a71a7a3113c2bff93065bd30ed14cba"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/wiki-page-addresses.ts": {
+    "mtime": 1779576677.7549577,
+    "ast_hash": "afffc0c1c303f85677fe55a6bbdcb754",
+    "semantic_hash": "afffc0c1c303f85677fe55a6bbdcb754"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/index.ts": {
+    "mtime": 1779612329.9521937,
+    "ast_hash": "ab6d112f8f9819c7cc402f63046197ac",
+    "semantic_hash": "ab6d112f8f9819c7cc402f63046197ac"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/hot-cache-state.ts": {
+    "mtime": 1779601610.110031,
+    "ast_hash": "3a8c2c6f5751e186242f92e6a2dfe51a",
+    "semantic_hash": "3a8c2c6f5751e186242f92e6a2dfe51a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/logging.ts": {
+    "mtime": 1779798081.574494,
+    "ast_hash": "1d52d163d3c9afc9e630c54e5efa6722",
+    "semantic_hash": "1d52d163d3c9afc9e630c54e5efa6722"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/manifest-writer.test.ts": {
+    "mtime": 1779798081.5729806,
+    "ast_hash": "75661f9eeaed547d820a4f360fff95cc",
+    "semantic_hash": "75661f9eeaed547d820a4f360fff95cc"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/source-staging.test.ts": {
+    "mtime": 1779798081.5735195,
+    "ast_hash": "f85b427c6aba558ba41c057e4722ddbd",
+    "semantic_hash": "f85b427c6aba558ba41c057e4722ddbd"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/raw-file-manager.test.ts": {
+    "mtime": 1779798081.5731304,
+    "ast_hash": "7315c12de3ec422be2107ea0b4c8f5d0",
+    "semantic_hash": "7315c12de3ec422be2107ea0b4c8f5d0"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/lint-addresses.test.ts": {
+    "mtime": 1779581402.1487358,
+    "ast_hash": "802b3a2fa5c20c5b34d5431b5094637c",
+    "semantic_hash": "802b3a2fa5c20c5b34d5431b5094637c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/source-staging-url-ocr.test.ts": {
+    "mtime": 1779612329.9514208,
+    "ast_hash": "71a99e522392fae491d8d5c1cbeddd7a",
+    "semantic_hash": "71a99e522392fae491d8d5c1cbeddd7a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/dragonscale-boundary-compat.test.ts": {
+    "mtime": 1779704532.564475,
+    "ast_hash": "ebea95da7ae8109469d5d064850902c5",
+    "semantic_hash": "ebea95da7ae8109469d5d064850902c5"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/dragonscale-tiling-report.test.ts": {
+    "mtime": 1779580323.276282,
+    "ast_hash": "1beecd64dbb2a06d0259adf13e0946f9",
+    "semantic_hash": "1beecd64dbb2a06d0259adf13e0946f9"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/knowledge-base-public-api.test.ts": {
+    "mtime": 1779601610.1085136,
+    "ast_hash": "a49c5056c3c8ff87b7c9b86345c69b22",
+    "semantic_hash": "a49c5056c3c8ff87b7c9b86345c69b22"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/dragonscale-boundary-service.test.ts": {
+    "mtime": 1779860253.3195035,
+    "ast_hash": "4fc2b583c9badb197851d3be31aca664",
+    "semantic_hash": "4fc2b583c9badb197851d3be31aca664"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/hot-cache-state.test.ts": {
+    "mtime": 1779601610.1068246,
+    "ast_hash": "8ee63018e3c3148d30c5425421104755",
+    "semantic_hash": "8ee63018e3c3148d30c5425421104755"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/managed-path.test.ts": {
+    "mtime": 1779606412.928827,
+    "ast_hash": "2705fe1c9e9c41fdb04d1e3f48e029d7",
+    "semantic_hash": "2705fe1c9e9c41fdb04d1e3f48e029d7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/knowledge-base-service.test.ts": {
+    "mtime": 1779798081.572289,
+    "ast_hash": "63d41378f0be7c0d8551a9eedc7e3505",
+    "semantic_hash": "63d41378f0be7c0d8551a9eedc7e3505"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/wiki-page-addresses.test.ts": {
+    "mtime": 1779576677.752514,
+    "ast_hash": "e58e6a796b740ba4d642da46a27ede4d",
+    "semantic_hash": "e58e6a796b740ba4d642da46a27ede4d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/lint-preflight.test.ts": {
+    "mtime": 1779860253.320179,
+    "ast_hash": "cd11d93ed015420b56b51385f8cd8ef6",
+    "semantic_hash": "cd11d93ed015420b56b51385f8cd8ef6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/source-staging-image.test.ts": {
+    "mtime": 1779601610.1095657,
+    "ast_hash": "691435ee7feab04f7c82fde2efad974e",
+    "semantic_hash": "691435ee7feab04f7c82fde2efad974e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/dragonscale-tiling-provider.test.ts": {
+    "mtime": 1779580275.9835677,
+    "ast_hash": "4df0e81b4fb64dd0fd584f867acb4485",
+    "semantic_hash": "4df0e81b4fb64dd0fd584f867acb4485"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/atomic-write.test.ts": {
+    "mtime": 1779798081.5717952,
+    "ast_hash": "c80dca4883a3493a1eaf2c671ba8f95c",
+    "semantic_hash": "c80dca4883a3493a1eaf2c671ba8f95c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/dragonscale-tiling-service.test.ts": {
+    "mtime": 1779580323.2760434,
+    "ast_hash": "10443719386c3b38fd78ce879a487358",
+    "semantic_hash": "10443719386c3b38fd78ce879a487358"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/source-scan.test.ts": {
+    "mtime": 1779860253.3209329,
+    "ast_hash": "258edcf8b6908c13e2198dc8b3992040",
+    "semantic_hash": "258edcf8b6908c13e2198dc8b3992040"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/wiki-snapshot.test.ts": {
+    "mtime": 1779584205.2841165,
+    "ast_hash": "e03656bdc33d31fe54d390c6b778055f",
+    "semantic_hash": "e03656bdc33d31fe54d390c6b778055f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/dragonscale-address-service.test.ts": {
+    "mtime": 1779603315.2503915,
+    "ast_hash": "da5129d6242fe281e439ed0e462163cf",
+    "semantic_hash": "da5129d6242fe281e439ed0e462163cf"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/__tests__/source-staging-fixtures.test.ts": {
+    "mtime": 1779714497.3413038,
+    "ast_hash": "d2343e4be4e98d96822a95c07c7f50d9",
+    "semantic_hash": "d2343e4be4e98d96822a95c07c7f50d9"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/dragonscale/boundary-service.ts": {
+    "mtime": 1779860253.3213067,
+    "ast_hash": "2b0655cc65e8dbcf24e5ee5e328b2516",
+    "semantic_hash": "2b0655cc65e8dbcf24e5ee5e328b2516"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/dragonscale/address-service.ts": {
+    "mtime": 1779798081.574107,
+    "ast_hash": "47aab0c984cf0880fe9a7ec672c64f1a",
+    "semantic_hash": "47aab0c984cf0880fe9a7ec672c64f1a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/dragonscale/ollama-embedding-provider.ts": {
+    "mtime": 1779580323.275447,
+    "ast_hash": "f3943aff0d812d46cb83907ef87ee169",
+    "semantic_hash": "f3943aff0d812d46cb83907ef87ee169"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/dragonscale/tiling-types.ts": {
+    "mtime": 1779580128.9705508,
+    "ast_hash": "bb882bbf2dcee4f9f865f54c745a3a4f",
+    "semantic_hash": "bb882bbf2dcee4f9f865f54c745a3a4f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/dragonscale/tiling-service.ts": {
+    "mtime": 1779580128.9711077,
+    "ast_hash": "c82077c158dab8e844b62f784782f720",
+    "semantic_hash": "c82077c158dab8e844b62f784782f720"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/dragonscale/boundary-types.ts": {
+    "mtime": 1779577841.5590641,
+    "ast_hash": "7023dc419d45581d90cc740886a5be5f",
+    "semantic_hash": "7023dc419d45581d90cc740886a5be5f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/knowledge-base/dragonscale/types.ts": {
+    "mtime": 1779551348.210573,
+    "ast_hash": "8968ba37616c30b5eb3b32ade61164f7",
+    "semantic_hash": "8968ba37616c30b5eb3b32ade61164f7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/errors.ts": {
+    "mtime": 1779582492.1239092,
+    "ast_hash": "91766128526cc0a89be4c13af4eca9fe",
+    "semantic_hash": "91766128526cc0a89be4c13af4eca9fe"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/markdown.ts": {
+    "mtime": 1779582492.127242,
+    "ast_hash": "4c022661d38bc156082ab9a9f94c48b6",
+    "semantic_hash": "4c022661d38bc156082ab9a9f94c48b6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/html-to-markdown.ts": {
+    "mtime": 1779582492.1263852,
+    "ast_hash": "03ad253b1ef5b8dbbb4b9070e490d217",
+    "semantic_hash": "03ad253b1ef5b8dbbb4b9070e490d217"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/types.ts": {
+    "mtime": 1779601609.9959426,
+    "ast_hash": "a5ecbbb9b441b9c47390f2833fb94a5b",
+    "semantic_hash": "a5ecbbb9b441b9c47390f2833fb94a5b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/registry.ts": {
+    "mtime": 1779601609.9957154,
+    "ast_hash": "ac505ace11711e6e5a4bb319e9266970",
+    "semantic_hash": "ac505ace11711e6e5a4bb319e9266970"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/index.ts": {
+    "mtime": 1779601609.9946566,
+    "ast_hash": "86fb29b8f42bcf1257eeab50b9652790",
+    "semantic_hash": "86fb29b8f42bcf1257eeab50b9652790"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/service.ts": {
+    "mtime": 1779582492.1280103,
+    "ast_hash": "022e57d5b621d3f71710b58a12fcc978",
+    "semantic_hash": "022e57d5b621d3f71710b58a12fcc978"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/ocr/types.ts": {
+    "mtime": 1779601609.9953396,
+    "ast_hash": "12d4efabff22154f7745ca984dc920ec",
+    "semantic_hash": "12d4efabff22154f7745ca984dc920ec"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/ocr/local-ocr.ts": {
+    "mtime": 1779601609.9950726,
+    "ast_hash": "360b074257ca146b9da28349d6f207ad",
+    "semantic_hash": "360b074257ca146b9da28349d6f207ad"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/__tests__/file-conversion-fixtures.test.ts": {
+    "mtime": 1779631800.0946524,
+    "ast_hash": "1b8d2db4e77dd1c6c35e9d57edeef30f",
+    "semantic_hash": "1b8d2db4e77dd1c6c35e9d57edeef30f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/__tests__/file-conversion-service.test.ts": {
+    "mtime": 1779601609.9931786,
+    "ast_hash": "537605108390c6e51bbb8d9215dcbf52",
+    "semantic_hash": "537605108390c6e51bbb8d9215dcbf52"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/__tests__/markdown.test.ts": {
+    "mtime": 1779582492.123573,
+    "ast_hash": "c6a7425834c28bff8308d9773935bad4",
+    "semantic_hash": "c6a7425834c28bff8308d9773935bad4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/__tests__/file-conversion-errors.test.ts": {
+    "mtime": 1779582492.1207469,
+    "ast_hash": "47c5d0e5ee599e31494f77b72749134c",
+    "semantic_hash": "47c5d0e5ee599e31494f77b72749134c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/__tests__/ocr.test.ts": {
+    "mtime": 1779601609.9936204,
+    "ast_hash": "7117a19322275a07c2e0c4a9966baa16",
+    "semantic_hash": "7117a19322275a07c2e0c4a9966baa16"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/__tests__/fixtures/build-fixtures.ts": {
+    "mtime": 1779582492.1232796,
+    "ast_hash": "066d4fa3cf813dd712fb2b8a901f0dcc",
+    "semantic_hash": "066d4fa3cf813dd712fb2b8a901f0dcc"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/extractors/legacy-office.ts": {
+    "mtime": 1779582492.1247494,
+    "ast_hash": "09664c79692218a29413554197ae028e",
+    "semantic_hash": "09664c79692218a29413554197ae028e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/extractors/pptx.ts": {
+    "mtime": 1779582492.125717,
+    "ast_hash": "5e8b131e3d0ad7272c4d8f2fd7be2c14",
+    "semantic_hash": "5e8b131e3d0ad7272c4d8f2fd7be2c14"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/extractors/image.ts": {
+    "mtime": 1779601609.9940264,
+    "ast_hash": "0b076a41dc5c956babe1d10373f864c7",
+    "semantic_hash": "0b076a41dc5c956babe1d10373f864c7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/extractors/xlsx.ts": {
+    "mtime": 1779582492.1260543,
+    "ast_hash": "e391b1f45dcd44ff6f487af19a8f1685",
+    "semantic_hash": "e391b1f45dcd44ff6f487af19a8f1685"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/extractors/pdf.ts": {
+    "mtime": 1779601609.9943461,
+    "ast_hash": "ccfe57ab396e19f4c1f7cbb30d9f4e66",
+    "semantic_hash": "ccfe57ab396e19f4c1f7cbb30d9f4e66"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/file-conversion/extractors/docx.ts": {
+    "mtime": 1779582492.1243727,
+    "ast_hash": "41a1fdbc0fd5216b4be0cbc2e7f349d2",
+    "semantic_hash": "41a1fdbc0fd5216b4be0cbc2e7f349d2"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/variable-resolver.ts": {
+    "mtime": 1779293361.943715,
+    "ast_hash": "eb8f39e0ebbd1a54ac59a40a738e4f37",
+    "semantic_hash": "eb8f39e0ebbd1a54ac59a40a738e4f37"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/file-conversion-input-service.ts": {
+    "mtime": 1779937854.8340023,
+    "ast_hash": "82b03c4bdf24be34a31ba646339dcd23",
+    "semantic_hash": "82b03c4bdf24be34a31ba646339dcd23"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/workflow-validator.ts": {
+    "mtime": 1779860253.3338082,
+    "ast_hash": "368bc43b2dd9fcfcfc0ac96fc936438c",
+    "semantic_hash": "368bc43b2dd9fcfcfc0ac96fc936438c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/run-snapshot-service.ts": {
+    "mtime": 1779776203.1880128,
+    "ast_hash": "75614495052c75aea7f65d713519ba55",
+    "semantic_hash": "75614495052c75aea7f65d713519ba55"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/run-snapshot-sanitize.ts": {
+    "mtime": 1779772739.1938663,
+    "ast_hash": "19957faa325e3fbbdd5e81e974258384",
+    "semantic_hash": "19957faa325e3fbbdd5e81e974258384"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/workflow-service.ts": {
+    "mtime": 1779772828.5231051,
+    "ast_hash": "f1a984760740ed478eff04ef5f9b8fb5",
+    "semantic_hash": "f1a984760740ed478eff04ef5f9b8fb5"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/workflow-scheduler.ts": {
+    "mtime": 1779806193.7508385,
+    "ast_hash": "a415996b62150cc5351d07f4ecf6b3b5",
+    "semantic_hash": "a415996b62150cc5351d07f4ecf6b3b5"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/file-conversion-output-writer.ts": {
+    "mtime": 1779780314.3258753,
+    "ast_hash": "19d03ed928a467dcb0078f8ef5d14681",
+    "semantic_hash": "19d03ed928a467dcb0078f8ef5d14681"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/workflow-utils.ts": {
+    "mtime": 1779293361.9458394,
+    "ast_hash": "1259d6a19fd988e2fd12c122887745c2",
+    "semantic_hash": "1259d6a19fd988e2fd12c122887745c2"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/workflow-package-service.ts": {
+    "mtime": 1779780314.3272107,
+    "ast_hash": "0318b5cfec287074dccbe6957066984f",
+    "semantic_hash": "0318b5cfec287074dccbe6957066984f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/window-manager.ts": {
+    "mtime": 1779777280.5250735,
+    "ast_hash": "2424542f2bd5a944a2f6bd1f576ccc01",
+    "semantic_hash": "2424542f2bd5a944a2f6bd1f576ccc01"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/workflow-engine.ts": {
+    "mtime": 1779806236.902609,
+    "ast_hash": "b6ce8cc7678b5faf017d8bc4ceea1ecd",
+    "semantic_hash": "b6ce8cc7678b5faf017d8bc4ceea1ecd"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/__tests__/workflow-validator.test.ts": {
+    "mtime": 1779860253.3330207,
+    "ast_hash": "faa13ce05fbf2e466db95c6e8232d4be",
+    "semantic_hash": "faa13ce05fbf2e466db95c6e8232d4be"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/workflow/__tests__/file-conversion-node.test.ts": {
+    "mtime": 1779937854.8337424,
+    "ast_hash": "6b79726bd9ba4b696a3829cc1840a012",
+    "semantic_hash": "6b79726bd9ba4b696a3829cc1840a012"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/side-channel/attachment-policy.ts": {
+    "mtime": 1779694092.9940715,
+    "ast_hash": "f08b4a53c6d1d7559e4122e51290c632",
+    "semantic_hash": "f08b4a53c6d1d7559e4122e51290c632"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/side-channel/side-channel-service.ts": {
+    "mtime": 1779860253.327403,
+    "ast_hash": "5d982c67612f5279c0780d12e03363b4",
+    "semantic_hash": "5d982c67612f5279c0780d12e03363b4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/side-channel/types.ts": {
+    "mtime": 1779860253.3278112,
+    "ast_hash": "ccf2f0b1c9b63e571555df9a62ff1233",
+    "semantic_hash": "ccf2f0b1c9b63e571555df9a62ff1233"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/side-channel/index.ts": {
+    "mtime": 1779293361.9244623,
+    "ast_hash": "01f6b3773b49feaf8d82f0833a6947bd",
+    "semantic_hash": "01f6b3773b49feaf8d82f0833a6947bd"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/side-channel/__tests__/attachment-policy.test.ts": {
+    "mtime": 1779694092.9935215,
+    "ast_hash": "12efbe941892c76840930cd2b49114b0",
+    "semantic_hash": "12efbe941892c76840930cd2b49114b0"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/side-channel/__tests__/side-channel-service.test.ts": {
+    "mtime": 1779860253.326885,
+    "ast_hash": "309c6222f555fe2ead152de90a984f6b",
+    "semantic_hash": "309c6222f555fe2ead152de90a984f6b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/relay/agent-relay-service.ts": {
+    "mtime": 1779860253.3247497,
+    "ast_hash": "e57c57c43b65aff07e139aa638aa6005",
+    "semantic_hash": "e57c57c43b65aff07e139aa638aa6005"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/relay/types.ts": {
+    "mtime": 1779293361.915045,
+    "ast_hash": "c989ba30b130c1f91b294bba49e66a49",
+    "semantic_hash": "c989ba30b130c1f91b294bba49e66a49"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/relay/index.ts": {
+    "mtime": 1779293361.914936,
+    "ast_hash": "765d7c939d9795bde661113582cb21b8",
+    "semantic_hash": "765d7c939d9795bde661113582cb21b8"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/relay/__tests__/agent-relay-service.test.ts": {
+    "mtime": 1779860253.3240552,
+    "ast_hash": "ffb4ae003bf8b263071aa0c79e5c0837",
+    "semantic_hash": "ffb4ae003bf8b263071aa0c79e5c0837"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/governance.ts": {
+    "mtime": 1779293361.8848028,
+    "ast_hash": "690e824ddfe2b92c3231cdbf3066e7e3",
+    "semantic_hash": "690e824ddfe2b92c3231cdbf3066e7e3"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/session-lifecycle.ts": {
+    "mtime": 1779584403.5950449,
+    "ast_hash": "d3a2883a1dd1f8cfe0f790888c941ced",
+    "semantic_hash": "d3a2883a1dd1f8cfe0f790888c941ced"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/preview-progress.ts": {
+    "mtime": 1779342894.7275128,
+    "ast_hash": "9b7b2138aa1fdfb59335107fbfc33dea",
+    "semantic_hash": "9b7b2138aa1fdfb59335107fbfc33dea"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/agent-runtime-service.ts": {
+    "mtime": 1779860253.3147428,
+    "ast_hash": "9e2b6b92c525339bfbbca4a34c328c47",
+    "semantic_hash": "9e2b6b92c525339bfbbca4a34c328c47"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/sdk-event-bridge.ts": {
+    "mtime": 1779806050.865069,
+    "ast_hash": "0b1fa242aa07882298dfb86e0ba4c418",
+    "semantic_hash": "0b1fa242aa07882298dfb86e0ba4c418"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/command-router.ts": {
+    "mtime": 1779697920.0186038,
+    "ast_hash": "b6ef3456a7a69caca62e004c832fff3a",
+    "semantic_hash": "b6ef3456a7a69caca62e004c832fff3a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/project-contributions.ts": {
+    "mtime": 1779601610.1063874,
+    "ast_hash": "fd152588c2e665103a863ffc6012cc82",
+    "semantic_hash": "fd152588c2e665103a863ffc6012cc82"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/types.ts": {
+    "mtime": 1779806057.633706,
+    "ast_hash": "a7d71fc82e7e80cd84cf0938d10917eb",
+    "semantic_hash": "a7d71fc82e7e80cd84cf0938d10917eb"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/session-manager.ts": {
+    "mtime": 1779860253.3160326,
+    "ast_hash": "3bdf51956e214c669057a83299f9b147",
+    "semantic_hash": "3bdf51956e214c669057a83299f9b147"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/permission-sanitize.ts": {
+    "mtime": 1779342880.1879997,
+    "ast_hash": "e85e1bb3b438ca083035ca804464c55e",
+    "semantic_hash": "e85e1bb3b438ca083035ca804464c55e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/references.ts": {
+    "mtime": 1779293361.8859262,
+    "ast_hash": "322cca83a3b1043b2299c81ed329d80c",
+    "semantic_hash": "322cca83a3b1043b2299c81ed329d80c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/index.ts": {
+    "mtime": 1779760648.8760188,
+    "ast_hash": "fd1a868e34f33871e9ca222763082a99",
+    "semantic_hash": "fd1a868e34f33871e9ca222763082a99"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/session-repository.ts": {
+    "mtime": 1779806089.5817392,
+    "ast_hash": "8e26744971c0f9e39a4cad993b09723a",
+    "semantic_hash": "8e26744971c0f9e39a4cad993b09723a"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/conversation-router.ts": {
+    "mtime": 1779860253.3152332,
+    "ast_hash": "ad29284d4ff574c13f860478483a9016",
+    "semantic_hash": "ad29284d4ff574c13f860478483a9016"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/skill-registry.ts": {
+    "mtime": 1779293361.889475,
+    "ast_hash": "f62b2157a91aa97cdbfce166968312d7",
+    "semantic_hash": "f62b2157a91aa97cdbfce166968312d7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/claude-sdk-session.ts": {
+    "mtime": 1779697920.0180337,
+    "ast_hash": "2df028e985da9e9355e8aaacb1d3519b",
+    "semantic_hash": "2df028e985da9e9355e8aaacb1d3519b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/command-registry.ts": {
+    "mtime": 1779549762.766131,
+    "ast_hash": "1573cd3b4dab4ef0a61d3c1cde3d04d7",
+    "semantic_hash": "1573cd3b4dab4ef0a61d3c1cde3d04d7"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/agent-runtime-state.test.ts": {
+    "mtime": 1779293361.8754992,
+    "ast_hash": "c37d641bb66f1ce31e8acf3ed9bad6d6",
+    "semantic_hash": "c37d641bb66f1ce31e8acf3ed9bad6d6"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/session-repository.test.ts": {
+    "mtime": 1779293361.8794796,
+    "ast_hash": "ff5541e3b52b2797483af403c37b63c4",
+    "semantic_hash": "ff5541e3b52b2797483af403c37b63c4"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/session-manager.test.ts": {
+    "mtime": 1779607735.739434,
+    "ast_hash": "35e8452bf781093dd3c52aff4900c19f",
+    "semantic_hash": "35e8452bf781093dd3c52aff4900c19f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/preview-progress.test.ts": {
+    "mtime": 1779343025.4147408,
+    "ast_hash": "93e6553ea4f551b8dbd291868d25cbec",
+    "semantic_hash": "93e6553ea4f551b8dbd291868d25cbec"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/index.test.ts": {
+    "mtime": 1779760648.8756118,
+    "ast_hash": "36af7dec45b5ad32071bcae24f69f039",
+    "semantic_hash": "36af7dec45b5ad32071bcae24f69f039"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/sdk-event-bridge.test.ts": {
+    "mtime": 1779806348.689354,
+    "ast_hash": "a70379c1e3db8c52272fb316e558427e",
+    "semantic_hash": "a70379c1e3db8c52272fb316e558427e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/skill-registry.test.ts": {
+    "mtime": 1779293361.879626,
+    "ast_hash": "77b6dba6bf328e5361ac4aaa0008ec69",
+    "semantic_hash": "77b6dba6bf328e5361ac4aaa0008ec69"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/conversation-router.test.ts": {
+    "mtime": 1779860253.314139,
+    "ast_hash": "380a27acdbc1428293b4349f07b7b944",
+    "semantic_hash": "380a27acdbc1428293b4349f07b7b944"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/references.test.ts": {
+    "mtime": 1779293361.878381,
+    "ast_hash": "c98968b77ca36d501d17e0c05a63ab21",
+    "semantic_hash": "c98968b77ca36d501d17e0c05a63ab21"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/agent-runtime-cancel.test.ts": {
+    "mtime": 1779293361.8749185,
+    "ast_hash": "dfa3daa0b9f3feb03335e91c5f75f8a0",
+    "semantic_hash": "dfa3daa0b9f3feb03335e91c5f75f8a0"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/claude-sdk-session.test.ts": {
+    "mtime": 1779697920.0165346,
+    "ast_hash": "d004af2650af64b2b5b891a8b2acd2b2",
+    "semantic_hash": "d004af2650af64b2b5b891a8b2acd2b2"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/command-registry.test.ts": {
+    "mtime": 1779293361.8763463,
+    "ast_hash": "bef9cd88d510e8c0d7735dce92ef9917",
+    "semantic_hash": "bef9cd88d510e8c0d7735dce92ef9917"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/governance.test.ts": {
+    "mtime": 1779293361.8775518,
+    "ast_hash": "acdfa73e6b34369751ecbe261411f04d",
+    "semantic_hash": "acdfa73e6b34369751ecbe261411f04d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/agent-runtime-service.test.ts": {
+    "mtime": 1779860253.3129773,
+    "ast_hash": "197ecac700649c1113cd668f1b71970c",
+    "semantic_hash": "197ecac700649c1113cd668f1b71970c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/session-lifecycle.test.ts": {
+    "mtime": 1779293361.87867,
+    "ast_hash": "ff6e27c19d370e0e7a10554bd7f10f55",
+    "semantic_hash": "ff6e27c19d370e0e7a10554bd7f10f55"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/agent-runtime/__tests__/command-router.test.ts": {
+    "mtime": 1779504240.7572286,
+    "ast_hash": "34b5f40d379380db34bf7d407ecc3698",
+    "semantic_hash": "34b5f40d379380db34bf7d407ecc3698"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/definitions/generated/main-registry.ts": {
+    "mtime": 1779942384.3149025,
+    "ast_hash": "16d7f8557256b20ec28906c635977460",
+    "semantic_hash": "16d7f8557256b20ec28906c635977460"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/electron/services/definitions/__tests__/agent-runtime-registry.test.ts": {
+    "mtime": 1779293361.9020524,
+    "ast_hash": "0c45722242f49c4c931fce3905b3cc86",
+    "semantic_hash": "0c45722242f49c4c931fce3905b3cc86"
+  }
+}

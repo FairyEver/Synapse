@@ -1,0 +1,23 @@
+{
+  "0": "unit / phase-0.2-integration.test.ts",
+  "1": "unit / api-mcp-capability-surface.test.ts",
+  "2": "unit / phase-0.6-integration.test.ts",
+  "3": "unit / phase-0.3-integration.test.ts",
+  "4": "unit / phase-0.4-integration.test.ts",
+  "5": "unit / phase-0.1-integration.test.ts",
+  "6": "unit / synapse-capabilities.test.ts",
+  "7": "unit / phase-0.5-integration.test.ts",
+  "8": "fixtures / runtime.ts",
+  "9": "unit / database-capability-parity.test.ts",
+  "10": "unit / database-log-list.test.ts",
+  "11": "unit / database-mcp-rpc.test.ts",
+  "12": "unit / database-mcp-tools.test.ts",
+  "13": "unit / database-dry-run.test.ts",
+  "14": "unit / database-sql-read.test.ts",
+  "15": "unit / mcp-scheduler-tools.test.ts",
+  "16": "unit / database-overview.test.ts",
+  "17": "unit / capability-naming.test.ts",
+  "18": "fuzz / placeholder.test.ts",
+  "19": "e2e / placeholder.test.ts",
+  "20": "perf / placeholder.test.ts"
+}

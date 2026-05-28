@@ -9,7 +9,7 @@
       "source_file": "unit/database-sql-read.test.ts",
       "source_location": "L1",
       "id": "unit_database_sql_read_test_ts",
-      "community": 14,
+      "community": 9,
       "norm_label": "database-sql-read.test.ts"
     },
     {
@@ -18,7 +18,7 @@
       "source_file": "unit/database-sql-read.test.ts",
       "source_location": "L6",
       "id": "unit_database_sql_read_test_electronmock",
-      "community": 14,
+      "community": 9,
       "norm_label": "electronmock"
     },
     {
@@ -27,7 +27,7 @@
       "source_file": "unit/database-sql-read.test.ts",
       "source_location": "L52",
       "id": "unit_database_sql_read_test_result",
-      "community": 14,
+      "community": 9,
       "norm_label": "result"
     },
     {
@@ -36,7 +36,7 @@
       "source_file": "unit/database-dry-run.test.ts",
       "source_location": "L1",
       "id": "unit_database_dry_run_test_ts",
-      "community": 13,
+      "community": 8,
       "norm_label": "database-dry-run.test.ts"
     },
     {
@@ -45,7 +45,7 @@
       "source_file": "unit/database-dry-run.test.ts",
       "source_location": "L6",
       "id": "unit_database_dry_run_test_electronmock",
-      "community": 13,
+      "community": 8,
       "norm_label": "electronmock"
     },
     {
@@ -54,7 +54,7 @@
       "source_file": "unit/database-dry-run.test.ts",
       "source_location": "L41",
       "id": "unit_database_dry_run_test_preview",
-      "community": 13,
+      "community": 8,
       "norm_label": "preview"
     },
     {
@@ -63,7 +63,7 @@
       "source_file": "unit/database-capability-parity.test.ts",
       "source_location": "L1",
       "id": "unit_database_capability_parity_test_ts",
-      "community": 9,
+      "community": 4,
       "norm_label": "database-capability-parity.test.ts"
     },
     {
@@ -72,7 +72,7 @@
       "source_file": "unit/database-capability-parity.test.ts",
       "source_location": "L7",
       "id": "unit_database_capability_parity_test_extractdispatcheractions",
-      "community": 9,
+      "community": 4,
       "norm_label": "extractdispatcheractions()"
     },
     {
@@ -81,7 +81,7 @@
       "source_file": "unit/database-capability-parity.test.ts",
       "source_location": "L18",
       "id": "unit_database_capability_parity_test_registryactions",
-      "community": 9,
+      "community": 4,
       "norm_label": "registryactions"
     },
     {
@@ -90,7 +90,7 @@
       "source_file": "unit/database-capability-parity.test.ts",
       "source_location": "L23",
       "id": "unit_database_capability_parity_test_toolnames",
-      "community": 9,
+      "community": 4,
       "norm_label": "toolnames"
     },
     {
@@ -99,7 +99,7 @@
       "source_file": "unit/database-capability-parity.test.ts",
       "source_location": "L24",
       "id": "unit_database_capability_parity_test_mappedtoolnames",
-      "community": 9,
+      "community": 4,
       "norm_label": "mappedtoolnames"
     },
     {
@@ -108,7 +108,7 @@
       "source_file": "unit/database-capability-parity.test.ts",
       "source_location": "L25",
       "id": "unit_database_capability_parity_test_mappedactions",
-      "community": 9,
+      "community": 4,
       "norm_label": "mappedactions"
     },
     {
@@ -117,7 +117,7 @@
       "source_file": "unit/database-capability-parity.test.ts",
       "source_location": "L27",
       "id": "unit_database_capability_parity_test_registrytoolnames",
-      "community": 9,
+      "community": 4,
       "norm_label": "registrytoolnames"
     },
     {
@@ -126,7 +126,7 @@
       "source_file": "unit/capability-naming.test.ts",
       "source_location": "L1",
       "id": "unit_capability_naming_test_ts",
-      "community": 17,
+      "community": 12,
       "norm_label": "capability-naming.test.ts"
     },
     {
@@ -135,7 +135,7 @@
       "source_file": "unit/database-overview.test.ts",
       "source_location": "L1",
       "id": "unit_database_overview_test_ts",
-      "community": 16,
+      "community": 11,
       "norm_label": "database-overview.test.ts"
     },
     {
@@ -144,7 +144,7 @@
       "source_file": "unit/database-overview.test.ts",
       "source_location": "L6",
       "id": "unit_database_overview_test_electronmock",
-      "community": 16,
+      "community": 11,
       "norm_label": "electronmock"
     },
     {
@@ -324,7 +324,7 @@
       "source_file": "unit/database-mcp-tools.test.ts",
       "source_location": "L1",
       "id": "unit_database_mcp_tools_test_ts",
-      "community": 12,
+      "community": 6,
       "norm_label": "database-mcp-tools.test.ts"
     },
     {
@@ -333,7 +333,7 @@
       "source_file": "unit/database-mcp-tools.test.ts",
       "source_location": "L4",
       "id": "unit_database_mcp_tools_test_gettool",
-      "community": 12,
+      "community": 6,
       "norm_label": "gettool()"
     },
     {
@@ -342,7 +342,7 @@
       "source_file": "unit/database-mcp-tools.test.ts",
       "source_location": "L10",
       "id": "unit_database_mcp_tools_test_getpropertydescription",
-      "community": 12,
+      "community": 6,
       "norm_label": "getpropertydescription()"
     },
     {
@@ -351,7 +351,7 @@
       "source_file": "unit/database-mcp-tools.test.ts",
       "source_location": "L27",
       "id": "unit_database_mcp_tools_test_tabledescription",
-      "community": 12,
+      "community": 6,
       "norm_label": "tabledescription"
     },
     {
@@ -360,7 +360,7 @@
       "source_file": "unit/database-mcp-tools.test.ts",
       "source_location": "L51",
       "id": "unit_database_mcp_tools_test_names",
-      "community": 12,
+      "community": 6,
       "norm_label": "names"
     },
     {
@@ -369,7 +369,7 @@
       "source_file": "unit/database-mcp-tools.test.ts",
       "source_location": "L57",
       "id": "unit_database_mcp_tools_test_where",
-      "community": 12,
+      "community": 6,
       "norm_label": "where"
     },
     {
@@ -378,7 +378,7 @@
       "source_file": "unit/phase-0.5-integration.test.ts",
       "source_location": "L1",
       "id": "unit_phase_0_5_integration_test_ts",
-      "community": 7,
+      "community": 0,
       "norm_label": "phase-0.5-integration.test.ts"
     },
     {
@@ -387,7 +387,7 @@
       "source_file": "unit/phase-0.5-integration.test.ts",
       "source_location": "L28",
       "id": "unit_phase_0_5_integration_test_registry",
-      "community": 7,
+      "community": 0,
       "norm_label": "registry"
     },
     {
@@ -396,7 +396,7 @@
       "source_file": "unit/phase-0.5-integration.test.ts",
       "source_location": "L29",
       "id": "unit_phase_0_5_integration_test_container",
-      "community": 7,
+      "community": 0,
       "norm_label": "container"
     },
     {
@@ -405,7 +405,7 @@
       "source_file": "unit/phase-0.5-integration.test.ts",
       "source_location": "L53",
       "id": "unit_phase_0_5_integration_test_eventbus",
-      "community": 7,
+      "community": 0,
       "norm_label": "eventbus"
     },
     {
@@ -414,7 +414,7 @@
       "source_file": "unit/phase-0.5-integration.test.ts",
       "source_location": "L54",
       "id": "unit_phase_0_5_integration_test_datarepo",
-      "community": 7,
+      "community": 0,
       "norm_label": "datarepo"
     },
     {
@@ -423,7 +423,7 @@
       "source_file": "unit/phase-0.5-integration.test.ts",
       "source_location": "L62",
       "id": "unit_phase_0_5_integration_test_runtime",
-      "community": 7,
+      "community": 0,
       "norm_label": "runtime"
     },
     {
@@ -432,7 +432,7 @@
       "source_file": "unit/phase-0.5-integration.test.ts",
       "source_location": "L64",
       "id": "unit_phase_0_5_integration_test_agentservice",
-      "community": 7,
+      "community": 0,
       "norm_label": "agentservice"
     },
     {
@@ -441,7 +441,7 @@
       "source_file": "unit/phase-0.5-integration.test.ts",
       "source_location": "L98",
       "id": "unit_phase_0_5_integration_test_virtualnow",
-      "community": 7,
+      "community": 0,
       "norm_label": "virtualnow"
     },
     {
@@ -450,17 +450,8 @@
       "source_file": "unit/phase-0.5-integration.test.ts",
       "source_location": "L99",
       "id": "unit_phase_0_5_integration_test_reaper",
-      "community": 7,
+      "community": 0,
       "norm_label": "reaper"
-    },
-    {
-      "label": "phase-0.4-integration.test.ts",
-      "file_type": "code",
-      "source_file": "unit/phase-0.4-integration.test.ts",
-      "source_location": "L1",
-      "id": "unit_phase_0_4_integration_test_ts",
-      "community": 4,
-      "norm_label": "phase-0.4-integration.test.ts"
     },
     {
       "label": "fakeWindow()",
@@ -468,7 +459,7 @@
       "source_file": "unit/phase-0.4-integration.test.ts",
       "source_location": "L21",
       "id": "unit_phase_0_4_integration_test_fakewindow",
-      "community": 4,
+      "community": 0,
       "norm_label": "fakewindow()"
     },
     {
@@ -477,7 +468,7 @@
       "source_file": "unit/phase-0.4-integration.test.ts",
       "source_location": "L41",
       "id": "unit_phase_0_4_integration_test_event",
-      "community": 4,
+      "community": 0,
       "norm_label": "event()"
     },
     {
@@ -486,7 +477,7 @@
       "source_file": "unit/phase-0.4-integration.test.ts",
       "source_location": "L56",
       "id": "unit_phase_0_4_integration_test_manager",
-      "community": 4,
+      "community": 0,
       "norm_label": "manager"
     },
     {
@@ -495,7 +486,7 @@
       "source_file": "unit/phase-0.4-integration.test.ts",
       "source_location": "L57",
       "id": "unit_phase_0_4_integration_test_a",
-      "community": 4,
+      "community": 0,
       "norm_label": "a"
     },
     {
@@ -504,7 +495,7 @@
       "source_file": "unit/phase-0.4-integration.test.ts",
       "source_location": "L58",
       "id": "unit_phase_0_4_integration_test_b",
-      "community": 4,
+      "community": 0,
       "norm_label": "b"
     },
     {
@@ -513,7 +504,7 @@
       "source_file": "unit/phase-0.4-integration.test.ts",
       "source_location": "L64",
       "id": "unit_phase_0_4_integration_test_bus",
-      "community": 4,
+      "community": 0,
       "norm_label": "bus"
     },
     {
@@ -522,7 +513,7 @@
       "source_file": "unit/phase-0.4-integration.test.ts",
       "source_location": "L78",
       "id": "unit_phase_0_4_integration_test_proj1window",
-      "community": 4,
+      "community": 0,
       "norm_label": "proj1window"
     },
     {
@@ -531,7 +522,7 @@
       "source_file": "unit/phase-0.4-integration.test.ts",
       "source_location": "L79",
       "id": "unit_phase_0_4_integration_test_proj2window",
-      "community": 4,
+      "community": 0,
       "norm_label": "proj2window"
     },
     {
@@ -540,7 +531,7 @@
       "source_file": "unit/phase-0.4-integration.test.ts",
       "source_location": "L90",
       "id": "unit_phase_0_4_integration_test_broadcaster",
-      "community": 4,
+      "community": 0,
       "norm_label": "broadcaster"
     },
     {
@@ -549,7 +540,7 @@
       "source_file": "unit/phase-0.4-integration.test.ts",
       "source_location": "L116",
       "id": "unit_phase_0_4_integration_test_win",
-      "community": 4,
+      "community": 0,
       "norm_label": "win"
     },
     {
@@ -558,7 +549,7 @@
       "source_file": "unit/phase-0.4-integration.test.ts",
       "source_location": "L132",
       "id": "unit_phase_0_4_integration_test_evt",
-      "community": 4,
+      "community": 0,
       "norm_label": "evt"
     },
     {
@@ -567,7 +558,7 @@
       "source_file": "unit/database-log-list.test.ts",
       "source_location": "L1",
       "id": "unit_database_log_list_test_ts",
-      "community": 10,
+      "community": 7,
       "norm_label": "database-log-list.test.ts"
     },
     {
@@ -576,7 +567,7 @@
       "source_file": "unit/database-log-list.test.ts",
       "source_location": "L7",
       "id": "unit_database_log_list_test_electronmock",
-      "community": 10,
+      "community": 7,
       "norm_label": "electronmock"
     },
     {
@@ -585,7 +576,7 @@
       "source_file": "unit/database-log-list.test.ts",
       "source_location": "L52",
       "id": "unit_database_log_list_test_permissionguard",
-      "community": 10,
+      "community": 7,
       "norm_label": "permissionguard"
     },
     {
@@ -594,17 +585,8 @@
       "source_file": "unit/database-log-list.test.ts",
       "source_location": "L53",
       "id": "unit_database_log_list_test_auditsink",
-      "community": 10,
+      "community": 7,
       "norm_label": "auditsink"
-    },
-    {
-      "label": "permissionGuardMock()",
-      "file_type": "code",
-      "source_file": "unit/database-log-list.test.ts",
-      "source_location": "L156",
-      "id": "unit_database_log_list_test_permissionguardmock",
-      "community": 10,
-      "norm_label": "permissionguardmock()"
     },
     {
       "label": "auditSinkMock()",
@@ -612,17 +594,8 @@
       "source_file": "unit/database-log-list.test.ts",
       "source_location": "L165",
       "id": "unit_database_log_list_test_auditsinkmock",
-      "community": 10,
+      "community": 7,
       "norm_label": "auditsinkmock()"
-    },
-    {
-      "label": "phase-0.6-integration.test.ts",
-      "file_type": "code",
-      "source_file": "unit/phase-0.6-integration.test.ts",
-      "source_location": "L1",
-      "id": "unit_phase_0_6_integration_test_ts",
-      "community": 2,
-      "norm_label": "phase-0.6-integration.test.ts"
     },
     {
       "label": "sink",
@@ -630,7 +603,7 @@
       "source_file": "unit/phase-0.6-integration.test.ts",
       "source_location": "L37",
       "id": "unit_phase_0_6_integration_test_sink",
-      "community": 2,
+      "community": 0,
       "norm_label": "sink"
     },
     {
@@ -639,7 +612,7 @@
       "source_file": "unit/phase-0.6-integration.test.ts",
       "source_location": "L38",
       "id": "unit_phase_0_6_integration_test_logger",
-      "community": 2,
+      "community": 0,
       "norm_label": "logger"
     },
     {
@@ -648,7 +621,7 @@
       "source_file": "unit/phase-0.6-integration.test.ts",
       "source_location": "L39",
       "id": "unit_phase_0_6_integration_test_metrics",
-      "community": 2,
+      "community": 0,
       "norm_label": "metrics"
     },
     {
@@ -657,7 +630,7 @@
       "source_file": "unit/phase-0.6-integration.test.ts",
       "source_location": "L40",
       "id": "unit_phase_0_6_integration_test_health",
-      "community": 2,
+      "community": 0,
       "norm_label": "health"
     },
     {
@@ -666,7 +639,7 @@
       "source_file": "unit/phase-0.6-integration.test.ts",
       "source_location": "L43",
       "id": "unit_phase_0_6_integration_test_agentstarts",
-      "community": 2,
+      "community": 0,
       "norm_label": "agentstarts"
     },
     {
@@ -675,7 +648,7 @@
       "source_file": "unit/phase-0.6-integration.test.ts",
       "source_location": "L47",
       "id": "unit_phase_0_6_integration_test_diag",
-      "community": 2,
+      "community": 0,
       "norm_label": "diag"
     },
     {
@@ -684,7 +657,7 @@
       "source_file": "unit/phase-0.6-integration.test.ts",
       "source_location": "L62",
       "id": "unit_phase_0_6_integration_test_guard",
-      "community": 2,
+      "community": 0,
       "norm_label": "guard"
     },
     {
@@ -693,7 +666,7 @@
       "source_file": "unit/phase-0.6-integration.test.ts",
       "source_location": "L63",
       "id": "unit_phase_0_6_integration_test_audit",
-      "community": 2,
+      "community": 0,
       "norm_label": "audit"
     },
     {
@@ -702,7 +675,7 @@
       "source_file": "unit/phase-0.6-integration.test.ts",
       "source_location": "L82",
       "id": "unit_phase_0_6_integration_test_queue",
-      "community": 2,
+      "community": 0,
       "norm_label": "queue"
     },
     {
@@ -711,7 +684,7 @@
       "source_file": "unit/phase-0.6-integration.test.ts",
       "source_location": "L83",
       "id": "unit_phase_0_6_integration_test_limiter",
-      "community": 2,
+      "community": 0,
       "norm_label": "limiter"
     },
     {
@@ -720,7 +693,7 @@
       "source_file": "unit/phase-0.6-integration.test.ts",
       "source_location": "L85",
       "id": "unit_phase_0_6_integration_test_breaker",
-      "community": 2,
+      "community": 0,
       "norm_label": "breaker"
     },
     {
@@ -729,7 +702,7 @@
       "source_file": "unit/phase-0.6-integration.test.ts",
       "source_location": "L103",
       "id": "unit_phase_0_6_integration_test_registry",
-      "community": 2,
+      "community": 0,
       "norm_label": "registry"
     },
     {
@@ -738,7 +711,7 @@
       "source_file": "unit/phase-0.6-integration.test.ts",
       "source_location": "L105",
       "id": "unit_phase_0_6_integration_test_point",
-      "community": 2,
+      "community": 0,
       "norm_label": "point"
     },
     {
@@ -747,7 +720,7 @@
       "source_file": "unit/mcp-scheduler-tools.test.ts",
       "source_location": "L1",
       "id": "unit_mcp_scheduler_tools_test_ts",
-      "community": 15,
+      "community": 10,
       "norm_label": "mcp-scheduler-tools.test.ts"
     },
     {
@@ -756,7 +729,7 @@
       "source_file": "unit/mcp-scheduler-tools.test.ts",
       "source_location": "L13",
       "id": "unit_mcp_scheduler_tools_test_names",
-      "community": 15,
+      "community": 10,
       "norm_label": "names"
     },
     {
@@ -765,17 +738,8 @@
       "source_file": "unit/mcp-scheduler-tools.test.ts",
       "source_location": "L46",
       "id": "unit_mcp_scheduler_tools_test_executetool",
-      "community": 15,
+      "community": 10,
       "norm_label": "executetool"
-    },
-    {
-      "label": "phase-0.1-integration.test.ts",
-      "file_type": "code",
-      "source_file": "unit/phase-0.1-integration.test.ts",
-      "source_location": "L1",
-      "id": "unit_phase_0_1_integration_test_ts",
-      "community": 5,
-      "norm_label": "phase-0.1-integration.test.ts"
     },
     {
       "label": "stage",
@@ -783,7 +747,7 @@
       "source_file": "unit/phase-0.1-integration.test.ts",
       "source_location": "L20",
       "id": "unit_phase_0_1_integration_test_stage",
-      "community": 5,
+      "community": 0,
       "norm_label": "stage"
     },
     {
@@ -792,7 +756,7 @@
       "source_file": "unit/phase-0.1-integration.test.ts",
       "source_location": "L22",
       "id": "unit_phase_0_1_integration_test_fakedescriptor",
-      "community": 5,
+      "community": 0,
       "norm_label": "fakedescriptor()"
     },
     {
@@ -801,7 +765,7 @@
       "source_file": "unit/phase-0.1-integration.test.ts",
       "source_location": "L48",
       "id": "unit_phase_0_1_integration_test_registry",
-      "community": 5,
+      "community": 0,
       "norm_label": "registry"
     },
     {
@@ -810,7 +774,7 @@
       "source_file": "unit/phase-0.1-integration.test.ts",
       "source_location": "L65",
       "id": "unit_phase_0_1_integration_test_inspected",
-      "community": 5,
+      "community": 0,
       "norm_label": "inspected"
     },
     {
@@ -819,7 +783,7 @@
       "source_file": "unit/phase-0.1-integration.test.ts",
       "source_location": "L72",
       "id": "unit_phase_0_1_integration_test_idx",
-      "community": 5,
+      "community": 0,
       "norm_label": "idx()"
     },
     {
@@ -828,7 +792,7 @@
       "source_file": "unit/phase-0.1-integration.test.ts",
       "source_location": "L80",
       "id": "unit_phase_0_1_integration_test_t0",
-      "community": 5,
+      "community": 0,
       "norm_label": "t0"
     },
     {
@@ -837,7 +801,7 @@
       "source_file": "unit/phase-0.1-integration.test.ts",
       "source_location": "L85",
       "id": "unit_phase_0_1_integration_test_afterstop",
-      "community": 5,
+      "community": 0,
       "norm_label": "afterstop"
     },
     {
@@ -846,7 +810,7 @@
       "source_file": "unit/phase-0.1-integration.test.ts",
       "source_location": "L91",
       "id": "unit_phase_0_1_integration_test_stopidx",
-      "community": 5,
+      "community": 0,
       "norm_label": "stopidx()"
     },
     {
@@ -855,17 +819,8 @@
       "source_file": "unit/phase-0.1-integration.test.ts",
       "source_location": "L111",
       "id": "unit_phase_0_1_integration_test_order",
-      "community": 5,
-      "norm_label": "order"
-    },
-    {
-      "label": "phase-0.2-integration.test.ts",
-      "file_type": "code",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L1",
-      "id": "unit_phase_0_2_integration_test_ts",
       "community": 0,
-      "norm_label": "phase-0.2-integration.test.ts"
+      "norm_label": "order"
     },
     {
       "label": "tempDir()",
@@ -1057,21 +1012,12 @@
       "norm_label": "secretsns2"
     },
     {
-      "label": "phase-0.3-integration.test.ts",
-      "file_type": "code",
-      "source_file": "unit/phase-0.3-integration.test.ts",
-      "source_location": "L1",
-      "id": "unit_phase_0_3_integration_test_ts",
-      "community": 3,
-      "norm_label": "phase-0.3-integration.test.ts"
-    },
-    {
       "label": "ctx",
       "file_type": "code",
       "source_file": "unit/phase-0.3-integration.test.ts",
       "source_location": "L23",
       "id": "unit_phase_0_3_integration_test_ctx",
-      "community": 3,
+      "community": 0,
       "norm_label": "ctx"
     },
     {
@@ -1080,7 +1026,7 @@
       "source_file": "unit/phase-0.3-integration.test.ts",
       "source_location": "L30",
       "id": "unit_phase_0_3_integration_test_fakewindow",
-      "community": 3,
+      "community": 0,
       "norm_label": "fakewindow()"
     },
     {
@@ -1089,7 +1035,7 @@
       "source_file": "unit/phase-0.3-integration.test.ts",
       "source_location": "L49",
       "id": "unit_phase_0_3_integration_test_harness",
-      "community": 3,
+      "community": 0,
       "norm_label": "harness"
     },
     {
@@ -1098,7 +1044,7 @@
       "source_file": "unit/phase-0.3-integration.test.ts",
       "source_location": "L58",
       "id": "unit_phase_0_3_integration_test_manager",
-      "community": 3,
+      "community": 0,
       "norm_label": "manager"
     },
     {
@@ -1107,7 +1053,7 @@
       "source_file": "unit/phase-0.3-integration.test.ts",
       "source_location": "L59",
       "id": "unit_phase_0_3_integration_test_a",
-      "community": 3,
+      "community": 0,
       "norm_label": "a"
     },
     {
@@ -1116,7 +1062,7 @@
       "source_file": "unit/phase-0.3-integration.test.ts",
       "source_location": "L60",
       "id": "unit_phase_0_3_integration_test_b",
-      "community": 3,
+      "community": 0,
       "norm_label": "b"
     },
     {
@@ -1125,7 +1071,7 @@
       "source_file": "unit/phase-0.3-integration.test.ts",
       "source_location": "L65",
       "id": "unit_phase_0_3_integration_test_sent",
-      "community": 3,
+      "community": 0,
       "norm_label": "sent"
     },
     {
@@ -1134,7 +1080,7 @@
       "source_file": "unit/phase-0.3-integration.test.ts",
       "source_location": "L70",
       "id": "unit_phase_0_3_integration_test_reg",
-      "community": 3,
+      "community": 0,
       "norm_label": "reg"
     },
     {
@@ -1143,7 +1089,7 @@
       "source_file": "unit/phase-0.3-integration.test.ts",
       "source_location": "L91",
       "id": "unit_phase_0_3_integration_test_electrondir",
-      "community": 3,
+      "community": 0,
       "norm_label": "electrondir"
     },
     {
@@ -1152,7 +1098,7 @@
       "source_file": "unit/phase-0.3-integration.test.ts",
       "source_location": "L93",
       "id": "unit_phase_0_3_integration_test_violations",
-      "community": 3,
+      "community": 0,
       "norm_label": "violations"
     },
     {
@@ -1161,7 +1107,7 @@
       "source_file": "unit/phase-0.3-integration.test.ts",
       "source_location": "L94",
       "id": "unit_phase_0_3_integration_test_walk",
-      "community": 3,
+      "community": 0,
       "norm_label": "walk()"
     },
     {
@@ -1170,7 +1116,7 @@
       "source_file": "unit/synapse-capabilities.test.ts",
       "source_location": "L1",
       "id": "unit_synapse_capabilities_test_ts",
-      "community": 6,
+      "community": 2,
       "norm_label": "synapse-capabilities.test.ts"
     },
     {
@@ -1179,7 +1125,7 @@
       "source_file": "unit/synapse-capabilities.test.ts",
       "source_location": "L66",
       "id": "unit_synapse_capabilities_test_tools",
-      "community": 6,
+      "community": 2,
       "norm_label": "tools"
     },
     {
@@ -1188,7 +1134,7 @@
       "source_file": "unit/synapse-capabilities.test.ts",
       "source_location": "L74",
       "id": "unit_synapse_capabilities_test_toolnames",
-      "community": 6,
+      "community": 2,
       "norm_label": "toolnames"
     },
     {
@@ -1197,7 +1143,7 @@
       "source_file": "unit/synapse-capabilities.test.ts",
       "source_location": "L126",
       "id": "unit_synapse_capabilities_test_listtool",
-      "community": 6,
+      "community": 2,
       "norm_label": "listtool"
     },
     {
@@ -1206,7 +1152,7 @@
       "source_file": "unit/synapse-capabilities.test.ts",
       "source_location": "L167",
       "id": "unit_synapse_capabilities_test_actions",
-      "community": 6,
+      "community": 2,
       "norm_label": "actions"
     },
     {
@@ -1215,7 +1161,7 @@
       "source_file": "unit/synapse-capabilities.test.ts",
       "source_location": "L193",
       "id": "unit_synapse_capabilities_test_gettool",
-      "community": 6,
+      "community": 2,
       "norm_label": "gettool"
     },
     {
@@ -1224,7 +1170,7 @@
       "source_file": "unit/synapse-capabilities.test.ts",
       "source_location": "L213",
       "id": "unit_synapse_capabilities_test_tool",
-      "community": 6,
+      "community": 2,
       "norm_label": "tool()"
     },
     {
@@ -1233,7 +1179,7 @@
       "source_file": "unit/synapse-capabilities.test.ts",
       "source_location": "L226",
       "id": "unit_synapse_capabilities_test_updatedefinition",
-      "community": 6,
+      "community": 2,
       "norm_label": "updatedefinition"
     },
     {
@@ -1242,7 +1188,7 @@
       "source_file": "unit/synapse-capabilities.test.ts",
       "source_location": "L297",
       "id": "unit_synapse_capabilities_test_create",
-      "community": 6,
+      "community": 2,
       "norm_label": "create"
     },
     {
@@ -1251,7 +1197,7 @@
       "source_file": "unit/synapse-capabilities.test.ts",
       "source_location": "L298",
       "id": "unit_synapse_capabilities_test_update",
-      "community": 6,
+      "community": 2,
       "norm_label": "update"
     },
     {
@@ -1260,7 +1206,7 @@
       "source_file": "unit/database-mcp-rpc.test.ts",
       "source_location": "L1",
       "id": "unit_database_mcp_rpc_test_ts",
-      "community": 11,
+      "community": 5,
       "norm_label": "database-mcp-rpc.test.ts"
     },
     {
@@ -1269,7 +1215,7 @@
       "source_file": "unit/database-mcp-rpc.test.ts",
       "source_location": "L4",
       "id": "unit_database_mcp_rpc_test_identity",
-      "community": 11,
+      "community": 5,
       "norm_label": "identity"
     },
     {
@@ -1278,7 +1224,7 @@
       "source_file": "unit/database-mcp-rpc.test.ts",
       "source_location": "L6",
       "id": "unit_database_mcp_rpc_test_calltool",
-      "community": 11,
+      "community": 5,
       "norm_label": "calltool()"
     },
     {
@@ -1287,7 +1233,7 @@
       "source_file": "unit/database-mcp-rpc.test.ts",
       "source_location": "L54",
       "id": "unit_database_mcp_rpc_test_status",
-      "community": 11,
+      "community": 5,
       "norm_label": "status"
     },
     {
@@ -1296,7 +1242,7 @@
       "source_file": "unit/database-mcp-rpc.test.ts",
       "source_location": "L63",
       "id": "unit_database_mcp_rpc_test_summaries",
-      "community": 11,
+      "community": 5,
       "norm_label": "summaries"
     },
     {
@@ -1305,7 +1251,7 @@
       "source_file": "unit/database-mcp-rpc.test.ts",
       "source_location": "L108",
       "id": "unit_database_mcp_rpc_test_folders",
-      "community": 11,
+      "community": 5,
       "norm_label": "folders"
     },
     {
@@ -1314,7 +1260,7 @@
       "source_file": "fixtures/runtime.ts",
       "source_location": "L1",
       "id": "fixtures_runtime_ts",
-      "community": 8,
+      "community": 3,
       "norm_label": "runtime.ts"
     },
     {
@@ -1323,7 +1269,7 @@
       "source_file": "fixtures/runtime.ts",
       "source_location": "L18",
       "id": "fixtures_runtime_runtimefixture",
-      "community": 8,
+      "community": 3,
       "norm_label": "runtimefixture"
     },
     {
@@ -1332,7 +1278,7 @@
       "source_file": "fixtures/runtime.ts",
       "source_location": "L26",
       "id": "fixtures_runtime_createruntimefixture",
-      "community": 8,
+      "community": 3,
       "norm_label": "createruntimefixture()"
     },
     {
@@ -1341,7 +1287,7 @@
       "source_file": "fixtures/runtime.ts",
       "source_location": "L41",
       "id": "fixtures_runtime_testlogger",
-      "community": 8,
+      "community": 3,
       "norm_label": "testlogger"
     },
     {
@@ -1350,7 +1296,7 @@
       "source_file": "ipc/sample.test.ts",
       "source_location": "L1",
       "id": "ipc_sample_test_ts",
-      "community": 8,
+      "community": 3,
       "norm_label": "sample.test.ts"
     },
     {
@@ -1359,7 +1305,7 @@
       "source_file": "ipc/sample.test.ts",
       "source_location": "L11",
       "id": "ipc_sample_test_fixture",
-      "community": 8,
+      "community": 3,
       "norm_label": "fixture"
     },
     {
@@ -1368,7 +1314,7 @@
       "source_file": "ipc/sample.test.ts",
       "source_location": "L20",
       "id": "ipc_sample_test_eventbus",
-      "community": 8,
+      "community": 3,
       "norm_label": "{ eventbus }"
     },
     {
@@ -1377,7 +1323,7 @@
       "source_file": "ipc/sample.test.ts",
       "source_location": "L21",
       "id": "ipc_sample_test_seen",
-      "community": 8,
+      "community": 3,
       "norm_label": "seen"
     },
     {
@@ -1386,7 +1332,7 @@
       "source_file": "fuzz/placeholder.test.ts",
       "source_location": "L1",
       "id": "fuzz_placeholder_test_ts",
-      "community": 18,
+      "community": 13,
       "norm_label": "placeholder.test.ts"
     },
     {
@@ -1395,7 +1341,7 @@
       "source_file": "e2e/placeholder.test.ts",
       "source_location": "L1",
       "id": "e2e_placeholder_test_ts",
-      "community": 19,
+      "community": 14,
       "norm_label": "placeholder.test.ts"
     },
     {
@@ -1404,7 +1350,7 @@
       "source_file": "perf/placeholder.test.ts",
       "source_location": "L1",
       "id": "perf_placeholder_test_ts",
-      "community": 20,
+      "community": 15,
       "norm_label": "placeholder.test.ts"
     }
   ],
@@ -1763,6 +1709,526 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L85",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_afterstop",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_fakedescriptor",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L72",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_idx",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L65",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_inspected",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L111",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_order",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L99",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_registry",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L20",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_stage",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L91",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_stopidx",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L80",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_t0",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L124",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_auditns",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L210",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_auditns2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L116",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_configns",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L202",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_configns2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L133",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_convns",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L219",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_convns2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L132",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_db",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L218",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_db2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L37",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_fakesafestorage",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L56",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_file",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L195",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_fullsecrets",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L281",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_ns",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L97",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_ns2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L280",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_repo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L201",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_repo2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L141",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_secretsns",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L227",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_secretsns2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L190",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_sharedaudit",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L187",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_sharedsecrets",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L35",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_tempdir",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L58",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_v0",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L59",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_a",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L60",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_b",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L23",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_ctx",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L91",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_electrondir",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L30",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_fakewindow",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L49",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_harness",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L58",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_manager",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L70",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_reg",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L65",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_sent",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L93",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_violations",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L94",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_walk",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L57",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_a",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L58",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_b",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L90",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_broadcaster",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L120",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_bus",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L41",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_event",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L132",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_evt",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L21",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_fakewindow",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L115",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_manager",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L78",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_proj1window",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L79",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_proj2window",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L116",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_win",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
       "source_file": "unit/phase-0.5-integration.test.ts",
       "source_location": "L64",
       "weight": 1.0,
@@ -1843,111 +2309,131 @@
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.4-integration.test.ts",
-      "source_location": "L57",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L43",
       "weight": 1.0,
-      "source": "unit_phase_0_4_integration_test_ts",
-      "target": "unit_phase_0_4_integration_test_a",
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_agentstarts",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.4-integration.test.ts",
-      "source_location": "L58",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L63",
       "weight": 1.0,
-      "source": "unit_phase_0_4_integration_test_ts",
-      "target": "unit_phase_0_4_integration_test_b",
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_audit",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.4-integration.test.ts",
-      "source_location": "L90",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L85",
       "weight": 1.0,
-      "source": "unit_phase_0_4_integration_test_ts",
-      "target": "unit_phase_0_4_integration_test_broadcaster",
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_breaker",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.4-integration.test.ts",
-      "source_location": "L120",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L47",
       "weight": 1.0,
-      "source": "unit_phase_0_4_integration_test_ts",
-      "target": "unit_phase_0_4_integration_test_bus",
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_diag",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.4-integration.test.ts",
-      "source_location": "L41",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L62",
       "weight": 1.0,
-      "source": "unit_phase_0_4_integration_test_ts",
-      "target": "unit_phase_0_4_integration_test_event",
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_guard",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.4-integration.test.ts",
-      "source_location": "L132",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L40",
       "weight": 1.0,
-      "source": "unit_phase_0_4_integration_test_ts",
-      "target": "unit_phase_0_4_integration_test_evt",
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_health",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.4-integration.test.ts",
-      "source_location": "L21",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L83",
       "weight": 1.0,
-      "source": "unit_phase_0_4_integration_test_ts",
-      "target": "unit_phase_0_4_integration_test_fakewindow",
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_limiter",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.4-integration.test.ts",
-      "source_location": "L115",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L38",
       "weight": 1.0,
-      "source": "unit_phase_0_4_integration_test_ts",
-      "target": "unit_phase_0_4_integration_test_manager",
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_logger",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.4-integration.test.ts",
-      "source_location": "L78",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L39",
       "weight": 1.0,
-      "source": "unit_phase_0_4_integration_test_ts",
-      "target": "unit_phase_0_4_integration_test_proj1window",
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_metrics",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.4-integration.test.ts",
-      "source_location": "L79",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L105",
       "weight": 1.0,
-      "source": "unit_phase_0_4_integration_test_ts",
-      "target": "unit_phase_0_4_integration_test_proj2window",
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_point",
       "confidence_score": 1.0
     },
     {
       "relation": "contains",
       "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.4-integration.test.ts",
-      "source_location": "L116",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L82",
       "weight": 1.0,
-      "source": "unit_phase_0_4_integration_test_ts",
-      "target": "unit_phase_0_4_integration_test_win",
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_queue",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L103",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_registry",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L37",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_sink",
       "confidence_score": 1.0
     },
     {
@@ -1984,150 +2470,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "unit/database-log-list.test.ts",
-      "source_location": "L141",
-      "weight": 1.0,
-      "source": "unit_database_log_list_test_ts",
-      "target": "unit_database_log_list_test_permissionguard",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/database-log-list.test.ts",
       "source_location": "L156",
       "weight": 1.0,
       "source": "unit_database_log_list_test_ts",
-      "target": "unit_database_log_list_test_permissionguardmock",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.6-integration.test.ts",
-      "source_location": "L43",
-      "weight": 1.0,
-      "source": "unit_phase_0_6_integration_test_ts",
-      "target": "unit_phase_0_6_integration_test_agentstarts",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.6-integration.test.ts",
-      "source_location": "L63",
-      "weight": 1.0,
-      "source": "unit_phase_0_6_integration_test_ts",
-      "target": "unit_phase_0_6_integration_test_audit",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.6-integration.test.ts",
-      "source_location": "L85",
-      "weight": 1.0,
-      "source": "unit_phase_0_6_integration_test_ts",
-      "target": "unit_phase_0_6_integration_test_breaker",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.6-integration.test.ts",
-      "source_location": "L47",
-      "weight": 1.0,
-      "source": "unit_phase_0_6_integration_test_ts",
-      "target": "unit_phase_0_6_integration_test_diag",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.6-integration.test.ts",
-      "source_location": "L62",
-      "weight": 1.0,
-      "source": "unit_phase_0_6_integration_test_ts",
-      "target": "unit_phase_0_6_integration_test_guard",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.6-integration.test.ts",
-      "source_location": "L40",
-      "weight": 1.0,
-      "source": "unit_phase_0_6_integration_test_ts",
-      "target": "unit_phase_0_6_integration_test_health",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.6-integration.test.ts",
-      "source_location": "L83",
-      "weight": 1.0,
-      "source": "unit_phase_0_6_integration_test_ts",
-      "target": "unit_phase_0_6_integration_test_limiter",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.6-integration.test.ts",
-      "source_location": "L38",
-      "weight": 1.0,
-      "source": "unit_phase_0_6_integration_test_ts",
-      "target": "unit_phase_0_6_integration_test_logger",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.6-integration.test.ts",
-      "source_location": "L39",
-      "weight": 1.0,
-      "source": "unit_phase_0_6_integration_test_ts",
-      "target": "unit_phase_0_6_integration_test_metrics",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.6-integration.test.ts",
-      "source_location": "L105",
-      "weight": 1.0,
-      "source": "unit_phase_0_6_integration_test_ts",
-      "target": "unit_phase_0_6_integration_test_point",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.6-integration.test.ts",
-      "source_location": "L82",
-      "weight": 1.0,
-      "source": "unit_phase_0_6_integration_test_ts",
-      "target": "unit_phase_0_6_integration_test_queue",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.6-integration.test.ts",
-      "source_location": "L103",
-      "weight": 1.0,
-      "source": "unit_phase_0_6_integration_test_ts",
-      "target": "unit_phase_0_6_integration_test_registry",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.6-integration.test.ts",
-      "source_location": "L37",
-      "weight": 1.0,
-      "source": "unit_phase_0_6_integration_test_ts",
-      "target": "unit_phase_0_6_integration_test_sink",
+      "target": "unit_database_log_list_test_permissionguard",
       "confidence_score": 1.0
     },
     {
@@ -2148,416 +2494,6 @@
       "weight": 1.0,
       "source": "unit_mcp_scheduler_tools_test_ts",
       "target": "unit_mcp_scheduler_tools_test_names",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.1-integration.test.ts",
-      "source_location": "L85",
-      "weight": 1.0,
-      "source": "unit_phase_0_1_integration_test_ts",
-      "target": "unit_phase_0_1_integration_test_afterstop",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.1-integration.test.ts",
-      "source_location": "L22",
-      "weight": 1.0,
-      "source": "unit_phase_0_1_integration_test_ts",
-      "target": "unit_phase_0_1_integration_test_fakedescriptor",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.1-integration.test.ts",
-      "source_location": "L72",
-      "weight": 1.0,
-      "source": "unit_phase_0_1_integration_test_ts",
-      "target": "unit_phase_0_1_integration_test_idx",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.1-integration.test.ts",
-      "source_location": "L65",
-      "weight": 1.0,
-      "source": "unit_phase_0_1_integration_test_ts",
-      "target": "unit_phase_0_1_integration_test_inspected",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.1-integration.test.ts",
-      "source_location": "L111",
-      "weight": 1.0,
-      "source": "unit_phase_0_1_integration_test_ts",
-      "target": "unit_phase_0_1_integration_test_order",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.1-integration.test.ts",
-      "source_location": "L99",
-      "weight": 1.0,
-      "source": "unit_phase_0_1_integration_test_ts",
-      "target": "unit_phase_0_1_integration_test_registry",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.1-integration.test.ts",
-      "source_location": "L20",
-      "weight": 1.0,
-      "source": "unit_phase_0_1_integration_test_ts",
-      "target": "unit_phase_0_1_integration_test_stage",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.1-integration.test.ts",
-      "source_location": "L91",
-      "weight": 1.0,
-      "source": "unit_phase_0_1_integration_test_ts",
-      "target": "unit_phase_0_1_integration_test_stopidx",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.1-integration.test.ts",
-      "source_location": "L80",
-      "weight": 1.0,
-      "source": "unit_phase_0_1_integration_test_ts",
-      "target": "unit_phase_0_1_integration_test_t0",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L124",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_auditns",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L210",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_auditns2",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L116",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_configns",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L202",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_configns2",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L133",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_convns",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L219",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_convns2",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L132",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_db",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L218",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_db2",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L37",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_fakesafestorage",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L56",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_file",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L195",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_fullsecrets",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L281",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_ns",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L97",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_ns2",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L280",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_repo",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L201",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_repo2",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L141",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_secretsns",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L227",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_secretsns2",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L190",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_sharedaudit",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L187",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_sharedsecrets",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L35",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_tempdir",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.2-integration.test.ts",
-      "source_location": "L58",
-      "weight": 1.0,
-      "source": "unit_phase_0_2_integration_test_ts",
-      "target": "unit_phase_0_2_integration_test_v0",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.3-integration.test.ts",
-      "source_location": "L59",
-      "weight": 1.0,
-      "source": "unit_phase_0_3_integration_test_ts",
-      "target": "unit_phase_0_3_integration_test_a",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.3-integration.test.ts",
-      "source_location": "L60",
-      "weight": 1.0,
-      "source": "unit_phase_0_3_integration_test_ts",
-      "target": "unit_phase_0_3_integration_test_b",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.3-integration.test.ts",
-      "source_location": "L23",
-      "weight": 1.0,
-      "source": "unit_phase_0_3_integration_test_ts",
-      "target": "unit_phase_0_3_integration_test_ctx",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.3-integration.test.ts",
-      "source_location": "L91",
-      "weight": 1.0,
-      "source": "unit_phase_0_3_integration_test_ts",
-      "target": "unit_phase_0_3_integration_test_electrondir",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.3-integration.test.ts",
-      "source_location": "L30",
-      "weight": 1.0,
-      "source": "unit_phase_0_3_integration_test_ts",
-      "target": "unit_phase_0_3_integration_test_fakewindow",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.3-integration.test.ts",
-      "source_location": "L49",
-      "weight": 1.0,
-      "source": "unit_phase_0_3_integration_test_ts",
-      "target": "unit_phase_0_3_integration_test_harness",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.3-integration.test.ts",
-      "source_location": "L58",
-      "weight": 1.0,
-      "source": "unit_phase_0_3_integration_test_ts",
-      "target": "unit_phase_0_3_integration_test_manager",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.3-integration.test.ts",
-      "source_location": "L70",
-      "weight": 1.0,
-      "source": "unit_phase_0_3_integration_test_ts",
-      "target": "unit_phase_0_3_integration_test_reg",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.3-integration.test.ts",
-      "source_location": "L65",
-      "weight": 1.0,
-      "source": "unit_phase_0_3_integration_test_ts",
-      "target": "unit_phase_0_3_integration_test_sent",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.3-integration.test.ts",
-      "source_location": "L93",
-      "weight": 1.0,
-      "source": "unit_phase_0_3_integration_test_ts",
-      "target": "unit_phase_0_3_integration_test_violations",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "unit/phase-0.3-integration.test.ts",
-      "source_location": "L94",
-      "weight": 1.0,
-      "source": "unit_phase_0_3_integration_test_ts",
-      "target": "unit_phase_0_3_integration_test_walk",
       "confidence_score": 1.0
     },
     {
@@ -2784,5 +2720,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "5202a67619f4e4fc9865e308e524954ce24e5e30"
+  "built_at_commit": "136f0d10f9c7b676f542321420356586e4d616c1"
 }

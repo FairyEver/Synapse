@@ -1,0 +1,2788 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "label": "database-sql-read.test.ts",
+      "file_type": "code",
+      "source_file": "unit/database-sql-read.test.ts",
+      "source_location": "L1",
+      "id": "unit_database_sql_read_test_ts",
+      "community": 14,
+      "norm_label": "database-sql-read.test.ts"
+    },
+    {
+      "label": "electronMock",
+      "file_type": "code",
+      "source_file": "unit/database-sql-read.test.ts",
+      "source_location": "L6",
+      "id": "unit_database_sql_read_test_electronmock",
+      "community": 14,
+      "norm_label": "electronmock"
+    },
+    {
+      "label": "result",
+      "file_type": "code",
+      "source_file": "unit/database-sql-read.test.ts",
+      "source_location": "L52",
+      "id": "unit_database_sql_read_test_result",
+      "community": 14,
+      "norm_label": "result"
+    },
+    {
+      "label": "database-dry-run.test.ts",
+      "file_type": "code",
+      "source_file": "unit/database-dry-run.test.ts",
+      "source_location": "L1",
+      "id": "unit_database_dry_run_test_ts",
+      "community": 13,
+      "norm_label": "database-dry-run.test.ts"
+    },
+    {
+      "label": "electronMock",
+      "file_type": "code",
+      "source_file": "unit/database-dry-run.test.ts",
+      "source_location": "L6",
+      "id": "unit_database_dry_run_test_electronmock",
+      "community": 13,
+      "norm_label": "electronmock"
+    },
+    {
+      "label": "preview",
+      "file_type": "code",
+      "source_file": "unit/database-dry-run.test.ts",
+      "source_location": "L41",
+      "id": "unit_database_dry_run_test_preview",
+      "community": 13,
+      "norm_label": "preview"
+    },
+    {
+      "label": "database-capability-parity.test.ts",
+      "file_type": "code",
+      "source_file": "unit/database-capability-parity.test.ts",
+      "source_location": "L1",
+      "id": "unit_database_capability_parity_test_ts",
+      "community": 9,
+      "norm_label": "database-capability-parity.test.ts"
+    },
+    {
+      "label": "extractDispatcherActions()",
+      "file_type": "code",
+      "source_file": "unit/database-capability-parity.test.ts",
+      "source_location": "L7",
+      "id": "unit_database_capability_parity_test_extractdispatcheractions",
+      "community": 9,
+      "norm_label": "extractdispatcheractions()"
+    },
+    {
+      "label": "registryActions",
+      "file_type": "code",
+      "source_file": "unit/database-capability-parity.test.ts",
+      "source_location": "L18",
+      "id": "unit_database_capability_parity_test_registryactions",
+      "community": 9,
+      "norm_label": "registryactions"
+    },
+    {
+      "label": "toolNames",
+      "file_type": "code",
+      "source_file": "unit/database-capability-parity.test.ts",
+      "source_location": "L23",
+      "id": "unit_database_capability_parity_test_toolnames",
+      "community": 9,
+      "norm_label": "toolnames"
+    },
+    {
+      "label": "mappedToolNames",
+      "file_type": "code",
+      "source_file": "unit/database-capability-parity.test.ts",
+      "source_location": "L24",
+      "id": "unit_database_capability_parity_test_mappedtoolnames",
+      "community": 9,
+      "norm_label": "mappedtoolnames"
+    },
+    {
+      "label": "mappedActions",
+      "file_type": "code",
+      "source_file": "unit/database-capability-parity.test.ts",
+      "source_location": "L25",
+      "id": "unit_database_capability_parity_test_mappedactions",
+      "community": 9,
+      "norm_label": "mappedactions"
+    },
+    {
+      "label": "registryToolNames",
+      "file_type": "code",
+      "source_file": "unit/database-capability-parity.test.ts",
+      "source_location": "L27",
+      "id": "unit_database_capability_parity_test_registrytoolnames",
+      "community": 9,
+      "norm_label": "registrytoolnames"
+    },
+    {
+      "label": "capability-naming.test.ts",
+      "file_type": "code",
+      "source_file": "unit/capability-naming.test.ts",
+      "source_location": "L1",
+      "id": "unit_capability_naming_test_ts",
+      "community": 17,
+      "norm_label": "capability-naming.test.ts"
+    },
+    {
+      "label": "database-overview.test.ts",
+      "file_type": "code",
+      "source_file": "unit/database-overview.test.ts",
+      "source_location": "L1",
+      "id": "unit_database_overview_test_ts",
+      "community": 16,
+      "norm_label": "database-overview.test.ts"
+    },
+    {
+      "label": "electronMock",
+      "file_type": "code",
+      "source_file": "unit/database-overview.test.ts",
+      "source_location": "L6",
+      "id": "unit_database_overview_test_electronmock",
+      "community": 16,
+      "norm_label": "electronmock"
+    },
+    {
+      "label": "api-mcp-capability-surface.test.ts",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L1",
+      "id": "unit_api_mcp_capability_surface_test_ts",
+      "community": 1,
+      "norm_label": "api-mcp-capability-surface.test.ts"
+    },
+    {
+      "label": "repoRoot",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L13",
+      "id": "unit_api_mcp_capability_surface_test_reporoot",
+      "community": 1,
+      "norm_label": "reporoot"
+    },
+    {
+      "label": "allCapabilityIds()",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L15",
+      "id": "unit_api_mcp_capability_surface_test_allcapabilityids",
+      "community": 1,
+      "norm_label": "allcapabilityids()"
+    },
+    {
+      "label": "readRepoFile()",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L19",
+      "id": "unit_api_mcp_capability_surface_test_readrepofile",
+      "community": 1,
+      "norm_label": "readrepofile()"
+    },
+    {
+      "label": "readMarkdownFiles()",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L23",
+      "id": "unit_api_mcp_capability_surface_test_readmarkdownfiles",
+      "community": 1,
+      "norm_label": "readmarkdownfiles()"
+    },
+    {
+      "label": "actionIds",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L41",
+      "id": "unit_api_mcp_capability_surface_test_actionids",
+      "community": 1,
+      "norm_label": "actionids"
+    },
+    {
+      "label": "toolNames",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L42",
+      "id": "unit_api_mcp_capability_surface_test_toolnames",
+      "community": 1,
+      "norm_label": "toolnames"
+    },
+    {
+      "label": "mappedToolNames",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L43",
+      "id": "unit_api_mcp_capability_surface_test_mappedtoolnames",
+      "community": 1,
+      "norm_label": "mappedtoolnames"
+    },
+    {
+      "label": "mappedActionIds",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L44",
+      "id": "unit_api_mcp_capability_surface_test_mappedactionids",
+      "community": 1,
+      "norm_label": "mappedactionids"
+    },
+    {
+      "label": "expectedToolNames",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L45",
+      "id": "unit_api_mcp_capability_surface_test_expectedtoolnames",
+      "community": 1,
+      "norm_label": "expectedtoolnames"
+    },
+    {
+      "label": "dispatchers",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L53",
+      "id": "unit_api_mcp_capability_surface_test_dispatchers",
+      "community": 1,
+      "norm_label": "dispatchers"
+    },
+    {
+      "label": "router",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L62",
+      "id": "unit_api_mcp_capability_surface_test_router",
+      "community": 1,
+      "norm_label": "router"
+    },
+    {
+      "label": "domain",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L74",
+      "id": "unit_api_mcp_capability_surface_test_domain",
+      "community": 1,
+      "norm_label": "domain"
+    },
+    {
+      "label": "packageJson",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L81",
+      "id": "unit_api_mcp_capability_surface_test_packagejson",
+      "community": 1,
+      "norm_label": "packagejson"
+    },
+    {
+      "label": "docsMatrix",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L82",
+      "id": "unit_api_mcp_capability_surface_test_docsmatrix",
+      "community": 1,
+      "norm_label": "docsmatrix"
+    },
+    {
+      "label": "websiteMatrix",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L83",
+      "id": "unit_api_mcp_capability_surface_test_websitematrix",
+      "community": 1,
+      "norm_label": "websitematrix"
+    },
+    {
+      "label": "websiteCapabilities",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L84",
+      "id": "unit_api_mcp_capability_surface_test_websitecapabilities",
+      "community": 1,
+      "norm_label": "websitecapabilities"
+    },
+    {
+      "label": "superpowersDocs",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L93",
+      "id": "unit_api_mcp_capability_surface_test_superpowersdocs",
+      "community": 1,
+      "norm_label": "superpowersdocs"
+    },
+    {
+      "label": "offenders",
+      "file_type": "code",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L100",
+      "id": "unit_api_mcp_capability_surface_test_offenders",
+      "community": 1,
+      "norm_label": "offenders"
+    },
+    {
+      "label": "database-mcp-tools.test.ts",
+      "file_type": "code",
+      "source_file": "unit/database-mcp-tools.test.ts",
+      "source_location": "L1",
+      "id": "unit_database_mcp_tools_test_ts",
+      "community": 12,
+      "norm_label": "database-mcp-tools.test.ts"
+    },
+    {
+      "label": "getTool()",
+      "file_type": "code",
+      "source_file": "unit/database-mcp-tools.test.ts",
+      "source_location": "L4",
+      "id": "unit_database_mcp_tools_test_gettool",
+      "community": 12,
+      "norm_label": "gettool()"
+    },
+    {
+      "label": "getPropertyDescription()",
+      "file_type": "code",
+      "source_file": "unit/database-mcp-tools.test.ts",
+      "source_location": "L10",
+      "id": "unit_database_mcp_tools_test_getpropertydescription",
+      "community": 12,
+      "norm_label": "getpropertydescription()"
+    },
+    {
+      "label": "tableDescription",
+      "file_type": "code",
+      "source_file": "unit/database-mcp-tools.test.ts",
+      "source_location": "L27",
+      "id": "unit_database_mcp_tools_test_tabledescription",
+      "community": 12,
+      "norm_label": "tabledescription"
+    },
+    {
+      "label": "names",
+      "file_type": "code",
+      "source_file": "unit/database-mcp-tools.test.ts",
+      "source_location": "L51",
+      "id": "unit_database_mcp_tools_test_names",
+      "community": 12,
+      "norm_label": "names"
+    },
+    {
+      "label": "where",
+      "file_type": "code",
+      "source_file": "unit/database-mcp-tools.test.ts",
+      "source_location": "L57",
+      "id": "unit_database_mcp_tools_test_where",
+      "community": 12,
+      "norm_label": "where"
+    },
+    {
+      "label": "phase-0.5-integration.test.ts",
+      "file_type": "code",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L1",
+      "id": "unit_phase_0_5_integration_test_ts",
+      "community": 7,
+      "norm_label": "phase-0.5-integration.test.ts"
+    },
+    {
+      "label": "registry",
+      "file_type": "code",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L28",
+      "id": "unit_phase_0_5_integration_test_registry",
+      "community": 7,
+      "norm_label": "registry"
+    },
+    {
+      "label": "container",
+      "file_type": "code",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L29",
+      "id": "unit_phase_0_5_integration_test_container",
+      "community": 7,
+      "norm_label": "container"
+    },
+    {
+      "label": "eventBus",
+      "file_type": "code",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L53",
+      "id": "unit_phase_0_5_integration_test_eventbus",
+      "community": 7,
+      "norm_label": "eventbus"
+    },
+    {
+      "label": "dataRepo",
+      "file_type": "code",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L54",
+      "id": "unit_phase_0_5_integration_test_datarepo",
+      "community": 7,
+      "norm_label": "datarepo"
+    },
+    {
+      "label": "runtime",
+      "file_type": "code",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L62",
+      "id": "unit_phase_0_5_integration_test_runtime",
+      "community": 7,
+      "norm_label": "runtime"
+    },
+    {
+      "label": "agentService",
+      "file_type": "code",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L64",
+      "id": "unit_phase_0_5_integration_test_agentservice",
+      "community": 7,
+      "norm_label": "agentservice"
+    },
+    {
+      "label": "virtualNow",
+      "file_type": "code",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L98",
+      "id": "unit_phase_0_5_integration_test_virtualnow",
+      "community": 7,
+      "norm_label": "virtualnow"
+    },
+    {
+      "label": "reaper",
+      "file_type": "code",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L99",
+      "id": "unit_phase_0_5_integration_test_reaper",
+      "community": 7,
+      "norm_label": "reaper"
+    },
+    {
+      "label": "phase-0.4-integration.test.ts",
+      "file_type": "code",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L1",
+      "id": "unit_phase_0_4_integration_test_ts",
+      "community": 4,
+      "norm_label": "phase-0.4-integration.test.ts"
+    },
+    {
+      "label": "fakeWindow()",
+      "file_type": "code",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L21",
+      "id": "unit_phase_0_4_integration_test_fakewindow",
+      "community": 4,
+      "norm_label": "fakewindow()"
+    },
+    {
+      "label": "event()",
+      "file_type": "code",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L41",
+      "id": "unit_phase_0_4_integration_test_event",
+      "community": 4,
+      "norm_label": "event()"
+    },
+    {
+      "label": "manager",
+      "file_type": "code",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L56",
+      "id": "unit_phase_0_4_integration_test_manager",
+      "community": 4,
+      "norm_label": "manager"
+    },
+    {
+      "label": "a",
+      "file_type": "code",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L57",
+      "id": "unit_phase_0_4_integration_test_a",
+      "community": 4,
+      "norm_label": "a"
+    },
+    {
+      "label": "b",
+      "file_type": "code",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L58",
+      "id": "unit_phase_0_4_integration_test_b",
+      "community": 4,
+      "norm_label": "b"
+    },
+    {
+      "label": "bus",
+      "file_type": "code",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L64",
+      "id": "unit_phase_0_4_integration_test_bus",
+      "community": 4,
+      "norm_label": "bus"
+    },
+    {
+      "label": "proj1Window",
+      "file_type": "code",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L78",
+      "id": "unit_phase_0_4_integration_test_proj1window",
+      "community": 4,
+      "norm_label": "proj1window"
+    },
+    {
+      "label": "proj2Window",
+      "file_type": "code",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L79",
+      "id": "unit_phase_0_4_integration_test_proj2window",
+      "community": 4,
+      "norm_label": "proj2window"
+    },
+    {
+      "label": "broadcaster",
+      "file_type": "code",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L90",
+      "id": "unit_phase_0_4_integration_test_broadcaster",
+      "community": 4,
+      "norm_label": "broadcaster"
+    },
+    {
+      "label": "win",
+      "file_type": "code",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L116",
+      "id": "unit_phase_0_4_integration_test_win",
+      "community": 4,
+      "norm_label": "win"
+    },
+    {
+      "label": "evt",
+      "file_type": "code",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L132",
+      "id": "unit_phase_0_4_integration_test_evt",
+      "community": 4,
+      "norm_label": "evt"
+    },
+    {
+      "label": "database-log-list.test.ts",
+      "file_type": "code",
+      "source_file": "unit/database-log-list.test.ts",
+      "source_location": "L1",
+      "id": "unit_database_log_list_test_ts",
+      "community": 10,
+      "norm_label": "database-log-list.test.ts"
+    },
+    {
+      "label": "electronMock",
+      "file_type": "code",
+      "source_file": "unit/database-log-list.test.ts",
+      "source_location": "L7",
+      "id": "unit_database_log_list_test_electronmock",
+      "community": 10,
+      "norm_label": "electronmock"
+    },
+    {
+      "label": "permissionGuard",
+      "file_type": "code",
+      "source_file": "unit/database-log-list.test.ts",
+      "source_location": "L52",
+      "id": "unit_database_log_list_test_permissionguard",
+      "community": 10,
+      "norm_label": "permissionguard"
+    },
+    {
+      "label": "auditSink",
+      "file_type": "code",
+      "source_file": "unit/database-log-list.test.ts",
+      "source_location": "L53",
+      "id": "unit_database_log_list_test_auditsink",
+      "community": 10,
+      "norm_label": "auditsink"
+    },
+    {
+      "label": "permissionGuardMock()",
+      "file_type": "code",
+      "source_file": "unit/database-log-list.test.ts",
+      "source_location": "L156",
+      "id": "unit_database_log_list_test_permissionguardmock",
+      "community": 10,
+      "norm_label": "permissionguardmock()"
+    },
+    {
+      "label": "auditSinkMock()",
+      "file_type": "code",
+      "source_file": "unit/database-log-list.test.ts",
+      "source_location": "L165",
+      "id": "unit_database_log_list_test_auditsinkmock",
+      "community": 10,
+      "norm_label": "auditsinkmock()"
+    },
+    {
+      "label": "phase-0.6-integration.test.ts",
+      "file_type": "code",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L1",
+      "id": "unit_phase_0_6_integration_test_ts",
+      "community": 2,
+      "norm_label": "phase-0.6-integration.test.ts"
+    },
+    {
+      "label": "sink",
+      "file_type": "code",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L37",
+      "id": "unit_phase_0_6_integration_test_sink",
+      "community": 2,
+      "norm_label": "sink"
+    },
+    {
+      "label": "logger",
+      "file_type": "code",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L38",
+      "id": "unit_phase_0_6_integration_test_logger",
+      "community": 2,
+      "norm_label": "logger"
+    },
+    {
+      "label": "metrics",
+      "file_type": "code",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L39",
+      "id": "unit_phase_0_6_integration_test_metrics",
+      "community": 2,
+      "norm_label": "metrics"
+    },
+    {
+      "label": "health",
+      "file_type": "code",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L40",
+      "id": "unit_phase_0_6_integration_test_health",
+      "community": 2,
+      "norm_label": "health"
+    },
+    {
+      "label": "agentStarts",
+      "file_type": "code",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L43",
+      "id": "unit_phase_0_6_integration_test_agentstarts",
+      "community": 2,
+      "norm_label": "agentstarts"
+    },
+    {
+      "label": "diag",
+      "file_type": "code",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L47",
+      "id": "unit_phase_0_6_integration_test_diag",
+      "community": 2,
+      "norm_label": "diag"
+    },
+    {
+      "label": "guard",
+      "file_type": "code",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L62",
+      "id": "unit_phase_0_6_integration_test_guard",
+      "community": 2,
+      "norm_label": "guard"
+    },
+    {
+      "label": "audit",
+      "file_type": "code",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L63",
+      "id": "unit_phase_0_6_integration_test_audit",
+      "community": 2,
+      "norm_label": "audit"
+    },
+    {
+      "label": "queue",
+      "file_type": "code",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L82",
+      "id": "unit_phase_0_6_integration_test_queue",
+      "community": 2,
+      "norm_label": "queue"
+    },
+    {
+      "label": "limiter",
+      "file_type": "code",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L83",
+      "id": "unit_phase_0_6_integration_test_limiter",
+      "community": 2,
+      "norm_label": "limiter"
+    },
+    {
+      "label": "breaker",
+      "file_type": "code",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L85",
+      "id": "unit_phase_0_6_integration_test_breaker",
+      "community": 2,
+      "norm_label": "breaker"
+    },
+    {
+      "label": "registry",
+      "file_type": "code",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L103",
+      "id": "unit_phase_0_6_integration_test_registry",
+      "community": 2,
+      "norm_label": "registry"
+    },
+    {
+      "label": "point",
+      "file_type": "code",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L105",
+      "id": "unit_phase_0_6_integration_test_point",
+      "community": 2,
+      "norm_label": "point"
+    },
+    {
+      "label": "mcp-scheduler-tools.test.ts",
+      "file_type": "code",
+      "source_file": "unit/mcp-scheduler-tools.test.ts",
+      "source_location": "L1",
+      "id": "unit_mcp_scheduler_tools_test_ts",
+      "community": 15,
+      "norm_label": "mcp-scheduler-tools.test.ts"
+    },
+    {
+      "label": "names",
+      "file_type": "code",
+      "source_file": "unit/mcp-scheduler-tools.test.ts",
+      "source_location": "L13",
+      "id": "unit_mcp_scheduler_tools_test_names",
+      "community": 15,
+      "norm_label": "names"
+    },
+    {
+      "label": "executeTool",
+      "file_type": "code",
+      "source_file": "unit/mcp-scheduler-tools.test.ts",
+      "source_location": "L46",
+      "id": "unit_mcp_scheduler_tools_test_executetool",
+      "community": 15,
+      "norm_label": "executetool"
+    },
+    {
+      "label": "phase-0.1-integration.test.ts",
+      "file_type": "code",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L1",
+      "id": "unit_phase_0_1_integration_test_ts",
+      "community": 5,
+      "norm_label": "phase-0.1-integration.test.ts"
+    },
+    {
+      "label": "stage",
+      "file_type": "code",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L20",
+      "id": "unit_phase_0_1_integration_test_stage",
+      "community": 5,
+      "norm_label": "stage"
+    },
+    {
+      "label": "fakeDescriptor()",
+      "file_type": "code",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L22",
+      "id": "unit_phase_0_1_integration_test_fakedescriptor",
+      "community": 5,
+      "norm_label": "fakedescriptor()"
+    },
+    {
+      "label": "registry",
+      "file_type": "code",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L48",
+      "id": "unit_phase_0_1_integration_test_registry",
+      "community": 5,
+      "norm_label": "registry"
+    },
+    {
+      "label": "inspected",
+      "file_type": "code",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L65",
+      "id": "unit_phase_0_1_integration_test_inspected",
+      "community": 5,
+      "norm_label": "inspected"
+    },
+    {
+      "label": "idx()",
+      "file_type": "code",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L72",
+      "id": "unit_phase_0_1_integration_test_idx",
+      "community": 5,
+      "norm_label": "idx()"
+    },
+    {
+      "label": "t0",
+      "file_type": "code",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L80",
+      "id": "unit_phase_0_1_integration_test_t0",
+      "community": 5,
+      "norm_label": "t0"
+    },
+    {
+      "label": "afterStop",
+      "file_type": "code",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L85",
+      "id": "unit_phase_0_1_integration_test_afterstop",
+      "community": 5,
+      "norm_label": "afterstop"
+    },
+    {
+      "label": "stopIdx()",
+      "file_type": "code",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L91",
+      "id": "unit_phase_0_1_integration_test_stopidx",
+      "community": 5,
+      "norm_label": "stopidx()"
+    },
+    {
+      "label": "order",
+      "file_type": "code",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L111",
+      "id": "unit_phase_0_1_integration_test_order",
+      "community": 5,
+      "norm_label": "order"
+    },
+    {
+      "label": "phase-0.2-integration.test.ts",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L1",
+      "id": "unit_phase_0_2_integration_test_ts",
+      "community": 0,
+      "norm_label": "phase-0.2-integration.test.ts"
+    },
+    {
+      "label": "tempDir()",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L35",
+      "id": "unit_phase_0_2_integration_test_tempdir",
+      "community": 0,
+      "norm_label": "tempdir()"
+    },
+    {
+      "label": "fakeSafeStorage()",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L37",
+      "id": "unit_phase_0_2_integration_test_fakesafestorage",
+      "community": 0,
+      "norm_label": "fakesafestorage()"
+    },
+    {
+      "label": "file",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L56",
+      "id": "unit_phase_0_2_integration_test_file",
+      "community": 0,
+      "norm_label": "file"
+    },
+    {
+      "label": "v0",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L58",
+      "id": "unit_phase_0_2_integration_test_v0",
+      "community": 0,
+      "norm_label": "v0"
+    },
+    {
+      "label": "ns",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L65",
+      "id": "unit_phase_0_2_integration_test_ns",
+      "community": 0,
+      "norm_label": "ns"
+    },
+    {
+      "label": "repo",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L88",
+      "id": "unit_phase_0_2_integration_test_repo",
+      "community": 0,
+      "norm_label": "repo"
+    },
+    {
+      "label": "ns2",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L97",
+      "id": "unit_phase_0_2_integration_test_ns2",
+      "community": 0,
+      "norm_label": "ns2"
+    },
+    {
+      "label": "configNs",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L116",
+      "id": "unit_phase_0_2_integration_test_configns",
+      "community": 0,
+      "norm_label": "configns"
+    },
+    {
+      "label": "auditNs",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L124",
+      "id": "unit_phase_0_2_integration_test_auditns",
+      "community": 0,
+      "norm_label": "auditns"
+    },
+    {
+      "label": "db",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L132",
+      "id": "unit_phase_0_2_integration_test_db",
+      "community": 0,
+      "norm_label": "db"
+    },
+    {
+      "label": "convNs",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L133",
+      "id": "unit_phase_0_2_integration_test_convns",
+      "community": 0,
+      "norm_label": "convns"
+    },
+    {
+      "label": "secretsNs",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L141",
+      "id": "unit_phase_0_2_integration_test_secretsns",
+      "community": 0,
+      "norm_label": "secretsns"
+    },
+    {
+      "label": "sharedSecrets",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L187",
+      "id": "unit_phase_0_2_integration_test_sharedsecrets",
+      "community": 0,
+      "norm_label": "sharedsecrets"
+    },
+    {
+      "label": "sharedAudit",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L190",
+      "id": "unit_phase_0_2_integration_test_sharedaudit",
+      "community": 0,
+      "norm_label": "sharedaudit"
+    },
+    {
+      "label": "fullSecrets",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L195",
+      "id": "unit_phase_0_2_integration_test_fullsecrets",
+      "community": 0,
+      "norm_label": "fullsecrets"
+    },
+    {
+      "label": "repo2",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L201",
+      "id": "unit_phase_0_2_integration_test_repo2",
+      "community": 0,
+      "norm_label": "repo2"
+    },
+    {
+      "label": "configNs2",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L202",
+      "id": "unit_phase_0_2_integration_test_configns2",
+      "community": 0,
+      "norm_label": "configns2"
+    },
+    {
+      "label": "auditNs2",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L210",
+      "id": "unit_phase_0_2_integration_test_auditns2",
+      "community": 0,
+      "norm_label": "auditns2"
+    },
+    {
+      "label": "db2",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L218",
+      "id": "unit_phase_0_2_integration_test_db2",
+      "community": 0,
+      "norm_label": "db2"
+    },
+    {
+      "label": "convNs2",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L219",
+      "id": "unit_phase_0_2_integration_test_convns2",
+      "community": 0,
+      "norm_label": "convns2"
+    },
+    {
+      "label": "secretsNs2",
+      "file_type": "code",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L227",
+      "id": "unit_phase_0_2_integration_test_secretsns2",
+      "community": 0,
+      "norm_label": "secretsns2"
+    },
+    {
+      "label": "phase-0.3-integration.test.ts",
+      "file_type": "code",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L1",
+      "id": "unit_phase_0_3_integration_test_ts",
+      "community": 3,
+      "norm_label": "phase-0.3-integration.test.ts"
+    },
+    {
+      "label": "ctx",
+      "file_type": "code",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L23",
+      "id": "unit_phase_0_3_integration_test_ctx",
+      "community": 3,
+      "norm_label": "ctx"
+    },
+    {
+      "label": "fakeWindow()",
+      "file_type": "code",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L30",
+      "id": "unit_phase_0_3_integration_test_fakewindow",
+      "community": 3,
+      "norm_label": "fakewindow()"
+    },
+    {
+      "label": "harness",
+      "file_type": "code",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L49",
+      "id": "unit_phase_0_3_integration_test_harness",
+      "community": 3,
+      "norm_label": "harness"
+    },
+    {
+      "label": "manager",
+      "file_type": "code",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L58",
+      "id": "unit_phase_0_3_integration_test_manager",
+      "community": 3,
+      "norm_label": "manager"
+    },
+    {
+      "label": "a",
+      "file_type": "code",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L59",
+      "id": "unit_phase_0_3_integration_test_a",
+      "community": 3,
+      "norm_label": "a"
+    },
+    {
+      "label": "b",
+      "file_type": "code",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L60",
+      "id": "unit_phase_0_3_integration_test_b",
+      "community": 3,
+      "norm_label": "b"
+    },
+    {
+      "label": "sent",
+      "file_type": "code",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L65",
+      "id": "unit_phase_0_3_integration_test_sent",
+      "community": 3,
+      "norm_label": "sent"
+    },
+    {
+      "label": "reg",
+      "file_type": "code",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L70",
+      "id": "unit_phase_0_3_integration_test_reg",
+      "community": 3,
+      "norm_label": "reg"
+    },
+    {
+      "label": "electronDir",
+      "file_type": "code",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L91",
+      "id": "unit_phase_0_3_integration_test_electrondir",
+      "community": 3,
+      "norm_label": "electrondir"
+    },
+    {
+      "label": "violations",
+      "file_type": "code",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L93",
+      "id": "unit_phase_0_3_integration_test_violations",
+      "community": 3,
+      "norm_label": "violations"
+    },
+    {
+      "label": "walk()",
+      "file_type": "code",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L94",
+      "id": "unit_phase_0_3_integration_test_walk",
+      "community": 3,
+      "norm_label": "walk()"
+    },
+    {
+      "label": "synapse-capabilities.test.ts",
+      "file_type": "code",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L1",
+      "id": "unit_synapse_capabilities_test_ts",
+      "community": 6,
+      "norm_label": "synapse-capabilities.test.ts"
+    },
+    {
+      "label": "tools",
+      "file_type": "code",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L66",
+      "id": "unit_synapse_capabilities_test_tools",
+      "community": 6,
+      "norm_label": "tools"
+    },
+    {
+      "label": "toolNames",
+      "file_type": "code",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L74",
+      "id": "unit_synapse_capabilities_test_toolnames",
+      "community": 6,
+      "norm_label": "toolnames"
+    },
+    {
+      "label": "listTool",
+      "file_type": "code",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L126",
+      "id": "unit_synapse_capabilities_test_listtool",
+      "community": 6,
+      "norm_label": "listtool"
+    },
+    {
+      "label": "actions",
+      "file_type": "code",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L167",
+      "id": "unit_synapse_capabilities_test_actions",
+      "community": 6,
+      "norm_label": "actions"
+    },
+    {
+      "label": "getTool",
+      "file_type": "code",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L193",
+      "id": "unit_synapse_capabilities_test_gettool",
+      "community": 6,
+      "norm_label": "gettool"
+    },
+    {
+      "label": "tool()",
+      "file_type": "code",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L213",
+      "id": "unit_synapse_capabilities_test_tool",
+      "community": 6,
+      "norm_label": "tool()"
+    },
+    {
+      "label": "updateDefinition",
+      "file_type": "code",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L226",
+      "id": "unit_synapse_capabilities_test_updatedefinition",
+      "community": 6,
+      "norm_label": "updatedefinition"
+    },
+    {
+      "label": "create",
+      "file_type": "code",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L297",
+      "id": "unit_synapse_capabilities_test_create",
+      "community": 6,
+      "norm_label": "create"
+    },
+    {
+      "label": "update",
+      "file_type": "code",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L298",
+      "id": "unit_synapse_capabilities_test_update",
+      "community": 6,
+      "norm_label": "update"
+    },
+    {
+      "label": "database-mcp-rpc.test.ts",
+      "file_type": "code",
+      "source_file": "unit/database-mcp-rpc.test.ts",
+      "source_location": "L1",
+      "id": "unit_database_mcp_rpc_test_ts",
+      "community": 11,
+      "norm_label": "database-mcp-rpc.test.ts"
+    },
+    {
+      "label": "identity",
+      "file_type": "code",
+      "source_file": "unit/database-mcp-rpc.test.ts",
+      "source_location": "L4",
+      "id": "unit_database_mcp_rpc_test_identity",
+      "community": 11,
+      "norm_label": "identity"
+    },
+    {
+      "label": "callTool()",
+      "file_type": "code",
+      "source_file": "unit/database-mcp-rpc.test.ts",
+      "source_location": "L6",
+      "id": "unit_database_mcp_rpc_test_calltool",
+      "community": 11,
+      "norm_label": "calltool()"
+    },
+    {
+      "label": "status",
+      "file_type": "code",
+      "source_file": "unit/database-mcp-rpc.test.ts",
+      "source_location": "L54",
+      "id": "unit_database_mcp_rpc_test_status",
+      "community": 11,
+      "norm_label": "status"
+    },
+    {
+      "label": "summaries",
+      "file_type": "code",
+      "source_file": "unit/database-mcp-rpc.test.ts",
+      "source_location": "L63",
+      "id": "unit_database_mcp_rpc_test_summaries",
+      "community": 11,
+      "norm_label": "summaries"
+    },
+    {
+      "label": "folders",
+      "file_type": "code",
+      "source_file": "unit/database-mcp-rpc.test.ts",
+      "source_location": "L108",
+      "id": "unit_database_mcp_rpc_test_folders",
+      "community": 11,
+      "norm_label": "folders"
+    },
+    {
+      "label": "runtime.ts",
+      "file_type": "code",
+      "source_file": "fixtures/runtime.ts",
+      "source_location": "L1",
+      "id": "fixtures_runtime_ts",
+      "community": 8,
+      "norm_label": "runtime.ts"
+    },
+    {
+      "label": "RuntimeFixture",
+      "file_type": "code",
+      "source_file": "fixtures/runtime.ts",
+      "source_location": "L18",
+      "id": "fixtures_runtime_runtimefixture",
+      "community": 8,
+      "norm_label": "runtimefixture"
+    },
+    {
+      "label": "createRuntimeFixture()",
+      "file_type": "code",
+      "source_file": "fixtures/runtime.ts",
+      "source_location": "L26",
+      "id": "fixtures_runtime_createruntimefixture",
+      "community": 8,
+      "norm_label": "createruntimefixture()"
+    },
+    {
+      "label": "testLogger",
+      "file_type": "code",
+      "source_file": "fixtures/runtime.ts",
+      "source_location": "L41",
+      "id": "fixtures_runtime_testlogger",
+      "community": 8,
+      "norm_label": "testlogger"
+    },
+    {
+      "label": "sample.test.ts",
+      "file_type": "code",
+      "source_file": "ipc/sample.test.ts",
+      "source_location": "L1",
+      "id": "ipc_sample_test_ts",
+      "community": 8,
+      "norm_label": "sample.test.ts"
+    },
+    {
+      "label": "fixture",
+      "file_type": "code",
+      "source_file": "ipc/sample.test.ts",
+      "source_location": "L11",
+      "id": "ipc_sample_test_fixture",
+      "community": 8,
+      "norm_label": "fixture"
+    },
+    {
+      "label": "{ eventBus }",
+      "file_type": "code",
+      "source_file": "ipc/sample.test.ts",
+      "source_location": "L20",
+      "id": "ipc_sample_test_eventbus",
+      "community": 8,
+      "norm_label": "{ eventbus }"
+    },
+    {
+      "label": "seen",
+      "file_type": "code",
+      "source_file": "ipc/sample.test.ts",
+      "source_location": "L21",
+      "id": "ipc_sample_test_seen",
+      "community": 8,
+      "norm_label": "seen"
+    },
+    {
+      "label": "placeholder.test.ts",
+      "file_type": "code",
+      "source_file": "fuzz/placeholder.test.ts",
+      "source_location": "L1",
+      "id": "fuzz_placeholder_test_ts",
+      "community": 18,
+      "norm_label": "placeholder.test.ts"
+    },
+    {
+      "label": "placeholder.test.ts",
+      "file_type": "code",
+      "source_file": "e2e/placeholder.test.ts",
+      "source_location": "L1",
+      "id": "e2e_placeholder_test_ts",
+      "community": 19,
+      "norm_label": "placeholder.test.ts"
+    },
+    {
+      "label": "placeholder.test.ts",
+      "file_type": "code",
+      "source_file": "perf/placeholder.test.ts",
+      "source_location": "L1",
+      "id": "perf_placeholder_test_ts",
+      "community": 20,
+      "norm_label": "placeholder.test.ts"
+    }
+  ],
+  "links": [
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-sql-read.test.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "unit_database_sql_read_test_ts",
+      "target": "unit_database_sql_read_test_electronmock",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-sql-read.test.ts",
+      "source_location": "L52",
+      "weight": 1.0,
+      "source": "unit_database_sql_read_test_ts",
+      "target": "unit_database_sql_read_test_result",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-dry-run.test.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "unit_database_dry_run_test_ts",
+      "target": "unit_database_dry_run_test_electronmock",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-dry-run.test.ts",
+      "source_location": "L48",
+      "weight": 1.0,
+      "source": "unit_database_dry_run_test_ts",
+      "target": "unit_database_dry_run_test_preview",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-capability-parity.test.ts",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "unit_database_capability_parity_test_ts",
+      "target": "unit_database_capability_parity_test_extractdispatcheractions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-capability-parity.test.ts",
+      "source_location": "L25",
+      "weight": 1.0,
+      "source": "unit_database_capability_parity_test_ts",
+      "target": "unit_database_capability_parity_test_mappedactions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-capability-parity.test.ts",
+      "source_location": "L24",
+      "weight": 1.0,
+      "source": "unit_database_capability_parity_test_ts",
+      "target": "unit_database_capability_parity_test_mappedtoolnames",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-capability-parity.test.ts",
+      "source_location": "L26",
+      "weight": 1.0,
+      "source": "unit_database_capability_parity_test_ts",
+      "target": "unit_database_capability_parity_test_registryactions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-capability-parity.test.ts",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "unit_database_capability_parity_test_ts",
+      "target": "unit_database_capability_parity_test_registrytoolnames",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-capability-parity.test.ts",
+      "source_location": "L23",
+      "weight": 1.0,
+      "source": "unit_database_capability_parity_test_ts",
+      "target": "unit_database_capability_parity_test_toolnames",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-overview.test.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "unit_database_overview_test_ts",
+      "target": "unit_database_overview_test_electronmock",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L41",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_actionids",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L15",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_allcapabilityids",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L53",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_dispatchers",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L82",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_docsmatrix",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L74",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_domain",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L45",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_expectedtoolnames",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L44",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_mappedactionids",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L43",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_mappedtoolnames",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L100",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_offenders",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L81",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_packagejson",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L23",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_readmarkdownfiles",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L19",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_readrepofile",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L13",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_reporoot",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L62",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_router",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L93",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_superpowersdocs",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L42",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_toolnames",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L84",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_websitecapabilities",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/api-mcp-capability-surface.test.ts",
+      "source_location": "L83",
+      "weight": 1.0,
+      "source": "unit_api_mcp_capability_surface_test_ts",
+      "target": "unit_api_mcp_capability_surface_test_websitematrix",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-mcp-tools.test.ts",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "unit_database_mcp_tools_test_ts",
+      "target": "unit_database_mcp_tools_test_getpropertydescription",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-mcp-tools.test.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "unit_database_mcp_tools_test_ts",
+      "target": "unit_database_mcp_tools_test_gettool",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-mcp-tools.test.ts",
+      "source_location": "L51",
+      "weight": 1.0,
+      "source": "unit_database_mcp_tools_test_ts",
+      "target": "unit_database_mcp_tools_test_names",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-mcp-tools.test.ts",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "unit_database_mcp_tools_test_ts",
+      "target": "unit_database_mcp_tools_test_tabledescription",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-mcp-tools.test.ts",
+      "source_location": "L57",
+      "weight": 1.0,
+      "source": "unit_database_mcp_tools_test_ts",
+      "target": "unit_database_mcp_tools_test_where",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-mcp-tools.test.ts",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "unit_database_mcp_tools_test_getpropertydescription",
+      "target": "unit_database_mcp_tools_test_gettool",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L64",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_5_integration_test_agentservice",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L92",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_5_integration_test_container",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L54",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_5_integration_test_datarepo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L53",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_5_integration_test_eventbus",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L99",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_5_integration_test_reaper",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L91",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_5_integration_test_registry",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L62",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_5_integration_test_runtime",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.5-integration.test.ts",
+      "source_location": "L98",
+      "weight": 1.0,
+      "source": "unit_phase_0_5_integration_test_ts",
+      "target": "unit_phase_0_5_integration_test_virtualnow",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L57",
+      "weight": 1.0,
+      "source": "unit_phase_0_4_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_a",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L58",
+      "weight": 1.0,
+      "source": "unit_phase_0_4_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_b",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L90",
+      "weight": 1.0,
+      "source": "unit_phase_0_4_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_broadcaster",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L120",
+      "weight": 1.0,
+      "source": "unit_phase_0_4_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_bus",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L41",
+      "weight": 1.0,
+      "source": "unit_phase_0_4_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_event",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L132",
+      "weight": 1.0,
+      "source": "unit_phase_0_4_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_evt",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L21",
+      "weight": 1.0,
+      "source": "unit_phase_0_4_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_fakewindow",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L115",
+      "weight": 1.0,
+      "source": "unit_phase_0_4_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_manager",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L78",
+      "weight": 1.0,
+      "source": "unit_phase_0_4_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_proj1window",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L79",
+      "weight": 1.0,
+      "source": "unit_phase_0_4_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_proj2window",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.4-integration.test.ts",
+      "source_location": "L116",
+      "weight": 1.0,
+      "source": "unit_phase_0_4_integration_test_ts",
+      "target": "unit_phase_0_4_integration_test_win",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-log-list.test.ts",
+      "source_location": "L142",
+      "weight": 1.0,
+      "source": "unit_database_log_list_test_ts",
+      "target": "unit_database_log_list_test_auditsink",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-log-list.test.ts",
+      "source_location": "L165",
+      "weight": 1.0,
+      "source": "unit_database_log_list_test_ts",
+      "target": "unit_database_log_list_test_auditsinkmock",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-log-list.test.ts",
+      "source_location": "L7",
+      "weight": 1.0,
+      "source": "unit_database_log_list_test_ts",
+      "target": "unit_database_log_list_test_electronmock",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-log-list.test.ts",
+      "source_location": "L141",
+      "weight": 1.0,
+      "source": "unit_database_log_list_test_ts",
+      "target": "unit_database_log_list_test_permissionguard",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-log-list.test.ts",
+      "source_location": "L156",
+      "weight": 1.0,
+      "source": "unit_database_log_list_test_ts",
+      "target": "unit_database_log_list_test_permissionguardmock",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L43",
+      "weight": 1.0,
+      "source": "unit_phase_0_6_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_agentstarts",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L63",
+      "weight": 1.0,
+      "source": "unit_phase_0_6_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_audit",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L85",
+      "weight": 1.0,
+      "source": "unit_phase_0_6_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_breaker",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L47",
+      "weight": 1.0,
+      "source": "unit_phase_0_6_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_diag",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L62",
+      "weight": 1.0,
+      "source": "unit_phase_0_6_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_guard",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L40",
+      "weight": 1.0,
+      "source": "unit_phase_0_6_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_health",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L83",
+      "weight": 1.0,
+      "source": "unit_phase_0_6_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_limiter",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L38",
+      "weight": 1.0,
+      "source": "unit_phase_0_6_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_logger",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L39",
+      "weight": 1.0,
+      "source": "unit_phase_0_6_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_metrics",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L105",
+      "weight": 1.0,
+      "source": "unit_phase_0_6_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_point",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L82",
+      "weight": 1.0,
+      "source": "unit_phase_0_6_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_queue",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L103",
+      "weight": 1.0,
+      "source": "unit_phase_0_6_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_registry",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.6-integration.test.ts",
+      "source_location": "L37",
+      "weight": 1.0,
+      "source": "unit_phase_0_6_integration_test_ts",
+      "target": "unit_phase_0_6_integration_test_sink",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/mcp-scheduler-tools.test.ts",
+      "source_location": "L72",
+      "weight": 1.0,
+      "source": "unit_mcp_scheduler_tools_test_ts",
+      "target": "unit_mcp_scheduler_tools_test_executetool",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/mcp-scheduler-tools.test.ts",
+      "source_location": "L24",
+      "weight": 1.0,
+      "source": "unit_mcp_scheduler_tools_test_ts",
+      "target": "unit_mcp_scheduler_tools_test_names",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L85",
+      "weight": 1.0,
+      "source": "unit_phase_0_1_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_afterstop",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "unit_phase_0_1_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_fakedescriptor",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L72",
+      "weight": 1.0,
+      "source": "unit_phase_0_1_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_idx",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L65",
+      "weight": 1.0,
+      "source": "unit_phase_0_1_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_inspected",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L111",
+      "weight": 1.0,
+      "source": "unit_phase_0_1_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_order",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L99",
+      "weight": 1.0,
+      "source": "unit_phase_0_1_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_registry",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L20",
+      "weight": 1.0,
+      "source": "unit_phase_0_1_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_stage",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L91",
+      "weight": 1.0,
+      "source": "unit_phase_0_1_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_stopidx",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.1-integration.test.ts",
+      "source_location": "L80",
+      "weight": 1.0,
+      "source": "unit_phase_0_1_integration_test_ts",
+      "target": "unit_phase_0_1_integration_test_t0",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L124",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_auditns",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L210",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_auditns2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L116",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_configns",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L202",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_configns2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L133",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_convns",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L219",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_convns2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L132",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_db",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L218",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_db2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L37",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_fakesafestorage",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L56",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_file",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L195",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_fullsecrets",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L281",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_ns",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L97",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_ns2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L280",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_repo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L201",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_repo2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L141",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_secretsns",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L227",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_secretsns2",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L190",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_sharedaudit",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L187",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_sharedsecrets",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L35",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_tempdir",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.2-integration.test.ts",
+      "source_location": "L58",
+      "weight": 1.0,
+      "source": "unit_phase_0_2_integration_test_ts",
+      "target": "unit_phase_0_2_integration_test_v0",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L59",
+      "weight": 1.0,
+      "source": "unit_phase_0_3_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_a",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L60",
+      "weight": 1.0,
+      "source": "unit_phase_0_3_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_b",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L23",
+      "weight": 1.0,
+      "source": "unit_phase_0_3_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_ctx",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L91",
+      "weight": 1.0,
+      "source": "unit_phase_0_3_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_electrondir",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L30",
+      "weight": 1.0,
+      "source": "unit_phase_0_3_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_fakewindow",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L49",
+      "weight": 1.0,
+      "source": "unit_phase_0_3_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_harness",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L58",
+      "weight": 1.0,
+      "source": "unit_phase_0_3_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_manager",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L70",
+      "weight": 1.0,
+      "source": "unit_phase_0_3_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_reg",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L65",
+      "weight": 1.0,
+      "source": "unit_phase_0_3_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_sent",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L93",
+      "weight": 1.0,
+      "source": "unit_phase_0_3_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_violations",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/phase-0.3-integration.test.ts",
+      "source_location": "L94",
+      "weight": 1.0,
+      "source": "unit_phase_0_3_integration_test_ts",
+      "target": "unit_phase_0_3_integration_test_walk",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L167",
+      "weight": 1.0,
+      "source": "unit_synapse_capabilities_test_ts",
+      "target": "unit_synapse_capabilities_test_actions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L297",
+      "weight": 1.0,
+      "source": "unit_synapse_capabilities_test_ts",
+      "target": "unit_synapse_capabilities_test_create",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L193",
+      "weight": 1.0,
+      "source": "unit_synapse_capabilities_test_ts",
+      "target": "unit_synapse_capabilities_test_gettool",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L126",
+      "weight": 1.0,
+      "source": "unit_synapse_capabilities_test_ts",
+      "target": "unit_synapse_capabilities_test_listtool",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L213",
+      "weight": 1.0,
+      "source": "unit_synapse_capabilities_test_ts",
+      "target": "unit_synapse_capabilities_test_tool",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L275",
+      "weight": 1.0,
+      "source": "unit_synapse_capabilities_test_ts",
+      "target": "unit_synapse_capabilities_test_toolnames",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L296",
+      "weight": 1.0,
+      "source": "unit_synapse_capabilities_test_ts",
+      "target": "unit_synapse_capabilities_test_tools",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L298",
+      "weight": 1.0,
+      "source": "unit_synapse_capabilities_test_ts",
+      "target": "unit_synapse_capabilities_test_update",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/synapse-capabilities.test.ts",
+      "source_location": "L226",
+      "weight": 1.0,
+      "source": "unit_synapse_capabilities_test_ts",
+      "target": "unit_synapse_capabilities_test_updatedefinition",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-mcp-rpc.test.ts",
+      "source_location": "L6",
+      "weight": 1.0,
+      "source": "unit_database_mcp_rpc_test_ts",
+      "target": "unit_database_mcp_rpc_test_calltool",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-mcp-rpc.test.ts",
+      "source_location": "L108",
+      "weight": 1.0,
+      "source": "unit_database_mcp_rpc_test_ts",
+      "target": "unit_database_mcp_rpc_test_folders",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-mcp-rpc.test.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "unit_database_mcp_rpc_test_ts",
+      "target": "unit_database_mcp_rpc_test_identity",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-mcp-rpc.test.ts",
+      "source_location": "L54",
+      "weight": 1.0,
+      "source": "unit_database_mcp_rpc_test_ts",
+      "target": "unit_database_mcp_rpc_test_status",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "unit/database-mcp-rpc.test.ts",
+      "source_location": "L63",
+      "weight": 1.0,
+      "source": "unit_database_mcp_rpc_test_ts",
+      "target": "unit_database_mcp_rpc_test_summaries",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "fixtures/runtime.ts",
+      "source_location": "L26",
+      "weight": 1.0,
+      "source": "fixtures_runtime_ts",
+      "target": "fixtures_runtime_createruntimefixture",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "fixtures/runtime.ts",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "fixtures_runtime_ts",
+      "target": "fixtures_runtime_runtimefixture",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "fixtures/runtime.ts",
+      "source_location": "L41",
+      "weight": 1.0,
+      "source": "fixtures_runtime_ts",
+      "target": "fixtures_runtime_testlogger",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "ipc/sample.test.ts",
+      "source_location": "L2",
+      "weight": 1.0,
+      "source": "ipc_sample_test_ts",
+      "target": "fixtures_runtime_ts",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "ipc/sample.test.ts",
+      "source_location": "L2",
+      "weight": 1.0,
+      "source": "ipc_sample_test_ts",
+      "target": "fixtures_runtime_createruntimefixture",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ipc/sample.test.ts",
+      "source_location": "L20",
+      "weight": 1.0,
+      "source": "ipc_sample_test_ts",
+      "target": "ipc_sample_test_eventbus",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ipc/sample.test.ts",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "ipc_sample_test_ts",
+      "target": "ipc_sample_test_fixture",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "ipc/sample.test.ts",
+      "source_location": "L21",
+      "weight": 1.0,
+      "source": "ipc_sample_test_ts",
+      "target": "ipc_sample_test_seen",
+      "confidence_score": 1.0
+    }
+  ],
+  "hyperedges": [],
+  "built_at_commit": "5202a67619f4e4fc9865e308e524954ce24e5e30"
+}

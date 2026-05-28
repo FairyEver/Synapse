@@ -1,0 +1,8 @@
+{
+  "0": "variable-domain.ts / types.ts",
+  "1": "model-price-domain.ts / registry.ts",
+  "2": "content-domain.ts",
+  "3": "scheduler-domain.ts",
+  "4": "naming.ts",
+  "5": "workflow-domain.ts / types.ts"
+}

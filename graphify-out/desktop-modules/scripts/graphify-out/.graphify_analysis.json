@@ -1,0 +1,261 @@
+{
+  "communities": {
+    "0": [
+      "import_legacy_database_mjs",
+      "scripts_import_legacy_database_affinitytokind",
+      "scripts_import_legacy_database_assertlegacysource",
+      "scripts_import_legacy_database_choice_kinds",
+      "scripts_import_legacy_database_cleanuptemp",
+      "scripts_import_legacy_database_collectplan",
+      "scripts_import_legacy_database_columndefinition",
+      "scripts_import_legacy_database_convertlegacyvalue",
+      "scripts_import_legacy_database_copyrows",
+      "scripts_import_legacy_database_createsystemschema",
+      "scripts_import_legacy_database_findlatestlegacysource",
+      "scripts_import_legacy_database_getuserdatapath",
+      "scripts_import_legacy_database_getusertables",
+      "scripts_import_legacy_database_inferchoices",
+      "scripts_import_legacy_database_inspecttarget",
+      "scripts_import_legacy_database_issynapserunning",
+      "scripts_import_legacy_database_kindtoaffinity",
+      "scripts_import_legacy_database_legacytypetokind",
+      "scripts_import_legacy_database_main",
+      "scripts_import_legacy_database_moveifexists",
+      "scripts_import_legacy_database_parseargs",
+      "scripts_import_legacy_database_parsechoices",
+      "scripts_import_legacy_database_preparesourceforread",
+      "scripts_import_legacy_database_printplan",
+      "scripts_import_legacy_database_q",
+      "scripts_import_legacy_database_readlegacycolumnmeta",
+      "scripts_import_legacy_database_readmetatables",
+      "scripts_import_legacy_database_system_columns",
+      "scripts_import_legacy_database_systemcolumnkind",
+      "scripts_import_legacy_database_uniquestrings",
+      "scripts_import_legacy_database_usage",
+      "scripts_import_legacy_database_writeconverteddatabase"
+    ],
+    "1": [
+      "migrate_display_name_to_user_directory_ts",
+      "scripts_migrate_display_name_to_user_directory_collectcandidates",
+      "scripts_migrate_display_name_to_user_directory_content_roots",
+      "scripts_migrate_display_name_to_user_directory_isfilenotfounderror",
+      "scripts_migrate_display_name_to_user_directory_isgitrepository",
+      "scripts_migrate_display_name_to_user_directory_legacymetarecord",
+      "scripts_migrate_display_name_to_user_directory_legacysnapshotrecord",
+      "scripts_migrate_display_name_to_user_directory_main",
+      "scripts_migrate_display_name_to_user_directory_normalizedisplayname",
+      "scripts_migrate_display_name_to_user_directory_normalizeuserid",
+      "scripts_migrate_display_name_to_user_directory_pathexists",
+      "scripts_migrate_display_name_to_user_directory_readdirectoryentries",
+      "scripts_migrate_display_name_to_user_directory_readjsonfile",
+      "scripts_migrate_display_name_to_user_directory_recordcandidate",
+      "scripts_migrate_display_name_to_user_directory_rungitcommand",
+      "scripts_migrate_display_name_to_user_directory_stageandcommitprofiles",
+      "scripts_migrate_display_name_to_user_directory_tosortkey",
+      "scripts_migrate_display_name_to_user_directory_user_profile_schema_version",
+      "scripts_migrate_display_name_to_user_directory_userprofilecandidate",
+      "scripts_migrate_display_name_to_user_directory_writeuserprofile"
+    ],
+    "2": [
+      "generate_ipc_mjs",
+      "scripts_generate_ipc_dirname",
+      "scripts_generate_ipc_extra_channel_sources",
+      "scripts_generate_ipc_extractchannels",
+      "scripts_generate_ipc_findexportedvariable",
+      "scripts_generate_ipc_findimportsource",
+      "scripts_generate_ipc_findipcmoduleobject",
+      "scripts_generate_ipc_findobjectproperty",
+      "scripts_generate_ipc_generate",
+      "scripts_generate_ipc_getpropertyname",
+      "scripts_generate_ipc_loadextrachannels",
+      "scripts_generate_ipc_loadmoduledescriptor",
+      "scripts_generate_ipc_module_sources",
+      "scripts_generate_ipc_output_path",
+      "scripts_generate_ipc_quote",
+      "scripts_generate_ipc_readobjectproperty",
+      "scripts_generate_ipc_readstringproperty",
+      "scripts_generate_ipc_resolveimportpath",
+      "scripts_generate_ipc_resolvespreadchannels"
+    ],
+    "3": [
+      "generate_definitions_registry_mjs",
+      "scripts_generate_definitions_registry_agentdefinitionsroot",
+      "scripts_generate_definitions_registry_definitionsroot",
+      "scripts_generate_definitions_registry_editordefinitionsroot",
+      "scripts_generate_definitions_registry_listagentdefinitiondirectories",
+      "scripts_generate_definitions_registry_listagentruntimedefinitiondirectories",
+      "scripts_generate_definitions_registry_listeditordefinitiondirectories",
+      "scripts_generate_definitions_registry_main",
+      "scripts_generate_definitions_registry_maingenerateddir",
+      "scripts_generate_definitions_registry_packageroot",
+      "scripts_generate_definitions_registry_pathexists",
+      "scripts_generate_definitions_registry_renderergenerateddir",
+      "scripts_generate_definitions_registry_rendermainregistry",
+      "scripts_generate_definitions_registry_renderrendererregistry",
+      "scripts_generate_definitions_registry_scriptdir",
+      "scripts_generate_definitions_registry_toidentifier"
+    ],
+    "4": [
+      "migrate_to_history_structure_ts",
+      "scripts_migrate_to_history_structure_blobs_directory_path",
+      "scripts_migrate_to_history_structure_collectlegacyfiles",
+      "scripts_migrate_to_history_structure_contenttype",
+      "scripts_migrate_to_history_structure_ensurejsonfile",
+      "scripts_migrate_to_history_structure_formatcompacttimestamp",
+      "scripts_migrate_to_history_structure_legacymetarecord",
+      "scripts_migrate_to_history_structure_main",
+      "scripts_migrate_to_history_structure_migratecontentdirectory",
+      "scripts_migrate_to_history_structure_normalizestring",
+      "scripts_migrate_to_history_structure_pathexists",
+      "scripts_migrate_to_history_structure_readdirectoryentries",
+      "scripts_migrate_to_history_structure_writeattachmenttopool"
+    ],
+    "5": [
+      "check_hard_constraints_mjs",
+      "scripts_check_hard_constraints_checks",
+      "scripts_check_hard_constraints_desktoproot",
+      "scripts_check_hard_constraints_dirname",
+      "scripts_check_hard_constraints_isallowed",
+      "scripts_check_hard_constraints_isexcluded",
+      "scripts_check_hard_constraints_linematches",
+      "scripts_check_hard_constraints_lines",
+      "scripts_check_hard_constraints_listfiles",
+      "scripts_check_hard_constraints_offenders",
+      "scripts_check_hard_constraints_relfile"
+    ],
+    "6": [
+      "scripts_verify_packaged_asar_apppaths",
+      "scripts_verify_packaged_asar_findapps",
+      "scripts_verify_packaged_asar_findnode",
+      "scripts_verify_packaged_asar_hash",
+      "scripts_verify_packaged_asar_readasarheader",
+      "scripts_verify_packaged_asar_readpackedfile",
+      "scripts_verify_packaged_asar_targetpath",
+      "scripts_verify_packaged_asar_usage",
+      "scripts_verify_packaged_asar_verifyapp",
+      "scripts_verify_packaged_asar_walkasarnode",
+      "verify_packaged_asar_mjs"
+    ],
+    "7": [
+      "build_icons_mjs",
+      "scripts_build_icons_inputpath",
+      "scripts_build_icons_outputbasepath",
+      "scripts_build_icons_outputdir",
+      "scripts_build_icons_result",
+      "scripts_build_icons_rootdir",
+      "scripts_build_icons_scriptdir"
+    ],
+    "8": [
+      "dev_electron_app_mjs",
+      "scripts_dev_electron_app_electronbuilddir",
+      "scripts_dev_electron_app_electronentryfiles",
+      "scripts_dev_electron_app_nodemon",
+      "scripts_dev_electron_app_runpnpm",
+      "scripts_dev_electron_app_stopchild"
+    ],
+    "9": [
+      "bump_version_commit_push_mjs",
+      "scripts_bump_version_commit_push_bumppackageversion",
+      "scripts_bump_version_commit_push_main",
+      "scripts_bump_version_commit_push_packageroot",
+      "scripts_bump_version_commit_push_run",
+      "scripts_bump_version_commit_push_scriptdir"
+    ],
+    "10": [
+      "dev_mjs",
+      "scripts_dev_child",
+      "scripts_dev_isportavailable",
+      "scripts_dev_resolveport",
+      "scripts_dev_startport"
+    ],
+    "11": [
+      "check_ipc_codegen_mjs",
+      "scripts_check_ipc_codegen_desktoproot",
+      "scripts_check_ipc_codegen_dirname",
+      "scripts_check_ipc_codegen_execfile",
+      "scripts_check_ipc_codegen_run"
+    ],
+    "12": [
+      "migrate_legacy_database_macos_sh",
+      "scripts_migrate_legacy_database_macos_run_with_node",
+      "scripts_migrate_legacy_database_macos_run_with_synapse_app"
+    ],
+    "13": [
+      "dev_renderer_mjs",
+      "scripts_dev_renderer_child"
+    ]
+  },
+  "cohesion": {
+    "0": 0.12701612903225806,
+    "1": 0.17894736842105263,
+    "2": 0.19883040935672514,
+    "3": 0.2,
+    "4": 0.28205128205128205,
+    "5": 0.18181818181818182,
+    "6": 0.2545454545454545,
+    "7": 0.2857142857142857,
+    "8": 0.3333333333333333,
+    "9": 0.4666666666666667,
+    "10": 0.5,
+    "11": 0.5,
+    "12": 0.6666666666666666,
+    "13": 1.0
+  },
+  "gods": [
+    {
+      "id": "scripts_import_legacy_database_main",
+      "label": "main()",
+      "degree": 13
+    },
+    {
+      "id": "scripts_import_legacy_database_collectplan",
+      "label": "collectPlan()",
+      "degree": 11
+    },
+    {
+      "id": "scripts_migrate_to_history_structure_migratecontentdirectory",
+      "label": "migrateContentDirectory()",
+      "degree": 8
+    },
+    {
+      "id": "scripts_generate_definitions_registry_main",
+      "label": "main()",
+      "degree": 7
+    },
+    {
+      "id": "scripts_migrate_display_name_to_user_directory_collectcandidates",
+      "label": "collectCandidates()",
+      "degree": 6
+    },
+    {
+      "id": "scripts_migrate_display_name_to_user_directory_main",
+      "label": "main()",
+      "degree": 6
+    },
+    {
+      "id": "scripts_import_legacy_database_q",
+      "label": "q()",
+      "degree": 6
+    },
+    {
+      "id": "scripts_generate_ipc_loadmoduledescriptor",
+      "label": "loadModuleDescriptor()",
+      "degree": 6
+    },
+    {
+      "id": "scripts_generate_definitions_registry_pathexists",
+      "label": "pathExists()",
+      "degree": 5
+    },
+    {
+      "id": "scripts_import_legacy_database_writeconverteddatabase",
+      "label": "writeConvertedDatabase()",
+      "degree": 5
+    }
+  ],
+  "surprises": [],
+  "tokens": {
+    "input": 0,
+    "output": 0
+  }
+}

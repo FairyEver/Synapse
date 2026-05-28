@@ -1,0 +1,370 @@
+{
+  "communities": {
+    "0": [
+      "agent_timeout_ts",
+      "prompt_card_promptnodecard",
+      "prompt_card_tsx",
+      "prompt_executor_main_logger",
+      "prompt_executor_main_promptnodeexecutor",
+      "prompt_executor_main_ts",
+      "prompt_index_ts",
+      "prompt_manifest_promptnodemanifest",
+      "prompt_manifest_ts",
+      "prompt_panel_promptnodepanel",
+      "prompt_panel_tier_labels",
+      "prompt_panel_tsx",
+      "prompt_schema_promptnodeconfig",
+      "prompt_schema_ts",
+      "prompt_tests_executor_test_ts",
+      "prompt_tests_executor_test_ts_tests_executor_test_ctx",
+      "prompt_tests_executor_test_ts_tests_executor_test_deps",
+      "prompt_tests_executor_test_ts_tests_executor_test_logger",
+      "prompt_tests_executor_test_ts_tests_executor_test_logs",
+      "prompt_tests_executor_test_ts_tests_executor_test_onagentconversation",
+      "prompt_tests_executor_test_ts_tests_executor_test_sendtoagent",
+      "prompt_tests_executor_test_ts_tests_executor_test_target",
+      "provider_lookup_context_tsx",
+      "tests_provider_settings_panel_test_button",
+      "tests_provider_settings_panel_test_checkbox",
+      "tests_provider_settings_panel_test_container",
+      "tests_provider_settings_panel_test_keyinput",
+      "tests_provider_settings_panel_test_onchange",
+      "tests_provider_settings_panel_test_providerlookup",
+      "tests_provider_settings_panel_test_renderpanel",
+      "tests_provider_settings_panel_test_roots",
+      "tests_provider_settings_panel_test_setinputvalue",
+      "tests_provider_settings_panel_test_textarea",
+      "tests_provider_settings_panel_test_ts",
+      "workflow_nodes_agent_timeout_agenttimeoutminstoms",
+      "workflow_nodes_agent_timeout_resolveagenttimeoutmins",
+      "workflow_nodes_provider_lookup_context_defaultlookup",
+      "workflow_nodes_provider_lookup_context_logger",
+      "workflow_nodes_provider_lookup_context_tiermodelvalue",
+      "workflow_nodes_provider_lookup_context_useproviderlookup"
+    ],
+    "1": [
+      "http_request_card_httprequestnodecard",
+      "http_request_card_tsx",
+      "http_request_executor_main_buildbody",
+      "http_request_executor_main_buildheaders",
+      "http_request_executor_main_buildurl",
+      "http_request_executor_main_httprequestnodeexecutor",
+      "http_request_executor_main_interpolateconfig",
+      "http_request_executor_main_logger",
+      "http_request_executor_main_ts",
+      "http_request_index_ts",
+      "http_request_manifest_httprequestnodemanifest",
+      "http_request_manifest_ts",
+      "http_request_panel_httprequestnodepanel",
+      "http_request_panel_tsx",
+      "http_request_schema_ts",
+      "http_request_tests_executor_test_ts",
+      "http_request_tests_executor_test_ts_tests_executor_test_ctx",
+      "http_request_tests_executor_test_ts_tests_executor_test_deps",
+      "http_request_tests_executor_test_ts_tests_executor_test_fakeruntimedeps",
+      "http_request_tests_executor_test_ts_tests_executor_test_input",
+      "http_request_tests_executor_test_ts_tests_executor_test_logger",
+      "http_request_tests_executor_test_ts_tests_executor_test_makeinput",
+      "http_request_tests_executor_test_ts_tests_executor_test_payload",
+      "register_main_ts",
+      "workflow_nodes_types_nodeexecutionresult",
+      "workflow_nodes_types_noderuntimedeps"
+    ],
+    "2": [
+      "schemas_variable_binding_ts",
+      "schemas_variable_binding_variablebindingschema",
+      "schemas_variable_binding_variablesource",
+      "schemas_variable_binding_variablesourceschema",
+      "script_executor_main_logger",
+      "script_executor_main_protected_env_names",
+      "script_executor_main_saferesolvedenv",
+      "script_executor_main_scriptnodeexecutor",
+      "script_executor_main_ts",
+      "script_index_ts",
+      "script_panel_scriptnodepanel",
+      "script_panel_tsx",
+      "script_schema_scriptnodeconfig",
+      "script_schema_scriptvariablebindingschema",
+      "script_schema_ts",
+      "script_tests_executor_test_ts",
+      "script_tests_executor_test_ts_tests_executor_test_ctx",
+      "script_tests_executor_test_ts_tests_executor_test_deps",
+      "script_tests_executor_test_ts_tests_executor_test_fakeruntimedeps",
+      "script_tests_executor_test_ts_tests_executor_test_input",
+      "script_tests_executor_test_ts_tests_executor_test_logger",
+      "script_tests_executor_test_ts_tests_executor_test_makeinput",
+      "script_tests_executor_test_ts_tests_executor_test_payload",
+      "variable_binding_editor_tsx",
+      "workflow_nodes_variable_binding_editor_variablesourcecontrol"
+    ],
+    "3": [
+      "file_conversion_card_fileconversionnodecard",
+      "file_conversion_card_tsx",
+      "file_conversion_executor_main_buildconversionoutputs",
+      "file_conversion_executor_main_fileconversionfailure",
+      "file_conversion_executor_main_fileconversionnodeexecutor",
+      "file_conversion_executor_main_interpolatefileconversionconfig",
+      "file_conversion_executor_main_logger",
+      "file_conversion_executor_main_markdownfilename",
+      "file_conversion_executor_main_normalizeocroptions",
+      "file_conversion_executor_main_resolvemarkdownoutputpath",
+      "file_conversion_executor_main_ts",
+      "file_conversion_executor_main_workflowfileconversionfailurecode",
+      "file_conversion_index_ts",
+      "file_conversion_manifest_fileconversionnodemanifest",
+      "file_conversion_manifest_ts",
+      "file_conversion_output_boundary_getworkflowfileconversionoutputroot",
+      "file_conversion_output_boundary_isworkflowfileconversionoutputpathallowed",
+      "file_conversion_output_boundary_ts",
+      "file_conversion_output_boundary_workflow_file_conversion_output_root",
+      "file_conversion_output_boundary_workflowfileconversionoutputwriteerror",
+      "file_conversion_output_boundary_workflowfileconversionoutputwriteerror_constructor",
+      "file_conversion_schema_fileconversionnodeocrschema",
+      "file_conversion_schema_ts"
+    ],
+    "4": [
+      "switch_card_tsx",
+      "switch_constants_ts",
+      "switch_executor_main_escaperegex",
+      "switch_executor_main_logger",
+      "switch_executor_main_matchbranch",
+      "switch_executor_main_normalizeresponse",
+      "switch_executor_main_switchnodeexecutor",
+      "switch_executor_main_ts",
+      "switch_index_ts",
+      "switch_manifest_switchnodemanifest",
+      "switch_manifest_ts",
+      "switch_schema_switchbranch",
+      "switch_schema_switchbranchschema",
+      "switch_schema_switchnodeconfig",
+      "switch_schema_ts",
+      "switch_tests_executor_test_ts",
+      "switch_tests_executor_test_ts_tests_executor_test_ctx",
+      "switch_tests_executor_test_ts_tests_executor_test_logger",
+      "switch_tests_executor_test_ts_tests_executor_test_logs",
+      "switch_tests_executor_test_ts_tests_executor_test_onagentconversation",
+      "switch_tests_executor_test_ts_tests_executor_test_sendtoagent",
+      "switch_tests_executor_test_ts_tests_executor_test_target",
+      "tests_executor_test_config"
+    ],
+    "5": [
+      "register_renderer_ts",
+      "registry_ts",
+      "script_manifest_scriptnodemanifest",
+      "script_manifest_ts",
+      "script_tests_schema_test_ts",
+      "tests_registry_test_exec",
+      "tests_registry_test_r",
+      "tests_registry_test_stub",
+      "tests_registry_test_ts",
+      "types_ts",
+      "workflow_nodes_registry_nodetyperegistry",
+      "workflow_nodes_registry_nodetyperegistry_getexecutor",
+      "workflow_nodes_registry_nodetyperegistry_getmanifest",
+      "workflow_nodes_registry_nodetyperegistry_listtypes",
+      "workflow_nodes_registry_nodetyperegistry_register",
+      "workflow_nodes_registry_nodetyperegistry_registermanifest",
+      "workflow_nodes_types_agentsenddeps",
+      "workflow_nodes_types_configfielddescriptor",
+      "workflow_nodes_types_nodeexecutor",
+      "workflow_nodes_types_nodemanifest",
+      "workflow_nodes_types_portdefinition",
+      "workflow_nodes_types_workflowruntimecontext"
+    ],
+    "6": [
+      "collapsible_section_tsx",
+      "file_conversion_panel_logger",
+      "file_conversion_panel_normalizeconfig",
+      "file_conversion_panel_output_labels",
+      "file_conversion_panel_parselanguagelist",
+      "file_conversion_panel_parseoptionalpositiveinteger",
+      "file_conversion_panel_tsx",
+      "panel_registry_ts",
+      "project_select_tsx",
+      "switch_panel_buildswitchprompttemplate",
+      "switch_panel_cancommitbranchids",
+      "switch_panel_getbranchiderror",
+      "switch_panel_switchnodepanel",
+      "switch_panel_tier_labels",
+      "switch_panel_tsx",
+      "switch_tests_panel_test_ts",
+      "workflow_nodes_panel_registry_getpanel",
+      "workflow_nodes_panel_registry_nodepanelprops",
+      "workflow_nodes_panel_registry_panelcomponent",
+      "workflow_nodes_project_select_projectselectprops"
+    ],
+    "7": [
+      "end_executor_main_endnodeexecutor",
+      "end_executor_main_logger",
+      "end_executor_main_ts",
+      "end_index_ts",
+      "end_manifest_endnodemanifest",
+      "end_manifest_ts",
+      "end_panel_endnodepanel",
+      "end_panel_tsx",
+      "end_schema_endnodeconfig",
+      "end_schema_endnodeconfigschema",
+      "end_schema_ts",
+      "tests_end_node_executor_test_logger",
+      "tests_end_node_executor_test_makeinput",
+      "tests_end_node_executor_test_payload",
+      "tests_end_node_executor_test_sendtoagent",
+      "tests_end_node_executor_test_ts",
+      "workflow_nodes_types_nodeexecutioninput"
+    ],
+    "8": [
+      "prompt_editor_tsx",
+      "prompt_shortcuts_ts",
+      "tests_prompt_shortcuts_test_options",
+      "tests_prompt_shortcuts_test_scan",
+      "tests_prompt_shortcuts_test_ts",
+      "workflow_nodes_prompt_editor_logger",
+      "workflow_nodes_prompt_editor_prompteditorprops",
+      "workflow_nodes_prompt_editor_useclaudecodeglobalskillnames",
+      "workflow_nodes_prompt_shortcuts_buildpromptshortcutoptions",
+      "workflow_nodes_prompt_shortcuts_completiontextforpromptshortcut",
+      "workflow_nodes_prompt_shortcuts_extractclaudecodeglobalskillnames",
+      "workflow_nodes_prompt_shortcuts_matchpromptshortcuttrigger",
+      "workflow_nodes_prompt_shortcuts_promptshortcutkind",
+      "workflow_nodes_prompt_shortcuts_promptshortcutoption",
+      "workflow_nodes_prompt_shortcuts_promptshortcuttriggermatch",
+      "workflow_nodes_prompt_shortcuts_shouldstartpromptshortcutcompletion",
+      "workflow_nodes_prompt_shortcuts_uniquenonempty"
+    ],
+    "9": [
+      "end_card_endnodecard",
+      "end_card_tsx",
+      "node_status_utils_ts",
+      "script_card_scriptnodecard",
+      "script_card_tsx",
+      "switch_card_switchnodecard",
+      "workflow_nodes_node_status_utils_nodestatus",
+      "workflow_nodes_node_status_utils_statusclass"
+    ]
+  },
+  "cohesion": {
+    "0": 0.07948717948717948,
+    "1": 0.12923076923076923,
+    "2": 0.12666666666666668,
+    "3": 0.1383399209486166,
+    "4": 0.1383399209486166,
+    "5": 0.16017316017316016,
+    "6": 0.12631578947368421,
+    "7": 0.22794117647058823,
+    "8": 0.20588235294117646,
+    "9": 0.4642857142857143
+  },
+  "gods": [
+    {
+      "id": "workflow_nodes_node_status_utils_statusclass",
+      "label": "statusClass()",
+      "degree": 13
+    },
+    {
+      "id": "workflow_nodes_types_nodemanifest",
+      "label": "NodeManifest",
+      "degree": 12
+    },
+    {
+      "id": "workflow_nodes_types_nodeexecutor",
+      "label": "NodeExecutor",
+      "degree": 11
+    },
+    {
+      "id": "workflow_nodes_types_nodeexecutioninput",
+      "label": "NodeExecutionInput",
+      "degree": 10
+    },
+    {
+      "id": "workflow_nodes_provider_lookup_context_useproviderlookup",
+      "label": "useProviderLookup()",
+      "degree": 9
+    },
+    {
+      "id": "workflow_nodes_registry_nodetyperegistry",
+      "label": "NodeTypeRegistry",
+      "degree": 9
+    },
+    {
+      "id": "http_request_card_httprequestnodecard",
+      "label": "HttpRequestNodeCard()",
+      "degree": 9
+    },
+    {
+      "id": "script_schema_scriptnodeconfig",
+      "label": "ScriptNodeConfig",
+      "degree": 8
+    },
+    {
+      "id": "end_schema_endnodeconfig",
+      "label": "EndNodeConfig",
+      "degree": 8
+    },
+    {
+      "id": "file_conversion_card_fileconversionnodecard",
+      "label": "FileConversionNodeCard()",
+      "degree": 8
+    }
+  ],
+  "surprises": [
+    {
+      "source": "SwitchNodeCard()",
+      "target": "useProviderLookup()",
+      "source_files": [
+        "switch/card.tsx",
+        "provider-lookup-context.tsx"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "connects across different repos/directories; bridges separate communities"
+    },
+    {
+      "source": "SwitchNodePanel()",
+      "target": "useProviderLookup()",
+      "source_files": [
+        "switch/panel.tsx",
+        "provider-lookup-context.tsx"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "connects across different repos/directories; bridges separate communities"
+    },
+    {
+      "source": "EndNodeCard()",
+      "target": "statusClass()",
+      "source_files": [
+        "end/card.tsx",
+        "node-status-utils.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "connects across different repos/directories; peripheral node `EndNodeCard()` unexpectedly reaches hub `statusClass()`"
+    },
+    {
+      "source": "FileConversionNodeCard()",
+      "target": "statusClass()",
+      "source_files": [
+        "file-conversion/card.tsx",
+        "node-status-utils.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "connects across different repos/directories; bridges separate communities"
+    },
+    {
+      "source": "HttpRequestNodeCard()",
+      "target": "statusClass()",
+      "source_files": [
+        "http-request/card.tsx",
+        "node-status-utils.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "connects across different repos/directories; bridges separate communities"
+    }
+  ],
+  "tokens": {
+    "input": 0,
+    "output": 0
+  }
+}

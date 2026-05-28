@@ -1,0 +1,16 @@
+{
+  "0": "import-legacy-database.mjs",
+  "1": "migrate-display-name-to-user-directory.ts",
+  "2": "generate-ipc.mjs",
+  "3": "generate-definitions-registry.mjs",
+  "4": "migrate-to-history-structure.ts",
+  "5": "check-hard-constraints.mjs",
+  "6": "verify-packaged-asar.mjs",
+  "7": "build-icons.mjs",
+  "8": "dev-electron-app.mjs",
+  "9": "bump-version-commit-push.mjs",
+  "10": "dev.mjs",
+  "11": "check-ipc-codegen.mjs",
+  "12": "migrate-legacy-database-macos.sh",
+  "13": "dev-renderer.mjs"
+}

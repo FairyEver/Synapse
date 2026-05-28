@@ -1,0 +1,237 @@
+{
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/SOURCE.json": {
+    "mtime": 1779606331.1311173,
+    "ast_hash": "e06234c7d8c36b62016c7949a1830d4d",
+    "semantic_hash": "e06234c7d8c36b62016c7949a1830d4d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.vault-meta/tiling-thresholds.json": {
+    "mtime": 1779606330.6154451,
+    "ast_hash": "56f22b1f79e8e1424d21a940964b061d",
+    "semantic_hash": "56f22b1f79e8e1424d21a940964b061d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/bin/setup-multi-agent.sh": {
+    "mtime": 1779606330.626249,
+    "ast_hash": "57c33ccb91f4fb7c09b47bd9e4668921",
+    "semantic_hash": "57c33ccb91f4fb7c09b47bd9e4668921"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/bin/setup-dragonscale.sh": {
+    "mtime": 1779606330.6276026,
+    "ast_hash": "9a7eaaa54561c869dbbccf9291cb51f5",
+    "semantic_hash": "9a7eaaa54561c869dbbccf9291cb51f5"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/bin/setup-vault.sh": {
+    "mtime": 1779606330.6357467,
+    "ast_hash": "fa7ca3ab1818dae81be785e5b51141e9",
+    "semantic_hash": "fa7ca3ab1818dae81be785e5b51141e9"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/tests/test_boundary_score.py": {
+    "mtime": 1779606330.6564906,
+    "ast_hash": "ef1b52b3ad287090c228e80f4b0242ed",
+    "semantic_hash": "ef1b52b3ad287090c228e80f4b0242ed"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/tests/test_tiling_check.py": {
+    "mtime": 1779606330.657567,
+    "ast_hash": "00140484ab9e980895c03b9280a2a94f",
+    "semantic_hash": "00140484ab9e980895c03b9280a2a94f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/tests/test_allocate_address.sh": {
+    "mtime": 1779606330.6590948,
+    "ast_hash": "c4ce54e5161d5b8887605afa23d9882c",
+    "semantic_hash": "c4ce54e5161d5b8887605afa23d9882c"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/workspace.json": {
+    "mtime": 1779606330.6731367,
+    "ast_hash": "37225062a45c06a208a6901792aa1d15",
+    "semantic_hash": "37225062a45c06a208a6901792aa1d15"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/app.json": {
+    "mtime": 1779606330.67411,
+    "ast_hash": "5e568f80da0679ffbc9641d599c227a8",
+    "semantic_hash": "5e568f80da0679ffbc9641d599c227a8"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/core-plugins.json": {
+    "mtime": 1779606330.7083857,
+    "ast_hash": "7c877bea49eaeabb100563bd157b9051",
+    "semantic_hash": "7c877bea49eaeabb100563bd157b9051"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/workspace-visual.json": {
+    "mtime": 1779606330.713438,
+    "ast_hash": "fc97ee5335300d401dbbadf73120db25",
+    "semantic_hash": "fc97ee5335300d401dbbadf73120db25"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/community-plugins.json": {
+    "mtime": 1779606330.7138364,
+    "ast_hash": "c9234f16c93fa6d2ff529a044df3f022",
+    "semantic_hash": "c9234f16c93fa6d2ff529a044df3f022"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/graph.json": {
+    "mtime": 1779606330.7147546,
+    "ast_hash": "a7c6df67408568999a8b9204ae5e1731",
+    "semantic_hash": "a7c6df67408568999a8b9204ae5e1731"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/appearance.json": {
+    "mtime": 1779606330.7184587,
+    "ast_hash": "6fc02840b218e680bed45be5f6f8a7f3",
+    "semantic_hash": "6fc02840b218e680bed45be5f6f8a7f3"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/plugins/obsidian-banners/main.js": {
+    "mtime": 1779606330.6792133,
+    "ast_hash": "e0860395bc23896909da19f2b6a7fbee",
+    "semantic_hash": "e0860395bc23896909da19f2b6a7fbee"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/plugins/obsidian-banners/manifest.json": {
+    "mtime": 1779606330.6798172,
+    "ast_hash": "d1668b8e695248b3525df8a43ceaf4b8",
+    "semantic_hash": "d1668b8e695248b3525df8a43ceaf4b8"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/plugins/calendar/data.json": {
+    "mtime": 1779606330.6809094,
+    "ast_hash": "a3053ed0857f86708c70790e33aa5187",
+    "semantic_hash": "a3053ed0857f86708c70790e33aa5187"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/plugins/calendar/main.js": {
+    "mtime": 1779606330.6816626,
+    "ast_hash": "908d7ebdd1ee370998d34c635e7eb9b9",
+    "semantic_hash": "908d7ebdd1ee370998d34c635e7eb9b9"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/plugins/calendar/manifest.json": {
+    "mtime": 1779606330.6829615,
+    "ast_hash": "6e6add8ae82af7253443ba4460f31fe2",
+    "semantic_hash": "6e6add8ae82af7253443ba4460f31fe2"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/plugins/thino/data.json": {
+    "mtime": 1779606330.6850064,
+    "ast_hash": "85e75057a6088b6c9487a618abfc9915",
+    "semantic_hash": "85e75057a6088b6c9487a618abfc9915"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/plugins/thino/main.js": {
+    "mtime": 1779606330.689001,
+    "ast_hash": "85ee1bc84604be5cf9dc0450bfc5ce59",
+    "semantic_hash": "85ee1bc84604be5cf9dc0450bfc5ce59"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/plugins/thino/manifest.json": {
+    "mtime": 1779606330.6934304,
+    "ast_hash": "e8b246714174ed8a5e9b5871d2ba7202",
+    "semantic_hash": "e8b246714174ed8a5e9b5871d2ba7202"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.obsidian/plugins/obsidian-excalidraw-plugin/manifest.json": {
+    "mtime": 1779606330.7039528,
+    "ast_hash": "0313ec329d0d6b7bb23f67b92eb728aa",
+    "semantic_hash": "0313ec329d0d6b7bb23f67b92eb728aa"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/hooks/hooks.json": {
+    "mtime": 1779606330.9715898,
+    "ast_hash": "7d6c2046d42bf99136f3456547d3e064",
+    "semantic_hash": "7d6c2046d42bf99136f3456547d3e064"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/scripts/boundary-score.py": {
+    "mtime": 1779868050.7871475,
+    "ast_hash": "390a9e474f60c93175d570771895a63e",
+    "semantic_hash": "390a9e474f60c93175d570771895a63e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/scripts/allocate-address.sh": {
+    "mtime": 1779606330.9760704,
+    "ast_hash": "9605e888d27fb60035bdbcbf082ba857",
+    "semantic_hash": "9605e888d27fb60035bdbcbf082ba857"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/scripts/tiling-check.py": {
+    "mtime": 1779606330.9773974,
+    "ast_hash": "d409b29cd7d9726b8b6cea0970b19223",
+    "semantic_hash": "d409b29cd7d9726b8b6cea0970b19223"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.claude-plugin/marketplace.json": {
+    "mtime": 1779606330.9790637,
+    "ast_hash": "df3a4b56412e482507d917dfe9225079",
+    "semantic_hash": "df3a4b56412e482507d917dfe9225079"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.claude-plugin/plugin.json": {
+    "mtime": 1779606330.9801958,
+    "ast_hash": "9aa49cf2956245587b86c68fddb2a07f",
+    "semantic_hash": "9aa49cf2956245587b86c68fddb2a07f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/claude-obsidian-template/.raw/.manifest.json": {
+    "mtime": 1779606331.1219132,
+    "ast_hash": "5cb8ab826f04ce9696cbcced08ebd107",
+    "semantic_hash": "5cb8ab826f04ce9696cbcced08ebd107"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/dragonscale/upstream/boundary-score.py": {
+    "mtime": 1779868050.7863379,
+    "ast_hash": "390a9e474f60c93175d570771895a63e",
+    "semantic_hash": "390a9e474f60c93175d570771895a63e"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/dragonscale/upstream/allocate-address.sh": {
+    "mtime": 1779551348.211487,
+    "ast_hash": "9605e888d27fb60035bdbcbf082ba857",
+    "semantic_hash": "9605e888d27fb60035bdbcbf082ba857"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/knowledge-base/dragonscale/upstream/tiling-check.py": {
+    "mtime": 1779551348.212106,
+    "ast_hash": "d409b29cd7d9726b8b6cea0970b19223",
+    "semantic_hash": "d409b29cd7d9726b8b6cea0970b19223"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/templates/rules/synapse-test-rule/meta.json": {
+    "mtime": 1779293361.9526794,
+    "ast_hash": "88efae0a255ffda5113ec982a9ab2116",
+    "semantic_hash": "88efae0a255ffda5113ec982a9ab2116"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/templates/rules/synapse-database-shortcut/meta.json": {
+    "mtime": 1779293361.9523623,
+    "ast_hash": "0a35dfb106b6c436e888437de68850db",
+    "semantic_hash": "0a35dfb106b6c436e888437de68850db"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/templates/prompts/test-universal-prompt/meta.json": {
+    "mtime": 1779293361.951761,
+    "ast_hash": "364bb2dc76fa978cceffb09f6e0269bb",
+    "semantic_hash": "364bb2dc76fa978cceffb09f6e0269bb"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/templates/prompts/test-current-time/meta.json": {
+    "mtime": 1779293361.9502592,
+    "ast_hash": "ac6a7489cc094225c0eeff1074d6502f",
+    "semantic_hash": "ac6a7489cc094225c0eeff1074d6502f"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/templates/skills/synapse-workflow-mcp/meta.json": {
+    "mtime": 1779410344.2442255,
+    "ast_hash": "67b9a547ff12d3e23bbef67712294278",
+    "semantic_hash": "67b9a547ff12d3e23bbef67712294278"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/templates/skills/bark-notification/meta.json": {
+    "mtime": 1779410344.2404597,
+    "ast_hash": "958e867ff0e943a0d87ab5ac115d21f8",
+    "semantic_hash": "958e867ff0e943a0d87ab5ac115d21f8"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/templates/skills/synapse-repository-mcp/meta.json": {
+    "mtime": 1779869412.2455692,
+    "ast_hash": "35d3076920f865e1e547597e635b83a9",
+    "semantic_hash": "35d3076920f865e1e547597e635b83a9"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/templates/skills/synapse-content-mcp/meta.json": {
+    "mtime": 1779410344.2413511,
+    "ast_hash": "61c27fa22360176e78d960d773438c14",
+    "semantic_hash": "61c27fa22360176e78d960d773438c14"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/templates/skills/synapse-database-mcp/meta.json": {
+    "mtime": 1779410344.242455,
+    "ast_hash": "d465d762ca5c4e85a15d993c52947aff",
+    "semantic_hash": "d465d762ca5c4e85a15d993c52947aff"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/templates/skills/synapse-scheduler-mcp/meta.json": {
+    "mtime": 1779410344.2431135,
+    "ast_hash": "162e27875d1011afb0cdd78d9bfa5702",
+    "semantic_hash": "162e27875d1011afb0cdd78d9bfa5702"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/templates/skills/synapse-variable-mcp/meta.json": {
+    "mtime": 1779869412.2462676,
+    "ast_hash": "0664ad8b6fb90d9b59e9533c52b1115b",
+    "semantic_hash": "0664ad8b6fb90d9b59e9533c52b1115b"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/templates/skills/synapse-model-price-mcp/meta.json": {
+    "mtime": 1779852057.9491427,
+    "ast_hash": "4ac6536144f7bc2745d2ab41a2b66099",
+    "semantic_hash": "4ac6536144f7bc2745d2ab41a2b66099"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/resources/templates/skills/synapse-test-skill/meta.json": {
+    "mtime": 1779410344.2434301,
+    "ast_hash": "40a3464e2f8a0df2dd51734161ad39a8",
+    "semantic_hash": "40a3464e2f8a0df2dd51734161ad39a8"
+  }
+}

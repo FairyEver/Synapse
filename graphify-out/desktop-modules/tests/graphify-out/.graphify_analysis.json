@@ -1,0 +1,261 @@
+{
+  "communities": {
+    "0": [
+      "unit_phase_0_1_integration_test_afterstop",
+      "unit_phase_0_1_integration_test_fakedescriptor",
+      "unit_phase_0_1_integration_test_idx",
+      "unit_phase_0_1_integration_test_inspected",
+      "unit_phase_0_1_integration_test_order",
+      "unit_phase_0_1_integration_test_registry",
+      "unit_phase_0_1_integration_test_stage",
+      "unit_phase_0_1_integration_test_stopidx",
+      "unit_phase_0_1_integration_test_t0",
+      "unit_phase_0_2_integration_test_auditns",
+      "unit_phase_0_2_integration_test_auditns2",
+      "unit_phase_0_2_integration_test_configns",
+      "unit_phase_0_2_integration_test_configns2",
+      "unit_phase_0_2_integration_test_convns",
+      "unit_phase_0_2_integration_test_convns2",
+      "unit_phase_0_2_integration_test_db",
+      "unit_phase_0_2_integration_test_db2",
+      "unit_phase_0_2_integration_test_fakesafestorage",
+      "unit_phase_0_2_integration_test_file",
+      "unit_phase_0_2_integration_test_fullsecrets",
+      "unit_phase_0_2_integration_test_ns",
+      "unit_phase_0_2_integration_test_ns2",
+      "unit_phase_0_2_integration_test_repo",
+      "unit_phase_0_2_integration_test_repo2",
+      "unit_phase_0_2_integration_test_secretsns",
+      "unit_phase_0_2_integration_test_secretsns2",
+      "unit_phase_0_2_integration_test_sharedaudit",
+      "unit_phase_0_2_integration_test_sharedsecrets",
+      "unit_phase_0_2_integration_test_tempdir",
+      "unit_phase_0_2_integration_test_v0",
+      "unit_phase_0_3_integration_test_a",
+      "unit_phase_0_3_integration_test_b",
+      "unit_phase_0_3_integration_test_ctx",
+      "unit_phase_0_3_integration_test_electrondir",
+      "unit_phase_0_3_integration_test_fakewindow",
+      "unit_phase_0_3_integration_test_harness",
+      "unit_phase_0_3_integration_test_manager",
+      "unit_phase_0_3_integration_test_reg",
+      "unit_phase_0_3_integration_test_sent",
+      "unit_phase_0_3_integration_test_violations",
+      "unit_phase_0_3_integration_test_walk",
+      "unit_phase_0_4_integration_test_a",
+      "unit_phase_0_4_integration_test_b",
+      "unit_phase_0_4_integration_test_broadcaster",
+      "unit_phase_0_4_integration_test_bus",
+      "unit_phase_0_4_integration_test_event",
+      "unit_phase_0_4_integration_test_evt",
+      "unit_phase_0_4_integration_test_fakewindow",
+      "unit_phase_0_4_integration_test_manager",
+      "unit_phase_0_4_integration_test_proj1window",
+      "unit_phase_0_4_integration_test_proj2window",
+      "unit_phase_0_4_integration_test_win",
+      "unit_phase_0_5_integration_test_agentservice",
+      "unit_phase_0_5_integration_test_container",
+      "unit_phase_0_5_integration_test_datarepo",
+      "unit_phase_0_5_integration_test_eventbus",
+      "unit_phase_0_5_integration_test_reaper",
+      "unit_phase_0_5_integration_test_registry",
+      "unit_phase_0_5_integration_test_runtime",
+      "unit_phase_0_5_integration_test_ts",
+      "unit_phase_0_5_integration_test_virtualnow",
+      "unit_phase_0_6_integration_test_agentstarts",
+      "unit_phase_0_6_integration_test_audit",
+      "unit_phase_0_6_integration_test_breaker",
+      "unit_phase_0_6_integration_test_diag",
+      "unit_phase_0_6_integration_test_guard",
+      "unit_phase_0_6_integration_test_health",
+      "unit_phase_0_6_integration_test_limiter",
+      "unit_phase_0_6_integration_test_logger",
+      "unit_phase_0_6_integration_test_metrics",
+      "unit_phase_0_6_integration_test_point",
+      "unit_phase_0_6_integration_test_queue",
+      "unit_phase_0_6_integration_test_registry",
+      "unit_phase_0_6_integration_test_sink"
+    ],
+    "1": [
+      "unit_api_mcp_capability_surface_test_actionids",
+      "unit_api_mcp_capability_surface_test_allcapabilityids",
+      "unit_api_mcp_capability_surface_test_dispatchers",
+      "unit_api_mcp_capability_surface_test_docsmatrix",
+      "unit_api_mcp_capability_surface_test_domain",
+      "unit_api_mcp_capability_surface_test_expectedtoolnames",
+      "unit_api_mcp_capability_surface_test_mappedactionids",
+      "unit_api_mcp_capability_surface_test_mappedtoolnames",
+      "unit_api_mcp_capability_surface_test_offenders",
+      "unit_api_mcp_capability_surface_test_packagejson",
+      "unit_api_mcp_capability_surface_test_readmarkdownfiles",
+      "unit_api_mcp_capability_surface_test_readrepofile",
+      "unit_api_mcp_capability_surface_test_reporoot",
+      "unit_api_mcp_capability_surface_test_router",
+      "unit_api_mcp_capability_surface_test_superpowersdocs",
+      "unit_api_mcp_capability_surface_test_toolnames",
+      "unit_api_mcp_capability_surface_test_ts",
+      "unit_api_mcp_capability_surface_test_websitecapabilities",
+      "unit_api_mcp_capability_surface_test_websitematrix"
+    ],
+    "2": [
+      "unit_synapse_capabilities_test_actions",
+      "unit_synapse_capabilities_test_create",
+      "unit_synapse_capabilities_test_gettool",
+      "unit_synapse_capabilities_test_listtool",
+      "unit_synapse_capabilities_test_tool",
+      "unit_synapse_capabilities_test_toolnames",
+      "unit_synapse_capabilities_test_tools",
+      "unit_synapse_capabilities_test_ts",
+      "unit_synapse_capabilities_test_update",
+      "unit_synapse_capabilities_test_updatedefinition"
+    ],
+    "3": [
+      "fixtures_runtime_createruntimefixture",
+      "fixtures_runtime_runtimefixture",
+      "fixtures_runtime_testlogger",
+      "fixtures_runtime_ts",
+      "ipc_sample_test_eventbus",
+      "ipc_sample_test_fixture",
+      "ipc_sample_test_seen",
+      "ipc_sample_test_ts"
+    ],
+    "4": [
+      "unit_database_capability_parity_test_extractdispatcheractions",
+      "unit_database_capability_parity_test_mappedactions",
+      "unit_database_capability_parity_test_mappedtoolnames",
+      "unit_database_capability_parity_test_registryactions",
+      "unit_database_capability_parity_test_registrytoolnames",
+      "unit_database_capability_parity_test_toolnames",
+      "unit_database_capability_parity_test_ts"
+    ],
+    "5": [
+      "unit_database_mcp_rpc_test_calltool",
+      "unit_database_mcp_rpc_test_folders",
+      "unit_database_mcp_rpc_test_identity",
+      "unit_database_mcp_rpc_test_status",
+      "unit_database_mcp_rpc_test_summaries",
+      "unit_database_mcp_rpc_test_ts"
+    ],
+    "6": [
+      "unit_database_mcp_tools_test_getpropertydescription",
+      "unit_database_mcp_tools_test_gettool",
+      "unit_database_mcp_tools_test_names",
+      "unit_database_mcp_tools_test_tabledescription",
+      "unit_database_mcp_tools_test_ts",
+      "unit_database_mcp_tools_test_where"
+    ],
+    "7": [
+      "unit_database_log_list_test_auditsink",
+      "unit_database_log_list_test_auditsinkmock",
+      "unit_database_log_list_test_electronmock",
+      "unit_database_log_list_test_permissionguard",
+      "unit_database_log_list_test_ts"
+    ],
+    "8": [
+      "unit_database_dry_run_test_electronmock",
+      "unit_database_dry_run_test_preview",
+      "unit_database_dry_run_test_ts"
+    ],
+    "9": [
+      "unit_database_sql_read_test_electronmock",
+      "unit_database_sql_read_test_result",
+      "unit_database_sql_read_test_ts"
+    ],
+    "10": [
+      "unit_mcp_scheduler_tools_test_executetool",
+      "unit_mcp_scheduler_tools_test_names",
+      "unit_mcp_scheduler_tools_test_ts"
+    ],
+    "11": [
+      "unit_database_overview_test_electronmock",
+      "unit_database_overview_test_ts"
+    ],
+    "12": [
+      "unit_capability_naming_test_ts"
+    ],
+    "13": [
+      "fuzz_placeholder_test_ts"
+    ],
+    "14": [
+      "e2e_placeholder_test_ts"
+    ],
+    "15": [
+      "perf_placeholder_test_ts"
+    ]
+  },
+  "cohesion": {
+    "0": 0.02702702702702703,
+    "1": 0.10526315789473684,
+    "2": 0.2,
+    "3": 0.2857142857142857,
+    "4": 0.2857142857142857,
+    "5": 0.3333333333333333,
+    "6": 0.4,
+    "7": 0.4,
+    "8": 0.6666666666666666,
+    "9": 0.6666666666666666,
+    "10": 0.6666666666666666,
+    "11": 1.0,
+    "12": 1.0,
+    "13": 1.0,
+    "14": 1.0,
+    "15": 1.0
+  },
+  "gods": [
+    {
+      "id": "unit_database_mcp_tools_test_gettool",
+      "label": "getTool()",
+      "degree": 2
+    },
+    {
+      "id": "unit_database_mcp_tools_test_getpropertydescription",
+      "label": "getPropertyDescription()",
+      "degree": 2
+    },
+    {
+      "id": "fixtures_runtime_createruntimefixture",
+      "label": "createRuntimeFixture()",
+      "degree": 2
+    },
+    {
+      "id": "unit_database_sql_read_test_electronmock",
+      "label": "electronMock",
+      "degree": 1
+    },
+    {
+      "id": "unit_database_sql_read_test_result",
+      "label": "result",
+      "degree": 1
+    },
+    {
+      "id": "unit_database_dry_run_test_electronmock",
+      "label": "electronMock",
+      "degree": 1
+    },
+    {
+      "id": "unit_database_dry_run_test_preview",
+      "label": "preview",
+      "degree": 1
+    },
+    {
+      "id": "unit_database_capability_parity_test_registryactions",
+      "label": "registryActions",
+      "degree": 1
+    },
+    {
+      "id": "unit_database_capability_parity_test_toolnames",
+      "label": "toolNames",
+      "degree": 1
+    },
+    {
+      "id": "unit_database_capability_parity_test_mappedtoolnames",
+      "label": "mappedToolNames",
+      "degree": 1
+    }
+  ],
+  "surprises": [],
+  "tokens": {
+    "input": 0,
+    "output": 0
+  }
+}

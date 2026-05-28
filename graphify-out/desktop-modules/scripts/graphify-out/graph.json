@@ -418,24 +418,6 @@
       "norm_label": "choice_kinds"
     },
     {
-      "label": "LEGACY_TYPE_TO_KIND",
-      "file_type": "code",
-      "source_file": "import-legacy-database.mjs",
-      "source_location": "L12",
-      "id": "scripts_import_legacy_database_legacy_type_to_kind",
-      "community": 0,
-      "norm_label": "legacy_type_to_kind"
-    },
-    {
-      "label": "KIND_TO_AFFINITY",
-      "file_type": "code",
-      "source_file": "import-legacy-database.mjs",
-      "source_location": "L25",
-      "id": "scripts_import_legacy_database_kind_to_affinity",
-      "community": 0,
-      "norm_label": "kind_to_affinity"
-    },
-    {
       "label": "usage()",
       "file_type": "code",
       "source_file": "import-legacy-database.mjs",
@@ -933,19 +915,6 @@
       "id": "migrate_legacy_database_macos_sh",
       "community": 12,
       "norm_label": "migrate-legacy-database-macos.sh"
-    },
-    {
-      "label": "migrate-legacy-database-macos.sh script",
-      "file_type": "code",
-      "source_file": "migrate-legacy-database-macos.sh",
-      "source_location": "L1",
-      "metadata": {
-        "language": "bash",
-        "kind": "bash_entrypoint"
-      },
-      "id": "users_liyang_documents_code_github_synapse_desktop_scripts_migrate_legacy_database_macos_sh__entry",
-      "community": 12,
-      "norm_label": "migrate-legacy-database-macos.sh script"
     },
     {
       "label": "run_with_node()",
@@ -2271,30 +2240,10 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "import-legacy-database.mjs",
-      "source_location": "L25",
-      "weight": 1.0,
-      "source": "import_legacy_database_mjs",
-      "target": "scripts_import_legacy_database_kind_to_affinity",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "import-legacy-database.mjs",
       "source_location": "L224",
       "weight": 1.0,
       "source": "import_legacy_database_mjs",
       "target": "scripts_import_legacy_database_kindtoaffinity",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "import-legacy-database.mjs",
-      "source_location": "L12",
-      "weight": 1.0,
-      "source": "import_legacy_database_mjs",
-      "target": "scripts_import_legacy_database_legacy_type_to_kind",
       "confidence_score": 1.0
     },
     {
@@ -3233,6 +3182,7 @@
       "source_file": "migrate-legacy-database-macos.sh",
       "source_location": "L17",
       "weight": 1.0,
+      "context": "call",
       "source": "migrate_legacy_database_macos_sh",
       "target": "scripts_migrate_legacy_database_macos_run_with_node",
       "confidence_score": 1.0
@@ -3243,39 +3193,8 @@
       "source_file": "migrate-legacy-database-macos.sh",
       "source_location": "L22",
       "weight": 1.0,
-      "source": "migrate_legacy_database_macos_sh",
-      "target": "scripts_migrate_legacy_database_macos_run_with_synapse_app",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "migrate-legacy-database-macos.sh",
-      "source_location": "L1",
-      "weight": 1.0,
-      "source": "migrate_legacy_database_macos_sh",
-      "target": "users_liyang_documents_code_github_synapse_desktop_scripts_migrate_legacy_database_macos_sh__entry",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "migrate-legacy-database-macos.sh",
-      "source_location": "L27",
-      "weight": 1.0,
       "context": "call",
-      "source": "users_liyang_documents_code_github_synapse_desktop_scripts_migrate_legacy_database_macos_sh__entry",
-      "target": "scripts_migrate_legacy_database_macos_run_with_node",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "confidence": "EXTRACTED",
-      "source_file": "migrate-legacy-database-macos.sh",
-      "source_location": "L44",
-      "weight": 1.0,
-      "context": "call",
-      "source": "users_liyang_documents_code_github_synapse_desktop_scripts_migrate_legacy_database_macos_sh__entry",
+      "source": "migrate_legacy_database_macos_sh",
       "target": "scripts_migrate_legacy_database_macos_run_with_synapse_app",
       "confidence_score": 1.0
     },
@@ -3916,5 +3835,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "5202a67619f4e4fc9865e308e524954ce24e5e30"
+  "built_at_commit": "136f0d10f9c7b676f542321420356586e4d616c1"
 }

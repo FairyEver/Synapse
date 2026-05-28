@@ -9,7 +9,7 @@
       "source_file": "provider-lookup-context.tsx",
       "source_location": "L1",
       "id": "provider_lookup_context_tsx",
-      "community": 8,
+      "community": 0,
       "norm_label": "provider-lookup-context.tsx"
     },
     {
@@ -18,17 +18,8 @@
       "source_file": "provider-lookup-context.tsx",
       "source_location": "L7",
       "id": "workflow_nodes_provider_lookup_context_logger",
-      "community": 8,
+      "community": 0,
       "norm_label": "logger"
-    },
-    {
-      "label": "ProviderLookup",
-      "file_type": "code",
-      "source_file": "provider-lookup-context.tsx",
-      "source_location": "L9",
-      "id": "workflow_nodes_provider_lookup_context_providerlookup",
-      "community": 8,
-      "norm_label": "providerlookup"
     },
     {
       "label": "defaultLookup",
@@ -36,17 +27,8 @@
       "source_file": "provider-lookup-context.tsx",
       "source_location": "L15",
       "id": "workflow_nodes_provider_lookup_context_defaultlookup",
-      "community": 8,
+      "community": 0,
       "norm_label": "defaultlookup"
-    },
-    {
-      "label": "ProviderLookupContext",
-      "file_type": "code",
-      "source_file": "provider-lookup-context.tsx",
-      "source_location": "L21",
-      "id": "workflow_nodes_provider_lookup_context_providerlookupcontext",
-      "community": 8,
-      "norm_label": "providerlookupcontext"
     },
     {
       "label": "tierModelValue()",
@@ -54,17 +36,8 @@
       "source_file": "provider-lookup-context.tsx",
       "source_location": "L23",
       "id": "workflow_nodes_provider_lookup_context_tiermodelvalue",
-      "community": 8,
+      "community": 0,
       "norm_label": "tiermodelvalue()"
-    },
-    {
-      "label": "ProviderLookupProvider()",
-      "file_type": "code",
-      "source_file": "provider-lookup-context.tsx",
-      "source_location": "L32",
-      "id": "workflow_nodes_provider_lookup_context_providerlookupprovider",
-      "community": 8,
-      "norm_label": "providerlookupprovider()"
     },
     {
       "label": "useProviderLookup()",
@@ -81,7 +54,7 @@
       "source_file": "register.renderer.ts",
       "source_location": "L1",
       "id": "register_renderer_ts",
-      "community": 1,
+      "community": 5,
       "norm_label": "register.renderer.ts"
     },
     {
@@ -90,17 +63,8 @@
       "source_file": "variable-binding-editor.tsx",
       "source_location": "L1",
       "id": "variable_binding_editor_tsx",
-      "community": 0,
+      "community": 2,
       "norm_label": "variable-binding-editor.tsx"
-    },
-    {
-      "label": "VariableSourceControlProps",
-      "file_type": "code",
-      "source_file": "variable-binding-editor.tsx",
-      "source_location": "L18",
-      "id": "workflow_nodes_variable_binding_editor_variablesourcecontrolprops",
-      "community": 0,
-      "norm_label": "variablesourcecontrolprops"
     },
     {
       "label": "VariableSourceControl()",
@@ -108,44 +72,8 @@
       "source_file": "variable-binding-editor.tsx",
       "source_location": "L25",
       "id": "workflow_nodes_variable_binding_editor_variablesourcecontrol",
-      "community": 0,
+      "community": 2,
       "norm_label": "variablesourcecontrol()"
-    },
-    {
-      "label": "VariableBindingRowProps",
-      "file_type": "code",
-      "source_file": "variable-binding-editor.tsx",
-      "source_location": "L106",
-      "id": "workflow_nodes_variable_binding_editor_variablebindingrowprops",
-      "community": 0,
-      "norm_label": "variablebindingrowprops"
-    },
-    {
-      "label": "VariableBindingRow()",
-      "file_type": "code",
-      "source_file": "variable-binding-editor.tsx",
-      "source_location": "L114",
-      "id": "workflow_nodes_variable_binding_editor_variablebindingrow",
-      "community": 0,
-      "norm_label": "variablebindingrow()"
-    },
-    {
-      "label": "VariableBindingEditorProps",
-      "file_type": "code",
-      "source_file": "variable-binding-editor.tsx",
-      "source_location": "L155",
-      "id": "workflow_nodes_variable_binding_editor_variablebindingeditorprops",
-      "community": 0,
-      "norm_label": "variablebindingeditorprops"
-    },
-    {
-      "label": "VariableBindingEditor()",
-      "file_type": "code",
-      "source_file": "variable-binding-editor.tsx",
-      "source_location": "L162",
-      "id": "workflow_nodes_variable_binding_editor_variablebindingeditor",
-      "community": 0,
-      "norm_label": "variablebindingeditor()"
     },
     {
       "label": "node-status-utils.ts",
@@ -180,7 +108,7 @@
       "source_file": "panel-registry.ts",
       "source_location": "L1",
       "id": "panel_registry_ts",
-      "community": 0,
+      "community": 6,
       "norm_label": "panel-registry.ts"
     },
     {
@@ -189,7 +117,7 @@
       "source_file": "panel-registry.ts",
       "source_location": "L12",
       "id": "workflow_nodes_panel_registry_nodepanelprops",
-      "community": 0,
+      "community": 6,
       "norm_label": "nodepanelprops"
     },
     {
@@ -198,17 +126,8 @@
       "source_file": "panel-registry.ts",
       "source_location": "L25",
       "id": "workflow_nodes_panel_registry_panelcomponent",
-      "community": 0,
+      "community": 6,
       "norm_label": "panelcomponent"
-    },
-    {
-      "label": "panelRegistry",
-      "file_type": "code",
-      "source_file": "panel-registry.ts",
-      "source_location": "L30",
-      "id": "workflow_nodes_panel_registry_panelregistry",
-      "community": 0,
-      "norm_label": "panelregistry"
     },
     {
       "label": "getPanel()",
@@ -216,7 +135,7 @@
       "source_file": "panel-registry.ts",
       "source_location": "L39",
       "id": "workflow_nodes_panel_registry_getpanel",
-      "community": 0,
+      "community": 6,
       "norm_label": "getpanel()"
     },
     {
@@ -225,7 +144,7 @@
       "source_file": "types.ts",
       "source_location": "L1",
       "id": "types_ts",
-      "community": 1,
+      "community": 5,
       "norm_label": "types.ts"
     },
     {
@@ -234,7 +153,7 @@
       "source_file": "types.ts",
       "source_location": "L6",
       "id": "workflow_nodes_types_portdefinition",
-      "community": 1,
+      "community": 5,
       "norm_label": "portdefinition"
     },
     {
@@ -243,7 +162,7 @@
       "source_file": "types.ts",
       "source_location": "L7",
       "id": "workflow_nodes_types_configfielddescriptor",
-      "community": 1,
+      "community": 5,
       "norm_label": "configfielddescriptor"
     },
     {
@@ -252,7 +171,7 @@
       "source_file": "types.ts",
       "source_location": "L14",
       "id": "workflow_nodes_types_nodemanifest",
-      "community": 1,
+      "community": 5,
       "norm_label": "nodemanifest"
     },
     {
@@ -261,7 +180,7 @@
       "source_file": "types.ts",
       "source_location": "L27",
       "id": "workflow_nodes_types_workflowruntimecontext",
-      "community": 1,
+      "community": 5,
       "norm_label": "workflowruntimecontext"
     },
     {
@@ -270,7 +189,7 @@
       "source_file": "types.ts",
       "source_location": "L38",
       "id": "workflow_nodes_types_agentsenddeps",
-      "community": 1,
+      "community": 5,
       "norm_label": "agentsenddeps"
     },
     {
@@ -279,7 +198,7 @@
       "source_file": "types.ts",
       "source_location": "L65",
       "id": "workflow_nodes_types_noderuntimedeps",
-      "community": 4,
+      "community": 1,
       "norm_label": "noderuntimedeps"
     },
     {
@@ -288,7 +207,7 @@
       "source_file": "types.ts",
       "source_location": "L85",
       "id": "workflow_nodes_types_nodeexecutioninput",
-      "community": 1,
+      "community": 7,
       "norm_label": "nodeexecutioninput"
     },
     {
@@ -297,7 +216,7 @@
       "source_file": "types.ts",
       "source_location": "L95",
       "id": "workflow_nodes_types_nodeexecutionresult",
-      "community": 3,
+      "community": 1,
       "norm_label": "nodeexecutionresult"
     },
     {
@@ -306,7 +225,7 @@
       "source_file": "types.ts",
       "source_location": "L109",
       "id": "workflow_nodes_types_nodeexecutor",
-      "community": 1,
+      "community": 5,
       "norm_label": "nodeexecutor"
     },
     {
@@ -315,26 +234,8 @@
       "source_file": "collapsible-section.tsx",
       "source_location": "L1",
       "id": "collapsible_section_tsx",
-      "community": 0,
+      "community": 6,
       "norm_label": "collapsible-section.tsx"
-    },
-    {
-      "label": "CollapsibleSectionProps",
-      "file_type": "code",
-      "source_file": "collapsible-section.tsx",
-      "source_location": "L6",
-      "id": "workflow_nodes_collapsible_section_collapsiblesectionprops",
-      "community": 0,
-      "norm_label": "collapsiblesectionprops"
-    },
-    {
-      "label": "CollapsibleSection()",
-      "file_type": "code",
-      "source_file": "collapsible-section.tsx",
-      "source_location": "L13",
-      "id": "workflow_nodes_collapsible_section_collapsiblesection",
-      "community": 0,
-      "norm_label": "collapsiblesection()"
     },
     {
       "label": "registry.ts",
@@ -342,7 +243,7 @@
       "source_file": "registry.ts",
       "source_location": "L1",
       "id": "registry_ts",
-      "community": 1,
+      "community": 5,
       "norm_label": "registry.ts"
     },
     {
@@ -351,7 +252,7 @@
       "source_file": "registry.ts",
       "source_location": "L3",
       "id": "workflow_nodes_registry_nodetyperegistry",
-      "community": 1,
+      "community": 5,
       "norm_label": "nodetyperegistry"
     },
     {
@@ -360,7 +261,7 @@
       "source_file": "registry.ts",
       "source_location": "L7",
       "id": "workflow_nodes_registry_nodetyperegistry_register",
-      "community": 1,
+      "community": 5,
       "norm_label": ".register()"
     },
     {
@@ -369,7 +270,7 @@
       "source_file": "registry.ts",
       "source_location": "L11",
       "id": "workflow_nodes_registry_nodetyperegistry_registermanifest",
-      "community": 1,
+      "community": 5,
       "norm_label": ".registermanifest()"
     },
     {
@@ -378,7 +279,7 @@
       "source_file": "registry.ts",
       "source_location": "L14",
       "id": "workflow_nodes_registry_nodetyperegistry_getmanifest",
-      "community": 1,
+      "community": 5,
       "norm_label": ".getmanifest()"
     },
     {
@@ -387,7 +288,7 @@
       "source_file": "registry.ts",
       "source_location": "L19",
       "id": "workflow_nodes_registry_nodetyperegistry_getexecutor",
-      "community": 1,
+      "community": 5,
       "norm_label": ".getexecutor()"
     },
     {
@@ -396,7 +297,7 @@
       "source_file": "registry.ts",
       "source_location": "L24",
       "id": "workflow_nodes_registry_nodetyperegistry_listtypes",
-      "community": 1,
+      "community": 5,
       "norm_label": ".listtypes()"
     },
     {
@@ -405,7 +306,7 @@
       "source_file": "prompt-shortcuts.ts",
       "source_location": "L1",
       "id": "prompt_shortcuts_ts",
-      "community": 7,
+      "community": 8,
       "norm_label": "prompt-shortcuts.ts"
     },
     {
@@ -414,7 +315,7 @@
       "source_file": "prompt-shortcuts.ts",
       "source_location": "L4",
       "id": "workflow_nodes_prompt_shortcuts_promptshortcutkind",
-      "community": 7,
+      "community": 8,
       "norm_label": "promptshortcutkind"
     },
     {
@@ -423,7 +324,7 @@
       "source_file": "prompt-shortcuts.ts",
       "source_location": "L6",
       "id": "workflow_nodes_prompt_shortcuts_promptshortcutoption",
-      "community": 7,
+      "community": 8,
       "norm_label": "promptshortcutoption"
     },
     {
@@ -432,7 +333,7 @@
       "source_file": "prompt-shortcuts.ts",
       "source_location": "L12",
       "id": "workflow_nodes_prompt_shortcuts_promptshortcuttriggermatch",
-      "community": 7,
+      "community": 8,
       "norm_label": "promptshortcuttriggermatch"
     },
     {
@@ -441,7 +342,7 @@
       "source_file": "prompt-shortcuts.ts",
       "source_location": "L18",
       "id": "workflow_nodes_prompt_shortcuts_completiontextforpromptshortcut",
-      "community": 7,
+      "community": 8,
       "norm_label": "completiontextforpromptshortcut()"
     },
     {
@@ -450,7 +351,7 @@
       "source_file": "prompt-shortcuts.ts",
       "source_location": "L22",
       "id": "workflow_nodes_prompt_shortcuts_buildpromptshortcutoptions",
-      "community": 7,
+      "community": 8,
       "norm_label": "buildpromptshortcutoptions()"
     },
     {
@@ -459,7 +360,7 @@
       "source_file": "prompt-shortcuts.ts",
       "source_location": "L46",
       "id": "workflow_nodes_prompt_shortcuts_extractclaudecodeglobalskillnames",
-      "community": 7,
+      "community": 8,
       "norm_label": "extractclaudecodeglobalskillnames()"
     },
     {
@@ -468,7 +369,7 @@
       "source_file": "prompt-shortcuts.ts",
       "source_location": "L51",
       "id": "workflow_nodes_prompt_shortcuts_matchpromptshortcuttrigger",
-      "community": 7,
+      "community": 8,
       "norm_label": "matchpromptshortcuttrigger()"
     },
     {
@@ -477,7 +378,7 @@
       "source_file": "prompt-shortcuts.ts",
       "source_location": "L64",
       "id": "workflow_nodes_prompt_shortcuts_shouldstartpromptshortcutcompletion",
-      "community": 7,
+      "community": 8,
       "norm_label": "shouldstartpromptshortcutcompletion()"
     },
     {
@@ -486,7 +387,7 @@
       "source_file": "prompt-shortcuts.ts",
       "source_location": "L69",
       "id": "workflow_nodes_prompt_shortcuts_uniquenonempty",
-      "community": 7,
+      "community": 8,
       "norm_label": "uniquenonempty()"
     },
     {
@@ -495,7 +396,7 @@
       "source_file": "agent-timeout.ts",
       "source_location": "L1",
       "id": "agent_timeout_ts",
-      "community": 6,
+      "community": 0,
       "norm_label": "agent-timeout.ts"
     },
     {
@@ -504,7 +405,7 @@
       "source_file": "agent-timeout.ts",
       "source_location": "L3",
       "id": "workflow_nodes_agent_timeout_resolveagenttimeoutmins",
-      "community": 6,
+      "community": 0,
       "norm_label": "resolveagenttimeoutmins()"
     },
     {
@@ -513,7 +414,7 @@
       "source_file": "agent-timeout.ts",
       "source_location": "L7",
       "id": "workflow_nodes_agent_timeout_agenttimeoutminstoms",
-      "community": 6,
+      "community": 0,
       "norm_label": "agenttimeoutminstoms()"
     },
     {
@@ -522,7 +423,7 @@
       "source_file": "project-select.tsx",
       "source_location": "L1",
       "id": "project_select_tsx",
-      "community": 0,
+      "community": 6,
       "norm_label": "project-select.tsx"
     },
     {
@@ -531,17 +432,8 @@
       "source_file": "project-select.tsx",
       "source_location": "L4",
       "id": "workflow_nodes_project_select_projectselectprops",
-      "community": 0,
+      "community": 6,
       "norm_label": "projectselectprops"
-    },
-    {
-      "label": "ProjectSelect()",
-      "file_type": "code",
-      "source_file": "project-select.tsx",
-      "source_location": "L13",
-      "id": "workflow_nodes_project_select_projectselect",
-      "community": 0,
-      "norm_label": "projectselect()"
     },
     {
       "label": "register.main.ts",
@@ -549,7 +441,7 @@
       "source_file": "register.main.ts",
       "source_location": "L1",
       "id": "register_main_ts",
-      "community": 2,
+      "community": 1,
       "norm_label": "register.main.ts"
     },
     {
@@ -558,7 +450,7 @@
       "source_file": "prompt-editor.tsx",
       "source_location": "L1",
       "id": "prompt_editor_tsx",
-      "community": 7,
+      "community": 8,
       "norm_label": "prompt-editor.tsx"
     },
     {
@@ -567,7 +459,7 @@
       "source_file": "prompt-editor.tsx",
       "source_location": "L14",
       "id": "workflow_nodes_prompt_editor_logger",
-      "community": 7,
+      "community": 8,
       "norm_label": "logger"
     },
     {
@@ -576,7 +468,7 @@
       "source_file": "prompt-editor.tsx",
       "source_location": "L16",
       "id": "workflow_nodes_prompt_editor_prompteditorprops",
-      "community": 7,
+      "community": 8,
       "norm_label": "prompteditorprops"
     },
     {
@@ -585,17 +477,8 @@
       "source_file": "prompt-editor.tsx",
       "source_location": "L25",
       "id": "workflow_nodes_prompt_editor_useclaudecodeglobalskillnames",
-      "community": 7,
+      "community": 8,
       "norm_label": "useclaudecodeglobalskillnames()"
-    },
-    {
-      "label": "PromptEditor()",
-      "file_type": "code",
-      "source_file": "prompt-editor.tsx",
-      "source_location": "L56",
-      "id": "workflow_nodes_prompt_editor_prompteditor",
-      "community": 0,
-      "norm_label": "prompteditor()"
     },
     {
       "label": "variable-binding.ts",
@@ -603,7 +486,7 @@
       "source_file": "schemas/variable-binding.ts",
       "source_location": "L1",
       "id": "schemas_variable_binding_ts",
-      "community": 7,
+      "community": 2,
       "norm_label": "variable-binding.ts"
     },
     {
@@ -612,7 +495,7 @@
       "source_file": "schemas/variable-binding.ts",
       "source_location": "L5",
       "id": "schemas_variable_binding_variablesourceschema",
-      "community": 4,
+      "community": 2,
       "norm_label": "variablesourceschema"
     },
     {
@@ -621,17 +504,8 @@
       "source_file": "schemas/variable-binding.ts",
       "source_location": "L11",
       "id": "schemas_variable_binding_variablebindingschema",
-      "community": 7,
+      "community": 2,
       "norm_label": "variablebindingschema"
-    },
-    {
-      "label": "VariableBinding",
-      "file_type": "code",
-      "source_file": "schemas/variable-binding.ts",
-      "source_location": "L16",
-      "id": "schemas_variable_binding_variablebinding",
-      "community": 7,
-      "norm_label": "variablebinding"
     },
     {
       "label": "VariableSource",
@@ -639,17 +513,8 @@
       "source_file": "schemas/variable-binding.ts",
       "source_location": "L17",
       "id": "schemas_variable_binding_variablesource",
-      "community": 0,
+      "community": 2,
       "norm_label": "variablesource"
-    },
-    {
-      "label": "variable-binding.test.ts",
-      "file_type": "code",
-      "source_file": "schemas/__tests__/variable-binding.test.ts",
-      "source_location": "L1",
-      "id": "schemas_tests_variable_binding_test_ts",
-      "community": 7,
-      "norm_label": "variable-binding.test.ts"
     },
     {
       "label": "schema.ts",
@@ -657,7 +522,7 @@
       "source_file": "script/schema.ts",
       "source_location": "L1",
       "id": "script_schema_ts",
-      "community": 4,
+      "community": 2,
       "norm_label": "schema.ts"
     },
     {
@@ -666,17 +531,8 @@
       "source_file": "script/schema.ts",
       "source_location": "L7",
       "id": "script_schema_scriptvariablebindingschema",
-      "community": 4,
+      "community": 2,
       "norm_label": "scriptvariablebindingschema"
-    },
-    {
-      "label": "scriptNodeConfigSchema",
-      "file_type": "code",
-      "source_file": "script/schema.ts",
-      "source_location": "L12",
-      "id": "script_schema_scriptnodeconfigschema",
-      "community": 4,
-      "norm_label": "scriptnodeconfigschema"
     },
     {
       "label": "ScriptNodeConfig",
@@ -684,7 +540,7 @@
       "source_file": "script/schema.ts",
       "source_location": "L16",
       "id": "script_schema_scriptnodeconfig",
-      "community": 4,
+      "community": 2,
       "norm_label": "scriptnodeconfig"
     },
     {
@@ -711,17 +567,8 @@
       "source_file": "script/panel.tsx",
       "source_location": "L1",
       "id": "script_panel_tsx",
-      "community": 4,
+      "community": 2,
       "norm_label": "panel.tsx"
-    },
-    {
-      "label": "ScriptNodePanelProps",
-      "file_type": "code",
-      "source_file": "script/panel.tsx",
-      "source_location": "L9",
-      "id": "script_panel_scriptnodepanelprops",
-      "community": 4,
-      "norm_label": "scriptnodepanelprops"
     },
     {
       "label": "ScriptNodePanel()",
@@ -729,7 +576,7 @@
       "source_file": "script/panel.tsx",
       "source_location": "L16",
       "id": "script_panel_scriptnodepanel",
-      "community": 0,
+      "community": 2,
       "norm_label": "scriptnodepanel()"
     },
     {
@@ -738,7 +585,7 @@
       "source_file": "script/executor.main.ts",
       "source_location": "L1",
       "id": "script_executor_main_ts",
-      "community": 4,
+      "community": 2,
       "norm_label": "executor.main.ts"
     },
     {
@@ -747,7 +594,7 @@
       "source_file": "script/executor.main.ts",
       "source_location": "L9",
       "id": "script_executor_main_logger",
-      "community": 4,
+      "community": 2,
       "norm_label": "logger"
     },
     {
@@ -756,7 +603,7 @@
       "source_file": "script/executor.main.ts",
       "source_location": "L11",
       "id": "script_executor_main_scriptnodeexecutor",
-      "community": 4,
+      "community": 2,
       "norm_label": "scriptnodeexecutor"
     },
     {
@@ -765,7 +612,7 @@
       "source_file": "script/executor.main.ts",
       "source_location": "L100",
       "id": "script_executor_main_protected_env_names",
-      "community": 4,
+      "community": 2,
       "norm_label": "protected_env_names"
     },
     {
@@ -774,7 +621,7 @@
       "source_file": "script/executor.main.ts",
       "source_location": "L115",
       "id": "script_executor_main_saferesolvedenv",
-      "community": 4,
+      "community": 2,
       "norm_label": "saferesolvedenv()"
     },
     {
@@ -783,7 +630,7 @@
       "source_file": "script/manifest.ts",
       "source_location": "L1",
       "id": "script_manifest_ts",
-      "community": 4,
+      "community": 5,
       "norm_label": "manifest.ts"
     },
     {
@@ -792,7 +639,7 @@
       "source_file": "script/manifest.ts",
       "source_location": "L6",
       "id": "script_manifest_scriptnodemanifest",
-      "community": 4,
+      "community": 5,
       "norm_label": "scriptnodemanifest"
     },
     {
@@ -801,7 +648,7 @@
       "source_file": "script/index.ts",
       "source_location": "L1",
       "id": "script_index_ts",
-      "community": 4,
+      "community": 2,
       "norm_label": "index.ts"
     },
     {
@@ -810,7 +657,7 @@
       "source_file": "script/__tests__/executor.test.ts",
       "source_location": "L1",
       "id": "script_tests_executor_test_ts",
-      "community": 4,
+      "community": 2,
       "norm_label": "executor.test.ts"
     },
     {
@@ -819,7 +666,7 @@
       "source_file": "script/__tests__/executor.test.ts",
       "source_location": "L4",
       "id": "script_tests_executor_test_ts_tests_executor_test_logger",
-      "community": 4,
+      "community": 2,
       "norm_label": "logger"
     },
     {
@@ -828,7 +675,7 @@
       "source_file": "script/__tests__/executor.test.ts",
       "source_location": "L16",
       "id": "script_tests_executor_test_ts_tests_executor_test_ctx",
-      "community": 4,
+      "community": 2,
       "norm_label": "ctx"
     },
     {
@@ -837,7 +684,7 @@
       "source_file": "script/__tests__/executor.test.ts",
       "source_location": "L18",
       "id": "script_tests_executor_test_ts_tests_executor_test_makeinput",
-      "community": 4,
+      "community": 2,
       "norm_label": "makeinput()"
     },
     {
@@ -846,7 +693,7 @@
       "source_file": "script/__tests__/executor.test.ts",
       "source_location": "L33",
       "id": "script_tests_executor_test_ts_tests_executor_test_fakeruntimedeps",
-      "community": 4,
+      "community": 2,
       "norm_label": "fakeruntimedeps()"
     },
     {
@@ -855,7 +702,7 @@
       "source_file": "script/__tests__/executor.test.ts",
       "source_location": "L53",
       "id": "script_tests_executor_test_ts_tests_executor_test_deps",
-      "community": 4,
+      "community": 2,
       "norm_label": "deps"
     },
     {
@@ -864,7 +711,7 @@
       "source_file": "script/__tests__/executor.test.ts",
       "source_location": "L84",
       "id": "script_tests_executor_test_ts_tests_executor_test_input",
-      "community": 4,
+      "community": 2,
       "norm_label": "input"
     },
     {
@@ -873,7 +720,7 @@
       "source_file": "script/__tests__/executor.test.ts",
       "source_location": "L120",
       "id": "script_tests_executor_test_ts_tests_executor_test_payload",
-      "community": 4,
+      "community": 2,
       "norm_label": "payload"
     },
     {
@@ -882,7 +729,7 @@
       "source_file": "script/__tests__/schema.test.ts",
       "source_location": "L1",
       "id": "script_tests_schema_test_ts",
-      "community": 4,
+      "community": 5,
       "norm_label": "schema.test.ts"
     },
     {
@@ -891,7 +738,7 @@
       "source_file": "end/schema.ts",
       "source_location": "L1",
       "id": "end_schema_ts",
-      "community": 1,
+      "community": 7,
       "norm_label": "schema.ts"
     },
     {
@@ -900,7 +747,7 @@
       "source_file": "end/schema.ts",
       "source_location": "L4",
       "id": "end_schema_endnodeconfigschema",
-      "community": 1,
+      "community": 7,
       "norm_label": "endnodeconfigschema"
     },
     {
@@ -909,7 +756,7 @@
       "source_file": "end/schema.ts",
       "source_location": "L9",
       "id": "end_schema_endnodeconfig",
-      "community": 1,
+      "community": 7,
       "norm_label": "endnodeconfig"
     },
     {
@@ -936,17 +783,8 @@
       "source_file": "end/panel.tsx",
       "source_location": "L1",
       "id": "end_panel_tsx",
-      "community": 0,
+      "community": 7,
       "norm_label": "panel.tsx"
-    },
-    {
-      "label": "EndNodePanelProps",
-      "file_type": "code",
-      "source_file": "end/panel.tsx",
-      "source_location": "L8",
-      "id": "end_panel_endnodepanelprops",
-      "community": 1,
-      "norm_label": "endnodepanelprops"
     },
     {
       "label": "EndNodePanel()",
@@ -954,7 +792,7 @@
       "source_file": "end/panel.tsx",
       "source_location": "L15",
       "id": "end_panel_endnodepanel",
-      "community": 0,
+      "community": 7,
       "norm_label": "endnodepanel()"
     },
     {
@@ -963,7 +801,7 @@
       "source_file": "end/executor.main.ts",
       "source_location": "L1",
       "id": "end_executor_main_ts",
-      "community": 1,
+      "community": 7,
       "norm_label": "executor.main.ts"
     },
     {
@@ -972,7 +810,7 @@
       "source_file": "end/executor.main.ts",
       "source_location": "L6",
       "id": "end_executor_main_logger",
-      "community": 1,
+      "community": 7,
       "norm_label": "logger"
     },
     {
@@ -981,7 +819,7 @@
       "source_file": "end/executor.main.ts",
       "source_location": "L8",
       "id": "end_executor_main_endnodeexecutor",
-      "community": 1,
+      "community": 7,
       "norm_label": "endnodeexecutor"
     },
     {
@@ -990,7 +828,7 @@
       "source_file": "end/manifest.ts",
       "source_location": "L1",
       "id": "end_manifest_ts",
-      "community": 1,
+      "community": 7,
       "norm_label": "manifest.ts"
     },
     {
@@ -999,7 +837,7 @@
       "source_file": "end/manifest.ts",
       "source_location": "L6",
       "id": "end_manifest_endnodemanifest",
-      "community": 1,
+      "community": 7,
       "norm_label": "endnodemanifest"
     },
     {
@@ -1008,7 +846,7 @@
       "source_file": "end/index.ts",
       "source_location": "L1",
       "id": "end_index_ts",
-      "community": 1,
+      "community": 7,
       "norm_label": "index.ts"
     },
     {
@@ -1017,7 +855,7 @@
       "source_file": "__tests__/end-node-executor.test.ts",
       "source_location": "L1",
       "id": "tests_end_node_executor_test_ts",
-      "community": 1,
+      "community": 7,
       "norm_label": "end-node-executor.test.ts"
     },
     {
@@ -1026,7 +864,7 @@
       "source_file": "__tests__/end-node-executor.test.ts",
       "source_location": "L4",
       "id": "tests_end_node_executor_test_logger",
-      "community": 1,
+      "community": 7,
       "norm_label": "logger"
     },
     {
@@ -1035,7 +873,7 @@
       "source_file": "__tests__/end-node-executor.test.ts",
       "source_location": "L16",
       "id": "tests_end_node_executor_test_makeinput",
-      "community": 1,
+      "community": 7,
       "norm_label": "makeinput()"
     },
     {
@@ -1044,7 +882,7 @@
       "source_file": "__tests__/end-node-executor.test.ts",
       "source_location": "L47",
       "id": "tests_end_node_executor_test_sendtoagent",
-      "community": 1,
+      "community": 7,
       "norm_label": "sendtoagent"
     },
     {
@@ -1053,7 +891,7 @@
       "source_file": "__tests__/end-node-executor.test.ts",
       "source_location": "L61",
       "id": "tests_end_node_executor_test_payload",
-      "community": 1,
+      "community": 7,
       "norm_label": "payload"
     },
     {
@@ -1062,7 +900,7 @@
       "source_file": "__tests__/prompt-shortcuts.test.ts",
       "source_location": "L1",
       "id": "tests_prompt_shortcuts_test_ts",
-      "community": 7,
+      "community": 8,
       "norm_label": "prompt-shortcuts.test.ts"
     },
     {
@@ -1071,7 +909,7 @@
       "source_file": "__tests__/prompt-shortcuts.test.ts",
       "source_location": "L13",
       "id": "tests_prompt_shortcuts_test_options",
-      "community": 7,
+      "community": 8,
       "norm_label": "options"
     },
     {
@@ -1080,7 +918,7 @@
       "source_file": "__tests__/prompt-shortcuts.test.ts",
       "source_location": "L57",
       "id": "tests_prompt_shortcuts_test_scan",
-      "community": 7,
+      "community": 8,
       "norm_label": "scan"
     },
     {
@@ -1089,7 +927,7 @@
       "source_file": "__tests__/registry.test.ts",
       "source_location": "L1",
       "id": "tests_registry_test_ts",
-      "community": 1,
+      "community": 5,
       "norm_label": "registry.test.ts"
     },
     {
@@ -1098,7 +936,7 @@
       "source_file": "__tests__/registry.test.ts",
       "source_location": "L7",
       "id": "tests_registry_test_stub",
-      "community": 1,
+      "community": 5,
       "norm_label": "stub"
     },
     {
@@ -1107,7 +945,7 @@
       "source_file": "__tests__/registry.test.ts",
       "source_location": "L15",
       "id": "tests_registry_test_exec",
-      "community": 1,
+      "community": 5,
       "norm_label": "exec"
     },
     {
@@ -1116,7 +954,7 @@
       "source_file": "__tests__/registry.test.ts",
       "source_location": "L19",
       "id": "tests_registry_test_r",
-      "community": 1,
+      "community": 5,
       "norm_label": "r"
     },
     {
@@ -1125,7 +963,7 @@
       "source_file": "__tests__/provider-settings-panel.test.ts",
       "source_location": "L1",
       "id": "tests_provider_settings_panel_test_ts",
-      "community": 8,
+      "community": 0,
       "norm_label": "provider-settings-panel.test.ts"
     },
     {
@@ -1134,7 +972,7 @@
       "source_file": "__tests__/provider-settings-panel.test.ts",
       "source_location": "L30",
       "id": "tests_provider_settings_panel_test_providerlookup",
-      "community": 8,
+      "community": 0,
       "norm_label": "providerlookup"
     },
     {
@@ -1143,7 +981,7 @@
       "source_file": "__tests__/provider-settings-panel.test.ts",
       "source_location": "L36",
       "id": "tests_provider_settings_panel_test_roots",
-      "community": 8,
+      "community": 0,
       "norm_label": "roots"
     },
     {
@@ -1152,7 +990,7 @@
       "source_file": "__tests__/provider-settings-panel.test.ts",
       "source_location": "L47",
       "id": "tests_provider_settings_panel_test_renderpanel",
-      "community": 8,
+      "community": 0,
       "norm_label": "renderpanel()"
     },
     {
@@ -1161,7 +999,7 @@
       "source_file": "__tests__/provider-settings-panel.test.ts",
       "source_location": "L60",
       "id": "tests_provider_settings_panel_test_onchange",
-      "community": 8,
+      "community": 0,
       "norm_label": "onchange"
     },
     {
@@ -1170,7 +1008,7 @@
       "source_file": "__tests__/provider-settings-panel.test.ts",
       "source_location": "L61",
       "id": "tests_provider_settings_panel_test_container",
-      "community": 8,
+      "community": 0,
       "norm_label": "container"
     },
     {
@@ -1179,7 +1017,7 @@
       "source_file": "__tests__/provider-settings-panel.test.ts",
       "source_location": "L77",
       "id": "tests_provider_settings_panel_test_checkbox",
-      "community": 8,
+      "community": 0,
       "norm_label": "checkbox"
     },
     {
@@ -1188,7 +1026,7 @@
       "source_file": "__tests__/provider-settings-panel.test.ts",
       "source_location": "L194",
       "id": "tests_provider_settings_panel_test_button",
-      "community": 8,
+      "community": 0,
       "norm_label": "button"
     },
     {
@@ -1197,7 +1035,7 @@
       "source_file": "__tests__/provider-settings-panel.test.ts",
       "source_location": "L200",
       "id": "tests_provider_settings_panel_test_textarea",
-      "community": 8,
+      "community": 0,
       "norm_label": "textarea"
     },
     {
@@ -1206,7 +1044,7 @@
       "source_file": "__tests__/provider-settings-panel.test.ts",
       "source_location": "L231",
       "id": "tests_provider_settings_panel_test_keyinput",
-      "community": 8,
+      "community": 0,
       "norm_label": "keyinput"
     },
     {
@@ -1215,7 +1053,7 @@
       "source_file": "__tests__/provider-settings-panel.test.ts",
       "source_location": "L241",
       "id": "tests_provider_settings_panel_test_setinputvalue",
-      "community": 8,
+      "community": 0,
       "norm_label": "setinputvalue()"
     },
     {
@@ -1224,17 +1062,8 @@
       "source_file": "prompt/schema.ts",
       "source_location": "L1",
       "id": "prompt_schema_ts",
-      "community": 6,
+      "community": 0,
       "norm_label": "schema.ts"
-    },
-    {
-      "label": "promptNodeConfigSchema",
-      "file_type": "code",
-      "source_file": "prompt/schema.ts",
-      "source_location": "L4",
-      "id": "prompt_schema_promptnodeconfigschema",
-      "community": 6,
-      "norm_label": "promptnodeconfigschema"
     },
     {
       "label": "PromptNodeConfig",
@@ -1242,7 +1071,7 @@
       "source_file": "prompt/schema.ts",
       "source_location": "L12",
       "id": "prompt_schema_promptnodeconfig",
-      "community": 6,
+      "community": 0,
       "norm_label": "promptnodeconfig"
     },
     {
@@ -1251,7 +1080,7 @@
       "source_file": "prompt/card.tsx",
       "source_location": "L1",
       "id": "prompt_card_tsx",
-      "community": 6,
+      "community": 0,
       "norm_label": "card.tsx"
     },
     {
@@ -1282,15 +1111,6 @@
       "norm_label": "tier_labels"
     },
     {
-      "label": "PromptNodePanelProps",
-      "file_type": "code",
-      "source_file": "prompt/panel.tsx",
-      "source_location": "L22",
-      "id": "prompt_panel_promptnodepanelprops",
-      "community": 6,
-      "norm_label": "promptnodepanelprops"
-    },
-    {
       "label": "PromptNodePanel()",
       "file_type": "code",
       "source_file": "prompt/panel.tsx",
@@ -1305,7 +1125,7 @@
       "source_file": "prompt/executor.main.ts",
       "source_location": "L1",
       "id": "prompt_executor_main_ts",
-      "community": 6,
+      "community": 0,
       "norm_label": "executor.main.ts"
     },
     {
@@ -1314,7 +1134,7 @@
       "source_file": "prompt/executor.main.ts",
       "source_location": "L8",
       "id": "prompt_executor_main_logger",
-      "community": 6,
+      "community": 0,
       "norm_label": "logger"
     },
     {
@@ -1323,7 +1143,7 @@
       "source_file": "prompt/executor.main.ts",
       "source_location": "L10",
       "id": "prompt_executor_main_promptnodeexecutor",
-      "community": 6,
+      "community": 0,
       "norm_label": "promptnodeexecutor"
     },
     {
@@ -1332,7 +1152,7 @@
       "source_file": "prompt/manifest.ts",
       "source_location": "L1",
       "id": "prompt_manifest_ts",
-      "community": 6,
+      "community": 0,
       "norm_label": "manifest.ts"
     },
     {
@@ -1341,7 +1161,7 @@
       "source_file": "prompt/manifest.ts",
       "source_location": "L6",
       "id": "prompt_manifest_promptnodemanifest",
-      "community": 6,
+      "community": 0,
       "norm_label": "promptnodemanifest"
     },
     {
@@ -1350,7 +1170,7 @@
       "source_file": "prompt/index.ts",
       "source_location": "L1",
       "id": "prompt_index_ts",
-      "community": 6,
+      "community": 0,
       "norm_label": "index.ts"
     },
     {
@@ -1359,7 +1179,7 @@
       "source_file": "prompt/__tests__/executor.test.ts",
       "source_location": "L1",
       "id": "prompt_tests_executor_test_ts",
-      "community": 6,
+      "community": 0,
       "norm_label": "executor.test.ts"
     },
     {
@@ -1368,7 +1188,7 @@
       "source_file": "prompt/__tests__/executor.test.ts",
       "source_location": "L3",
       "id": "prompt_tests_executor_test_ts_tests_executor_test_logger",
-      "community": 6,
+      "community": 0,
       "norm_label": "logger"
     },
     {
@@ -1377,7 +1197,7 @@
       "source_file": "prompt/__tests__/executor.test.ts",
       "source_location": "L14",
       "id": "prompt_tests_executor_test_ts_tests_executor_test_ctx",
-      "community": 6,
+      "community": 0,
       "norm_label": "ctx"
     },
     {
@@ -1386,7 +1206,7 @@
       "source_file": "prompt/__tests__/executor.test.ts",
       "source_location": "L23",
       "id": "prompt_tests_executor_test_ts_tests_executor_test_deps",
-      "community": 6,
+      "community": 0,
       "norm_label": "deps()"
     },
     {
@@ -1395,7 +1215,7 @@
       "source_file": "prompt/__tests__/executor.test.ts",
       "source_location": "L36",
       "id": "prompt_tests_executor_test_ts_tests_executor_test_sendtoagent",
-      "community": 6,
+      "community": 0,
       "norm_label": "sendtoagent"
     },
     {
@@ -1404,7 +1224,7 @@
       "source_file": "prompt/__tests__/executor.test.ts",
       "source_location": "L121",
       "id": "prompt_tests_executor_test_ts_tests_executor_test_target",
-      "community": 6,
+      "community": 0,
       "norm_label": "target"
     },
     {
@@ -1413,7 +1233,7 @@
       "source_file": "prompt/__tests__/executor.test.ts",
       "source_location": "L127",
       "id": "prompt_tests_executor_test_ts_tests_executor_test_onagentconversation",
-      "community": 6,
+      "community": 0,
       "norm_label": "onagentconversation"
     },
     {
@@ -1422,7 +1242,7 @@
       "source_file": "prompt/__tests__/executor.test.ts",
       "source_location": "L231",
       "id": "prompt_tests_executor_test_ts_tests_executor_test_logs",
-      "community": 6,
+      "community": 0,
       "norm_label": "logs"
     },
     {
@@ -1431,26 +1251,8 @@
       "source_file": "http-request/schema.ts",
       "source_location": "L1",
       "id": "http_request_schema_ts",
-      "community": 3,
+      "community": 1,
       "norm_label": "schema.ts"
-    },
-    {
-      "label": "httpRequestNodeConfigSchema",
-      "file_type": "code",
-      "source_file": "http-request/schema.ts",
-      "source_location": "L5",
-      "id": "http_request_schema_httprequestnodeconfigschema",
-      "community": 3,
-      "norm_label": "httprequestnodeconfigschema"
-    },
-    {
-      "label": "HttpRequestNodeConfig",
-      "file_type": "code",
-      "source_file": "http-request/schema.ts",
-      "source_location": "L9",
-      "id": "http_request_schema_httprequestnodeconfig",
-      "community": 3,
-      "norm_label": "httprequestnodeconfig"
     },
     {
       "label": "card.tsx",
@@ -1458,7 +1260,7 @@
       "source_file": "http-request/card.tsx",
       "source_location": "L1",
       "id": "http_request_card_tsx",
-      "community": 3,
+      "community": 1,
       "norm_label": "card.tsx"
     },
     {
@@ -1467,7 +1269,7 @@
       "source_file": "http-request/card.tsx",
       "source_location": "L8",
       "id": "http_request_card_httprequestnodecard",
-      "community": 9,
+      "community": 1,
       "norm_label": "httprequestnodecard()"
     },
     {
@@ -1476,17 +1278,8 @@
       "source_file": "http-request/panel.tsx",
       "source_location": "L1",
       "id": "http_request_panel_tsx",
-      "community": 3,
+      "community": 1,
       "norm_label": "panel.tsx"
-    },
-    {
-      "label": "HttpRequestNodePanelProps",
-      "file_type": "code",
-      "source_file": "http-request/panel.tsx",
-      "source_location": "L9",
-      "id": "http_request_panel_httprequestnodepanelprops",
-      "community": 3,
-      "norm_label": "httprequestnodepanelprops"
     },
     {
       "label": "HttpRequestNodePanel()",
@@ -1494,7 +1287,7 @@
       "source_file": "http-request/panel.tsx",
       "source_location": "L16",
       "id": "http_request_panel_httprequestnodepanel",
-      "community": 0,
+      "community": 1,
       "norm_label": "httprequestnodepanel()"
     },
     {
@@ -1503,7 +1296,7 @@
       "source_file": "http-request/executor.main.ts",
       "source_location": "L1",
       "id": "http_request_executor_main_ts",
-      "community": 3,
+      "community": 1,
       "norm_label": "executor.main.ts"
     },
     {
@@ -1512,7 +1305,7 @@
       "source_file": "http-request/executor.main.ts",
       "source_location": "L8",
       "id": "http_request_executor_main_logger",
-      "community": 3,
+      "community": 1,
       "norm_label": "logger"
     },
     {
@@ -1521,7 +1314,7 @@
       "source_file": "http-request/executor.main.ts",
       "source_location": "L10",
       "id": "http_request_executor_main_httprequestnodeexecutor",
-      "community": 3,
+      "community": 1,
       "norm_label": "httprequestnodeexecutor"
     },
     {
@@ -1530,7 +1323,7 @@
       "source_file": "http-request/executor.main.ts",
       "source_location": "L101",
       "id": "http_request_executor_main_buildheaders",
-      "community": 3,
+      "community": 1,
       "norm_label": "buildheaders()"
     },
     {
@@ -1539,7 +1332,7 @@
       "source_file": "http-request/executor.main.ts",
       "source_location": "L114",
       "id": "http_request_executor_main_buildurl",
-      "community": 3,
+      "community": 1,
       "norm_label": "buildurl()"
     },
     {
@@ -1548,7 +1341,7 @@
       "source_file": "http-request/executor.main.ts",
       "source_location": "L131",
       "id": "http_request_executor_main_buildbody",
-      "community": 3,
+      "community": 1,
       "norm_label": "buildbody()"
     },
     {
@@ -1557,7 +1350,7 @@
       "source_file": "http-request/executor.main.ts",
       "source_location": "L137",
       "id": "http_request_executor_main_interpolateconfig",
-      "community": 3,
+      "community": 1,
       "norm_label": "interpolateconfig()"
     },
     {
@@ -1566,7 +1359,7 @@
       "source_file": "http-request/manifest.ts",
       "source_location": "L1",
       "id": "http_request_manifest_ts",
-      "community": 3,
+      "community": 1,
       "norm_label": "manifest.ts"
     },
     {
@@ -1575,7 +1368,7 @@
       "source_file": "http-request/manifest.ts",
       "source_location": "L6",
       "id": "http_request_manifest_httprequestnodemanifest",
-      "community": 3,
+      "community": 1,
       "norm_label": "httprequestnodemanifest"
     },
     {
@@ -1584,7 +1377,7 @@
       "source_file": "http-request/index.ts",
       "source_location": "L1",
       "id": "http_request_index_ts",
-      "community": 3,
+      "community": 1,
       "norm_label": "index.ts"
     },
     {
@@ -1593,7 +1386,7 @@
       "source_file": "http-request/__tests__/executor.test.ts",
       "source_location": "L1",
       "id": "http_request_tests_executor_test_ts",
-      "community": 3,
+      "community": 1,
       "norm_label": "executor.test.ts"
     },
     {
@@ -1602,7 +1395,7 @@
       "source_file": "http-request/__tests__/executor.test.ts",
       "source_location": "L4",
       "id": "http_request_tests_executor_test_ts_tests_executor_test_logger",
-      "community": 3,
+      "community": 1,
       "norm_label": "logger"
     },
     {
@@ -1611,7 +1404,7 @@
       "source_file": "http-request/__tests__/executor.test.ts",
       "source_location": "L16",
       "id": "http_request_tests_executor_test_ts_tests_executor_test_ctx",
-      "community": 3,
+      "community": 1,
       "norm_label": "ctx"
     },
     {
@@ -1620,7 +1413,7 @@
       "source_file": "http-request/__tests__/executor.test.ts",
       "source_location": "L18",
       "id": "http_request_tests_executor_test_ts_tests_executor_test_makeinput",
-      "community": 3,
+      "community": 1,
       "norm_label": "makeinput()"
     },
     {
@@ -1629,7 +1422,7 @@
       "source_file": "http-request/__tests__/executor.test.ts",
       "source_location": "L34",
       "id": "http_request_tests_executor_test_ts_tests_executor_test_fakeruntimedeps",
-      "community": 3,
+      "community": 1,
       "norm_label": "fakeruntimedeps()"
     },
     {
@@ -1638,7 +1431,7 @@
       "source_file": "http-request/__tests__/executor.test.ts",
       "source_location": "L48",
       "id": "http_request_tests_executor_test_ts_tests_executor_test_deps",
-      "community": 3,
+      "community": 1,
       "norm_label": "deps"
     },
     {
@@ -1647,7 +1440,7 @@
       "source_file": "http-request/__tests__/executor.test.ts",
       "source_location": "L136",
       "id": "http_request_tests_executor_test_ts_tests_executor_test_input",
-      "community": 3,
+      "community": 1,
       "norm_label": "input"
     },
     {
@@ -1656,7 +1449,7 @@
       "source_file": "http-request/__tests__/executor.test.ts",
       "source_location": "L189",
       "id": "http_request_tests_executor_test_ts_tests_executor_test_payload",
-      "community": 3,
+      "community": 1,
       "norm_label": "payload"
     },
     {
@@ -1665,7 +1458,7 @@
       "source_file": "file-conversion/schema.ts",
       "source_location": "L1",
       "id": "file_conversion_schema_ts",
-      "community": 2,
+      "community": 3,
       "norm_label": "schema.ts"
     },
     {
@@ -1674,26 +1467,8 @@
       "source_file": "file-conversion/schema.ts",
       "source_location": "L4",
       "id": "file_conversion_schema_fileconversionnodeocrschema",
-      "community": 2,
+      "community": 3,
       "norm_label": "fileconversionnodeocrschema"
-    },
-    {
-      "label": "fileConversionNodeConfigSchema",
-      "file_type": "code",
-      "source_file": "file-conversion/schema.ts",
-      "source_location": "L10",
-      "id": "file_conversion_schema_fileconversionnodeconfigschema",
-      "community": 2,
-      "norm_label": "fileconversionnodeconfigschema"
-    },
-    {
-      "label": "FileConversionNodeConfig",
-      "file_type": "code",
-      "source_file": "file-conversion/schema.ts",
-      "source_location": "L19",
-      "id": "file_conversion_schema_fileconversionnodeconfig",
-      "community": 2,
-      "norm_label": "fileconversionnodeconfig"
     },
     {
       "label": "card.tsx",
@@ -1701,7 +1476,7 @@
       "source_file": "file-conversion/card.tsx",
       "source_location": "L1",
       "id": "file_conversion_card_tsx",
-      "community": 9,
+      "community": 3,
       "norm_label": "card.tsx"
     },
     {
@@ -1710,7 +1485,7 @@
       "source_file": "file-conversion/card.tsx",
       "source_location": "L8",
       "id": "file_conversion_card_fileconversionnodecard",
-      "community": 9,
+      "community": 3,
       "norm_label": "fileconversionnodecard()"
     },
     {
@@ -1719,17 +1494,8 @@
       "source_file": "file-conversion/panel.tsx",
       "source_location": "L1",
       "id": "file_conversion_panel_tsx",
-      "community": 0,
+      "community": 6,
       "norm_label": "panel.tsx"
-    },
-    {
-      "label": "FileConversionNodePanelProps",
-      "file_type": "code",
-      "source_file": "file-conversion/panel.tsx",
-      "source_location": "L14",
-      "id": "file_conversion_panel_fileconversionnodepanelprops",
-      "community": 0,
-      "norm_label": "fileconversionnodepanelprops"
     },
     {
       "label": "OUTPUT_LABELS",
@@ -1737,7 +1503,7 @@
       "source_file": "file-conversion/panel.tsx",
       "source_location": "L21",
       "id": "file_conversion_panel_output_labels",
-      "community": 0,
+      "community": 6,
       "norm_label": "output_labels"
     },
     {
@@ -1746,17 +1512,8 @@
       "source_file": "file-conversion/panel.tsx",
       "source_location": "L25",
       "id": "file_conversion_panel_logger",
-      "community": 0,
+      "community": 6,
       "norm_label": "logger"
-    },
-    {
-      "label": "FileConversionNodePanel()",
-      "file_type": "code",
-      "source_file": "file-conversion/panel.tsx",
-      "source_location": "L27",
-      "id": "file_conversion_panel_fileconversionnodepanel",
-      "community": 0,
-      "norm_label": "fileconversionnodepanel()"
     },
     {
       "label": "normalizeConfig()",
@@ -1764,7 +1521,7 @@
       "source_file": "file-conversion/panel.tsx",
       "source_location": "L176",
       "id": "file_conversion_panel_normalizeconfig",
-      "community": 0,
+      "community": 6,
       "norm_label": "normalizeconfig()"
     },
     {
@@ -1773,7 +1530,7 @@
       "source_file": "file-conversion/panel.tsx",
       "source_location": "L191",
       "id": "file_conversion_panel_parselanguagelist",
-      "community": 0,
+      "community": 6,
       "norm_label": "parselanguagelist()"
     },
     {
@@ -1782,7 +1539,7 @@
       "source_file": "file-conversion/panel.tsx",
       "source_location": "L195",
       "id": "file_conversion_panel_parseoptionalpositiveinteger",
-      "community": 0,
+      "community": 6,
       "norm_label": "parseoptionalpositiveinteger()"
     },
     {
@@ -1791,7 +1548,7 @@
       "source_file": "file-conversion/executor.main.ts",
       "source_location": "L1",
       "id": "file_conversion_executor_main_ts",
-      "community": 2,
+      "community": 3,
       "norm_label": "executor.main.ts"
     },
     {
@@ -1800,7 +1557,7 @@
       "source_file": "file-conversion/executor.main.ts",
       "source_location": "L14",
       "id": "file_conversion_executor_main_logger",
-      "community": 2,
+      "community": 3,
       "norm_label": "logger"
     },
     {
@@ -1809,7 +1566,7 @@
       "source_file": "file-conversion/executor.main.ts",
       "source_location": "L16",
       "id": "file_conversion_executor_main_fileconversionnodeexecutor",
-      "community": 2,
+      "community": 3,
       "norm_label": "fileconversionnodeexecutor"
     },
     {
@@ -1818,7 +1575,7 @@
       "source_file": "file-conversion/executor.main.ts",
       "source_location": "L133",
       "id": "file_conversion_executor_main_workflowfileconversionfailurecode",
-      "community": 2,
+      "community": 3,
       "norm_label": "workflowfileconversionfailurecode"
     },
     {
@@ -1827,7 +1584,7 @@
       "source_file": "file-conversion/executor.main.ts",
       "source_location": "L135",
       "id": "file_conversion_executor_main_interpolatefileconversionconfig",
-      "community": 2,
+      "community": 3,
       "norm_label": "interpolatefileconversionconfig()"
     },
     {
@@ -1836,7 +1593,7 @@
       "source_file": "file-conversion/executor.main.ts",
       "source_location": "L147",
       "id": "file_conversion_executor_main_normalizeocroptions",
-      "community": 2,
+      "community": 3,
       "norm_label": "normalizeocroptions()"
     },
     {
@@ -1845,7 +1602,7 @@
       "source_file": "file-conversion/executor.main.ts",
       "source_location": "L157",
       "id": "file_conversion_executor_main_resolvemarkdownoutputpath",
-      "community": 2,
+      "community": 3,
       "norm_label": "resolvemarkdownoutputpath()"
     },
     {
@@ -1854,7 +1611,7 @@
       "source_file": "file-conversion/executor.main.ts",
       "source_location": "L167",
       "id": "file_conversion_executor_main_markdownfilename",
-      "community": 2,
+      "community": 3,
       "norm_label": "markdownfilename()"
     },
     {
@@ -1863,7 +1620,7 @@
       "source_file": "file-conversion/executor.main.ts",
       "source_location": "L174",
       "id": "file_conversion_executor_main_buildconversionoutputs",
-      "community": 2,
+      "community": 3,
       "norm_label": "buildconversionoutputs()"
     },
     {
@@ -1872,7 +1629,7 @@
       "source_file": "file-conversion/executor.main.ts",
       "source_location": "L186",
       "id": "file_conversion_executor_main_fileconversionfailure",
-      "community": 2,
+      "community": 3,
       "norm_label": "fileconversionfailure()"
     },
     {
@@ -1881,7 +1638,7 @@
       "source_file": "file-conversion/manifest.ts",
       "source_location": "L1",
       "id": "file_conversion_manifest_ts",
-      "community": 2,
+      "community": 3,
       "norm_label": "manifest.ts"
     },
     {
@@ -1890,7 +1647,7 @@
       "source_file": "file-conversion/manifest.ts",
       "source_location": "L6",
       "id": "file_conversion_manifest_fileconversionnodemanifest",
-      "community": 2,
+      "community": 3,
       "norm_label": "fileconversionnodemanifest"
     },
     {
@@ -1899,7 +1656,7 @@
       "source_file": "file-conversion/index.ts",
       "source_location": "L1",
       "id": "file_conversion_index_ts",
-      "community": 2,
+      "community": 3,
       "norm_label": "index.ts"
     },
     {
@@ -1908,17 +1665,8 @@
       "source_file": "file-conversion/output-boundary.ts",
       "source_location": "L1",
       "id": "file_conversion_output_boundary_ts",
-      "community": 2,
+      "community": 3,
       "norm_label": "output-boundary.ts"
-    },
-    {
-      "label": "WorkflowFileConversionOutputWriteErrorCode",
-      "file_type": "code",
-      "source_file": "file-conversion/output-boundary.ts",
-      "source_location": "L4",
-      "id": "file_conversion_output_boundary_workflowfileconversionoutputwriteerrorcode",
-      "community": 2,
-      "norm_label": "workflowfileconversionoutputwriteerrorcode"
     },
     {
       "label": "WorkflowFileConversionOutputWriteError",
@@ -1926,7 +1674,7 @@
       "source_file": "file-conversion/output-boundary.ts",
       "source_location": "L6",
       "id": "file_conversion_output_boundary_workflowfileconversionoutputwriteerror",
-      "community": 2,
+      "community": 3,
       "norm_label": "workflowfileconversionoutputwriteerror"
     },
     {
@@ -1935,7 +1683,7 @@
       "source_file": "file-conversion/output-boundary.ts",
       "source_location": "L9",
       "id": "file_conversion_output_boundary_workflowfileconversionoutputwriteerror_constructor",
-      "community": 2,
+      "community": 3,
       "norm_label": ".constructor()"
     },
     {
@@ -1944,7 +1692,7 @@
       "source_file": "file-conversion/output-boundary.ts",
       "source_location": "L19",
       "id": "file_conversion_output_boundary_workflow_file_conversion_output_root",
-      "community": 2,
+      "community": 3,
       "norm_label": "workflow_file_conversion_output_root"
     },
     {
@@ -1953,7 +1701,7 @@
       "source_file": "file-conversion/output-boundary.ts",
       "source_location": "L21",
       "id": "file_conversion_output_boundary_getworkflowfileconversionoutputroot",
-      "community": 2,
+      "community": 3,
       "norm_label": "getworkflowfileconversionoutputroot()"
     },
     {
@@ -1962,7 +1710,7 @@
       "source_file": "file-conversion/output-boundary.ts",
       "source_location": "L25",
       "id": "file_conversion_output_boundary_isworkflowfileconversionoutputpathallowed",
-      "community": 2,
+      "community": 3,
       "norm_label": "isworkflowfileconversionoutputpathallowed()"
     },
     {
@@ -1971,7 +1719,7 @@
       "source_file": "switch/schema.ts",
       "source_location": "L1",
       "id": "switch_schema_ts",
-      "community": 5,
+      "community": 4,
       "norm_label": "schema.ts"
     },
     {
@@ -1980,17 +1728,8 @@
       "source_file": "switch/schema.ts",
       "source_location": "L6",
       "id": "switch_schema_switchbranchschema",
-      "community": 5,
+      "community": 4,
       "norm_label": "switchbranchschema"
-    },
-    {
-      "label": "switchNodeConfigSchema",
-      "file_type": "code",
-      "source_file": "switch/schema.ts",
-      "source_location": "L10",
-      "id": "switch_schema_switchnodeconfigschema",
-      "community": 5,
-      "norm_label": "switchnodeconfigschema"
     },
     {
       "label": "SwitchNodeConfig",
@@ -1998,7 +1737,7 @@
       "source_file": "switch/schema.ts",
       "source_location": "L28",
       "id": "switch_schema_switchnodeconfig",
-      "community": 5,
+      "community": 4,
       "norm_label": "switchnodeconfig"
     },
     {
@@ -2007,7 +1746,7 @@
       "source_file": "switch/schema.ts",
       "source_location": "L29",
       "id": "switch_schema_switchbranch",
-      "community": 5,
+      "community": 4,
       "norm_label": "switchbranch"
     },
     {
@@ -2016,7 +1755,7 @@
       "source_file": "switch/card.tsx",
       "source_location": "L1",
       "id": "switch_card_tsx",
-      "community": 5,
+      "community": 4,
       "norm_label": "card.tsx"
     },
     {
@@ -2025,7 +1764,7 @@
       "source_file": "switch/card.tsx",
       "source_location": "L10",
       "id": "switch_card_switchnodecard",
-      "community": 0,
+      "community": 9,
       "norm_label": "switchnodecard()"
     },
     {
@@ -2034,7 +1773,7 @@
       "source_file": "switch/panel.tsx",
       "source_location": "L1",
       "id": "switch_panel_tsx",
-      "community": 0,
+      "community": 6,
       "norm_label": "panel.tsx"
     },
     {
@@ -2043,17 +1782,8 @@
       "source_file": "switch/panel.tsx",
       "source_location": "L21",
       "id": "switch_panel_tier_labels",
-      "community": 0,
+      "community": 6,
       "norm_label": "tier_labels"
-    },
-    {
-      "label": "SwitchNodePanelProps",
-      "file_type": "code",
-      "source_file": "switch/panel.tsx",
-      "source_location": "L26",
-      "id": "switch_panel_switchnodepanelprops",
-      "community": 5,
-      "norm_label": "switchnodepanelprops"
     },
     {
       "label": "SwitchNodePanel()",
@@ -2061,7 +1791,7 @@
       "source_file": "switch/panel.tsx",
       "source_location": "L39",
       "id": "switch_panel_switchnodepanel",
-      "community": 0,
+      "community": 6,
       "norm_label": "switchnodepanel()"
     },
     {
@@ -2070,7 +1800,7 @@
       "source_file": "switch/panel.tsx",
       "source_location": "L286",
       "id": "switch_panel_buildswitchprompttemplate",
-      "community": 0,
+      "community": 6,
       "norm_label": "buildswitchprompttemplate()"
     },
     {
@@ -2079,7 +1809,7 @@
       "source_file": "switch/panel.tsx",
       "source_location": "L308",
       "id": "switch_panel_cancommitbranchids",
-      "community": 0,
+      "community": 6,
       "norm_label": "cancommitbranchids()"
     },
     {
@@ -2088,7 +1818,7 @@
       "source_file": "switch/panel.tsx",
       "source_location": "L312",
       "id": "switch_panel_getbranchiderror",
-      "community": 0,
+      "community": 6,
       "norm_label": "getbranchiderror()"
     },
     {
@@ -2097,7 +1827,7 @@
       "source_file": "switch/executor.main.ts",
       "source_location": "L1",
       "id": "switch_executor_main_ts",
-      "community": 5,
+      "community": 4,
       "norm_label": "executor.main.ts"
     },
     {
@@ -2106,7 +1836,7 @@
       "source_file": "switch/executor.main.ts",
       "source_location": "L8",
       "id": "switch_executor_main_logger",
-      "community": 5,
+      "community": 4,
       "norm_label": "logger"
     },
     {
@@ -2115,7 +1845,7 @@
       "source_file": "switch/executor.main.ts",
       "source_location": "L16",
       "id": "switch_executor_main_normalizeresponse",
-      "community": 5,
+      "community": 4,
       "norm_label": "normalizeresponse()"
     },
     {
@@ -2124,7 +1854,7 @@
       "source_file": "switch/executor.main.ts",
       "source_location": "L27",
       "id": "switch_executor_main_escaperegex",
-      "community": 5,
+      "community": 4,
       "norm_label": "escaperegex()"
     },
     {
@@ -2133,7 +1863,7 @@
       "source_file": "switch/executor.main.ts",
       "source_location": "L41",
       "id": "switch_executor_main_matchbranch",
-      "community": 5,
+      "community": 4,
       "norm_label": "matchbranch()"
     },
     {
@@ -2142,7 +1872,7 @@
       "source_file": "switch/executor.main.ts",
       "source_location": "L62",
       "id": "switch_executor_main_switchnodeexecutor",
-      "community": 5,
+      "community": 4,
       "norm_label": "switchnodeexecutor"
     },
     {
@@ -2151,7 +1881,7 @@
       "source_file": "switch/constants.ts",
       "source_location": "L1",
       "id": "switch_constants_ts",
-      "community": 5,
+      "community": 4,
       "norm_label": "constants.ts"
     },
     {
@@ -2160,7 +1890,7 @@
       "source_file": "switch/manifest.ts",
       "source_location": "L1",
       "id": "switch_manifest_ts",
-      "community": 5,
+      "community": 4,
       "norm_label": "manifest.ts"
     },
     {
@@ -2169,7 +1899,7 @@
       "source_file": "switch/manifest.ts",
       "source_location": "L6",
       "id": "switch_manifest_switchnodemanifest",
-      "community": 5,
+      "community": 4,
       "norm_label": "switchnodemanifest"
     },
     {
@@ -2178,7 +1908,7 @@
       "source_file": "switch/index.ts",
       "source_location": "L1",
       "id": "switch_index_ts",
-      "community": 5,
+      "community": 4,
       "norm_label": "index.ts"
     },
     {
@@ -2187,7 +1917,7 @@
       "source_file": "switch/__tests__/executor.test.ts",
       "source_location": "L1",
       "id": "switch_tests_executor_test_ts",
-      "community": 5,
+      "community": 4,
       "norm_label": "executor.test.ts"
     },
     {
@@ -2196,7 +1926,7 @@
       "source_file": "switch/__tests__/executor.test.ts",
       "source_location": "L3",
       "id": "switch_tests_executor_test_ts_tests_executor_test_logger",
-      "community": 5,
+      "community": 4,
       "norm_label": "logger"
     },
     {
@@ -2205,7 +1935,7 @@
       "source_file": "switch/__tests__/executor.test.ts",
       "source_location": "L14",
       "id": "switch_tests_executor_test_ts_tests_executor_test_ctx",
-      "community": 5,
+      "community": 4,
       "norm_label": "ctx"
     },
     {
@@ -2214,7 +1944,7 @@
       "source_file": "switch/__tests__/executor.test.ts",
       "source_location": "L23",
       "id": "tests_executor_test_config",
-      "community": 5,
+      "community": 4,
       "norm_label": "config"
     },
     {
@@ -2223,7 +1953,7 @@
       "source_file": "switch/__tests__/executor.test.ts",
       "source_location": "L72",
       "id": "switch_tests_executor_test_ts_tests_executor_test_target",
-      "community": 5,
+      "community": 4,
       "norm_label": "target"
     },
     {
@@ -2232,7 +1962,7 @@
       "source_file": "switch/__tests__/executor.test.ts",
       "source_location": "L78",
       "id": "switch_tests_executor_test_ts_tests_executor_test_onagentconversation",
-      "community": 5,
+      "community": 4,
       "norm_label": "onagentconversation"
     },
     {
@@ -2241,7 +1971,7 @@
       "source_file": "switch/__tests__/executor.test.ts",
       "source_location": "L79",
       "id": "switch_tests_executor_test_ts_tests_executor_test_sendtoagent",
-      "community": 5,
+      "community": 4,
       "norm_label": "sendtoagent"
     },
     {
@@ -2250,7 +1980,7 @@
       "source_file": "switch/__tests__/executor.test.ts",
       "source_location": "L197",
       "id": "switch_tests_executor_test_ts_tests_executor_test_logs",
-      "community": 5,
+      "community": 4,
       "norm_label": "logs"
     },
     {
@@ -2259,7 +1989,7 @@
       "source_file": "switch/__tests__/panel.test.ts",
       "source_location": "L1",
       "id": "switch_tests_panel_test_ts",
-      "community": 0,
+      "community": 6,
       "norm_label": "panel.test.ts"
     }
   ],
@@ -2290,6 +2020,16 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "provider-lookup-context.tsx",
+      "source_location": "L32",
+      "weight": 1.0,
+      "source": "provider_lookup_context_tsx",
+      "target": "tests_provider_settings_panel_test_providerlookup",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "provider-lookup-context.tsx",
       "source_location": "L15",
       "weight": 1.0,
       "source": "provider_lookup_context_tsx",
@@ -2304,36 +2044,6 @@
       "weight": 1.0,
       "source": "provider_lookup_context_tsx",
       "target": "workflow_nodes_provider_lookup_context_logger",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "provider-lookup-context.tsx",
-      "source_location": "L9",
-      "weight": 1.0,
-      "source": "provider_lookup_context_tsx",
-      "target": "workflow_nodes_provider_lookup_context_providerlookup",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "provider-lookup-context.tsx",
-      "source_location": "L21",
-      "weight": 1.0,
-      "source": "provider_lookup_context_tsx",
-      "target": "workflow_nodes_provider_lookup_context_providerlookupcontext",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "provider-lookup-context.tsx",
-      "source_location": "L32",
-      "weight": 1.0,
-      "source": "provider_lookup_context_tsx",
-      "target": "workflow_nodes_provider_lookup_context_providerlookupprovider",
       "confidence_score": 1.0
     },
     {
@@ -2387,28 +2097,6 @@
       "weight": 1.0,
       "source": "tests_provider_settings_panel_test_ts",
       "target": "provider_lookup_context_tsx",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "__tests__/provider-settings-panel.test.ts",
-      "source_location": "L11",
-      "weight": 1.0,
-      "source": "tests_provider_settings_panel_test_ts",
-      "target": "workflow_nodes_provider_lookup_context_providerlookup",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "__tests__/provider-settings-panel.test.ts",
-      "source_location": "L10",
-      "weight": 1.0,
-      "source": "tests_provider_settings_panel_test_ts",
-      "target": "workflow_nodes_provider_lookup_context_providerlookupcontext",
       "confidence_score": 1.0
     },
     {
@@ -2721,11 +2409,11 @@
     },
     {
       "relation": "imports_from",
-      "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "variable-binding-editor.tsx",
       "source_location": "L6",
       "weight": 1.0,
+      "context": "import",
       "source": "variable_binding_editor_tsx",
       "target": "schemas_variable_binding_ts",
       "confidence_score": 1.0
@@ -2738,58 +2426,7 @@
       "source_location": "L6",
       "weight": 1.0,
       "source": "variable_binding_editor_tsx",
-      "target": "schemas_variable_binding_variablebinding",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "variable-binding-editor.tsx",
-      "source_location": "L6",
-      "weight": 1.0,
-      "source": "variable_binding_editor_tsx",
       "target": "schemas_variable_binding_variablesource",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "variable-binding-editor.tsx",
-      "source_location": "L162",
-      "weight": 1.0,
-      "source": "variable_binding_editor_tsx",
-      "target": "workflow_nodes_variable_binding_editor_variablebindingeditor",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "variable-binding-editor.tsx",
-      "source_location": "L155",
-      "weight": 1.0,
-      "source": "variable_binding_editor_tsx",
-      "target": "workflow_nodes_variable_binding_editor_variablebindingeditorprops",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "variable-binding-editor.tsx",
-      "source_location": "L114",
-      "weight": 1.0,
-      "source": "variable_binding_editor_tsx",
-      "target": "workflow_nodes_variable_binding_editor_variablebindingrow",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "variable-binding-editor.tsx",
-      "source_location": "L106",
-      "weight": 1.0,
-      "source": "variable_binding_editor_tsx",
-      "target": "workflow_nodes_variable_binding_editor_variablebindingrowprops",
       "confidence_score": 1.0
     },
     {
@@ -2803,90 +2440,14 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "variable-binding-editor.tsx",
-      "source_location": "L18",
-      "weight": 1.0,
-      "source": "variable_binding_editor_tsx",
-      "target": "workflow_nodes_variable_binding_editor_variablesourcecontrolprops",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "references",
       "context": "field",
       "confidence": "EXTRACTED",
       "source_file": "variable-binding-editor.tsx",
       "source_location": "L19",
       "weight": 1.0,
-      "source": "workflow_nodes_variable_binding_editor_variablesourcecontrolprops",
+      "source": "workflow_nodes_variable_binding_editor_variablesourcecontrol",
       "target": "schemas_variable_binding_variablesource",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "end/panel.tsx",
-      "source_location": "L4",
-      "weight": 1.0,
-      "source": "end_panel_tsx",
-      "target": "workflow_nodes_variable_binding_editor_variablebindingeditor",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "file-conversion/panel.tsx",
-      "source_location": "L11",
-      "weight": 1.0,
-      "source": "file_conversion_panel_tsx",
-      "target": "workflow_nodes_variable_binding_editor_variablebindingeditor",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "http-request/panel.tsx",
-      "source_location": "L6",
-      "weight": 1.0,
-      "source": "http_request_panel_tsx",
-      "target": "workflow_nodes_variable_binding_editor_variablebindingeditor",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "prompt/panel.tsx",
-      "source_location": "L13",
-      "weight": 1.0,
-      "source": "prompt_panel_tsx",
-      "target": "workflow_nodes_variable_binding_editor_variablebindingeditor",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "script/panel.tsx",
-      "source_location": "L6",
-      "weight": 1.0,
-      "source": "script_panel_tsx",
-      "target": "workflow_nodes_variable_binding_editor_variablebindingeditor",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "switch/panel.tsx",
-      "source_location": "L14",
-      "weight": 1.0,
-      "source": "switch_panel_tsx",
-      "target": "workflow_nodes_variable_binding_editor_variablebindingeditor",
       "confidence_score": 1.0
     },
     {
@@ -3203,7 +2764,7 @@
       "source_location": "L10",
       "weight": 1.0,
       "source": "panel_registry_ts",
-      "target": "file_conversion_panel_fileconversionnodepanel",
+      "target": "file_conversion_card_fileconversionnodecard",
       "confidence_score": 1.0
     },
     {
@@ -3333,16 +2894,6 @@
       "weight": 1.0,
       "source": "panel_registry_ts",
       "target": "workflow_nodes_panel_registry_panelcomponent",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "panel-registry.ts",
-      "source_location": "L30",
-      "weight": 1.0,
-      "source": "panel_registry_ts",
-      "target": "workflow_nodes_panel_registry_panelregistry",
       "confidence_score": 1.0
     },
     {
@@ -4041,26 +3592,6 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "collapsible-section.tsx",
-      "source_location": "L13",
-      "weight": 1.0,
-      "source": "collapsible_section_tsx",
-      "target": "workflow_nodes_collapsible_section_collapsiblesection",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "collapsible-section.tsx",
-      "source_location": "L6",
-      "weight": 1.0,
-      "source": "collapsible_section_tsx",
-      "target": "workflow_nodes_collapsible_section_collapsiblesectionprops",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "imports_from",
       "context": "import",
       "confidence": "EXTRACTED",
@@ -4124,72 +3655,6 @@
       "weight": 1.0,
       "source": "switch_panel_tsx",
       "target": "collapsible_section_tsx",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "end/panel.tsx",
-      "source_location": "L6",
-      "weight": 1.0,
-      "source": "end_panel_tsx",
-      "target": "workflow_nodes_collapsible_section_collapsiblesection",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "file-conversion/panel.tsx",
-      "source_location": "L10",
-      "weight": 1.0,
-      "source": "file_conversion_panel_tsx",
-      "target": "workflow_nodes_collapsible_section_collapsiblesection",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "http-request/panel.tsx",
-      "source_location": "L7",
-      "weight": 1.0,
-      "source": "http_request_panel_tsx",
-      "target": "workflow_nodes_collapsible_section_collapsiblesection",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "prompt/panel.tsx",
-      "source_location": "L15",
-      "weight": 1.0,
-      "source": "prompt_panel_tsx",
-      "target": "workflow_nodes_collapsible_section_collapsiblesection",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "script/panel.tsx",
-      "source_location": "L7",
-      "weight": 1.0,
-      "source": "script_panel_tsx",
-      "target": "workflow_nodes_collapsible_section_collapsiblesection",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "switch/panel.tsx",
-      "source_location": "L16",
-      "weight": 1.0,
-      "source": "switch_panel_tsx",
-      "target": "workflow_nodes_collapsible_section_collapsiblesection",
       "confidence_score": 1.0
     },
     {
@@ -4316,17 +3781,6 @@
       "weight": 1.0,
       "source": "prompt_shortcuts_ts",
       "target": "schemas_variable_binding_ts",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "prompt-shortcuts.ts",
-      "source_location": "L2",
-      "weight": 1.0,
-      "source": "prompt_shortcuts_ts",
-      "target": "schemas_variable_binding_variablebinding",
       "confidence_score": 1.0
     },
     {
@@ -4652,16 +4106,6 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "project-select.tsx",
-      "source_location": "L13",
-      "weight": 1.0,
-      "source": "project_select_tsx",
-      "target": "workflow_nodes_project_select_projectselect",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "project-select.tsx",
       "source_location": "L4",
       "weight": 1.0,
       "source": "project_select_tsx",
@@ -4688,28 +4132,6 @@
       "weight": 1.0,
       "source": "switch_panel_tsx",
       "target": "project_select_tsx",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "prompt/panel.tsx",
-      "source_location": "L17",
-      "weight": 1.0,
-      "source": "prompt_panel_tsx",
-      "target": "workflow_nodes_project_select_projectselect",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "switch/panel.tsx",
-      "source_location": "L18",
-      "weight": 1.0,
-      "source": "switch_panel_tsx",
-      "target": "workflow_nodes_project_select_projectselect",
       "confidence_score": 1.0
     },
     {
@@ -4933,17 +4355,6 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "prompt-editor.tsx",
-      "source_location": "L6",
-      "weight": 1.0,
-      "source": "prompt_editor_tsx",
-      "target": "schemas_variable_binding_variablebinding",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "prompt-editor.tsx",
@@ -4951,16 +4362,6 @@
       "weight": 1.0,
       "source": "prompt_editor_tsx",
       "target": "workflow_nodes_prompt_editor_logger",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "prompt-editor.tsx",
-      "source_location": "L56",
-      "weight": 1.0,
-      "source": "prompt_editor_tsx",
-      "target": "workflow_nodes_prompt_editor_prompteditor",
       "confidence_score": 1.0
     },
     {
@@ -4975,6 +4376,7 @@
     },
     {
       "relation": "contains",
+      "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "prompt-editor.tsx",
       "source_location": "L25",
@@ -5013,51 +4415,7 @@
       "source_location": "L20",
       "weight": 1.0,
       "source": "workflow_nodes_prompt_editor_prompteditorprops",
-      "target": "schemas_variable_binding_variablebinding",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "calls",
-      "context": "call",
-      "confidence": "EXTRACTED",
-      "source_file": "prompt-editor.tsx",
-      "source_location": "L58",
-      "weight": 1.0,
-      "source": "workflow_nodes_prompt_editor_prompteditor",
-      "target": "workflow_nodes_prompt_editor_useclaudecodeglobalskillnames",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "end/panel.tsx",
-      "source_location": "L5",
-      "weight": 1.0,
-      "source": "end_panel_tsx",
-      "target": "workflow_nodes_prompt_editor_prompteditor",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "prompt/panel.tsx",
-      "source_location": "L14",
-      "weight": 1.0,
-      "source": "prompt_panel_tsx",
-      "target": "workflow_nodes_prompt_editor_prompteditor",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "switch/panel.tsx",
-      "source_location": "L15",
-      "weight": 1.0,
-      "source": "switch_panel_tsx",
-      "target": "workflow_nodes_prompt_editor_prompteditor",
+      "target": "schemas_variable_binding_ts",
       "confidence_score": 1.0
     },
     {
@@ -5105,32 +4463,12 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "imports_from",
-      "context": "import",
+      "relation": "imports",
       "confidence": "EXTRACTED",
       "source_file": "schemas/__tests__/variable-binding.test.ts",
       "source_location": "L2",
       "weight": 1.0,
-      "source": "schemas_tests_variable_binding_test_ts",
-      "target": "schemas_variable_binding_ts",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "schemas/variable-binding.ts",
-      "source_location": "L16",
-      "weight": 1.0,
-      "source": "schemas_variable_binding_ts",
-      "target": "schemas_variable_binding_variablebinding",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "schemas/variable-binding.ts",
-      "source_location": "L11",
-      "weight": 1.0,
+      "context": "import",
       "source": "schemas_variable_binding_ts",
       "target": "schemas_variable_binding_variablebindingschema",
       "confidence_score": 1.0
@@ -5236,17 +4574,6 @@
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "schemas/__tests__/variable-binding.test.ts",
-      "source_location": "L2",
-      "weight": 1.0,
-      "source": "schemas_tests_variable_binding_test_ts",
-      "target": "schemas_variable_binding_variablebindingschema",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
       "source_file": "script/schema.ts",
       "source_location": "L2",
       "weight": 1.0,
@@ -5334,16 +4661,6 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "script/schema.ts",
-      "source_location": "L12",
-      "weight": 1.0,
-      "source": "script_schema_ts",
-      "target": "script_schema_scriptnodeconfigschema",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "script/schema.ts",
       "source_location": "L7",
       "weight": 1.0,
       "source": "script_schema_ts",
@@ -5359,28 +4676,6 @@
       "weight": 1.0,
       "source": "script_tests_executor_test_ts",
       "target": "script_schema_ts",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "re_exports",
-      "context": "re-export",
-      "confidence": "EXTRACTED",
-      "source_file": "script/index.ts",
-      "source_location": "L3",
-      "weight": 1.0,
-      "source": "script_index_ts",
-      "target": "script_schema_scriptnodeconfigschema",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "script/manifest.ts",
-      "source_location": "L4",
-      "weight": 1.0,
-      "source": "script_manifest_ts",
-      "target": "script_schema_scriptnodeconfigschema",
       "confidence_score": 1.0
     },
     {
@@ -5421,7 +4716,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "script/manifest.ts",
-      "source_location": "L3",
+      "source_location": "L4",
       "weight": 1.0,
       "source": "script_manifest_ts",
       "target": "script_schema_scriptnodeconfig",
@@ -5434,7 +4729,7 @@
       "source_file": "script/panel.tsx",
       "source_location": "L10",
       "weight": 1.0,
-      "source": "script_panel_scriptnodepanelprops",
+      "source": "script_panel_scriptnodepanel",
       "target": "script_schema_scriptnodeconfig",
       "confidence_score": 1.0
     },
@@ -5500,16 +4795,6 @@
       "weight": 1.0,
       "source": "script_panel_tsx",
       "target": "script_panel_scriptnodepanel",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "script/panel.tsx",
-      "source_location": "L9",
-      "weight": 1.0,
-      "source": "script_panel_tsx",
-      "target": "script_panel_scriptnodepanelprops",
       "confidence_score": 1.0
     },
     {
@@ -5879,7 +5164,7 @@
       "source_file": "end/panel.tsx",
       "source_location": "L9",
       "weight": 1.0,
-      "source": "end_panel_endnodepanelprops",
+      "source": "end_panel_endnodepanel",
       "target": "end_schema_endnodeconfig",
       "confidence_score": 1.0
     },
@@ -5945,16 +5230,6 @@
       "weight": 1.0,
       "source": "end_panel_tsx",
       "target": "end_panel_endnodepanel",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "end/panel.tsx",
-      "source_location": "L8",
-      "weight": 1.0,
-      "source": "end_panel_tsx",
-      "target": "end_panel_endnodepanelprops",
       "confidence_score": 1.0
     },
     {
@@ -6238,11 +5513,12 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
+      "relation": "imports",
       "confidence": "EXTRACTED",
       "source_file": "__tests__/provider-settings-panel.test.ts",
-      "source_location": "L30",
+      "source_location": "L11",
       "weight": 1.0,
+      "context": "import",
       "source": "tests_provider_settings_panel_test_ts",
       "target": "tests_provider_settings_panel_test_providerlookup",
       "confidence_score": 1.0
@@ -6353,38 +5629,6 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "prompt/schema.ts",
-      "source_location": "L4",
-      "weight": 1.0,
-      "source": "prompt_schema_ts",
-      "target": "prompt_schema_promptnodeconfigschema",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "re_exports",
-      "context": "re-export",
-      "confidence": "EXTRACTED",
-      "source_file": "prompt/index.ts",
-      "source_location": "L3",
-      "weight": 1.0,
-      "source": "prompt_index_ts",
-      "target": "prompt_schema_promptnodeconfigschema",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "prompt/manifest.ts",
-      "source_location": "L4",
-      "weight": 1.0,
-      "source": "prompt_manifest_ts",
-      "target": "prompt_schema_promptnodeconfigschema",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
@@ -6422,7 +5666,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "prompt/manifest.ts",
-      "source_location": "L3",
+      "source_location": "L4",
       "weight": 1.0,
       "source": "prompt_manifest_ts",
       "target": "prompt_schema_promptnodeconfig",
@@ -6435,7 +5679,7 @@
       "source_file": "prompt/panel.tsx",
       "source_location": "L23",
       "weight": 1.0,
-      "source": "prompt_panel_promptnodepanelprops",
+      "source": "prompt_panel_promptnodepanel",
       "target": "prompt_schema_promptnodeconfig",
       "confidence_score": 1.0
     },
@@ -6490,16 +5734,6 @@
       "weight": 1.0,
       "source": "prompt_panel_tsx",
       "target": "prompt_panel_promptnodepanel",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "prompt/panel.tsx",
-      "source_location": "L22",
-      "weight": 1.0,
-      "source": "prompt_panel_tsx",
-      "target": "prompt_panel_promptnodepanelprops",
       "confidence_score": 1.0
     },
     {
@@ -6740,17 +5974,7 @@
       "source_location": "L9",
       "weight": 1.0,
       "source": "http_request_schema_ts",
-      "target": "http_request_schema_httprequestnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "http-request/schema.ts",
-      "source_location": "L5",
-      "weight": 1.0,
-      "source": "http_request_schema_ts",
-      "target": "http_request_schema_httprequestnodeconfigschema",
+      "target": "http_request_card_httprequestnodecard",
       "confidence_score": 1.0
     },
     {
@@ -6765,110 +5989,12 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "re_exports",
-      "context": "re-export",
-      "confidence": "EXTRACTED",
-      "source_file": "http-request/index.ts",
-      "source_location": "L3",
-      "weight": 1.0,
-      "source": "http_request_index_ts",
-      "target": "http_request_schema_httprequestnodeconfigschema",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "http-request/manifest.ts",
-      "source_location": "L4",
-      "weight": 1.0,
-      "source": "http_request_manifest_ts",
-      "target": "http_request_schema_httprequestnodeconfigschema",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "http-request/card.tsx",
       "source_location": "L3",
       "weight": 1.0,
-      "source": "http_request_card_tsx",
-      "target": "http_request_schema_httprequestnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
       "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "http-request/executor.main.ts",
-      "source_location": "L2",
-      "weight": 1.0,
-      "source": "http_request_executor_main_ts",
-      "target": "http_request_schema_httprequestnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "re_exports",
-      "context": "re-export",
-      "confidence": "EXTRACTED",
-      "source_file": "http-request/index.ts",
-      "source_location": "L4",
-      "weight": 1.0,
-      "source": "http_request_index_ts",
-      "target": "http_request_schema_httprequestnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "http-request/manifest.ts",
-      "source_location": "L3",
-      "weight": 1.0,
-      "source": "http_request_manifest_ts",
-      "target": "http_request_schema_httprequestnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "references",
-      "context": "field",
-      "confidence": "EXTRACTED",
-      "source_file": "http-request/panel.tsx",
-      "source_location": "L10",
-      "weight": 1.0,
-      "source": "http_request_panel_httprequestnodepanelprops",
-      "target": "http_request_schema_httprequestnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "http-request/panel.tsx",
-      "source_location": "L3",
-      "weight": 1.0,
-      "source": "http_request_panel_tsx",
-      "target": "http_request_schema_httprequestnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "http-request/__tests__/executor.test.ts",
-      "source_location": "L14",
-      "weight": 1.0,
-      "source": "http_request_tests_executor_test_ts",
-      "target": "http_request_schema_httprequestnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "http-request/card.tsx",
-      "source_location": "L8",
-      "weight": 1.0,
       "source": "http_request_card_tsx",
       "target": "http_request_card_httprequestnodecard",
       "confidence_score": 1.0
@@ -6896,6 +6022,72 @@
       "confidence_score": 1.0
     },
     {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "http-request/executor.main.ts",
+      "source_location": "L2",
+      "weight": 1.0,
+      "source": "http_request_executor_main_ts",
+      "target": "http_request_card_httprequestnodecard",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "http-request/index.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "http_request_index_ts",
+      "target": "http_request_card_httprequestnodecard",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "http-request/manifest.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "http_request_manifest_ts",
+      "target": "http_request_card_httprequestnodecard",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "references",
+      "context": "field",
+      "confidence": "EXTRACTED",
+      "source_file": "http-request/panel.tsx",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "http_request_panel_httprequestnodepanel",
+      "target": "http_request_card_httprequestnodecard",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "http-request/panel.tsx",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "http_request_panel_tsx",
+      "target": "http_request_card_httprequestnodecard",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "http-request/__tests__/executor.test.ts",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "http_request_tests_executor_test_ts",
+      "target": "http_request_card_httprequestnodecard",
+      "confidence_score": 1.0
+    },
+    {
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "http-request/panel.tsx",
@@ -6903,16 +6095,6 @@
       "weight": 1.0,
       "source": "http_request_panel_tsx",
       "target": "http_request_panel_httprequestnodepanel",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "http-request/panel.tsx",
-      "source_location": "L9",
-      "weight": 1.0,
-      "source": "http_request_panel_tsx",
-      "target": "http_request_panel_httprequestnodepanelprops",
       "confidence_score": 1.0
     },
     {
@@ -7183,17 +6365,7 @@
       "source_location": "L19",
       "weight": 1.0,
       "source": "file_conversion_schema_ts",
-      "target": "file_conversion_schema_fileconversionnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "file-conversion/schema.ts",
-      "source_location": "L10",
-      "weight": 1.0,
-      "source": "file_conversion_schema_ts",
-      "target": "file_conversion_schema_fileconversionnodeconfigschema",
+      "target": "file_conversion_card_fileconversionnodecard",
       "confidence_score": 1.0
     },
     {
@@ -7207,99 +6379,12 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "re_exports",
-      "context": "re-export",
-      "confidence": "EXTRACTED",
-      "source_file": "file-conversion/index.ts",
-      "source_location": "L3",
-      "weight": 1.0,
-      "source": "file_conversion_index_ts",
-      "target": "file_conversion_schema_fileconversionnodeconfigschema",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "file-conversion/manifest.ts",
-      "source_location": "L4",
-      "weight": 1.0,
-      "source": "file_conversion_manifest_ts",
-      "target": "file_conversion_schema_fileconversionnodeconfigschema",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "file-conversion/card.tsx",
       "source_location": "L6",
       "weight": 1.0,
-      "source": "file_conversion_card_tsx",
-      "target": "file_conversion_schema_fileconversionnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
       "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "file-conversion/executor.main.ts",
-      "source_location": "L11",
-      "weight": 1.0,
-      "source": "file_conversion_executor_main_ts",
-      "target": "file_conversion_schema_fileconversionnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "re_exports",
-      "context": "re-export",
-      "confidence": "EXTRACTED",
-      "source_file": "file-conversion/index.ts",
-      "source_location": "L4",
-      "weight": 1.0,
-      "source": "file_conversion_index_ts",
-      "target": "file_conversion_schema_fileconversionnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "file-conversion/manifest.ts",
-      "source_location": "L3",
-      "weight": 1.0,
-      "source": "file_conversion_manifest_ts",
-      "target": "file_conversion_schema_fileconversionnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "references",
-      "context": "field",
-      "confidence": "EXTRACTED",
-      "source_file": "file-conversion/panel.tsx",
-      "source_location": "L15",
-      "weight": 1.0,
-      "source": "file_conversion_panel_fileconversionnodepanelprops",
-      "target": "file_conversion_schema_fileconversionnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "file-conversion/panel.tsx",
-      "source_location": "L12",
-      "weight": 1.0,
-      "source": "file_conversion_panel_tsx",
-      "target": "file_conversion_schema_fileconversionnodeconfig",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "file-conversion/card.tsx",
-      "source_location": "L8",
-      "weight": 1.0,
       "source": "file_conversion_card_tsx",
       "target": "file_conversion_card_fileconversionnodecard",
       "confidence_score": 1.0
@@ -7327,23 +6412,47 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
+      "relation": "imports",
+      "context": "import",
       "confidence": "EXTRACTED",
-      "source_file": "file-conversion/panel.tsx",
-      "source_location": "L27",
+      "source_file": "file-conversion/executor.main.ts",
+      "source_location": "L11",
       "weight": 1.0,
-      "source": "file_conversion_panel_tsx",
-      "target": "file_conversion_panel_fileconversionnodepanel",
+      "source": "file_conversion_executor_main_ts",
+      "target": "file_conversion_card_fileconversionnodecard",
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "file-conversion/index.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "file_conversion_index_ts",
+      "target": "file_conversion_card_fileconversionnodecard",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "file-conversion/manifest.ts",
+      "source_location": "L4",
+      "weight": 1.0,
+      "source": "file_conversion_manifest_ts",
+      "target": "file_conversion_card_fileconversionnodecard",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
       "confidence": "EXTRACTED",
       "source_file": "file-conversion/panel.tsx",
-      "source_location": "L14",
+      "source_location": "L12",
       "weight": 1.0,
+      "context": "import",
       "source": "file_conversion_panel_tsx",
-      "target": "file_conversion_panel_fileconversionnodepanelprops",
+      "target": "file_conversion_card_fileconversionnodecard",
       "confidence_score": 1.0
     },
     {
@@ -7625,16 +6734,6 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "file-conversion/output-boundary.ts",
-      "source_location": "L4",
-      "weight": 1.0,
-      "source": "file_conversion_output_boundary_ts",
-      "target": "file_conversion_output_boundary_workflowfileconversionoutputwriteerrorcode",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "method",
       "confidence": "EXTRACTED",
       "source_file": "file-conversion/output-boundary.ts",
@@ -7730,38 +6829,6 @@
       "confidence_score": 1.0
     },
     {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "switch/schema.ts",
-      "source_location": "L10",
-      "weight": 1.0,
-      "source": "switch_schema_ts",
-      "target": "switch_schema_switchnodeconfigschema",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "re_exports",
-      "context": "re-export",
-      "confidence": "EXTRACTED",
-      "source_file": "switch/index.ts",
-      "source_location": "L3",
-      "weight": 1.0,
-      "source": "switch_index_ts",
-      "target": "switch_schema_switchnodeconfigschema",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "imports",
-      "context": "import",
-      "confidence": "EXTRACTED",
-      "source_file": "switch/manifest.ts",
-      "source_location": "L4",
-      "weight": 1.0,
-      "source": "switch_manifest_ts",
-      "target": "switch_schema_switchnodeconfigschema",
-      "confidence_score": 1.0
-    },
-    {
       "relation": "imports",
       "context": "import",
       "confidence": "EXTRACTED",
@@ -7799,7 +6866,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "switch/manifest.ts",
-      "source_location": "L3",
+      "source_location": "L4",
       "weight": 1.0,
       "source": "switch_manifest_ts",
       "target": "switch_schema_switchnodeconfig",
@@ -7812,7 +6879,7 @@
       "source_file": "switch/panel.tsx",
       "source_location": "L27",
       "weight": 1.0,
-      "source": "switch_panel_switchnodepanelprops",
+      "source": "switch_panel_switchnodepanel",
       "target": "switch_schema_switchnodeconfig",
       "confidence_score": 1.0
     },
@@ -7930,16 +6997,6 @@
       "weight": 1.0,
       "source": "switch_panel_tsx",
       "target": "switch_panel_switchnodepanel",
-      "confidence_score": 1.0
-    },
-    {
-      "relation": "contains",
-      "confidence": "EXTRACTED",
-      "source_file": "switch/panel.tsx",
-      "source_location": "L26",
-      "weight": 1.0,
-      "source": "switch_panel_tsx",
-      "target": "switch_panel_switchnodepanelprops",
       "confidence_score": 1.0
     },
     {
@@ -8205,5 +7262,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "5202a67619f4e4fc9865e308e524954ce24e5e30"
+  "built_at_commit": "136f0d10f9c7b676f542321420356586e4d616c1"
 }

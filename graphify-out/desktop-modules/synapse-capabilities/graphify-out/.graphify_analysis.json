@@ -1,0 +1,214 @@
+{
+  "communities": {
+    "0": [
+      "shared_naming_capabilityid",
+      "shared_repository_domain_repository_mcp_tool_actions",
+      "shared_repository_domain_repositorycapabilities",
+      "shared_repository_domain_ts",
+      "shared_types_capabilitydefinition",
+      "shared_types_capabilitydomaindefinition",
+      "shared_types_dispatchcontext",
+      "shared_types_dispatchresult",
+      "shared_types_mcptooldefinition",
+      "shared_types_synapseactionsource",
+      "shared_types_ts",
+      "shared_workflow_domain_modeltierschema",
+      "shared_workflow_domain_ts",
+      "shared_workflow_domain_variablebindingschema",
+      "shared_workflow_domain_workflow_mcp_tool_actions",
+      "shared_workflow_domain_workflowcapabilities",
+      "shared_workflow_domain_workflowdefinitionschema"
+    ],
+    "1": [
+      "shared_content_domain_basecreateproperties",
+      "shared_content_domain_content_mcp_tool_actions",
+      "shared_content_domain_contentcapabilities",
+      "shared_content_domain_contentresourcetype",
+      "shared_content_domain_createtool",
+      "shared_content_domain_deletetool",
+      "shared_content_domain_gettool",
+      "shared_content_domain_iconfields",
+      "shared_content_domain_listtool",
+      "shared_content_domain_skillfileschema",
+      "shared_content_domain_stringfield",
+      "shared_content_domain_ts",
+      "shared_content_domain_updatetool"
+    ],
+    "2": [
+      "shared_content_domain_buildcontenttools",
+      "shared_registry_buildallmcptools",
+      "shared_registry_capability_domains",
+      "shared_registry_getactiondomainid",
+      "shared_registry_getmcptooldomainid",
+      "shared_registry_mcp_tool_actions",
+      "shared_registry_ts",
+      "shared_repository_domain_buildrepositorytools",
+      "shared_scheduler_domain_buildschedulertools",
+      "shared_variable_domain_buildvariabletools",
+      "shared_workflow_domain_buildworkflowtools"
+    ],
+    "3": [
+      "shared_naming_assertcanonicalcapabilityid",
+      "shared_naming_capabilityaction",
+      "shared_naming_capabilityidtoservicemethod",
+      "shared_naming_getcapabilityaction",
+      "shared_naming_getcapabilitydomain",
+      "shared_naming_iscanonicalcapabilityid",
+      "shared_naming_isknownaction",
+      "shared_naming_splitcapabilityid",
+      "shared_naming_topascaltoken",
+      "shared_naming_ts"
+    ],
+    "4": [
+      "shared_scheduler_domain_scheduler_mcp_tool_actions",
+      "shared_scheduler_domain_schedulercapabilities",
+      "shared_scheduler_domain_schedulerschedule",
+      "shared_scheduler_domain_schedulertaskcreateparams",
+      "shared_scheduler_domain_schedulertaskidparams",
+      "shared_scheduler_domain_schedulertaskruntimestatusparams",
+      "shared_scheduler_domain_schedulertaskupdateparams",
+      "shared_scheduler_domain_taskidproperty",
+      "shared_scheduler_domain_ts"
+    ],
+    "5": [
+      "shared_naming_capabilityidtomcptool",
+      "shared_variable_domain_descriptionproperty",
+      "shared_variable_domain_nameproperty",
+      "shared_variable_domain_repositoryuuidproperty",
+      "shared_variable_domain_ts",
+      "shared_variable_domain_valueproperty",
+      "shared_variable_domain_variable_mcp_tool_actions",
+      "shared_variable_domain_variablecapabilities"
+    ],
+    "6": [
+      "shared_model_price_domain_buildmodelpricetools",
+      "shared_model_price_domain_model_price_mcp_tool_actions",
+      "shared_model_price_domain_modelpricecapabilities",
+      "shared_model_price_domain_priceproperty",
+      "shared_model_price_domain_ruleidproperty",
+      "shared_model_price_domain_ts"
+    ]
+  },
+  "cohesion": {
+    "0": 0.17647058823529413,
+    "1": 0.21794871794871795,
+    "2": 0.2909090909090909,
+    "3": 0.3333333333333333,
+    "4": 0.2222222222222222,
+    "5": 0.25,
+    "6": 0.4
+  },
+  "gods": [
+    {
+      "id": "shared_types_mcptooldefinition",
+      "label": "McpToolDefinition",
+      "degree": 8
+    },
+    {
+      "id": "shared_types_capabilitydomaindefinition",
+      "label": "CapabilityDomainDefinition",
+      "degree": 8
+    },
+    {
+      "id": "shared_registry_buildallmcptools",
+      "label": "buildAllMcpTools()",
+      "degree": 7
+    },
+    {
+      "id": "shared_naming_capabilityid",
+      "label": "CapabilityId",
+      "degree": 7
+    },
+    {
+      "id": "shared_naming_capabilityidtomcptool",
+      "label": "capabilityIdToMcpTool()",
+      "degree": 7
+    },
+    {
+      "id": "shared_types_capabilitydefinition",
+      "label": "CapabilityDefinition",
+      "degree": 6
+    },
+    {
+      "id": "shared_naming_splitcapabilityid",
+      "label": "splitCapabilityId()",
+      "degree": 5
+    },
+    {
+      "id": "shared_content_domain_stringfield",
+      "label": "stringField()",
+      "degree": 5
+    },
+    {
+      "id": "shared_model_price_domain_buildmodelpricetools",
+      "label": "buildModelPriceTools()",
+      "degree": 4
+    },
+    {
+      "id": "shared_naming_iscanonicalcapabilityid",
+      "label": "isCanonicalCapabilityId()",
+      "degree": 4
+    }
+  ],
+  "surprises": [
+    {
+      "source": "buildAllMcpTools()",
+      "target": "buildModelPriceTools()",
+      "source_files": [
+        "shared/registry.ts",
+        "shared/model-price-domain.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "bridges separate communities"
+    },
+    {
+      "source": "buildAllMcpTools()",
+      "target": "buildWorkflowTools()",
+      "source_files": [
+        "shared/registry.ts",
+        "shared/workflow-domain.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "cross-file semantic connection"
+    },
+    {
+      "source": "buildAllMcpTools()",
+      "target": "buildRepositoryTools()",
+      "source_files": [
+        "shared/registry.ts",
+        "shared/repository-domain.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "cross-file semantic connection"
+    },
+    {
+      "source": "buildAllMcpTools()",
+      "target": "buildSchedulerTools()",
+      "source_files": [
+        "shared/registry.ts",
+        "shared/scheduler-domain.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "cross-file semantic connection"
+    },
+    {
+      "source": "buildAllMcpTools()",
+      "target": "buildContentTools()",
+      "source_files": [
+        "shared/registry.ts",
+        "shared/content-domain.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "cross-file semantic connection"
+    }
+  ],
+  "tokens": {
+    "input": 0,
+    "output": 0
+  }
+}
