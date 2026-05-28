@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router';
 
 import { BrandIcon } from '@/components/brand-icon';
@@ -12,6 +12,11 @@ type IssuedDeepLink = {
   url: string;
 };
 
+function buildDesktopLoginErrorCallbackUrl(state: string, error: string) {
+  const query = new URLSearchParams({ error, state });
+  return `synapse://auth/callback?${query.toString()}`;
+}
+
 export function DesktopLoginHandoffPage() {
   const { isAuthenticated, isLoading, logout, session } = useAuth();
   const navigate = useNavigate();
@@ -24,12 +29,17 @@ export function DesktopLoginHandoffPage() {
   const [error, setError] = useState('');
   const [retryKey, setRetryKey] = useState(0);
   const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
+  const reportedUnsupportedAccountRef = useRef('');
   const loginPath = `/login?client=desktop&state=${encodeURIComponent(state)}`;
   const sessionRole = session?.role;
   const sessionEmail = session?.email;
   const sessionKey = session?.sessionId ?? '';
   const deepLinkUrl =
     issuedDeepLink?.sessionKey === sessionKey ? issuedDeepLink.url : '';
+  const unsupportedAccountDeepLinkUrl =
+    isValidState && sessionRole && sessionRole !== 'user'
+      ? buildDesktopLoginErrorCallbackUrl(state, 'unsupported_account')
+      : '';
 
   useEffect(() => {
     if (!isValidState || isLoading || !isAuthenticated || !sessionRole) return;
@@ -52,6 +62,10 @@ export function DesktopLoginHandoffPage() {
       .catch((nextError) => {
         if (isCancelled) return;
         setError(nextError instanceof Error ? nextError.message : '打开失败');
+        window.location.href = buildDesktopLoginErrorCallbackUrl(
+          state,
+          'handoff_failed',
+        );
       });
 
     return () => {
@@ -67,6 +81,19 @@ export function DesktopLoginHandoffPage() {
     sessionKey,
     sessionRole,
     state,
+  ]);
+
+  useEffect(() => {
+    if (!unsupportedAccountDeepLinkUrl || isLoading || !isAuthenticated) return;
+    const marker = `${sessionKey}:${unsupportedAccountDeepLinkUrl}`;
+    if (reportedUnsupportedAccountRef.current === marker) return;
+    reportedUnsupportedAccountRef.current = marker;
+    window.location.href = unsupportedAccountDeepLinkUrl;
+  }, [
+    isAuthenticated,
+    isLoading,
+    sessionKey,
+    unsupportedAccountDeepLinkUrl,
   ]);
 
   async function onSwitchAccount() {
@@ -129,9 +156,14 @@ export function DesktopLoginHandoffPage() {
               {error ? '重试' : '打开'}
             </Button>
           ) : (
-            <Button disabled={isSwitchingAccount} onClick={onSwitchAccount}>
-              {isSwitchingAccount ? '切换中' : '切换账号'}
-            </Button>
+            <>
+              <p className="text-sm text-muted-foreground">
+                请使用普通用户账号登录
+              </p>
+              <Button disabled={isSwitchingAccount} onClick={onSwitchAccount}>
+                {isSwitchingAccount ? '切换中' : '切换账号'}
+              </Button>
+            </>
           )}
         </CardContent>
       </Card>

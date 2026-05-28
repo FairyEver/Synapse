@@ -48,6 +48,13 @@ function dashboardLoginUrl(baseUrl: string, state: string): string {
   return `${origin}/dashboard/login?${query.toString()}`
 }
 
+function authCallbackErrorMessage(errorCode: string): string {
+  if (errorCode === "unsupported_account") {
+    return "请使用普通用户账号登录。"
+  }
+  return "登录失败，请重试。"
+}
+
 function createNamespace(): EncryptedJsonNamespace<PersistedAccount> {
   return new EncryptedJsonNamespace<PersistedAccount>({
     name: CORE_ACCOUNT_NAMESPACE,
@@ -153,8 +160,21 @@ export class AccountService {
 
     const code = parsed.searchParams.get("code")?.trim()
     const callbackState = parsed.searchParams.get("state")?.trim()
+    const callbackError = parsed.searchParams.get("error")?.trim()
     const persisted = await this.readPersisted("Failed to read stored account for auth callback.")
     const attempt = persisted?.activeAttempt
+
+    if (callbackError && callbackState && attempt?.state === callbackState) {
+      await this.clearActiveAttemptIfState(callbackState)
+      const latest = await this.readPersisted("Failed to read stored account after account callback error.")
+      if (this.hasDifferentActiveAttempt(latest, callbackState)) return this.state
+      this.setState({
+        status: "error",
+        message: authCallbackErrorMessage(callbackError),
+        profile: latest?.lastProfile ?? persisted?.lastProfile,
+      })
+      return this.state
+    }
 
     if (!code || !callbackState || !attempt || attempt.state !== callbackState) {
       if (callbackState && this.hasDifferentActiveAttempt(persisted, callbackState)) return this.state

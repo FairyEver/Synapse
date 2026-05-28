@@ -41,6 +41,8 @@ export function useAdminList<T>(
   }, [loader, page, pageSize]);
 
   useEffect(() => {
+    isMountedRef.current = true;
+
     return () => {
       isMountedRef.current = false;
     };

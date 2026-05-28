@@ -137,6 +137,25 @@ describe("AccountService", () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
+  it("clears active login state when the browser reports an unsupported account", async () => {
+    const fetch = vi.fn()
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+
+    const state = await service.handleAuthCallback(
+      `synapse://auth/callback?error=unsupported_account&state=${attempt!.state}`,
+    )
+
+    expect(state).toMatchObject({
+      status: "error",
+      message: "请使用普通用户账号登录。",
+    })
+    expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
   it("preserves newer login attempts when an older callback arrives", async () => {
     const fetch = vi.fn(async (url, init) => {
       if (String(url).endsWith("/auth/desktop/exchange")) {
