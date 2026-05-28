@@ -52,9 +52,9 @@ function buildDesktopDeepLink(code: string, state: string): string {
 }
 
 function timingSafeEqualText(left: string, right: string): boolean {
-  const leftBuffer = Buffer.from(left)
-  const rightBuffer = Buffer.from(right)
-  return leftBuffer.length === rightBuffer.length && timingSafeEqual(leftBuffer, rightBuffer)
+  const leftBuffer = Buffer.from(hashToken(left), "hex")
+  const rightBuffer = Buffer.from(hashToken(right), "hex")
+  return timingSafeEqual(leftBuffer, rightBuffer)
 }
 
 @Injectable()
@@ -218,16 +218,25 @@ export class UserAuthService {
       throw new UnauthorizedException("登录凭证无效或已过期。")
     }
 
-    const result = await this.prisma.desktopLoginCode.updateMany({
-      where: { id: record.id, usedAt: null },
-      data: { usedAt: now },
-    })
-    if (result.count !== 1) {
-      await this.recordDesktopLoginExchangeFailure(record, input.ipAddress)
-      throw new UnauthorizedException("登录凭证无效或已过期。")
+    let tokens: UserTokenPair
+    try {
+      tokens = await this.prisma.$transaction(async (tx) => {
+        const result = await tx.desktopLoginCode.updateMany({
+          where: { id: record.id, usedAt: null },
+          data: { usedAt: now },
+        })
+        if (result.count !== 1) {
+          throw new UnauthorizedException("登录凭证无效或已过期。")
+        }
+        return this.issueTokenPair(record.user, tx)
+      })
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        await this.recordDesktopLoginExchangeFailure(record, input.ipAddress)
+      }
+      throw error
     }
 
-    const tokens = await this.issueTokenPair(record.user)
     await this.auditLog?.record({
       adminEmail: record.user.email,
       action: "user.desktop_login.exchange.success",

@@ -65,7 +65,7 @@ export class UserAuthController {
     return this.auth.issueDesktopLoginCode({
       userId: request.user!.id,
       state: input.state,
-      ipAddress: request.ip,
+      ipAddress: readRequestIp(request),
       userAgent: readHeaderText(request.headers["user-agent"]),
     })
   }
@@ -77,7 +77,7 @@ export class UserAuthController {
     return this.auth.exchangeDesktopLoginCode({
       code: input.code,
       state: input.state,
-      ipAddress: request.ip,
+      ipAddress: readRequestIp(request),
     })
   }
 
@@ -98,4 +98,8 @@ function parseBody<T extends z.ZodType>(schema: T, body: unknown, message: strin
 
 function readHeaderText(header: string | string[] | undefined): string | undefined {
   return Array.isArray(header) ? header.join(", ") : header
+}
+
+function readRequestIp(request: Request): string {
+  return request.ip ?? "unknown"
 }

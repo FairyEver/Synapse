@@ -17,6 +17,10 @@ describe("UserAuthController", () => {
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.refresh)).toBe(60000)
     expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.logout)).toBe(5)
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.logout)).toBe(60000)
+    expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.issueDesktopCode)).toBe(10)
+    expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.issueDesktopCode)).toBe(60000)
+    expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.exchangeDesktopCode)).toBe(10)
+    expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.exchangeDesktopCode)).toBe(60000)
   })
 
   it("passes valid login requests to the service", () => {

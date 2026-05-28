@@ -17,6 +17,9 @@ function createPrismaMock() {
     userSession: {
       create: vi.fn().mockResolvedValue({ id: "session-1" }),
     },
+    desktopLoginCode: {
+      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+    },
     $executeRaw: vi.fn(),
   }
   return {
@@ -149,7 +152,9 @@ describe("UserAuthService", () => {
       user: { id: "user-1", email: "desktop@example.com", status: "active" },
     })
     prisma.desktopLoginCode.updateMany.mockResolvedValue({ count: 1 })
-    const service = createService(prisma)
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog)
+    const issuedAt = Date.now()
 
     const issued = await service.issueDesktopLoginCode({
       userId: "user-1",
@@ -160,6 +165,19 @@ describe("UserAuthService", () => {
 
     expect(issued.code).toHaveLength(43)
     expect(issued.deepLinkUrl).toBe(`synapse://auth/callback?code=${encodeURIComponent(issued.code)}&state=state-1234567890`)
+    expect(prisma.desktopLoginCode.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        codeHash: hashToken(issued.code),
+        userId: "user-1",
+        state: "state-1234567890",
+        ipAddress: "127.0.0.1",
+        userAgent: "vitest",
+      }),
+    })
+    const persistedExpiresAt = prisma.desktopLoginCode.create.mock.calls[0]?.[0].data.expiresAt
+    expect(persistedExpiresAt).toEqual(expect.any(Date))
+    expect(persistedExpiresAt.getTime()).toBeGreaterThanOrEqual(issuedAt + 5 * 60 * 1000)
+    expect(persistedExpiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 5 * 60 * 1000)
 
     const exchanged = await service.exchangeDesktopLoginCode({
       code: issued.code,
@@ -170,6 +188,31 @@ describe("UserAuthService", () => {
     expect(exchanged.accessToken).toEqual(expect.any(String))
     expect(exchanged.refreshToken).toEqual(expect.any(String))
     expect(exchanged).not.toHaveProperty("user")
+    expect(prisma.__tx.desktopLoginCode.updateMany).toHaveBeenCalledWith({
+      where: { id: "code-1", usedAt: null },
+      data: { usedAt: expect.any(Date) },
+    })
+    expect(prisma.__tx.userSession.create).toHaveBeenCalledWith({
+      data: {
+        userId: "user-1",
+        refreshTokenHash: expect.any(String),
+        expiresAt: expect.any(Date),
+      },
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "desktop@example.com",
+      action: "user.desktop_login.issue",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "127.0.0.1",
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "desktop@example.com",
+      action: "user.desktop_login.exchange.success",
+      targetType: "user",
+      targetId: "user-1",
+      ipAddress: "127.0.0.1",
+    })
   })
 
   it("rejects desktop login code replay", async () => {
