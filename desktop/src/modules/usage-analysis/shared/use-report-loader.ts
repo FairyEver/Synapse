@@ -1,5 +1,8 @@
 import { useCallback, useEffect, useState, type DependencyList } from "react"
+import { createRendererLogger } from "@/app-shell/logging"
 import type { ReportState } from "./types"
+
+const logger = createRendererLogger("usage-analysis.report-loader")
 
 export function useReportLoader<T>(
   loader: () => Promise<T>,
@@ -15,8 +18,9 @@ export function useReportLoader<T>(
       const next = await loader()
       setData(next)
       setError(null)
-    } catch {
-      setError(new Error("读取失败"))
+    } catch (err) {
+      logger.error("Usage analysis report load failed.", { error: err })
+      setError(toReportLoadError(err))
     } finally {
       setLoading(false)
     }
@@ -27,4 +31,9 @@ export function useReportLoader<T>(
   }, [reload])
 
   return { data, loading, error, reload }
+}
+
+function toReportLoadError(err: unknown): Error {
+  if (err instanceof Error && err.message.trim()) return err
+  return new Error("读取失败")
 }
