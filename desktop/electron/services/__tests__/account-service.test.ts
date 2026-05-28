@@ -126,14 +126,14 @@ describe("AccountService", () => {
     expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
   })
 
-  it("rejects state mismatch without exchanging", async () => {
+  it("preserves active login state on callback state mismatch", async () => {
     const fetch = vi.fn()
     const { service } = await createTestAccountService({ fetch: fetch as typeof fetch })
     await service.startLogin()
 
     const state = await service.handleAuthCallback("synapse://auth/callback?code=code-1&state=wrong")
 
-    expect(state.status).toBe("error")
+    expect(state.status).toBe("authenticating")
     expect(fetch).not.toHaveBeenCalled()
   })
 
@@ -162,7 +162,7 @@ describe("AccountService", () => {
       `synapse://auth/callback?code=code-1&state=${firstAttempt!.state}`,
     )
 
-    expect(firstState.status).toBe("error")
+    expect(firstState.status).toBe("authenticating")
     expect(fetch).not.toHaveBeenCalled()
     expect((await namespace.getSingleton())?.activeAttempt?.state).toBe(secondAttempt!.state)
 
@@ -188,6 +188,17 @@ describe("AccountService", () => {
       message: "登录已失效，请重试。",
       profile: storedProfile,
     })
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it("keeps active login state when malformed callback arrives during login", async () => {
+    const fetch = vi.fn()
+    const { service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    const started = await service.startLogin()
+
+    const state = await service.handleAuthCallback("not a url")
+
+    expect(state).toEqual(started.state)
     expect(fetch).not.toHaveBeenCalled()
   })
 
@@ -277,6 +288,16 @@ describe("AccountService", () => {
     expect(await namespace.getSingleton()).not.toHaveProperty("accessToken")
   })
 
+  it("keeps active login state when refresh finds an attempt without a token", async () => {
+    const { service } = await createTestAccountService()
+
+    const started = await service.startLogin()
+    const state = await service.refreshFromStorage()
+
+    expect(started.state.status).toBe("authenticating")
+    expect(state).toEqual(started.state)
+  })
+
   it("keeps newer login attempts when stored refresh fails", async () => {
     let rejectRefresh: ((error: Error) => void) | undefined
     const refreshResponse = new Promise<Response>((_resolve, reject) => {
@@ -305,6 +326,190 @@ describe("AccountService", () => {
       lastProfile: storedProfile,
     })
     expect(persisted).not.toHaveProperty("refreshToken")
+  })
+
+  it("keeps newer login state after an expired callback and queued new login overlap", async () => {
+    const fetch = vi.fn()
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    const originalSetSingleton = namespace.setSingleton.bind(namespace)
+    let resolveClearStarted: (() => void) | undefined
+    let resolveClear: (() => void) | undefined
+    const clearStarted = new Promise<void>((resolve) => {
+      resolveClearStarted = resolve
+    })
+    const clearGate = new Promise<void>((resolve) => {
+      resolveClear = resolve
+    })
+    await namespace.setSingleton({
+      activeAttempt: {
+        state: "expired-state",
+        apiBaseUrl: "http://localhost:3000/api",
+        createdAt: "2026-05-28T00:00:00.000Z",
+        expiresAt: "2026-05-28T00:00:01.000Z",
+      },
+    })
+    vi.spyOn(namespace, "setSingleton").mockImplementation(async (value) => {
+      if (!value?.activeAttempt) {
+        resolveClearStarted?.()
+        await clearGate
+      }
+      return originalSetSingleton(value)
+    })
+
+    const expiredCallback = service.handleAuthCallback("synapse://auth/callback?code=code-1&state=expired-state")
+    await clearStarted
+    const started = service.startLogin()
+    resolveClear?.()
+    await expiredCallback
+    const loginResult = await started
+
+    expect(service.getState()).toEqual(loginResult.state)
+    expect(loginResult.state.status).toBe("authenticating")
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it("does not restore credentials when logout wins an in-flight refresh", async () => {
+    let resolveRefresh: ((response: Response) => void) | undefined
+    const refreshResponse = new Promise<Response>((resolve) => {
+      resolveRefresh = resolve
+    })
+    const fetch = vi.fn(async (url) => {
+      if (String(url).endsWith("/auth/refresh")) return refreshResponse
+      if (String(url).endsWith("/auth/logout")) return jsonResponse({})
+      if (String(url).endsWith("/auth/me")) {
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    const refresh = service.refreshFromStorage()
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:3000/api/auth/refresh",
+      expect.any(Object),
+    ))
+    await service.logout()
+    resolveRefresh?.(jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" }))
+    const state = await refresh
+
+    expect(state.status).toBe("unauthenticated")
+    expect(await namespace.getSingleton()).toBeNull()
+    expect(fetch.mock.calls.map(([url]) => String(url))).not.toContain("http://localhost:3000/api/auth/me")
+  })
+
+  it("does not restore credentials when logout happens during the refresh commit", async () => {
+    const fetch = vi.fn(async (url, init) => {
+      if (String(url).endsWith("/auth/refresh")) {
+        expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: "refresh-old" })
+        return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
+      }
+      if (String(url).endsWith("/auth/logout")) return jsonResponse({})
+      if (String(url).endsWith("/auth/me")) {
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    const originalSetSingleton = namespace.setSingleton.bind(namespace)
+    let resolveCommitStarted: (() => void) | undefined
+    let resolveCommit: (() => void) | undefined
+    const commitStarted = new Promise<void>((resolve) => {
+      resolveCommitStarted = resolve
+    })
+    const commitGate = new Promise<void>((resolve) => {
+      resolveCommit = resolve
+    })
+    vi.spyOn(namespace, "setSingleton").mockImplementation(async (value) => {
+      if (value?.refreshToken === "refresh-new") {
+        resolveCommitStarted?.()
+        await commitGate
+      }
+      return originalSetSingleton(value)
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    const refresh = service.refreshFromStorage()
+    await commitStarted
+    const logout = service.logout()
+    resolveCommit?.()
+    await Promise.all([refresh, logout])
+
+    expect(service.getState().status).toBe("unauthenticated")
+    expect(await namespace.getSingleton()).toBeNull()
+  })
+
+  it("does not restore credentials when logout wins an in-flight callback", async () => {
+    let resolveExchange: ((response: Response) => void) | undefined
+    const exchangeResponse = new Promise<Response>((resolve) => {
+      resolveExchange = resolve
+    })
+    const fetch = vi.fn(async (url) => {
+      if (String(url).endsWith("/auth/desktop/exchange")) return exchangeResponse
+      if (String(url).endsWith("/auth/me")) {
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+
+    const callback = service.handleAuthCallback(`synapse://auth/callback?code=code-1&state=${attempt!.state}`)
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
+      "http://localhost:3000/api/auth/desktop/exchange",
+      expect.any(Object),
+    ))
+    await service.logout()
+    resolveExchange?.(jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" }))
+    const state = await callback
+
+    expect(state.status).toBe("unauthenticated")
+    expect(await namespace.getSingleton()).toBeNull()
+    expect(fetch.mock.calls.map(([url]) => String(url))).not.toContain("http://localhost:3000/api/auth/me")
+  })
+
+  it("does not restore credentials when logout happens during the callback commit", async () => {
+    const fetch = vi.fn(async (url) => {
+      if (String(url).endsWith("/auth/desktop/exchange")) {
+        return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
+      }
+      if (String(url).endsWith("/auth/logout")) return jsonResponse({})
+      if (String(url).endsWith("/auth/me")) {
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    const originalSetSingleton = namespace.setSingleton.bind(namespace)
+    let resolveCommitStarted: (() => void) | undefined
+    let resolveCommit: (() => void) | undefined
+    const commitStarted = new Promise<void>((resolve) => {
+      resolveCommitStarted = resolve
+    })
+    const commitGate = new Promise<void>((resolve) => {
+      resolveCommit = resolve
+    })
+    vi.spyOn(namespace, "setSingleton").mockImplementation(async (value) => {
+      if (value?.refreshToken === "refresh-new") {
+        resolveCommitStarted?.()
+        await commitGate
+      }
+      return originalSetSingleton(value)
+    })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+
+    const callback = service.handleAuthCallback(`synapse://auth/callback?code=code-1&state=${attempt!.state}`)
+    await commitStarted
+    const logout = service.logout()
+    resolveCommit?.()
+    await Promise.all([callback, logout])
+
+    expect(service.getState().status).toBe("unauthenticated")
+    expect(await namespace.getSingleton()).toBeNull()
   })
 
   it("merges refreshed account data with newer persisted fields", async () => {
@@ -336,7 +541,7 @@ describe("AccountService", () => {
 
     const state = await service.refreshFromStorage()
 
-    expect(state.status).toBe("authenticated")
+    expect(state.status).toBe("unauthenticated")
     expect(await namespace.getSingleton()).toMatchObject({
       refreshToken: "refresh-new",
       activeAttempt: { state: "newer-state" },

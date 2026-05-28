@@ -65,6 +65,8 @@ export class AccountService {
   private eventBus: EventBus | null = null
   private state: SynapseAccountState = { status: "unauthenticated" }
   private listeners = new Set<(state: SynapseAccountState) => void>()
+  private authRevision = 0
+  private storageMutationQueue: Promise<void> = Promise.resolve()
 
   constructor(deps: AccountServiceDeps = {}) {
     this.namespace = deps.namespace ?? createNamespace()
@@ -99,10 +101,15 @@ export class AccountService {
       expiresAt: new Date(now.getTime() + ATTEMPT_TTL_MS).toISOString(),
     }
     const loginUrl = dashboardLoginUrl(baseUrl, state)
+    const revision = this.bumpAuthRevision()
 
     try {
-      const current = await this.namespace.getSingleton()
-      await this.namespace.setSingleton({ ...(current ?? {}), activeAttempt: attempt })
+      await this.runStorageMutation(async () => {
+        if (this.authRevision !== revision) return
+        const current = await this.namespace.getSingleton()
+        await this.namespace.setSingleton({ ...(current ?? {}), activeAttempt: attempt })
+      })
+      if (this.authRevision !== revision) return { state: this.state, loginUrl }
       this.setState({ status: "authenticating", loginUrl })
       await this.openExternal(loginUrl)
     } catch (error) {
@@ -120,6 +127,7 @@ export class AccountService {
     } catch (error) {
       logger.warn("Ignored malformed account auth callback.", { error })
       const persisted = await this.readPersisted("Failed to read stored account for malformed auth callback.")
+      if (persisted?.activeAttempt) return this.state
       this.setInvalidCallbackState(persisted)
       return this.state
     }
@@ -139,6 +147,7 @@ export class AccountService {
     const attempt = persisted?.activeAttempt
 
     if (!code || !callbackState || !attempt || attempt.state !== callbackState) {
+      if (callbackState && this.hasDifferentActiveAttempt(persisted, callbackState)) return this.state
       this.setState({
         status: "error",
         message: "登录已失效，请重试。",
@@ -149,10 +158,12 @@ export class AccountService {
 
     if (new Date(attempt.expiresAt).getTime() <= Date.now()) {
       await this.clearActiveAttemptIfState(callbackState)
+      const latest = await this.readPersisted("Failed to read stored account after clearing expired auth callback.")
+      if (this.hasDifferentActiveAttempt(latest, callbackState)) return this.state
       this.setState({
         status: "error",
         message: "登录已失效，请重试。",
-        profile: persisted?.lastProfile,
+        profile: latest?.lastProfile ?? persisted?.lastProfile,
       })
       return this.state
     }
@@ -167,6 +178,8 @@ export class AccountService {
       logger.warn("Desktop account callback exchange failed.", { error })
       this.accessToken = null
       await this.clearActiveAttemptIfState(callbackState)
+      const latest = await this.readPersisted("Failed to read stored account after account callback exchange failed.")
+      if (this.hasDifferentActiveAttempt(latest, callbackState)) return this.state
       this.setState({
         status: "error",
         message: "登录失败，请重试。",
@@ -177,31 +190,63 @@ export class AccountService {
 
     this.accessToken = tokens.accessToken
     try {
+      const currentBeforeProfile = await this.readPersisted(
+        "Failed to read stored account before loading callback account profile.",
+      )
+      if (currentBeforeProfile?.activeAttempt?.state !== callbackState) {
+        this.accessToken = null
+        return this.state
+      }
+      const revision = this.authRevision
       const profile = await this.loadMe(attempt.apiBaseUrl)
-      await this.writeAccountPatch(
+      const committed = await this.writeAccountPatchIfAttemptCurrent(
+        revision,
+        callbackState,
         { refreshToken: tokens.refreshToken, lastProfile: profile },
         { clearAttemptState: callbackState },
       )
+      if (!committed) {
+        this.accessToken = null
+        return this.state
+      }
       this.setState({ status: "authenticated", profile })
     } catch (error) {
       logger.warn("Desktop account profile load failed after exchange; retrying refresh.", { error })
       this.accessToken = null
-      await this.writeAccountPatch({ refreshToken: tokens.refreshToken }, { clearAttemptState: callbackState }).catch(
-        (writeError) => {
-          logger.warn("Failed to store refresh token after account exchange.", { error: writeError })
-        },
-      )
+      const revision = this.authRevision
+      const storedExchangeToken = await this.writeAccountPatchIfAttemptCurrent(
+        revision,
+        callbackState,
+        { refreshToken: tokens.refreshToken },
+        { clearAttemptState: callbackState },
+      ).catch((writeError) => {
+        logger.warn("Failed to store refresh token after account exchange.", { error: writeError })
+        return null
+      })
+      if (!storedExchangeToken) return this.state
       try {
         const refreshed = await this.refreshWithToken(attempt.apiBaseUrl, tokens.refreshToken)
-        await this.writeAccountPatch(
+        const committed = await this.writeAccountPatchIfRefreshTokenCurrent(
+          revision,
+          tokens.refreshToken,
           { refreshToken: refreshed.refreshToken, lastProfile: refreshed.profile },
-          { clearAttemptState: callbackState },
         )
+        if (!committed) {
+          this.accessToken = null
+          return this.state
+        }
+        if (committed.activeAttempt) return this.state
         this.setState({ status: "authenticated", profile: refreshed.profile })
       } catch (refreshError) {
         logger.warn("Desktop account callback refresh recovery failed.", { error: refreshError })
         this.accessToken = null
+        const beforeClear = await this.readPersisted(
+          "Failed to read stored account before clearing failed callback refresh token.",
+        )
+        await this.clearStoredRefreshTokenIfCurrent(tokens.refreshToken)
+        if (beforeClear?.refreshToken !== tokens.refreshToken) return this.state
         const latest = await this.readPersisted("Failed to read stored account after account callback recovery failed.")
+        if (this.hasDifferentActiveAttempt(latest, callbackState)) return this.state
         this.setState({
           status: "error",
           message: "登录失败，请重试。",
@@ -218,10 +263,12 @@ export class AccountService {
     try {
       const persisted = await this.namespace.getSingleton()
       if (!persisted?.refreshToken) {
+        if (persisted?.activeAttempt) return this.state
         this.setState({ status: "unauthenticated" })
         return this.state
       }
       attemptedRefreshToken = persisted.refreshToken
+      const revision = this.authRevision
 
       const baseUrl = apiBaseUrl(this.isPackaged)
       const tokens = await this.postJson<{ accessToken: string; refreshToken: string }>(
@@ -229,8 +276,27 @@ export class AccountService {
         { refreshToken: persisted.refreshToken },
       )
       this.accessToken = tokens.accessToken
+      const currentBeforeProfile = await this.readPersisted(
+        "Failed to read stored account before loading refreshed account profile.",
+      )
+      if (currentBeforeProfile?.refreshToken !== attemptedRefreshToken) {
+        this.accessToken = null
+        return this.state
+      }
       const profile = await this.loadMe(baseUrl)
-      await this.writeAccountPatch({ refreshToken: tokens.refreshToken, lastProfile: profile })
+      const committed = await this.writeAccountPatchIfRefreshTokenCurrent(
+        revision,
+        attemptedRefreshToken,
+        {
+          refreshToken: tokens.refreshToken,
+          lastProfile: profile,
+        },
+      )
+      if (!committed) {
+        this.accessToken = null
+        return this.state
+      }
+      if (committed.activeAttempt) return this.state
       this.setState({ status: "authenticated", profile })
     } catch (error) {
       logger.warn("Account refresh failed.", { error })
@@ -246,6 +312,8 @@ export class AccountService {
 
   async logout(): Promise<SynapseAccountState> {
     const persisted = await this.readPersisted("Failed to read stored account before logout.")
+    this.bumpAuthRevision()
+    this.accessToken = null
     if (persisted?.refreshToken) {
       await this.postJson(`${apiBaseUrl(this.isPackaged)}/auth/logout`, {
         refreshToken: persisted.refreshToken,
@@ -254,7 +322,6 @@ export class AccountService {
       })
     }
 
-    this.accessToken = null
     await this.clearStoredAccount()
     this.setState({ status: "unauthenticated" })
     return this.state
@@ -303,42 +370,97 @@ export class AccountService {
   }
 
   private async clearActiveAttemptIfState(expectedState: string): Promise<void> {
-    const persisted = await this.readPersisted("Failed to read stored account before clearing login attempt.")
-    if (persisted?.activeAttempt?.state !== expectedState) return
-    const nextPersisted: PersistedAccount = { ...persisted }
-    delete nextPersisted.activeAttempt
-    await this.namespace.setSingleton(nextPersisted).catch((error) => {
+    await this.runStorageMutation(async () => {
+      const persisted = await this.readPersisted("Failed to read stored account before clearing login attempt.")
+      if (persisted?.activeAttempt?.state !== expectedState) return
+      const nextPersisted: PersistedAccount = { ...persisted }
+      delete nextPersisted.activeAttempt
+      await this.namespace.setSingleton(nextPersisted)
+    }).catch((error) => {
       logger.warn("Failed to clear account login attempt.", { error })
     })
   }
 
-  private async writeAccountPatch(
+  private async writeAccountPatchIfAttemptCurrent(
+    expectedRevision: number,
+    expectedState: string,
     patch: PersistedAccount,
     options: { clearAttemptState?: string } = {},
-  ): Promise<void> {
-    const current = await this.readPersisted("Failed to read stored account before writing account state.")
-    const nextPersisted: PersistedAccount = { ...(current ?? {}), ...patch }
-    if (options.clearAttemptState && nextPersisted.activeAttempt?.state === options.clearAttemptState) {
-      delete nextPersisted.activeAttempt
-    }
-    await this.namespace.setSingleton(nextPersisted)
+  ): Promise<PersistedAccount | null> {
+    return this.runStorageMutation(async () => {
+      if (this.authRevision !== expectedRevision) return null
+      const current = await this.readPersisted("Failed to read stored account before writing account state.")
+      if (current?.activeAttempt?.state !== expectedState) return null
+      const nextPersisted: PersistedAccount = { ...(current ?? {}), ...patch }
+      if (options.clearAttemptState && nextPersisted.activeAttempt?.state === options.clearAttemptState) {
+        delete nextPersisted.activeAttempt
+      }
+      await this.namespace.setSingleton(nextPersisted)
+      if (this.authRevision !== expectedRevision) return null
+      return nextPersisted
+    })
+  }
+
+  private async writeAccountPatchIfRefreshTokenCurrent(
+    expectedRevision: number,
+    expectedRefreshToken: string,
+    patch: PersistedAccount,
+  ): Promise<PersistedAccount | null> {
+    return this.runStorageMutation(async () => {
+      if (this.authRevision !== expectedRevision) return null
+      const current = await this.readPersisted("Failed to read stored account before writing account state.")
+      if (current?.refreshToken !== expectedRefreshToken) return null
+      const nextPersisted: PersistedAccount = { ...current, ...patch }
+      await this.namespace.setSingleton(nextPersisted)
+      if (this.authRevision !== expectedRevision) return null
+      return nextPersisted
+    })
   }
 
   private async clearStoredAccount(): Promise<void> {
-    await this.namespace.clearSingleton().catch((error) => {
+    await this.runStorageMutation(async () => {
+      await this.namespace.clearSingleton()
+    }).catch((error) => {
       logger.warn("Failed to clear stored account.", { error })
     })
   }
 
   private async clearStoredRefreshTokenIfCurrent(expectedRefreshToken: string | undefined): Promise<void> {
     if (!expectedRefreshToken) return
-    const persisted = await this.readPersisted("Failed to read stored account before clearing refresh token.")
-    if (persisted?.refreshToken !== expectedRefreshToken) return
-    const nextPersisted: PersistedAccount = { ...persisted }
-    delete nextPersisted.refreshToken
-    await this.namespace.setSingleton(nextPersisted).catch((error) => {
+    await this.runStorageMutation(async () => {
+      const persisted = await this.readPersisted("Failed to read stored account before clearing refresh token.")
+      if (persisted?.refreshToken !== expectedRefreshToken) return
+      const nextPersisted: PersistedAccount = { ...persisted }
+      delete nextPersisted.refreshToken
+      await this.namespace.setSingleton(nextPersisted)
+    }).catch((error) => {
       logger.warn("Failed to clear stored account refresh token.", { error })
     })
+  }
+
+  private bumpAuthRevision(): number {
+    this.authRevision += 1
+    return this.authRevision
+  }
+
+  private hasDifferentActiveAttempt(persisted: PersistedAccount | null, expectedState: string): boolean {
+    return Boolean(persisted?.activeAttempt && persisted.activeAttempt.state !== expectedState)
+  }
+
+  private async runStorageMutation<T>(operation: () => Promise<T>): Promise<T> {
+    const previous = this.storageMutationQueue
+    let release: () => void = () => {}
+    this.storageMutationQueue = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    await previous.catch((error) => {
+      logger.warn("Previous account storage mutation failed.", { error })
+    })
+    try {
+      return await operation()
+    } finally {
+      release()
+    }
   }
 
   private setInvalidCallbackState(persisted: PersistedAccount | null): void {
