@@ -21,9 +21,11 @@ export function DesktopLoginHandoffPage() {
   const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
   const loginPath = `/login?client=desktop&state=${encodeURIComponent(state)}`;
   const sessionRole = session?.role;
+  const sessionEmail = session?.email;
 
   useEffect(() => {
     if (!isValidState || isLoading || !isAuthenticated || !sessionRole) return;
+    if (!sessionEmail) return;
     if (sessionRole !== 'user') return;
     if (deepLinkUrl) return;
 
@@ -31,7 +33,11 @@ export function DesktopLoginHandoffPage() {
 
     setError('');
 
-    void issueDesktopLoginCodeOnce(state)
+    void issueDesktopLoginCodeOnce({
+      email: sessionEmail,
+      role: sessionRole,
+      state,
+    })
       .then((nextDeepLinkUrl) => {
         if (isCancelled) return;
         setDeepLinkUrl(nextDeepLinkUrl);
@@ -51,6 +57,7 @@ export function DesktopLoginHandoffPage() {
     isLoading,
     isValidState,
     retryKey,
+    sessionEmail,
     sessionRole,
     state,
   ]);
@@ -125,18 +132,23 @@ export function DesktopLoginHandoffPage() {
   );
 }
 
-function issueDesktopLoginCodeOnce(state: string) {
-  const existingRequest = desktopLoginCodeRequests.get(state);
+function issueDesktopLoginCodeOnce(input: {
+  email: string;
+  role: 'admin' | 'user';
+  state: string;
+}) {
+  const cacheKey = `${input.role}:${input.email}:${input.state}`;
+  const existingRequest = desktopLoginCodeRequests.get(cacheKey);
   if (existingRequest) return existingRequest;
 
   const request = dashboardApi
-    .issueDesktopLoginCode({ state })
+    .issueDesktopLoginCode({ state: input.state })
     .then((result) => result.deepLinkUrl)
     .finally(() => {
-      desktopLoginCodeRequests.delete(state);
+      desktopLoginCodeRequests.delete(cacheKey);
     });
 
-  desktopLoginCodeRequests.set(state, request);
+  desktopLoginCodeRequests.set(cacheKey, request);
   return request;
 }
 
