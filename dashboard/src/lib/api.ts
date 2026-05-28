@@ -129,6 +129,12 @@ export type UserTokenPair = {
   refreshToken: string;
 };
 
+export type DesktopLoginCodeIssueResult = {
+  code: string;
+  deepLinkUrl: string;
+  expiresAt: string;
+};
+
 type RequestOptions = RequestInit;
 
 const dashboardApiBasePath = '/api/dashboard';
@@ -273,6 +279,11 @@ export const dashboardApi = {
   logout: () =>
     request<{ ok: true }>(`${dashboardApiBasePath}/logout`, { method: 'POST' }),
   getMe: () => request<DashboardMe>(`${dashboardApiBasePath}/me`),
+  issueDesktopLoginCode: (input: { state: string }) =>
+    request<DesktopLoginCodeIssueResult>('/api/auth/desktop/issue-code', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
 };
 
 export const adminApi = {

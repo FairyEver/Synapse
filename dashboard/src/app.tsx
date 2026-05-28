@@ -6,6 +6,7 @@ import { ErrorState } from '@/components/page-state';
 import { AuthProvider, useAuth } from '@/hooks/use-auth';
 import { AuditLogsPage } from '@/pages/audit-logs-page';
 import { BackupPage } from '@/pages/backup-page';
+import { DesktopLoginHandoffPage } from '@/pages/desktop-login-handoff-page';
 import { InvitationsPage } from '@/pages/invitations-page';
 import { LoginPage } from '@/pages/login-page';
 import { LogsPage } from '@/pages/logs-page';
@@ -58,6 +59,7 @@ export default function App() {
     <AuthProvider>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
+        <Route path="/desktop-login" element={<DesktopLoginHandoffPage />} />
         <Route path="/signup" element={<SignupPage />} />
         <Route path="/team-invite" element={<TeamInvitePage />} />
         <Route element={<ProtectedRoute roles={['admin']} />}>

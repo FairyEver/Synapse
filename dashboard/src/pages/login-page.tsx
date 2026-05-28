@@ -15,13 +15,24 @@ export function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const searchParams = new URLSearchParams(location.search);
+  const desktopState =
+    searchParams.get('client') === 'desktop' ? searchParams.get('state') : null;
+  const desktopReturnPath =
+    desktopState && desktopState.trim().length >= 16
+      ? `/desktop-login?state=${encodeURIComponent(desktopState.trim())}`
+      : null;
 
   const from = getSafeReturnPath(location, session?.role);
 
   if (isAuthenticated) {
     return (
       <Navigate
-        to={from ?? (session?.role === 'user' ? '/me' : '/system')}
+        to={
+          desktopReturnPath ??
+          from ??
+          (session?.role === 'user' ? '/me' : '/system')
+        }
         replace
       />
     );
@@ -35,7 +46,8 @@ export function LoginPage() {
     try {
       const nextSession = await login({ email, password });
       navigate(
-        getSafeReturnPath(location, nextSession.role) ??
+        desktopReturnPath ??
+          getSafeReturnPath(location, nextSession.role) ??
           (nextSession.role === 'admin' ? '/system' : '/me'),
         {
           replace: true,
