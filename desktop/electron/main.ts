@@ -52,14 +52,23 @@ function focusOrCreateMainWindow(): void {
 function handleProtocolUrl(url: string): void {
   pendingProtocolUrls.push(url)
   if (canHandleProtocolUrls) {
-    drainProtocolUrls()
+    void drainProtocolUrls()
   }
 }
 
-function drainProtocolUrls(): void {
+async function drainProtocolUrls(): Promise<number> {
+  let handledCount = 0
   for (const url of pendingProtocolUrls.splice(0)) {
-    void accountService.handleAuthCallback(url).finally(() => focusOrCreateMainWindow())
+    handledCount += 1
+    try {
+      await accountService.handleAuthCallback(url)
+    } catch (error) {
+      logger.warn("Failed to handle account auth callback.", { error })
+    } finally {
+      focusOrCreateMainWindow()
+    }
   }
+  return handledCount
 }
 
 let gotSingleInstanceLock = app.requestSingleInstanceLock()
@@ -134,8 +143,10 @@ if (!gotSingleInstanceLock) {
       const eventBus = registry.get<EventBus>("core.event-bus")
       accountService.setEventBus(eventBus)
       canHandleProtocolUrls = true
-      drainProtocolUrls()
-      void accountService.refreshFromStorage()
+      const handledProtocolUrls = await drainProtocolUrls()
+      if (handledProtocolUrls === 0) {
+        void accountService.refreshFromStorage()
+      }
 
       repositoryStore.onRepositoryDisappeared((repositoryUuid) => {
         eventBus.emit({
