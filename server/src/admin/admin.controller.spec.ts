@@ -7,7 +7,10 @@ function createController(
   service: Partial<AdminService>,
   auditLog: Partial<AuditLogService> = {},
 ) {
-  return new AdminController(service as AdminService, auditLog as AuditLogService)
+  return new AdminController(
+    service as AdminService,
+    { record: vi.fn().mockResolvedValue(undefined), ...auditLog } as AuditLogService,
+  )
 }
 
 describe("AdminController", () => {
@@ -29,13 +32,17 @@ describe("AdminController", () => {
 
   it("passes audit log filters to the audit service", async () => {
     const list = vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
-    const controller = createController({}, { list })
+    const record = vi.fn().mockResolvedValue(undefined)
+    const controller = createController({}, { list, record })
 
-    await controller.listAuditLogs({
-      action: "admin.login",
-      from: "2026-05-01",
-      to: "2026-05-21",
-    })
+    await controller.listAuditLogs(
+      {
+        action: "admin.login",
+        from: "2026-05-01",
+        to: "2026-05-21",
+      },
+      { admin: { email: "admin@example.com" }, ip: "203.0.113.10" } as never,
+    )
 
     expect(list).toHaveBeenCalledWith({
       action: "admin.login",
@@ -47,6 +54,73 @@ describe("AdminController", () => {
         to: "2026-05-21",
       },
     })
+    expect(record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.audit_logs.list",
+      targetType: "audit_log",
+      targetId: "list",
+      detail: {
+        action: "admin.login",
+        from: "2026-05-01",
+        to: "2026-05-21",
+      },
+      ipAddress: "203.0.113.10",
+    })
+  })
+
+  it("records audit logs for sensitive admin read endpoints", async () => {
+    const list = vi.fn().mockResolvedValue({ data: [], total: 0, page: 1, pageSize: 20 })
+    const record = vi.fn().mockResolvedValue(undefined)
+    const service = {
+      getSystemOverview: vi.fn().mockResolvedValue({ counts: {} }),
+      listInvitations: list,
+      listUsers: list,
+      listTeams: list,
+      listModulePermissions: vi.fn().mockReturnValue([{ key: "module.database" }]),
+      listUserModulePermissions: vi.fn().mockResolvedValue({ permissionKeys: ["module.database"] }),
+    }
+    const controller = createController(service as never, { record })
+    const request = { admin: { email: "admin@example.com" }, ip: "203.0.113.11" } as never
+
+    await controller.getSystemOverview(request)
+    await controller.listInvitations({}, request)
+    await controller.listUsers({}, request)
+    await controller.listTeams({}, request)
+    await controller.listModulePermissions(request)
+    await controller.listUserModulePermissions("user-1", request)
+
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      adminEmail: "admin@example.com",
+      action: "admin.system.view",
+      targetType: "system",
+      targetId: "overview",
+      ipAddress: "203.0.113.11",
+    }))
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.invitations.list",
+      targetType: "invitation",
+      targetId: "list",
+    }))
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.users.list",
+      targetType: "user",
+      targetId: "list",
+    }))
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.teams.list",
+      targetType: "team",
+      targetId: "list",
+    }))
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.module_permissions.list",
+      targetType: "module_permission",
+      targetId: "list",
+    }))
+    expect(record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "admin.user_module_permissions.list",
+      targetType: "user",
+      targetId: "user-1",
+    }))
   })
 
   it("exports audit logs without list pagination", async () => {
@@ -215,11 +289,11 @@ describe("AdminController", () => {
       .toThrow("用户状态无效：status 必须是 active 或 disabled")
   })
 
-  it("lists module permission definitions through the service", () => {
+  it("lists module permission definitions through the service", async () => {
     const listModulePermissions = vi.fn().mockReturnValue([{ key: "module.database" }])
     const controller = createController({ listModulePermissions } as never)
 
-    expect(controller.listModulePermissions()).toEqual([{ key: "module.database" }])
+    await expect(controller.listModulePermissions()).resolves.toEqual([{ key: "module.database" }])
     expect(listModulePermissions).toHaveBeenCalledWith()
   })
 

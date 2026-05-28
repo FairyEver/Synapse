@@ -38,23 +38,47 @@ export class AdminController {
   ) {}
 
   @Get("/audit-logs")
-  listAuditLogs(@Query() query: Record<string, unknown>) {
-    return this.auditLog.list({
+  async listAuditLogs(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
+    const filters = {
       action: typeof query.action === "string" ? query.action : undefined,
       from: typeof query.from === "string" ? query.from : undefined,
       to: typeof query.to === "string" ? query.to : undefined,
+    }
+    const result = await this.auditLog.list({
+      ...filters,
       query,
     })
+    await this.recordAdminRead(request, {
+      action: "admin.audit_logs.list",
+      targetType: "audit_log",
+      targetId: "list",
+      detail: filters,
+    })
+    return result
   }
 
   @Get("/system")
-  getSystemOverview() {
-    return this.admin.getSystemOverview()
+  async getSystemOverview(@Req() request?: AdminRequest) {
+    const result = await this.admin.getSystemOverview()
+    await this.recordAdminRead(request, {
+      action: "admin.system.view",
+      targetType: "system",
+      targetId: "overview",
+    })
+    return result
   }
 
   @Get("/invitations")
-  listInvitations(@Query() query: Record<string, unknown>) {
-    return this.admin.listInvitations(parsePagination(query, { allowedSortFields: invitationSortFields }))
+  async listInvitations(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
+    const pagination = parsePagination(query, { allowedSortFields: invitationSortFields })
+    const result = await this.admin.listInvitations(pagination)
+    await this.recordAdminRead(request, {
+      action: "admin.invitations.list",
+      targetType: "invitation",
+      targetId: "list",
+      detail: { page: pagination.page, pageSize: pagination.pageSize },
+    })
+    return result
   }
 
   @Delete("/invitations")
@@ -70,8 +94,16 @@ export class AdminController {
   }
 
   @Get("/users")
-  listUsers(@Query() query: Record<string, unknown>) {
-    return this.admin.listUsers(parsePagination(query, { allowedSortFields: userSortFields }))
+  async listUsers(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
+    const pagination = parsePagination(query, { allowedSortFields: userSortFields })
+    const result = await this.admin.listUsers(pagination)
+    await this.recordAdminRead(request, {
+      action: "admin.users.list",
+      targetType: "user",
+      targetId: "list",
+      detail: { page: pagination.page, pageSize: pagination.pageSize },
+    })
+    return result
   }
 
   @Patch("/users/:id/status")
@@ -82,18 +114,38 @@ export class AdminController {
   }
 
   @Get("/teams")
-  listTeams(@Query() query: Record<string, unknown>) {
-    return this.admin.listTeams(parsePagination(query, { allowedSortFields: teamSortFields }))
+  async listTeams(@Query() query: Record<string, unknown>, @Req() request?: AdminRequest) {
+    const pagination = parsePagination(query, { allowedSortFields: teamSortFields })
+    const result = await this.admin.listTeams(pagination)
+    await this.recordAdminRead(request, {
+      action: "admin.teams.list",
+      targetType: "team",
+      targetId: "list",
+      detail: { page: pagination.page, pageSize: pagination.pageSize },
+    })
+    return result
   }
 
   @Get("/module-permissions")
-  listModulePermissions() {
-    return this.admin.listModulePermissions()
+  async listModulePermissions(@Req() request?: AdminRequest) {
+    const result = this.admin.listModulePermissions()
+    await this.recordAdminRead(request, {
+      action: "admin.module_permissions.list",
+      targetType: "module_permission",
+      targetId: "list",
+    })
+    return result
   }
 
   @Get("/users/:id/module-permissions")
-  listUserModulePermissions(@Param("id") id: string) {
-    return this.admin.listUserModulePermissions(id)
+  async listUserModulePermissions(@Param("id") id: string, @Req() request?: AdminRequest) {
+    const result = await this.admin.listUserModulePermissions(id)
+    await this.recordAdminRead(request, {
+      action: "admin.user_module_permissions.list",
+      targetType: "user",
+      targetId: id,
+    })
+    return result
   }
 
   @Put("/users/:id/module-permissions")
@@ -135,6 +187,25 @@ export class AdminController {
       targetId: "export",
       detail: { filters, count: data.length },
       ipAddress: request.ip ?? "",
+    })
+  }
+
+  private async recordAdminRead(
+    request: AdminRequest | undefined,
+    input: {
+      readonly action: string
+      readonly targetType: string
+      readonly targetId: string
+      readonly detail?: unknown
+    },
+  ): Promise<void> {
+    await this.auditLog.record({
+      adminEmail: request?.admin?.email ?? "system",
+      action: input.action,
+      targetType: input.targetType,
+      targetId: input.targetId,
+      ...(input.detail === undefined ? undefined : { detail: input.detail }),
+      ipAddress: request?.ip ?? "system",
     })
   }
 }
