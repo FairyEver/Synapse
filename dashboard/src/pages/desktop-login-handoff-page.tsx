@@ -20,10 +20,12 @@ export function DesktopLoginHandoffPage() {
   const [retryKey, setRetryKey] = useState(0);
   const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
   const loginPath = `/login?client=desktop&state=${encodeURIComponent(state)}`;
+  const sessionRole = session?.role;
 
   useEffect(() => {
-    if (!isValidState || isLoading || !isAuthenticated || !session) return;
-    if (session.role !== 'user') return;
+    if (!isValidState || isLoading || !isAuthenticated || !sessionRole) return;
+    if (sessionRole !== 'user') return;
+    if (deepLinkUrl) return;
 
     let isCancelled = false;
 
@@ -43,7 +45,15 @@ export function DesktopLoginHandoffPage() {
     return () => {
       isCancelled = true;
     };
-  }, [isAuthenticated, isLoading, isValidState, retryKey, session, state]);
+  }, [
+    deepLinkUrl,
+    isAuthenticated,
+    isLoading,
+    isValidState,
+    retryKey,
+    sessionRole,
+    state,
+  ]);
 
   async function onSwitchAccount() {
     setError('');

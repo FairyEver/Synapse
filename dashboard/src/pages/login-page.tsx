@@ -29,7 +29,7 @@ export function LoginPage() {
     return (
       <Navigate
         to={
-          (session?.role === 'user' ? desktopReturnPath : null) ??
+          desktopReturnPath ??
           from ??
           (session?.role === 'user' ? '/me' : '/system')
         }
@@ -46,7 +46,7 @@ export function LoginPage() {
     try {
       const nextSession = await login({ email, password });
       navigate(
-        (nextSession.role === 'user' ? desktopReturnPath : null) ??
+        desktopReturnPath ??
           getSafeReturnPath(location, nextSession.role) ??
           (nextSession.role === 'admin' ? '/system' : '/me'),
         {
