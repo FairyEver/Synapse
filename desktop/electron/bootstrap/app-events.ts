@@ -48,6 +48,29 @@ export function attachSecondInstanceFocus(state: MainWindowState): void {
   })
 }
 
+export function registerAuthProtocol(): void {
+  if (process.defaultApp) {
+    const args = process.argv[1] ? [process.argv[1]] : []
+    app.setAsDefaultProtocolClient("synapse", process.execPath, args)
+    return
+  }
+  app.setAsDefaultProtocolClient("synapse")
+}
+
+export function attachOpenUrlHandler(handleUrl: (url: string) => void): void {
+  app.on("open-url", (event, url) => {
+    event.preventDefault()
+    handleUrl(url)
+  })
+}
+
+export function attachSecondInstanceProtocolHandler(handleUrl: (url: string) => void): void {
+  app.on("second-instance", (_event, argv) => {
+    const url = argv.find((item) => item.startsWith("synapse://"))
+    if (url) handleUrl(url)
+  })
+}
+
 export function attachActivateHandler(showOrCreate: () => void): void {
   app.on("activate", () => {
     showOrCreate()

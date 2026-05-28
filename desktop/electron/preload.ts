@@ -8,6 +8,7 @@ import { contextBridge, ipcRenderer, webUtils } from "electron"
 import type { SynapseBridge } from "../src/types/bridge"
 import type { SynapseAgentDomainEvent } from "../src/types/agent"
 import type { OpenAgentSessionPayload } from "../src/types/agent-navigation"
+import type { SynapseAccountStateChangedEvent } from "../src/types/account"
 import type { SynapseContentChangedEvent } from "../src/types/content"
 import type { DatabaseChangeEvent } from "../src/types/database"
 import type { InstallStatusChangedEvent } from "../src/types/install-status"
@@ -265,7 +266,22 @@ const IPC_CHANNELS = {
     "pricingRulesGet": "synapse:usage-analysis:pricing-rules:get",
     "pricingRulesSave": "synapse:usage-analysis:pricing-rules:save",
   },
-} as const satisfies IpcChannelMap
+  "account": {
+    "getState": "synapse:account:get-state",
+    "startLogin": "synapse:account:start-login",
+    "refresh": "synapse:account:refresh",
+    "logout": "synapse:account:logout",
+    "event": "synapse:events:account",
+  },
+} as const satisfies IpcChannelMap & {
+  readonly account: {
+    readonly getState: "synapse:account:get-state"
+    readonly startLogin: "synapse:account:start-login"
+    readonly refresh: "synapse:account:refresh"
+    readonly logout: "synapse:account:logout"
+    readonly event: "synapse:events:account"
+  }
+}
 
 // Event channels (not in generated IPC_CHANNELS because they're events, not methods)
 const EVENT_CHANNELS = {
@@ -467,6 +483,17 @@ const synapseBridge: SynapseBridge = {
     node: process.versions.node,
   },
   isPackaged: !process.env.VITE_DEV_SERVER_URL,
+  account: {
+    getState: invoke(IPC_CHANNELS.account.getState),
+    startLogin: invoke(IPC_CHANNELS.account.startLogin),
+    refresh: invoke(IPC_CHANNELS.account.refresh),
+    logout: invoke(IPC_CHANNELS.account.logout),
+    onStateChanged: createDomainEventPayloadSubscription<SynapseAccountStateChangedEvent>(
+      subscribe,
+      "account",
+      "account.stateChanged",
+    ),
+  },
   content: {
     list: invoke(IPC_CHANNELS.content.list),
     getContent: invoke(IPC_CHANNELS.content.getContent),

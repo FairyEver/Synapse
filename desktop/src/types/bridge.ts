@@ -16,6 +16,10 @@ import type {
   DatabaseWhereClause,
 } from "./database"
 import type {
+  SynapseAccountState,
+  SynapseAccountStateChangedEvent,
+} from "./account"
+import type {
   SynapseAgentCancelTurnResult,
   SynapseAgentDomainEvent,
   SynapseAgentPendingPermission,
@@ -557,6 +561,13 @@ export type SynapseBridge = {
     node: string
   }
   isPackaged: boolean
+  account: {
+    getState: () => Promise<SynapseAccountState>
+    startLogin: () => Promise<SynapseAccountState>
+    refresh: () => Promise<SynapseAccountState>
+    logout: () => Promise<SynapseAccountState>
+    onStateChanged: (listener: (event: SynapseAccountStateChangedEvent) => void) => () => void
+  }
   content: {
     list: <T extends SynapseContentType>(
       args: { contentType: T },

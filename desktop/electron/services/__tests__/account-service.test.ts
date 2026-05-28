@@ -1,0 +1,175 @@
+import { mkdtemp } from "node:fs/promises"
+import os from "node:os"
+import path from "node:path"
+import { describe, expect, it, vi } from "vitest"
+
+vi.mock("electron", () => ({
+  app: {
+    getPath: (name: string) => path.join(os.tmpdir(), `synapse-account-${name}`),
+    getAppPath: () => path.join(os.tmpdir(), "synapse-account-app"),
+    getName: () => "synapse-test",
+    getVersion: () => "0.0.0-test",
+    isPackaged: false,
+  },
+  safeStorage: {
+    isEncryptionAvailable: () => true,
+    encryptString: (plaintext: string) => Buffer.from(plaintext, "utf8"),
+    decryptString: (cipher: Buffer) => cipher.toString("utf8"),
+  },
+  shell: {
+    openExternal: vi.fn().mockResolvedValue(undefined),
+  },
+}))
+
+import {
+  EncryptedJsonNamespace,
+  type SafeStorage,
+} from "../../runtime/data-repo/backends/encrypted-json"
+import type { SynapseAccountProfile } from "../../../src/types/account"
+import { AccountService } from "../account-service"
+
+type PersistedAccountForTest = Record<string, unknown> & {
+  refreshToken?: string
+  accessTokenExpiresAt?: string
+  lastProfile?: SynapseAccountProfile
+  activeAttempt?: {
+    state: string
+    apiBaseUrl: string
+    createdAt: string
+    expiresAt: string
+  }
+}
+
+function makeFakeSafeStorage(available = true): SafeStorage {
+  return {
+    isEncryptionAvailable: () => available,
+    encryptString: (plaintext) => Buffer.from(plaintext, "utf8"),
+    decryptString: (cipher) => cipher.toString("utf8"),
+  }
+}
+
+function jsonResponse(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "Content-Type": "application/json" },
+  })
+}
+
+async function createTestAccountService(input: {
+  fetch?: typeof fetch
+  isPackaged?: boolean
+  safeStorage?: SafeStorage
+} = {}) {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "synapse-account-test-"))
+  const namespace = new EncryptedJsonNamespace<PersistedAccountForTest>({
+    name: "core.account",
+    schemaVersion: 1,
+    backend: "encrypted-json",
+    filePath: path.join(dir, "core.account.bin"),
+    safeStorage: input.safeStorage ?? makeFakeSafeStorage(),
+  })
+  const openExternal = vi.fn().mockResolvedValue(undefined)
+  const service = new AccountService({
+    namespace,
+    fetch: input.fetch ?? vi.fn(),
+    openExternal,
+    isPackaged: input.isPackaged ?? false,
+  })
+  return { namespace, openExternal, service }
+}
+
+describe("AccountService", () => {
+  it("starts login by persisting an attempt and opening the browser", async () => {
+    const { namespace, openExternal, service } = await createTestAccountService()
+    const result = await service.startLogin()
+
+    expect(result.state.status).toBe("authenticating")
+    expect(result.loginUrl).toContain("client=desktop")
+    expect(result.loginUrl).toContain("state=")
+    expect(openExternal).toHaveBeenCalledWith(result.loginUrl)
+    expect(await namespace.getSingleton()).toMatchObject({
+      activeAttempt: { state: expect.any(String), apiBaseUrl: "http://localhost:3000/api" },
+    })
+  })
+
+  it("exchanges protocol callback, stores refresh token, and loads me", async () => {
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url, init) => {
+        if (String(url).endsWith("/auth/desktop/exchange")) {
+          expect(init?.method).toBe("POST")
+          return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
+        }
+        if (String(url).endsWith("/auth/me")) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+
+    const state = await service.handleAuthCallback(`synapse://auth/callback?code=code-1&state=${attempt!.state}`)
+
+    if (state.status !== "authenticated") {
+      throw new Error("expected authenticated account state")
+    }
+    expect(state.profile.user.email).toBe("u@example.com")
+    expect((await namespace.getSingleton())?.refreshToken).toBe("refresh-1")
+    expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
+  })
+
+  it("rejects state mismatch without exchanging", async () => {
+    const fetch = vi.fn()
+    const { service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await service.startLogin()
+
+    const state = await service.handleAuthCallback("synapse://auth/callback?code=code-1&state=wrong")
+
+    expect(state.status).toBe("error")
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it("refreshes from stored refresh token and keeps access token in memory only", async () => {
+    const calls: string[] = []
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url, init) => {
+        calls.push(String(url))
+        if (String(url).endsWith("/auth/refresh")) {
+          expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: "refresh-old" })
+          return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
+        }
+        if (String(url).endsWith("/auth/me")) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-new" })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old" })
+
+    const state = await service.refreshFromStorage()
+
+    expect(state.status).toBe("authenticated")
+    expect(calls).toEqual([
+      "http://localhost:3000/api/auth/refresh",
+      "http://localhost:3000/api/auth/me",
+    ])
+    expect(await namespace.getSingleton()).toMatchObject({
+      refreshToken: "refresh-new",
+      lastProfile: { user: { email: "u@example.com" } },
+    })
+    expect(await namespace.getSingleton()).not.toHaveProperty("accessToken")
+  })
+
+  it("returns unauthenticated when encryption is unavailable", async () => {
+    const { service } = await createTestAccountService({
+      safeStorage: makeFakeSafeStorage(false),
+    })
+
+    const state = await service.refreshFromStorage()
+
+    expect(state).toEqual({ status: "unauthenticated" })
+  })
+})

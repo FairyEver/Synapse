@@ -7,6 +7,7 @@
 
 import { app, dialog } from "electron"
 import { createMainLogger } from "./services/log-store"
+import { accountService } from "./services/account-service"
 import { installStatusCacheService } from "./services/install-status-cache-service"
 import { repositoryStore } from "./services/repository-store"
 import type { EventBus } from "./runtime/event-bus"
@@ -15,14 +16,17 @@ import type { WindowManager } from "./runtime/window"
 import {
   attachActivateHandler,
   attachBeforeQuitHandler,
+  attachOpenUrlHandler,
   attachProcessLevelLogging,
   attachSecondInstanceFocus,
+  attachSecondInstanceProtocolHandler,
   buildServiceRegistry,
   clearStaleSingletonLock,
   configureWindowsAppIdentity,
   createIpcRegistry,
   createMainWindow,
   createMainWindowState,
+  registerAuthProtocol,
   showOrCreateMainWindow,
 } from "./bootstrap"
 
@@ -30,9 +34,12 @@ const logger = createMainLogger("main")
 const mainWindowState = createMainWindowState()
 let allowAppQuit = false
 let windowManager: WindowManager | undefined
+const pendingProtocolUrls: string[] = process.argv.filter((item) => item.startsWith("synapse://"))
+let canHandleProtocolUrls = false
 
 attachProcessLevelLogging()
 configureWindowsAppIdentity()
+registerAuthProtocol()
 
 function focusOrCreateMainWindow(): void {
   showOrCreateMainWindow({
@@ -40,6 +47,19 @@ function focusOrCreateMainWindow(): void {
     windowManager,
     isAppQuitting: () => allowAppQuit,
   })
+}
+
+function handleProtocolUrl(url: string): void {
+  pendingProtocolUrls.push(url)
+  if (canHandleProtocolUrls) {
+    drainProtocolUrls()
+  }
+}
+
+function drainProtocolUrls(): void {
+  for (const url of pendingProtocolUrls.splice(0)) {
+    void accountService.handleAuthCallback(url).finally(() => focusOrCreateMainWindow())
+  }
 }
 
 let gotSingleInstanceLock = app.requestSingleInstanceLock()
@@ -53,6 +73,8 @@ if (!gotSingleInstanceLock) {
   app.quit()
 } else {
   attachSecondInstanceFocus(mainWindowState)
+  attachOpenUrlHandler(handleProtocolUrl)
+  attachSecondInstanceProtocolHandler(handleProtocolUrl)
 
   app
     .whenReady()
@@ -110,6 +132,11 @@ if (!gotSingleInstanceLock) {
 
       // Phase 0.4: Use EventBus for cross-window repository update notifications.
       const eventBus = registry.get<EventBus>("core.event-bus")
+      accountService.setEventBus(eventBus)
+      canHandleProtocolUrls = true
+      drainProtocolUrls()
+      void accountService.refreshFromStorage()
+
       repositoryStore.onRepositoryDisappeared((repositoryUuid) => {
         eventBus.emit({
           domain: "repository",

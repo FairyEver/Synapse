@@ -4,6 +4,7 @@
  */
 
 export type EventDomain =
+  | "account"
   | "repository"
   | "content"
   | "update"

@@ -47,9 +47,12 @@ export { createIpcRegistry, registeredIpcModules } from "./ipc-registry"
 
 export {
   attachActivateHandler,
+  attachOpenUrlHandler,
   configureWindowsAppIdentity,
   attachProcessLevelLogging,
   attachSecondInstanceFocus,
+  attachSecondInstanceProtocolHandler,
+  registerAuthProtocol,
 } from "./app-events"
 
 export { registerCoreExtensions, EXTENSION_POINT_IDS } from "./extensions"
