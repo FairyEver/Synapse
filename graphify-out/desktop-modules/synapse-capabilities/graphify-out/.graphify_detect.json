@@ -1,0 +1,26 @@
+{
+  "files": {
+    "code": [
+      "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/model-price-domain.ts",
+      "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/workflow-domain.ts",
+      "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/repository-domain.ts",
+      "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/types.ts",
+      "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/scheduler-domain.ts",
+      "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/registry.ts",
+      "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/naming.ts",
+      "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/variable-domain.ts",
+      "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/content-domain.ts"
+    ],
+    "document": [],
+    "paper": [],
+    "image": [],
+    "video": []
+  },
+  "total_files": 9,
+  "total_words": 5880,
+  "needs_graph": false,
+  "warning": "Corpus is ~5,880 words - fits in a single context window. You may not need a graph.",
+  "skipped_sensitive": [],
+  "graphifyignore_patterns": 18,
+  "scan_root": "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities"
+}

@@ -1,0 +1,23 @@
+{
+  "files": {
+    "code": [
+      "/Users/liyang/Documents/code/github/Synapse/desktop/database/mcp/index.ts",
+      "/Users/liyang/Documents/code/github/Synapse/desktop/database/shared/server-identity.ts",
+      "/Users/liyang/Documents/code/github/Synapse/desktop/database/shared/capability-registry.ts",
+      "/Users/liyang/Documents/code/github/Synapse/desktop/database/shared/mcp-rpc.ts",
+      "/Users/liyang/Documents/code/github/Synapse/desktop/database/shared/resolve-user-data.ts",
+      "/Users/liyang/Documents/code/github/Synapse/desktop/database/shared/mcp-tools.ts"
+    ],
+    "document": [],
+    "paper": [],
+    "image": [],
+    "video": []
+  },
+  "total_files": 6,
+  "total_words": 4795,
+  "needs_graph": false,
+  "warning": "Corpus is ~4,795 words - fits in a single context window. You may not need a graph.",
+  "skipped_sensitive": [],
+  "graphifyignore_patterns": 18,
+  "scan_root": "/Users/liyang/Documents/code/github/Synapse/desktop/database"
+}

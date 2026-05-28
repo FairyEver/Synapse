@@ -1,0 +1,22 @@
+{
+  "code": [
+    "/Users/liyang/Documents/code/github/Synapse/desktop/scripts/check-ipc-codegen.mjs",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/scripts/generate-definitions-registry.mjs",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/scripts/migrate-display-name-to-user-directory.ts",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/scripts/dev-renderer.mjs",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/scripts/import-legacy-database.mjs",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/scripts/generate-ipc.mjs",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/scripts/bump-version-commit-push.mjs",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/scripts/migrate-legacy-database-macos.sh",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/scripts/build-icons.mjs",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/scripts/migrate-to-history-structure.ts",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/scripts/verify-packaged-asar.mjs",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/scripts/check-hard-constraints.mjs",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/scripts/dev.mjs",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/scripts/dev-electron-app.mjs"
+  ],
+  "document": [],
+  "paper": [],
+  "image": [],
+  "video": []
+}

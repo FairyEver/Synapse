@@ -1,0 +1,1128 @@
+{
+  "directed": false,
+  "multigraph": false,
+  "graph": {},
+  "nodes": [
+    {
+      "label": "index.ts",
+      "file_type": "code",
+      "source_file": "mcp/index.ts",
+      "source_location": "L1",
+      "id": "mcp_index_ts",
+      "community": 3,
+      "norm_label": "index.ts"
+    },
+    {
+      "label": "[major]",
+      "file_type": "code",
+      "source_file": "mcp/index.ts",
+      "source_location": "L3",
+      "id": "mcp_index_major",
+      "community": 3,
+      "norm_label": "[major]"
+    },
+    {
+      "label": "getServerInfo()",
+      "file_type": "code",
+      "source_file": "mcp/index.ts",
+      "source_location": "L22",
+      "id": "mcp_index_getserverinfo",
+      "community": 2,
+      "norm_label": "getserverinfo()"
+    },
+    {
+      "label": "clearServerInfoCache()",
+      "file_type": "code",
+      "source_file": "mcp/index.ts",
+      "source_location": "L36",
+      "id": "mcp_index_clearserverinfocache",
+      "community": 3,
+      "norm_label": "clearserverinfocache()"
+    },
+    {
+      "label": "executeTool()",
+      "file_type": "code",
+      "source_file": "mcp/index.ts",
+      "source_location": "L40",
+      "id": "mcp_index_executetool",
+      "community": 3,
+      "norm_label": "executetool()"
+    },
+    {
+      "label": "writeResponse()",
+      "file_type": "code",
+      "source_file": "mcp/index.ts",
+      "source_location": "L51",
+      "id": "mcp_index_writeresponse",
+      "community": 4,
+      "norm_label": "writeresponse()"
+    },
+    {
+      "label": "handleRequest()",
+      "file_type": "code",
+      "source_file": "mcp/index.ts",
+      "source_location": "L58",
+      "id": "mcp_index_handlerequest",
+      "community": 4,
+      "norm_label": "handlerequest()"
+    },
+    {
+      "label": "rl",
+      "file_type": "code",
+      "source_file": "mcp/index.ts",
+      "source_location": "L68",
+      "id": "mcp_index_rl",
+      "community": 3,
+      "norm_label": "rl"
+    },
+    {
+      "label": "server-identity.ts",
+      "file_type": "code",
+      "source_file": "shared/server-identity.ts",
+      "source_location": "L1",
+      "id": "shared_server_identity_ts",
+      "community": 6,
+      "norm_label": "server-identity.ts"
+    },
+    {
+      "label": "SYNAPSE_MCP_SERVER_IDENTITY",
+      "file_type": "code",
+      "source_file": "shared/server-identity.ts",
+      "source_location": "L14",
+      "id": "shared_server_identity_synapse_mcp_server_identity",
+      "community": 6,
+      "norm_label": "synapse_mcp_server_identity"
+    },
+    {
+      "label": "SYNAPSE_MCP_LEGACY_SERVER_NAMES",
+      "file_type": "code",
+      "source_file": "shared/server-identity.ts",
+      "source_location": "L21",
+      "id": "shared_server_identity_synapse_mcp_legacy_server_names",
+      "community": 6,
+      "norm_label": "synapse_mcp_legacy_server_names"
+    },
+    {
+      "label": "capability-registry.ts",
+      "file_type": "code",
+      "source_file": "shared/capability-registry.ts",
+      "source_location": "L1",
+      "id": "shared_capability_registry_ts",
+      "community": 5,
+      "norm_label": "capability-registry.ts"
+    },
+    {
+      "label": "DATABASE_DOMAIN",
+      "file_type": "code",
+      "source_file": "shared/capability-registry.ts",
+      "source_location": "L39",
+      "id": "shared_capability_registry_database_domain",
+      "community": 5,
+      "norm_label": "database_domain"
+    },
+    {
+      "label": "buildMcpToolActions()",
+      "file_type": "code",
+      "source_file": "shared/capability-registry.ts",
+      "source_location": "L44",
+      "id": "shared_capability_registry_buildmcptoolactions",
+      "community": 5,
+      "norm_label": "buildmcptoolactions()"
+    },
+    {
+      "label": "getMutatingActions()",
+      "file_type": "code",
+      "source_file": "shared/capability-registry.ts",
+      "source_location": "L53",
+      "id": "shared_capability_registry_getmutatingactions",
+      "community": 5,
+      "norm_label": "getmutatingactions()"
+    },
+    {
+      "label": "mcp-rpc.ts",
+      "file_type": "code",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L1",
+      "id": "shared_mcp_rpc_ts",
+      "community": 0,
+      "norm_label": "mcp-rpc.ts"
+    },
+    {
+      "label": "JsonRpcId",
+      "file_type": "code",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L11",
+      "id": "shared_mcp_rpc_jsonrpcid",
+      "community": 0,
+      "norm_label": "jsonrpcid"
+    },
+    {
+      "label": "JsonRpcRequest",
+      "file_type": "code",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L13",
+      "id": "shared_mcp_rpc_jsonrpcrequest",
+      "community": 0,
+      "norm_label": "jsonrpcrequest"
+    },
+    {
+      "label": "McpRpcResponse",
+      "file_type": "code",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L20",
+      "id": "shared_mcp_rpc_mcprpcresponse",
+      "community": 0,
+      "norm_label": "mcprpcresponse"
+    },
+    {
+      "label": "McpServerIdentity",
+      "file_type": "code",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L25",
+      "id": "shared_mcp_rpc_mcpserveridentity",
+      "community": 0,
+      "norm_label": "mcpserveridentity"
+    },
+    {
+      "label": "ToolExecutor",
+      "file_type": "code",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L30",
+      "id": "shared_mcp_rpc_toolexecutor",
+      "community": 0,
+      "norm_label": "toolexecutor"
+    },
+    {
+      "label": "isRecord()",
+      "file_type": "code",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L34",
+      "id": "shared_mcp_rpc_isrecord",
+      "community": 0,
+      "norm_label": "isrecord()"
+    },
+    {
+      "label": "numberOrZero()",
+      "file_type": "code",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L38",
+      "id": "shared_mcp_rpc_numberorzero",
+      "community": 0,
+      "norm_label": "numberorzero()"
+    },
+    {
+      "label": "idsFromData()",
+      "file_type": "code",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L42",
+      "id": "shared_mcp_rpc_idsfromdata",
+      "community": 0,
+      "norm_label": "idsfromdata()"
+    },
+    {
+      "label": "isDryRun()",
+      "file_type": "code",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L47",
+      "id": "shared_mcp_rpc_isdryrun",
+      "community": 0,
+      "norm_label": "isdryrun()"
+    },
+    {
+      "label": "normalizeToolResult()",
+      "file_type": "code",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L51",
+      "id": "shared_mcp_rpc_normalizetoolresult",
+      "community": 0,
+      "norm_label": "normalizetoolresult()"
+    },
+    {
+      "label": "processMcpRequest()",
+      "file_type": "code",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L103",
+      "id": "shared_mcp_rpc_processmcprequest",
+      "community": 4,
+      "norm_label": "processmcprequest()"
+    },
+    {
+      "label": "serializeJsonRpcPayload()",
+      "file_type": "code",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L179",
+      "id": "shared_mcp_rpc_serializejsonrpcpayload",
+      "community": 4,
+      "norm_label": "serializejsonrpcpayload()"
+    },
+    {
+      "label": "resolve-user-data.ts",
+      "file_type": "code",
+      "source_file": "shared/resolve-user-data.ts",
+      "source_location": "L1",
+      "id": "shared_resolve_user_data_ts",
+      "community": 2,
+      "norm_label": "resolve-user-data.ts"
+    },
+    {
+      "label": "ServerInfo",
+      "file_type": "code",
+      "source_file": "shared/resolve-user-data.ts",
+      "source_location": "L5",
+      "id": "shared_resolve_user_data_serverinfo",
+      "community": 2,
+      "norm_label": "serverinfo"
+    },
+    {
+      "label": "DatabaseApiClientSource",
+      "file_type": "code",
+      "source_file": "shared/resolve-user-data.ts",
+      "source_location": "L12",
+      "id": "shared_resolve_user_data_databaseapiclientsource",
+      "community": 2,
+      "norm_label": "databaseapiclientsource"
+    },
+    {
+      "label": "getUserDataPath()",
+      "file_type": "code",
+      "source_file": "shared/resolve-user-data.ts",
+      "source_location": "L14",
+      "id": "shared_resolve_user_data_getuserdatapath",
+      "community": 2,
+      "norm_label": "getuserdatapath()"
+    },
+    {
+      "label": "readServerInfo()",
+      "file_type": "code",
+      "source_file": "shared/resolve-user-data.ts",
+      "source_location": "L25",
+      "id": "shared_resolve_user_data_readserverinfo",
+      "community": 2,
+      "norm_label": "readserverinfo()"
+    },
+    {
+      "label": "isAppRunning()",
+      "file_type": "code",
+      "source_file": "shared/resolve-user-data.ts",
+      "source_location": "L35",
+      "id": "shared_resolve_user_data_isapprunning",
+      "community": 2,
+      "norm_label": "isapprunning()"
+    },
+    {
+      "label": "apiCall()",
+      "file_type": "code",
+      "source_file": "shared/resolve-user-data.ts",
+      "source_location": "L45",
+      "id": "shared_resolve_user_data_apicall",
+      "community": 3,
+      "norm_label": "apicall()"
+    },
+    {
+      "label": "mcp-tools.ts",
+      "file_type": "code",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L1",
+      "id": "shared_mcp_tools_ts",
+      "community": 1,
+      "norm_label": "mcp-tools.ts"
+    },
+    {
+      "label": "McpTool",
+      "file_type": "code",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L14",
+      "id": "shared_mcp_tools_mcptool",
+      "community": 1,
+      "norm_label": "mcptool"
+    },
+    {
+      "label": "tableNameProp",
+      "file_type": "code",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L24",
+      "id": "shared_mcp_tools_tablenameprop",
+      "community": 1,
+      "norm_label": "tablenameprop"
+    },
+    {
+      "label": "columnKindEnum",
+      "file_type": "code",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L29",
+      "id": "shared_mcp_tools_columnkindenum",
+      "community": 1,
+      "norm_label": "columnkindenum"
+    },
+    {
+      "label": "kindDescription",
+      "file_type": "code",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L31",
+      "id": "shared_mcp_tools_kinddescription",
+      "community": 1,
+      "norm_label": "kinddescription"
+    },
+    {
+      "label": "whereConditionSchema",
+      "file_type": "code",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L44",
+      "id": "shared_mcp_tools_whereconditionschema",
+      "community": 1,
+      "norm_label": "whereconditionschema"
+    },
+    {
+      "label": "whereClauseSchema",
+      "file_type": "code",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L58",
+      "id": "shared_mcp_tools_whereclauseschema",
+      "community": 1,
+      "norm_label": "whereclauseschema"
+    },
+    {
+      "label": "buildTools()",
+      "file_type": "code",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L82",
+      "id": "shared_mcp_tools_buildtools",
+      "community": 1,
+      "norm_label": "buildtools()"
+    },
+    {
+      "label": "DATABASE_MCP_TOOL_ACTIONS",
+      "file_type": "code",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L581",
+      "id": "shared_mcp_tools_database_mcp_tool_actions",
+      "community": 1,
+      "norm_label": "database_mcp_tool_actions"
+    }
+  ],
+  "links": [
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L36",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "mcp_index_clearserverinfocache",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L40",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "mcp_index_executetool",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L22",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "mcp_index_getserverinfo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L58",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "mcp_index_handlerequest",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L3",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "mcp_index_major",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L68",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "mcp_index_rl",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L51",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "mcp_index_writeresponse",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "shared_mcp_rpc_jsonrpcrequest",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "shared_mcp_rpc_mcprpcresponse",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "shared_mcp_rpc_processmcprequest",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "shared_mcp_rpc_serializejsonrpcpayload",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "shared_mcp_rpc_ts",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "shared_resolve_user_data_apicall",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "shared_resolve_user_data_isapprunning",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "shared_resolve_user_data_readserverinfo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "shared_resolve_user_data_serverinfo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L10",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "shared_resolve_user_data_ts",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "shared_server_identity_synapse_mcp_server_identity",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L18",
+      "weight": 1.0,
+      "source": "mcp_index_ts",
+      "target": "shared_server_identity_ts",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L44",
+      "weight": 1.0,
+      "source": "mcp_index_executetool",
+      "target": "mcp_index_getserverinfo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L23",
+      "weight": 1.0,
+      "source": "mcp_index_getserverinfo",
+      "target": "shared_resolve_user_data_isapprunning",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L27",
+      "weight": 1.0,
+      "source": "mcp_index_getserverinfo",
+      "target": "shared_resolve_user_data_readserverinfo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L46",
+      "weight": 1.0,
+      "source": "mcp_index_executetool",
+      "target": "mcp_index_clearserverinfocache",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L44",
+      "weight": 1.0,
+      "source": "mcp_index_executetool",
+      "target": "shared_resolve_user_data_apicall",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "INFERRED",
+      "confidence_score": 0.8,
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L157",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_processmcprequest",
+      "target": "mcp_index_executetool"
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L60",
+      "weight": 1.0,
+      "source": "mcp_index_handlerequest",
+      "target": "mcp_index_writeresponse",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L52",
+      "weight": 1.0,
+      "source": "mcp_index_writeresponse",
+      "target": "shared_mcp_rpc_serializejsonrpcpayload",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "mcp/index.ts",
+      "source_location": "L64",
+      "weight": 1.0,
+      "source": "mcp_index_handlerequest",
+      "target": "shared_mcp_rpc_processmcprequest",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/server-identity.ts",
+      "source_location": "L21",
+      "weight": 1.0,
+      "source": "shared_server_identity_ts",
+      "target": "shared_server_identity_synapse_mcp_legacy_server_names",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/server-identity.ts",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "shared_server_identity_ts",
+      "target": "shared_server_identity_synapse_mcp_server_identity",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/capability-registry.ts",
+      "source_location": "L44",
+      "weight": 1.0,
+      "source": "shared_capability_registry_ts",
+      "target": "shared_capability_registry_buildmcptoolactions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/capability-registry.ts",
+      "source_location": "L39",
+      "weight": 1.0,
+      "source": "shared_capability_registry_ts",
+      "target": "shared_capability_registry_database_domain",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/capability-registry.ts",
+      "source_location": "L53",
+      "weight": 1.0,
+      "source": "shared_capability_registry_ts",
+      "target": "shared_capability_registry_getmutatingactions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "shared_mcp_tools_ts",
+      "target": "shared_capability_registry_ts",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "shared_mcp_tools_ts",
+      "target": "shared_capability_registry_buildmcptoolactions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L42",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_ts",
+      "target": "shared_mcp_rpc_idsfromdata",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L47",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_ts",
+      "target": "shared_mcp_rpc_isdryrun",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L34",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_ts",
+      "target": "shared_mcp_rpc_isrecord",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L11",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_ts",
+      "target": "shared_mcp_rpc_jsonrpcid",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L13",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_ts",
+      "target": "shared_mcp_rpc_jsonrpcrequest",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L20",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_ts",
+      "target": "shared_mcp_rpc_mcprpcresponse",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L25",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_ts",
+      "target": "shared_mcp_rpc_mcpserveridentity",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L51",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_ts",
+      "target": "shared_mcp_rpc_normalizetoolresult",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L38",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_ts",
+      "target": "shared_mcp_rpc_numberorzero",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L103",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_ts",
+      "target": "shared_mcp_rpc_processmcprequest",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L179",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_ts",
+      "target": "shared_mcp_rpc_serializejsonrpcpayload",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L30",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_ts",
+      "target": "shared_mcp_rpc_toolexecutor",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L43",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_idsfromdata",
+      "target": "shared_mcp_rpc_isrecord",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L48",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_isdryrun",
+      "target": "shared_mcp_rpc_isrecord",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L52",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_normalizetoolresult",
+      "target": "shared_mcp_rpc_isrecord",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L83",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_normalizetoolresult",
+      "target": "shared_mcp_rpc_numberorzero",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L94",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_normalizetoolresult",
+      "target": "shared_mcp_rpc_idsfromdata",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L95",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_normalizetoolresult",
+      "target": "shared_mcp_rpc_isdryrun",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-rpc.ts",
+      "source_location": "L158",
+      "weight": 1.0,
+      "source": "shared_mcp_rpc_processmcprequest",
+      "target": "shared_mcp_rpc_normalizetoolresult",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/resolve-user-data.ts",
+      "source_location": "L45",
+      "weight": 1.0,
+      "source": "shared_resolve_user_data_ts",
+      "target": "shared_resolve_user_data_apicall",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/resolve-user-data.ts",
+      "source_location": "L12",
+      "weight": 1.0,
+      "source": "shared_resolve_user_data_ts",
+      "target": "shared_resolve_user_data_databaseapiclientsource",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/resolve-user-data.ts",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "shared_resolve_user_data_ts",
+      "target": "shared_resolve_user_data_getuserdatapath",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/resolve-user-data.ts",
+      "source_location": "L35",
+      "weight": 1.0,
+      "source": "shared_resolve_user_data_ts",
+      "target": "shared_resolve_user_data_isapprunning",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/resolve-user-data.ts",
+      "source_location": "L25",
+      "weight": 1.0,
+      "source": "shared_resolve_user_data_ts",
+      "target": "shared_resolve_user_data_readserverinfo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/resolve-user-data.ts",
+      "source_location": "L5",
+      "weight": 1.0,
+      "source": "shared_resolve_user_data_ts",
+      "target": "shared_resolve_user_data_serverinfo",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/resolve-user-data.ts",
+      "source_location": "L26",
+      "weight": 1.0,
+      "source": "shared_resolve_user_data_readserverinfo",
+      "target": "shared_resolve_user_data_getuserdatapath",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L82",
+      "weight": 1.0,
+      "source": "shared_mcp_tools_ts",
+      "target": "shared_mcp_tools_buildtools",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L29",
+      "weight": 1.0,
+      "source": "shared_mcp_tools_ts",
+      "target": "shared_mcp_tools_columnkindenum",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L581",
+      "weight": 1.0,
+      "source": "shared_mcp_tools_ts",
+      "target": "shared_mcp_tools_database_mcp_tool_actions",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L31",
+      "weight": 1.0,
+      "source": "shared_mcp_tools_ts",
+      "target": "shared_mcp_tools_kinddescription",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L14",
+      "weight": 1.0,
+      "source": "shared_mcp_tools_ts",
+      "target": "shared_mcp_tools_mcptool",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L24",
+      "weight": 1.0,
+      "source": "shared_mcp_tools_ts",
+      "target": "shared_mcp_tools_tablenameprop",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L58",
+      "weight": 1.0,
+      "source": "shared_mcp_tools_ts",
+      "target": "shared_mcp_tools_whereclauseschema",
+      "confidence_score": 1.0
+    },
+    {
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/mcp-tools.ts",
+      "source_location": "L44",
+      "weight": 1.0,
+      "source": "shared_mcp_tools_ts",
+      "target": "shared_mcp_tools_whereconditionschema",
+      "confidence_score": 1.0
+    }
+  ],
+  "hyperedges": [],
+  "built_at_commit": "5202a67619f4e4fc9865e308e524954ce24e5e30"
+}

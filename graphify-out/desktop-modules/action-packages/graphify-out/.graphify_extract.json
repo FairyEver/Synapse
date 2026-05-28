@@ -1,0 +1,5104 @@
+{
+  "nodes": [
+    {
+      "id": "types_ts",
+      "label": "types.ts",
+      "file_type": "code",
+      "source_file": "types.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "action_packages_types_actionrunstatus",
+      "label": "ActionRunStatus",
+      "file_type": "code",
+      "source_file": "types.ts",
+      "source_location": "L3"
+    },
+    {
+      "id": "action_packages_types_actionrunresult",
+      "label": "ActionRunResult",
+      "file_type": "code",
+      "source_file": "types.ts",
+      "source_location": "L5"
+    },
+    {
+      "id": "action_packages_types_actionrunlog",
+      "label": "ActionRunLog",
+      "file_type": "code",
+      "source_file": "types.ts",
+      "source_location": "L18"
+    },
+    {
+      "id": "action_packages_types_actionrunmetrics",
+      "label": "ActionRunMetrics",
+      "file_type": "code",
+      "source_file": "types.ts",
+      "source_location": "L23"
+    },
+    {
+      "id": "action_packages_types_actionconfig",
+      "label": "ActionConfig",
+      "file_type": "code",
+      "source_file": "types.ts",
+      "source_location": "L29"
+    },
+    {
+      "id": "action_packages_types_actionstoredconfigissue",
+      "label": "ActionStoredConfigIssue",
+      "file_type": "code",
+      "source_file": "types.ts",
+      "source_location": "L31"
+    },
+    {
+      "id": "action_packages_types_actionstoredconfigvalidation",
+      "label": "ActionStoredConfigValidation",
+      "file_type": "code",
+      "source_file": "types.ts",
+      "source_location": "L36"
+    },
+    {
+      "id": "action_packages_types_actionpermissionname",
+      "label": "ActionPermissionName",
+      "file_type": "code",
+      "source_file": "types.ts",
+      "source_location": "L46"
+    },
+    {
+      "id": "action_packages_types_actionconfigfieldkind",
+      "label": "ActionConfigFieldKind",
+      "file_type": "code",
+      "source_file": "types.ts",
+      "source_location": "L51"
+    },
+    {
+      "id": "action_packages_types_actionconfigfielddescriptor",
+      "label": "ActionConfigFieldDescriptor",
+      "file_type": "code",
+      "source_file": "types.ts",
+      "source_location": "L58"
+    },
+    {
+      "id": "action_packages_types_actionmanifest",
+      "label": "ActionManifest",
+      "file_type": "code",
+      "source_file": "types.ts",
+      "source_location": "L67"
+    },
+    {
+      "id": "records_ts",
+      "label": "records.ts",
+      "file_type": "code",
+      "source_file": "records.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "action_packages_records_parserecordtext",
+      "label": "parseRecordText()",
+      "file_type": "code",
+      "source_file": "records.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "action_packages_records_stringifyrecordtext",
+      "label": "stringifyRecordText()",
+      "file_type": "code",
+      "source_file": "records.ts",
+      "source_location": "L19"
+    },
+    {
+      "id": "shared_cost_currency_ts",
+      "label": "cost-currency.ts",
+      "file_type": "code",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "shared_cost_currency_synapse_cost_currency",
+      "label": "SYNAPSE_COST_CURRENCY",
+      "file_type": "code",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "shared_cost_currency_synapsecostcurrency",
+      "label": "SynapseCostCurrency",
+      "file_type": "code",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L4"
+    },
+    {
+      "id": "shared_cost_currency_costformatter",
+      "label": "costFormatter",
+      "file_type": "code",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L6"
+    },
+    {
+      "id": "shared_cost_currency_usdtocny",
+      "label": "usdToCny()",
+      "file_type": "code",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L13"
+    },
+    {
+      "id": "shared_cost_currency_normalizecostcny",
+      "label": "normalizeCostCny()",
+      "file_type": "code",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L17"
+    },
+    {
+      "id": "shared_cost_currency_resolvesynapsecostcny",
+      "label": "resolveSynapseCostCny()",
+      "file_type": "code",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L22"
+    },
+    {
+      "id": "shared_cost_currency_formatsynapsecost",
+      "label": "formatSynapseCost()",
+      "file_type": "code",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L32"
+    },
+    {
+      "id": "tests_cost_currency_test_ts",
+      "label": "cost-currency.test.ts",
+      "file_type": "code",
+      "source_file": "__tests__/cost-currency.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "tests_records_test_ts",
+      "label": "records.test.ts",
+      "file_type": "code",
+      "source_file": "__tests__/records.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_shell_process_main_ts",
+      "label": "shell-process.main.ts",
+      "file_type": "code",
+      "source_file": "builtin/shell-process.main.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_shell_process_main_shellactionconfig",
+      "label": "ShellActionConfig",
+      "file_type": "code",
+      "source_file": "builtin/shell-process.main.ts",
+      "source_location": "L6"
+    },
+    {
+      "id": "builtin_shell_process_main_runshellaction",
+      "label": "runShellAction()",
+      "file_type": "code",
+      "source_file": "builtin/shell-process.main.ts",
+      "source_location": "L14"
+    },
+    {
+      "id": "builtin_agent_schema_ts",
+      "label": "schema.ts",
+      "file_type": "code",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "agent_schema_agentpermissionmodeset",
+      "label": "agentPermissionModeSet",
+      "file_type": "code",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "agent_schema_modeltierset",
+      "label": "modelTierSet",
+      "file_type": "code",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L8"
+    },
+    {
+      "id": "agent_schema_agentactionconfig",
+      "label": "AgentActionConfig",
+      "file_type": "code",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L10"
+    },
+    {
+      "id": "agent_schema_agentactionconfigschema",
+      "label": "agentActionConfigSchema",
+      "file_type": "code",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L23"
+    },
+    {
+      "id": "agent_schema_validateagentstoredconfig",
+      "label": "validateAgentStoredConfig()",
+      "file_type": "code",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L36"
+    },
+    {
+      "id": "builtin_agent_result_renderer_tsx",
+      "label": "result.renderer.tsx",
+      "file_type": "code",
+      "source_file": "builtin/agent/result.renderer.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_agent_index_shared_ts",
+      "label": "index.shared.ts",
+      "file_type": "code",
+      "source_file": "builtin/agent/index.shared.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_agent_executor_main_ts",
+      "label": "executor.main.ts",
+      "file_type": "code",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "agent_executor_main_logger",
+      "label": "logger",
+      "file_type": "code",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L8"
+    },
+    {
+      "id": "agent_executor_main_createagentaction",
+      "label": "createAgentAction()",
+      "file_type": "code",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L10"
+    },
+    {
+      "id": "agent_executor_main_persistableagenterror",
+      "label": "persistableAgentError()",
+      "file_type": "code",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L118"
+    },
+    {
+      "id": "agent_executor_main_scheduledtimeoutms",
+      "label": "scheduledTimeoutMs()",
+      "file_type": "code",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L129"
+    },
+    {
+      "id": "builtin_agent_manifest_ts",
+      "label": "manifest.ts",
+      "file_type": "code",
+      "source_file": "builtin/agent/manifest.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_agent_index_ts",
+      "label": "index.ts",
+      "file_type": "code",
+      "source_file": "builtin/agent/index.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_agent_config_renderer_tsx",
+      "label": "config.renderer.tsx",
+      "file_type": "code",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "agent_config_renderer_tier_labels",
+      "label": "TIER_LABELS",
+      "file_type": "code",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L21"
+    },
+    {
+      "id": "agent_config_renderer_agentconfigform",
+      "label": "AgentConfigForm()",
+      "file_type": "code",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L28"
+    },
+    {
+      "id": "builtin_agent_tests_manifest_test_ts",
+      "label": "manifest.test.ts",
+      "file_type": "code",
+      "source_file": "builtin/agent/__tests__/manifest.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "tests_manifest_test_agenttypefield",
+      "label": "agentTypeField",
+      "file_type": "code",
+      "source_file": "builtin/agent/__tests__/manifest.test.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "tests_manifest_test_result",
+      "label": "result",
+      "file_type": "code",
+      "source_file": "builtin/agent/__tests__/manifest.test.ts",
+      "source_location": "L13"
+    },
+    {
+      "id": "builtin_agent_tests_schema_test_ts",
+      "label": "schema.test.ts",
+      "file_type": "code",
+      "source_file": "builtin/agent/__tests__/schema.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "tests_schema_test_baseconfig",
+      "label": "baseConfig",
+      "file_type": "code",
+      "source_file": "builtin/agent/__tests__/schema.test.ts",
+      "source_location": "L5"
+    },
+    {
+      "id": "tests_schema_test_result",
+      "label": "result",
+      "file_type": "code",
+      "source_file": "builtin/agent/__tests__/schema.test.ts",
+      "source_location": "L27"
+    },
+    {
+      "id": "builtin_agent_tests_executor_main_test_ts",
+      "label": "executor.main.test.ts",
+      "file_type": "code",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "tests_executor_main_test_runtime",
+      "label": "runtime",
+      "file_type": "code",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L8"
+    },
+    {
+      "id": "tests_executor_main_test_action",
+      "label": "action",
+      "file_type": "code",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L16"
+    },
+    {
+      "id": "tests_executor_main_test_controller",
+      "label": "controller",
+      "file_type": "code",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L243"
+    },
+    {
+      "id": "builtin_script_schema_ts",
+      "label": "schema.ts",
+      "file_type": "code",
+      "source_file": "builtin/script/schema.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "script_schema_scriptactionconfigschema",
+      "label": "scriptActionConfigSchema",
+      "file_type": "code",
+      "source_file": "builtin/script/schema.ts",
+      "source_location": "L3"
+    },
+    {
+      "id": "script_schema_scriptactionconfig",
+      "label": "ScriptActionConfig",
+      "file_type": "code",
+      "source_file": "builtin/script/schema.ts",
+      "source_location": "L12"
+    },
+    {
+      "id": "builtin_script_result_renderer_tsx",
+      "label": "result.renderer.tsx",
+      "file_type": "code",
+      "source_file": "builtin/script/result.renderer.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_script_index_shared_ts",
+      "label": "index.shared.ts",
+      "file_type": "code",
+      "source_file": "builtin/script/index.shared.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_script_executor_main_ts",
+      "label": "executor.main.ts",
+      "file_type": "code",
+      "source_file": "builtin/script/executor.main.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "script_executor_main_createscriptaction",
+      "label": "createScriptAction()",
+      "file_type": "code",
+      "source_file": "builtin/script/executor.main.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "builtin_script_manifest_ts",
+      "label": "manifest.ts",
+      "file_type": "code",
+      "source_file": "builtin/script/manifest.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_script_index_ts",
+      "label": "index.ts",
+      "file_type": "code",
+      "source_file": "builtin/script/index.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_script_config_renderer_tsx",
+      "label": "config.renderer.tsx",
+      "file_type": "code",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "script_config_renderer_shell_options",
+      "label": "SHELL_OPTIONS",
+      "file_type": "code",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L15"
+    },
+    {
+      "id": "script_config_renderer_path_strategy_options",
+      "label": "PATH_STRATEGY_OPTIONS",
+      "file_type": "code",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L21"
+    },
+    {
+      "id": "script_config_renderer_scriptconfigform",
+      "label": "ScriptConfigForm()",
+      "file_type": "code",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L26"
+    },
+    {
+      "id": "builtin_script_tests_executor_test_ts",
+      "label": "executor.test.ts",
+      "file_type": "code",
+      "source_file": "builtin/script/__tests__/executor.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_script_tests_executor_test_ts_tests_executor_test_run",
+      "label": "run",
+      "file_type": "code",
+      "source_file": "builtin/script/__tests__/executor.test.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "builtin_script_tests_executor_test_ts_tests_executor_test_action",
+      "label": "action",
+      "file_type": "code",
+      "source_file": "builtin/script/__tests__/executor.test.ts",
+      "source_location": "L15"
+    },
+    {
+      "id": "builtin_http_request_schema_ts",
+      "label": "schema.ts",
+      "file_type": "code",
+      "source_file": "builtin/http-request/schema.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "http_request_schema_httprequestactionconfigschema",
+      "label": "httpRequestActionConfigSchema",
+      "file_type": "code",
+      "source_file": "builtin/http-request/schema.ts",
+      "source_location": "L3"
+    },
+    {
+      "id": "http_request_schema_httprequestactionconfig",
+      "label": "HttpRequestActionConfig",
+      "file_type": "code",
+      "source_file": "builtin/http-request/schema.ts",
+      "source_location": "L19"
+    },
+    {
+      "id": "builtin_http_request_auth_fields_tsx",
+      "label": "auth-fields.tsx",
+      "file_type": "code",
+      "source_file": "builtin/http-request/auth-fields.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "http_request_auth_fields_authconfig",
+      "label": "AuthConfig",
+      "file_type": "code",
+      "source_file": "builtin/http-request/auth-fields.tsx",
+      "source_location": "L4"
+    },
+    {
+      "id": "http_request_auth_fields_authfieldsprops",
+      "label": "AuthFieldsProps",
+      "file_type": "code",
+      "source_file": "builtin/http-request/auth-fields.tsx",
+      "source_location": "L11"
+    },
+    {
+      "id": "http_request_auth_fields_auth_type_options",
+      "label": "AUTH_TYPE_OPTIONS",
+      "file_type": "code",
+      "source_file": "builtin/http-request/auth-fields.tsx",
+      "source_location": "L17"
+    },
+    {
+      "id": "http_request_auth_fields_authfields",
+      "label": "AuthFields()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/auth-fields.tsx",
+      "source_location": "L23"
+    },
+    {
+      "id": "builtin_http_request_request_tester_tsx",
+      "label": "request-tester.tsx",
+      "file_type": "code",
+      "source_file": "builtin/http-request/request-tester.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "http_request_request_tester_httptestresponse",
+      "label": "HttpTestResponse",
+      "file_type": "code",
+      "source_file": "builtin/http-request/request-tester.tsx",
+      "source_location": "L6"
+    },
+    {
+      "id": "http_request_request_tester_requesttester",
+      "label": "RequestTester()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/request-tester.tsx",
+      "source_location": "L14"
+    },
+    {
+      "id": "http_request_request_tester_formatresponsebody",
+      "label": "formatResponseBody()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/request-tester.tsx",
+      "source_location": "L80"
+    },
+    {
+      "id": "builtin_http_request_code_json_editor_tsx",
+      "label": "code-json-editor.tsx",
+      "file_type": "code",
+      "source_file": "builtin/http-request/code-json-editor.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "http_request_code_json_editor_codejsoneditorprops",
+      "label": "CodeJsonEditorProps",
+      "file_type": "code",
+      "source_file": "builtin/http-request/code-json-editor.tsx",
+      "source_location": "L7"
+    },
+    {
+      "id": "http_request_code_json_editor_useisdarkmode",
+      "label": "useIsDarkMode()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/code-json-editor.tsx",
+      "source_location": "L14"
+    },
+    {
+      "id": "http_request_code_json_editor_codejsoneditor",
+      "label": "CodeJsonEditor()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/code-json-editor.tsx",
+      "source_location": "L32"
+    },
+    {
+      "id": "builtin_http_request_result_renderer_tsx",
+      "label": "result.renderer.tsx",
+      "file_type": "code",
+      "source_file": "builtin/http-request/result.renderer.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_http_request_kv_editor_tsx",
+      "label": "kv-editor.tsx",
+      "file_type": "code",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "http_request_kv_editor_kveditorprops",
+      "label": "KvEditorProps",
+      "file_type": "code",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L6"
+    },
+    {
+      "id": "http_request_kv_editor_kvrow",
+      "label": "KvRow",
+      "file_type": "code",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L15"
+    },
+    {
+      "id": "http_request_kv_editor_nextrowid",
+      "label": "nextRowId()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L22"
+    },
+    {
+      "id": "http_request_kv_editor_recordtorows",
+      "label": "recordToRows()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L26"
+    },
+    {
+      "id": "http_request_kv_editor_rowstorecord",
+      "label": "rowsToRecord()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L30"
+    },
+    {
+      "id": "http_request_kv_editor_kveditor",
+      "label": "KvEditor()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L41"
+    },
+    {
+      "id": "builtin_http_request_index_shared_ts",
+      "label": "index.shared.ts",
+      "file_type": "code",
+      "source_file": "builtin/http-request/index.shared.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_http_request_executor_main_ts",
+      "label": "executor.main.ts",
+      "file_type": "code",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "http_request_executor_main_sanitizeurl",
+      "label": "sanitizeUrl()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L12"
+    },
+    {
+      "id": "http_request_executor_main_buildheaders",
+      "label": "buildHeaders()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L28"
+    },
+    {
+      "id": "http_request_executor_main_createhttprequestaction",
+      "label": "createHttpRequestAction()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L41"
+    },
+    {
+      "id": "http_request_executor_main_buildurl",
+      "label": "buildUrl()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L118"
+    },
+    {
+      "id": "http_request_executor_main_buildbody",
+      "label": "buildBody()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L126"
+    },
+    {
+      "id": "builtin_http_request_manifest_ts",
+      "label": "manifest.ts",
+      "file_type": "code",
+      "source_file": "builtin/http-request/manifest.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_http_request_index_ts",
+      "label": "index.ts",
+      "file_type": "code",
+      "source_file": "builtin/http-request/index.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_http_request_config_renderer_tsx",
+      "label": "config.renderer.tsx",
+      "file_type": "code",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "http_request_config_renderer_http_method_options",
+      "label": "HTTP_METHOD_OPTIONS",
+      "file_type": "code",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L11"
+    },
+    {
+      "id": "http_request_config_renderer_body_type_options",
+      "label": "BODY_TYPE_OPTIONS",
+      "file_type": "code",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L19"
+    },
+    {
+      "id": "http_request_config_renderer_httprequestconfigform",
+      "label": "HttpRequestConfigForm()",
+      "file_type": "code",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L25"
+    },
+    {
+      "id": "builtin_http_request_tests_executor_test_ts",
+      "label": "executor.test.ts",
+      "file_type": "code",
+      "source_file": "builtin/http-request/__tests__/executor.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "tests_executor_test_sendrequest",
+      "label": "sendRequest",
+      "file_type": "code",
+      "source_file": "builtin/http-request/__tests__/executor.test.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "builtin_http_request_tests_executor_test_ts_tests_executor_test_action",
+      "label": "action",
+      "file_type": "code",
+      "source_file": "builtin/http-request/__tests__/executor.test.ts",
+      "source_location": "L13"
+    },
+    {
+      "id": "builtin_http_request_tests_executor_test_ts_tests_executor_test_request",
+      "label": "request",
+      "file_type": "code",
+      "source_file": "builtin/http-request/__tests__/executor.test.ts",
+      "source_location": "L57"
+    },
+    {
+      "id": "builtin_command_schema_ts",
+      "label": "schema.ts",
+      "file_type": "code",
+      "source_file": "builtin/command/schema.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "command_schema_commandactionconfigschema",
+      "label": "commandActionConfigSchema",
+      "file_type": "code",
+      "source_file": "builtin/command/schema.ts",
+      "source_location": "L3"
+    },
+    {
+      "id": "command_schema_commandactionconfig",
+      "label": "CommandActionConfig",
+      "file_type": "code",
+      "source_file": "builtin/command/schema.ts",
+      "source_location": "L12"
+    },
+    {
+      "id": "builtin_command_result_renderer_tsx",
+      "label": "result.renderer.tsx",
+      "file_type": "code",
+      "source_file": "builtin/command/result.renderer.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_command_index_shared_ts",
+      "label": "index.shared.ts",
+      "file_type": "code",
+      "source_file": "builtin/command/index.shared.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_command_executor_main_ts",
+      "label": "executor.main.ts",
+      "file_type": "code",
+      "source_file": "builtin/command/executor.main.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "command_executor_main_createcommandaction",
+      "label": "createCommandAction()",
+      "file_type": "code",
+      "source_file": "builtin/command/executor.main.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "builtin_command_manifest_ts",
+      "label": "manifest.ts",
+      "file_type": "code",
+      "source_file": "builtin/command/manifest.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_command_index_ts",
+      "label": "index.ts",
+      "file_type": "code",
+      "source_file": "builtin/command/index.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_command_config_renderer_tsx",
+      "label": "config.renderer.tsx",
+      "file_type": "code",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L1"
+    },
+    {
+      "id": "command_config_renderer_shell_options",
+      "label": "SHELL_OPTIONS",
+      "file_type": "code",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L15"
+    },
+    {
+      "id": "command_config_renderer_path_strategy_options",
+      "label": "PATH_STRATEGY_OPTIONS",
+      "file_type": "code",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L21"
+    },
+    {
+      "id": "command_config_renderer_commandconfigform",
+      "label": "CommandConfigForm()",
+      "file_type": "code",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L26"
+    },
+    {
+      "id": "builtin_command_tests_executor_test_ts",
+      "label": "executor.test.ts",
+      "file_type": "code",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L1"
+    },
+    {
+      "id": "builtin_command_tests_executor_test_ts_tests_executor_test_run",
+      "label": "run",
+      "file_type": "code",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L7"
+    },
+    {
+      "id": "builtin_command_tests_executor_test_ts_tests_executor_test_action",
+      "label": "action",
+      "file_type": "code",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L15"
+    },
+    {
+      "id": "builtin_command_tests_executor_test_ts_tests_executor_test_request",
+      "label": "request",
+      "file_type": "code",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L279"
+    }
+  ],
+  "edges": [
+    {
+      "source": "types_ts",
+      "target": "zod",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "types.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "types_ts",
+      "target": "action_packages_types_actionrunstatus",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "types.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "types_ts",
+      "target": "action_packages_types_actionrunresult",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "types.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "types_ts",
+      "target": "action_packages_types_actionrunlog",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "types.ts",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "types_ts",
+      "target": "action_packages_types_actionrunmetrics",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "types.ts",
+      "source_location": "L23",
+      "weight": 1.0
+    },
+    {
+      "source": "types_ts",
+      "target": "action_packages_types_actionconfig",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "types.ts",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "types_ts",
+      "target": "action_packages_types_actionstoredconfigissue",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "types.ts",
+      "source_location": "L31",
+      "weight": 1.0
+    },
+    {
+      "source": "types_ts",
+      "target": "action_packages_types_actionstoredconfigvalidation",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "types.ts",
+      "source_location": "L36",
+      "weight": 1.0
+    },
+    {
+      "source": "types_ts",
+      "target": "action_packages_types_actionpermissionname",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "types.ts",
+      "source_location": "L46",
+      "weight": 1.0
+    },
+    {
+      "source": "types_ts",
+      "target": "action_packages_types_actionconfigfieldkind",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "types.ts",
+      "source_location": "L51",
+      "weight": 1.0
+    },
+    {
+      "source": "types_ts",
+      "target": "action_packages_types_actionconfigfielddescriptor",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "types.ts",
+      "source_location": "L58",
+      "weight": 1.0
+    },
+    {
+      "source": "types_ts",
+      "target": "action_packages_types_actionmanifest",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "types.ts",
+      "source_location": "L67",
+      "weight": 1.0
+    },
+    {
+      "source": "records_ts",
+      "target": "action_packages_records_parserecordtext",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "records.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "records_ts",
+      "target": "action_packages_records_stringifyrecordtext",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "records.ts",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "shared_cost_currency_ts",
+      "target": "shared_cost_currency_synapse_cost_currency",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "shared_cost_currency_ts",
+      "target": "shared_cost_currency_synapsecostcurrency",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "shared_cost_currency_ts",
+      "target": "shared_cost_currency_costformatter",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "shared_cost_currency_ts",
+      "target": "shared_cost_currency_usdtocny",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "shared_cost_currency_ts",
+      "target": "shared_cost_currency_normalizecostcny",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "shared_cost_currency_ts",
+      "target": "shared_cost_currency_resolvesynapsecostcny",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L22",
+      "weight": 1.0
+    },
+    {
+      "source": "shared_cost_currency_ts",
+      "target": "shared_cost_currency_formatsynapsecost",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "shared_cost_currency_resolvesynapsecostcny",
+      "target": "shared_cost_currency_normalizecostcny",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "shared_cost_currency_resolvesynapsecostcny",
+      "target": "shared_cost_currency_usdtocny",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "shared/cost-currency.ts",
+      "source_location": "L29",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_cost_currency_test_ts",
+      "target": "vitest",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "__tests__/cost-currency.test.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_cost_currency_test_ts",
+      "target": "shared_cost_currency_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "__tests__/cost-currency.test.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_cost_currency_test_ts",
+      "target": "shared_cost_currency_synapse_cost_currency",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "__tests__/cost-currency.test.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_cost_currency_test_ts",
+      "target": "shared_cost_currency_usd_to_cny_rate",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "__tests__/cost-currency.test.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_cost_currency_test_ts",
+      "target": "shared_cost_currency_formatsynapsecost",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "__tests__/cost-currency.test.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_cost_currency_test_ts",
+      "target": "shared_cost_currency_normalizecostcny",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "__tests__/cost-currency.test.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_cost_currency_test_ts",
+      "target": "shared_cost_currency_resolvesynapsecostcny",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "__tests__/cost-currency.test.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_cost_currency_test_ts",
+      "target": "shared_cost_currency_usdtocny",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "__tests__/cost-currency.test.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_records_test_ts",
+      "target": "vitest",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "__tests__/records.test.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_records_test_ts",
+      "target": "records_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "__tests__/records.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_records_test_ts",
+      "target": "action_packages_records_parserecordtext",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "__tests__/records.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "tests_records_test_ts",
+      "target": "action_packages_records_stringifyrecordtext",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "__tests__/records.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_shell_process_main_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_runtime_process_index_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/shell-process.main.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_shell_process_main_ts",
+      "target": "process_index_controlledprocessrunner",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/shell-process.main.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_shell_process_main_ts",
+      "target": "process_index_pathstrategy",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/shell-process.main.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_shell_process_main_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_services_shell_exec_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/shell-process.main.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_shell_process_main_ts",
+      "target": "services_shell_exec_resolveshellcommand",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/shell-process.main.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_shell_process_main_ts",
+      "target": "types_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/shell-process.main.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_shell_process_main_ts",
+      "target": "action_packages_types_actionrunresult",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/shell-process.main.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_shell_process_main_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_action_runtime_action_registry_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/shell-process.main.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_shell_process_main_ts",
+      "target": "action_runtime_action_registry_actionruntimecontext",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/shell-process.main.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_shell_process_main_ts",
+      "target": "builtin_shell_process_main_shellactionconfig",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/shell-process.main.ts",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_shell_process_main_ts",
+      "target": "builtin_shell_process_main_runshellaction",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/shell-process.main.ts",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_schema_ts",
+      "target": "zod",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_schema_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_types_agent_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_schema_ts",
+      "target": "types_agent_synapse_agent_permission_modes",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_schema_ts",
+      "target": "types_agent_synapseagentpermissionmode",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_schema_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_types_provider_model_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_schema_ts",
+      "target": "types_provider_model_modeltier",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_schema_ts",
+      "target": "types_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_schema_ts",
+      "target": "action_packages_types_actionstoredconfigvalidation",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_schema_ts",
+      "target": "agent_schema_agentpermissionmodeset",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_schema_ts",
+      "target": "agent_schema_modeltierset",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_schema_ts",
+      "target": "agent_schema_agentactionconfig",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_schema_ts",
+      "target": "agent_schema_agentactionconfigschema",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L23",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_schema_ts",
+      "target": "agent_schema_validateagentstoredconfig",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/schema.ts",
+      "source_location": "L36",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_result_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_action_runtime_action_result_view_tsx",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/result.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_result_renderer_tsx",
+      "target": "action_runtime_action_result_view_actionresultview",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/result.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_index_shared_ts",
+      "target": "builtin_agent_schema_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_index_shared_ts",
+      "target": "agent_schema_agentactionconfigschema",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_index_shared_ts",
+      "target": "agent_schema_agentactionconfig",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_index_shared_ts",
+      "target": "builtin_agent_manifest_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/index.shared.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_index_shared_ts",
+      "target": "agent_manifest_agentactionmanifest",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/index.shared.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_action_runtime_action_registry_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "action_runtime_action_registry_mainactiondefinition",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_services_agent_runtime_agent_runtime_service_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "agent_runtime_agent_runtime_service_agentruntimeservice",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_services_error_sanitize_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "services_error_sanitize_sanitizeerror",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_services_log_store_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "services_log_store_createmainlogger",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "builtin_agent_manifest_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "agent_manifest_agentactionmanifest",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "builtin_agent_schema_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "agent_schema_agentactionconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "agent_executor_main_logger",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "agent_executor_main_createagentaction",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "agent_executor_main_persistableagenterror",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L118",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_executor_main_ts",
+      "target": "agent_executor_main_scheduledtimeoutms",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/executor.main.ts",
+      "source_location": "L129",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_manifest_ts",
+      "target": "types_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/manifest.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_manifest_ts",
+      "target": "action_packages_types_actionmanifest",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/manifest.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_manifest_ts",
+      "target": "builtin_agent_schema_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/manifest.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_manifest_ts",
+      "target": "agent_schema_agentactionconfigschema",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/manifest.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_manifest_ts",
+      "target": "agent_schema_validateagentstoredconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/manifest.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_manifest_ts",
+      "target": "agent_schema_agentactionconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/manifest.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_manifest_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_types_agent_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/manifest.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_manifest_ts",
+      "target": "types_agent_synapse_agent_permission_modes",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/manifest.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_index_ts",
+      "target": "builtin_agent_schema_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_index_ts",
+      "target": "agent_schema_agentactionconfigschema",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_index_ts",
+      "target": "agent_schema_agentactionconfig",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_index_ts",
+      "target": "builtin_agent_manifest_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/index.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_index_ts",
+      "target": "agent_manifest_agentactionmanifest",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/index.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "react",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "lucide_react",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_button_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "ui_button_button",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_field_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "ui_field_field",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "ui_field_fieldcontent",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "ui_field_fieldgroup",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "ui_field_fieldlabel",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_input_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "ui_input_input",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_textarea_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "ui_textarea_textarea",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_toggle_group_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "ui_toggle_group_togglegroup",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "ui_toggle_group_togglegroupitem",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_provider_model_select_dialog_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "components_provider_model_select_dialog_providermodelselectdialog",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_modules_agent_components_permission_mode_menu_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "components_permission_mode_menu_agentpermissionmodemenu",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_modules_agent_permission_mode_options_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "agent_permission_mode_options_permissionmodelabels",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_types_agent_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "types_agent_synapseagentpermissionmode",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_types_provider_model_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "types_provider_model_modeltier",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L18",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "builtin_agent_schema_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "agent_schema_agentactionconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "agent_config_renderer_tier_labels",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_config_renderer_tsx",
+      "target": "agent_config_renderer_agentconfigform",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/config.renderer.tsx",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_manifest_test_ts",
+      "target": "vitest",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/manifest.test.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_manifest_test_ts",
+      "target": "builtin_agent_manifest_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/manifest.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_manifest_test_ts",
+      "target": "agent_manifest_agentactionmanifest",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/manifest.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_manifest_test_ts",
+      "target": "tests_manifest_test_agenttypefield",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/manifest.test.ts",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_manifest_test_ts",
+      "target": "tests_manifest_test_result",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/manifest.test.ts",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_schema_test_ts",
+      "target": "vitest",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/schema.test.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_schema_test_ts",
+      "target": "builtin_agent_schema_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/schema.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_schema_test_ts",
+      "target": "agent_schema_agentactionconfigschema",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/schema.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_schema_test_ts",
+      "target": "agent_schema_validateagentstoredconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/schema.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_schema_test_ts",
+      "target": "tests_schema_test_baseconfig",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/schema.test.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_schema_test_ts",
+      "target": "tests_schema_test_result",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/schema.test.ts",
+      "source_location": "L27",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_schema_test_ts",
+      "target": "tests_schema_test_result",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/schema.test.ts",
+      "source_location": "L46",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "vitest",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_services_agent_runtime_agent_runtime_service_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "agent_runtime_agent_runtime_service_agentruntimeservice",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "builtin_agent_executor_main_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "agent_executor_main_createagentaction",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_runtime",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L16",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_runtime",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L50",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L59",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_runtime",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L95",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L103",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_runtime",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L134",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L142",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_runtime",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L179",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L194",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_runtime",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L232",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L240",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_controller",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L243",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_runtime",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L275",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L284",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_runtime",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L330",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L338",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_runtime",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L376",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L384",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_runtime",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L422",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L430",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_runtime",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L468",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_tests_executor_main_test_ts",
+      "target": "tests_executor_main_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/__tests__/executor.main.test.ts",
+      "source_location": "L473",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_schema_ts",
+      "target": "zod",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/schema.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_schema_ts",
+      "target": "script_schema_scriptactionconfigschema",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/schema.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_schema_ts",
+      "target": "script_schema_scriptactionconfig",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/schema.ts",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_result_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_action_runtime_action_result_view_tsx",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/result.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_result_renderer_tsx",
+      "target": "action_runtime_action_result_view_actionresultview",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/result.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_index_shared_ts",
+      "target": "builtin_script_schema_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_index_shared_ts",
+      "target": "script_schema_scriptactionconfigschema",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_index_shared_ts",
+      "target": "script_schema_scriptactionconfig",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_index_shared_ts",
+      "target": "builtin_script_manifest_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/index.shared.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_index_shared_ts",
+      "target": "script_manifest_scriptactionmanifest",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/index.shared.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_executor_main_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_runtime_process_index_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/executor.main.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_executor_main_ts",
+      "target": "process_index_controlledprocessrunner",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/executor.main.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_executor_main_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_action_runtime_action_registry_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/executor.main.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_executor_main_ts",
+      "target": "action_runtime_action_registry_mainactiondefinition",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/executor.main.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_executor_main_ts",
+      "target": "builtin_shell_process_main_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/executor.main.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_executor_main_ts",
+      "target": "builtin_shell_process_main_runshellaction",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/executor.main.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_executor_main_ts",
+      "target": "builtin_script_manifest_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/executor.main.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_executor_main_ts",
+      "target": "script_manifest_scriptactionmanifest",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/executor.main.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_executor_main_ts",
+      "target": "builtin_script_schema_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/executor.main.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_executor_main_ts",
+      "target": "script_schema_scriptactionconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/executor.main.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_executor_main_ts",
+      "target": "script_executor_main_createscriptaction",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/executor.main.ts",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_manifest_ts",
+      "target": "types_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/manifest.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_manifest_ts",
+      "target": "action_packages_types_actionmanifest",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/manifest.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_manifest_ts",
+      "target": "builtin_script_schema_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/manifest.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_manifest_ts",
+      "target": "script_schema_scriptactionconfigschema",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/manifest.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_manifest_ts",
+      "target": "script_schema_scriptactionconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/manifest.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_index_ts",
+      "target": "builtin_script_schema_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_index_ts",
+      "target": "script_schema_scriptactionconfigschema",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_index_ts",
+      "target": "script_schema_scriptactionconfig",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_index_ts",
+      "target": "builtin_script_manifest_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/index.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_index_ts",
+      "target": "script_manifest_scriptactionmanifest",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/index.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_checkbox_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "ui_checkbox_checkbox",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_field_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "ui_field_field",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "ui_field_fieldcontent",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "ui_field_fielddescription",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "ui_field_fieldgroup",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "ui_field_fieldlabel",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_input_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "ui_input_input",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_textarea_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "ui_textarea_textarea",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_toggle_group_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "ui_toggle_group_togglegroup",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "ui_toggle_group_togglegroupitem",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "records_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "action_packages_records_parserecordtext",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "action_packages_records_stringifyrecordtext",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "builtin_script_schema_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "script_schema_scriptactionconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "script_config_renderer_shell_options",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "script_config_renderer_path_strategy_options",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_config_renderer_tsx",
+      "target": "script_config_renderer_scriptconfigform",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_tests_executor_test_ts",
+      "target": "vitest",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/__tests__/executor.test.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_tests_executor_test_ts",
+      "target": "builtin_script_executor_main_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/__tests__/executor.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_tests_executor_test_ts",
+      "target": "script_executor_main_createscriptaction",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/__tests__/executor.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_tests_executor_test_ts",
+      "target": "builtin_script_tests_executor_test_ts_tests_executor_test_run",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/__tests__/executor.test.ts",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_tests_executor_test_ts",
+      "target": "builtin_script_tests_executor_test_ts_tests_executor_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/__tests__/executor.test.ts",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_tests_executor_test_ts",
+      "target": "builtin_script_tests_executor_test_ts_tests_executor_test_run",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/__tests__/executor.test.ts",
+      "source_location": "L43",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_tests_executor_test_ts",
+      "target": "builtin_script_tests_executor_test_ts_tests_executor_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/__tests__/executor.test.ts",
+      "source_location": "L51",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_tests_executor_test_ts",
+      "target": "builtin_script_tests_executor_test_ts_tests_executor_test_run",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/__tests__/executor.test.ts",
+      "source_location": "L79",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_tests_executor_test_ts",
+      "target": "builtin_script_tests_executor_test_ts_tests_executor_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/__tests__/executor.test.ts",
+      "source_location": "L87",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_tests_executor_test_ts",
+      "target": "builtin_script_tests_executor_test_ts_tests_executor_test_run",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/__tests__/executor.test.ts",
+      "source_location": "L115",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_tests_executor_test_ts",
+      "target": "builtin_script_tests_executor_test_ts_tests_executor_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/__tests__/executor.test.ts",
+      "source_location": "L123",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_schema_ts",
+      "target": "zod",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/schema.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_schema_ts",
+      "target": "http_request_schema_httprequestactionconfigschema",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/schema.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_schema_ts",
+      "target": "http_request_schema_httprequestactionconfig",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/schema.ts",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_auth_fields_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_input_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/auth-fields.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_auth_fields_tsx",
+      "target": "ui_input_input",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/auth-fields.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_auth_fields_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_toggle_group_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/auth-fields.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_auth_fields_tsx",
+      "target": "ui_toggle_group_togglegroup",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/auth-fields.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_auth_fields_tsx",
+      "target": "ui_toggle_group_togglegroupitem",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/auth-fields.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_auth_fields_tsx",
+      "target": "http_request_auth_fields_authconfig",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/auth-fields.tsx",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_auth_fields_tsx",
+      "target": "http_request_auth_fields_authfieldsprops",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/auth-fields.tsx",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_auth_fields_tsx",
+      "target": "http_request_auth_fields_auth_type_options",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/auth-fields.tsx",
+      "source_location": "L17",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_auth_fields_tsx",
+      "target": "http_request_auth_fields_authfields",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/auth-fields.tsx",
+      "source_location": "L23",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_request_tester_tsx",
+      "target": "react",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/request-tester.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_request_tester_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_button_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/request-tester.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_request_tester_tsx",
+      "target": "ui_button_button",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/request-tester.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_request_tester_tsx",
+      "target": "lucide_react",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/request-tester.tsx",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_request_tester_tsx",
+      "target": "builtin_http_request_schema_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/request-tester.tsx",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_request_tester_tsx",
+      "target": "http_request_schema_httprequestactionconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/request-tester.tsx",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_request_tester_tsx",
+      "target": "http_request_request_tester_httptestresponse",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/request-tester.tsx",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_request_tester_tsx",
+      "target": "http_request_request_tester_requesttester",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/request-tester.tsx",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_request_tester_tsx",
+      "target": "http_request_request_tester_formatresponsebody",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/request-tester.tsx",
+      "source_location": "L80",
+      "weight": 1.0
+    },
+    {
+      "source": "http_request_request_tester_requesttester",
+      "target": "http_request_request_tester_formatresponsebody",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/request-tester.tsx",
+      "source_location": "L71",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_code_json_editor_tsx",
+      "target": "react",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/code-json-editor.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_code_json_editor_tsx",
+      "target": "react_codemirror",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/code-json-editor.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_code_json_editor_tsx",
+      "target": "lang_json",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/code-json-editor.tsx",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_code_json_editor_tsx",
+      "target": "theme_one_dark",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/code-json-editor.tsx",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_code_json_editor_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_button_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/code-json-editor.tsx",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_code_json_editor_tsx",
+      "target": "ui_button_button",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/code-json-editor.tsx",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_code_json_editor_tsx",
+      "target": "http_request_code_json_editor_codejsoneditorprops",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/code-json-editor.tsx",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_code_json_editor_tsx",
+      "target": "http_request_code_json_editor_useisdarkmode",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/code-json-editor.tsx",
+      "source_location": "L14",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_code_json_editor_tsx",
+      "target": "http_request_code_json_editor_codejsoneditor",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/code-json-editor.tsx",
+      "source_location": "L32",
+      "weight": 1.0
+    },
+    {
+      "source": "http_request_code_json_editor_codejsoneditor",
+      "target": "http_request_code_json_editor_useisdarkmode",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/code-json-editor.tsx",
+      "source_location": "L38",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_result_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_action_runtime_action_result_view_tsx",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/result.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_result_renderer_tsx",
+      "target": "action_runtime_action_result_view_actionresultview",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/result.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_kv_editor_tsx",
+      "target": "react",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_kv_editor_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_button_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_kv_editor_tsx",
+      "target": "ui_button_button",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_kv_editor_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_input_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_kv_editor_tsx",
+      "target": "ui_input_input",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_kv_editor_tsx",
+      "target": "lucide_react",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_kv_editor_tsx",
+      "target": "http_request_kv_editor_kveditorprops",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_kv_editor_tsx",
+      "target": "http_request_kv_editor_kvrow",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_kv_editor_tsx",
+      "target": "http_request_kv_editor_nextrowid",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L22",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_kv_editor_tsx",
+      "target": "http_request_kv_editor_recordtorows",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_kv_editor_tsx",
+      "target": "http_request_kv_editor_rowstorecord",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L30",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_kv_editor_tsx",
+      "target": "http_request_kv_editor_kveditor",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/kv-editor.tsx",
+      "source_location": "L41",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_index_shared_ts",
+      "target": "builtin_http_request_schema_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_index_shared_ts",
+      "target": "http_request_schema_httprequestactionconfigschema",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_index_shared_ts",
+      "target": "http_request_schema_httprequestactionconfig",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_index_shared_ts",
+      "target": "builtin_http_request_manifest_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/index.shared.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_index_shared_ts",
+      "target": "http_request_manifest_httprequestactionmanifest",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/index.shared.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_runtime_network_index_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "network_index_outboundhttprequest",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "network_index_outboundhttpresponse",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_runtime_network_index_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "network_index_sendoutboundhttprequest",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_action_runtime_action_registry_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "action_runtime_action_registry_mainactiondefinition",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "builtin_http_request_manifest_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "http_request_manifest_httprequestactionmanifest",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "builtin_http_request_schema_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "http_request_schema_httprequestactionconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "http_request_executor_main_sanitizeurl",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "http_request_executor_main_buildheaders",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L28",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "http_request_executor_main_createhttprequestaction",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L41",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "http_request_executor_main_buildurl",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L118",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_executor_main_ts",
+      "target": "http_request_executor_main_buildbody",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/executor.main.ts",
+      "source_location": "L126",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_manifest_ts",
+      "target": "types_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/manifest.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_manifest_ts",
+      "target": "action_packages_types_actionmanifest",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/manifest.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_manifest_ts",
+      "target": "builtin_http_request_schema_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/manifest.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_manifest_ts",
+      "target": "http_request_schema_httprequestactionconfigschema",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/manifest.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_manifest_ts",
+      "target": "http_request_schema_httprequestactionconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/manifest.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_index_ts",
+      "target": "builtin_http_request_schema_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_index_ts",
+      "target": "http_request_schema_httprequestactionconfigschema",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_index_ts",
+      "target": "http_request_schema_httprequestactionconfig",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_index_ts",
+      "target": "builtin_http_request_manifest_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/index.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_index_ts",
+      "target": "http_request_manifest_httprequestactionmanifest",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/index.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_input_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "ui_input_input",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_textarea_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "ui_textarea_textarea",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_toggle_group_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "ui_toggle_group_togglegroup",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "ui_toggle_group_togglegroupitem",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_separator_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "ui_separator_separator",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "builtin_http_request_schema_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "http_request_schema_httprequestactionconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "builtin_http_request_kv_editor_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "http_request_kv_editor_kveditor",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L6",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "builtin_http_request_code_json_editor_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "http_request_code_json_editor_codejsoneditor",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "builtin_http_request_auth_fields_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "http_request_auth_fields_authfields",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L8",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "builtin_http_request_request_tester_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "http_request_request_tester_requesttester",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "http_request_config_renderer_http_method_options",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "http_request_config_renderer_body_type_options",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L19",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_config_renderer_tsx",
+      "target": "http_request_config_renderer_httprequestconfigform",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/config.renderer.tsx",
+      "source_location": "L25",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_tests_executor_test_ts",
+      "target": "vitest",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/__tests__/executor.test.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_tests_executor_test_ts",
+      "target": "builtin_http_request_executor_main_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/__tests__/executor.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_tests_executor_test_ts",
+      "target": "http_request_executor_main_createhttprequestaction",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/__tests__/executor.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_tests_executor_test_ts",
+      "target": "tests_executor_test_sendrequest",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/__tests__/executor.test.ts",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_tests_executor_test_ts",
+      "target": "builtin_http_request_tests_executor_test_ts_tests_executor_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/__tests__/executor.test.ts",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_tests_executor_test_ts",
+      "target": "builtin_http_request_tests_executor_test_ts_tests_executor_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/__tests__/executor.test.ts",
+      "source_location": "L56",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_tests_executor_test_ts",
+      "target": "builtin_http_request_tests_executor_test_ts_tests_executor_test_request",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/__tests__/executor.test.ts",
+      "source_location": "L57",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_schema_ts",
+      "target": "zod",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/schema.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_schema_ts",
+      "target": "command_schema_commandactionconfigschema",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/schema.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_schema_ts",
+      "target": "command_schema_commandactionconfig",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/schema.ts",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_result_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_action_runtime_action_result_view_tsx",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/result.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_result_renderer_tsx",
+      "target": "action_runtime_action_result_view_actionresultview",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/result.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_index_shared_ts",
+      "target": "builtin_command_schema_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_index_shared_ts",
+      "target": "command_schema_commandactionconfigschema",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_index_shared_ts",
+      "target": "command_schema_commandactionconfig",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_index_shared_ts",
+      "target": "builtin_command_manifest_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/index.shared.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_index_shared_ts",
+      "target": "command_manifest_commandactionmanifest",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/index.shared.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_executor_main_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_runtime_process_index_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/executor.main.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_executor_main_ts",
+      "target": "process_index_controlledprocessrunner",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/executor.main.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_executor_main_ts",
+      "target": "users_liyang_documents_code_github_synapse_desktop_electron_action_runtime_action_registry_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/executor.main.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_executor_main_ts",
+      "target": "action_runtime_action_registry_mainactiondefinition",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/executor.main.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_executor_main_ts",
+      "target": "builtin_shell_process_main_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/executor.main.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_executor_main_ts",
+      "target": "builtin_shell_process_main_runshellaction",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/executor.main.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_executor_main_ts",
+      "target": "builtin_command_manifest_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/executor.main.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_executor_main_ts",
+      "target": "command_manifest_commandactionmanifest",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/executor.main.ts",
+      "source_location": "L4",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_executor_main_ts",
+      "target": "builtin_command_schema_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/executor.main.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_executor_main_ts",
+      "target": "command_schema_commandactionconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/executor.main.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_executor_main_ts",
+      "target": "command_executor_main_createcommandaction",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/executor.main.ts",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_manifest_ts",
+      "target": "types_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/manifest.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_manifest_ts",
+      "target": "action_packages_types_actionmanifest",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/manifest.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_manifest_ts",
+      "target": "builtin_command_schema_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/manifest.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_manifest_ts",
+      "target": "command_schema_commandactionconfigschema",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/manifest.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_manifest_ts",
+      "target": "command_schema_commandactionconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/manifest.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_index_ts",
+      "target": "builtin_command_schema_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_index_ts",
+      "target": "command_schema_commandactionconfigschema",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_index_ts",
+      "target": "command_schema_commandactionconfig",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_index_ts",
+      "target": "builtin_command_manifest_ts",
+      "relation": "imports_from",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/index.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_index_ts",
+      "target": "command_manifest_commandactionmanifest",
+      "relation": "re_exports",
+      "context": "re-export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/index.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_checkbox_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "ui_checkbox_checkbox",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_field_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "ui_field_field",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "ui_field_fieldcontent",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "ui_field_fielddescription",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "ui_field_fieldgroup",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "ui_field_fieldlabel",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_input_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "ui_input_input",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L9",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_textarea_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "ui_textarea_textarea",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L10",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_components_ui_toggle_group_tsx",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "ui_toggle_group_togglegroup",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "ui_toggle_group_togglegroupitem",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L11",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "records_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "action_packages_records_parserecordtext",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "action_packages_records_stringifyrecordtext",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L12",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "builtin_command_schema_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "command_schema_commandactionconfig",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L13",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "command_config_renderer_shell_options",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "command_config_renderer_path_strategy_options",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L21",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_config_renderer_tsx",
+      "target": "command_config_renderer_commandconfigform",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L26",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "vitest",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_executor_main_ts",
+      "relation": "imports_from",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "command_executor_main_createcommandaction",
+      "relation": "imports",
+      "context": "import",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L3",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_run",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L7",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L15",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_run",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L53",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L68",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_run",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L94",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L102",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_run",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L133",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L141",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_run",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L171",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L179",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_run",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L207",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L215",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_run",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L243",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L251",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_action",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L278",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_tests_executor_test_ts",
+      "target": "builtin_command_tests_executor_test_ts_tests_executor_test_request",
+      "relation": "contains",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/__tests__/executor.test.ts",
+      "source_location": "L279",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_result_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_action_runtime_action_result_view_tsx",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/result.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_index_shared_ts",
+      "target": "builtin_agent_schema_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_index_shared_ts",
+      "target": "builtin_agent_manifest_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/index.shared.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_index_ts",
+      "target": "builtin_agent_schema_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_agent_index_ts",
+      "target": "builtin_agent_manifest_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/agent/index.ts",
+      "source_location": "L2",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_result_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_action_runtime_action_result_view_tsx",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/result.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_index_shared_ts",
+      "target": "builtin_script_schema_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_index_shared_ts",
+      "target": "builtin_script_manifest_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/index.shared.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_index_ts",
+      "target": "builtin_script_schema_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_script_index_ts",
+      "target": "builtin_script_manifest_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/script/index.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_result_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_action_runtime_action_result_view_tsx",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/result.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_index_shared_ts",
+      "target": "builtin_http_request_schema_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_index_shared_ts",
+      "target": "builtin_http_request_manifest_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/index.shared.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_index_ts",
+      "target": "builtin_http_request_schema_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_http_request_index_ts",
+      "target": "builtin_http_request_manifest_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/http-request/index.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_result_renderer_tsx",
+      "target": "users_liyang_documents_code_github_synapse_desktop_src_action_runtime_action_result_view_tsx",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/result.renderer.tsx",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_index_shared_ts",
+      "target": "builtin_command_schema_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/index.shared.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_index_shared_ts",
+      "target": "builtin_command_manifest_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/index.shared.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_index_ts",
+      "target": "builtin_command_schema_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/index.ts",
+      "source_location": "L1",
+      "weight": 1.0
+    },
+    {
+      "source": "builtin_command_index_ts",
+      "target": "builtin_command_manifest_ts",
+      "relation": "re_exports",
+      "context": "export",
+      "confidence": "EXTRACTED",
+      "source_file": "builtin/command/index.ts",
+      "source_location": "L5",
+      "weight": 1.0
+    },
+    {
+      "source": "script_config_renderer_scriptconfigform",
+      "target": "action_packages_records_stringifyrecordtext",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "builtin/script/config.renderer.tsx",
+      "source_location": "L97",
+      "weight": 1.0
+    },
+    {
+      "source": "command_config_renderer_commandconfigform",
+      "target": "action_packages_records_stringifyrecordtext",
+      "relation": "calls",
+      "context": "call",
+      "confidence": "EXTRACTED",
+      "confidence_score": 1.0,
+      "source_file": "builtin/command/config.renderer.tsx",
+      "source_location": "L94",
+      "weight": 1.0
+    }
+  ],
+  "input_tokens": 0,
+  "output_tokens": 0,
+  "hyperedges": []
+}

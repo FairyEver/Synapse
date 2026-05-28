@@ -1,0 +1,17 @@
+{
+  "code": [
+    "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/model-price-domain.ts",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/workflow-domain.ts",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/repository-domain.ts",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/types.ts",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/scheduler-domain.ts",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/registry.ts",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/naming.ts",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/variable-domain.ts",
+    "/Users/liyang/Documents/code/github/Synapse/desktop/synapse-capabilities/shared/content-domain.ts"
+  ],
+  "document": [],
+  "paper": [],
+  "image": [],
+  "video": []
+}

@@ -1,0 +1,16 @@
+{
+  "module": "desktop/workflow-nodes",
+  "status": "ok_ast_only_single_process",
+  "total_files": 63,
+  "total_words": 15513,
+  "code_files": 63,
+  "skipped_sensitive": 0,
+  "nodes": 251,
+  "edges": 557,
+  "communities": 10,
+  "output": "graphify-out/desktop-modules/workflow-nodes/graphify-out",
+  "html": "graphify-out/desktop-modules/workflow-nodes/graphify-out/graph.html",
+  "report": "graphify-out/desktop-modules/workflow-nodes/graphify-out/GRAPH_REPORT.md",
+  "graph": "graphify-out/desktop-modules/workflow-nodes/graphify-out/graph.json",
+  "note": "AST-only single-process scan; semantic extraction skipped because no LLM API key is configured."
+}

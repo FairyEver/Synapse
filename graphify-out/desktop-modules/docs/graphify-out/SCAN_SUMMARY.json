@@ -1,0 +1,12 @@
+{
+  "module": "desktop/docs",
+  "status": "skipped_no_code",
+  "total_files": 24,
+  "total_words": 46653,
+  "code_files": 0,
+  "nodes": 0,
+  "edges": 0,
+  "communities": 0,
+  "output": "graphify-out/desktop-modules/docs/graphify-out",
+  "note": "No code files for AST-only scan; semantic extraction skipped because no LLM API key is configured."
+}
