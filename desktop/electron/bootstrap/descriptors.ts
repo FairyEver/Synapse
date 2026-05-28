@@ -512,6 +512,8 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     })
     const repositoryDispatcher = createRepositoryCapabilityDispatcher({
       loadConfig: () => configStore.load(),
+      permissionGuard,
+      auditSink,
     })
     const variableDispatcher = createVariableCapabilityDispatcher({
       loadConfig: () => configStore.load(),

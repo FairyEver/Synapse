@@ -1,8 +1,12 @@
 import type { SynapseConfig, SynapseRepositoryConfig } from "../../src/types/config"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 
 type RepositoryCapabilityDispatcherDeps = {
   readonly loadConfig: () => Promise<SynapseConfig>
+  readonly permissionGuard?: PermissionGuard
+  readonly auditSink?: AuditSink
+  readonly actor?: ActorIdentity
 }
 
 type RepositorySummary = {
@@ -13,32 +17,105 @@ type RepositorySummary = {
   readonly variableCount: number
 }
 
+type RepositoryAccessSecurity = {
+  readonly actor: ActorIdentity
+  readonly resource: string
+  readonly metadata: Record<string, unknown>
+}
+
+const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
+
 export function createRepositoryCapabilityDispatcher(deps: RepositoryCapabilityDispatcherDeps) {
   return {
     async dispatch(
       action: string,
       _params: Record<string, unknown>,
-      _context: DispatchContext,
+      context: DispatchContext,
     ): Promise<DispatchResult> {
       switch (action) {
         case "repository.item.list": {
-          const config = await deps.loadConfig()
-          const repositories = config.repositories.map((repository) =>
-            toRepositorySummary(repository, config.activeRepoUuid),
-          )
-          return {
-            ok: true,
-            data: {
-              activeRepositoryUuid: config.activeRepoUuid,
-              repositories,
-            },
-            total: repositories.length,
+          const security = repositoryAccessSecurity(deps, action, context)
+          await authorizeRepositoryAccess(deps, security)
+          try {
+            const config = await deps.loadConfig()
+            const repositories = config.repositories.map((repository) =>
+              toRepositorySummary(repository, config.activeRepoUuid),
+            )
+            deps.auditSink?.record({
+              action: "fs.read.outside-userdata",
+              actor: security.actor,
+              resource: security.resource,
+              outcome: "allowed",
+              metadata: security.metadata,
+            })
+            return {
+              ok: true,
+              data: {
+                activeRepositoryUuid: config.activeRepoUuid,
+                repositories,
+              },
+              total: repositories.length,
+            }
+          } catch (error) {
+            deps.auditSink?.record({
+              action: "fs.read.outside-userdata",
+              actor: security.actor,
+              resource: security.resource,
+              outcome: "failed",
+              metadata: {
+                ...security.metadata,
+                errorName: error instanceof Error ? error.name : typeof error,
+                errorLength: String(error).length,
+              },
+            })
+            throw error
           }
         }
         default:
           throw new Error(`Unknown repository action: ${action}`)
       }
     },
+  }
+}
+
+function repositoryAccessSecurity(
+  deps: RepositoryCapabilityDispatcherDeps,
+  action: string,
+  context: DispatchContext,
+): RepositoryAccessSecurity {
+  return {
+    actor: deps.actor ?? DEFAULT_ACTOR,
+    resource: "repository:list",
+    metadata: {
+      source: context.source ?? "api",
+      repositoryAction: action,
+    },
+  }
+}
+
+async function authorizeRepositoryAccess(
+  deps: RepositoryCapabilityDispatcherDeps,
+  security: RepositoryAccessSecurity,
+): Promise<void> {
+  const permission = await deps.permissionGuard?.check({
+    action: "fs.read.outside-userdata",
+    actor: security.actor,
+    resource: security.resource,
+    context: security.metadata,
+  })
+  if (permission && !permission.allowed) {
+    deps.auditSink?.record({
+      action: "fs.read.outside-userdata",
+      actor: security.actor,
+      resource: security.resource,
+      outcome: "denied",
+      metadata: {
+        ...security.metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    throw new Error(permission.reason)
   }
 }
 
