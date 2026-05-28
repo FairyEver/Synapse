@@ -1,5 +1,6 @@
 import type { DatabaseSync } from "node:sqlite"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
+import type { ActorIdentity, AuditSink, PermissionGuard } from "../runtime/security"
 import {
   createUsagePriceRule,
   deleteUsagePriceRule,
@@ -19,6 +20,9 @@ type UsageSourceName = "cc" | "codex"
 
 type ModelPriceDispatcherDeps = {
   readonly db: DatabaseSync
+  readonly permissionGuard?: PermissionGuard
+  readonly auditSink?: AuditSink
+  readonly actor?: ActorIdentity
 }
 
 type UsedModelRow = {
@@ -48,31 +52,127 @@ type MutableUsageModelPriceRulePatch = {
 
 const RANGE_PRESETS: readonly UsageRangePreset[] = ["today", "7d", "30d", "90d", "all"]
 const PRICE_FIELDS = ["inputPer1M", "outputPer1M", "cacheReadPer1M", "cacheWritePer1M", "reasoningPer1M"] as const
+const MODEL_PRICE_MUTATION_ACTIONS = new Set([
+  "model_price.rule.create",
+  "model_price.rule.update",
+  "model_price.rule.delete",
+  "model_price.rule.enable",
+  "model_price.rule.disable",
+])
+const DEFAULT_ACTOR: ActorIdentity = { kind: "user", id: "synapse-mcp", display: "Synapse MCP" }
 
 export function createModelPriceCapabilityDispatcher(deps: ModelPriceDispatcherDeps) {
   return {
-    async dispatch(action: string, params: Record<string, unknown>, _context: DispatchContext): Promise<DispatchResult> {
-      switch (action) {
-        case "model_price.used_model.list":
-          return { ok: true, data: listUsedModels(deps.db, params) }
-        case "model_price.rule.list":
-          return { ok: true, data: listUsagePriceRules(deps.db) }
-        case "model_price.rule.get":
-          return { ok: true, data: requireRule(deps.db, requireString(params, "ruleId")) }
-        case "model_price.rule.create":
-          return { ok: true, data: createUsagePriceRule(deps.db, readCreateParams(params)) }
-        case "model_price.rule.update":
-          return { ok: true, data: updateUsagePriceRule(deps.db, requireString(params, "ruleId"), readPatchParams(params)) }
-        case "model_price.rule.delete":
-          return { ok: true, data: deleteUsagePriceRule(deps.db, requireString(params, "ruleId")) }
-        case "model_price.rule.enable":
-          return { ok: true, data: setUsagePriceRuleEnabled(deps.db, requireString(params, "ruleId"), true) }
-        case "model_price.rule.disable":
-          return { ok: true, data: setUsagePriceRuleEnabled(deps.db, requireString(params, "ruleId"), false) }
-        default:
-          throw new Error(`Unknown action: ${action}`)
+    async dispatch(action: string, params: Record<string, unknown>, context: DispatchContext): Promise<DispatchResult> {
+      const security = modelPriceMutationSecurity(deps, action, params, context)
+      if (security) await authorizeModelPriceMutation(deps, security)
+      try {
+        const result = dispatchModelPriceAction(deps.db, action, params)
+        if (security) {
+          deps.auditSink?.record({
+            action: "database.mutate",
+            actor: security.actor,
+            resource: security.resource,
+            outcome: "allowed",
+            metadata: security.metadata,
+          })
+        }
+        return result
+      } catch (error) {
+        if (security) {
+          deps.auditSink?.record({
+            action: "database.mutate",
+            actor: security.actor,
+            resource: security.resource,
+            outcome: "failed",
+            metadata: {
+              ...security.metadata,
+              errorName: error instanceof Error ? error.name : typeof error,
+              errorLength: String(error).length,
+            },
+          })
+        }
+        throw error
       }
     },
+  }
+}
+
+function dispatchModelPriceAction(
+  db: DatabaseSync,
+  action: string,
+  params: Record<string, unknown>,
+): DispatchResult {
+  switch (action) {
+    case "model_price.used_model.list":
+      return { ok: true, data: listUsedModels(db, params) }
+    case "model_price.rule.list":
+      return { ok: true, data: listUsagePriceRules(db) }
+    case "model_price.rule.get":
+      return { ok: true, data: requireRule(db, requireString(params, "ruleId")) }
+    case "model_price.rule.create":
+      return { ok: true, data: createUsagePriceRule(db, readCreateParams(params)) }
+    case "model_price.rule.update":
+      return { ok: true, data: updateUsagePriceRule(db, requireString(params, "ruleId"), readPatchParams(params)) }
+    case "model_price.rule.delete":
+      return { ok: true, data: deleteUsagePriceRule(db, requireString(params, "ruleId")) }
+    case "model_price.rule.enable":
+      return { ok: true, data: setUsagePriceRuleEnabled(db, requireString(params, "ruleId"), true) }
+    case "model_price.rule.disable":
+      return { ok: true, data: setUsagePriceRuleEnabled(db, requireString(params, "ruleId"), false) }
+    default:
+      throw new Error(`Unknown action: ${action}`)
+  }
+}
+
+type ModelPriceMutationSecurity = {
+  readonly actor: ActorIdentity
+  readonly resource: string
+  readonly metadata: Record<string, unknown>
+}
+
+function modelPriceMutationSecurity(
+  deps: ModelPriceDispatcherDeps,
+  action: string,
+  params: Record<string, unknown>,
+  context: DispatchContext,
+): ModelPriceMutationSecurity | null {
+  if (!MODEL_PRICE_MUTATION_ACTIONS.has(action)) return null
+  const ruleId = typeof params.ruleId === "string" && params.ruleId.trim() ? params.ruleId.trim() : action
+  return {
+    actor: deps.actor ?? DEFAULT_ACTOR,
+    resource: `model-price-rule:${ruleId}`,
+    metadata: {
+      source: context.source ?? "api",
+      modelPriceAction: action,
+      ...(ruleId !== action ? { ruleId } : undefined),
+    },
+  }
+}
+
+async function authorizeModelPriceMutation(
+  deps: ModelPriceDispatcherDeps,
+  security: ModelPriceMutationSecurity,
+): Promise<void> {
+  const permission = await deps.permissionGuard?.check({
+    action: "database.mutate",
+    actor: security.actor,
+    resource: security.resource,
+    context: security.metadata,
+  })
+  if (permission && !permission.allowed) {
+    deps.auditSink?.record({
+      action: "database.mutate",
+      actor: security.actor,
+      resource: security.resource,
+      outcome: "denied",
+      metadata: {
+        ...security.metadata,
+        reason: permission.reason,
+        policyId: permission.policyId,
+      },
+    })
+    throw new Error(permission.reason)
   }
 }
 

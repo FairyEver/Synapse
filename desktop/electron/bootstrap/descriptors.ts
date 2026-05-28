@@ -507,6 +507,8 @@ export const coreDatabaseDescriptor: ServiceDescriptor<{ initialized: true }> = 
     })
     const modelPriceDispatcher = createModelPriceCapabilityDispatcher({
       db: getUsageAnalysisDb(app.getPath("userData")),
+      permissionGuard,
+      auditSink,
     })
     const repositoryDispatcher = createRepositoryCapabilityDispatcher({
       loadConfig: () => configStore.load(),

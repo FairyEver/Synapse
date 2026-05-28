@@ -1,6 +1,7 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import { DatabaseSync } from "node:sqlite"
 import { initUsageAnalysisSchema } from "../../services/usage-analysis/db-schema"
+import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import { createModelPriceCapabilityDispatcher } from "../model-price-dispatcher"
 
 function createTestDb(): DatabaseSync {
@@ -47,6 +48,77 @@ function insertUsageEvent(db: DatabaseSync, prefix: "cc" | "cx", input: {
 }
 
 describe("model price capability dispatcher", () => {
+  it("checks permission and audits mutating price rule actions", async () => {
+    const db = createTestDb()
+    const { auditEvents, auditSink, permissionGuard } = createSecurityHarness()
+    const dispatcher = createModelPriceCapabilityDispatcher({
+      db,
+      permissionGuard,
+      auditSink,
+    })
+
+    const created = await dispatcher.dispatch("model_price.rule.create", {
+      modelPattern: "secure-model",
+      inputPer1M: 1,
+    }, { source: "mcp-http" })
+    const ruleId = (created.data as { id: string }).id
+
+    await dispatcher.dispatch("model_price.rule.update", { ruleId, outputPer1M: 2 }, { source: "mcp-http" })
+    await dispatcher.dispatch("model_price.rule.disable", { ruleId }, { source: "mcp-http" })
+    await dispatcher.dispatch("model_price.rule.enable", { ruleId }, { source: "mcp-http" })
+    await dispatcher.dispatch("model_price.rule.delete", { ruleId }, { source: "mcp-http" })
+
+    expect(permissionGuard.check).toHaveBeenCalledTimes(5)
+    expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "database.mutate",
+      resource: "model-price-rule:model_price.rule.create",
+      context: expect.objectContaining({
+        source: "mcp-http",
+        modelPriceAction: "model_price.rule.create",
+      }),
+    }))
+    expect(auditEvents.filter((event) => event.outcome === "allowed")).toHaveLength(5)
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "database.mutate",
+      outcome: "allowed",
+      resource: "model-price-rule:model_price.rule.create",
+    }))
+    db.close()
+  })
+
+  it("blocks price rule mutations when permission is denied", async () => {
+    const db = createTestDb()
+    const { auditEvents, auditSink, permissionGuard } = createSecurityHarness()
+    vi.mocked(permissionGuard.check).mockResolvedValueOnce({
+      allowed: false,
+      reason: "denied by policy",
+      policyId: "test-policy",
+    })
+    const dispatcher = createModelPriceCapabilityDispatcher({
+      db,
+      permissionGuard,
+      auditSink,
+    })
+
+    await expect(dispatcher.dispatch("model_price.rule.create", {
+      modelPattern: "blocked-model",
+    }, { source: "api" })).rejects.toThrow("denied by policy")
+
+    expect(auditEvents).toContainEqual(expect.objectContaining({
+      action: "database.mutate",
+      outcome: "denied",
+      resource: "model-price-rule:model_price.rule.create",
+      metadata: expect.objectContaining({
+        reason: "denied by policy",
+        policyId: "test-policy",
+      }),
+    }))
+    const rules = await dispatcher.dispatch("model_price.rule.list", {}, { source: "api" })
+    expect((rules.data as Array<{ modelPattern: string }>).some((rule) => rule.modelPattern === "blocked-model"))
+      .toBe(false)
+    db.close()
+  })
+
   it("creates partially updates disables enables and deletes price rules by ruleId", async () => {
     const db = createTestDb()
     const dispatcher = createModelPriceCapabilityDispatcher({ db })
@@ -171,3 +243,20 @@ describe("model price capability dispatcher", () => {
     db.close()
   })
 })
+
+function createSecurityHarness() {
+  const auditEvents: Parameters<AuditSink["record"]>[0][] = []
+  const permissionGuard: PermissionGuard = {
+    registerPolicy: vi.fn(),
+    check: vi.fn(async () => ({ allowed: true as const })),
+  }
+  const auditSink: AuditSink = {
+    record: (event) => {
+      auditEvents.push(event)
+    },
+    list: () => [],
+    clearForTests: () => undefined,
+  }
+
+  return { auditEvents, auditSink, permissionGuard }
+}
