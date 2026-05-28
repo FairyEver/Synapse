@@ -139,6 +139,7 @@ type RequestOptions = RequestInit;
 
 const dashboardApiBasePath = '/api/dashboard';
 const adminApiBasePath = '/api/admin';
+const desktopLoginIssueCodePath = '/api/auth/desktop/issue-code';
 const authExpiredListeners = new Set<() => void>();
 
 export class ApiError extends Error {
@@ -214,6 +215,9 @@ function notifyAuthExpired() {
 }
 
 function shouldNotifyAuthExpired(path: string, status: number) {
+  if (path === desktopLoginIssueCodePath) {
+    return status === 401 || status === 403;
+  }
   if (status !== 401) return false;
   if (!path.startsWith(adminApiBasePath) && !path.startsWith(dashboardApiBasePath)) {
     return false;
@@ -280,7 +284,7 @@ export const dashboardApi = {
     request<{ ok: true }>(`${dashboardApiBasePath}/logout`, { method: 'POST' }),
   getMe: () => request<DashboardMe>(`${dashboardApiBasePath}/me`),
   issueDesktopLoginCode: (input: { state: string }) =>
-    request<DesktopLoginCodeIssueResult>('/api/auth/desktop/issue-code', {
+    request<DesktopLoginCodeIssueResult>(desktopLoginIssueCodePath, {
       method: 'POST',
       body: JSON.stringify(input),
     }),
