@@ -132,9 +132,8 @@ function issueDesktopLoginCodeOnce(state: string) {
   const request = dashboardApi
     .issueDesktopLoginCode({ state })
     .then((result) => result.deepLinkUrl)
-    .catch((error) => {
+    .finally(() => {
       desktopLoginCodeRequests.delete(state);
-      throw error;
     });
 
   desktopLoginCodeRequests.set(state, request);
