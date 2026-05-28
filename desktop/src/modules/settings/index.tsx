@@ -2,7 +2,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { LoaderCircle } from "lucide-react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
-import { subscribeOpenSettingsAbout, subscribeOpenSettingsStorage } from "@/app-shell/navigation"
+import {
+  consumeRequestedSettingsCategory,
+  subscribeOpenSettingsAccount,
+  subscribeOpenSettingsAbout,
+  subscribeOpenSettingsStorage,
+} from "@/app-shell/navigation"
 import { useAppNotifications } from "@/app-shell/notifications"
 import {
   useActiveRepository,
@@ -13,6 +18,7 @@ import { Button } from "@/components/ui/button"
 import { Card, CardHeader } from "@/components/ui/card"
 import { settingsCategories, settingsItems } from "@/modules/settings/data"
 import { AboutPanel } from "@/modules/settings/components/about-panel"
+import { AccountPanel } from "@/modules/settings/components/account-panel"
 import type { SettingsCategory } from "@/modules/settings/types"
 import { ConfigBackupPanel } from "@/modules/settings/components/config-backup-panel"
 import { AppResetPanel } from "@/modules/settings/components/app-reset-panel"
@@ -40,7 +46,9 @@ function SettingsModule() {
   const activeRepository = useActiveRepository()
   const { replaceRepositories } = useRepositoryActions()
   const { promise, warning } = useAppNotifications()
-  const [activeCategory, setActiveCategoryRaw] = useState<SettingsCategoryId>("general")
+  const [activeCategory, setActiveCategoryRaw] = useState<SettingsCategoryId>(
+    () => consumeRequestedSettingsCategory() ?? "account",
+  )
   const activeCategoryRef = useRef(activeCategory)
   activeCategoryRef.current = activeCategory
   const [isAdminMode, setIsAdminModeState] = useState(false)
@@ -60,6 +68,12 @@ function SettingsModule() {
   useEffect(() => {
     return subscribeOpenSettingsAbout(() => {
       setActiveCategory("about")
+    })
+  }, [setActiveCategory])
+
+  useEffect(() => {
+    return subscribeOpenSettingsAccount(() => {
+      setActiveCategory("account")
     })
   }, [setActiveCategory])
 
@@ -263,6 +277,8 @@ function SettingsModule() {
             ))}
           </SettingsGroup>
         ) : null}
+
+        {isReady && activeCategory === "account" ? <AccountPanel /> : null}
 
         {isReady && activeCategory === "general" ? <IdentityPanel /> : null}
         {isReady && activeCategory === "general" ? <ConfigBackupPanel /> : null}

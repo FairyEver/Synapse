@@ -6,6 +6,7 @@ import {
   FolderGit2,
   FolderOpen,
   Info,
+  CircleUserRound,
   Server,
   Settings2,
   Shield,
@@ -18,6 +19,12 @@ import type { SettingItem, SettingsCategory } from "@/modules/settings/types"
 import { SYNAPSE_THEME_MODE_OPTIONS } from "@/types/config"
 
 const settingsCategories: SettingsCategory[] = [
+  {
+    id: "account",
+    icon: CircleUserRound,
+    label: "账号",
+    description: "登录状态。",
+  },
   {
     id: "general",
     icon: Settings2,

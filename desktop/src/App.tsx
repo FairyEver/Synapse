@@ -15,6 +15,7 @@ import { updateDiagnosticContext } from "@/lib/diagnostic-context"
 import {
   type OpenAgentSessionPayload,
   publishActiveAppTab,
+  requestOpenSettingsAccount,
   requestOpenSettingsAbout,
   requestOpenSettingsStorage,
   subscribeOpenAgentSession,
@@ -383,6 +384,7 @@ function MainApp() {
             showRepositorySwitch={toolbarState.showRepositorySwitch}
             syncSnapshot={toolbarState.syncSnapshot}
             syncStatus={toolbarState.syncStatus}
+            onOpenAccountSettings={requestOpenSettingsAccount}
             onOpenRepositorySettings={() => {
               setActiveTab("settings", "sync-status")
               requestOpenSettingsStorage()

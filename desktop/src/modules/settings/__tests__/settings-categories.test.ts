@@ -7,6 +7,7 @@ describe("settingsCategories", () => {
     const ids = settingsCategories.map((c) => c.id)
 
     expect(ids).toEqual([
+      "account",
       "general",
       "repositories",
       "projects",
@@ -39,6 +40,7 @@ describe("settingsCategories", () => {
   it("uses clear user-facing category names", () => {
     const labels = new Map(settingsCategories.map((category) => [category.id, category.label]))
 
+    expect(labels.get("account")).toBe("账号")
     expect(labels.get("general")).toBe("基础设置")
     expect(labels.get("repositories")).toBe("本地仓库")
     expect(labels.get("projects")).toBe("本地项目")

@@ -3,6 +3,7 @@ import { createRoot } from "react-dom/client"
 import App from "@/App"
 import { AppErrorBoundary } from "@/components/app-error-boundary"
 import { ActiveRepositorySwitchProvider } from "@/app-shell/active-repository-switch"
+import { AccountProvider } from "@/app-shell/account"
 import { AppConfigProvider } from "@/app-shell/config"
 import { IdentityProvider } from "@/app-shell/identity-context"
 import { createRendererLogger, installRendererLogForwarding } from "@/app-shell/logging"
@@ -97,9 +98,11 @@ void (async () => {
             <RepositoryManagerProvider>
               <IdentityProvider>
                 <AppNotificationsProvider>
-                  <ActiveRepositorySwitchProvider>
-                    <App />
-                  </ActiveRepositorySwitchProvider>
+                  <AccountProvider>
+                    <ActiveRepositorySwitchProvider>
+                      <App />
+                    </ActiveRepositorySwitchProvider>
+                  </AccountProvider>
                 </AppNotificationsProvider>
               </IdentityProvider>
             </RepositoryManagerProvider>

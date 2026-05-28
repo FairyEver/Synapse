@@ -4,6 +4,7 @@ import {
 } from "@/types/agent-navigation"
 
 const OPEN_SETTINGS_TAB_EVENT = "synapse:open-settings-tab"
+const OPEN_SETTINGS_ACCOUNT_EVENT = "synapse:open-settings-account"
 const OPEN_SETTINGS_ABOUT_EVENT = "synapse:open-settings-about"
 const OPEN_SETTINGS_STORAGE_EVENT = "synapse:open-settings-storage"
 const APP_TAB_CHANGED_EVENT = "synapse:app-tab-changed"
@@ -15,7 +16,9 @@ type WatchNextAgentSessionPayload = {
   platform?: string
   sessionKeyPrefix?: string
 }
+type RequestedSettingsCategory = "account" | "repositories" | "about"
 let currentAppTab = "skill"
+let requestedSettingsCategory: RequestedSettingsCategory | null = null
 
 function requestOpenSettingsTab(): void {
   window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_TAB_EVENT))
@@ -57,6 +60,8 @@ function subscribeActiveAppTab(listener: (tabId: string) => void): () => void {
 }
 
 function requestOpenSettingsAbout(): void {
+  requestedSettingsCategory = "about"
+  requestOpenSettingsTab()
   window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_ABOUT_EVENT))
 }
 
@@ -73,6 +78,8 @@ function subscribeOpenSettingsAbout(listener: () => void): () => void {
 }
 
 function requestOpenSettingsStorage(): void {
+  requestedSettingsCategory = "repositories"
+  requestOpenSettingsTab()
   window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_STORAGE_EVENT))
 }
 
@@ -86,6 +93,30 @@ function subscribeOpenSettingsStorage(listener: () => void): () => void {
   return () => {
     window.removeEventListener(OPEN_SETTINGS_STORAGE_EVENT, handleEvent)
   }
+}
+
+function requestOpenSettingsAccount(): void {
+  requestedSettingsCategory = "account"
+  requestOpenSettingsTab()
+  window.dispatchEvent(new CustomEvent(OPEN_SETTINGS_ACCOUNT_EVENT))
+}
+
+function subscribeOpenSettingsAccount(listener: () => void): () => void {
+  const handleEvent = () => {
+    listener()
+  }
+
+  window.addEventListener(OPEN_SETTINGS_ACCOUNT_EVENT, handleEvent)
+
+  return () => {
+    window.removeEventListener(OPEN_SETTINGS_ACCOUNT_EVENT, handleEvent)
+  }
+}
+
+function consumeRequestedSettingsCategory(): RequestedSettingsCategory | null {
+  const category = requestedSettingsCategory
+  requestedSettingsCategory = null
+  return category
 }
 
 function requestWatchNextAgentSession(payload: WatchNextAgentSessionPayload): void {
@@ -146,7 +177,9 @@ export {
   cancelWatchNextAgentSession,
   publishActiveAppTab,
   readCurrentAppTab,
+  consumeRequestedSettingsCategory,
   requestOpenAgentSession,
+  requestOpenSettingsAccount,
   requestOpenSettingsAbout,
   requestOpenSettingsStorage,
   requestOpenSettingsTab,
@@ -154,6 +187,7 @@ export {
   subscribeActiveAppTab,
   subscribeCancelWatchNextAgentSession,
   subscribeOpenAgentSession,
+  subscribeOpenSettingsAccount,
   subscribeOpenSettingsAbout,
   subscribeOpenSettingsStorage,
   subscribeOpenSettingsTab,

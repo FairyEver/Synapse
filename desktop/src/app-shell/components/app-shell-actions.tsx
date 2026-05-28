@@ -1,4 +1,5 @@
 import { ArrowLeftRight, LoaderCircle, RefreshCw } from "lucide-react"
+import { AccountUserControl } from "@/app-shell/components/account-user-control"
 import { GitSyncStatusCenter } from "@/app-shell/components/git-sync-status-center"
 import type { SyncStatus } from "@/app-shell/components/sync-status-chip"
 import { Button } from "@/components/ui/button"
@@ -25,6 +26,7 @@ type AppShellActionsProps = {
   syncSnapshot?: SynapseRepositorySyncSnapshot
   syncStatus?: SyncStatus
   onOpenRepositorySettings?: () => void
+  onOpenAccountSettings?: () => void
   onRefresh?: () => void
   onRepositorySwitch?: () => void
   onSyncStatusRetry?: () => void
@@ -44,12 +46,13 @@ function AppShellActions({
   syncSnapshot,
   syncStatus = "synced",
   onOpenRepositorySettings,
+  onOpenAccountSettings,
   onRefresh,
   onRepositorySwitch,
   onSyncStatusRetry,
   refreshTitle = "同步仓库",
 }: AppShellActionsProps) {
-  const hasActions = showRefresh || showRepositorySwitch
+  const hasRepositoryActions = showRefresh || showRepositorySwitch
 
   return (
     <div className="flex items-center gap-1.5">
@@ -71,7 +74,7 @@ function AppShellActions({
         )}
       </div>
 
-      {hasActions ? (
+      {hasRepositoryActions ? (
         <>
           <Separator orientation="vertical" className="mx-1 h-4 data-[orientation=vertical]:self-center" />
           <TooltipProvider>
@@ -119,6 +122,8 @@ function AppShellActions({
           </TooltipProvider>
         </>
       ) : null}
+      <Separator orientation="vertical" className="mx-1 h-4 data-[orientation=vertical]:self-center" />
+      <AccountUserControl onOpenSettings={onOpenAccountSettings} />
     </div>
   )
 }

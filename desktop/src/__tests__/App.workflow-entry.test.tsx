@@ -104,6 +104,7 @@ vi.mock("@/app-shell/use-repository-manager", () => ({
 
 vi.mock("@/app-shell/navigation", () => ({
   publishActiveAppTab: vi.fn(),
+  requestOpenSettingsAccount: vi.fn(),
   requestOpenSettingsAbout: vi.fn(),
   requestOpenSettingsStorage: vi.fn(),
   subscribeOpenAgentSession: () => () => undefined,

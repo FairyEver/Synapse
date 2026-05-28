@@ -1,0 +1,154 @@
+import { ChevronDown, CircleUserRound, LoaderCircle, LogOut, RefreshCw, Settings } from "lucide-react"
+import { useAccount } from "@/app-shell/account"
+import { useAppNotifications } from "@/app-shell/notifications"
+import { Button } from "@/components/ui/button"
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu"
+import type { SynapseAccountState } from "@/types/account"
+
+type AccountUserControlProps = {
+  variant?: "toolbar" | "panel"
+  onOpenSettings?: () => void
+}
+
+function getAccountTitle(state: SynapseAccountState): string {
+  if (state.status === "authenticated") return state.profile.user.email
+  if (state.status === "authenticating") return "登录中"
+  return "未登录"
+}
+
+function getAccountDetail(state: SynapseAccountState): string {
+  if (state.status === "authenticated") {
+    return state.profile.teams.length > 0 ? `${state.profile.teams.length} 个团队` : "Synapse 账号"
+  }
+  if (state.status === "authenticating") return "正在等待浏览器登录"
+  if (state.status === "error") return state.message
+  return "可选"
+}
+
+function AccountUserControl({
+  variant = "toolbar",
+  onOpenSettings,
+}: AccountUserControlProps) {
+  const {
+    isLoading,
+    logout,
+    pendingAction,
+    refresh,
+    startLogin,
+    state,
+  } = useAccount()
+  const { warning } = useAppNotifications()
+  const isBusy = isLoading || pendingAction !== null
+
+  const runAndReport = async (action: () => Promise<SynapseAccountState>): Promise<void> => {
+    const nextState = await action()
+    if (nextState.status === "error") {
+      warning(nextState.message)
+    }
+  }
+
+  const handleLogin = () => {
+    void runAndReport(startLogin)
+  }
+
+  const handleRefresh = () => {
+    void runAndReport(refresh)
+  }
+
+  const handleLogout = () => {
+    void runAndReport(logout)
+  }
+
+  if (variant === "panel") {
+    return (
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+            {isBusy ? <LoaderCircle className="size-4 animate-spin" /> : <CircleUserRound className="size-4" />}
+          </div>
+          <div className="min-w-0">
+            <p className="truncate text-sm font-medium">{getAccountTitle(state)}</p>
+            <p className="truncate text-sm text-muted-foreground">{getAccountDetail(state)}</p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          {state.status === "authenticated" ? (
+            <>
+              <Button variant="outline" size="sm" disabled={isBusy} onClick={handleRefresh}>
+                <RefreshCw data-icon="inline-start" className={pendingAction === "refresh" ? "animate-spin" : undefined} />
+                同步
+              </Button>
+              <Button variant="outline" size="sm" disabled={isBusy} onClick={handleLogout}>
+                <LogOut data-icon="inline-start" />
+                退出
+              </Button>
+            </>
+          ) : (
+            <Button size="sm" disabled={isBusy || state.status === "authenticating"} onClick={handleLogin}>
+              {pendingAction === "login" ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : <CircleUserRound data-icon="inline-start" />}
+              登录
+            </Button>
+          )}
+        </div>
+      </div>
+    )
+  }
+
+  if (state.status !== "authenticated") {
+    return (
+      <Button
+        variant="ghost"
+        size="sm"
+        disabled={isBusy || state.status === "authenticating"}
+        onClick={handleLogin}
+      >
+        {isBusy || state.status === "authenticating" ? (
+          <LoaderCircle data-icon="inline-start" className="animate-spin" />
+        ) : (
+          <CircleUserRound data-icon="inline-start" />
+        )}
+        {state.status === "authenticating" ? "登录中" : "登录"}
+      </Button>
+    )
+  }
+
+  return (
+    <DropdownMenu data-track="account-user-menu">
+      <DropdownMenuTrigger asChild>
+        <Button variant="ghost" size="sm" className="max-w-48">
+          <CircleUserRound data-icon="inline-start" />
+          <span className="truncate">{state.profile.user.email}</span>
+          <ChevronDown data-icon="inline-end" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-56">
+        <DropdownMenuLabel className="truncate">{state.profile.user.email}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {onOpenSettings ? (
+          <DropdownMenuItem onSelect={onOpenSettings}>
+            <Settings />
+            账号设置
+          </DropdownMenuItem>
+        ) : null}
+        <DropdownMenuItem onSelect={handleRefresh} disabled={isBusy}>
+          <RefreshCw className={pendingAction === "refresh" ? "animate-spin" : undefined} />
+          同步账号
+        </DropdownMenuItem>
+        <DropdownMenuSeparator />
+        <DropdownMenuItem variant="destructive" onSelect={handleLogout} disabled={isBusy}>
+          <LogOut />
+          退出登录
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+}
+
+export { AccountUserControl }
