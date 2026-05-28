@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import type {
   CcConversationDetail,
+  CcConversationParseError,
   CcConversationWindowRequest,
   CcRawConversationEvent,
 } from "@/types/usage-analysis-conversations"
@@ -19,11 +21,16 @@ function selectFocusedEvent(
     ?? null
 }
 
+function parseErrorSummary(errors: readonly CcConversationParseError[]): string {
+  return `${errors.length} 行解析失败`
+}
+
 export function CcConversationDetailWindowPage({ request }: { readonly request: CcConversationWindowRequest }) {
   const [detail, setDetail] = useState<CcConversationDetail | null>(null)
   const [selected, setSelected] = useState<CcRawConversationEvent | null>(null)
   const [error, setError] = useState<string | null>(null)
   const events = detail?.events ?? []
+  const parseErrors = detail?.parseErrors ?? []
   const title = detail?.session.title || request.title || request.sessionId
   const subtitle = detail?.session.workspaceLabel || detail?.session.sourceFilePath || request.sessionId
 
@@ -61,6 +68,22 @@ export function CcConversationDetailWindowPage({ request }: { readonly request: 
         <div className="text-xs text-muted-foreground">{events.length} 事件</div>
       </header>
       <main className="grid min-h-0 flex-1 grid-cols-1 gap-2 p-2 lg:grid-cols-12">
+        {parseErrors.length > 0 ? (
+          <Alert variant="destructive" className="lg:col-span-12">
+            <AlertTitle>{parseErrorSummary(parseErrors)}</AlertTitle>
+            <AlertDescription>
+              <div>部分事件可能缺失。</div>
+              <div className="mt-1 flex flex-col gap-1">
+                {parseErrors.slice(0, 3).map((parseError) => (
+                  <div key={parseError.id}>
+                    第 {parseError.lineNumber} 行：{parseError.message}
+                  </div>
+                ))}
+                {parseErrors.length > 3 ? <div>还有 {parseErrors.length - 3} 行未显示。</div> : null}
+              </div>
+            </AlertDescription>
+          </Alert>
+        ) : null}
         <aside className="min-h-0 overflow-auto rounded-md border bg-card p-2 lg:col-span-2">
           <h2 className="text-sm font-medium">事件</h2>
           <div className="mt-2 flex flex-col gap-1">
