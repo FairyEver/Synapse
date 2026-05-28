@@ -62,6 +62,22 @@ pnpm quit                    # 停止本地开发环境
 更完整的开发、打包、发布、编辑器集成说明见 [`desktop/README.md`](./desktop/README.md)。
 授权服务说明见 [`server/README.md`](./server/README.md)。
 
+## 常见问题
+
+### macOS 开发模式下登录无法唤起客户端
+
+**现象**：点击客户端"登录"按钮后浏览器打开了 `/desktop-login` 页面，但 `synapse://` 协议无法唤起 Electron 客户端。
+
+**原因**：开发模式下 Electron 使用 `node_modules` 中未签名的 `Electron.app`，其 `Info.plist` 不包含 URL scheme 声明，macOS Launch Services 无法将 `synapse://` 路由到该应用。
+
+**解决**：在仓库根目录执行：
+
+```bash
+bash scripts/fix-dev-protocol.sh
+```
+
+该脚本会向开发模式 `Electron.app` 的 `Info.plist` 添加 `synapse://` URL scheme 并注册到 Launch Services。执行一次即可，`pnpm install` 或 Electron 版本更新后需重新执行。
+
 ## 正式环境
 
 - 管理面板：<https://synapse.d2.pub/dashboard>
