@@ -12,6 +12,7 @@ import { installStatusCacheService } from "./services/install-status-cache-servi
 import { repositoryStore } from "./services/repository-store"
 import type { EventBus } from "./runtime/event-bus"
 import type { IpcHandlerContext } from "./runtime/ipc/types"
+import type { AuditSink, PermissionGuard } from "./runtime/security"
 import type { WindowManager } from "./runtime/window"
 import {
   attachActivateHandler,
@@ -23,6 +24,7 @@ import {
   buildServiceRegistry,
   clearStaleSingletonLock,
   configureWindowsAppIdentity,
+  createAccountExternalUrlOpener,
   createIpcRegistry,
   createMainWindow,
   createMainWindowState,
@@ -144,6 +146,12 @@ if (!gotSingleInstanceLock) {
       }
 
       logger.info("Service registry started. Creating main window.")
+      const eventBus = registry.get<EventBus>("core.event-bus")
+      accountService.setEventBus(eventBus)
+      accountService.setExternalUrlOpener(createAccountExternalUrlOpener({
+        auditSink: registry.get<AuditSink>("core.audit-sink"),
+        permissionGuard: registry.get<PermissionGuard>("core.permission-guard"),
+      }))
       windowManager = registry.get<WindowManager>("core.window-manager")
       createMainWindow({
         state: mainWindowState,
@@ -154,8 +162,6 @@ if (!gotSingleInstanceLock) {
       attachActivateHandler(focusOrCreateMainWindow)
 
       // Phase 0.4: Use EventBus for cross-window repository update notifications.
-      const eventBus = registry.get<EventBus>("core.event-bus")
-      accountService.setEventBus(eventBus)
       canHandleProtocolUrls = true
       const handledProtocolUrls = await drainProtocolUrls()
       if (handledProtocolUrls === 0) {

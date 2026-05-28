@@ -30,6 +30,7 @@ export type { TrayShowOrCreateCallback } from "./descriptors"
 
 export { buildServiceRegistry } from "./registry"
 export type { BuildServiceRegistryOptions } from "./registry"
+export { createAccountExternalUrlOpener } from "./account-external-opener"
 
 export {
   createMainWindow,

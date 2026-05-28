@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto"
 import path from "node:path"
-import { app, safeStorage, shell } from "electron"
+import { app, safeStorage } from "electron"
 
 import type { SynapseAccountProfile, SynapseAccountState } from "../../src/types/account"
 import { EncryptedJsonNamespace } from "../runtime/data-repo/backends/encrypted-json"
@@ -25,10 +25,12 @@ type PersistedAccount = Record<string, unknown> & {
   }
 }
 
+type AccountExternalUrlOpener = (url: string) => Promise<void>
+
 type AccountServiceDeps = {
   namespace?: EncryptedJsonNamespace<PersistedAccount>
   fetch?: typeof fetch
-  openExternal?: (url: string) => Promise<void>
+  openExternal?: AccountExternalUrlOpener
   isPackaged?: boolean
 }
 
@@ -56,10 +58,14 @@ function createNamespace(): EncryptedJsonNamespace<PersistedAccount> {
   })
 }
 
+async function unavailableExternalUrlOpener(): Promise<void> {
+  throw new Error("Account external opener is unavailable.")
+}
+
 export class AccountService {
   private readonly namespace: EncryptedJsonNamespace<PersistedAccount>
   private readonly fetchImpl: typeof fetch
-  private readonly openExternal: (url: string) => Promise<void>
+  private openExternal: AccountExternalUrlOpener
   private readonly isPackaged: boolean
   private accessToken: string | null = null
   private eventBus: EventBus | null = null
@@ -71,12 +77,16 @@ export class AccountService {
   constructor(deps: AccountServiceDeps = {}) {
     this.namespace = deps.namespace ?? createNamespace()
     this.fetchImpl = deps.fetch ?? globalThis.fetch.bind(globalThis)
-    this.openExternal = deps.openExternal ?? shell.openExternal
+    this.openExternal = deps.openExternal ?? unavailableExternalUrlOpener
     this.isPackaged = deps.isPackaged ?? app.isPackaged
   }
 
   setEventBus(eventBus: EventBus): void {
     this.eventBus = eventBus
+  }
+
+  setExternalUrlOpener(openExternal: AccountExternalUrlOpener): void {
+    this.openExternal = openExternal
   }
 
   onStateChanged(listener: (state: SynapseAccountState) => void): () => void {

@@ -41,6 +41,7 @@ function createPrismaMock() {
     },
     desktopLoginCode: {
       create: vi.fn(),
+      deleteMany: vi.fn().mockResolvedValue({ count: 0 }),
       findUnique: vi.fn(),
       updateMany: vi.fn(),
     },
@@ -525,19 +526,28 @@ describe("UserAuthService", () => {
     expect(prisma.userSession.updateMany).not.toHaveBeenCalled()
   })
 
-  it("cleans expired and stale revoked sessions", async () => {
+  it("cleans expired sessions and desktop login codes", async () => {
     const prisma = createPrismaMock()
     prisma.userSession.deleteMany.mockResolvedValue({ count: 3 })
+    prisma.desktopLoginCode.deleteMany.mockResolvedValue({ count: 2 })
     const service = createService(prisma)
     const now = new Date("2026-05-23T12:00:00.000Z")
 
-    await expect(service.cleanupExpiredSessions(now)).resolves.toBe(3)
+    await expect(service.cleanupExpiredSessions(now)).resolves.toBe(5)
 
     expect(prisma.userSession.deleteMany).toHaveBeenCalledWith({
       where: {
         OR: [
           { expiresAt: { lt: now } },
           { revokedAt: { lt: new Date("2026-05-16T12:00:00.000Z") } },
+        ],
+      },
+    })
+    expect(prisma.desktopLoginCode.deleteMany).toHaveBeenCalledWith({
+      where: {
+        OR: [
+          { expiresAt: { lt: now } },
+          { usedAt: { not: null } },
         ],
       },
     })

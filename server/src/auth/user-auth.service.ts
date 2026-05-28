@@ -344,15 +344,25 @@ export class UserAuthService {
 
   async cleanupExpiredSessions(now = new Date()): Promise<number> {
     const revokedBefore = new Date(now.getTime() - revokedSessionRetentionMs)
-    const result = await this.prisma.userSession.deleteMany({
-      where: {
-        OR: [
-          { expiresAt: { lt: now } },
-          { revokedAt: { lt: revokedBefore } },
-        ],
-      },
-    })
-    return result.count
+    const [sessionResult, desktopLoginCodeResult] = await Promise.all([
+      this.prisma.userSession.deleteMany({
+        where: {
+          OR: [
+            { expiresAt: { lt: now } },
+            { revokedAt: { lt: revokedBefore } },
+          ],
+        },
+      }),
+      this.prisma.desktopLoginCode.deleteMany({
+        where: {
+          OR: [
+            { expiresAt: { lt: now } },
+            { usedAt: { not: null } },
+          ],
+        },
+      }),
+    ])
+    return sessionResult.count + desktopLoginCodeResult.count
   }
 
   async getMe(userId: string): Promise<UserMeResponse> {
