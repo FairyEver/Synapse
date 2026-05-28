@@ -7,7 +7,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useAuth } from '@/hooks/use-auth';
 import { dashboardApi } from '@/lib/api';
 
-const desktopLoginCodeRequests = new Map<string, Promise<string>>();
+type IssuedDeepLink = {
+  sessionKey: string;
+  url: string;
+};
 
 export function DesktopLoginHandoffPage() {
   const { isAuthenticated, isLoading, logout, session } = useAuth();
@@ -15,13 +18,19 @@ export function DesktopLoginHandoffPage() {
   const [searchParams] = useSearchParams();
   const state = (searchParams.get('state') ?? '').trim();
   const isValidState = state.length >= 16;
-  const [deepLinkUrl, setDeepLinkUrl] = useState('');
+  const [issuedDeepLink, setIssuedDeepLink] = useState<IssuedDeepLink | null>(
+    null,
+  );
   const [error, setError] = useState('');
   const [retryKey, setRetryKey] = useState(0);
   const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
   const loginPath = `/login?client=desktop&state=${encodeURIComponent(state)}`;
   const sessionRole = session?.role;
   const sessionEmail = session?.email;
+  const sessionKey =
+    sessionRole && sessionEmail ? `${sessionRole}:${sessionEmail}` : '';
+  const deepLinkUrl =
+    issuedDeepLink?.sessionKey === sessionKey ? issuedDeepLink.url : '';
 
   useEffect(() => {
     if (!isValidState || isLoading || !isAuthenticated || !sessionRole) return;
@@ -33,14 +42,12 @@ export function DesktopLoginHandoffPage() {
 
     setError('');
 
-    void issueDesktopLoginCodeOnce({
-      email: sessionEmail,
-      role: sessionRole,
-      state,
-    })
+    void dashboardApi
+      .issueDesktopLoginCode({ state })
+      .then((result) => result.deepLinkUrl)
       .then((nextDeepLinkUrl) => {
         if (isCancelled) return;
-        setDeepLinkUrl(nextDeepLinkUrl);
+        setIssuedDeepLink({ sessionKey, url: nextDeepLinkUrl });
         window.location.href = nextDeepLinkUrl;
       })
       .catch((nextError) => {
@@ -58,6 +65,7 @@ export function DesktopLoginHandoffPage() {
     isValidState,
     retryKey,
     sessionEmail,
+    sessionKey,
     sessionRole,
     state,
   ]);
@@ -130,26 +138,6 @@ export function DesktopLoginHandoffPage() {
       </Card>
     </main>
   );
-}
-
-function issueDesktopLoginCodeOnce(input: {
-  email: string;
-  role: 'admin' | 'user';
-  state: string;
-}) {
-  const cacheKey = `${input.role}:${input.email}:${input.state}`;
-  const existingRequest = desktopLoginCodeRequests.get(cacheKey);
-  if (existingRequest) return existingRequest;
-
-  const request = dashboardApi
-    .issueDesktopLoginCode({ state: input.state })
-    .then((result) => result.deepLinkUrl)
-    .finally(() => {
-      desktopLoginCodeRequests.delete(cacheKey);
-    });
-
-  desktopLoginCodeRequests.set(cacheKey, request);
-  return request;
 }
 
 function ErrorState({ message }: { message: string }) {
