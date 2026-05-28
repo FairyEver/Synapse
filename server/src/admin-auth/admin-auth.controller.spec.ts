@@ -1,5 +1,6 @@
 import "reflect-metadata"
 import { describe, expect, it, vi } from "vitest"
+import { hashToken } from "../auth/token"
 import { AdminAuthController } from "./admin-auth.controller"
 import type { AdminRequest } from "./admin-auth.guard"
 
@@ -34,6 +35,7 @@ describe("AdminAuthController", () => {
       email: "user@example.com",
       role: "user",
       modulePermissions: ["module.database"],
+      sessionId: hashToken("dashboard-token"),
     })
 
     expect(response.cookie).toHaveBeenCalledWith("synapse_admin", "dashboard-token", {
@@ -147,6 +149,27 @@ describe("AdminAuthController", () => {
       targetType: "user",
       targetId: "user-1",
       ipAddress: "203.0.113.12",
+    })
+  })
+
+  it("returns a stable dashboard session id for the current cookie", async () => {
+    const auth = {
+      verifyDashboardSession: vi.fn().mockResolvedValue({
+        id: "user-1",
+        email: "user@example.com",
+        role: "user",
+        modulePermissions: ["module.database"],
+      }),
+    }
+    const controller = new AdminAuthController(auth as never)
+
+    await expect(controller.getSession({
+      cookies: { synapse_admin: "dashboard-token" },
+    } as unknown as AdminRequest)).resolves.toEqual({
+      email: "user@example.com",
+      role: "user",
+      modulePermissions: ["module.database"],
+      sessionId: hashToken("dashboard-token"),
     })
   })
 })

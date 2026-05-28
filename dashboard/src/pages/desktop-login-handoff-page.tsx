@@ -27,8 +27,7 @@ export function DesktopLoginHandoffPage() {
   const loginPath = `/login?client=desktop&state=${encodeURIComponent(state)}`;
   const sessionRole = session?.role;
   const sessionEmail = session?.email;
-  const sessionKey =
-    sessionRole && sessionEmail ? `${sessionRole}:${sessionEmail}` : '';
+  const sessionKey = session?.sessionId ?? '';
   const deepLinkUrl =
     issuedDeepLink?.sessionKey === sessionKey ? issuedDeepLink.url : '';
 

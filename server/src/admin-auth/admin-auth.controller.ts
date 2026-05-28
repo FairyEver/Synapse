@@ -2,6 +2,7 @@ import { Body, Controller, Get, Optional, Post, Req, Res, UnauthorizedException,
 import { Throttle } from "@nestjs/throttler"
 import type { Response } from "express"
 import { z } from "zod"
+import { hashToken } from "../auth/token"
 import { AuditLogService } from "../common/audit-log.service"
 import { badRequestFromZodError } from "../common/zod-validation"
 import { AdminAuthGuard, type AdminRequest } from "./admin-auth.guard"
@@ -39,7 +40,12 @@ export class AdminAuthController {
     const credentials = result.data
     const session = await this.auth.login(credentials.email, credentials.password, request.ip)
     response.cookie(adminCookieName, session.token, adminCookieOptions())
-    return { email: session.email, role: session.role, modulePermissions: session.modulePermissions }
+    return {
+      email: session.email,
+      role: session.role,
+      modulePermissions: session.modulePermissions,
+      sessionId: hashToken(session.token),
+    }
   }
 
   @Throttle({ default: { ttl: 60000, limit: 5 } })
@@ -73,6 +79,11 @@ export class AdminAuthController {
     if (!session) {
       throw new UnauthorizedException("未登录或登录已过期。")
     }
-    return { email: session.email, role: session.role, modulePermissions: session.modulePermissions }
+    return {
+      email: session.email,
+      role: session.role,
+      modulePermissions: session.modulePermissions,
+      sessionId: hashToken(token),
+    }
   }
 }
