@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Navigate, useSearchParams } from 'react-router';
+import { Navigate, useNavigate, useSearchParams } from 'react-router';
 
 import { BrandIcon } from '@/components/brand-icon';
 import { Button } from '@/components/ui/button';
@@ -10,27 +10,53 @@ import { dashboardApi } from '@/lib/api';
 const desktopLoginCodeRequests = new Map<string, Promise<string>>();
 
 export function DesktopLoginHandoffPage() {
-  const { isAuthenticated, isLoading, session } = useAuth();
+  const { isAuthenticated, isLoading, logout, session } = useAuth();
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const state = (searchParams.get('state') ?? '').trim();
   const isValidState = state.length >= 16;
   const [deepLinkUrl, setDeepLinkUrl] = useState('');
   const [error, setError] = useState('');
+  const [retryKey, setRetryKey] = useState(0);
+  const [isSwitchingAccount, setIsSwitchingAccount] = useState(false);
+  const loginPath = `/login?client=desktop&state=${encodeURIComponent(state)}`;
 
   useEffect(() => {
     if (!isValidState || isLoading || !isAuthenticated || !session) return;
+    if (session.role !== 'user') return;
+
+    let isCancelled = false;
 
     setError('');
 
     void issueDesktopLoginCodeOnce(state)
       .then((nextDeepLinkUrl) => {
+        if (isCancelled) return;
         setDeepLinkUrl(nextDeepLinkUrl);
         window.location.href = nextDeepLinkUrl;
       })
       .catch((nextError) => {
+        if (isCancelled) return;
         setError(nextError instanceof Error ? nextError.message : '打开失败');
       });
-  }, [isAuthenticated, isLoading, isValidState, session, state]);
+
+    return () => {
+      isCancelled = true;
+    };
+  }, [isAuthenticated, isLoading, isValidState, retryKey, session, state]);
+
+  async function onSwitchAccount() {
+    setError('');
+    setIsSwitchingAccount(true);
+
+    try {
+      await logout();
+      navigate(loginPath, { replace: true });
+    } catch (nextError) {
+      setError(nextError instanceof Error ? nextError.message : '切换失败');
+      setIsSwitchingAccount(false);
+    }
+  }
 
   if (!isValidState) {
     return (
@@ -51,12 +77,7 @@ export function DesktopLoginHandoffPage() {
   }
 
   if (!isAuthenticated || !session) {
-    return (
-      <Navigate
-        to={`/login?client=desktop&state=${encodeURIComponent(state)}`}
-        replace
-      />
-    );
+    return <Navigate to={loginPath} replace />;
   }
 
   return (
@@ -70,14 +91,24 @@ export function DesktopLoginHandoffPage() {
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           {error ? <p className="text-sm text-destructive">{error}</p> : null}
-          <Button
-            disabled={!deepLinkUrl}
-            onClick={() => {
-              window.location.href = deepLinkUrl;
-            }}
-          >
-            打开
-          </Button>
+          {session.role === 'user' ? (
+            <Button
+              disabled={!error && !deepLinkUrl}
+              onClick={() => {
+                if (error) {
+                  setRetryKey((value) => value + 1);
+                  return;
+                }
+                window.location.href = deepLinkUrl;
+              }}
+            >
+              {error ? '重试' : '打开'}
+            </Button>
+          ) : (
+            <Button disabled={isSwitchingAccount} onClick={onSwitchAccount}>
+              {isSwitchingAccount ? '切换中' : '切换账号'}
+            </Button>
+          )}
         </CardContent>
       </Card>
     </main>
