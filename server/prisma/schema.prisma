@@ -54,6 +54,7 @@ model User {
   memberships         TeamMembership[]
   createdTeams        Team[]                 @relation("TeamCreator")
   sessions            UserSession[]
+  desktopLoginCodes   DesktopLoginCode[]
   acceptedInvitations Invitation[]           @relation("AcceptedInvitations")
   createdInvitations  Invitation[]           @relation("UserCreatedInvitations")
   modulePermissions   UserModulePermission[]
@@ -135,6 +136,23 @@ model UserSession {
   @@index([userId])
   @@index([expiresAt])
   @@index([revokedAt])
+}
+
+model DesktopLoginCode {
+  id        String    @id @default(cuid())
+  codeHash  String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  state     String
+  expiresAt DateTime
+  usedAt    DateTime?
+  ipAddress String
+  userAgent String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([usedAt])
 }
 
 model AuditLog {
