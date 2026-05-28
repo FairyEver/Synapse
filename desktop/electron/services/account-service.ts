@@ -125,13 +125,11 @@ export class AccountService {
     }
 
     if (parsed.protocol !== "synapse:" || parsed.hostname !== "auth" || parsed.pathname !== "/callback") {
-      const persisted = await this.readPersisted("Failed to read stored account for unknown auth callback.")
       logger.warn("Ignored unknown account auth callback.", {
         protocol: parsed.protocol,
         host: parsed.hostname,
         pathname: parsed.pathname,
       })
-      this.setInvalidCallbackState(persisted)
       return this.state
     }
 
@@ -156,18 +154,12 @@ export class AccountService {
       return this.state
     }
 
+    let tokens: { accessToken: string; refreshToken: string }
     try {
-      const tokens = await this.postJson<{ accessToken: string; refreshToken: string }>(
+      tokens = await this.postJson<{ accessToken: string; refreshToken: string }>(
         `${attempt.apiBaseUrl}/auth/desktop/exchange`,
         { code, state: callbackState },
       )
-      this.accessToken = tokens.accessToken
-      const profile = await this.loadMe(attempt.apiBaseUrl)
-      await this.namespace.setSingleton({
-        refreshToken: tokens.refreshToken,
-        lastProfile: profile,
-      })
-      this.setState({ status: "authenticated", profile })
     } catch (error) {
       logger.warn("Desktop account callback exchange failed.", { error })
       this.accessToken = null
@@ -177,6 +169,42 @@ export class AccountService {
         message: "登录失败，请重试。",
         profile: persisted?.lastProfile,
       })
+      return this.state
+    }
+
+    this.accessToken = tokens.accessToken
+    try {
+      const profile = await this.loadMe(attempt.apiBaseUrl)
+      await this.writeAccountPatch(
+        { refreshToken: tokens.refreshToken, lastProfile: profile },
+        { clearAttemptState: callbackState },
+      )
+      this.setState({ status: "authenticated", profile })
+    } catch (error) {
+      logger.warn("Desktop account profile load failed after exchange; retrying refresh.", { error })
+      this.accessToken = null
+      await this.writeAccountPatch({ refreshToken: tokens.refreshToken }, { clearAttemptState: callbackState }).catch(
+        (writeError) => {
+          logger.warn("Failed to store refresh token after account exchange.", { error: writeError })
+        },
+      )
+      try {
+        const refreshed = await this.refreshWithToken(attempt.apiBaseUrl, tokens.refreshToken)
+        await this.writeAccountPatch(
+          { refreshToken: refreshed.refreshToken, lastProfile: refreshed.profile },
+          { clearAttemptState: callbackState },
+        )
+        this.setState({ status: "authenticated", profile: refreshed.profile })
+      } catch (refreshError) {
+        logger.warn("Desktop account callback refresh recovery failed.", { error: refreshError })
+        this.accessToken = null
+        const latest = await this.readPersisted("Failed to read stored account after account callback recovery failed.")
+        this.setState({
+          status: "error",
+          message: "登录失败，请重试。",
+          profile: latest?.lastProfile ?? persisted?.lastProfile,
+        })
+      }
     }
 
     return this.state
@@ -197,7 +225,7 @@ export class AccountService {
       )
       this.accessToken = tokens.accessToken
       const profile = await this.loadMe(baseUrl)
-      await this.namespace.setSingleton({ refreshToken: tokens.refreshToken, lastProfile: profile })
+      await this.writeAccountPatch({ refreshToken: tokens.refreshToken, lastProfile: profile })
       this.setState({ status: "authenticated", profile })
     } catch (error) {
       logger.warn("Account refresh failed.", { error })
@@ -234,6 +262,19 @@ export class AccountService {
     return { ...payload, syncedAt: new Date().toISOString() }
   }
 
+  private async refreshWithToken(
+    baseUrl: string,
+    refreshToken: string,
+  ): Promise<{ refreshToken: string; profile: SynapseAccountProfile }> {
+    const tokens = await this.postJson<{ accessToken: string; refreshToken: string }>(
+      `${baseUrl}/auth/refresh`,
+      { refreshToken },
+    )
+    this.accessToken = tokens.accessToken
+    const profile = await this.loadMe(baseUrl)
+    return { refreshToken: tokens.refreshToken, profile }
+  }
+
   private async postJson<T = unknown>(url: string, body: unknown): Promise<T> {
     const response = await this.fetchImpl(url, {
       method: "POST",
@@ -261,6 +302,18 @@ export class AccountService {
     await this.namespace.setSingleton(nextPersisted).catch((error) => {
       logger.warn("Failed to clear account login attempt.", { error })
     })
+  }
+
+  private async writeAccountPatch(
+    patch: PersistedAccount,
+    options: { clearAttemptState?: string } = {},
+  ): Promise<void> {
+    const current = await this.readPersisted("Failed to read stored account before writing account state.")
+    const nextPersisted: PersistedAccount = { ...(current ?? {}), ...patch }
+    if (options.clearAttemptState && nextPersisted.activeAttempt?.state === options.clearAttemptState) {
+      delete nextPersisted.activeAttempt
+    }
+    await this.namespace.setSingleton(nextPersisted)
   }
 
   private async clearStoredAccount(): Promise<void> {

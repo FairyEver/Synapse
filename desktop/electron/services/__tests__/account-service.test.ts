@@ -152,19 +152,58 @@ describe("AccountService", () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it("reports wrong callback routes as errors without exchanging", async () => {
+  it("ignores unknown protocol routes without exchanging", async () => {
     const fetch = vi.fn()
-    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
-    await namespace.setSingleton({ lastProfile: storedProfile })
+    const { service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await service.startLogin()
+    const before = service.getState()
 
-    const state = await service.handleAuthCallback("synapse://auth/other?code=code-1&state=state-1")
+    const state = await service.handleAuthCallback("synapse://other/path?code=code-1&state=state-1")
 
-    expect(state).toMatchObject({
-      status: "error",
-      message: "登录已失效，请重试。",
-      profile: storedProfile,
-    })
+    expect(state).toEqual(before)
     expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it("recovers when me fails after exchange by refreshing the new token", async () => {
+    const calls: string[] = []
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url, init) => {
+        calls.push(String(url))
+        if (String(url).endsWith("/auth/desktop/exchange")) {
+          return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
+        }
+        if (String(url).endsWith("/auth/me") && calls.filter((item) => item.endsWith("/auth/me")).length === 1) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
+          return jsonResponse({ error: "stale access" }, 401)
+        }
+        if (String(url).endsWith("/auth/refresh")) {
+          expect(JSON.parse(String(init?.body))).toEqual({ refreshToken: "refresh-1" })
+          return jsonResponse({ accessToken: "access-2", refreshToken: "refresh-2" })
+        }
+        if (String(url).endsWith("/auth/me")) {
+          expect(init?.headers).toMatchObject({ Authorization: "Bearer access-2" })
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+
+    const state = await service.handleAuthCallback(`synapse://auth/callback?code=code-1&state=${attempt!.state}`)
+
+    expect(state.status).toBe("authenticated")
+    expect(calls).toEqual([
+      "http://localhost:3000/api/auth/desktop/exchange",
+      "http://localhost:3000/api/auth/me",
+      "http://localhost:3000/api/auth/refresh",
+      "http://localhost:3000/api/auth/me",
+    ])
+    expect(await namespace.getSingleton()).toMatchObject({
+      refreshToken: "refresh-2",
+      lastProfile: { user: { email: "u@example.com" } },
+    })
   })
 
   it("refreshes from stored refresh token and keeps access token in memory only", async () => {
@@ -197,6 +236,43 @@ describe("AccountService", () => {
       lastProfile: { user: { email: "u@example.com" } },
     })
     expect(await namespace.getSingleton()).not.toHaveProperty("accessToken")
+  })
+
+  it("merges refreshed account data with newer persisted fields", async () => {
+    let namespaceUpdatedDuringRefresh = false
+    const { namespace, service } = await createTestAccountService({
+      fetch: (async (url) => {
+        if (String(url).endsWith("/auth/refresh")) {
+          return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
+        }
+        if (String(url).endsWith("/auth/me")) {
+          if (!namespaceUpdatedDuringRefresh) {
+            namespaceUpdatedDuringRefresh = true
+            await namespace.setSingleton({
+              refreshToken: "refresh-old",
+              activeAttempt: {
+                state: "newer-state",
+                apiBaseUrl: "http://localhost:3000/api",
+                createdAt: "2026-05-28T00:00:00.000Z",
+                expiresAt: "2026-05-28T00:10:00.000Z",
+              },
+            })
+          }
+          return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+        }
+        throw new Error(`unexpected url ${String(url)}`)
+      }) as typeof fetch,
+    })
+    await namespace.setSingleton({ refreshToken: "refresh-old" })
+
+    const state = await service.refreshFromStorage()
+
+    expect(state.status).toBe("authenticated")
+    expect(await namespace.getSingleton()).toMatchObject({
+      refreshToken: "refresh-new",
+      activeAttempt: { state: "newer-state" },
+      lastProfile: { user: { email: "u@example.com" } },
+    })
   })
 
   it("returns unauthenticated when encryption is unavailable", async () => {

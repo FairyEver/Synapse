@@ -56,10 +56,24 @@ function handleProtocolUrl(url: string): void {
   }
 }
 
+function isAccountAuthCallbackUrl(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl)
+    return parsed.protocol === "synapse:" && parsed.hostname === "auth" && parsed.pathname === "/callback"
+  } catch {
+    return (
+      rawUrl === "synapse://auth/callback" ||
+      rawUrl.startsWith("synapse://auth/callback?") ||
+      rawUrl.startsWith("synapse://auth/callback#")
+    )
+  }
+}
+
 async function drainProtocolUrls(): Promise<number> {
   let handledCount = 0
   for (const url of pendingProtocolUrls.splice(0)) {
-    handledCount += 1
+    const isAccountAuthCallback = isAccountAuthCallbackUrl(url)
+    if (isAccountAuthCallback) handledCount += 1
     try {
       await accountService.handleAuthCallback(url)
     } catch (error) {
