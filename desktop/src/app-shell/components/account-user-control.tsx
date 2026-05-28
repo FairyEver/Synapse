@@ -91,8 +91,8 @@ function AccountUserControl({
               </Button>
             </>
           ) : (
-            <Button size="sm" disabled={isBusy || state.status === "authenticating"} onClick={handleLogin}>
-              {pendingAction === "login" ? <LoaderCircle data-icon="inline-start" className="animate-spin" /> : <CircleUserRound data-icon="inline-start" />}
+            <Button size="sm" disabled={isBusy} onClick={handleLogin}>
+              <CircleUserRound data-icon="inline-start" />
               登录
             </Button>
           )}
@@ -106,15 +106,11 @@ function AccountUserControl({
       <Button
         variant="ghost"
         size="sm"
-        disabled={isBusy || state.status === "authenticating"}
+        disabled={isBusy}
         onClick={handleLogin}
       >
-        {isBusy || state.status === "authenticating" ? (
-          <LoaderCircle data-icon="inline-start" className="animate-spin" />
-        ) : (
-          <CircleUserRound data-icon="inline-start" />
-        )}
-        {state.status === "authenticating" ? "登录中" : "登录"}
+        <CircleUserRound data-icon="inline-start" />
+        登录
       </Button>
     )
   }
