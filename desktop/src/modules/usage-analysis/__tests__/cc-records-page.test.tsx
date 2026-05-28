@@ -94,6 +94,20 @@ describe("CcRecordsPage", () => {
     expect(html).not.toContain("正在读取记录")
   })
 
+  it("shows when raw text search results are partial", () => {
+    recordsState = {
+      ...recordsState,
+      data: {
+        ...recordData,
+        partial: true,
+      },
+    }
+
+    const html = renderToStaticMarkup(<CcRecordsPage range="30d" refreshKey={0} />)
+
+    expect(html).toContain("结果可能不完整")
+  })
+
   it("shows the next loading range while loading another record batch", () => {
     recordsState = { ...recordsState, loading: true }
 

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import type { CcRecordListInput } from "@/types/usage-analysis-conversations"
 import { ReportState } from "../../shared/components/report-state"
 import type { UsageRangePreset } from "../../shared/types"
@@ -53,6 +54,7 @@ export function CcRecordsPage({
   const shown = rows.length
   const initialLoading = state.loading && !state.data
   const statusText = formatRecordLoadStatus({ shown, total, loading: state.loading })
+  const partial = state.data?.partial === true
 
   useEffect(() => {
     const target = loadMoreRef.current
@@ -98,6 +100,12 @@ export function CcRecordsPage({
         </div>
       ) : (
         <ReportState loading={false} error={state.error} empty={rows.length === 0}>
+          {partial ? (
+            <Alert>
+              <AlertTitle>结果可能不完整</AlertTitle>
+              <AlertDescription>缩小时间范围或关键词后重试。</AlertDescription>
+            </Alert>
+          ) : null}
           <RecordTable
             rows={rows}
             expandedSessionId={expandedSessionId}
