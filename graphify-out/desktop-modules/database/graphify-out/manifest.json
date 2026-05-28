@@ -1,0 +1,32 @@
+{
+  "/Users/liyang/Documents/code/github/Synapse/desktop/database/mcp/index.ts": {
+    "mtime": 1779293361.773624,
+    "ast_hash": "e8a75102e9394faf3e31fba69ea815f2",
+    "semantic_hash": "e8a75102e9394faf3e31fba69ea815f2"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/database/shared/server-identity.ts": {
+    "mtime": 1779293361.7781532,
+    "ast_hash": "6d42282383d065ef9a14b4f25996e4db",
+    "semantic_hash": "6d42282383d065ef9a14b4f25996e4db"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/database/shared/capability-registry.ts": {
+    "mtime": 1779703757.4016166,
+    "ast_hash": "465b09aee7ee292638e8edc0af625bbd",
+    "semantic_hash": "465b09aee7ee292638e8edc0af625bbd"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/database/shared/mcp-rpc.ts": {
+    "mtime": 1779895231.2549756,
+    "ast_hash": "c4e1e225cf7c8cc8bea7b12791a94a51",
+    "semantic_hash": "c4e1e225cf7c8cc8bea7b12791a94a51"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/database/shared/resolve-user-data.ts": {
+    "mtime": 1779703757.4023917,
+    "ast_hash": "7a6e929196d783cc23ddbedec3c9394d",
+    "semantic_hash": "7a6e929196d783cc23ddbedec3c9394d"
+  },
+  "/Users/liyang/Documents/code/github/Synapse/desktop/database/shared/mcp-tools.ts": {
+    "mtime": 1779860253.2836852,
+    "ast_hash": "466e2a8fcbf18264d3613f8f3eb964c3",
+    "semantic_hash": "466e2a8fcbf18264d3613f8f3eb964c3"
+  }
+}

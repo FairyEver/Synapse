@@ -1,0 +1,247 @@
+{
+  "communities": {
+    "0": [
+      "agent_config_renderer_agentconfigform",
+      "agent_config_renderer_tier_labels",
+      "agent_executor_main_createagentaction",
+      "agent_executor_main_logger",
+      "agent_executor_main_persistableagenterror",
+      "agent_executor_main_scheduledtimeoutms",
+      "agent_schema_agentactionconfig",
+      "agent_schema_agentpermissionmodeset",
+      "agent_schema_modeltierset",
+      "agent_schema_validateagentstoredconfig",
+      "builtin_agent_config_renderer_tsx",
+      "builtin_agent_executor_main_ts",
+      "builtin_agent_index_shared_ts",
+      "builtin_agent_index_ts",
+      "builtin_agent_manifest_ts",
+      "builtin_agent_schema_ts",
+      "builtin_agent_tests_executor_main_test_ts",
+      "builtin_agent_tests_schema_test_ts",
+      "tests_executor_main_test_action",
+      "tests_executor_main_test_controller",
+      "tests_executor_main_test_runtime",
+      "tests_manifest_test_agenttypefield",
+      "tests_manifest_test_result",
+      "tests_schema_test_baseconfig",
+      "tests_schema_test_result"
+    ],
+    "1": [
+      "builtin_http_request_auth_fields_tsx",
+      "builtin_http_request_code_json_editor_tsx",
+      "builtin_http_request_config_renderer_tsx",
+      "builtin_http_request_kv_editor_tsx",
+      "builtin_http_request_request_tester_tsx",
+      "http_request_auth_fields_auth_type_options",
+      "http_request_auth_fields_authconfig",
+      "http_request_auth_fields_authfields",
+      "http_request_auth_fields_authfieldsprops",
+      "http_request_code_json_editor_codejsoneditorprops",
+      "http_request_code_json_editor_useisdarkmode",
+      "http_request_config_renderer_body_type_options",
+      "http_request_config_renderer_http_method_options",
+      "http_request_config_renderer_httprequestconfigform",
+      "http_request_kv_editor_kveditor",
+      "http_request_kv_editor_kveditorprops",
+      "http_request_kv_editor_kvrow",
+      "http_request_kv_editor_nextrowid",
+      "http_request_kv_editor_recordtorows",
+      "http_request_kv_editor_rowstorecord",
+      "http_request_request_tester_formatresponsebody",
+      "http_request_request_tester_httptestresponse",
+      "http_request_request_tester_requesttester"
+    ],
+    "2": [
+      "builtin_http_request_executor_main_ts",
+      "builtin_http_request_index_shared_ts",
+      "builtin_http_request_index_ts",
+      "builtin_http_request_manifest_ts",
+      "builtin_http_request_schema_ts",
+      "builtin_http_request_tests_executor_test_ts",
+      "builtin_http_request_tests_executor_test_ts_tests_executor_test_action",
+      "builtin_http_request_tests_executor_test_ts_tests_executor_test_request",
+      "http_request_executor_main_buildbody",
+      "http_request_executor_main_buildheaders",
+      "http_request_executor_main_buildurl",
+      "http_request_executor_main_createhttprequestaction",
+      "http_request_executor_main_sanitizeurl",
+      "http_request_schema_httprequestactionconfig",
+      "http_request_schema_httprequestactionconfigschema",
+      "tests_executor_test_sendrequest"
+    ],
+    "3": [
+      "action_packages_types_actionconfig",
+      "action_packages_types_actionconfigfielddescriptor",
+      "action_packages_types_actionconfigfieldkind",
+      "action_packages_types_actionmanifest",
+      "action_packages_types_actionpermissionname",
+      "action_packages_types_actionrunlog",
+      "action_packages_types_actionrunmetrics",
+      "action_packages_types_actionrunresult",
+      "action_packages_types_actionrunstatus",
+      "action_packages_types_actionstoredconfigissue",
+      "action_packages_types_actionstoredconfigvalidation",
+      "builtin_shell_process_main_runshellaction",
+      "builtin_shell_process_main_shellactionconfig",
+      "builtin_shell_process_main_ts",
+      "types_ts"
+    ],
+    "4": [
+      "action_packages_records_parserecordtext",
+      "action_packages_records_stringifyrecordtext",
+      "builtin_command_config_renderer_tsx",
+      "builtin_script_config_renderer_tsx",
+      "command_config_renderer_commandconfigform",
+      "command_config_renderer_path_strategy_options",
+      "command_config_renderer_shell_options",
+      "records_ts",
+      "script_config_renderer_path_strategy_options",
+      "script_config_renderer_scriptconfigform",
+      "script_config_renderer_shell_options",
+      "tests_records_test_ts"
+    ],
+    "5": [
+      "builtin_command_executor_main_ts",
+      "builtin_command_index_shared_ts",
+      "builtin_command_index_ts",
+      "builtin_command_manifest_ts",
+      "builtin_command_schema_ts",
+      "builtin_command_tests_executor_test_ts",
+      "builtin_command_tests_executor_test_ts_tests_executor_test_action",
+      "builtin_command_tests_executor_test_ts_tests_executor_test_request",
+      "builtin_command_tests_executor_test_ts_tests_executor_test_run",
+      "command_executor_main_createcommandaction",
+      "command_schema_commandactionconfig",
+      "command_schema_commandactionconfigschema"
+    ],
+    "6": [
+      "builtin_script_executor_main_ts",
+      "builtin_script_index_shared_ts",
+      "builtin_script_index_ts",
+      "builtin_script_manifest_ts",
+      "builtin_script_schema_ts",
+      "builtin_script_tests_executor_test_ts",
+      "builtin_script_tests_executor_test_ts_tests_executor_test_action",
+      "builtin_script_tests_executor_test_ts_tests_executor_test_run",
+      "script_executor_main_createscriptaction",
+      "script_schema_scriptactionconfig"
+    ],
+    "7": [
+      "shared_cost_currency_costformatter",
+      "shared_cost_currency_formatsynapsecost",
+      "shared_cost_currency_normalizecostcny",
+      "shared_cost_currency_resolvesynapsecostcny",
+      "shared_cost_currency_synapsecostcurrency",
+      "shared_cost_currency_ts",
+      "shared_cost_currency_usdtocny",
+      "tests_cost_currency_test_ts"
+    ],
+    "8": [
+      "builtin_agent_result_renderer_tsx"
+    ],
+    "9": [
+      "builtin_script_result_renderer_tsx"
+    ],
+    "10": [
+      "builtin_http_request_result_renderer_tsx"
+    ],
+    "11": [
+      "builtin_command_result_renderer_tsx"
+    ]
+  },
+  "cohesion": {
+    "0": 0.12,
+    "1": 0.10276679841897234,
+    "2": 0.21666666666666667,
+    "3": 0.14285714285714285,
+    "4": 0.2878787878787879,
+    "5": 0.3333333333333333,
+    "6": 0.37777777777777777,
+    "7": 0.5,
+    "8": 1.0,
+    "9": 1.0,
+    "10": 1.0,
+    "11": 1.0
+  },
+  "gods": [
+    {
+      "id": "agent_schema_agentactionconfig",
+      "label": "AgentActionConfig",
+      "degree": 7
+    },
+    {
+      "id": "http_request_schema_httprequestactionconfig",
+      "label": "HttpRequestActionConfig",
+      "degree": 7
+    },
+    {
+      "id": "action_packages_records_stringifyrecordtext",
+      "label": "stringifyRecordText()",
+      "degree": 6
+    },
+    {
+      "id": "script_schema_scriptactionconfig",
+      "label": "ScriptActionConfig",
+      "degree": 6
+    },
+    {
+      "id": "command_schema_commandactionconfig",
+      "label": "CommandActionConfig",
+      "degree": 6
+    },
+    {
+      "id": "action_packages_types_actionmanifest",
+      "label": "ActionManifest",
+      "degree": 5
+    },
+    {
+      "id": "action_packages_records_parserecordtext",
+      "label": "parseRecordText()",
+      "degree": 4
+    },
+    {
+      "id": "shared_cost_currency_resolvesynapsecostcny",
+      "label": "resolveSynapseCostCny()",
+      "degree": 4
+    },
+    {
+      "id": "http_request_schema_httprequestactionconfigschema",
+      "label": "httpRequestActionConfigSchema",
+      "degree": 4
+    },
+    {
+      "id": "command_schema_commandactionconfigschema",
+      "label": "commandActionConfigSchema",
+      "degree": 4
+    }
+  ],
+  "surprises": [
+    {
+      "source": "CommandConfigForm()",
+      "target": "stringifyRecordText()",
+      "source_files": [
+        "builtin/command/config.renderer.tsx",
+        "records.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "connects across different repos/directories; peripheral node `CommandConfigForm()` unexpectedly reaches hub `stringifyRecordText()`"
+    },
+    {
+      "source": "ScriptConfigForm()",
+      "target": "stringifyRecordText()",
+      "source_files": [
+        "builtin/script/config.renderer.tsx",
+        "records.ts"
+      ],
+      "confidence": "EXTRACTED",
+      "relation": "calls",
+      "why": "connects across different repos/directories; peripheral node `ScriptConfigForm()` unexpectedly reaches hub `stringifyRecordText()`"
+    }
+  ],
+  "tokens": {
+    "input": 0,
+    "output": 0
+  }
+}
