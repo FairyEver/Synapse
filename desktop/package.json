@@ -162,6 +162,14 @@
         "to": "database"
       }
     ],
+    "protocols": [
+      {
+        "name": "Synapse",
+        "schemes": [
+          "synapse"
+        ]
+      }
+    ],
     "publish": [
       {
         "provider": "github",

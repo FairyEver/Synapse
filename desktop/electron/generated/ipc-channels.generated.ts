@@ -7,6 +7,13 @@
 /* eslint-disable */
 
 export const IPC_CHANNELS = {
+  "account": {
+    "getState": "synapse:account:get-state",
+    "startLogin": "synapse:account:start-login",
+    "refresh": "synapse:account:refresh",
+    "logout": "synapse:account:logout",
+    "stateChanged": "synapse:events:account",
+  },
   "content": {
     "list": "synapse:content:list",
     "getContent": "synapse:content:get-content",

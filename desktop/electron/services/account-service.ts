@@ -214,12 +214,14 @@ export class AccountService {
   }
 
   async refreshFromStorage(): Promise<SynapseAccountState> {
+    let attemptedRefreshToken: string | undefined
     try {
       const persisted = await this.namespace.getSingleton()
       if (!persisted?.refreshToken) {
         this.setState({ status: "unauthenticated" })
         return this.state
       }
+      attemptedRefreshToken = persisted.refreshToken
 
       const baseUrl = apiBaseUrl(this.isPackaged)
       const tokens = await this.postJson<{ accessToken: string; refreshToken: string }>(
@@ -233,7 +235,9 @@ export class AccountService {
     } catch (error) {
       logger.warn("Account refresh failed.", { error })
       this.accessToken = null
-      await this.clearStoredAccount()
+      await this.clearStoredRefreshTokenIfCurrent(attemptedRefreshToken)
+      const latest = await this.readPersisted("Failed to read stored account after account refresh failed.")
+      if (latest?.activeAttempt) return this.state
       this.setState({ status: "unauthenticated" })
     }
 
@@ -323,6 +327,17 @@ export class AccountService {
   private async clearStoredAccount(): Promise<void> {
     await this.namespace.clearSingleton().catch((error) => {
       logger.warn("Failed to clear stored account.", { error })
+    })
+  }
+
+  private async clearStoredRefreshTokenIfCurrent(expectedRefreshToken: string | undefined): Promise<void> {
+    if (!expectedRefreshToken) return
+    const persisted = await this.readPersisted("Failed to read stored account before clearing refresh token.")
+    if (persisted?.refreshToken !== expectedRefreshToken) return
+    const nextPersisted: PersistedAccount = { ...persisted }
+    delete nextPersisted.refreshToken
+    await this.namespace.setSingleton(nextPersisted).catch((error) => {
+      logger.warn("Failed to clear stored account refresh token.", { error })
     })
   }
 

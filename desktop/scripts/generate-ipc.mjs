@@ -39,6 +39,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
  * value) and pulls IpcModule from a default export named identically.
  */
 const MODULE_SOURCES = [
+  { id: "account", importPath: "../electron/modules/account/ipc.ts" },
   { id: "content", importPath: "../electron/modules/content/ipc.ts" },
   { id: "config", importPath: "../electron/modules/config/ipc.ts" },
   { id: "identity", importPath: "../electron/modules/identity/ipc.ts" },

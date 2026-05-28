@@ -277,6 +277,36 @@ describe("AccountService", () => {
     expect(await namespace.getSingleton()).not.toHaveProperty("accessToken")
   })
 
+  it("keeps newer login attempts when stored refresh fails", async () => {
+    let rejectRefresh: ((error: Error) => void) | undefined
+    const refreshResponse = new Promise<Response>((_resolve, reject) => {
+      rejectRefresh = reject
+    })
+    const fetch = vi.fn((url) => {
+      if (String(url).endsWith("/auth/refresh")) return refreshResponse
+      throw new Error(`unexpected url ${String(url)}`)
+    })
+    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+    await namespace.setSingleton({ refreshToken: "refresh-old", lastProfile: storedProfile })
+
+    const refresh = service.refreshFromStorage()
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1))
+    await service.startLogin()
+    const attempt = (await namespace.getSingleton())?.activeAttempt
+    expect(attempt).toBeTruthy()
+
+    rejectRefresh?.(new Error("expired refresh token"))
+    const state = await refresh
+
+    expect(state.status).toBe("authenticating")
+    const persisted = await namespace.getSingleton()
+    expect(persisted).toMatchObject({
+      activeAttempt: { state: attempt!.state },
+      lastProfile: storedProfile,
+    })
+    expect(persisted).not.toHaveProperty("refreshToken")
+  })
+
   it("merges refreshed account data with newer persisted fields", async () => {
     let namespaceUpdatedDuringRefresh = false
     const { namespace, service } = await createTestAccountService({

@@ -271,19 +271,11 @@ const IPC_CHANNELS = {
     "startLogin": "synapse:account:start-login",
     "refresh": "synapse:account:refresh",
     "logout": "synapse:account:logout",
-    "event": "synapse:events:account",
+    "stateChanged": "synapse:events:account",
   },
-} as const satisfies IpcChannelMap & {
-  readonly account: {
-    readonly getState: "synapse:account:get-state"
-    readonly startLogin: "synapse:account:start-login"
-    readonly refresh: "synapse:account:refresh"
-    readonly logout: "synapse:account:logout"
-    readonly event: "synapse:events:account"
-  }
-}
+} as const satisfies IpcChannelMap
 
-// Event channels (not in generated IPC_CHANNELS because they're events, not methods)
+// Legacy event channels that are not declared by IpcModule descriptors yet.
 const EVENT_CHANNELS = {
   update: {
     stateChanged: "synapse:update:state-changed",
