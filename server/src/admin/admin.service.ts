@@ -48,6 +48,49 @@ function isRecordNotFoundError(error: unknown): boolean {
   return error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2025"
 }
 
+function startOfDay(value: Date): Date {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate())
+}
+
+function addDays(value: Date, days: number): Date {
+  const next = new Date(value)
+  next.setDate(next.getDate() + days)
+  return next
+}
+
+function formatDateKey(value: Date): string {
+  const year = value.getFullYear()
+  const month = `${value.getMonth() + 1}`.padStart(2, "0")
+  const date = `${value.getDate()}`.padStart(2, "0")
+  return `${year}-${month}-${date}`
+}
+
+function buildDailyTrend(
+  now: Date,
+  values: ReadonlyArray<{ readonly createdAt: Date }>,
+): Array<{ date: string; label: string; count: number }> {
+  const today = startOfDay(now)
+  const buckets = Array.from({ length: 7 }, (_, index) => {
+    const date = addDays(today, index - 6)
+    const key = formatDateKey(date)
+    return {
+      key,
+      date: key,
+      label: `${date.getMonth() + 1}/${date.getDate()}`,
+      count: 0,
+    }
+  })
+  const bucketByKey = new Map(buckets.map((bucket) => [bucket.key, bucket]))
+
+  for (const value of values) {
+    const key = formatDateKey(startOfDay(value.createdAt))
+    const bucket = bucketByKey.get(key)
+    if (bucket) bucket.count += 1
+  }
+
+  return buckets.map(({ key: _key, ...bucket }) => bucket)
+}
+
 @Injectable()
 export class AdminService {
   constructor(
@@ -57,22 +100,59 @@ export class AdminService {
   ) {}
 
   async getSystemOverview() {
+    const now = new Date()
+    const windowStart = startOfDay(addDays(now, -6))
     const [
       auditLogs,
       users,
       teams,
       invitations,
       userModulePermissions,
+      activeUsers,
+      disabledUsers,
+      pendingInvitations,
+      usedInvitations,
+      expiredInvitations,
+      recentUsers,
+      recentTeams,
+      recentInvitations,
+      recentAuditLogs,
     ] = await this.prisma.$transaction([
       this.prisma.auditLog.count(),
       this.prisma.user.count(),
       this.prisma.team.count(),
       this.prisma.invitation.count(),
       this.prisma.userModulePermission.count(),
+      this.prisma.user.count({ where: { status: "active" } }),
+      this.prisma.user.count({ where: { status: "disabled" } }),
+      this.prisma.invitation.count({ where: { usedAt: null, expiresAt: { gt: now } } }),
+      this.prisma.invitation.count({ where: { usedAt: { not: null } } }),
+      this.prisma.invitation.count({ where: { usedAt: null, expiresAt: { lte: now } } }),
+      this.prisma.user.findMany({
+        where: { createdAt: { gte: windowStart } },
+        select: { createdAt: true },
+      }),
+      this.prisma.team.findMany({
+        where: { createdAt: { gte: windowStart } },
+        select: { createdAt: true },
+      }),
+      this.prisma.invitation.findMany({
+        where: { createdAt: { gte: windowStart } },
+        select: { createdAt: true },
+      }),
+      this.prisma.auditLog.findMany({
+        where: { createdAt: { gte: windowStart } },
+        select: { createdAt: true },
+      }),
     ])
 
+    const userTrend = buildDailyTrend(now, recentUsers)
+    const teamTrend = buildDailyTrend(now, recentTeams)
+    const invitationTrend = buildDailyTrend(now, recentInvitations)
+    const auditLogTrend = buildDailyTrend(now, recentAuditLogs)
+
     return {
-      serverTime: new Date().toISOString(),
+      serverTime: now.toISOString(),
       counts: {
         auditLogs,
         users,
@@ -80,6 +160,23 @@ export class AdminService {
         invitations,
         userModulePermissions,
       },
+      userStatus: {
+        active: activeUsers,
+        disabled: disabledUsers,
+      },
+      invitationStatus: {
+        pending: pendingInvitations,
+        used: usedInvitations,
+        expired: expiredInvitations,
+      },
+      dailyTrend: userTrend.map((item, index) => ({
+        date: item.date,
+        label: item.label,
+        users: item.count,
+        teams: teamTrend[index]?.count ?? 0,
+        invitations: invitationTrend[index]?.count ?? 0,
+        auditLogs: auditLogTrend[index]?.count ?? 0,
+      })),
     }
   }
 

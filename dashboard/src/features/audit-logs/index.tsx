@@ -1,29 +1,80 @@
 import { useState } from 'react'
+import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery } from '@tanstack/react-query'
 import { Download } from 'lucide-react'
 import { toast } from 'sonner'
-import { adminApi } from '@/lib/api'
+import { adminApi, type AuditLog } from '@/lib/api'
+import {
+  DataTableColumnHeader,
+  ServerDataTable,
+  getServerTableSortQuery,
+} from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+
+const columns: ColumnDef<AuditLog>[] = [
+  {
+    accessorKey: 'action',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='操作' />
+    ),
+    cell: ({ row }) => <span className='font-medium'>{row.original.action}</span>,
+  },
+  {
+    accessorKey: 'adminEmail',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='管理员' />
+    ),
+  },
+  {
+    id: 'target',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='目标' />
+    ),
+    cell: ({ row }) => `${row.original.targetType}:${row.original.targetId}`,
+    enableSorting: false,
+  },
+  {
+    accessorKey: 'ipAddress',
+    header: ({ column }) => <DataTableColumnHeader column={column} title='IP' />,
+    enableSorting: false,
+  },
+  {
+    accessorKey: 'createdAt',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='时间' />
+    ),
+    cell: ({ row }) =>
+      new Date(row.original.createdAt).toLocaleString('zh-CN'),
+  },
+  {
+    id: 'actions',
+    cell: () => <span aria-hidden='true' className='block h-8' />,
+    enableSorting: false,
+    enableHiding: false,
+  },
+]
 
 export default function AuditLogsPage() {
   const [page, setPage] = useState(1)
+  const [pageSize, setPageSize] = useState(20)
   const [action, setAction] = useState('')
-  const pageSize = 20
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'createdAt', desc: true },
+  ])
+  const sortQuery = getServerTableSortQuery(sorting)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-audit-logs', page, action],
-    queryFn: () => adminApi.listAuditLogs({ page, pageSize, action: action || undefined }),
+    queryKey: ['admin-audit-logs', page, pageSize, action, sortQuery],
+    queryFn: () =>
+      adminApi.listAuditLogs({
+        page,
+        pageSize,
+        action: action || undefined,
+        ...sortQuery,
+      }),
   })
 
   async function handleExport() {
@@ -35,64 +86,45 @@ export default function AuditLogsPage() {
     }
   }
 
-  const totalPages = data ? Math.ceil(data.total / pageSize) : 0
-
   return (
     <>
       <Header>
         <h1 className='text-lg font-semibold'>审计日志</h1>
       </Header>
       <Main>
-        <div className='flex items-center gap-2 pb-4'>
-          <Input
-            placeholder='按操作类型筛选...'
-            value={action}
-            onChange={(e) => { setAction(e.target.value); setPage(1) }}
-            className='max-w-xs'
-          />
-          <Button variant='outline' size='sm' onClick={handleExport}>
-            <Download className='mr-1 h-4 w-4' />
-            导出
-          </Button>
-        </div>
         {isLoading ? (
           <div className='text-muted-foreground'>加载中...</div>
         ) : (
-          <>
-            <div className='rounded-md border'>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>操作</TableHead>
-                    <TableHead>管理员</TableHead>
-                    <TableHead>目标</TableHead>
-                    <TableHead>IP</TableHead>
-                    <TableHead>时间</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data?.data.map((log) => (
-                    <TableRow key={log.id}>
-                      <TableCell className='font-medium'>{log.action}</TableCell>
-                      <TableCell>{log.adminEmail}</TableCell>
-                      <TableCell>{log.targetType}:{log.targetId}</TableCell>
-                      <TableCell>{log.ipAddress}</TableCell>
-                      <TableCell>
-                        {new Date(log.createdAt).toLocaleString('zh-CN')}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            {totalPages > 1 && (
-              <div className='flex items-center justify-end gap-2 pt-4'>
-                <Button variant='outline' size='sm' disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>上一页</Button>
-                <span className='text-sm text-muted-foreground'>{page} / {totalPages}</span>
-                <Button variant='outline' size='sm' disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>下一页</Button>
+          <ServerDataTable
+            columns={columns}
+            data={data?.data ?? []}
+            page={page}
+            pageSize={pageSize}
+            total={data?.total ?? 0}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            sorting={sorting}
+            onSortingChange={setSorting}
+            toolbar={
+              <div className='flex items-center justify-between'>
+                <div className='flex flex-1 items-center gap-2'>
+                  <Input
+                    placeholder='按操作类型筛选...'
+                    value={action}
+                    onChange={(e) => {
+                      setAction(e.target.value)
+                      setPage(1)
+                    }}
+                    className='h-8 w-37.5 lg:w-62.5'
+                  />
+                </div>
+                <Button variant='outline' size='sm' onClick={handleExport}>
+                  <Download data-icon='inline-start' />
+                  导出
+                </Button>
               </div>
-            )}
-          </>
+            }
+          />
         )}
       </Main>
     </>

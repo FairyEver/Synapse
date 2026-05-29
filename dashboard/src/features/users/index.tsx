@@ -1,28 +1,34 @@
 import { useState } from 'react'
+import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { adminApi, type AdminUserRow } from '@/lib/api'
+import {
+  DataTableColumnHeader,
+  ServerDataTable,
+  getServerTableSortQuery,
+} from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+
+const pageSizeOptions = {
+  initial: 20,
+}
 
 export default function UsersPage() {
   const [page, setPage] = useState(1)
-  const pageSize = 20
+  const [pageSize, setPageSize] = useState(pageSizeOptions.initial)
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'createdAt', desc: true },
+  ])
   const queryClient = useQueryClient()
+  const sortQuery = getServerTableSortQuery(sorting)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-users', page],
-    queryFn: () => adminApi.listUsers({ page, pageSize }),
+    queryKey: ['admin-users', page, pageSize, sortQuery],
+    queryFn: () => adminApi.listUsers({ page, pageSize, ...sortQuery }),
   })
 
   const toggleStatus = useMutation({
@@ -40,7 +46,61 @@ export default function UsersPage() {
     toggleStatus.mutate({ id: user.id, status: newStatus })
   }
 
-  const totalPages = data ? Math.ceil(data.total / pageSize) : 0
+  const columns: ColumnDef<AdminUserRow>[] = [
+    {
+      accessorKey: 'email',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='邮箱' />
+      ),
+      cell: ({ row }) => (
+        <span className='font-medium'>{row.original.email}</span>
+      ),
+    },
+    {
+      accessorKey: 'status',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='状态' />
+      ),
+      cell: ({ row }) => (
+        <Badge
+          variant={row.original.status === 'active' ? 'default' : 'secondary'}
+        >
+          {row.original.status === 'active' ? '正常' : '禁用'}
+        </Badge>
+      ),
+    },
+    {
+      id: 'teams',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='团队' />
+      ),
+      cell: ({ row }) =>
+        row.original.memberships.map((m) => m.team.name).join(', ') || '-',
+      enableSorting: false,
+    },
+    {
+      accessorKey: 'createdAt',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='创建时间' />
+      ),
+      cell: ({ row }) =>
+        new Date(row.original.createdAt).toLocaleDateString('zh-CN'),
+    },
+    {
+      id: 'actions',
+      cell: ({ row }) => (
+        <Button
+          variant='ghost'
+          className='h-8 px-2'
+          onClick={() => handleToggle(row.original)}
+        >
+          {row.original.status === 'active' ? '禁用' : '启用'}
+        </Button>
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
+  ]
 
   return (
     <>
@@ -51,71 +111,17 @@ export default function UsersPage() {
         {isLoading ? (
           <div className='text-muted-foreground'>加载中...</div>
         ) : (
-          <>
-            <div className='rounded-md border'>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>邮箱</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead>团队</TableHead>
-                    <TableHead>创建时间</TableHead>
-                    <TableHead>操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data?.data.map((user) => (
-                    <TableRow key={user.id}>
-                      <TableCell className='font-medium'>{user.email}</TableCell>
-                      <TableCell>
-                        <Badge variant={user.status === 'active' ? 'default' : 'secondary'}>
-                          {user.status === 'active' ? '正常' : '禁用'}
-                        </Badge>
-                      </TableCell>
-                      <TableCell>
-                        {user.memberships.map((m) => m.team.name).join(', ') || '-'}
-                      </TableCell>
-                      <TableCell>
-                        {new Date(user.createdAt).toLocaleDateString('zh-CN')}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant='ghost'
-                          size='sm'
-                          onClick={() => handleToggle(user)}
-                        >
-                          {user.status === 'active' ? '禁用' : '启用'}
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            {totalPages > 1 && (
-              <div className='flex items-center justify-end gap-2 pt-4'>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  disabled={page <= 1}
-                  onClick={() => setPage((p) => p - 1)}
-                >
-                  上一页
-                </Button>
-                <span className='text-sm text-muted-foreground'>
-                  {page} / {totalPages}
-                </span>
-                <Button
-                  variant='outline'
-                  size='sm'
-                  disabled={page >= totalPages}
-                  onClick={() => setPage((p) => p + 1)}
-                >
-                  下一页
-                </Button>
-              </div>
-            )}
-          </>
+          <ServerDataTable
+            columns={columns}
+            data={data?.data ?? []}
+            page={page}
+            pageSize={pageSize}
+            total={data?.total ?? 0}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            sorting={sorting}
+            onSortingChange={setSorting}
+          />
         )}
       </Main>
     </>

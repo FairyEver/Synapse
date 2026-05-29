@@ -111,6 +111,8 @@
 ## 当前仓库结构
 
 - 本仓库是 pnpm monorepo。工作区根目录包含共享文档（`AGENTS.md`, `CLAUDE.md`, `README.md`）、项目级 Claude 规则 `.claude/rules/`、`.github/` CI，以及 monorepo 的 `package.json` / `pnpm-workspace.yaml`。工作区包包括 `@synapse/desktop`、`@synapse/website`、`@synapse/server`、`@synapse/auto` 和 `@synapse/auto-web`；桌面应用源码位于 `desktop/` 子包。
+- `dashboard/` 是独立的管理后台包，视觉与交互规范以 `templates/shadcn-admin/` 为参考基线。凡是新增或修改管理后台页面，必须先在 `templates/shadcn-admin/` 中查找相近页面、组件和布局，优先复用模板已有结构与组件组合，尽量不要自行发挥页面样式；模板没有对应实现时，再按现有 dashboard 共享组件做最小扩展。
+- 管理后台列表页禁止在页面内直接组装 `Table` / `TableHeader` / `TableBody` / `TableCell` / 手写分页；服务端分页表格必须优先使用 `dashboard/src/components/data-table/server-data-table.tsx` 暴露的 `ServerDataTable`，列头使用 `DataTableColumnHeader`。如果现有共享表格不满足需求，先扩展共享表格组件，不要在单个页面复制或临时拼一套表格结构。
 - 根目录开发启动命令：`pnpm dev`（同时启动 desktop + server）、`pnpm dev:desktop`（仅桌面端）、`pnpm dev:server`（仅后台，含 server API、dashboard 和 compose 服务）、`pnpm dev:website`（仅官网）。停止命令：`pnpm quit`（全部停止）、`pnpm quit:server`、`pnpm quit:desktop`、`pnpm quit:website`。其他包级脚本直接使用对应包名运行，例如 `pnpm --filter @synapse/desktop run <script>`。
 - 启动策略：根据当前任务修改的内容选择最小启动范围，不要无差别执行 `pnpm dev`。只改 `desktop/` 就只启 `pnpm dev:desktop`；只改 `server/` 就只启 `pnpm dev:server`；两者都改才用 `pnpm dev`。如果对应服务已经在运行，因为有热更新，通常不需要停止再重启——直接修改代码即可生效。只有在确认热更新不覆盖的场景（如改了 Electron 主进程入口、改了构建配置、改了依赖）时才需要重启。
 - 进行自动化测试、UI 测试或需要本地服务的验证时，禁止自行猜测启动 / 停止命令，必须使用上述根目录命令。

@@ -14,6 +14,23 @@ export type SystemOverview = {
     invitations: number
     userModulePermissions: number
   }
+  userStatus: {
+    active: number
+    disabled: number
+  }
+  invitationStatus: {
+    pending: number
+    used: number
+    expired: number
+  }
+  dailyTrend: Array<{
+    date: string
+    label: string
+    users: number
+    teams: number
+    invitations: number
+    auditLogs: number
+  }>
 }
 
 export type PaginatedResponse<T> = {
@@ -233,10 +250,19 @@ function shouldNotifyAuthExpired(path: string, status: number) {
   ].includes(path)
 }
 
-function paginationSuffix(options: { page?: number; pageSize?: number }) {
+type PaginationOptions = {
+  page?: number
+  pageSize?: number
+  sortBy?: string
+  sortOrder?: 'asc' | 'desc'
+}
+
+function paginationSuffix(options: PaginationOptions) {
   const query = new URLSearchParams()
   if (options.page) query.set('page', String(options.page))
   if (options.pageSize) query.set('pageSize', String(options.pageSize))
+  if (options.sortBy) query.set('sortBy', options.sortBy)
+  if (options.sortOrder) query.set('sortOrder', options.sortOrder)
   const value = query.toString()
   return value ? `?${value}` : ''
 }
@@ -297,7 +323,7 @@ export const dashboardApi = {
 export const adminApi = {
   getSystemOverview: () =>
     request<SystemOverview>(`${adminApiBasePath}/system`),
-  listInvitations: (options: { page?: number; pageSize?: number } = {}) =>
+  listInvitations: (options: PaginationOptions = {}) =>
     request<PaginatedResponse<AdminInvitationRow>>(
       `${adminApiBasePath}/invitations${paginationSuffix(options)}`
     ),
@@ -306,7 +332,7 @@ export const adminApi = {
       `${adminApiBasePath}/invitations/${encodeURIComponent(id)}`,
       { method: 'DELETE' }
     ),
-  listUsers: (options: { page?: number; pageSize?: number } = {}) =>
+  listUsers: (options: PaginationOptions = {}) =>
     request<PaginatedResponse<AdminUserRow>>(
       `${adminApiBasePath}/users${paginationSuffix(options)}`
     ),
@@ -315,7 +341,7 @@ export const adminApi = {
       method: 'PATCH',
       body: JSON.stringify({ status }),
     }),
-  listTeams: (options: { page?: number; pageSize?: number } = {}) =>
+  listTeams: (options: PaginationOptions = {}) =>
     request<PaginatedResponse<AdminTeamRow>>(
       `${adminApiBasePath}/teams${paginationSuffix(options)}`
     ),
@@ -352,6 +378,8 @@ export const adminApi = {
       to?: string
       page?: number
       pageSize?: number
+      sortBy?: string
+      sortOrder?: 'asc' | 'desc'
     } = {}
   ) =>
     request<PaginatedResponse<AuditLog>>(

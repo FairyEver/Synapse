@@ -1,29 +1,31 @@
 import { useState } from 'react'
+import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Trash2 } from 'lucide-react'
-import { adminApi } from '@/lib/api'
+import { adminApi, type AdminInvitationRow } from '@/lib/api'
+import {
+  DataTableColumnHeader,
+  ServerDataTable,
+  getServerTableSortQuery,
+} from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
 
 export default function InvitationsPage() {
   const [page, setPage] = useState(1)
-  const pageSize = 20
+  const [pageSize, setPageSize] = useState(20)
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'createdAt', desc: true },
+  ])
   const queryClient = useQueryClient()
+  const sortQuery = getServerTableSortQuery(sorting)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-invitations', page],
-    queryFn: () => adminApi.listInvitations({ page, pageSize }),
+    queryKey: ['admin-invitations', page, pageSize, sortQuery],
+    queryFn: () => adminApi.listInvitations({ page, pageSize, ...sortQuery }),
   })
 
   const deleteMutation = useMutation({
@@ -35,7 +37,70 @@ export default function InvitationsPage() {
     onError: (err: Error) => toast.error(err.message),
   })
 
-  const totalPages = data ? Math.ceil(data.total / pageSize) : 0
+  const columns: ColumnDef<AdminInvitationRow>[] = [
+    {
+      accessorKey: 'type',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='类型' />
+      ),
+    },
+    {
+      id: 'team',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='团队' />
+      ),
+      cell: ({ row }) => row.original.team?.name ?? '-',
+      enableSorting: false,
+    },
+    {
+      id: 'createdBy',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='创建者' />
+      ),
+      cell: ({ row }) =>
+        row.original.createdByAdmin?.email ??
+        row.original.createdByUser?.email ??
+        '-',
+      enableSorting: false,
+    },
+    {
+      id: 'status',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='状态' />
+      ),
+      cell: ({ row }) => {
+        if (row.original.usedAt) return <Badge variant='default'>已使用</Badge>
+        if (new Date(row.original.expiresAt) < new Date()) {
+          return <Badge variant='secondary'>已过期</Badge>
+        }
+        return <Badge variant='outline'>有效</Badge>
+      },
+      enableSorting: false,
+    },
+    {
+      accessorKey: 'expiresAt',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='过期时间' />
+      ),
+      cell: ({ row }) =>
+        new Date(row.original.expiresAt).toLocaleString('zh-CN'),
+    },
+    {
+      id: 'actions',
+      cell: ({ row }) => (
+        <Button
+          variant='ghost'
+          className='h-8 w-8 p-0'
+          onClick={() => deleteMutation.mutate(row.original.id)}
+        >
+          <Trash2 data-icon='inline-start' />
+          <span className='sr-only'>删除</span>
+        </Button>
+      ),
+      enableSorting: false,
+      enableHiding: false,
+    },
+  ]
 
   return (
     <>
@@ -46,61 +111,17 @@ export default function InvitationsPage() {
         {isLoading ? (
           <div className='text-muted-foreground'>加载中...</div>
         ) : (
-          <>
-            <div className='rounded-md border'>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>类型</TableHead>
-                    <TableHead>团队</TableHead>
-                    <TableHead>创建者</TableHead>
-                    <TableHead>状态</TableHead>
-                    <TableHead>过期时间</TableHead>
-                    <TableHead>操作</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data?.data.map((inv) => (
-                    <TableRow key={inv.id}>
-                      <TableCell>{inv.type}</TableCell>
-                      <TableCell>{inv.team?.name ?? '-'}</TableCell>
-                      <TableCell>
-                        {inv.createdByAdmin?.email ?? inv.createdByUser?.email ?? '-'}
-                      </TableCell>
-                      <TableCell>
-                        {inv.usedAt ? (
-                          <Badge variant='default'>已使用</Badge>
-                        ) : new Date(inv.expiresAt) < new Date() ? (
-                          <Badge variant='secondary'>已过期</Badge>
-                        ) : (
-                          <Badge variant='outline'>有效</Badge>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        {new Date(inv.expiresAt).toLocaleString('zh-CN')}
-                      </TableCell>
-                      <TableCell>
-                        <Button
-                          variant='ghost'
-                          size='icon'
-                          onClick={() => deleteMutation.mutate(inv.id)}
-                        >
-                          <Trash2 className='h-4 w-4' />
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            {totalPages > 1 && (
-              <div className='flex items-center justify-end gap-2 pt-4'>
-                <Button variant='outline' size='sm' disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>上一页</Button>
-                <span className='text-sm text-muted-foreground'>{page} / {totalPages}</span>
-                <Button variant='outline' size='sm' disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>下一页</Button>
-              </div>
-            )}
-          </>
+          <ServerDataTable
+            columns={columns}
+            data={data?.data ?? []}
+            page={page}
+            pageSize={pageSize}
+            total={data?.total ?? 0}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            sorting={sorting}
+            onSortingChange={setSorting}
+          />
         )}
       </Main>
     </>

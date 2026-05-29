@@ -1,29 +1,70 @@
 import { useState } from 'react'
+import { type ColumnDef, type SortingState } from '@tanstack/react-table'
 import { useQuery } from '@tanstack/react-query'
-import { adminApi } from '@/lib/api'
+import { adminApi, type AdminTeamRow } from '@/lib/api'
+import {
+  DataTableColumnHeader,
+  ServerDataTable,
+  getServerTableSortQuery,
+} from '@/components/data-table'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@/components/ui/table'
+
+const columns: ColumnDef<AdminTeamRow>[] = [
+  {
+    accessorKey: 'name',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='团队名称' />
+    ),
+    cell: ({ row }) => <span className='font-medium'>{row.original.name}</span>,
+  },
+  {
+    id: 'createdBy',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='创建者' />
+    ),
+    cell: ({ row }) => row.original.createdByUser.email,
+    enableSorting: false,
+  },
+  {
+    id: 'members',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='成员数' />
+    ),
+    cell: ({ row }) => (
+      <Badge variant='secondary'>{row.original.memberships.length}</Badge>
+    ),
+    enableSorting: false,
+  },
+  {
+    accessorKey: 'createdAt',
+    header: ({ column }) => (
+      <DataTableColumnHeader column={column} title='创建时间' />
+    ),
+    cell: ({ row }) =>
+      new Date(row.original.createdAt).toLocaleDateString('zh-CN'),
+  },
+  {
+    id: 'actions',
+    cell: () => <span aria-hidden='true' className='block h-8' />,
+    enableSorting: false,
+    enableHiding: false,
+  },
+]
 
 export default function TeamsPage() {
   const [page, setPage] = useState(1)
-  const pageSize = 20
+  const [pageSize, setPageSize] = useState(20)
+  const [sorting, setSorting] = useState<SortingState>([
+    { id: 'createdAt', desc: true },
+  ])
+  const sortQuery = getServerTableSortQuery(sorting)
 
   const { data, isLoading } = useQuery({
-    queryKey: ['admin-teams', page],
-    queryFn: () => adminApi.listTeams({ page, pageSize }),
+    queryKey: ['admin-teams', page, pageSize, sortQuery],
+    queryFn: () => adminApi.listTeams({ page, pageSize, ...sortQuery }),
   })
-
-  const totalPages = data ? Math.ceil(data.total / pageSize) : 0
 
   return (
     <>
@@ -34,41 +75,17 @@ export default function TeamsPage() {
         {isLoading ? (
           <div className='text-muted-foreground'>加载中...</div>
         ) : (
-          <>
-            <div className='rounded-md border'>
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>团队名称</TableHead>
-                    <TableHead>创建者</TableHead>
-                    <TableHead>成员数</TableHead>
-                    <TableHead>创建时间</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {data?.data.map((team) => (
-                    <TableRow key={team.id}>
-                      <TableCell className='font-medium'>{team.name}</TableCell>
-                      <TableCell>{team.createdByUser.email}</TableCell>
-                      <TableCell>
-                        <Badge variant='secondary'>{team.memberships.length}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        {new Date(team.createdAt).toLocaleDateString('zh-CN')}
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-            {totalPages > 1 && (
-              <div className='flex items-center justify-end gap-2 pt-4'>
-                <Button variant='outline' size='sm' disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>上一页</Button>
-                <span className='text-sm text-muted-foreground'>{page} / {totalPages}</span>
-                <Button variant='outline' size='sm' disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>下一页</Button>
-              </div>
-            )}
-          </>
+          <ServerDataTable
+            columns={columns}
+            data={data?.data ?? []}
+            page={page}
+            pageSize={pageSize}
+            total={data?.total ?? 0}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            sorting={sorting}
+            onSortingChange={setSorting}
+          />
         )}
       </Main>
     </>

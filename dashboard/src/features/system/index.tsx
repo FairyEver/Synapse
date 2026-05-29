@@ -1,9 +1,43 @@
+import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Activity, Users, Shield, Mail, FileText } from 'lucide-react'
-import { adminApi } from '@/lib/api'
+import {
+  Activity,
+  Clock,
+  FileText,
+  Mail,
+  Shield,
+  Users,
+  type LucideIcon,
+} from 'lucide-react'
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  ResponsiveContainer,
+  XAxis,
+  YAxis,
+} from 'recharts'
+import { adminApi, type SystemOverview } from '@/lib/api'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Badge } from '@/components/ui/badge'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card'
+import { Skeleton } from '@/components/ui/skeleton'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+
+type StatCard = {
+  title: string
+  value: number | string
+  detail: string
+  icon: LucideIcon
+}
 
 export default function SystemPage() {
   const { data, isLoading } = useQuery({
@@ -11,13 +45,7 @@ export default function SystemPage() {
     queryFn: adminApi.getSystemOverview,
   })
 
-  const stats = [
-    { title: '用户数', value: data?.counts.users ?? '-', icon: Users },
-    { title: '团队数', value: data?.counts.teams ?? '-', icon: Shield },
-    { title: '邀请数', value: data?.counts.invitations ?? '-', icon: Mail },
-    { title: '审计日志', value: data?.counts.auditLogs ?? '-', icon: FileText },
-    { title: '权限记录', value: data?.counts.userModulePermissions ?? '-', icon: Activity },
-  ]
+  const stats = useMemo(() => buildStats(data), [data])
 
   return (
     <>
@@ -25,36 +53,341 @@ export default function SystemPage() {
         <h1 className='text-lg font-semibold'>系统概览</h1>
       </Header>
       <Main>
+        <div className='mb-4 flex flex-col gap-1'>
+          <h2 className='text-2xl font-bold tracking-tight'>系统</h2>
+          <p className='text-sm text-muted-foreground'>
+            {data?.serverTime
+              ? `更新于 ${formatDateTime(data.serverTime)}`
+              : '系统数据'}
+          </p>
+        </div>
+
         {isLoading ? (
-          <div className='text-muted-foreground'>加载中...</div>
+          <SystemSkeleton />
         ) : (
-          <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-3'>
-            {stats.map((stat) => (
-              <Card key={stat.title}>
-                <CardHeader className='flex flex-row items-center justify-between pb-2'>
-                  <CardTitle className='text-sm font-medium'>{stat.title}</CardTitle>
-                  <stat.icon className='h-4 w-4 text-muted-foreground' />
-                </CardHeader>
-                <CardContent>
-                  <div className='text-2xl font-bold'>{stat.value}</div>
-                </CardContent>
-              </Card>
-            ))}
-            {data?.serverTime && (
-              <Card>
-                <CardHeader className='pb-2'>
-                  <CardTitle className='text-sm font-medium'>服务器时间</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className='text-sm text-muted-foreground'>
-                    {new Date(data.serverTime).toLocaleString('zh-CN')}
-                  </div>
-                </CardContent>
-              </Card>
-            )}
-          </div>
+          <SystemDashboard data={data} stats={stats} />
         )}
       </Main>
     </>
   )
+}
+
+function SystemDashboard({
+  data,
+  stats,
+}: {
+  data: SystemOverview | undefined
+  stats: StatCard[]
+}) {
+  if (!data) {
+    return (
+      <Card>
+        <CardContent className='py-6 text-sm text-muted-foreground'>
+          暂无数据
+        </CardContent>
+      </Card>
+    )
+  }
+
+  return (
+    <Tabs
+      orientation='vertical'
+      defaultValue='overview'
+      className='flex flex-col gap-4'
+    >
+      <div className='w-full overflow-x-auto pb-1'>
+        <TabsList>
+          <TabsTrigger value='overview'>概览</TabsTrigger>
+          <TabsTrigger value='activity'>活动</TabsTrigger>
+        </TabsList>
+      </div>
+
+      <TabsContent value='overview' className='flex flex-col gap-4'>
+        <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+          {stats.map((stat) => (
+            <SystemStatCard key={stat.title} stat={stat} />
+          ))}
+        </div>
+
+        <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
+          <Card className='lg:col-span-4'>
+            <CardHeader>
+              <CardTitle>增长趋势</CardTitle>
+              <CardDescription>最近 7 天</CardDescription>
+            </CardHeader>
+            <CardContent className='ps-2'>
+              <GrowthChart data={data.dailyTrend} />
+            </CardContent>
+          </Card>
+
+          <Card className='lg:col-span-3'>
+            <CardHeader>
+              <CardTitle>账号状态</CardTitle>
+              <CardDescription>当前用户</CardDescription>
+            </CardHeader>
+            <CardContent>
+              <StatusDistribution
+                items={[
+                  { label: '启用', value: data.userStatus.active },
+                  { label: '禁用', value: data.userStatus.disabled },
+                ]}
+              />
+            </CardContent>
+          </Card>
+        </div>
+      </TabsContent>
+
+      <TabsContent
+        value='activity'
+        className='grid grid-cols-1 gap-4 lg:grid-cols-7'
+      >
+        <Card className='lg:col-span-4'>
+          <CardHeader>
+            <CardTitle>管理操作</CardTitle>
+            <CardDescription>最近 7 天</CardDescription>
+          </CardHeader>
+          <CardContent className='ps-2'>
+            <AuditChart data={data.dailyTrend} />
+          </CardContent>
+        </Card>
+
+        <Card className='lg:col-span-3'>
+          <CardHeader>
+            <CardTitle>邀请状态</CardTitle>
+            <CardDescription>当前邀请</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <StatusDistribution
+              items={[
+                { label: '待使用', value: data.invitationStatus.pending },
+                { label: '已使用', value: data.invitationStatus.used },
+                { label: '已过期', value: data.invitationStatus.expired },
+              ]}
+            />
+          </CardContent>
+        </Card>
+      </TabsContent>
+    </Tabs>
+  )
+}
+
+function SystemStatCard({ stat }: { stat: StatCard }) {
+  const Icon = stat.icon
+
+  return (
+    <Card>
+      <CardHeader className='flex flex-row items-center justify-between pb-2'>
+        <CardTitle className='text-sm font-medium'>{stat.title}</CardTitle>
+        <Icon className='h-4 w-4 text-muted-foreground' />
+      </CardHeader>
+      <CardContent>
+        <div className='text-2xl font-bold'>{stat.value}</div>
+        <p className='text-xs text-muted-foreground'>{stat.detail}</p>
+      </CardContent>
+    </Card>
+  )
+}
+
+function GrowthChart({ data }: { data: SystemOverview['dailyTrend'] }) {
+  return (
+    <ResponsiveContainer width='100%' height={350}>
+      <BarChart data={data}>
+        <XAxis
+          dataKey='label'
+          stroke='var(--muted-foreground)'
+          fontSize={12}
+          tickLine={false}
+          axisLine={false}
+        />
+        <YAxis
+          direction='ltr'
+          stroke='var(--muted-foreground)'
+          fontSize={12}
+          tickLine={false}
+          axisLine={false}
+          allowDecimals={false}
+        />
+        <Bar
+          dataKey='users'
+          fill='currentColor'
+          radius={[4, 4, 0, 0]}
+          className='fill-primary'
+        />
+        <Bar
+          dataKey='teams'
+          fill='currentColor'
+          radius={[4, 4, 0, 0]}
+          className='fill-muted-foreground'
+        />
+      </BarChart>
+    </ResponsiveContainer>
+  )
+}
+
+function AuditChart({ data }: { data: SystemOverview['dailyTrend'] }) {
+  return (
+    <ResponsiveContainer width='100%' height={350}>
+      <AreaChart data={data}>
+        <XAxis
+          dataKey='label'
+          stroke='var(--muted-foreground)'
+          fontSize={12}
+          tickLine={false}
+          axisLine={false}
+        />
+        <YAxis
+          stroke='var(--muted-foreground)'
+          fontSize={12}
+          tickLine={false}
+          axisLine={false}
+          allowDecimals={false}
+        />
+        <Area
+          type='monotone'
+          dataKey='auditLogs'
+          stroke='var(--primary)'
+          fill='var(--primary)'
+          fillOpacity={0.15}
+        />
+        <Area
+          type='monotone'
+          dataKey='invitations'
+          stroke='var(--muted-foreground)'
+          fill='var(--muted-foreground)'
+          fillOpacity={0.1}
+        />
+      </AreaChart>
+    </ResponsiveContainer>
+  )
+}
+
+function StatusDistribution({
+  items,
+}: {
+  items: Array<{ label: string; value: number }>
+}) {
+  const total = items.reduce((sum, item) => sum + item.value, 0)
+
+  return (
+    <div className='flex flex-col gap-4'>
+      {items.map((item) => {
+        const percent = total > 0 ? Math.round((item.value / total) * 100) : 0
+
+        return (
+          <div key={item.label} className='flex flex-col gap-2'>
+            <div className='flex items-center justify-between gap-3 text-sm'>
+              <span className='font-medium'>{item.label}</span>
+              <div className='flex items-center gap-2'>
+                <span className='tabular-nums text-muted-foreground'>
+                  {item.value}
+                </span>
+                <Badge variant='secondary'>{percent}%</Badge>
+              </div>
+            </div>
+            <div className='h-2 overflow-hidden rounded-full bg-muted'>
+              <div
+                className='h-full bg-primary'
+                style={{ width: `${percent}%` }}
+              />
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+function SystemSkeleton() {
+  return (
+    <div className='flex flex-col gap-4'>
+      <div className='grid gap-4 sm:grid-cols-2 lg:grid-cols-4'>
+        {Array.from({ length: 4 }, (_, index) => (
+          <Card key={index}>
+            <CardHeader className='pb-2'>
+              <Skeleton className='h-4 w-20' />
+            </CardHeader>
+            <CardContent className='flex flex-col gap-2'>
+              <Skeleton className='h-8 w-16' />
+              <Skeleton className='h-3 w-28' />
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+      <div className='grid grid-cols-1 gap-4 lg:grid-cols-7'>
+        <Card className='lg:col-span-4'>
+          <CardHeader>
+            <Skeleton className='h-5 w-24' />
+          </CardHeader>
+          <CardContent>
+            <Skeleton className='h-[350px] w-full' />
+          </CardContent>
+        </Card>
+        <Card className='lg:col-span-3'>
+          <CardHeader>
+            <Skeleton className='h-5 w-24' />
+          </CardHeader>
+          <CardContent className='flex flex-col gap-4'>
+            <Skeleton className='h-10 w-full' />
+            <Skeleton className='h-10 w-full' />
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  )
+}
+
+function buildStats(data: SystemOverview | undefined): StatCard[] {
+  return [
+    {
+      title: '用户',
+      value: data?.counts.users ?? '-',
+      detail: `${data?.userStatus.active ?? 0} 个启用`,
+      icon: Users,
+    },
+    {
+      title: '团队',
+      value: data?.counts.teams ?? '-',
+      detail: '当前团队总数',
+      icon: Shield,
+    },
+    {
+      title: '邀请',
+      value: data?.counts.invitations ?? '-',
+      detail: `${data?.invitationStatus.pending ?? 0} 个待使用`,
+      icon: Mail,
+    },
+    {
+      title: '审计日志',
+      value: data?.counts.auditLogs ?? '-',
+      detail: '累计管理记录',
+      icon: FileText,
+    },
+    {
+      title: '权限记录',
+      value: data?.counts.userModulePermissions ?? '-',
+      detail: '用户模块授权',
+      icon: Activity,
+    },
+    {
+      title: '服务器时间',
+      value: data?.serverTime ? formatTime(data.serverTime) : '-',
+      detail: data?.serverTime ? formatDate(data.serverTime) : '未同步',
+      icon: Clock,
+    },
+  ]
+}
+
+function formatDateTime(value: string) {
+  return new Date(value).toLocaleString('zh-CN')
+}
+
+function formatDate(value: string) {
+  return new Date(value).toLocaleDateString('zh-CN')
+}
+
+function formatTime(value: string) {
+  return new Date(value).toLocaleTimeString('zh-CN', {
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }

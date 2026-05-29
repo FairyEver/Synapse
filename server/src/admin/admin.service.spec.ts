@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, describe, expect, it, vi } from "vitest"
 import { Prisma } from "@prisma/client"
 import type { PrismaService } from "../prisma/prisma.service"
 import { AdminService } from "./admin.service"
@@ -27,6 +27,15 @@ function createPrismaMock(counts: {
   readonly teams?: number
   readonly invitations?: number
   readonly userModulePermissions?: number
+  readonly activeUsers?: number
+  readonly disabledUsers?: number
+  readonly pendingInvitations?: number
+  readonly usedInvitations?: number
+  readonly expiredInvitations?: number
+  readonly recentUsers?: Array<{ createdAt: Date }>
+  readonly recentTeams?: Array<{ createdAt: Date }>
+  readonly recentInvitations?: Array<{ createdAt: Date }>
+  readonly recentAuditLogs?: Array<{ createdAt: Date }>
 } = {}) {
   const prisma = {
     $executeRaw: vi.fn(),
@@ -38,9 +47,18 @@ function createPrismaMock(counts: {
         counts.teams ?? 0,
         counts.invitations ?? 0,
         counts.userModulePermissions ?? 0,
+        counts.activeUsers ?? 0,
+        counts.disabledUsers ?? 0,
+        counts.pendingInvitations ?? 0,
+        counts.usedInvitations ?? 0,
+        counts.expiredInvitations ?? 0,
+        counts.recentUsers ?? [],
+        counts.recentTeams ?? [],
+        counts.recentInvitations ?? [],
+        counts.recentAuditLogs ?? [],
       ])
     }),
-    auditLog: { count: vi.fn() },
+    auditLog: { count: vi.fn(), findMany: vi.fn() },
     user: {
       count: vi.fn(),
       findUnique: vi.fn().mockResolvedValue({ status: "active" }),
@@ -57,19 +75,34 @@ function createPrismaMock(counts: {
       findUnique: vi.fn().mockResolvedValue({ id: "team-1" }),
     },
     userModulePermission: { count: vi.fn() },
-    invitation: { count: vi.fn(), delete: vi.fn(), deleteMany: vi.fn() },
+    invitation: { count: vi.fn(), findMany: vi.fn(), delete: vi.fn(), deleteMany: vi.fn() },
   }
   return prisma
 }
 
 describe("AdminService", () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   it("returns retained system overview counts", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-05-21T12:00:00.000Z"))
     const prisma = createPrismaMock({
       auditLogs: 2,
       users: 3,
       teams: 1,
       invitations: 4,
       userModulePermissions: 14,
+      activeUsers: 2,
+      disabledUsers: 1,
+      pendingInvitations: 1,
+      usedInvitations: 2,
+      expiredInvitations: 1,
+      recentUsers: [{ createdAt: new Date("2026-05-21T08:00:00.000Z") }],
+      recentTeams: [{ createdAt: new Date("2026-05-20T08:00:00.000Z") }],
+      recentInvitations: [{ createdAt: new Date("2026-05-19T08:00:00.000Z") }],
+      recentAuditLogs: [{ createdAt: new Date("2026-05-21T08:00:00.000Z") }],
     })
     const service = new AdminService(
       prisma as unknown as PrismaService,
@@ -84,6 +117,14 @@ describe("AdminService", () => {
       teams: 1,
       invitations: 4,
       userModulePermissions: 14,
+    })
+    expect(result.userStatus).toEqual({ active: 2, disabled: 1 })
+    expect(result.invitationStatus).toEqual({ pending: 1, used: 2, expired: 1 })
+    expect(result.dailyTrend).toHaveLength(7)
+    expect(result.dailyTrend.at(-1)).toMatchObject({
+      date: "2026-05-21",
+      users: 1,
+      auditLogs: 1,
     })
     expect(prisma.invitation.count).toHaveBeenCalledWith()
     expect(prisma.userModulePermission.count).toHaveBeenCalledWith()
