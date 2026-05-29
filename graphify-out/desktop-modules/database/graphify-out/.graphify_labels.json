@@ -1,9 +1,0 @@
-{
-  "0": "shared / mcp-rpc.ts",
-  "1": "shared / mcp-tools.ts",
-  "2": "shared / resolve-user-data.ts",
-  "3": "mcp / index.ts",
-  "4": "mcp / index.ts",
-  "5": "shared / capability-registry.ts",
-  "6": "shared / server-identity.ts"
-}
