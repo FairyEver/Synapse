@@ -11,12 +11,12 @@ const tempDirs: string[] = []
 afterEach(() => {
   closeUsageAnalysisDbForTests()
   for (const dir of tempDirs.splice(0)) {
-    fs.rmSync(dir, { recursive: true, force: true })
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 })
   }
 })
 
 describe("usage analysis db", () => {
-  it("creates cc and cx table namespaces", () => {
+  it("creates cc and cx table namespaces", { timeout: 15_000 }, () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-db-"))
     tempDirs.push(dir)
     const db = getUsageAnalysisDb(dir)

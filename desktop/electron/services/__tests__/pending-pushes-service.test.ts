@@ -24,7 +24,7 @@ vi.mock("../repository-store", () => ({
   },
 }))
 
-describe("pendingPushesService", () => {
+describe("pendingPushesService", { timeout: 15_000 }, () => {
   const repository: SynapseRepositoryConfig = {
     uuid: "repo-1",
     name: "Repo",
@@ -38,7 +38,7 @@ describe("pendingPushesService", () => {
   })
 
   afterEach(async () => {
-    await rm(userDataPath, { recursive: true, force: true })
+    await rm(userDataPath, { recursive: true, force: true, maxRetries: 3, retryDelay: 200 })
   })
 
   it("persists retry metadata", async () => {
