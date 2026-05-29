@@ -35,6 +35,8 @@
 
 - `templates/` 目录下的内容是外部参考模板，仅供阅读和参考，禁止自动修改其中的任何文件。
 - 如需修改模板代码，必须由用户在当前对话中明确要求。
+- 当用户提供模板线上 demo URL 时，按以下规则定位本地源码以供模仿：
+  - `shadcn-admin`（线上 demo: `https://shadcn-admin.netlify.app/`）：源码位于 `templates/shadcn-admin/`。URL 路径对应 `src/routes/_authenticated/<path>/index.tsx`（路由入口），页面业务实现在 `src/features/<path>/`。
 
 ### 金手指系统
 
