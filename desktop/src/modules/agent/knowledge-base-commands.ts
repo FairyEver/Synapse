@@ -16,18 +16,18 @@ export type KnowledgeBaseAgentCapability = {
 }
 
 export const KNOWLEDGE_BASE_AGENT_CAPABILITIES: readonly KnowledgeBaseAgentCapability[] = [
-  knowledgeBaseCapability("autoresearch", "围绕主题研究并写入知识库", {
+  knowledgeBaseCapability("autoresearch", "围绕主题研究并写入知识库", [{
     label: "研究主题",
     action: "insert",
-  }),
+  }]),
   knowledgeBaseCapability("canvas", "创建或更新知识库画布"),
   knowledgeBaseCapability("defuddle", "清理网页正文后用于入库"),
   knowledgeBaseCapability("obsidian-bases", "创建或编辑 Obsidian Bases"),
   knowledgeBaseCapability("obsidian-markdown", "按 Obsidian 语法编写页面"),
-  knowledgeBaseCapability("save", "保存当前对话或关键结论", {
+  knowledgeBaseCapability("save", "保存当前对话或关键结论", [{
     label: "保存对话",
     action: "insert",
-  }),
+  }]),
   knowledgeBaseCapability("wiki", "管理知识库结构与热缓存"),
   knowledgeBaseCapability("wiki-fold", "折叠整理知识库日志"),
   knowledgeBaseCapability("wiki-ingest", "汲取资料，整理 .raw 中的新内容", [
@@ -42,14 +42,14 @@ export const KNOWLEDGE_BASE_AGENT_CAPABILITIES: readonly KnowledgeBaseAgentCapab
       insertText: "/wiki-ingest .raw/",
     },
   ]),
-  knowledgeBaseCapability("wiki-lint", "检查链接、索引、孤立页面和结构问题", {
+  knowledgeBaseCapability("wiki-lint", "检查链接、索引、孤立页面和结构问题", [{
     label: "检查知识库",
     action: "send",
-  }),
-  knowledgeBaseCapability("wiki-query", "查询知识库并基于已有页面回答", {
+  }]),
+  knowledgeBaseCapability("wiki-query", "查询知识库并基于已有页面回答", [{
     label: "查询知识库",
     action: "insert",
-  }),
+  }]),
 ]
 
 const KNOWLEDGE_BASE_QUICK_ACTION_ORDER = [
@@ -122,21 +122,14 @@ export function knowledgeBaseStaticCommands(): SynapseAgentPublishedCommand[] {
 function knowledgeBaseCapability(
   name: string,
   description: string,
-  quickActions?: KnowledgeBaseQuickAction | readonly KnowledgeBaseQuickAction[],
+  quickActions?: readonly KnowledgeBaseQuickAction[],
 ): KnowledgeBaseAgentCapability {
   return {
     name,
     description,
     slashText: `/${name} `,
-    quickActions: normalizeKnowledgeBaseQuickActions(quickActions),
+    quickActions,
   }
-}
-
-function normalizeKnowledgeBaseQuickActions(
-  quickActions?: KnowledgeBaseQuickAction | readonly KnowledgeBaseQuickAction[],
-): readonly KnowledgeBaseQuickAction[] | undefined {
-  if (!quickActions) return undefined
-  return Array.isArray(quickActions) ? quickActions : [quickActions]
 }
 
 function knowledgeBaseSlashText(item: KnowledgeBaseAgentCapability): string {
