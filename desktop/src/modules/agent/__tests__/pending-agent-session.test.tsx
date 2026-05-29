@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => {
     sidebarProps: null as {
       projects?: Array<{ id: string; name: string; path: string }>
       sourceFilter?: string
+      onCreateSession?: (projectId: string, selection: { providerId: string; modelTier: string }) => void | Promise<void>
+      onSourceFilterChange?: (sourceFilter: string) => void
     } | null,
     configProjects: [{ id: "project-1", name: "Project One", path: "/repo" }],
     activeRepository: { uuid: "project-1", name: "Project One", localPath: "/repo" },
@@ -102,6 +104,8 @@ vi.mock("../components/agent-session-sidebar", () => ({
   AgentSessionSidebar: (props: {
     projects?: Array<{ id: string; name: string; path: string }>
     sourceFilter?: string
+    onCreateSession?: (projectId: string, selection: { providerId: string; modelTier: string }) => void | Promise<void>
+    onSourceFilterChange?: (sourceFilter: string) => void
   }) => {
     mocks.sidebarProps = props
     return <aside />
@@ -420,6 +424,45 @@ describe("AgentModule pending prompt sessions", () => {
     expect(mocks.sidebarProps?.sourceFilter).toBe("workflow")
     expect(selectSession).toHaveBeenCalledWith(workflowSession)
     expect(onPendingAgentSessionConsumed).toHaveBeenCalledTimes(1)
+  })
+
+  it("switches back to user conversations when creating a local session from another source filter", async () => {
+    const createSession = vi.fn().mockResolvedValue(undefined)
+    mocks.chat = createChatState({
+      createSession,
+      sessions: [{
+        ...targetSession,
+        platform: "scheduled",
+        name: "Scheduled Run",
+      }],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    await act(async () => {
+      mocks.sidebarProps?.onSourceFilterChange?.("scheduled")
+    })
+
+    expect(mocks.sidebarProps?.sourceFilter).toBe("scheduled")
+
+    await act(async () => {
+      await mocks.sidebarProps?.onCreateSession?.("project-1", {
+        providerId: "provider-1",
+        modelTier: "opus",
+      })
+    })
+
+    expect(createSession).toHaveBeenCalledWith("project-1", "provider-1", undefined, "opus")
+    expect(mocks.sidebarProps?.sourceFilter).toBe("user")
   })
 
   it("logs pending session handoff failures without consuming the prompt", async () => {

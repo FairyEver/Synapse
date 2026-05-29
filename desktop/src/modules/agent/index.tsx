@@ -440,7 +440,10 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
       selectedConversationId={chat.selectedConversationId}
       sourceFilter={sourceFilter}
       unreadByConversationId={chat.unreadByConversationId}
-      onCreateSession={(projectId, selection) => void chat.createSession(projectId, selection.providerId, undefined, selection.modelTier)}
+      onCreateSession={async (projectId, selection) => {
+        if (sourceFilter !== "user") setSourceFilter("user")
+        await chat.createSession(projectId, selection.providerId, undefined, selection.modelTier)
+      }}
       onSourceFilterChange={setSourceFilter}
       onSelect={(session) => void chat.selectSession(session)}
       onDelete={(session) => void chat.deleteSession(session)}
@@ -583,6 +586,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               onCreatePermissionModeSession={(mode) => {
                 const projectId = chat.selectedProjectId ?? chat.activeProjectId
                 if (!projectId) return
+                if (sourceFilter !== "user") setSourceFilter("user")
                 void chat.createSession(projectId, selectedSession?.providerId, mode)
               }}
               onDraftChange={setDraft}

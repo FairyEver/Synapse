@@ -47,7 +47,7 @@ type AgentSessionSidebarProps = {
   selectedConversationId?: string
   sourceFilter: ConversationSourceFilter
   unreadByConversationId: Record<string, number>
-  onCreateSession: (projectId: string, selection: ProviderModelSelection) => void
+  onCreateSession: (projectId: string, selection: ProviderModelSelection) => void | Promise<void>
   onSourceFilterChange: (sourceFilter: ConversationSourceFilter) => void
   onSelect: (session: SynapseAgentSessionSummary) => void
   onDelete: (session: SynapseAgentSessionSummary) => void
@@ -156,8 +156,9 @@ function AgentSessionSidebar({
         open={createProject !== null}
         onOpenChange={(open) => { if (!open) setCreateProject(null) }}
         defaultSelection={config.agent.defaultProviderModel ?? undefined}
-        onSelect={(selection) => {
-          if (createProject) onCreateSession(createProject.id, selection)
+        onSelect={async (selection) => {
+          if (!createProject) return
+          await onCreateSession(createProject.id, selection)
           setCreateProject(null)
         }}
       />
