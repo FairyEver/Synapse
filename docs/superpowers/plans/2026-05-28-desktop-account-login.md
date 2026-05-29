@@ -1993,17 +1993,7 @@ pnpm --filter @synapse/desktop run check:hard-constraints
 
 Expected: PASS. Pay particular attention that new IPC code uses `IpcModule` and no new renderer code imports Electron directly.
 
-- [ ] **Step 4: Keep graphify current**
-
-Run:
-
-```bash
-graphify update .
-```
-
-Expected: graph update exits 0. Existing dirty graphify output may remain dirty; do not revert unrelated pre-existing graph files.
-
-- [ ] **Step 5: Final commit**
+- [ ] **Step 4: Final commit**
 
 ```bash
 git add RELEASE_NOTES_PENDING.md
