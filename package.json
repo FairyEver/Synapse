@@ -4,6 +4,7 @@
   "version": "0.0.0",
   "packageManager": "pnpm@10.22.0",
   "scripts": {
+    "dev": "pnpm run dev:server & pnpm run dev:desktop & wait",
     "dev:website": "pnpm --filter @synapse/website run dev",
     "dev:desktop": "pnpm --filter @synapse/desktop run dev",
     "dev:server": "docker compose --env-file server/.env -f server/compose.yml up -d postgres && (node scripts/run-with-server-env.mjs --filter @synapse/server run dev & node scripts/run-with-server-env.mjs --filter @synapse/dashboard run dev & wait)",

@@ -104,8 +104,9 @@
 ## 当前仓库结构
 
 - 本仓库是 pnpm monorepo。工作区根目录包含共享文档（`AGENTS.md`, `CLAUDE.md`, `README.md`）、项目级 Claude 规则 `.claude/rules/`、`.github/` CI，以及 monorepo 的 `package.json` / `pnpm-workspace.yaml`。工作区包包括 `@synapse/desktop`、`@synapse/website`、`@synapse/server`、`@synapse/auto` 和 `@synapse/auto-web`；桌面应用源码位于 `desktop/` 子包。
-- 根目录公开开发入口是 `pnpm dev:website`、`pnpm dev:server` 和 `pnpm dev:desktop`；根目录刻意没有 `pnpm dev` 命令。后台 / server 启动命令是根目录执行 `pnpm dev:server`，它会启动 server API、dashboard 和所需的 server compose 服务。停止后台 / server 使用根目录 `pnpm quit:server`。使用 `pnpm quit` 停止本地开发进程和 server compose 服务。其他包级脚本直接使用对应包名运行，例如 `pnpm --filter @synapse/desktop run <script>`。
-- 进行自动化测试、UI 测试或需要本地服务的验证时，禁止自行猜测启动 / 停止命令。后台 / server 只能用根目录 `pnpm dev:server` 启动、`pnpm quit:server` 停止；website 前端只能用根目录 `pnpm dev:website` 启动、`pnpm quit:website` 停止；desktop 前端只能用根目录 `pnpm dev:desktop` 启动、`pnpm quit:desktop` 停止。
+- 根目录开发启动命令：`pnpm dev`（同时启动 desktop + server）、`pnpm dev:desktop`（仅桌面端）、`pnpm dev:server`（仅后台，含 server API、dashboard 和 compose 服务）、`pnpm dev:website`（仅官网）。停止命令：`pnpm quit`（全部停止）、`pnpm quit:server`、`pnpm quit:desktop`、`pnpm quit:website`。其他包级脚本直接使用对应包名运行，例如 `pnpm --filter @synapse/desktop run <script>`。
+- 启动策略：根据当前任务修改的内容选择最小启动范围，不要无差别执行 `pnpm dev`。只改 `desktop/` 就只启 `pnpm dev:desktop`；只改 `server/` 就只启 `pnpm dev:server`；两者都改才用 `pnpm dev`。如果对应服务已经在运行，因为有热更新，通常不需要停止再重启——直接修改代码即可生效。只有在确认热更新不覆盖的场景（如改了 Electron 主进程入口、改了构建配置、改了依赖）时才需要重启。
+- 进行自动化测试、UI 测试或需要本地服务的验证时，禁止自行猜测启动 / 停止命令，必须使用上述根目录命令。
 - 特权 Electron 代码位于 `desktop/electron/`。
 - Renderer 代码位于 `desktop/src/`。
 - 共享 shell 状态与编排位于 `desktop/src/app-shell/`。
