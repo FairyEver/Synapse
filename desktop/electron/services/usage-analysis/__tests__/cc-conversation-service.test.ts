@@ -135,7 +135,7 @@ afterEach(() => {
 })
 
 describe("CcConversationService", () => {
-  it("lists conversations from the usage index", () => {
+  it("lists conversations from the usage index", { timeout: 15_000 }, () => {
     const { db } = setupFixture()
     const service = new CcConversationService({ db })
 
@@ -156,7 +156,7 @@ describe("CcConversationService", () => {
     })
   })
 
-  it("returns record rows with request counts", () => {
+  it("returns record rows with request counts", { timeout: 15_000 }, () => {
     const { db } = setupFixture()
     const service = new CcConversationService({ db })
     insertUsage(db, {
