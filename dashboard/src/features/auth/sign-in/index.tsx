@@ -1,7 +1,6 @@
 import { useState } from 'react'
 import { z } from 'zod'
 import { useForm } from 'react-hook-form'
-import { zodResolver } from '@hookform/resolvers/zod'
 import { useNavigate, useSearch } from '@tanstack/react-router'
 import { Loader2, LogIn } from 'lucide-react'
 import { toast } from 'sonner'
@@ -31,14 +30,23 @@ export function SignIn() {
   const { auth } = useAuthStore()
 
   const form = useForm<z.infer<typeof formSchema>>({
-    resolver: zodResolver(formSchema),
     defaultValues: { email: '', password: '' },
   })
 
-  async function onSubmit(data: z.infer<typeof formSchema>) {
+  async function onSubmit(rawData: z.infer<typeof formSchema>) {
+    const parsed = formSchema.safeParse(rawData)
+    if (!parsed.success) {
+      const errors = z.flattenError(parsed.error).fieldErrors
+      if (errors.email?.[0]) form.setError('email', { message: errors.email[0] })
+      if (errors.password?.[0]) {
+        form.setError('password', { message: errors.password[0] })
+      }
+      return
+    }
+
     setIsLoading(true)
     try {
-      const session = await dashboardApi.login(data)
+      const session = await dashboardApi.login(parsed.data)
       auth.setUser(session)
       toast.success(`欢迎回来，${session.email}`)
       const targetPath = search.redirect || '/'

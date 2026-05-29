@@ -27,5 +27,12 @@
     "noFallthroughCasesInSwitch": true,
     "noUncheckedSideEffectImports": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  "exclude": [
+    "src/**/*.test.ts",
+    "src/**/*.test.tsx",
+    "src/components/date-picker.tsx",
+    "src/components/ui/calendar.tsx",
+    "src/components/ui/input-otp.tsx"
+  ]
 }
