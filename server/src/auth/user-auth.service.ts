@@ -13,6 +13,7 @@ export const userAuthOptionsToken = "USER_AUTH_OPTIONS"
 export interface UserAuthOptions {
   readonly accessMinutes: number
   readonly refreshDays: number
+  readonly exposePasswordResetUrl: boolean
 }
 
 export interface UserTokenPair {
@@ -32,9 +33,16 @@ export interface UserMeResponse {
   readonly teams: readonly UserMeTeam[]
 }
 
+export interface PasswordResetRequestResult {
+  readonly ok: true
+  readonly resetUrl?: string
+  readonly expiresAt?: Date
+}
+
 interface UserJwtPayload {
   readonly sub: string
   readonly email: string
+  readonly iat?: number
 }
 
 function addDays(date: Date, days: number): Date {
@@ -45,16 +53,29 @@ function addDays(date: Date, days: number): Date {
 
 const revokedSessionRetentionMs = 7 * 24 * 60 * 60 * 1000
 const desktopLoginCodeTtlMs = 5 * 60 * 1000
+const passwordResetTokenTtlMs = 30 * 60 * 1000
 
 function buildDesktopDeepLink(code: string, state: string): string {
   const query = new URLSearchParams({ code, state })
   return `synapse://auth/callback?${query.toString()}`
 }
 
+function buildPasswordResetUrl(publicAppUrl: string, token: string): string {
+  const url = new URL("/dashboard/reset-password", `${publicAppUrl.replace(/\/+$/, "")}/`)
+  url.searchParams.set("token", token)
+  return url.toString()
+}
+
 function timingSafeEqualText(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(hashToken(left), "hex")
   const rightBuffer = Buffer.from(hashToken(right), "hex")
   return timingSafeEqual(leftBuffer, rightBuffer)
+}
+
+function tokenIssuedBeforePasswordChange(payload: { readonly iat?: number }, passwordChangedAt?: Date | null): boolean {
+  if (!passwordChangedAt) return false
+  if (!payload.iat) return true
+  return payload.iat < Math.floor(passwordChangedAt.getTime() / 1000)
 }
 
 @Injectable()
@@ -113,6 +134,113 @@ export class UserAuthService {
       }
       throw error
     }
+  }
+
+  async requestPasswordReset(
+    input: { email: string; publicAppUrl: string },
+    ipAddress = "system",
+  ): Promise<PasswordResetRequestResult> {
+    const email = input.email.trim().toLowerCase()
+    const user = await this.prisma.user.findUnique({
+      where: { email },
+      select: { id: true, email: true, status: true },
+    })
+    if (!user || user.status !== "active") {
+      await this.auditLog?.record({
+        adminEmail: email,
+        action: "user.password_reset.request_ignored",
+        targetType: "user",
+        targetId: user?.id ?? "unknown",
+        ipAddress,
+      })
+      return { ok: true }
+    }
+
+    const token = createOpaqueToken()
+    const expiresAt = new Date(Date.now() + passwordResetTokenTtlMs)
+    await this.prisma.userPasswordResetToken.create({
+      data: {
+        tokenHash: hashToken(token),
+        userId: user.id,
+        expiresAt,
+      },
+    })
+    await this.auditLog?.record({
+      adminEmail: user.email,
+      action: "user.password_reset.request",
+      targetType: "user",
+      targetId: user.id,
+      ipAddress,
+    })
+
+    if (!this.options.exposePasswordResetUrl) return { ok: true }
+
+    return {
+      ok: true,
+      resetUrl: buildPasswordResetUrl(input.publicAppUrl, token),
+      expiresAt,
+    }
+  }
+
+  async resetPassword(input: { token: string; password: string }, ipAddress = "system"): Promise<{ ok: true }> {
+    const token = input.token.trim()
+    if (!token) throw new UnauthorizedException("重置链接无效或已过期。")
+
+    const record = await this.prisma.userPasswordResetToken.findUnique({
+      where: { tokenHash: hashToken(token) },
+      include: { user: true },
+    })
+    const now = new Date()
+    if (!record || record.usedAt || record.expiresAt <= now || record.user.status !== "active") {
+      await this.recordPasswordResetFailure(record, ipAddress)
+      throw new UnauthorizedException("重置链接无效或已过期。")
+    }
+
+    try {
+      await this.prisma.$transaction(async (tx) => {
+        const update = await tx.userPasswordResetToken.updateMany({
+          where: {
+            id: record.id,
+            usedAt: null,
+            expiresAt: { gt: now },
+          },
+          data: { usedAt: now },
+        })
+        if (update.count !== 1) {
+          throw new UnauthorizedException("重置链接无效或已过期。")
+        }
+
+        await tx.user.update({
+          where: { id: record.userId },
+          data: {
+            passwordHash: await hashPassword(input.password),
+            passwordChangedAt: now,
+          },
+        })
+        await tx.userSession.updateMany({
+          where: { userId: record.userId, revokedAt: null },
+          data: { revokedAt: now },
+        })
+        await tx.userPasswordResetToken.updateMany({
+          where: { userId: record.userId, usedAt: null },
+          data: { usedAt: now },
+        })
+      })
+    } catch (error) {
+      if (error instanceof UnauthorizedException) {
+        await this.recordPasswordResetFailure(record, ipAddress)
+      }
+      throw error
+    }
+
+    await this.auditLog?.record({
+      adminEmail: record.user.email,
+      action: "user.password_reset.success",
+      targetType: "user",
+      targetId: record.user.id,
+      ipAddress,
+    })
+    return { ok: true }
   }
 
   async login(input: { email: string; password: string }, ipAddress = "system"): Promise<UserTokenPair> {
@@ -344,7 +472,7 @@ export class UserAuthService {
 
   async cleanupExpiredSessions(now = new Date()): Promise<number> {
     const revokedBefore = new Date(now.getTime() - revokedSessionRetentionMs)
-    const [sessionResult, desktopLoginCodeResult] = await Promise.all([
+    const [sessionResult, desktopLoginCodeResult, passwordResetTokenResult] = await Promise.all([
       this.prisma.userSession.deleteMany({
         where: {
           OR: [
@@ -361,8 +489,16 @@ export class UserAuthService {
           ],
         },
       }),
+      this.prisma.userPasswordResetToken.deleteMany({
+        where: {
+          OR: [
+            { expiresAt: { lt: now } },
+            { usedAt: { not: null } },
+          ],
+        },
+      }),
     ])
-    return sessionResult.count + desktopLoginCodeResult.count
+    return sessionResult.count + desktopLoginCodeResult.count + passwordResetTokenResult.count
   }
 
   async getMe(userId: string): Promise<UserMeResponse> {
@@ -400,7 +536,12 @@ export class UserAuthService {
     try {
       const payload = this.jwt.verify<UserJwtPayload>(token)
       const user = await this.prisma.user.findUnique({ where: { id: payload.sub } })
-      if (!user || user.status !== "active" || user.email !== payload.email) {
+      if (
+        !user ||
+        user.status !== "active" ||
+        user.email !== payload.email ||
+        tokenIssuedBeforePasswordChange(payload, user.passwordChangedAt)
+      ) {
         throw new UnauthorizedException("未登录或登录已过期。")
       }
       return { userId: user.id }
@@ -447,6 +588,19 @@ export class UserAuthService {
       targetId: "unknown",
       detail: { reason: input.reason },
       ipAddress: input.ipAddress,
+    })
+  }
+
+  private async recordPasswordResetFailure(
+    record: { user?: Pick<User, "id" | "email"> } | null,
+    ipAddress: string,
+  ): Promise<void> {
+    await this.auditLog?.record({
+      adminEmail: record?.user?.email ?? "unknown",
+      action: "user.password_reset.failure",
+      targetType: "user",
+      targetId: record?.user?.id ?? "unknown",
+      ipAddress,
     })
   }
 

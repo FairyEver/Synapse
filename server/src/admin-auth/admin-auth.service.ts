@@ -11,6 +11,7 @@ interface AdminJwtPayload {
   readonly sub: string
   readonly email: string
   readonly type?: "admin" | "user"
+  readonly iat?: number
   readonly exp?: number
 }
 
@@ -30,6 +31,12 @@ function getDashboardModulePermissions(user: { modulePermissions?: readonly { pe
   return user.modulePermissions
     ?.map((item) => item.permissionKey)
     .filter(isActiveModulePermissionKey) ?? []
+}
+
+function tokenIssuedBeforePasswordChange(payload: { readonly iat?: number }, passwordChangedAt?: Date | null): boolean {
+  if (!passwordChangedAt) return false
+  if (!payload.iat) return true
+  return payload.iat < Math.floor(passwordChangedAt.getTime() / 1000)
 }
 
 @Injectable()
@@ -138,7 +145,12 @@ export class AdminAuthService {
           where: { id: payload.sub },
           include: { modulePermissions: { select: userModulePermissionSelect } },
         })
-        if (!user || user.status !== "active" || user.email !== payload.email) return null
+        if (
+          !user ||
+          user.status !== "active" ||
+          user.email !== payload.email ||
+          tokenIssuedBeforePasswordChange(payload, user.passwordChangedAt)
+        ) return null
         return {
           id: user.id,
           email: user.email,

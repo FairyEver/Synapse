@@ -270,7 +270,12 @@ describe("agent slash menu utilities", () => {
       action: item.action,
       commandText: item.commandText,
     }))).toEqual([
-      { label: "汲取资料", action: "send", commandText: "/wiki-ingest " },
+      {
+        label: "汲取新资料",
+        action: "send",
+        commandText: "/wiki-ingest ingest all of these .raw sources ",
+      },
+      { label: "汲取指定资料", action: "insert", commandText: "/wiki-ingest .raw/ " },
       { label: "查询知识库", action: "insert", commandText: "/wiki-query " },
       { label: "保存对话", action: "insert", commandText: "/save " },
       { label: "研究主题", action: "insert", commandText: "/autoresearch " },

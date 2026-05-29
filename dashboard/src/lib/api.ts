@@ -147,6 +147,12 @@ export type UserTokenPair = {
   refreshToken: string
 }
 
+export type PasswordResetRequestResult = {
+  ok: true
+  resetUrl?: string
+  expiresAt?: string
+}
+
 export type DesktopLoginCodeIssueResult = {
   code: string
   deepLinkUrl: string
@@ -411,12 +417,26 @@ export const adminApi = {
     ),
 }
 
-export const userApi = {
+export const userAuthApi = {
   register: (input: { email: string; password: string }) =>
     request<UserTokenPair>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(input),
     }),
+  requestPasswordReset: (input: { email: string }) =>
+    request<PasswordResetRequestResult>('/api/auth/password-reset/request', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  resetPassword: (input: { token: string; password: string }) =>
+    request<{ ok: true }>('/api/auth/password-reset/confirm', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+}
+
+export const userApi = {
+  register: userAuthApi.register,
   joinTeam: (input: { token: string }) =>
     request<unknown>('/api/teams/join', {
       method: 'POST',

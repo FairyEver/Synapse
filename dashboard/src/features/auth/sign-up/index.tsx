@@ -1,4 +1,4 @@
-import { Link, useSearch } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import {
   Card,
   CardContent,
@@ -8,29 +8,27 @@ import {
   CardTitle,
 } from '@/components/ui/card'
 import { AuthLayout } from '../auth-layout'
-import { UserAuthForm } from './components/user-auth-form'
+import { SignUpForm } from './components/sign-up-form'
 
-export function SignIn() {
-  const { redirect } = useSearch({ from: '/(auth)/sign-in' })
-
+export function SignUp() {
   return (
     <AuthLayout>
       <Card className='w-full max-w-sm gap-4 sm:min-w-sm'>
         <CardHeader>
-          <CardTitle className='text-lg'>登录</CardTitle>
-          <CardDescription>输入邮箱和密码登录管理后台。</CardDescription>
+          <CardTitle className='text-lg'>创建账号</CardTitle>
+          <CardDescription>输入邮箱和密码创建普通用户账号。</CardDescription>
         </CardHeader>
         <CardContent>
-          <UserAuthForm redirectTo={redirect} />
+          <SignUpForm />
         </CardContent>
         <CardFooter>
           <p className='px-8 text-center text-sm text-muted-foreground'>
-            没有账号？{' '}
+            已有账号？{' '}
             <Link
-              to='/sign-up'
+              to='/sign-in'
               className='underline underline-offset-4 hover:text-primary'
             >
-              创建账号
+              登录
             </Link>
           </p>
         </CardFooter>

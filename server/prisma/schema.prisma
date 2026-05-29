@@ -50,11 +50,13 @@ model User {
   id                  String                 @id @default(cuid())
   email               String                 @unique
   passwordHash        String
+  passwordChangedAt   DateTime?
   status              UserStatus             @default(active)
   memberships         TeamMembership[]
   createdTeams        Team[]                 @relation("TeamCreator")
   sessions            UserSession[]
   desktopLoginCodes   DesktopLoginCode[]
+  passwordResetTokens UserPasswordResetToken[]
   acceptedInvitations Invitation[]           @relation("AcceptedInvitations")
   createdInvitations  Invitation[]           @relation("UserCreatedInvitations")
   modulePermissions   UserModulePermission[]
@@ -148,6 +150,20 @@ model DesktopLoginCode {
   usedAt    DateTime?
   ipAddress String
   userAgent String?
+  createdAt DateTime  @default(now())
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@index([usedAt])
+}
+
+model UserPasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt DateTime
+  usedAt    DateTime?
   createdAt DateTime  @default(now())
 
   @@index([userId])

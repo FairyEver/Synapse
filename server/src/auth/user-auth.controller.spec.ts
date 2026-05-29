@@ -13,6 +13,10 @@ describe("UserAuthController", () => {
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.register)).toBe(60000)
     expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.login)).toBe(5)
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.login)).toBe(60000)
+    expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.requestPasswordReset)).toBe(5)
+    expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.requestPasswordReset)).toBe(60000)
+    expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.resetPassword)).toBe(5)
+    expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.resetPassword)).toBe(60000)
     expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.refresh)).toBe(5)
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.refresh)).toBe(60000)
     expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.logout)).toBe(5)
@@ -49,6 +53,64 @@ describe("UserAuthController", () => {
       email: "user@example.com",
       password: "password",
     }, "203.0.113.21")
+  })
+
+  it("passes password reset requests with the resolved public app URL", () => {
+    const auth = {
+      requestPasswordReset: vi.fn().mockResolvedValue({ ok: true }),
+    }
+    const controller = new UserAuthController(auth as unknown as UserAuthService)
+
+    vi.stubEnv("APP_PUBLIC_URL", "")
+    try {
+      controller.requestPasswordReset(
+        { email: "user@example.com" },
+        {
+          ip: "203.0.113.30",
+          protocol: "https",
+          headers: { host: "app.example.com" },
+          get: (name: string) => (name === "host" ? "app.example.com" : undefined),
+        } as never,
+      )
+    } finally {
+      vi.unstubAllEnvs()
+    }
+
+    expect(auth.requestPasswordReset).toHaveBeenCalledWith({
+      email: "user@example.com",
+      publicAppUrl: "https://app.example.com",
+    }, "203.0.113.30")
+  })
+
+  it("passes valid password reset confirmations with the request ip", () => {
+    const auth = {
+      resetPassword: vi.fn().mockResolvedValue({ ok: true }),
+    }
+    const controller = new UserAuthController(auth as unknown as UserAuthService)
+
+    controller.resetPassword({
+      token: "reset-token",
+      password: "NewPassword123!",
+    }, { ip: "203.0.113.31" } as never)
+
+    expect(auth.resetPassword).toHaveBeenCalledWith({
+      token: "reset-token",
+      password: "NewPassword123!",
+    }, "203.0.113.31")
+  })
+
+  it("rejects invalid password reset confirmations before calling the service", () => {
+    const auth = {
+      resetPassword: vi.fn(),
+    }
+    const controller = new UserAuthController(auth as unknown as UserAuthService)
+
+    expect(() => controller.resetPassword({
+      token: "",
+      password: "short",
+    }, { ip: "203.0.113.31" } as never))
+      .toThrow(BadRequestException)
+    expect(auth.resetPassword).not.toHaveBeenCalled()
   })
 
   it("rejects register requests with invitation tokens", () => {
