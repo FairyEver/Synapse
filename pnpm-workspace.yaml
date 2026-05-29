@@ -5,6 +5,7 @@ packages:
   - dashboard
   - auto
   - auto/web
+  - templates/shadcn-admin
 
 onlyBuiltDependencies:
   - electron

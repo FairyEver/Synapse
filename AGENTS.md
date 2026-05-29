@@ -31,6 +31,11 @@
 - 完成用户可感知或发版相关改动后，必须更新根目录 `RELEASE_NOTES_PENDING.md`。记录要面向后续发版说明，口语化说明用户得到什么、什么行为变了、修了什么问题；不要写代码路径、提交号或实现流水账。纯内部整理、版本 bump、无产品影响的文档规划通常不需要记录。
 - 修改 Electron 打包边界时必须把 `app.asar` 当成启动关键路径处理。凡是改动 `desktop/package.json` 的 `files`、`asarUnpack`、`extraResources`，或新增/移动 Electron worker、原生模块、可执行文件、运行时资源，都必须同步确认 sourcemap、unpacked 文件和 packed 文件不会错位；不要只把 `.js` 加入 `asarUnpack` 而忽略同目录产物如 `.js.map`。发版前必须用 `pnpm --filter @synapse/desktop run check:packaged-asar` 或等价校验证明 `package.json`、主进程入口、packed hash 和 unpacked 文件存在性正常。
 
+### 参考模板目录
+
+- `templates/` 目录下的内容是外部参考模板，仅供阅读和参考，禁止自动修改其中的任何文件。
+- 如需修改模板代码，必须由用户在当前对话中明确要求。
+
 ### 金手指系统
 
 - 金手指（cheat code）是代码内注册的隐藏指令身份，稳定名称使用命名空间字符串，例如 `model:flow:disable`；它只是隐蔽入口，不是权限或安全边界。
