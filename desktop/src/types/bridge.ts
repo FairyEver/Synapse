@@ -869,7 +869,13 @@ export type SynapseBridge = {
     ) => Promise<SynapseAgentSendResult>
     listPendingPermissions: (projectId: string) => Promise<SynapseAgentPendingPermission[]>
     respondPermission: (
-      args: { projectId: string; requestId: string; behavior: "allow" | "deny"; message?: string },
+      args: {
+        projectId: string
+        requestId: string
+        behavior: "allow" | "deny"
+        updatedInput?: Record<string, unknown>
+        message?: string
+      },
     ) => Promise<{ ok: true }>
     setPermissionMode: (
       args: {

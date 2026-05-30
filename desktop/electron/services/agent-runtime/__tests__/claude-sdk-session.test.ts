@@ -426,6 +426,61 @@ describe("ClaudeSDKSession", () => {
     })
   })
 
+  it("canUseTool forwards AskUserQuestion as a structured user question request", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory)
+    const questionInput = {
+      questions: [{
+        question: "该怎么处理？",
+        header: "处理方式",
+        options: [
+          { label: "跳过", description: "保持现状" },
+          { label: "重试", description: "重新处理" },
+        ],
+        multiSelect: false,
+      }],
+    }
+
+    const canUseTool = getOptions().canUseTool as (
+      toolName: string,
+      input: Record<string, unknown>,
+      context: { signal: AbortSignal },
+    ) => Promise<PermissionResult>
+    const permission = canUseTool("AskUserQuestion", questionInput, {
+      signal: new AbortController().signal,
+    })
+
+    const event = await session.nextEvent()
+
+    expect(event).toMatchObject({
+      type: "permissionRequest",
+      requestId: expect.any(String),
+      toolName: "AskUserQuestion",
+      questions: questionInput.questions,
+      toolInputRaw: questionInput,
+      conversationId: "conversation-1",
+      providerId: "claude-sdk",
+      timestamp: "2026-05-13T00:00:00.000Z",
+    })
+
+    if (event?.type !== "permissionRequest") {
+      throw new Error("expected user question request")
+    }
+    const updatedInput = {
+      questions: questionInput.questions,
+      answers: { "该怎么处理？": "重试" },
+    }
+    await session.respondPermission(event.requestId, {
+      behavior: "allow",
+      updatedInput,
+    })
+
+    await expect(permission).resolves.toEqual({
+      behavior: "allow",
+      updatedInput,
+    })
+  })
+
   it("logs stale permission responses when the SDK pending request is missing", async () => {
     const { factory } = createQueryFactory()
     const logger = { warn: vi.fn() }

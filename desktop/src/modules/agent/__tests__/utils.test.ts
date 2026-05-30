@@ -111,6 +111,32 @@ describe("agent utils", () => {
     ].join("\n"))
   })
 
+  it("labels AskUserQuestion transcript entries as pending answers", () => {
+    const entries = [{
+      id: "question-1",
+      kind: "permissionRequest",
+      requestId: "request-1",
+      toolName: "AskUserQuestion",
+      timestamp: "2026-04-27T03:18:00.000Z",
+      questions: [{
+        header: "Pick one",
+        question: "你最想学哪门编程语言？",
+        options: [
+          { label: "Python", description: "AI/数据科学" },
+          { label: "TypeScript", description: "前端全栈" },
+        ],
+        multiSelect: false,
+      }],
+    }] as const
+
+    const transcript = formatAgentTranscript(entries)
+
+    expect(transcript).toContain(`待回答 ${formatEntryTime(entries[0].timestamp)}`)
+    expect(transcript).toContain("Pick one: 你最想学哪门编程语言？")
+    expect(transcript).toContain("- Python: AI/数据科学")
+    expect(transcript).not.toContain("权限")
+  })
+
   it("omits malformed timestamps from copied transcripts", () => {
     const entries = [
       {

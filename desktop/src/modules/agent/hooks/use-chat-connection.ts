@@ -59,7 +59,12 @@ type ChatConnectionResult = {
   readonly deleteSession: (session: SynapseAgentSessionSummary) => Promise<void>
   readonly renameSession: (session: SynapseAgentSessionSummary, name: string) => Promise<void>
   readonly setPermissionMode: (mode: SynapseAgentPermissionMode) => Promise<void>
-  readonly respondPermission: (requestId: string, behavior: "allow" | "deny") => Promise<void>
+  readonly respondPermission: (
+    requestId: string,
+    behavior: "allow" | "deny",
+    updatedInput?: Record<string, unknown>,
+    message?: string,
+  ) => Promise<void>
   readonly cancelTurn: () => Promise<void>
   readonly forceKillTurn: () => Promise<void>
 }
@@ -715,6 +720,8 @@ function useChatConnection(
   const respondPermission = useCallback(async (
     requestId: string,
     behavior: "allow" | "deny",
+    updatedInput?: Record<string, unknown>,
+    message?: string,
   ) => {
     if (respondingPermissionIdsRef.current.has(requestId)) return
     respondingPermissionIdsRef.current.add(requestId)
@@ -727,7 +734,7 @@ function useChatConnection(
     const bridge = requireSynapseBridge()
     dispatch({ type: "SET_ERROR", error: null })
     try {
-      await bridge.agent.respondPermission({ projectId, requestId, behavior })
+      await bridge.agent.respondPermission({ projectId, requestId, behavior, updatedInput, message })
       try {
         await refreshPendingPermissions()
       } catch (refreshError) {

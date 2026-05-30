@@ -1040,6 +1040,46 @@ describe("ConversationRouter", () => {
     ])
   })
 
+  it("uses answer wording when a side session receives AskUserQuestion", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const { router } = createRouter({
+      agentEvents,
+      session: new ScriptedSession([
+        {
+          type: "permissionRequest",
+          requestId: "question-1",
+          toolName: "AskUserQuestion",
+          toolInput: "处理方式",
+          toolInputRaw: {
+            questions: [{
+              question: "该怎么处理？",
+              options: [{ label: "跳过" }, { label: "重试" }],
+              multiSelect: false,
+            }],
+          },
+          questions: [{
+            question: "该怎么处理？",
+            options: [{ label: "跳过" }, { label: "重试" }],
+            multiSelect: false,
+          }],
+          sdkSessionId: "sdk-1",
+        },
+      ], "sdk-1"),
+    })
+
+    const result = await router.sendSideSessionWithTimeout(baseMessage("relay"), "Relay", 100)
+    const persisted = await agentEvents.list()
+
+    expect(result).toMatchObject({
+      timedOut: false,
+      error: "Relay requested a user answer.",
+    })
+    expect(persisted.map((entry) => entry.eventType)).toEqual(["permissionRequest", "error"])
+    expect(persisted[1]?.payload).toEqual(expect.objectContaining({
+      message: "Relay requested a user answer.",
+    }))
+  })
+
   it("keeps persisted tool metadata and event payloads bounded and sanitized", async () => {
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
     const raw = {
@@ -1260,6 +1300,10 @@ class FakeProviderService {
 class ScriptedSession implements AgentLiveSession {
   readonly agentType = "claude-sdk"
   readonly sent: string[] = []
+  readonly responses: Array<{
+    readonly requestId: string
+    readonly decision: AgentPermissionDecision
+  }> = []
   private readonly events: AgentEvent[]
   private closed = false
 
@@ -1273,9 +1317,11 @@ class ScriptedSession implements AgentLiveSession {
   }
 
   async respondPermission(
-    _requestId: string,
-    _decision: AgentPermissionDecision,
-  ): Promise<void> {}
+    requestId: string,
+    decision: AgentPermissionDecision,
+  ): Promise<void> {
+    this.responses.push({ requestId, decision })
+  }
 
   async nextEvent(): Promise<AgentEvent | null> {
     return this.events.shift() ?? null

@@ -14,12 +14,14 @@ import { AgentAnnotation } from "./agent-annotation"
 import { AgentPermissionCard } from "./agent-permission-card"
 import { AgentThinkingEvent } from "./agent-thinking-event"
 import { AgentToolEvent } from "./agent-tool-event"
+import { AgentUserQuestionCard } from "./agent-user-question-card"
 
 function AgentTimelineItem({
   item,
   profile,
   agentIcon,
   pendingPermissions,
+  latestPendingItemIds,
   onOpenReference,
   onRespondPermission,
 }: {
@@ -27,8 +29,14 @@ function AgentTimelineItem({
   readonly profile: SynapseAgentDisplayProfile
   readonly agentIcon?: string
   readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
+  readonly latestPendingItemIds?: ReadonlySet<string>
   readonly onOpenReference: (reference: string) => void
-  readonly onRespondPermission: (requestId: string, behavior: "allow" | "deny") => void | Promise<void>
+  readonly onRespondPermission: (
+    requestId: string,
+    behavior: "allow" | "deny",
+    updatedInput?: Record<string, unknown>,
+    message?: string,
+  ) => void | Promise<void>
 }) {
   switch (item.kind) {
     case "message":
@@ -46,9 +54,20 @@ function AgentTimelineItem({
     case "toolResult":
       return <AgentToolEvent item={item} profile={profile} />
     case "permissionRequest": {
-      const isPending = pendingPermissions.some((p) => p.requestId === item.requestId)
+      const hasPendingRequest = pendingPermissions.some((p) => p.requestId === item.requestId)
+      const isPending = hasPendingRequest && (latestPendingItemIds?.has(item.id) ?? true)
       const isLatestPending =
-        pendingPermissions[pendingPermissions.length - 1]?.requestId === item.requestId
+        isPending && pendingPermissions[pendingPermissions.length - 1]?.requestId === item.requestId
+      if (isAskUserQuestionItem(item)) {
+        return (
+          <AgentUserQuestionCard
+            item={item}
+            pending={isPending}
+            isLatestPending={isLatestPending}
+            onRespond={onRespondPermission}
+          />
+        )
+      }
       return (
         <AgentPermissionCard
           item={item}
@@ -95,6 +114,10 @@ function AgentTimelineItem({
       return exhaustive
     }
   }
+}
+
+function isAskUserQuestionItem(item: SynapseAgentTimelineItem): boolean {
+  return item.kind === "permissionRequest" && item.toolName === "AskUserQuestion"
 }
 
 export { AgentTimelineItem }

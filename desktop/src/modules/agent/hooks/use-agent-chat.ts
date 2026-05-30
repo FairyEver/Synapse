@@ -47,7 +47,12 @@ type UseAgentChatState = {
   refresh: () => Promise<void>
   sendMessage: (content: string, target?: SendMessageTarget) => Promise<boolean>
   setPermissionMode: (mode: SynapseAgentPermissionMode) => Promise<void>
-  respondPermission: (requestId: string, behavior: "allow" | "deny") => Promise<void>
+  respondPermission: (
+    requestId: string,
+    behavior: "allow" | "deny",
+    updatedInput?: Record<string, unknown>,
+    message?: string,
+  ) => Promise<void>
   cancelTurn: () => Promise<void>
   forceKillTurn: () => Promise<void>
 }

@@ -1,5 +1,5 @@
 import { type FormEvent, type KeyboardEvent, useEffect, useMemo, useRef, useState } from "react"
-import { AlertTriangle, Clock, Copy, FolderOpen, ShieldAlert } from "lucide-react"
+import { AlertTriangle, CircleHelp, Clock, Copy, FolderOpen, ShieldAlert } from "lucide-react"
 import { toast } from "sonner"
 import { useAppConfig } from "@/app-shell/config"
 import { useActiveRepository } from "@/app-shell/use-repository-manager"
@@ -14,7 +14,11 @@ import { agentDefinitions } from "@/definitions/generated/renderer-registry"
 import { getSynapseBridge, requireSynapseBridge } from "@/lib/electron-bridge"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import type { OpenAgentSessionPayload } from "@/app-shell/navigation"
-import type { SynapseAgentDisplayProfile, SynapseAgentPublishedCommand } from "@/types/agent"
+import type {
+  SynapseAgentDisplayProfile,
+  SynapseAgentPendingPermission,
+  SynapseAgentPublishedCommand,
+} from "@/types/agent"
 
 import { AgentSessionSidebar, type ProjectOption } from "./components/agent-session-sidebar"
 import { AgentTimeline } from "./components/agent-timeline"
@@ -325,11 +329,19 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
   }
 
   const handlePendingPermissionsClick = () => {
-    const requestId = chat.pendingPermissions[0]?.requestId
+    const requestId = chat.pendingPermissions.find(isToolPermission)?.requestId
+    scrollToPendingRequest(requestId)
+  }
+
+  const handlePendingQuestionsClick = () => {
+    const requestId = chat.pendingPermissions.find(isUserQuestionPending)?.requestId
+    scrollToPendingRequest(requestId)
+  }
+
+  const scrollToPendingRequest = (requestId: string | undefined) => {
     if (!requestId) return
-    document
-      .querySelector(`[data-agent-permission-request-id="${CSS.escape(requestId)}"]`)
-      ?.scrollIntoView({ block: "center", behavior: "smooth" })
+    const targets = document.querySelectorAll(`[data-agent-permission-request-id="${CSS.escape(requestId)}"]`)
+    targets[targets.length - 1]?.scrollIntoView({ block: "center", behavior: "smooth" })
   }
 
   const handleOpenSourceManager = async () => {
@@ -390,6 +402,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     ?? DEFAULT_AGENT_DISPLAY_PROFILE
   const selectedCliLabel = agentCliLabel(selectedSession?.agentType)
   const selectedPermissionMode = selectedSession?.mode ?? "default"
+  const pendingPermissionCount = chat.pendingPermissions.filter(isToolPermission).length
+  const pendingQuestionCount = chat.pendingPermissions.filter(isUserQuestionPending).length
   const openReference = (reference: string) => {
     const projectId = chat.selectedProjectId ?? chat.activeProjectId
     if (!projectId) return
@@ -506,7 +520,20 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                 </span>
               ) : null}
 
-              {chat.pendingPermissions.length > 0 ? (
+              {pendingQuestionCount > 0 ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  data-track="agent-pending-questions-focus"
+                  onClick={handlePendingQuestionsClick}
+                >
+                  <CircleHelp data-icon="inline-start" />
+                  待回答 {pendingQuestionCount}
+                </Button>
+              ) : null}
+
+              {pendingPermissionCount > 0 ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -515,7 +542,7 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
                   onClick={handlePendingPermissionsClick}
                 >
                   <ShieldAlert data-icon="inline-start" />
-                  权限 {chat.pendingPermissions.length}
+                  权限 {pendingPermissionCount}
                 </Button>
               ) : null}
 
@@ -570,7 +597,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               sending={chat.sending}
               pendingPermissions={chat.pendingPermissions}
               onOpenReference={openReference}
-              onRespondPermission={(requestId, behavior) => chat.respondPermission(requestId, behavior)}
+              onRespondPermission={(requestId, behavior, updatedInput, message) =>
+                chat.respondPermission(requestId, behavior, updatedInput, message)}
               viewportRef={stick.viewportRef}
             />
 
@@ -617,6 +645,14 @@ function errorDiagnostic(error: unknown): { readonly errorName: string; readonly
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
   }
+}
+
+function isUserQuestionPending(item: SynapseAgentPendingPermission): boolean {
+  return item.toolName === "AskUserQuestion"
+}
+
+function isToolPermission(item: SynapseAgentPendingPermission): boolean {
+  return !isUserQuestionPending(item)
 }
 
 export { AgentComposer, AgentModule }

@@ -59,6 +59,16 @@ const timelineBaseSchema = {
 }
 
 const jsonRecordSchema = z.record(z.string(), z.unknown())
+export const agentUserQuestionOptionSchema = z.object({
+  label: z.string(),
+  description: z.string().optional(),
+})
+export const agentUserQuestionSchema = z.object({
+  question: z.string(),
+  header: z.string().optional(),
+  options: z.array(agentUserQuestionOptionSchema).optional(),
+  multiSelect: z.boolean().optional(),
+})
 const resultMetadataSchema = z.object({
   model: z.string().optional(),
   effort: z.string().optional(),
@@ -108,6 +118,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
     toolName: z.string(),
     toolInput: z.string().optional(),
     toolInputRaw: jsonRecordSchema.optional(),
+    questions: z.array(agentUserQuestionSchema).optional(),
   }),
   z.object({
     ...timelineBaseSchema,
@@ -397,6 +408,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
     toolName: z.string(),
     toolInput: z.string().optional(),
     toolInputRaw: jsonRecordSchema.optional(),
+    questions: z.array(agentUserQuestionSchema).optional(),
   }),
   z.object({
     ...agentEventBaseSchema,

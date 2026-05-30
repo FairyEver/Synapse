@@ -14,6 +14,7 @@ import {
   timelineItemSchema,
   agentEventSchema,
   permissionModeSchema,
+  agentUserQuestionSchema,
   sessionSummary,
   sessionSummarySchema,
   resolveProjectAgent,
@@ -47,6 +48,7 @@ const sendRequestSchema = projectRequestSchema.extend({
 const respondPermissionRequestSchema = projectRequestSchema.extend({
   requestId: z.string().min(1),
   behavior: z.enum(["allow", "deny"]),
+  updatedInput: z.record(z.string(), z.unknown()).optional(),
   message: z.string().optional(),
 })
 
@@ -91,6 +93,7 @@ const pendingPermissionSchema = z.object({
   toolName: z.string(),
   toolInput: z.string().optional(),
   toolInputRaw: z.record(z.string(), z.unknown()).optional(),
+  questions: z.array(agentUserQuestionSchema).optional(),
   createdAt: z.string(),
 })
 
@@ -312,6 +315,7 @@ export const messageMethods: Record<string, IpcMethodDescriptor> = {
       await agent.respondPermission({
         requestId: request.requestId,
         behavior: request.behavior,
+        updatedInput: request.updatedInput,
         message: request.message,
         actor: { kind: "user" },
       })

@@ -253,6 +253,44 @@ describe("BridgeAdapterService", () => {
     await service.stop()
   })
 
+  it("sends AskUserQuestion bridge cards as answer prompts instead of permission cards", async () => {
+    const { service, port } = await startBridge()
+    const ws = await registeredBridge(port, "tok", ["text", "card"])
+    const cardMessage = readJson(ws) as Promise<{
+      readonly type: "card"
+      readonly card: {
+        readonly title: string
+        readonly body: string
+        readonly actions: readonly { readonly label: string; readonly action: string }[]
+      }
+    }>
+
+    await service.dispatchAgentEvent(bridgeTarget(), {
+      type: "permissionRequest",
+      requestId: "question-1",
+      toolName: "AskUserQuestion",
+      questions: [{
+        header: "Pick one",
+        question: "你最想学哪门编程语言？",
+        options: [
+          { label: "Python", description: "AI/数据科学" },
+          { label: "TypeScript", description: "前端全栈" },
+        ],
+        multiSelect: false,
+      }],
+    })
+
+    const message = await cardMessage
+    expect(message.card.title).toBe("Answer required")
+    expect(message.card.body).toContain("Pick one: 你最想学哪门编程语言？")
+    expect(message.card.body).toContain("- Python: AI/数据科学")
+    expect(message.card.actions).toEqual([{ label: "Skip", action: "perm:question-1:deny" }])
+    expect(JSON.stringify(message)).not.toContain("Permission required")
+    expect(JSON.stringify(message)).not.toContain("Allow")
+    ws.close()
+    await service.stop()
+  })
+
   it("does not expose raw permission response failures to bridge adapters", async () => {
     const agent = new FailingPermissionAgentRuntime("permission failed at /Users/liyang/private token=secret")
     const { service, port } = await startBridge(agent)
@@ -477,6 +515,32 @@ describe("BridgeAdapterService", () => {
       type: "reply",
       content: expect.stringContaining("ok"),
     }))
+    ws.close()
+    await service.stop()
+  })
+
+  it("falls back to answer prompt text for AskUserQuestion without card capability", async () => {
+    const { service, port } = await startBridge()
+    const ws = await registeredBridge(port, "tok", ["text"])
+    const message = readJson(ws) as Promise<{ readonly content: string }>
+
+    await service.dispatchAgentEvent(bridgeTarget(), {
+      type: "permissionRequest",
+      requestId: "question-1",
+      toolName: "AskUserQuestion",
+      questions: [{
+        question: "选一个？",
+        options: [
+          { label: "A" },
+          { label: "B" },
+        ],
+        multiSelect: false,
+      }],
+    })
+
+    const received = await message
+    expect(received.content).toContain("Answer required: 选一个？")
+    expect(received.content).not.toContain("Permission required")
     ws.close()
     await service.stop()
   })

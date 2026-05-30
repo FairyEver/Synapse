@@ -29,6 +29,8 @@ import type {
   AgentLiveSession,
   AgentMessage,
   AgentPermissionDecision,
+  AgentUserQuestion,
+  AgentUserQuestionOption,
 } from "./types"
 
 export interface QueryLike {
@@ -297,6 +299,9 @@ export class ClaudeSDKSession implements AgentLiveSession {
   ): Promise<PermissionResult> {
     if (this.closed) return { behavior: "deny", message: "Session is closed." }
     if (context.signal.aborted) return permissionCancelledResult()
+    if (toolName === ASK_USER_QUESTION_TOOL_NAME) {
+      return this.requestUserQuestion(input, context)
+    }
     const toolPolicyResult = this.toolPolicy?.(toolName, input)
     if (toolPolicyResult) return toolPolicyResult
     const policyResult = this.evaluateSubagentToolPolicy(toolName, input, context)
@@ -319,6 +324,43 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
     this.eventQueue.push(event)
 
+    return this.awaitPermissionResponse(requestId, context)
+  }
+
+  private async requestUserQuestion(
+    input: Record<string, unknown>,
+    context: CanUseToolContext,
+  ): Promise<PermissionResult> {
+    const questions = parseAskUserQuestions(input)
+    if (!questions) {
+      return { behavior: "deny", message: "Invalid AskUserQuestion input." }
+    }
+
+    const requestId = this.nextPermissionRequestId()
+    const timestamp = this.now().toISOString()
+    const event: AgentEvent = {
+      type: "permissionRequest",
+      requestId,
+      toolName: ASK_USER_QUESTION_TOOL_NAME,
+      toolInput: summarizeToolInput(ASK_USER_QUESTION_TOOL_NAME, input),
+      toolInputRaw: sanitizeToolInputRecord(input),
+      questions,
+      conversationId: this.conversationId,
+      providerId: this.providerId,
+      projectId: this.projectId,
+      sdkSessionId: this.sdkSessionId,
+      timestamp,
+    }
+
+    this.eventQueue.push(event)
+
+    return this.awaitPermissionResponse(requestId, context)
+  }
+
+  private awaitPermissionResponse(
+    requestId: string,
+    context: CanUseToolContext,
+  ): Promise<PermissionResult> {
     return new Promise<PermissionResult>((resolve) => {
       const abort = (): void => {
         if (!this.permissions.delete(requestId)) return
@@ -498,6 +540,7 @@ const MAX_TOOL_INPUT_SUMMARY_LENGTH = 240
 const MAX_TOOL_INPUT_STRING_LENGTH = 120
 const MAX_DIAGNOSTIC_TEXT_LENGTH = 240
 const REDACTED = "[redacted]"
+const ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion"
 const sensitiveToolInputKeyPattern = /token|secret|api[-_]?key|authorization|cookie|password|credential/i
 
 function defaultQueryFactory(input: {
@@ -680,10 +723,54 @@ function errorLogMeta(error: unknown): Record<string, unknown> {
   }
 }
 
+function parseAskUserQuestions(input: Record<string, unknown>): readonly AgentUserQuestion[] | undefined {
+  const rawQuestions = input.questions
+  if (!Array.isArray(rawQuestions) || rawQuestions.length < 1 || rawQuestions.length > 4) {
+    return undefined
+  }
+
+  const questions: AgentUserQuestion[] = []
+  for (const rawQuestion of rawQuestions) {
+    const record = asRecord(rawQuestion)
+    const question = stringValue(record?.question)
+    const options = parseAskUserQuestionOptions(record?.options)
+    if (!question || !options) return undefined
+    const header = stringValue(record?.header)
+    const multiSelect = typeof record?.multiSelect === "boolean" ? record.multiSelect : false
+    questions.push({
+      question,
+      ...(header ? { header } : {}),
+      options,
+      multiSelect,
+    })
+  }
+  return questions
+}
+
+function parseAskUserQuestionOptions(value: unknown): readonly AgentUserQuestionOption[] | undefined {
+  if (!Array.isArray(value) || value.length < 2 || value.length > 4) return undefined
+  const options: AgentUserQuestionOption[] = []
+  for (const rawOption of value) {
+    const record = asRecord(rawOption)
+    const label = stringValue(record?.label)
+    if (!label) return undefined
+    const description = stringValue(record?.description)
+    options.push({
+      label,
+      ...(description ? { description } : {}),
+    })
+  }
+  return options
+}
+
 function asRecord(value: unknown): Record<string, unknown> | undefined {
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined
+}
+
+function stringValue(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim().length > 0 ? value : undefined
 }
 
 function sanitizeDiagnosticText(value: string): string {

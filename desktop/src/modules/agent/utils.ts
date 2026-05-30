@@ -1,5 +1,6 @@
 import type {
   SynapseAgentMessageTimelineItem,
+  SynapseAgentPermissionRequestTimelineItem,
   SynapseAgentSessionSummary,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
@@ -72,6 +73,7 @@ function labelForTimelineItem(entry: SynapseAgentTimelineItem): string {
     case "toolResult":
       return "工具"
     case "permissionRequest":
+      if (isAskUserQuestionEntry(entry)) return "待回答"
       return "权限"
     case "error":
       return "错误"
@@ -98,8 +100,15 @@ function timelineItemText(entry: SynapseAgentTimelineItem): string {
       return entry.toolInput ? `${entry.toolName}\n${entry.toolInput}` : entry.toolName
     case "toolResult":
       return entry.content?.trim() || entry.toolName
-    case "permissionRequest":
-      return entry.toolInput ? `${entry.toolName}\n${entry.toolInput}` : entry.toolName
+    case "permissionRequest": {
+      const permissionEntry = entry
+      if (isAskUserQuestionEntry(permissionEntry)) {
+        return userQuestionText(permissionEntry) || permissionEntry.toolName
+      }
+      return permissionEntry.toolInput
+        ? `${permissionEntry.toolName}\n${permissionEntry.toolInput}`
+        : permissionEntry.toolName
+    }
     case "error":
       return entry.message
     case "phase":
@@ -113,6 +122,22 @@ function timelineItemText(entry: SynapseAgentTimelineItem): string {
       return exhaustive
     }
   }
+}
+
+function isAskUserQuestionEntry(entry: SynapseAgentTimelineItem): boolean {
+  return entry.kind === "permissionRequest" && entry.toolName === "AskUserQuestion"
+}
+
+function userQuestionText(entry: SynapseAgentPermissionRequestTimelineItem): string {
+  const questions = entry.questions ?? []
+  return questions.map((question, index) => {
+    const lines = [
+      question.header ? `${question.header}: ${question.question}` : question.question,
+      ...(question.options?.map((option) =>
+        option.description ? `- ${option.label}: ${option.description}` : `- ${option.label}`) ?? []),
+    ]
+    return questions.length > 1 ? `${index + 1}. ${lines.join("\n")}` : lines.join("\n")
+  }).join("\n\n")
 }
 
 function thinkingIndicatorText(frame: number): string {

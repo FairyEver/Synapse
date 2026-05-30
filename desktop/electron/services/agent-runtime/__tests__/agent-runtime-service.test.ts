@@ -16,6 +16,7 @@ import type {
   AgentLiveSession,
   AgentMessage,
   AgentPermissionDecision,
+  AgentUserQuestion,
 } from "../types"
 
 describe("AgentRuntimeService", () => {
@@ -535,6 +536,124 @@ describe("AgentRuntimeService", () => {
     expect(service.listPendingPermissions()).toEqual([])
     expect(session.responses).toEqual([{ requestId: "conversation-a-permission-1", behavior: "deny" }])
     await expect(turn).resolves.toMatchObject({ resultText: "guard denied" })
+  })
+
+  it("answers AskUserQuestion without running permission guard", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const questions = [{
+      question: "该怎么处理？",
+      header: "处理方式",
+      options: [
+        { label: "跳过", description: "保持现状" },
+        { label: "重试", description: "重新处理" },
+      ],
+      multiSelect: false,
+    }]
+    const session = new QuestionSession("conversation-a-permission-1", questions, "question answered")
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: false, reason: "should not run" })) }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      permissionGuard: permissionGuard as never,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs choice"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    expect(service.listPendingPermissions()[0]?.questions).toEqual(questions)
+    await service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      updatedInput: { answers: { "该怎么处理？": "重试" } },
+      actor: { kind: "user" },
+    })
+
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(session.responses).toEqual([{
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      updatedInput: {
+        questions,
+        answers: { "该怎么处理？": "重试" },
+      },
+    }])
+    await expect(turn).resolves.toMatchObject({ resultText: "question answered" })
+  })
+
+  it("rejects AskUserQuestion allow responses without answers", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const questions = [{
+      question: "该怎么处理？",
+      header: "处理方式",
+      options: [
+        { label: "跳过" },
+        { label: "重试" },
+      ],
+      multiSelect: false,
+    }]
+    const session = new QuestionSession("conversation-a-permission-1", questions, "unused")
+    const permissionGuard = { check: vi.fn(async () => ({ allowed: true })) }
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      permissionGuard: permissionGuard as never,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs choice"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+
+    await expect(service.respondPermission({
+      requestId: "conversation-a-permission-1",
+      behavior: "allow",
+      actor: { kind: "user" },
+    })).rejects.toThrow("AskUserQuestion requires answers before continuing.")
+
+    expect(permissionGuard.check).not.toHaveBeenCalled()
+    expect(session.responses).toEqual([])
+    await service.forceKillTurn(conversationId("local", "s1", "active"))
+    await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
+  })
+
+  it("uses answer timeout wording for AskUserQuestion pending requests", async () => {
+    const conversations = new MemoryNamespace<ConversationEntryV1>("conversations")
+    const questions = [{
+      question: "该怎么处理？",
+      header: "处理方式",
+      options: [
+        { label: "跳过" },
+        { label: "重试" },
+      ],
+      multiSelect: false,
+    }]
+    const session = new QuestionSession("conversation-a-permission-1", questions, "question timed out")
+    const service = new AgentRuntimeService({
+      projectId: "project-1",
+      workDir: "/repo",
+      conversations,
+      providerService: new FakeProviderService("anthropic", {}) as unknown as ProviderService,
+      createSession: () => session,
+      permissionTimeoutMs: 1,
+      now: fixedNow,
+    })
+
+    const turn = service.send(baseMessage("needs choice"))
+    await waitFor(() => service.listPendingPermissions().length === 1)
+    await waitFor(() => session.responses.length === 1)
+
+    expect(session.responses).toEqual([{
+      requestId: "conversation-a-permission-1",
+      behavior: "deny",
+      message: "User question timed out waiting for response.",
+    }])
+    await expect(turn).resolves.toMatchObject({ resultText: "question timed out" })
   })
 
   it("redacts permission response failure audit metadata", async () => {
@@ -1503,6 +1622,92 @@ class PermissionSession implements AgentLiveSession {
         toolName: "Bash",
         toolInput: "pwd",
         toolInputRaw: { command: "pwd" },
+      })
+    }
+    return new Promise((resolve) => {
+      this.waiter = resolve
+    })
+  }
+
+  currentSessionId(): string | undefined {
+    return undefined
+  }
+
+  alive(): boolean {
+    return !this.closed
+  }
+
+  async close(): Promise<void> {
+    this.closed = true
+    this.waiter?.(null)
+    this.waiter = undefined
+  }
+
+  private push(event: AgentEvent): void {
+    const waiter = this.waiter
+    if (waiter) {
+      this.waiter = undefined
+      waiter(event)
+      return
+    }
+    this.events.push(event)
+  }
+}
+
+class QuestionSession implements AgentLiveSession {
+  readonly agentType = "claude-sdk"
+  readonly responses: Array<{
+    readonly requestId: string
+    readonly behavior: string
+    readonly updatedInput?: Record<string, unknown>
+    readonly message?: string
+  }> = []
+  closed = false
+  private waiter: ((event: AgentEvent | null) => void) | undefined
+  private readonly events: AgentEvent[] = []
+  private sent = false
+
+  constructor(
+    private readonly requestId: string,
+    private readonly questions: readonly AgentUserQuestion[],
+    private readonly resultText: string,
+  ) {}
+
+  async send(): Promise<boolean> {
+    this.sent = true
+    return true
+  }
+
+  async respondPermission(
+    requestId: string,
+    decision: AgentPermissionDecision,
+  ): Promise<void> {
+    this.responses.push({
+      requestId,
+      behavior: decision.behavior,
+      ...(decision.updatedInput ? { updatedInput: decision.updatedInput } : {}),
+      ...(decision.message ? { message: decision.message } : {}),
+    })
+    this.push({
+      type: "result",
+      content: this.resultText,
+      done: true,
+    })
+  }
+
+  nextEvent(): Promise<AgentEvent | null> {
+    const event = this.events.shift()
+    if (event) return Promise.resolve(event)
+    if (this.closed) return Promise.resolve(null)
+    if (this.sent) {
+      this.sent = false
+      return Promise.resolve({
+        type: "permissionRequest",
+        requestId: this.requestId,
+        toolName: "AskUserQuestion",
+        toolInput: JSON.stringify({ questions: this.questions }),
+        toolInputRaw: { questions: this.questions },
+        questions: this.questions,
       })
     }
     return new Promise((resolve) => {

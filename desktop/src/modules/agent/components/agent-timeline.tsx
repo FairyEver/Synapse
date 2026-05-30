@@ -25,12 +25,18 @@ function AgentTimeline({
   readonly sending: boolean
   readonly pendingPermissions: readonly SynapseAgentPendingPermission[]
   readonly onOpenReference: (reference: string) => void
-  readonly onRespondPermission: (requestId: string, behavior: "allow" | "deny") => void | Promise<void>
+  readonly onRespondPermission: (
+    requestId: string,
+    behavior: "allow" | "deny",
+    updatedInput?: Record<string, unknown>,
+    message?: string,
+  ) => void | Promise<void>
   readonly viewportRef: Ref<HTMLDivElement>
 }) {
   // Drives 1s re-renders for any in-progress phase row's elapsed timer.
   useActivePhaseTicker(items)
   const now = Date.now()
+  const latestPendingItemIds = latestPendingTimelineItemIds(items, pendingPermissions)
   return (
     <div className="relative flex min-h-0 min-w-0 flex-1">
       <div ref={viewportRef} className="min-h-0 min-w-0 flex-1 overflow-y-auto">
@@ -51,6 +57,7 @@ function AgentTimeline({
                 profile={profile}
                 agentIcon={agentIcon}
                 pendingPermissions={pendingPermissions}
+                latestPendingItemIds={latestPendingItemIds}
                 onOpenReference={onOpenReference}
                 onRespondPermission={onRespondPermission}
               />
@@ -60,6 +67,23 @@ function AgentTimeline({
       </div>
     </div>
   )
+}
+
+function latestPendingTimelineItemIds(
+  items: readonly SynapseAgentTimelineItem[],
+  pendingPermissions: readonly SynapseAgentPendingPermission[],
+): ReadonlySet<string> {
+  const pendingRequestIds = new Set(pendingPermissions.map((permission) => permission.requestId))
+  const latestItemIds = new Set<string>()
+  const seenRequestIds = new Set<string>()
+  for (let index = items.length - 1; index >= 0; index -= 1) {
+    const item = items[index]
+    if (item?.kind !== "permissionRequest") continue
+    if (!pendingRequestIds.has(item.requestId) || seenRequestIds.has(item.requestId)) continue
+    seenRequestIds.add(item.requestId)
+    latestItemIds.add(item.id)
+  }
+  return latestItemIds
 }
 
 export { AgentTimeline }

@@ -750,9 +750,9 @@ export class ConversationRouter {
         if (event.type === "permissionRequest") {
           await liveSession.respondPermission(event.requestId, {
             behavior: "deny",
-            message: "Relay cannot approve tool permissions.",
+            message: permissionRelayDenyMessage(event),
           })
-          error = "Relay requested permission."
+          error = permissionRelayErrorMessage(event)
           await this.sessionManager.closeCurrentTurn(conversation.id)
           break
         }
@@ -933,6 +933,7 @@ export class ConversationRouter {
         toolName: event.toolName,
         toolInput: event.toolInput,
         toolInputRaw: event.toolInputRaw,
+        questions: event.questions,
         createdAt: this.isoNow(),
         liveSession,
         resolve: settle,
@@ -948,7 +949,7 @@ export class ConversationRouter {
         if (settled) return
         liveSession.respondPermission(event.requestId, {
           behavior: "deny",
-          message: "Permission request timed out waiting for user response.",
+          message: permissionTimeoutMessage(event),
         }).then(() => {
           this.sessionManager.settlePendingPermission(pending)
         }).catch((error) => {
@@ -1291,6 +1292,7 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
           requestId: event.requestId,
           toolName: event.toolName,
           toolInputSummary: truncateString(event.toolInput, MAX_SUMMARY_LENGTH),
+          questions: event.questions,
         }),
       }
     case "error":
@@ -1442,6 +1444,28 @@ function sanitizeErrorText(value: string): string {
       .replace(BEARER_TOKEN_PATTERN, "Bearer [redacted]"),
     MAX_SUMMARY_LENGTH,
   ) ?? ""
+}
+
+function permissionRelayDenyMessage(event: AgentPermissionRequestEvent): string {
+  return isAskUserQuestionEvent(event)
+    ? "Relay cannot answer user questions."
+    : "Relay cannot approve tool permissions."
+}
+
+function permissionRelayErrorMessage(event: AgentPermissionRequestEvent): string {
+  return isAskUserQuestionEvent(event)
+    ? "Relay requested a user answer."
+    : "Relay requested permission."
+}
+
+function permissionTimeoutMessage(event: AgentPermissionRequestEvent): string {
+  return isAskUserQuestionEvent(event)
+    ? "User question timed out waiting for response."
+    : "Permission request timed out waiting for user response."
+}
+
+function isAskUserQuestionEvent(event: AgentPermissionRequestEvent): boolean {
+  return event.toolName === "AskUserQuestion"
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

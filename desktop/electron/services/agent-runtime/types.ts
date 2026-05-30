@@ -231,6 +231,7 @@ export interface AgentPendingPermission {
   readonly toolName: string
   readonly toolInput?: string
   readonly toolInputRaw?: Record<string, unknown>
+  readonly questions?: readonly AgentUserQuestion[]
   readonly createdAt: string
 }
 

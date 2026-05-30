@@ -100,6 +100,7 @@ const DEFAULT_BRIDGE_PORT = 9810
 const CAPABILITIES_SNAPSHOT_PROTO = "capabilities_snapshot_v1"
 const PREVIEW_ACK_TIMEOUT_MS = 2000
 const PROGRESS_FALLBACK_INTERVAL_MS = 3000
+const ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion"
 
 export class BridgeAdapterService implements BridgeOutboundDispatcher {
   private readonly deps: BridgeAdapterServiceDeps
@@ -241,7 +242,11 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
         break
       case "permissionRequest":
         this.sendTyping(adapter, target, turn, false)
-        await this.sendPermission(adapter, target, event)
+        if (isAskUserQuestionEvent(event)) {
+          await this.sendUserQuestion(adapter, target, event)
+        } else {
+          await this.sendPermission(adapter, target, event)
+        }
         break
       case "toolUse":
       case "toolResult":
@@ -919,6 +924,31 @@ export class BridgeAdapterService implements BridgeOutboundDispatcher {
     })
   }
 
+  private async sendUserQuestion(
+    adapter: BridgeAdapterConnection,
+    target: ReplyTarget,
+    event: Extract<AgentEvent, { type: "permissionRequest" }>,
+  ): Promise<void> {
+    const body = formatUserQuestionBody(event)
+    if (!adapter.capabilities.has("card")) {
+      await this.sendReply(adapter, target, `Answer required: ${body}`)
+      return
+    }
+    adapter.connection.sendJson({
+      type: "card",
+      session_key: target.sessionKey,
+      reply_ctx: target.replyCtx?.replyCtx,
+      project: target.projectId,
+      card: {
+        title: "Answer required",
+        body,
+        actions: [
+          { label: "Skip", action: `perm:${event.requestId}:deny` },
+        ],
+      },
+    })
+  }
+
   private sendProtocolError(
     adapter: BridgeAdapterConnection,
     code: string,
@@ -1126,6 +1156,27 @@ function parsePermissionAction(action: string):
   const match = /^perm:(.+):(allow|deny)$/.exec(action)
   if (!match?.[1] || !match[2]) return null
   return { requestId: match[1], behavior: match[2] as "allow" | "deny" }
+}
+
+function isAskUserQuestionEvent(event: Extract<AgentEvent, { type: "permissionRequest" }>): boolean {
+  return event.toolName === ASK_USER_QUESTION_TOOL_NAME
+}
+
+function formatUserQuestionBody(event: Extract<AgentEvent, { type: "permissionRequest" }>): string {
+  const questions = event.questions
+  if (!questions?.length) {
+    return formatPermissionBody(event.toolName, event.toolInput, event.toolInputRaw)
+  }
+  return questions.map((question, index) => {
+    const lines = [
+      question.header ? `${question.header}: ${question.question}` : question.question,
+      ...(question.options?.map((option) =>
+        option.description ? `- ${option.label}: ${option.description}` : `- ${option.label}`) ?? []),
+    ]
+    return questions.length > 1
+      ? `${index + 1}. ${lines.join("\n")}`
+      : lines.join("\n")
+  }).join("\n\n")
 }
 
 function previewAckFailureType(error: unknown): "timeout" | "error" {

@@ -223,8 +223,8 @@ function useChatEvents(
       if (resultModel) {
         dispatch({ type: "SET_CURRENT_CONVERSATION_MODEL", model: resultModel })
       }
-      // Immediately upsert permission request into local pending state so the
-      // permission card shows approve/deny buttons even if the async refresh
+      // Immediately upsert pending requests into local state so the
+      // permission or answer card stays interactive even if the async refresh
       // (listPendingPermissions IPC) fails. A subsequent successful refresh
       // will overwrite with the authoritative server state.
       if (event.type === "permissionRequest") {
@@ -250,6 +250,7 @@ function useChatEvents(
               toolName: event.toolName,
               toolInput: event.toolInput,
               toolInputRaw: event.toolInputRaw,
+              questions: event.questions,
               createdAt: domainEvent.timestamp,
             })
           },

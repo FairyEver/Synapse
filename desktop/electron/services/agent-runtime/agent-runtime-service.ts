@@ -131,6 +131,8 @@ type PublishedProjectCommandSource =
   | readonly PublishedAgentCommand[]
   | ((platform: string) => readonly PublishedAgentCommand[] | Promise<readonly PublishedAgentCommand[]>)
 
+const ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion"
+
 export interface AgentRuntimeStatus {
   readonly projectId: string
   readonly agentType: string
@@ -571,6 +573,7 @@ export class AgentRuntimeService {
       toolName: pending.toolName,
       toolInput: sanitizePendingPermissionText(pending.toolInput),
       toolInputRaw: sanitizePendingPermissionRawInput(pending.toolInputRaw),
+      questions: pending.questions,
       createdAt: pending.createdAt,
     }))
   }
@@ -670,6 +673,17 @@ export class AgentRuntimeService {
     }
     if (request.sessionKey !== undefined && request.sessionKey !== pending.sessionKey) {
       throw new Error(`Session key mismatch: the request's session does not own this permission`)
+    }
+
+    if (isAskUserQuestionTool(pending.toolName)) {
+      const updatedInput = askUserQuestionUpdatedInput(pending, request)
+      await pending.liveSession.respondPermission(request.requestId, {
+        behavior: request.behavior,
+        updatedInput,
+        message: request.message,
+      })
+      this.sessionManager.settlePendingPermission(pending)
+      return
     }
 
     const action = permissionActionForTool(pending.toolName)
@@ -1177,6 +1191,36 @@ export function permissionActionForTool(toolName: string): PermissionAction {
 
 function permissionAuditResource(resource: string, toolName: string): string {
   return resource === toolName ? toolName : `${toolName} input (${resource.length} chars)`
+}
+
+function isAskUserQuestionTool(toolName: string): boolean {
+  return toolName === ASK_USER_QUESTION_TOOL_NAME
+}
+
+function askUserQuestionUpdatedInput(
+  pending: PendingPermissionState,
+  request: AgentPermissionResponseRequest,
+): Record<string, unknown> | undefined {
+  if (request.behavior === "deny") return request.updatedInput
+  const answers = recordValue(request.updatedInput?.answers)
+  if (!answers || Object.keys(answers).length === 0) {
+    throw new Error("AskUserQuestion requires answers before continuing.")
+  }
+  const questions = request.updatedInput?.questions ?? pending.questions ?? pending.toolInputRaw?.questions
+  if (!Array.isArray(questions)) {
+    throw new Error("AskUserQuestion requires questions before continuing.")
+  }
+  return {
+    ...request.updatedInput,
+    questions,
+    answers,
+  }
+}
+
+function recordValue(value: unknown): Record<string, unknown> | undefined {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : undefined
 }
 
 function sanitizePendingPermissionRawInput(

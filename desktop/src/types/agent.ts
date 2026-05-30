@@ -6,6 +6,18 @@ export interface SynapseAgentEventBase {
   readonly payload?: Record<string, unknown>
 }
 
+export interface SynapseAgentUserQuestionOption {
+  readonly label: string
+  readonly description?: string
+}
+
+export interface SynapseAgentUserQuestion {
+  readonly question: string
+  readonly header?: string
+  readonly options?: readonly SynapseAgentUserQuestionOption[]
+  readonly multiSelect?: boolean
+}
+
 export const SYNAPSE_AGENT_PERMISSION_MODES = [
   "default",
   "acceptEdits",
@@ -46,6 +58,7 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
       toolName: string
       toolInput?: string
       toolInputRaw?: Record<string, unknown>
+      questions?: SynapseAgentUserQuestion[]
     }
   | {
       type: "result"
@@ -204,6 +217,7 @@ export interface SynapseAgentPermissionRequestTimelineItem extends SynapseAgentT
   readonly toolName: string
   readonly toolInput?: string
   readonly toolInputRaw?: Record<string, unknown>
+  readonly questions?: readonly SynapseAgentUserQuestion[]
 }
 
 export interface SynapseAgentErrorTimelineItem extends SynapseAgentTimelineBase {
@@ -378,6 +392,7 @@ export interface SynapseAgentPendingPermission {
   readonly toolName: string
   readonly toolInput?: string
   readonly toolInputRaw?: Record<string, unknown>
+  readonly questions?: readonly SynapseAgentUserQuestion[]
   readonly createdAt: string
 }
 

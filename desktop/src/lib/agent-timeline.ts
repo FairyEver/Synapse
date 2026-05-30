@@ -3,6 +3,7 @@ import type {
   SynapseAgentMessageTimelineItem,
   SynapseAgentResultMetadata,
   SynapseAgentTimelineItem,
+  SynapseAgentUserQuestion,
 } from "../types/agent"
 
 type TimelineRecordRole = "user" | "assistant" | "system" | "tool"
@@ -71,6 +72,7 @@ export function agentEventToTimelineItem(
         toolName: event.toolName,
         toolInput: event.toolInput,
         toolInputRaw: event.toolInputRaw,
+        questions: event.questions,
       }
     case "result":
       return {
@@ -165,6 +167,7 @@ export function historyRecordToTimelineItem(
         toolName: stringMetadata(metadata, "toolName") ?? firstLine(entry.content),
         toolInput: entry.content.includes("\n") ? entry.content.slice(entry.content.indexOf("\n") + 1) : undefined,
         toolInputRaw: recordMetadata(metadata, "toolInputRaw"),
+        questions: questionsMetadata(metadata, "questions"),
       }
     case "error":
       return { ...base, kind: "error", message: entry.content }
@@ -396,6 +399,44 @@ function recordMetadata(metadata: Record<string, unknown> | undefined, key: stri
   return value && typeof value === "object" && !Array.isArray(value)
     ? value as Record<string, unknown>
     : undefined
+}
+
+function questionsMetadata(
+  metadata: Record<string, unknown> | undefined,
+  key: string,
+): SynapseAgentUserQuestion[] | undefined {
+  const value = metadata?.[key]
+  if (!Array.isArray(value)) return undefined
+  const questions: SynapseAgentUserQuestion[] = []
+  for (const item of value) {
+    const record = item && typeof item === "object" && !Array.isArray(item)
+      ? item as Record<string, unknown>
+      : undefined
+    const question = typeof record?.question === "string" ? record.question : undefined
+    const rawOptions = Array.isArray(record?.options) ? record.options : undefined
+    if (!question || !rawOptions) return undefined
+    const options = rawOptions.map((rawOption) => {
+      const option = rawOption && typeof rawOption === "object" && !Array.isArray(rawOption)
+        ? rawOption as Record<string, unknown>
+        : undefined
+      const label = typeof option?.label === "string" ? option.label : undefined
+      if (!label) return undefined
+      const description = typeof option?.description === "string" ? option.description : undefined
+      return {
+        label,
+        ...(description ? { description } : {}),
+      }
+    })
+    if (options.some((option) => !option)) return undefined
+    const header = typeof record?.header === "string" ? record.header : undefined
+    questions.push({
+      question,
+      ...(header ? { header } : {}),
+      options: options as SynapseAgentUserQuestion["options"],
+      multiSelect: typeof record?.multiSelect === "boolean" ? record.multiSelect : false,
+    })
+  }
+  return questions.length > 0 ? questions : undefined
 }
 
 function storedResultMetadata(metadata: Record<string, unknown> | undefined): SynapseAgentResultMetadata | undefined {
