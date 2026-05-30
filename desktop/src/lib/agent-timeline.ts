@@ -50,6 +50,7 @@ export function agentEventToTimelineItem(
       return {
         ...base,
         kind: "toolCall",
+        toolUseId: event.toolUseId,
         toolName: event.toolName,
         toolInput: event.toolInput,
         toolInputRaw: event.toolInputRaw,
@@ -58,6 +59,7 @@ export function agentEventToTimelineItem(
       return {
         ...base,
         kind: "toolResult",
+        toolUseId: event.toolUseId,
         toolName: event.toolName,
         content: event.content,
         status: event.status,
@@ -143,6 +145,7 @@ export function historyRecordToTimelineItem(
       return {
         ...base,
         kind: "toolCall",
+        toolUseId: stringMetadata(metadata, "toolUseId"),
         toolName: stringMetadata(metadata, "toolName") ?? firstLine(entry.content),
         toolInput: entry.content.includes("\n") ? entry.content.slice(entry.content.indexOf("\n") + 1) : undefined,
         toolInputRaw: recordMetadata(metadata, "toolInputRaw"),
@@ -151,6 +154,7 @@ export function historyRecordToTimelineItem(
       return {
         ...base,
         kind: "toolResult",
+        toolUseId: stringMetadata(metadata, "toolUseId"),
         toolName: stringMetadata(metadata, "toolName") ?? "tool",
         content: entry.content,
         status: stringMetadata(metadata, "status"),

@@ -111,6 +111,188 @@ describe("agent utils", () => {
     ].join("\n"))
   })
 
+  it("groups tool call and result transcript output with readable file paths", () => {
+    const entries = [
+      {
+        id: "tool-1",
+        kind: "toolCall",
+        toolUseId: "toolu-read-1",
+        toolName: "Read",
+        toolInputRaw: {
+          file_path: "/Users/liyang/project/secret.txt",
+          ANTHROPIC_AUTH_TOKEN: "sk-auth",
+        },
+        timestamp: "2026-04-27T03:17:00.000Z",
+      },
+      {
+        id: "result-1",
+        kind: "toolResult",
+        toolUseId: "toolu-read-1",
+        toolName: "Read",
+        content: "file content",
+        status: "success",
+        success: true,
+        timestamp: "2026-04-27T03:17:01.000Z",
+      },
+    ] as const
+
+    const transcript = formatAgentTranscript(entries)
+
+    expect(transcript).toContain(`工具 ${formatEntryTime(entries[0].timestamp)}`)
+    expect(transcript).toContain('"file_path": "/Users/liyang/project/secret.txt"')
+    expect(transcript).toContain('"ANTHROPIC_AUTH_TOKEN": "[redacted]"')
+    expect(transcript).toContain("输出\nfile content")
+    expect(transcript).not.toContain("sk-auth")
+    expect(transcript.match(/工具/g)).toHaveLength(1)
+  })
+
+  it("groups out-of-order same-name tool results by tool use id", () => {
+    const entries = [
+      {
+        id: "tool-a",
+        kind: "toolCall",
+        toolUseId: "toolu-read-a",
+        toolName: "Read",
+        toolInputRaw: { file_path: "/Users/liyang/project/a.md" },
+        timestamp: "2026-04-27T03:17:00.000Z",
+      },
+      {
+        id: "tool-b",
+        kind: "toolCall",
+        toolUseId: "toolu-read-b",
+        toolName: "Read",
+        toolInputRaw: { file_path: "/Users/liyang/project/b.md" },
+        timestamp: "2026-04-27T03:17:01.000Z",
+      },
+      {
+        id: "result-b",
+        kind: "toolResult",
+        toolUseId: "toolu-read-b",
+        toolName: "Read",
+        content: "content b",
+        status: "success",
+        success: true,
+        timestamp: "2026-04-27T03:17:02.000Z",
+      },
+      {
+        id: "result-a",
+        kind: "toolResult",
+        toolUseId: "toolu-read-a",
+        toolName: "Read",
+        content: "content a",
+        status: "success",
+        success: true,
+        timestamp: "2026-04-27T03:17:03.000Z",
+      },
+    ] as const
+
+    const transcript = formatAgentTranscript(entries)
+
+    expect(transcript).toContain('"file_path": "/Users/liyang/project/a.md"\n}\n\n输出\ncontent a')
+    expect(transcript).toContain('"file_path": "/Users/liyang/project/b.md"\n}\n\n输出\ncontent b')
+    expect(transcript).not.toContain('"file_path": "/Users/liyang/project/a.md"\n}\n\n输出\ncontent b')
+    expect(transcript).not.toContain('"file_path": "/Users/liyang/project/b.md"\n}\n\n输出\ncontent a')
+    expect(transcript.match(/工具/g)).toHaveLength(2)
+  })
+
+  it("does not attach identified tool results to legacy tool calls without tool use ids", () => {
+    const entries = [
+      {
+        id: "legacy-tool",
+        kind: "toolCall",
+        toolName: "Read",
+        toolInputRaw: { file_path: "/Users/liyang/project/legacy.md" },
+        timestamp: "2026-04-27T03:17:00.000Z",
+      },
+      {
+        id: "result-new",
+        kind: "toolResult",
+        toolUseId: "toolu-new",
+        toolName: "Read",
+        content: "new content",
+        status: "success",
+        success: true,
+        timestamp: "2026-04-27T03:17:01.000Z",
+      },
+    ] as const
+
+    const transcript = formatAgentTranscript(entries)
+
+    expect(transcript).not.toContain('"file_path": "/Users/liyang/project/legacy.md"\n}\n\n输出\nnew content')
+    expect(transcript.match(/工具/g)).toHaveLength(2)
+  })
+
+  it("uses tool use ids before tool names when grouping identified results", () => {
+    const entries = [
+      {
+        id: "tool-1",
+        kind: "toolCall",
+        toolUseId: "toolu-same",
+        toolName: "tool_result",
+        toolInputRaw: { value: "placeholder name before resolution" },
+        timestamp: "2026-04-27T03:17:00.000Z",
+      },
+      {
+        id: "result-1",
+        kind: "toolResult",
+        toolUseId: "toolu-same",
+        toolName: "Read",
+        content: "resolved output",
+        status: "success",
+        success: true,
+        timestamp: "2026-04-27T03:17:01.000Z",
+      },
+    ] as const
+
+    const transcript = formatAgentTranscript(entries)
+
+    expect(transcript).toContain('"value": "placeholder name before resolution"\n}\n\n输出\nresolved output')
+    expect(transcript.match(/工具/g)).toHaveLength(1)
+  })
+
+  it("keeps legacy tool result fallback for entries without tool use ids", () => {
+    const entries = [
+      {
+        id: "legacy-tool",
+        kind: "toolCall",
+        toolName: "Read",
+        toolInputRaw: { file_path: "/Users/liyang/project/legacy.md" },
+        timestamp: "2026-04-27T03:17:00.000Z",
+      },
+      {
+        id: "legacy-result",
+        kind: "toolResult",
+        toolName: "Read",
+        content: "legacy content",
+        status: "success",
+        success: true,
+        timestamp: "2026-04-27T03:17:01.000Z",
+      },
+    ] as const
+
+    const transcript = formatAgentTranscript(entries)
+
+    expect(transcript).toContain('"file_path": "/Users/liyang/project/legacy.md"\n}\n\n输出\nlegacy content')
+    expect(transcript.match(/工具/g)).toHaveLength(1)
+  })
+
+  it("redacts secret-shaped values in copied transcripts", () => {
+    const entries = [{
+      id: "tool-secret",
+      kind: "toolCall",
+      toolName: "Bash",
+      toolInput: "ANTHROPIC_API_KEY=sk-api SYNAPSE_SIDE_CHANNEL_TOKEN=side-token curl -H 'Authorization: Bearer sk-bearer'",
+      timestamp: "2026-04-27T03:17:00.000Z",
+    }] as const
+
+    const transcript = formatAgentTranscript(entries)
+
+    expect(transcript).toContain("[redacted]")
+    expect(transcript).not.toContain("sk-api")
+    expect(transcript).not.toContain("side-token")
+    expect(transcript).not.toContain("sk-bearer")
+  })
+
   it("labels AskUserQuestion transcript entries as pending answers", () => {
     const entries = [{
       id: "question-1",

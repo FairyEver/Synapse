@@ -26,6 +26,7 @@ import type {
   AgentRuntimeRelayResult,
   AgentRuntimeTurnResult,
 } from "./types"
+import { redactSensitiveText } from "./redaction"
 
 export interface ConversationRouterDeps {
   readonly projectId: string
@@ -62,8 +63,6 @@ const DEFAULT_LIVE_EVENT_TIMEOUT_MS = 5 * 60 * 1000
 const MAX_EVENT_PAYLOAD_BYTES = 8192
 const MAX_SUMMARY_LENGTH = 1000
 const MAX_HISTORY_CONTENT_LENGTH = 10_000
-const SENSITIVE_ERROR_ASSIGNMENT_PATTERN = /\b(secret|token|api[-_]?key|authorization|cookie|password|credential)\b\s*[:=]\s*("[^"]*"|'[^']*'|[^\s,;]+)/gi
-const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
 
 export class ConversationRouter {
   private readonly deps: ConversationRouterDeps
@@ -1256,6 +1255,7 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
         metadata: compactMetadata({
           agentEventType: event.type,
           sdkSessionId: event.sdkSessionId,
+          toolUseId: event.toolUseId,
           toolName: event.toolName,
           toolInputSummary: truncateString(event.toolInput, MAX_SUMMARY_LENGTH),
         }),
@@ -1267,6 +1267,7 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
         metadata: compactMetadata({
           agentEventType: event.type,
           sdkSessionId: event.sdkSessionId,
+          toolUseId: event.toolUseId,
           toolName: event.toolName,
           status: event.status,
           exitCode: event.exitCode,
@@ -1439,9 +1440,7 @@ function errorMetadata(error: unknown): {
 
 function sanitizeErrorText(value: string): string {
   return truncateString(
-    value
-      .replace(SENSITIVE_ERROR_ASSIGNMENT_PATTERN, (_match, key: string) => `${key}=[redacted]`)
-      .replace(BEARER_TOKEN_PATTERN, "Bearer [redacted]"),
+    redactSensitiveText(value),
     MAX_SUMMARY_LENGTH,
   ) ?? ""
 }

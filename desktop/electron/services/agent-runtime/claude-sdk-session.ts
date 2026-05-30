@@ -23,6 +23,7 @@ import type {
   AgentSdkPluginSpec,
   AgentSdkSubagentToolPolicies,
 } from "./project-contributions"
+import { isSensitiveTextKey, redactSensitiveText, REDACTED } from "./redaction"
 import { bridgeSdkMessage, type AgentEventEnvelope } from "./sdk-event-bridge"
 import type {
   AgentEvent,
@@ -253,9 +254,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
     const sdkEnv = mergeEnvironmentWithPath(hostEnv, options.env)
     const queryOptions: Partial<Options> = {
       cwd: options.cwd,
-      settingSources: options.allowPluginHooks === true
-        ? ["project", "local"]
-        : ["user", "project", "local"],
+      settingSources: ["user", "project", "local"],
       skills: "all",
       settings: {
         enableAllProjectMcpServers: true,
@@ -509,7 +508,7 @@ export class ClaudeSDKSession implements AgentLiveSession {
 
   private resolveToolResultName(event: AgentEvent): AgentEvent {
     if (event.type !== "toolResult") return event
-    const toolName = this.toolNamesByUseId.get(event.toolName)
+    const toolName = event.toolUseId ? this.toolNamesByUseId.get(event.toolUseId) : this.toolNamesByUseId.get(event.toolName)
     return toolName ? { ...event, toolName } : { ...event, toolName: "tool_result" }
   }
 
@@ -539,9 +538,7 @@ const permissionModes = new Set<PermissionMode>([
 const MAX_TOOL_INPUT_SUMMARY_LENGTH = 240
 const MAX_TOOL_INPUT_STRING_LENGTH = 120
 const MAX_DIAGNOSTIC_TEXT_LENGTH = 240
-const REDACTED = "[redacted]"
 const ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion"
-const sensitiveToolInputKeyPattern = /token|secret|api[-_]?key|authorization|cookie|password|credential/i
 
 function defaultQueryFactory(input: {
   prompt: AsyncIterable<SDKUserMessage>
@@ -774,15 +771,7 @@ function stringValue(value: unknown): string | undefined {
 }
 
 function sanitizeDiagnosticText(value: string): string {
-  const redacted = value
-    .replace(
-      /\b(api[-_]?key|authorization|cookie|password|credential|secret|token)\b(\s*[:=]\s*)(?:(Bearer)\s+)?[^\s,;]+/gi,
-      (_match, key: string, separator: string, bearer: string | undefined) =>
-        `${key}${separator}${bearer ? `${bearer} ` : ""}${REDACTED}`,
-    )
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTED}`)
-
-  return truncateText(redacted, MAX_DIAGNOSTIC_TEXT_LENGTH)
+  return truncateText(redactSensitiveText(value), MAX_DIAGNOSTIC_TEXT_LENGTH)
 }
 
 function summarizeToolInput(toolName: string, input: Record<string, unknown>): string | undefined {
@@ -794,7 +783,7 @@ function summarizeToolInput(toolName: string, input: Record<string, unknown>): s
 }
 
 function sanitizeToolInput(value: unknown, key = ""): unknown {
-  if (sensitiveToolInputKeyPattern.test(key)) return REDACTED
+  if (isSensitiveTextKey(key)) return REDACTED
   if (typeof value === "string") {
     return truncateText(redactSensitiveText(value), MAX_TOOL_INPUT_STRING_LENGTH)
   }
@@ -811,25 +800,6 @@ function sanitizeToolInput(value: unknown, key = ""): unknown {
 function sanitizeToolInputRecord(input: Record<string, unknown>): Record<string, unknown> {
   const sanitized = sanitizeToolInput(input)
   return asRecord(sanitized) ?? {}
-}
-
-function redactSensitiveText(value: string): string {
-  return truncateText(
-    value
-      .replace(
-        /\b(authorization)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s'"]+(?:\s+[^\s'"]+)?)/gi,
-        `$1$2${REDACTED}`,
-      )
-      .replace(
-        /\b(cookie|set-cookie|token|secret|password|credential|api[-_]?key)(\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;'"`]+)/gi,
-        `$1$2${REDACTED}`,
-      )
-      .replace(
-        /(--cookie(?:-jar)?\s+)(?:"[^"]*"|'[^']*'|[^\s]+)/gi,
-        `$1${REDACTED}`,
-      ),
-    MAX_TOOL_INPUT_SUMMARY_LENGTH,
-  )
 }
 
 function truncateText(value: string, maxLength: number): string {

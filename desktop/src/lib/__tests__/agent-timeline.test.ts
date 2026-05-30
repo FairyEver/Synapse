@@ -10,6 +10,7 @@ describe("agent timeline conversion", () => {
   it("converts live tool events into canonical items", () => {
     expect(agentEventToTimelineItem({
       type: "toolUse",
+      toolUseId: "toolu-1",
       toolName: "Bash",
       toolInput: "pnpm test",
       toolInputRaw: { cmd: "pnpm test" },
@@ -26,6 +27,7 @@ describe("agent timeline conversion", () => {
       agentType: "codex",
       agentSessionId: "thread-1",
       threadId: "thread-1",
+      toolUseId: "toolu-1",
       toolName: "Bash",
       toolInput: "pnpm test",
       toolInputRaw: { cmd: "pnpm test" },
@@ -39,6 +41,7 @@ describe("agent timeline conversion", () => {
       timestamp: "2026-04-28T00:01:00.000Z",
       metadata: {
         agentEventType: "toolResult",
+        toolUseId: "toolu-1",
         toolName: "Bash",
         status: "completed",
         exitCode: 0,
@@ -53,6 +56,7 @@ describe("agent timeline conversion", () => {
       agentType: "codex",
       agentSessionId: "thread-1",
       threadId: "thread-1",
+      toolUseId: "toolu-1",
       toolName: "Bash",
       content: "ok",
       status: "completed",

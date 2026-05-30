@@ -39,6 +39,11 @@ type McpServerInfo = {
 
 const MCP_DEFINITIONS = mcpDefinitions
 const MCP_TARGETS: McpTarget[] = MCP_DEFINITIONS.map((definition) => definition.target)
+const CLAUDE_TARGET = "claude"
+const CLAUDE_SETTINGS_PERMISSION_FILES = [
+  [".claude", "settings.json"],
+  [".claude", "settings.local.json"],
+] as const
 
 function getMcpDefinition(target: McpTarget): SynapseMcpDefinition | null {
   return MCP_DEFINITIONS.find((definition) => definition.target === target) ?? null
@@ -484,6 +489,27 @@ function removeJsonMcp(settingsPath: string, serverName: string): boolean {
   return true
 }
 
+function isLegacyMcpPermission(value: string): boolean {
+  return SYNAPSE_MCP_LEGACY_SERVER_NAMES.some((legacy) => value.startsWith(`mcp__${legacy}__`))
+}
+
+function removeLegacyClaudePermissionAllowlistEntries(settingsPath: string): boolean {
+  if (!existsSync(settingsPath)) return false
+  const settings = readJsonSettings(settingsPath)
+  const permissions = settings.permissions
+  if (!isRecord(permissions) || !Array.isArray(permissions.allow)) return false
+
+  const nextAllow = permissions.allow.filter((item) =>
+    typeof item !== "string" || !isLegacyMcpPermission(item)
+  )
+  if (nextAllow.length === permissions.allow.length) return false
+
+  permissions.allow = nextAllow
+  settings.permissions = permissions
+  writeFileSync(settingsPath, JSON.stringify(settings, null, 2), "utf-8")
+  return true
+}
+
 function removeCodexMcp(settingsPath: string, serverName: string): boolean {
   if (!existsSync(settingsPath)) return false
   const raw = readFileSync(settingsPath, "utf-8")
@@ -610,6 +636,29 @@ async function cleanupLegacyMcpNamesForTarget(
   }
 }
 
+async function cleanupLegacyClaudePermissions(security?: McpRegistrationSecurity): Promise<void> {
+  for (const segments of CLAUDE_SETTINGS_PERMISSION_FILES) {
+    const settingsPath = path.join(homedir(), ...segments)
+    if (!existsSync(settingsPath)) continue
+    const audit = buildMcpWriteAudit(CLAUDE_TARGET, settingsPath, security, "unregister")
+    const permission = await authorizeMcpWrite(security, audit)
+    if (!permission.allowed) {
+      logger.warn("Legacy Claude MCP permission cleanup denied.", { settingsPath, reason: permission.reason })
+      continue
+    }
+    try {
+      if (removeLegacyClaudePermissionAllowlistEntries(settingsPath)) {
+        recordMcpWriteAudit(security, audit, "allowed")
+        logger.info("Legacy Claude MCP permission allowlist entries removed.", { settingsPath })
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      recordMcpWriteAudit(security, audit, "failed", message)
+      logger.warn("Legacy Claude MCP permission cleanup failed.", { settingsPath, error: message })
+    }
+  }
+}
+
 async function autoRegisterMcp(mcpPort: number, security?: McpRegistrationSecurity): Promise<void> {
   logger.info("MCP auto-registration started.", { port: mcpPort, targets: MCP_TARGETS.map((d) => d) })
   const mcpUrl = getMcpUrl(mcpPort)
@@ -641,6 +690,7 @@ async function autoRegisterMcp(mcpPort: number, security?: McpRegistrationSecuri
       if (detection.registered && detection.mode === "http" && detection.url === mcpUrl) {
         logger.info("MCP target already registered with correct URL.", { target, settingsPath })
         await cleanupLegacyMcpNamesForTarget(target, security)
+        if (target === CLAUDE_TARGET) await cleanupLegacyClaudePermissions(security)
         continue
       }
 
@@ -648,6 +698,7 @@ async function autoRegisterMcp(mcpPort: number, security?: McpRegistrationSecuri
       if (result.success) {
         logger.info("MCP auto-registered.", { target, settingsPath, previousMode: detection.mode, previousUrl: detection.url })
         await cleanupLegacyMcpNamesForTarget(target, security)
+        if (target === CLAUDE_TARGET) await cleanupLegacyClaudePermissions(security)
       } else {
         logger.warn("MCP auto-registration failed, preserving legacy entries.", { target, error: result.error })
       }

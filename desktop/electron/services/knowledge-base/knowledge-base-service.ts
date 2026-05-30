@@ -1,7 +1,7 @@
 import { app, shell } from "electron"
 import { constants } from "node:fs"
 import type { Dirent } from "node:fs"
-import { access, copyFile, lstat, mkdir, readdir, readFile } from "node:fs/promises"
+import { access, copyFile, lstat, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises"
 import path from "node:path"
 import type {
   SynapseKnowledgeBaseCreateManagedPayload,
@@ -93,14 +93,27 @@ export class KnowledgeBaseService {
     if (await pathExists(runtimePath)) {
       throw new Error("知识库已存在。")
     }
-    await copyDirectoryContents(this.managedTemplateRoot, runtimePath)
-    const source = await readTemplateSource(this.managedTemplateRoot)
-    return {
-      projectId: payload.projectId,
-      projectPath: knowledgeBaseVirtualPath(payload.projectId),
-      runtimePath,
-      templateVersion: KNOWLEDGE_BASE_TEMPLATE_VERSION,
-      ...(source ? { templateSource: source } : undefined),
+    try {
+      await copyDirectoryContents(this.managedTemplateRoot, runtimePath)
+      await resetNewManagedRuntimeContent(runtimePath)
+      const source = await readTemplateSource(this.managedTemplateRoot)
+      return {
+        projectId: payload.projectId,
+        projectPath: knowledgeBaseVirtualPath(payload.projectId),
+        runtimePath,
+        templateVersion: KNOWLEDGE_BASE_TEMPLATE_VERSION,
+        ...(source ? { templateSource: source } : undefined),
+      }
+    } catch (error) {
+      try {
+        await rm(runtimePath, { recursive: true, force: true })
+      } catch (cleanupError) {
+        logger.warn("Managed Knowledge Base runtime cleanup after create failure failed.", {
+          runtimePath,
+          ...knowledgeBaseErrorMeta(cleanupError),
+        })
+      }
+      throw error
     }
   }
 
@@ -408,6 +421,48 @@ async function copyDirectoryContents(sourceRoot: string, targetRoot: string): Pr
       await copyFile(sourcePath, targetPath)
     }
   }
+}
+
+async function resetNewManagedRuntimeContent(runtimePath: string): Promise<void> {
+  await resetNewManagedWiki(runtimePath)
+  await resetNewManagedRaw(runtimePath)
+  await resetNewManagedVaultMeta(runtimePath)
+}
+
+async function resetNewManagedWiki(runtimePath: string): Promise<void> {
+  const wikiPath = path.join(runtimePath, "wiki")
+  await rm(wikiPath, { recursive: true, force: true })
+  await mkdir(path.join(wikiPath, "sources"), { recursive: true })
+  await mkdir(path.join(wikiPath, "concepts"), { recursive: true })
+  await mkdir(path.join(wikiPath, "entities"), { recursive: true })
+  await mkdir(path.join(wikiPath, "questions"), { recursive: true })
+  await mkdir(path.join(wikiPath, "meta"), { recursive: true })
+  await writeFile(path.join(wikiPath, "index.md"), "# Index\n\nNo entries yet.\n", "utf8")
+  await writeFile(path.join(wikiPath, "log.md"), "# Log\n\n", "utf8")
+  await writeFile(path.join(wikiPath, "hot.md"), "# Hot\n\n", "utf8")
+  await writeFile(path.join(wikiPath, "overview.md"), "# Overview\n\nNo entries yet.\n", "utf8")
+  await writeFile(path.join(wikiPath, "sources", "_index.md"), "# Sources\n\nNo entries yet.\n", "utf8")
+  await writeFile(path.join(wikiPath, "concepts", "_index.md"), "# Concepts\n\nNo entries yet.\n", "utf8")
+  await writeFile(path.join(wikiPath, "entities", "_index.md"), "# Entities\n\nNo entries yet.\n", "utf8")
+  await writeFile(path.join(wikiPath, "questions", "_index.md"), "# Questions\n\nNo entries yet.\n", "utf8")
+}
+
+async function resetNewManagedRaw(runtimePath: string): Promise<void> {
+  const rawPath = path.join(runtimePath, ".raw")
+  await rm(rawPath, { recursive: true, force: true })
+  await mkdir(rawPath, { recursive: true })
+  await writeFile(path.join(rawPath, ".gitkeep"), "", "utf8")
+  await writeFile(path.join(rawPath, ".manifest.json"), JSON.stringify({
+    version: 1,
+    sources: {},
+    address_map: {},
+  }, null, 2) + "\n", "utf8")
+}
+
+async function resetNewManagedVaultMeta(runtimePath: string): Promise<void> {
+  const vaultMetaPath = path.join(runtimePath, ".vault-meta")
+  await mkdir(vaultMetaPath, { recursive: true })
+  await writeFile(path.join(vaultMetaPath, "address-counter.txt"), "1\n", "utf8")
 }
 
 async function assertNoSymlinkInRequiredPath(projectPath: string, relativePath: string): Promise<void> {

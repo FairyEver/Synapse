@@ -40,12 +40,14 @@ export type SynapseAgentEvent = SynapseAgentEventBase & (
     }
   | {
       type: "toolUse"
+      toolUseId?: string
       toolName: string
       toolInput?: string
       toolInputRaw?: Record<string, unknown>
     }
   | {
       type: "toolResult"
+      toolUseId?: string
       toolName: string
       content?: string
       status?: string
@@ -197,6 +199,7 @@ export interface SynapseAgentThinkingTimelineItem extends SynapseAgentTimelineBa
 
 export interface SynapseAgentToolCallTimelineItem extends SynapseAgentTimelineBase {
   readonly kind: "toolCall"
+  readonly toolUseId?: string
   readonly toolName: string
   readonly toolInput?: string
   readonly toolInputRaw?: Record<string, unknown>
@@ -204,6 +207,7 @@ export interface SynapseAgentToolCallTimelineItem extends SynapseAgentTimelineBa
 
 export interface SynapseAgentToolResultTimelineItem extends SynapseAgentTimelineBase {
   readonly kind: "toolResult"
+  readonly toolUseId?: string
   readonly toolName: string
   readonly content?: string
   readonly status?: string

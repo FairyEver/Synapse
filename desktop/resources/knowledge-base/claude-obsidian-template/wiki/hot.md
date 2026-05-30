@@ -74,8 +74,3 @@ Navigation: [[index]] | [[log]] | [[overview]]
 - DragonScale Mechanism 4 shipped in Phase 4 as an opt-in Topic Selection mode in `skills/autoresearch/`. All four DragonScale mechanisms are now shipped and feature-gated.
 - v1.6.0 not yet pushed to GitHub (local commits only, no git tag created). User controls push and tag timing.
 - CLAUDE.md has one pre-existing uncommitted change ("Release Blog Post" section) that predates this session.
-
-## Repo Locations
-
-- Working: `~/Desktop/claude-obsidian/`
-- Public: https://github.com/AgriciDaniel/claude-obsidian

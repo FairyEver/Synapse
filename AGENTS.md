@@ -62,6 +62,56 @@
 - Rule / Skill / Content 写入编辑器目录、覆盖、替换、备份失败等敏感路径必须经过确认、权限检查和审计；备份失败必须阻断替换；安装和复制文案不能混用。
 - 扫描详情的“发布到仓库”不得静默写库；覆盖路径只能预填本地版本并进入内容详情编辑态，由用户保存后才落库。
 
+## 知识库相关
+
+本节记录 Knowledge Base 的长期边界。后续 agent 修改知识库、Agent Runtime、Claude Code SDK 参数、MCP 注册诊断或 `claude-obsidian` 模板时，必须先读本节。
+
+### 产品与运行边界
+
+- Knowledge Base 是 Synapse 托管项目，不是用户可见普通目录。用户只看到 `synapse-kb://<id>`，真实 backing directory 存在 app-managed storage 中。
+- Knowledge Base renderer Agent 会话必须把 backing directory 作为 Claude Code SDK local plugin 加载，并允许该知识库模板内已启用的 plugin hooks。普通项目不得加载知识库 plugin、skill、hook、prompt 或快捷动作。
+- Scheduler、Workflow 或其它非 renderer Agent 入口不得默认获得知识库 plugin runtime。只有明确绑定托管 Knowledge Base 且入口策略允许时，才加载 Knowledge Base 专用行为。
+- Agent composer slash menu 只负责插入 `/<name>`，不得改成自动执行命令，也不要在 renderer 侧新增目录扫描器来替代后端 command/skill 解析。
+- Knowledge Base renderer Agent 和普通 Agent 都应尽量与用户本机 Claude Code 看到同一套 MCP：Claude SDK `settingSources` 必须包含 `["user", "project", "local"]`。不要因为 `allowPluginHooks === true` 就移除 `user` settings。
+- 不要新增 SDK `mcpServers` 程序化注入来“修复”知识库 MCP。Synapse MCP 继续通过用户 Claude Code 配置读取，注册位置是 `~/.claude.json`，当前 server 名是 `synapse-mcp`。
+- Knowledge Base 不做 MCP 隔离。用户本机 Claude Code 能读到的 MCP，知识库 Agent 也应能读到；权限是否允许调用仍走现有工具权限流程。
+
+### 新建 runtime 初始化
+
+- `desktop/resources/knowledge-base/claude-obsidian-template/` 可以完整同步上游 runtime 资源；新建 Knowledge Base 的数据净化发生在 runtime 创建阶段，不靠手工删模板来保证用户新库干净。
+- 新建 Knowledge Base 可以先复制模板，但必须重置数据层，不能继承上游 demo `wiki/` 页面、`.raw/` source 或示例 manifest。
+- 新建 runtime 的最小 wiki 骨架必须包含：`wiki/index.md`、`wiki/hot.md`、`wiki/log.md`、`wiki/overview.md`、`wiki/sources/_index.md`、`wiki/concepts/_index.md`、`wiki/entities/_index.md`、`wiki/questions/_index.md` 和空的 `wiki/meta/`。
+- 新建 runtime 的 `.raw/` 必须重置为 `.raw/.gitkeep` 和空 `.raw/.manifest.json`；manifest 结构必须保留 `version`、`sources` 和 `address_map`，其中 `sources` 与 `address_map` 初始为空对象。
+- 新建 runtime 的 `.vault-meta/address-counter.txt` 必须重置为 `1`，避免继承上游模板地址计数；`tiling-thresholds.json` 等非语义默认配置应保留，不要把整个 `.vault-meta/` 当垃圾目录清空。
+- 创建 runtime 时必须保留模板运行资产：`.claude-plugin/`、`skills/`、`commands/`、`hooks/`、`scripts/`、`CLAUDE.md` 以及模板运行所需的其它资源。不要为了清理示例内容误删 runtime 资产。
+- `createManaged()` 复制模板或净化失败时，必须删除本次新建的 runtime 目录并抛出原错误；清理失败只能结构化 warn，不能留下半初始化的托管知识库目录。
+- 修改新建 runtime 初始化逻辑时，测试必须覆盖：demo wiki/raw 不被继承、最小骨架存在、manifest 为空、runtime 资产保留、address counter 重置、非语义 `.vault-meta` 配置保留、失败回滚。
+
+### `claude-obsidian` 模板更新约定
+
+- 模板里不得把 `~/Desktop/claude-obsidian`、开发机绝对路径或上游作者本地路径写进新知识库默认 wiki/hot/log 内容。需要路径时基于当前 cwd/backing directory。
+- `/save`、`save` skill 和“记录到知识库”默认语义是保存当前对话、结论或洞察为结构化 wiki note；不要把它们改成一律创建 `.raw/` 原始资料文件。这个语义应尽量跟随上游 `claude-obsidian`。
+- “保存笔记”和“资料摄入”必须保持产品语义区分：只有用户明确要求摄入资料、处理 source、导入文件、写入 `.raw/`，或通过资料管理 UI 添加材料时，才把内容作为 raw source 落到 `.raw/`。
+- 如果新增“作为资料摄入”类入口，必须先通过 Knowledge Base source staging / raw file manager 写入 `.raw/` 中真实 source，再由 `/wiki-ingest` 处理；不要让 agent 凭空把已生成的 wiki 页面倒填为 source。
+- `/wiki-ingest` 只能处理 `.raw/` 中真实存在的新/变更 source。不要让 agent 凭空手写 source manifest；manifest 更新应保留既有 `sources` 和 `address_map`，代码侧优先使用既有 Knowledge Base manifest 写入能力。
+- 如果上游模板更新覆盖了 `skills/save/SKILL.md`、`commands/save.md` 或 `skills/wiki-ingest/SKILL.md`，必须重新检查本节的保存笔记语义、真实 source ingest、manifest 保留和路径约束是否仍然存在。
+
+### 已有库与迁移边界
+
+- 不自动迁移、删除或重写已有用户知识库内容。需要清理旧知识库或迁移已有内容时，必须提供显式入口和用户确认。
+- Agent 会话启动、SessionStart 前置处理或后台 hygiene 流程不得为了清理模板残留而改写已有知识库的 `wiki/hot.md`、`wiki/`、`.raw/`、manifest、log 或 `.vault-meta/`。模板 hook 可以在会话中读取 `wiki/hot.md` 恢复上下文，但 Synapse 启动代码不得把读取变成自动修复写入。
+- 旧知识库若包含上游 `claude-obsidian` 本地路径，只能在用户明确触发迁移/清理时窄范围处理明确的旧 `Repo Locations`/`~/Desktop/claude-obsidian` 提示。不得为修复路径误导而重建、清空或批量重写用户内容。
+
+### MCP、权限、诊断和日志
+
+- 修改 Claude SDK 参数时必须保留 user/project/local 三类 settings。Knowledge Base 启用 plugin hooks 不应改变普通 Agent 与知识库 Agent 对用户 Claude Code MCP 配置的可见性。
+- 自动注册/清理 Synapse MCP 时必须继续移除旧 server 名称：`synapse-data`、`synapse-database`、`synapse-services`，并清理 Claude settings 权限 allowlist 里的旧工具名，例如 `mcp__synapse-data__*`。不要自动新增 `mcp__synapse-mcp__*` allowlist，避免扩大权限。
+- MCP 诊断必须区分两件事：Synapse MCP HTTP server 是否运行，以及 Claude Code 配置 `~/.claude.json` 中是否注册了 `synapse-mcp`。不要用 `~/.claude/settings.json` 或旧权限 allowlist 推断 server 是否存在。
+- Agent 权限卡片、工具事件、错误日志和导出文本必须脱敏 token/API key/Authorization/Bearer/env JSON/data-server token。普通路径和 `file_path` 仍应保留，方便排查。
+- AskUserQuestion/确认类交互如果返回空答案，后续敏感写操作必须停止，并给用户明确反馈“未收到选择，已停止操作。”不要把空答案当成同意或默认选项。
+- Agent 工具调用与工具结果的稳定关联键是 `toolUseId`。修改 SDK event bridge、history metadata、IPC schema、renderer timeline、复制或导出文本时，必须端到端保留该字段；有 `toolUseId` 的结果只能按 `toolUseId` 归属，缺失时才允许走旧数据兼容 fallback。
+- 并行工具结果不能只靠顺序或 `toolName` 猜归属；`toolName` 可能重复或只是 SDK 返回的占位名。文件读取类工具日志和导出文本要保留原始 `file_path`，但 token、Authorization、Bearer、env secret 等敏感值必须继续脱敏。
+
 ## 模块设计文档发现规则
 
 不要在本文件中维护具体设计文档清单。修改带产品边界的模块前，先在 `docs/` 下自动查找相关设计文档作为参考，重点搜索 `docs/agent-guides/`、`docs/superpowers/specs/`、`docs/superpowers/plans/` 和模块专属文档目录。

@@ -40,18 +40,20 @@ If the user specifies a type, use that. If not, pick the best fit based on the c
 2. **Ask** (if not already named): "What should I call this note?" Keep the name short and descriptive.
 3. **Determine** note type using the table above.
 4. **Extract** all relevant content from the conversation. Rewrite it in declarative present tense (not "the user asked" but the actual content itself).
-5. **Create** the note in the correct folder with full frontmatter.
-6. **Collect links**: identify any wiki pages mentioned in the conversation. Add them to `related` in frontmatter.
-7. **Update** `wiki/index.md`. Add the new entry at the top of the relevant section.
-8. **Append** to `wiki/log.md`. New entry at the TOP:
+5. **Preserve raw source when applicable**: if the user provided long pasted material, source notes, transcript text, or external material in the chat, write the original material unchanged to `.raw/saves/[YYYY-MM-DD]-[slug].md` before creating the wiki page. Do not overwrite or rewrite existing `.raw/` source files.
+6. **Create** the note in the correct folder with full frontmatter. If a raw source was saved, include that `.raw/...` path in `sources`.
+7. **Collect links**: identify any wiki pages mentioned in the conversation. Add them to `related` in frontmatter.
+8. **Update** `wiki/index.md`. Add the new entry at the top of the relevant section.
+9. **Append** to `wiki/log.md`. New entry at the TOP:
    ```
    ## [YYYY-MM-DD] save | Note Title
    - Type: [note type]
    - Location: wiki/[folder]/Note Title.md
+   - Raw source: `.raw/saves/[YYYY-MM-DD]-[slug].md` (if saved)
    - From: conversation on [brief topic description]
    ```
-9. **Update** `wiki/hot.md` to reflect the new addition.
-10. **Confirm**: "Saved as [[Note Title]] in wiki/[folder]/."
+10. **Update** `wiki/hot.md` to reflect the new addition.
+11. **Confirm**: "Saved as [[Note Title]] in wiki/[folder]/."
 
 ---
 

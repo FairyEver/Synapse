@@ -100,7 +100,7 @@ describe("ClaudeSDKSession", () => {
     })
 
     expect(getOptions()).toMatchObject({
-      settingSources: ["project", "local"],
+      settingSources: ["user", "project", "local"],
       settings: {
         disableAllHooks: false,
       },
@@ -214,6 +214,26 @@ describe("ClaudeSDKSession", () => {
     expect(getOptions().settings).toMatchObject({
       env: { FOO: "bar" },
     })
+  })
+
+  it("redacts secret-shaped env values in permission tool input summaries", async () => {
+    const { factory, getOptions } = createQueryFactory()
+    const session = createSession(factory)
+
+    void canUseTool(getOptions())("Bash", {
+      command: "ANTHROPIC_AUTH_TOKEN=sk-auth ANTHROPIC_API_KEY=sk-api SYNAPSE_SIDE_CHANNEL_TOKEN=side-token curl -H 'Authorization: Bearer sk-bearer' http://127.0.0.1",
+    }, {
+      signal: new AbortController().signal,
+    })
+
+    const event = await session.nextEvent()
+    expect(event?.type).toBe("permissionRequest")
+    const serialized = JSON.stringify(event)
+    expect(serialized).toContain("[redacted]")
+    expect(serialized).not.toContain("sk-auth")
+    expect(serialized).not.toContain("sk-api")
+    expect(serialized).not.toContain("side-token")
+    expect(serialized).not.toContain("sk-bearer")
   })
 
   it("merges login shell PATH and Synapse node fallback into SDK env", () => {

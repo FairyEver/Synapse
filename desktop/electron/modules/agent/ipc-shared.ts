@@ -98,6 +98,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
   z.object({
     ...timelineBaseSchema,
     kind: z.literal("toolCall"),
+    toolUseId: z.string().optional(),
     toolName: z.string(),
     toolInput: z.string().optional(),
     toolInputRaw: jsonRecordSchema.optional(),
@@ -105,6 +106,7 @@ export const timelineItemSchema = z.discriminatedUnion("kind", [
   z.object({
     ...timelineBaseSchema,
     kind: z.literal("toolResult"),
+    toolUseId: z.string().optional(),
     toolName: z.string(),
     content: z.string().optional(),
     status: z.string().optional(),
@@ -388,6 +390,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
   z.object({
     ...agentEventBaseSchema,
     type: z.literal("toolUse"),
+    toolUseId: z.string().optional(),
     toolName: z.string(),
     toolInput: z.string().optional(),
     toolInputRaw: jsonRecordSchema.optional(),
@@ -395,6 +398,7 @@ export const agentEventSchema = z.discriminatedUnion("type", [
   z.object({
     ...agentEventBaseSchema,
     type: z.literal("toolResult"),
+    toolUseId: z.string().optional(),
     toolName: z.string(),
     content: z.string().optional(),
     status: z.string().optional(),

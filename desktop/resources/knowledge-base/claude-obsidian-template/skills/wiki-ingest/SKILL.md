@@ -13,14 +13,14 @@ Read the source. Write the wiki. Cross-reference everything. A single source typ
 
 ## Delta Tracking
 
-Before ingesting any file, check `.raw/.manifest.json` to avoid re-processing unchanged sources.
+Before ingesting any file, list the actual files under `.raw/` and check `.raw/.manifest.json` to avoid re-processing unchanged sources. Process only source files that really exist under `.raw/`; never invent source paths or manifest entries for files that are not present.
 
 ```bash
 # Check if manifest exists
 [ -f .raw/.manifest.json ] && echo "exists" || echo "no manifest yet"
 ```
 
-**Manifest format** (create if missing):
+**Manifest format** (create if missing only after confirming at least one real `.raw/` source exists):
 ```json
 {
   "sources": {
@@ -35,14 +35,15 @@ Before ingesting any file, check `.raw/.manifest.json` to avoid re-processing un
 ```
 
 **Before ingesting a file:**
-1. Compute a hash: `md5sum [file] | cut -d' ' -f1` (or `sha256sum` on Linux).
+1. Verify the file exists under `.raw/` and is not `.raw/.manifest.json`.
+2. Compute a hash: `md5sum [file] | cut -d' ' -f1` (or `sha256sum` on Linux).
 2. Check if the path exists in `.manifest.json` with the same hash.
 3. If hash matches, skip. Report: "Already ingested (unchanged). Use `force` to re-ingest."
 4. If missing or hash differs, proceed with ingest.
 
 **After ingesting a file:**
-1. Record `{hash, ingested_at, pages_created, pages_updated}` in `.manifest.json`.
-2. Write the updated manifest back.
+1. Record `{hash, ingested_at, pages_created, pages_updated}` in `.manifest.json` for the real source path.
+2. Write the updated manifest back. Preserve unrelated existing manifest entries and `address_map`.
 
 Skip delta checking if the user says "force ingest" or "re-ingest".
 

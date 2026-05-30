@@ -72,6 +72,7 @@ export interface AgentThinkingEvent extends AgentEventBase {
 
 export interface AgentToolUseEvent extends AgentEventBase {
   readonly type: "toolUse"
+  readonly toolUseId?: string
   readonly toolName: string
   readonly toolInput?: string
   readonly toolInputRaw?: Record<string, unknown>
@@ -79,6 +80,7 @@ export interface AgentToolUseEvent extends AgentEventBase {
 
 export interface AgentToolResultEvent extends AgentEventBase {
   readonly type: "toolResult"
+  readonly toolUseId?: string
   readonly toolName: string
   readonly content?: string
   readonly status?: string

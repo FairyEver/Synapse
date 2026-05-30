@@ -617,8 +617,11 @@ describe("AgentRuntimeService", () => {
     })).rejects.toThrow("AskUserQuestion requires answers before continuing.")
 
     expect(permissionGuard.check).not.toHaveBeenCalled()
-    expect(session.responses).toEqual([])
-    await service.forceKillTurn(conversationId("local", "s1", "active"))
+    expect(session.responses).toEqual([{
+      requestId: "conversation-a-permission-1",
+      behavior: "deny",
+      message: "未收到选择，已停止操作。",
+    }])
     await expect(resolveSoon(turn)).resolves.not.toBe("timeout")
   })
 

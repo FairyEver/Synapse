@@ -1,15 +1,11 @@
+import { isSensitiveKey, redactSensitiveText } from "./redaction"
+
 const MAX_PERMISSION_TEXT_RUNES = 240
 
 export function sanitizePermissionText(value: string | undefined): string | undefined {
   if (!value) return value
   return truncateRunes(
-    value
-      .replace(
-        /\b(api[-_]?key|authorization|cookie|password|credential|secret|token)\b(\s*[:=]\s*)(?:(Bearer)\s+)?[^\s,;'"`]+/gi,
-        (_match, key: string, separator: string, bearer: string | undefined) =>
-          `${key}${separator}${bearer ? `${bearer} ` : ""}[redacted]`,
-      )
-      .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]"),
+    redactSensitiveText(value),
     MAX_PERMISSION_TEXT_RUNES,
   )
 }
@@ -50,17 +46,6 @@ function sanitizePermissionValue(value: unknown, key = ""): unknown {
     output[childKey] = sanitizePermissionValue(childValue, childKey)
   }
   return output
-}
-
-function isSensitiveKey(key: string): boolean {
-  const normalized = key.toLowerCase().replace(/[-_]/g, "")
-  return normalized.includes("secret")
-    || normalized.includes("apikey")
-    || normalized.includes("authorization")
-    || normalized.includes("cookie")
-    || normalized.includes("password")
-    || normalized.includes("credential")
-    || (normalized.includes("token") && !normalized.endsWith("tokens"))
 }
 
 function truncateRunes(value: string, maxRunes: number): string {

@@ -4,6 +4,11 @@ import type {
   SynapseAgentSessionSummary,
   SynapseAgentTimelineItem,
 } from "@/types/agent"
+import {
+  isSensitiveKey,
+  redactSensitiveText,
+  REDACTED,
+} from "@/lib/agent-redaction"
 
 const DEFAULT_LOCAL_SESSION_KEY = "local:renderer"
 const THINKING_DOT = "·"
@@ -33,10 +38,48 @@ function formatEntryTime(timestamp: string): string | undefined {
 }
 
 function formatAgentTranscript(entries: readonly SynapseAgentTimelineItem[]): string {
-  return entries.map((entry) => [
-    transcriptLabel(entry),
-    timelineItemText(entry).trimEnd(),
+  return transcriptSections(entries).map((section) => [
+    section.label,
+    section.text.trimEnd(),
   ].join("\n")).join("\n\n")
+}
+
+type TranscriptSection = {
+  label: string
+  text: string
+  toolName?: string
+  toolUseId?: string
+}
+
+function transcriptSections(entries: readonly SynapseAgentTimelineItem[]): readonly TranscriptSection[] {
+  const sections: TranscriptSection[] = []
+  for (const entry of entries) {
+    if (entry.kind === "toolResult") {
+      const section = matchingToolSection(sections, entry)
+      if (section) {
+        section.text = `${section.text.trimEnd()}\n\n输出\n${timelineItemText(entry).trimEnd()}`
+        continue
+      }
+    }
+    sections.push({
+      label: transcriptLabel(entry),
+      text: timelineItemText(entry),
+      toolName: entry.kind === "toolCall" ? entry.toolName : undefined,
+      toolUseId: entry.kind === "toolCall" ? entry.toolUseId : undefined,
+    })
+  }
+  return sections
+}
+
+function matchingToolSection(
+  sections: readonly TranscriptSection[],
+  entry: Extract<SynapseAgentTimelineItem, { kind: "toolResult" }>,
+): TranscriptSection | undefined {
+  if (entry.toolUseId) {
+    return [...sections].reverse().find((item) => item.toolUseId === entry.toolUseId)
+  }
+  const latest = sections.at(-1)
+  return latest?.toolUseId || latest?.toolName !== entry.toolName ? undefined : latest
 }
 
 function transcriptLabel(entry: SynapseAgentTimelineItem): string {
@@ -97,7 +140,7 @@ function timelineItemText(entry: SynapseAgentTimelineItem): string {
     case "result":
       return entry.content
     case "toolCall":
-      return entry.toolInput ? `${entry.toolName}\n${entry.toolInput}` : entry.toolName
+      return toolCallTranscriptText(entry)
     case "toolResult":
       return entry.content?.trim() || entry.toolName
     case "permissionRequest": {
@@ -154,9 +197,7 @@ function agentCliLabel(agentType: string | undefined): string | undefined {
   return normalized
 }
 
-const REDACTED = "[redacted]"
 const MAX_RAW_INPUT_STRING_LENGTH = 160
-const SENSITIVE_RAW_INPUT_KEY_PATTERN = /token|secret|api[-_]?key|authorization|cookie|password|credential/i
 
 function errorLogMeta(error: unknown): {
   readonly errorName: string
@@ -184,7 +225,7 @@ function errorLogMeta(error: unknown): {
 }
 
 function sanitizeAgentRawInput(value: unknown, key = ""): unknown {
-  if (SENSITIVE_RAW_INPUT_KEY_PATTERN.test(key)) return REDACTED
+  if (isSensitiveKey(key)) return REDACTED
   if (typeof value === "string") return truncateRawInputString(formatAgentInputText(value))
   if (Array.isArray(value)) return value.map((item) => sanitizeAgentRawInput(item))
   if (!value || typeof value !== "object") return value
@@ -197,7 +238,17 @@ function sanitizeAgentRawInput(value: unknown, key = ""): unknown {
 }
 
 function formatAgentInputText(value: string): string {
-  return value
+  return redactSensitiveText(value)
+}
+
+function toolCallTranscriptText(entry: Extract<SynapseAgentTimelineItem, { kind: "toolCall" }>): string {
+  const input = entry.toolInputRaw
+    ? JSON.stringify(sanitizeAgentRawInput(entry.toolInputRaw), null, 2)
+    : entry.toolInput
+      ? formatAgentInputText(entry.toolInput)
+      : undefined
+  if (!input) return entry.toolName
+  return `${entry.toolName}\n${input}`
 }
 
 function truncateRawInputString(value: string): string {

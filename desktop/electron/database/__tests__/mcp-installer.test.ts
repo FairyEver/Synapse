@@ -62,6 +62,7 @@ describe("mcp-installer", () => {
     vi.clearAllMocks()
     rmSync(state.home, { recursive: true, force: true })
     mkdirSync(path.join(state.home, ".cursor"), { recursive: true })
+    mkdirSync(path.join(state.home, ".claude"), { recursive: true })
   })
 
   afterEach(() => {
@@ -183,5 +184,76 @@ describe("mcp-installer", () => {
         target: "cursor",
       }),
     }))
+  })
+
+  it("detects Claude Code registration from ~/.claude.json", async () => {
+    mkdirSync(state.home, { recursive: true })
+    writeFileSync(path.join(state.home, ".claude.json"), JSON.stringify({
+      mcpServers: {
+        "synapse-mcp": {
+          type: "http",
+          url: "http://127.0.0.1:51234/mcp",
+        },
+      },
+    }), "utf8")
+
+    const { getMcpServers } = await import("../mcp-installer")
+
+    expect(getMcpServers().find((server) => server.target === "claude")).toMatchObject({
+      target: "claude",
+      settingsPath: path.join(state.home, ".claude.json"),
+      settingsFileExists: true,
+      registered: true,
+      mode: "http",
+      url: "http://127.0.0.1:51234/mcp",
+    })
+  })
+
+  it("removes legacy Claude MCP entries and allowlist permissions without adding new allowlist entries", async () => {
+    const { autoRegisterMcp } = await import("../mcp-installer")
+    const settingsPath = path.join(state.home, ".claude.json")
+    const localSettingsPath = path.join(state.home, ".claude", "settings.local.json")
+    const userSettingsPath = path.join(state.home, ".claude", "settings.json")
+    writeFileSync(settingsPath, JSON.stringify({
+      mcpServers: {
+        "synapse-data": { type: "http", url: "http://127.0.0.1:11111/mcp" },
+        "synapse-mcp": { type: "http", url: "http://127.0.0.1:51234/mcp" },
+      },
+    }), "utf8")
+    writeFileSync(localSettingsPath, JSON.stringify({
+      permissions: {
+        allow: [
+          "mcp__synapse-data__database_table_list",
+          "mcp__synapse-database__database_row_list",
+          "mcp__synapse-services__scheduler_task_list",
+          "mcp__other-server__tool",
+          "Bash(ls:*)",
+        ],
+      },
+    }), "utf8")
+    writeFileSync(userSettingsPath, JSON.stringify({
+      permissions: {
+        allow: [
+          "mcp__synapse-data__database_table_create",
+        ],
+      },
+    }), "utf8")
+
+    await autoRegisterMcp(51234)
+
+    expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({
+      mcpServers: {
+        "synapse-mcp": {
+          type: "http",
+          url: "http://127.0.0.1:51234/mcp",
+        },
+      },
+    })
+    expect(JSON.parse(readFileSync(localSettingsPath, "utf8")).permissions.allow).toEqual([
+      "mcp__other-server__tool",
+      "Bash(ls:*)",
+    ])
+    expect(JSON.parse(readFileSync(userSettingsPath, "utf8")).permissions.allow).toEqual([])
+    expect(readFileSync(localSettingsPath, "utf8")).not.toContain("mcp__synapse-mcp__")
   })
 })

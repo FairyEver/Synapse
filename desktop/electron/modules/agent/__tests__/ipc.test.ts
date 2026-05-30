@@ -285,6 +285,22 @@ describe("agentIpcModule", () => {
         payload: { type: "system", secret: "not-rendered-here" },
       },
       {
+        type: "toolUse",
+        sdkSessionId: "sdk-1",
+        toolUseId: "toolu-read-1",
+        toolName: "Read",
+        toolInput: "{\"file_path\":\"README.md\"}",
+      },
+      {
+        type: "toolResult",
+        sdkSessionId: "sdk-1",
+        toolUseId: "toolu-read-1",
+        toolName: "Read",
+        content: "file content",
+        status: "success",
+        success: true,
+      },
+      {
         type: "result",
         content: "",
         done: true,
@@ -313,6 +329,64 @@ describe("agentIpcModule", () => {
     expect(result).toEqual(expect.objectContaining({
       events: sdkEvents,
     }))
+  })
+
+  it("preserves tool use ids in conversation timelines", async () => {
+    const getSession = vi.fn().mockResolvedValue({
+      projectId: "project-1",
+      id: "conv-1",
+      sessionKey: "local:renderer",
+      active: true,
+      history: [
+        {
+          role: "tool",
+          content: "Read\n{\"file_path\":\"README.md\"}",
+          timestamp: "2026-04-27T03:17:00.000Z",
+          metadata: {
+            agentEventType: "toolUse",
+            toolUseId: "toolu-read-1",
+            toolName: "Read",
+          },
+        },
+        {
+          role: "tool",
+          content: "file content",
+          timestamp: "2026-04-27T03:17:01.000Z",
+          metadata: {
+            agentEventType: "toolResult",
+            toolUseId: "toolu-read-1",
+            toolName: "Read",
+            status: "success",
+            success: true,
+          },
+        },
+      ],
+      createdAt: "2026-04-27T00:00:00.000Z",
+      updatedAt: "2026-04-27T00:00:00.000Z",
+    })
+    const harness = createHarness({
+      agent: {
+        getSession,
+      },
+    })
+
+    const result = await harness.invoke("synapse:agent:get-timeline", {
+      projectId: "project-1",
+      conversationId: "conv-1",
+    }) as { readonly entries: readonly { readonly toolUseId?: string }[] }
+
+    expect(result.entries).toEqual([
+      expect.objectContaining({
+        kind: "toolCall",
+        toolUseId: "toolu-read-1",
+        toolName: "Read",
+      }),
+      expect.objectContaining({
+        kind: "toolResult",
+        toolUseId: "toolu-read-1",
+        toolName: "Read",
+      }),
+    ])
   })
 
   it("returns provider summaries without secrets", async () => {

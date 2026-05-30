@@ -68,6 +68,7 @@ import type {
 import type { SkillRegistry } from "./skill-registry"
 import { sanitizeError } from "../error-sanitize"
 import type { SynapseAgentConversationTarget } from "../../../src/types/agent-navigation"
+import { isSensitiveKey, redactSensitiveText } from "./redaction"
 
 interface CommandExecutionRunner {
   run(request: ControlledProcessRunRequest): Promise<ControlledProcessResult>
@@ -132,6 +133,7 @@ type PublishedProjectCommandSource =
   | ((platform: string) => readonly PublishedAgentCommand[] | Promise<readonly PublishedAgentCommand[]>)
 
 const ASK_USER_QUESTION_TOOL_NAME = "AskUserQuestion"
+const ASK_USER_QUESTION_EMPTY_ANSWER_MESSAGE = "未收到选择，已停止操作。"
 
 export interface AgentRuntimeStatus {
   readonly projectId: string
@@ -676,7 +678,17 @@ export class AgentRuntimeService {
     }
 
     if (isAskUserQuestionTool(pending.toolName)) {
-      const updatedInput = askUserQuestionUpdatedInput(pending, request)
+      let updatedInput: Record<string, unknown> | undefined
+      try {
+        updatedInput = askUserQuestionUpdatedInput(pending, request)
+      } catch (error) {
+        await pending.liveSession.respondPermission(request.requestId, {
+          behavior: "deny",
+          message: ASK_USER_QUESTION_EMPTY_ANSWER_MESSAGE,
+        })
+        this.sessionManager.settlePendingPermission(pending)
+        throw error
+      }
       await pending.liveSession.respondPermission(request.requestId, {
         behavior: request.behavior,
         updatedInput,
@@ -1245,27 +1257,11 @@ function sanitizePendingPermissionValue(value: unknown, key = ""): unknown {
 
 function sanitizePendingPermissionText(value: string | undefined): string | undefined {
   if (!value) return value
-  return truncateRunes(
-    value
-      .replace(
-        /\b(api[-_]?key|authorization|cookie|password|credential|secret|token)\b(\s*[:=]\s*)(?:(Bearer)\s+)?[^\s,;'"`]+/gi,
-        (_match, key: string, separator: string, bearer: string | undefined) =>
-          `${key}${separator}${bearer ? `${bearer} ` : ""}[redacted]`,
-      )
-      .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, "Bearer [redacted]"),
-    240,
-  )
+  return truncateRunes(redactSensitiveText(value), 240)
 }
 
 function isSensitivePendingPermissionKey(key: string): boolean {
-  const normalized = key.toLowerCase().replace(/[-_]/g, "")
-  return normalized.includes("secret")
-    || normalized.includes("apikey")
-    || normalized.includes("authorization")
-    || normalized.includes("cookie")
-    || normalized.includes("password")
-    || normalized.includes("credential")
-    || (normalized.includes("token") && !normalized.endsWith("tokens"))
+  return isSensitiveKey(key)
 }
 
 function compressionStateId(projectId: string, agentType: string): string {

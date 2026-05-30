@@ -359,6 +359,7 @@ describe("SDK event bridge", () => {
       expect.objectContaining({
         type: "toolUse",
         sdkSessionId: "sdk-tools",
+        toolUseId: "toolu-1",
         toolName: "Read",
         toolInput: "{\"file_path\":\"/Users/liyang/project/README.md\",\"authorization\":\"[redacted]\"}",
         toolInputRaw: {
@@ -402,6 +403,7 @@ describe("SDK event bridge", () => {
     expect(toolEvent).toMatchObject({
       type: "toolUse",
       sdkSessionId: "sdk-tools",
+      toolUseId: "toolu-secret",
       toolName: "Bash",
       toolInput: expect.stringContaining("Bearer [redacted]"),
       toolInputRaw: {
@@ -457,6 +459,7 @@ describe("SDK event bridge", () => {
       expect.objectContaining({
         type: "toolResult",
         sdkSessionId: "sdk-tools",
+        toolUseId: "toolu-1",
         toolName: "toolu-1",
         content: "file contents",
         status: "success",
@@ -497,6 +500,7 @@ describe("SDK event bridge", () => {
       expect.objectContaining({
         type: "toolResult",
         sdkSessionId: "sdk-tools",
+        toolUseId: "toolu-secret",
         toolName: "toolu-secret",
         content: expect.stringContaining("[redacted]"),
         status: "error",
@@ -507,6 +511,37 @@ describe("SDK event bridge", () => {
     expect(JSON.stringify(events)).not.toContain("sk-tool-result")
     expect(JSON.stringify(events)).not.toContain("sid-secret")
     expect(JSON.stringify(events)).toContain("/Users/liyang/private")
+  })
+
+  it("redacts env-shaped tokens and data-server token payloads", () => {
+    const events = bridgeSdkMessage({
+      type: "user",
+      session_id: "sdk-tools",
+      uuid: "uuid-tool-result-env-secret",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu-secret",
+            content: [
+              {
+                type: "text",
+                text: "ANTHROPIC_AUTH_TOKEN=sk-auth ANTHROPIC_API_KEY=sk-api SYNAPSE_SIDE_CHANNEL_TOKEN=side-token {\"token\":\"data-server-token\"}",
+              },
+            ],
+            is_error: true,
+          },
+        ],
+      },
+    } as unknown as SDKMessage, baseEnvelope)
+
+    const serialized = JSON.stringify(events)
+    expect(serialized).toContain("[redacted]")
+    expect(serialized).not.toContain("sk-auth")
+    expect(serialized).not.toContain("sk-api")
+    expect(serialized).not.toContain("side-token")
+    expect(serialized).not.toContain("data-server-token")
   })
 
   it("bridges SDK result error messages to error events", () => {

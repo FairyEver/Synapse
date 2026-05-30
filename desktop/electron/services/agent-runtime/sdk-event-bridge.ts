@@ -2,8 +2,8 @@ import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk" with { "resolut
 
 import { SYNAPSE_COST_CURRENCY, usdToCny } from "../../../action-packages/shared/cost-currency"
 import type { AgentEvent } from "./types"
+import { isSensitiveKey, redactSensitiveText, REDACTED } from "./redaction"
 
-const REDACTED = "[redacted]"
 const MAX_DIAGNOSTIC_TEXT_LENGTH = 240
 
 export interface AgentEventEnvelope {
@@ -201,12 +201,14 @@ function toolUseEventsFromBlocks(
     const record = recordValue(block)
     if (record?.type !== "tool_use") return []
     const toolName = stringValue(record.name)
+    const toolUseId = stringValue(record.id)
     if (!toolName) return []
     const sanitizedToolInput = sanitizeToolInputValue(record.input)
     const toolInputRaw = isRecord(sanitizedToolInput) ? sanitizedToolInput : undefined
     return [{
       type: "toolUse",
       sdkSessionId,
+      toolUseId,
       toolName,
       toolInput: stringifyToolInput(sanitizedToolInput),
       toolInputRaw,
@@ -225,10 +227,12 @@ function toolResultEventsFromBlocks(
     const record = recordValue(block)
     if (record?.type !== "tool_result") return []
     const isError = record.is_error === true
+    const toolUseId = stringValue(record.tool_use_id)
     return [{
       type: "toolResult",
       sdkSessionId,
-      toolName: stringValue(record.tool_use_id) ?? "tool_result",
+      toolUseId,
+      toolName: toolUseId ?? "tool_result",
       content: toolResultContent(record.content),
       status: isError ? "error" : "success",
       success: !isError,
@@ -361,18 +365,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 function isSensitivePayloadKey(key: string): boolean {
-  const normalized = key.toLowerCase().replace(/[-_]/g, "")
-  if (
-    normalized.includes("secret")
-    || normalized.includes("apikey")
-    || normalized.includes("authorization")
-    || normalized.includes("cookie")
-    || normalized.includes("password")
-    || normalized.includes("credential")
-  ) {
-    return true
-  }
-  return normalized.includes("token") && !normalized.endsWith("tokens")
+  return isSensitiveKey(key)
 }
 
 function isUrlPayloadKey(key: string): boolean {
@@ -412,31 +405,7 @@ function sanitizeUrlDiagnostic(value: string): string {
 }
 
 function redactDiagnosticText(value: string): string {
-  return value
-    .replace(secretLikeTextPattern(), secretLikeTextReplacement)
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTED}`)
-}
-
-function redactSensitiveText(value: string): string {
-  return value
-    .replace(
-      secretLikeTextPattern(),
-      secretLikeTextReplacement,
-    )
-    .replace(/\bBearer\s+[A-Za-z0-9._~+/=-]+/gi, `Bearer ${REDACTED}`)
-}
-
-function secretLikeTextPattern(): RegExp {
-  return /\b(api[-_]?key|authorization|cookie|password|credential|secret|token)\b(\s*[:=]\s*)(?:(Bearer)\s+)?[^\s,;]+/gi
-}
-
-function secretLikeTextReplacement(
-  _match: string,
-  key: string,
-  separator: string,
-  bearer: string | undefined,
-): string {
-  return `${key}${separator}${bearer ? `${bearer} ` : ""}${REDACTED}`
+  return redactSensitiveText(value)
 }
 
 function truncateDiagnosticText(value: string): string {

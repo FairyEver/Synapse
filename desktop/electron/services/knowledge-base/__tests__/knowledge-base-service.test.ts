@@ -85,8 +85,15 @@ describe("KnowledgeBaseService", () => {
   it("creates managed knowledge base runtime from template", async () => {
     const templateRoot = await tempDir()
     await mkdir(path.join(templateRoot, "wiki"), { recursive: true })
+    await mkdir(path.join(templateRoot, ".raw"), { recursive: true })
+    await mkdir(path.join(templateRoot, ".vault-meta"), { recursive: true })
     await mkdir(path.join(templateRoot, ".claude-plugin"), { recursive: true })
-    await writeFile(path.join(templateRoot, "wiki", "index.md"), "# Index\n", "utf8")
+    await writeFile(path.join(templateRoot, "wiki", "index.md"), "# Example Index\n", "utf8")
+    await writeFile(path.join(templateRoot, "wiki", "example.md"), "# Example\n", "utf8")
+    await writeFile(path.join(templateRoot, ".raw", "example.md"), "# Raw Example\n", "utf8")
+    await writeFile(path.join(templateRoot, ".raw", ".manifest.json"), "{\"sources\":{\".raw/example.md\":{}}}\n", "utf8")
+    await writeFile(path.join(templateRoot, ".vault-meta", "address-counter.txt"), "3\n", "utf8")
+    await writeFile(path.join(templateRoot, ".vault-meta", "tiling-thresholds.json"), "{\"version\":1}\n", "utf8")
     await writeFile(path.join(templateRoot, ".claude-plugin", "plugin.json"), "{\"name\":\"kb\"}\n", "utf8")
     await writeFile(path.join(templateRoot, "SOURCE.json"), JSON.stringify({
       repo: "https://github.com/AgriciDaniel/claude-obsidian",
@@ -102,8 +109,33 @@ describe("KnowledgeBaseService", () => {
     expect(result.projectPath).toBe("synapse-kb://kb-1")
     expect(result.runtimePath).toBe(path.join(userDataPath, "knowledge-bases", "kb-1"))
     expect(result.templateSource?.commit).toBe("75d3b6feb77b96c6bb16599c4550cc9703553d87")
-    await expect(readFile(path.join(result.runtimePath, "wiki", "index.md"), "utf8")).resolves.toBe("# Index\n")
+    await expect(readFile(path.join(result.runtimePath, "wiki", "index.md"), "utf8")).resolves.toBe("# Index\n\nNo entries yet.\n")
+    await expect(readFile(path.join(result.runtimePath, "wiki", "log.md"), "utf8")).resolves.toBe("# Log\n\n")
+    await expect(readFile(path.join(result.runtimePath, "wiki", "hot.md"), "utf8")).resolves.toBe("# Hot\n\n")
+    await expect(readFile(path.join(result.runtimePath, "wiki", "overview.md"), "utf8")).resolves.toBe("# Overview\n\nNo entries yet.\n")
+    await expect(readFile(path.join(result.runtimePath, "wiki", "sources", "_index.md"), "utf8")).resolves.toBe("# Sources\n\nNo entries yet.\n")
+    await expect(readFile(path.join(result.runtimePath, "wiki", "concepts", "_index.md"), "utf8")).resolves.toBe("# Concepts\n\nNo entries yet.\n")
+    await expect(readFile(path.join(result.runtimePath, "wiki", "entities", "_index.md"), "utf8")).resolves.toBe("# Entities\n\nNo entries yet.\n")
+    await expect(readFile(path.join(result.runtimePath, "wiki", "questions", "_index.md"), "utf8")).resolves.toBe("# Questions\n\nNo entries yet.\n")
+    await expect(readFile(path.join(result.runtimePath, "wiki", "example.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(result.runtimePath, ".raw", "example.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+    await expect(readFile(path.join(result.runtimePath, ".raw", ".manifest.json"), "utf8"))
+      .resolves.toBe(`${JSON.stringify({ version: 1, sources: {}, address_map: {} }, null, 2)}\n`)
+    await expect(readFile(path.join(result.runtimePath, ".vault-meta", "address-counter.txt"), "utf8")).resolves.toBe("1\n")
+    await expect(readFile(path.join(result.runtimePath, ".vault-meta", "tiling-thresholds.json"), "utf8")).resolves.toBe("{\"version\":1}\n")
     await expect(readFile(path.join(result.runtimePath, ".claude-plugin", "plugin.json"), "utf8")).resolves.toContain("kb")
+    await expect(readFile(path.join(templateRoot, ".vault-meta", "address-counter.txt"), "utf8")).resolves.toBe("3\n")
+  })
+
+  it("removes a partially created managed runtime when initialization fails", async () => {
+    const userDataPath = await tempDir()
+    const templateRoot = path.join(userDataPath, "missing-template")
+    const service = new KnowledgeBaseService({ managedTemplateRoot: templateRoot, userDataPath })
+    const runtimePath = path.join(userDataPath, "knowledge-bases", "kb-1")
+
+    await expect(service.createManaged({ projectId: "kb-1", name: "Knowledge" })).rejects.toThrow()
+
+    await expect(readFile(path.join(runtimePath, "wiki", "example.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
   })
 
   it("trashes managed knowledge base runtime", async () => {
