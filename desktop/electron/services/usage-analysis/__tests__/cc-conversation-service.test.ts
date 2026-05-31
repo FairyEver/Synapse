@@ -309,6 +309,53 @@ describe("CcConversationService", () => {
     }))
   })
 
+  it("redacts raw conversation secrets in details and search snippets", async () => {
+    const { db, filePath } = setupFixture()
+    fs.appendFileSync(filePath, `\n${JSON.stringify({
+      type: "user",
+      sessionId: "session-1",
+      uuid: "secret-1",
+      timestamp: "2026-05-27T01:00:02.000Z",
+      message: {
+        role: "user",
+        content: [
+          "ANTHROPIC_AUTH_TOKEN=sk-usage-secret",
+          "Authorization: Bearer sk-bearer",
+          "{\"token\":\"data-server-token\"}",
+          "/Users/liyang/project/file.ts",
+        ].join(" "),
+      },
+    })}`)
+    const service = new CcConversationService({ db })
+
+    const detail = await service.getConversation("session-1")
+    const serializedDetail = JSON.stringify(detail.events)
+    expect(serializedDetail).toContain("[redacted]")
+    expect(serializedDetail).toContain("/Users/liyang/project/file.ts")
+    expect(serializedDetail).not.toContain("sk-usage-secret")
+    expect(serializedDetail).not.toContain("sk-bearer")
+    expect(serializedDetail).not.toContain("data-server-token")
+
+    const result = await service.searchConversationText({
+      preset: "all",
+      query: "file.ts",
+      rawText: true,
+    })
+    const serializedSnippets = JSON.stringify(result.items[0].matchSnippets)
+    expect(serializedSnippets).toContain("[redacted]")
+    expect(serializedSnippets).toContain("/Users/liyang/project/file.ts")
+    expect(serializedSnippets).not.toContain("sk-usage-secret")
+    expect(serializedSnippets).not.toContain("sk-bearer")
+    expect(serializedSnippets).not.toContain("data-server-token")
+
+    const secretSearch = await service.searchConversationText({
+      preset: "all",
+      query: "sk-usage-secret",
+      rawText: true,
+    })
+    expect(secretSearch.items).toEqual([])
+  })
+
   it("returns an explicit error for a missing source file", async () => {
     const { db, filePath } = setupFixture()
     fs.rmSync(filePath)

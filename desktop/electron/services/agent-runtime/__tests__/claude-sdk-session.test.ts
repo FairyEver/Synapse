@@ -204,16 +204,29 @@ describe("ClaudeSDKSession", () => {
 
   it("passes provider env together with the host process env to the SDK", () => {
     const { factory, getOptions } = createQueryFactory()
-    createSession(factory, { env: { FOO: "bar" } })
+    createSession(factory, {
+      env: {
+        ANTHROPIC_AUTH_TOKEN: "sk-auth",
+        ANTHROPIC_API_KEY: "sk-api",
+        SYNAPSE_SIDE_CHANNEL_TOKEN: "side-token",
+      },
+    })
 
     const sdkEnv = getOptions().env as NodeJS.ProcessEnv
     expect(sdkEnv).toEqual(expect.objectContaining({
-      FOO: "bar",
+      ANTHROPIC_AUTH_TOKEN: "sk-auth",
+      ANTHROPIC_API_KEY: "sk-api",
+      SYNAPSE_SIDE_CHANNEL_TOKEN: "side-token",
     }))
     expect(sdkEnv.PATH).toContain((process.env.PATH ?? "").split(":").filter(Boolean)[0] ?? "")
     expect(getOptions().settings).toMatchObject({
-      env: { FOO: "bar" },
+      enableAllProjectMcpServers: true,
+      disableAllHooks: true,
     })
+    expect(getOptions().settings).not.toHaveProperty("env")
+    expect(JSON.stringify(getOptions().settings)).not.toContain("sk-auth")
+    expect(JSON.stringify(getOptions().settings)).not.toContain("sk-api")
+    expect(JSON.stringify(getOptions().settings)).not.toContain("side-token")
   })
 
   it("redacts secret-shaped env values in permission tool input summaries", async () => {

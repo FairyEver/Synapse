@@ -101,6 +101,34 @@ describe("AgentToolEvent", () => {
     expect(html.indexOf("Done")).toBeLessThan(html.indexOf("lucide-chevron-down"))
   })
 
+  it("redacts secret-shaped tool result content before rendering", () => {
+    const html = renderToStaticMarkup(<AgentToolEvent
+      item={{
+        id: "tool-secret",
+        kind: "toolResult",
+        timestamp: "2026-04-28T00:00:00.000Z",
+        toolName: "Bash",
+        content: "ANTHROPIC_AUTH_TOKEN=sk-render Authorization: Bearer sk-bearer /Users/liyang/project/file.ts",
+        success: true,
+      }}
+      profile={{
+        ...profile,
+        tools: {
+          ...profile.tools,
+          Bash: {
+            ...profile.tools?.Bash,
+            previewChars: 400,
+          },
+        },
+      }}
+    />)
+
+    expect(html).toContain("[redacted]")
+    expect(html).toContain("/Users/liyang/project/file.ts")
+    expect(html).not.toContain("sk-render")
+    expect(html).not.toContain("sk-bearer")
+  })
+
   it("opens failed tool results even when profile default is collapsed", () => {
     const html = renderToStaticMarkup(<AgentToolEvent
       item={{
@@ -315,7 +343,10 @@ describe("AgentToolEvent", () => {
           content: "token=sk-secret",
           success: true,
         }}
-        profile={profile}
+        profile={{
+          ...profile,
+          toolDefaultCollapsed: "expanded",
+        }}
       />)
     })
 
@@ -334,7 +365,7 @@ describe("AgentToolEvent", () => {
         itemId: "tool-copy",
         kind: "toolResult",
         toolName: "Bash",
-        bodyLength: "token=sk-secret".length,
+        bodyLength: "token=[redacted]".length,
         errorName: "Error",
         errorLength: "clipboard denied for token=sk-secret".length,
       }),
@@ -364,7 +395,10 @@ describe("AgentToolEvent", () => {
           content: "token=sk-secret",
           success: true,
         }}
-        profile={profile}
+        profile={{
+          ...profile,
+          toolDefaultCollapsed: "expanded",
+        }}
       />)
     })
 
@@ -376,7 +410,8 @@ describe("AgentToolEvent", () => {
       await Promise.resolve()
     })
 
-    expect(rendererLogger.info).toHaveBeenCalledWith(
+    expect(rendererLogger.info).toHaveBeenNthCalledWith(
+      2,
       "agent-tool-copy:click",
       expect.objectContaining({
         component: "agent",
@@ -387,7 +422,7 @@ describe("AgentToolEvent", () => {
           itemId: "tool-copy-track",
           kind: "toolResult",
           toolName: "Bash",
-          bodyLength: "token=sk-secret".length,
+          bodyLength: "token=[redacted]".length,
         }),
       }),
     )

@@ -5,6 +5,8 @@
 ## 功能优化
 
 ## 问题修复
+- 知识库里发送 `/wiki-ingest` 这类原生 slash 时，Agent 时间线和导出内容会明确显示 `Native slash /wiki-ingest`，方便确认请求已原样交给 Claude SDK/plugin 处理。
+- 修复 Agent 工具输出、对话复制和用量分析详情中可能显示 Claude、Synapse side-channel 或 data-server token 的问题；相关内容现在会自动脱敏。
 - 修复复制或导出 Agent 对话时，并行同名工具的输出可能归属到错误工具调用下的问题。
 - 修复知识库 Agent 启用内置插件后读不到用户 Claude Code MCP 配置的问题；普通 Agent 和知识库 Agent 现在都会加载用户、项目和本地 Claude Code 设置。
 - 修复 Synapse MCP 旧名称残留导致的误判和权限污染；启动时会清理旧 MCP 配置与旧工具 allowlist，且不会自动扩大新 MCP 权限。

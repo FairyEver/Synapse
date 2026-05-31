@@ -111,6 +111,25 @@ describe("agent utils", () => {
     ].join("\n"))
   })
 
+  it("exports native slash passthrough annotations without user arguments", () => {
+    const entries = [
+      {
+        id: "native-slash",
+        kind: "sdkEvent",
+        sdkType: "nativeSlashPassthrough",
+        sdkSubtype: "/wiki-ingest",
+        label: "Native slash",
+        summary: "/wiki-ingest",
+        timestamp: "2026-05-31T03:15:00.000Z",
+      },
+    ] as const
+
+    expect(formatAgentTranscript(entries)).toBe([
+      `SDK ${formatEntryTime(entries[0].timestamp)}`,
+      "nativeSlashPassthrough /wiki-ingest",
+    ].join("\n"))
+  })
+
   it("groups tool call and result transcript output with readable file paths", () => {
     const entries = [
       {
@@ -291,6 +310,32 @@ describe("agent utils", () => {
     expect(transcript).not.toContain("sk-api")
     expect(transcript).not.toContain("side-token")
     expect(transcript).not.toContain("sk-bearer")
+  })
+
+  it("redacts secret-shaped tool result output in copied transcripts", () => {
+    const entries = [{
+      id: "tool-result-secret",
+      kind: "toolResult",
+      toolName: "Bash",
+      content: [
+        "ANTHROPIC_AUTH_TOKEN=sk-auth",
+        "SYNAPSE_SIDE_CHANNEL_TOKEN=side-token",
+        "Authorization: Bearer sk-bearer failed at /Users/liyang/project/file.ts",
+        "{\"token\":\"data-server-token\"}",
+      ].join("\n"),
+      status: "success",
+      success: true,
+      timestamp: "2026-04-27T03:17:00.000Z",
+    }] as const
+
+    const transcript = formatAgentTranscript(entries)
+
+    expect(transcript).toContain("[redacted]")
+    expect(transcript).toContain("/Users/liyang/project/file.ts")
+    expect(transcript).not.toContain("sk-auth")
+    expect(transcript).not.toContain("side-token")
+    expect(transcript).not.toContain("sk-bearer")
+    expect(transcript).not.toContain("data-server-token")
   })
 
   it("labels AskUserQuestion transcript entries as pending answers", () => {

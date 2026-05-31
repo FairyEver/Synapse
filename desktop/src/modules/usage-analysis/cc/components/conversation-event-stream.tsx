@@ -1,14 +1,18 @@
 import type { CcRawConversationEvent } from "@/types/usage-analysis-conversations"
+import {
+  redactSensitiveText,
+  redactSensitiveValue,
+} from "@/lib/agent-redaction"
 
 function eventText(event: CcRawConversationEvent): string {
   return event.contentBlocks.map((block) => {
     const text = block.text
     const thinking = block.thinking
     const content = block.content
-    if (typeof text === "string") return text
-    if (typeof thinking === "string") return thinking
-    if (typeof content === "string") return content
-    return JSON.stringify(block)
+    if (typeof text === "string") return redactSensitiveText(text)
+    if (typeof thinking === "string") return redactSensitiveText(thinking)
+    if (typeof content === "string") return redactSensitiveText(content)
+    return JSON.stringify(redactSensitiveValue(block))
   }).filter(Boolean).join("\n")
 }
 
@@ -37,7 +41,7 @@ export function ConversationEventStream({
             <span className="text-xs text-muted-foreground">{event.timestamp ?? `#${event.lineNumber}`}</span>
           </div>
           <pre className="mt-2 max-h-40 overflow-auto whitespace-pre-wrap text-xs" data-allow-select="true">
-            {eventText(event) || JSON.stringify(event.raw, null, 2)}
+            {eventText(event) || JSON.stringify(redactSensitiveValue(event.raw), null, 2)}
           </pre>
         </button>
       ))}

@@ -65,6 +65,69 @@ describe("agent timeline conversion", () => {
     })
   })
 
+  it("converts native slash passthrough events into visible annotations", () => {
+    expect(agentEventToTimelineItem({
+      type: "sdkEvent",
+      sdkType: "nativeSlashPassthrough",
+      sdkSubtype: "/wiki-ingest",
+      payload: { command: "/wiki-ingest" },
+      sdkSessionId: "sdk-1",
+    }, {
+      id: "live:native-slash",
+      timestamp: "2026-05-31T00:00:00.000Z",
+      agentType: "claude",
+    })).toEqual({
+      id: "live:native-slash",
+      kind: "sdkEvent",
+      timestamp: "2026-05-31T00:00:00.000Z",
+      agentType: "claude",
+      sdkSessionId: "sdk-1",
+      sdkType: "nativeSlashPassthrough",
+      sdkSubtype: "/wiki-ingest",
+      label: "Native slash",
+      summary: "/wiki-ingest",
+    })
+
+    const items = appendAgentTimelineEvent([], {
+      type: "sdkEvent",
+      sdkType: "nativeSlashPassthrough",
+      sdkSubtype: "/wiki-ingest",
+      payload: { command: "/wiki-ingest" },
+    }, "2026-05-31T00:00:00.000Z", "claude")
+
+    expect(items).toEqual([
+      expect.objectContaining({
+        kind: "sdkEvent",
+        label: "Native slash",
+        summary: "/wiki-ingest",
+      }),
+    ])
+  })
+
+  it("adapts stored native slash metadata into annotation items", () => {
+    expect(historyRecordToTimelineItem("session-1", {
+      role: "system",
+      content: "SDK nativeSlashPassthrough /wiki-ingest",
+      timestamp: "2026-05-31T00:01:00.000Z",
+      metadata: {
+        agentEventType: "sdkEvent",
+        sdkType: "nativeSlashPassthrough",
+        sdkSubtype: "/wiki-ingest",
+        sdkSessionId: "sdk-1",
+      },
+    }, 4, "claude")).toEqual({
+      id: "session-1:history:4",
+      kind: "sdkEvent",
+      timestamp: "2026-05-31T00:01:00.000Z",
+      agentType: "claude",
+      sdkSessionId: "sdk-1",
+      sdkType: "nativeSlashPassthrough",
+      sdkSubtype: "/wiki-ingest",
+      label: "Native slash",
+      summary: "/wiki-ingest",
+    })
+  })
+
   it("falls back to legacy message items when metadata is missing", () => {
     expect(historyRecordToTimelineItem("session-1", {
       role: "tool",

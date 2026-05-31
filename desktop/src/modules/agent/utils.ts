@@ -141,8 +141,10 @@ function timelineItemText(entry: SynapseAgentTimelineItem): string {
       return entry.content
     case "toolCall":
       return toolCallTranscriptText(entry)
-    case "toolResult":
-      return entry.content?.trim() || entry.toolName
+    case "toolResult": {
+      const content = entry.content?.trim()
+      return content ? redactSensitiveText(content) : entry.toolName
+    }
     case "permissionRequest": {
       const permissionEntry = entry
       if (isAskUserQuestionEntry(permissionEntry)) {
@@ -157,6 +159,11 @@ function timelineItemText(entry: SynapseAgentTimelineItem): string {
     case "phase":
       return entry.errorMessage ?? entry.phase
     case "sdkEvent":
+      if (entry.sdkType === "nativeSlashPassthrough") {
+        return [entry.sdkType, entry.summary ?? entry.sdkSubtype]
+          .filter((part): part is string => Boolean(part))
+          .join(" ")
+      }
       return [entry.sdkType, entry.sdkSubtype, entry.summary]
         .filter((part): part is string => Boolean(part))
         .join(" ")

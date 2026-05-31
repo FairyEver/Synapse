@@ -155,7 +155,7 @@ function AgentToolEvent({
 }
 
 function toolBody(item: AgentToolEventItem): string {
-  if (item.kind === "toolResult") return item.content ?? ""
+  if (item.kind === "toolResult") return item.content ? formatAgentInputText(item.content) : ""
   return item.toolInput ? formatAgentInputText(item.toolInput) : formatRawInput(item.toolInputRaw)
 }
 

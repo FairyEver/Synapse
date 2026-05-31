@@ -259,7 +259,6 @@ export class ClaudeSDKSession implements AgentLiveSession {
       settings: {
         enableAllProjectMcpServers: true,
         disableAllHooks: options.allowPluginHooks === true ? false : true,
-        env: options.env,
       },
       env: sdkEnv,
       includePartialMessages: true,

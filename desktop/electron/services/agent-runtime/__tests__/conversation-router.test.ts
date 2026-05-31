@@ -9,6 +9,7 @@ import type {
   DataNamespace,
 } from "../../../runtime/data-repo"
 import type { EventBusEmitOptions } from "../../../runtime/event-bus/types"
+import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import type { ProviderService } from "../../provider"
 import { AgentCommandRouter } from "../command-router"
 import { ConversationRouter } from "../conversation-router"
@@ -160,6 +161,118 @@ describe("ConversationRouter", () => {
     expect(result.resultText).toBe("command handled")
     expect(commandRouter.handle).toHaveBeenCalledTimes(1)
     expect(session.sent).toEqual([])
+  })
+
+  it("annotates allowed native slash passthrough after SDK send accepts the original message", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const commandRouter = {
+      handle: vi.fn(async () => ({ kind: "nativeSlash", name: "wiki-ingest" })),
+    } as unknown as AgentCommandRouter
+    const session = new ScriptedSession([
+      { type: "toolUse", toolName: "Skill", toolInput: "wiki-ingest", sdkSessionId: "sdk-1" },
+      { type: "result", content: "done", done: true, sdkSessionId: "sdk-1" },
+    ], "sdk-1")
+    const { conversations, router } = createRouter({ agentEvents, commandRouter, session })
+
+    const result = await router.send(baseMessage("/wiki-ingest ingest all of these .raw sources"))
+    const persisted = await agentEvents.list()
+    const saved = await conversations.get(result.conversationId)
+
+    expect(session.sent).toEqual(["/wiki-ingest ingest all of these .raw sources"])
+    expect(result.events).toEqual([
+      expect.objectContaining({
+        type: "sdkEvent",
+        sdkType: "nativeSlashPassthrough",
+        sdkSubtype: "/wiki-ingest",
+        payload: { command: "/wiki-ingest" },
+      }),
+      expect.objectContaining({ type: "toolUse" }),
+      expect.objectContaining({ type: "result" }),
+    ])
+    expect(persisted.map((entry) => entry.eventType)).toEqual(["sdkEvent", "toolUse", "result"])
+    expect(persisted[0]).toEqual(expect.objectContaining({
+      payload: expect.objectContaining({
+        sdkType: "nativeSlashPassthrough",
+        sdkSubtype: "/wiki-ingest",
+        payload: { command: "/wiki-ingest" },
+      }),
+    }))
+    expect(JSON.stringify(persisted[0]?.payload)).not.toContain("ingest all")
+    expect(saved?.history).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        role: "user",
+        content: "/wiki-ingest ingest all of these .raw sources",
+      }),
+      expect.objectContaining({
+        role: "system",
+        content: "SDK nativeSlashPassthrough /wiki-ingest",
+        metadata: expect.objectContaining({
+          agentEventType: "sdkEvent",
+          sdkType: "nativeSlashPassthrough",
+          sdkSubtype: "/wiki-ingest",
+        }),
+      }),
+    ]))
+  })
+
+  it("does not annotate native slash passthrough when SDK send fails", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const commandRouter = {
+      handle: vi.fn(async () => ({ kind: "nativeSlash", name: "wiki-ingest" })),
+    } as unknown as AgentCommandRouter
+    const { conversations, router } = createRouter({
+      agentEvents,
+      commandRouter,
+      session: new ThrowingSendSession("SDK send failed"),
+    })
+
+    const result = await router.send(baseMessage("/wiki-ingest ingest all"))
+    const persisted = await agentEvents.list()
+    const saved = await conversations.get(result.conversationId)
+
+    expect(result.error).toBe("SDK send failed")
+    expect(persisted.map((entry) => entry.payload)).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ sdkType: "nativeSlashPassthrough" }),
+    ]))
+    expect(saved?.history.map((entry) => entry.content)).not.toContain("SDK nativeSlashPassthrough /wiki-ingest")
+  })
+
+  it("does not annotate native slash passthrough when renderer spawn permission fails", async () => {
+    const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
+    const commandRouter = {
+      handle: vi.fn(async () => ({ kind: "nativeSlash", name: "wiki-ingest" })),
+    } as unknown as AgentCommandRouter
+    const session = new ScriptedSession([
+      { type: "result", content: "should not run", done: true },
+    ])
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: false, reason: "blocked" })),
+    } as unknown as PermissionGuard
+    const auditSink = {
+      record: vi.fn(),
+    } as unknown as AuditSink
+    const { conversations, router } = createRouter({
+      agentEvents,
+      commandRouter,
+      session,
+      permissionGuard,
+      auditSink,
+    })
+
+    const result = await router.send({
+      ...baseMessage("/wiki-ingest ingest all"),
+      platform: "local-renderer",
+    })
+    const persisted = await agentEvents.list()
+    const saved = await conversations.get(result.conversationId)
+
+    expect(result.error).toBe("Agent spawn denied by permission policy.")
+    expect(session.sent).toEqual([])
+    expect(persisted.map((entry) => entry.payload)).not.toEqual(expect.arrayContaining([
+      expect.objectContaining({ sdkType: "nativeSlashPassthrough" }),
+    ]))
+    expect(saved?.history.map((entry) => entry.content)).not.toContain("SDK nativeSlashPassthrough /wiki-ingest")
   })
 
   it("persists full agent events when an agent.events namespace is wired", async () => {
@@ -1149,6 +1262,8 @@ function createRouter(input: {
   readonly replyTargets?: ConversationRouterDeps["replyTargets"]
   readonly prepareMessage?: ConversationRouterDeps["prepareMessage"]
   readonly afterTurn?: ConversationRouterDeps["afterTurn"]
+  readonly permissionGuard?: PermissionGuard
+  readonly auditSink?: AuditSink
 } = {}) {
   const conversations = input.conversations ?? new MemoryNamespace<ConversationEntryV1>("conversations")
   const providerService = new FakeProviderService(input.activeProviderId ?? "anthropic", input.env ?? {})
@@ -1198,6 +1313,8 @@ function createRouter(input: {
       outbox: input.outbox,
       replyTargets: input.replyTargets,
       now: fixedNow,
+      permissionGuard: input.permissionGuard,
+      auditSink: input.auditSink,
       prepareMessage: input.prepareMessage,
       afterTurn: input.afterTurn,
     },

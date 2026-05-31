@@ -1,4 +1,5 @@
 import type { CcRawConversationEvent } from "@/types/usage-analysis-conversations"
+import { redactSensitiveValue } from "@/lib/agent-redaction"
 
 export function ConversationEventInspector({ event }: { readonly event: CcRawConversationEvent | null }) {
   return (
@@ -6,7 +7,7 @@ export function ConversationEventInspector({ event }: { readonly event: CcRawCon
       <h3 className="text-sm font-medium">字段</h3>
       {event ? (
         <pre className="min-h-0 flex-1 overflow-auto rounded-md border bg-card p-3 text-xs" data-allow-select="true">
-          {JSON.stringify(event.raw, null, 2)}
+          {JSON.stringify(redactSensitiveValue(event.raw), null, 2)}
         </pre>
       ) : (
         <div className="rounded-md border bg-card p-3 text-sm text-muted-foreground">选择事件</div>

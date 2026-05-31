@@ -110,6 +110,16 @@ export function agentEventToTimelineItem(
         summary: "compact boundary",
       }
     case "sdkEvent":
+      if (event.sdkType === "nativeSlashPassthrough") {
+        return {
+          ...base,
+          kind: "sdkEvent",
+          sdkType: event.sdkType,
+          sdkSubtype: event.sdkSubtype,
+          label: "Native slash",
+          summary: event.sdkSubtype,
+        }
+      }
       return {
         ...base,
         kind: "sdkEvent",
@@ -175,6 +185,15 @@ export function historyRecordToTimelineItem(
       }
     case "error":
       return { ...base, kind: "error", message: entry.content }
+    case "sdkEvent":
+      return {
+        ...base,
+        kind: "sdkEvent",
+        sdkType: stringMetadata(metadata, "sdkType") ?? "sdkEvent",
+        sdkSubtype: stringMetadata(metadata, "sdkSubtype"),
+        label: stringMetadata(metadata, "sdkType") === "nativeSlashPassthrough" ? "Native slash" : "SDK event",
+        summary: stringMetadata(metadata, "sdkSubtype"),
+      }
     default:
       return {
         ...base,

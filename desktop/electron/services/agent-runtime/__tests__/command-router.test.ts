@@ -12,6 +12,7 @@ import type {
 import { ProviderService } from "../../provider"
 import { AgentCommandRouter, modesForAgent } from "../command-router"
 import { CustomCommandRegistry } from "../command-registry"
+import { SkillRegistry, type AgentSkill } from "../skill-registry"
 import type { AgentMessage } from "../types"
 
 describe("AgentCommandRouter", () => {
@@ -439,7 +440,50 @@ describe("AgentCommandRouter", () => {
     expect(prompt).toEqual({ kind: "prompt", content: "Explain: foo bar" })
 
     const passthrough = await router.handle(baseMessage("/plan-status"), baseConversation())
-    expect(passthrough).toBeNull()
+    expect(passthrough).toEqual({ kind: "nativeSlash", name: "plan-status" })
+  })
+
+  it("prefers registered commands and skills before native slash passthrough", async () => {
+    const { providerService } = makeProviderService()
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      registeredPromptCommands: [{
+        name: "wiki-ingest",
+        buildPrompt: () => "registered prompt",
+      }],
+      skills: new StaticSkillRegistry({
+        name: "wiki-ingest",
+        prompt: "skill prompt",
+        source: "/skills/wiki-ingest/SKILL.md",
+      }),
+      agentNativeSlashAllowlist: ["wiki-ingest"],
+      resetSession: async () => baseConversation(),
+    })
+
+    await expect(router.handle(baseMessage("/wiki-ingest all"), baseConversation()))
+      .resolves.toEqual({ kind: "prompt", content: "registered prompt" })
+  })
+
+  it("returns native slash routes only for explicit allowlist or callback matches", async () => {
+    const { providerService } = makeProviderService()
+    const router = new AgentCommandRouter({
+      projectId: "project-1",
+      agentType: "claude-code",
+      providerService,
+      agentNativeSlashAllowlist: ["wiki-ingest"],
+      allowAgentNativeSlash: (name) => name === "save",
+      unknownSlashBehavior: "passthrough",
+      resetSession: async () => baseConversation(),
+    })
+
+    await expect(router.handle(baseMessage("/wiki-ingest all"), baseConversation()))
+      .resolves.toEqual({ kind: "nativeSlash", name: "wiki-ingest" })
+    await expect(router.handle(baseMessage("/save now"), baseConversation()))
+      .resolves.toEqual({ kind: "nativeSlash", name: "save" })
+    await expect(router.handle(baseMessage("/unknown passthrough"), baseConversation()))
+      .resolves.toBeNull()
   })
 
   it("routes registered prompt commands that return direct command results", async () => {
@@ -661,6 +705,16 @@ function makeProviderService(): { providerService: ProviderService } {
   const secrets = new MemoryNamespace<SecretEntryV1>("secrets")
   return {
     providerService: new ProviderService({ providers, secrets, now: fixedNow }),
+  }
+}
+
+class StaticSkillRegistry extends SkillRegistry {
+  constructor(private readonly skill: AgentSkill) {
+    super({})
+  }
+
+  override async resolve(name: string): Promise<AgentSkill | null> {
+    return name === this.skill.name ? this.skill : null
   }
 }
 

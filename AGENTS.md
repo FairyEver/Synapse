@@ -76,6 +76,17 @@
 - 不要新增 SDK `mcpServers` 程序化注入来“修复”知识库 MCP。Synapse MCP 继续通过用户 Claude Code 配置读取，注册位置是 `~/.claude.json`，当前 server 名是 `synapse-mcp`。
 - Knowledge Base 不做 MCP 隔离。用户本机 Claude Code 能读到的 MCP，知识库 Agent 也应能读到；权限是否允许调用仍走现有工具权限流程。
 
+### Native slash 与可观测性
+
+- Knowledge Base 的 `/wiki-ingest`、`/save` 等由托管 runtime/Claude plugin 提供的原生 slash，应作为 Claude SDK/plugin native slash 原样透传；不要把它们改成 Synapse renderer 侧命令、普通 prompt command、agent 自行模拟流程或 renderer 目录扫描器。
+- Agent command routing 必须保持优先级清晰：已注册 prompt/custom command 和普通 skill 先处理；只有命中 `agentNativeSlashAllowlist` 或 `allowAgentNativeSlash` 的 slash 才能进入 native slash passthrough；`unknownSlashBehavior: "passthrough"` 只表示“不拦截未知 slash”，不得把未知 slash 标记成已允许的 native slash。
+- Native slash passthrough 不得改写用户原始消息。发送给 Claude SDK 的内容必须仍是用户输入的完整 `/name ...`，包括参数正文；Synapse 只能在外层增加可观测事件，不应替用户拆参、重组或模拟执行。
+- Native slash passthrough 的可观测提示只表示“Synapse 已按白名单把该 slash 原样交给 Claude SDK/plugin”，不表示 SDK 一定加载了某个 skill、command 或工具。UI、日志和文案不得把这一提示写成 SDK 内部执行结果的证明。
+- Native slash passthrough annotation 必须在 `liveSession.send(...)` 成功之后、读取 SDK/tool 事件之前插入；如果会话创建、权限检查、spawn、`send` 或取消失败，不得插入“已交给 SDK”的提示。
+- Native slash passthrough annotation 走既有 `sdkEvent` 事件链路并端到端进入实时 timeline、`agent.events`、conversation history 和导出 transcript。稳定语义为 `sdkType: "nativeSlashPassthrough"`，`sdkSubtype`/summary 只记录命令名（例如 `/wiki-ingest`），不得记录参数正文、路径列表或其它用户输入内容。
+- Timeline 可以显示克制的 `Native slash /wiki-ingest`；导出文本可以显示 `nativeSlashPassthrough /wiki-ingest` 或等价短文本。不要新增解释性长文案，也不要为了该提示改变 slash 菜单“只插入、不自动发送”的交互。
+- 修改 native slash routing、SDK event bridge、history metadata、renderer timeline 或 transcript 导出时，必须测试：注册命令/普通 skill 优先于 native slash、白名单 native slash 有 annotation、未知 passthrough 无 annotation、原始消息原样发送、send/权限失败无 annotation、annotation 不包含用户参数。
+
 ### 新建 runtime 初始化
 
 - `desktop/resources/knowledge-base/claude-obsidian-template/` 可以完整同步上游 runtime 资源；新建 Knowledge Base 的数据净化发生在 runtime 创建阶段，不靠手工删模板来保证用户新库干净。
@@ -105,9 +116,17 @@
 ### MCP、权限、诊断和日志
 
 - 修改 Claude SDK 参数时必须保留 user/project/local 三类 settings。Knowledge Base 启用 plugin hooks 不应改变普通 Agent 与知识库 Agent 对用户 Claude Code MCP 配置的可见性。
+- 修改 Claude Agent SDK 环境变量或 settings 传值时，必须先核对官方文档和当前安装包类型。Provider token、side-channel token 等运行环境只通过 `Options.env` 传给 SDK 子进程；`Options.settings` 只用于 inline settings/flag settings，不得镜像 `env` 或放入 secret。
 - 自动注册/清理 Synapse MCP 时必须继续移除旧 server 名称：`synapse-data`、`synapse-database`、`synapse-services`，并清理 Claude settings 权限 allowlist 里的旧工具名，例如 `mcp__synapse-data__*`。不要自动新增 `mcp__synapse-mcp__*` allowlist，避免扩大权限。
 - MCP 诊断必须区分两件事：Synapse MCP HTTP server 是否运行，以及 Claude Code 配置 `~/.claude.json` 中是否注册了 `synapse-mcp`。不要用 `~/.claude/settings.json` 或旧权限 allowlist 推断 server 是否存在。
+- 诊断 Knowledge Base slash 是 native plugin、`commands/*.md` command 还是 agent 模拟时，只做只读文件证据检查：可检查当前 backing directory、`.claude-plugin/plugin.json`、`skills/<name>/SKILL.md`、`commands/<name>.md` 是否存在和 commands 第一层文件名；不得执行目标 slash，不得读取用户 Claude 配置、进程列表、token、secret、Authorization、cookie 或 password。
 - Agent 权限卡片、工具事件、错误日志和导出文本必须脱敏 token/API key/Authorization/Bearer/env JSON/data-server token。普通路径和 `file_path` 仍应保留，方便排查。
+- Agent/Knowledge Base 相关脱敏规则必须保持 Electron 与 renderer 一致，优先复用共享 helper，不要在主进程、renderer、导出、Usage Analysis 中各写一套正则。规则至少覆盖敏感 key、JSON 字段、shell/env 赋值、Authorization/Bearer、Cookie、`data-server.json` token、`ps aux`/`--env KEY=value` 输出，同时保留普通文件路径。
+- Agent 展示、复制、导出和日志链路必须同时脱敏 tool input 与 tool result content；不能只处理工具入参、权限摘要或错误摘要。文件读取类输出可以保留 `file_path`，但不得泄露 token、Authorization、Bearer、Cookie 或 env secret。
+- Usage Analysis 读取 Claude Code conversation/raw event 时，只能对 Synapse 内部展示、详情 JSON、事件流预览和搜索 snippet 使用脱敏投影；不得为了脱敏改写用户机器上的外部原始 JSONL/日志文件，也不得让 rawText 搜索返回真实 secret。
+- Provider 配置预览、Agent 环境诊断、MCP/side-channel 诊断不得展示 `buildEnv`、`getAgentEnv` 或 data-server 配置里的真实 secret；需要排查时只显示 key 是否存在、来源类别或 `[redacted]`。
+- 修改 SDK event bridge、Agent transcript、tool event UI、Usage Analysis raw 展示或 provider preview 时，必须补回归测试：provider token、side-channel token、Authorization/Bearer、Cookie、JSON `token`/`apiKey`、data-server token、`--env KEY=value` 都不出现真实值，普通 `/Users/...` 路径仍保留。
+- 手工验证脱敏时只能使用假 canary，并优先使用只打印、不 `export`、不写文件、不改配置的命令；不要要求用户粘贴真实 token，也不要把测试 token 写进 shell 配置、Claude 配置或 Synapse 配置。
 - AskUserQuestion/确认类交互如果返回空答案，后续敏感写操作必须停止，并给用户明确反馈“未收到选择，已停止操作。”不要把空答案当成同意或默认选项。
 - Agent 工具调用与工具结果的稳定关联键是 `toolUseId`。修改 SDK event bridge、history metadata、IPC schema、renderer timeline、复制或导出文本时，必须端到端保留该字段；有 `toolUseId` 的结果只能按 `toolUseId` 归属，缺失时才允许走旧数据兼容 fallback。
 - 并行工具结果不能只靠顺序或 `toolName` 猜归属；`toolName` 可能重复或只是 SDK 返回的占位名。文件读取类工具日志和导出文本要保留原始 `file_path`，但 token、Authorization、Bearer、env secret 等敏感值必须继续脱敏。

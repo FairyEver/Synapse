@@ -88,7 +88,15 @@ export interface AgentPromptCommandRoute {
   readonly content: string
 }
 
-export type AgentCommandRouterResult = AgentRuntimeTurnResult | AgentPromptCommandRoute
+export interface AgentNativeSlashRoute {
+  readonly kind: "nativeSlash"
+  readonly name: string
+}
+
+export type AgentCommandRouterResult =
+  | AgentRuntimeTurnResult
+  | AgentPromptCommandRoute
+  | AgentNativeSlashRoute
 
 interface ModeOption {
   readonly key: string
@@ -189,10 +197,10 @@ export class AgentCommandRouter {
 
     const allowlist = this.deps.agentNativeSlashAllowlist ?? []
     if (allowlist.some((allowed) => allowed.toLowerCase() === name)) {
-      return null
+      return { kind: "nativeSlash", name }
     }
     if (this.deps.allowAgentNativeSlash?.(name, message)) {
-      return null
+      return { kind: "nativeSlash", name }
     }
 
     if (this.deps.unknownSlashBehavior === "passthrough") {

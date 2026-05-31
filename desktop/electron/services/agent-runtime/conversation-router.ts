@@ -72,6 +72,10 @@ export class ConversationRouter {
   private readonly pendingPermissions: Map<string, PendingPermissionState>
   private readonly permissionTimeoutMs: number
   private readonly liveMessages = new WeakMap<object, AgentMessage>()
+  private readonly nativeSlashPassthroughs = new WeakMap<
+    object,
+    Extract<AgentCommandRouterResult, { kind: "nativeSlash" }>
+  >()
 
   constructor(input: {
     readonly deps: ConversationRouterDeps
@@ -241,9 +245,12 @@ export class ConversationRouter {
 
     const turnId = randomUUID()
     let liveMessage = message
+    let nativeSlashPassthrough: Extract<AgentCommandRouterResult, { kind: "nativeSlash" }> | undefined
     const commandResult = await this.commandRouter?.handle(message, conversation, { turnId })
     if (commandResult && isPromptCommandRoute(commandResult)) {
       liveMessage = { ...message, content: commandResult.content }
+    } else if (commandResult && isNativeSlashRoute(commandResult)) {
+      nativeSlashPassthrough = commandResult
     } else if (commandResult) {
       for (const [index, event] of commandResult.events.entries()) {
         this.emitEvent(message, commandResult.conversationId, event)
@@ -268,6 +275,9 @@ export class ConversationRouter {
         resolve,
       }
       this.liveMessages.set(turn, liveMessage)
+      if (nativeSlashPassthrough) {
+        this.nativeSlashPassthroughs.set(turn, nativeSlashPassthrough)
+      }
       state.queue.push(turn)
       if (!state.busy) {
         state.busy = true
@@ -312,6 +322,7 @@ export class ConversationRouter {
             state,
             turn.message,
             this.liveMessages.get(turn) ?? turn.message,
+            this.nativeSlashPassthroughs.get(turn),
             turn.conversationId,
             turn.turnId,
             ac.signal,
@@ -340,6 +351,7 @@ export class ConversationRouter {
           }
         } finally {
           externalSignal?.removeEventListener("abort", abort)
+          this.nativeSlashPassthroughs.delete(turn)
           state.turnAbortController = undefined
           this.clearCancelState(state)
         }
@@ -353,6 +365,7 @@ export class ConversationRouter {
     state: RuntimeSessionState,
     message: AgentMessage,
     liveMessage: AgentMessage,
+    nativeSlashPassthrough: Extract<AgentCommandRouterResult, { kind: "nativeSlash" }> | undefined,
     conversationId: string,
     turnId: string,
     abortSignal?: AbortSignal,
@@ -394,6 +407,7 @@ export class ConversationRouter {
           conversation,
           sessionHandle.liveSession,
           turnId,
+          nativeSlashPassthrough,
           abortSignal,
           liveEventTimeoutMs,
         )
@@ -508,6 +522,7 @@ export class ConversationRouter {
     conversation: ConversationEntryV1,
     liveSession: AgentLiveSession,
     turnId: string,
+    nativeSlashPassthrough: Extract<AgentCommandRouterResult, { kind: "nativeSlash" }> | undefined,
     abortSignal?: AbortSignal,
     liveEventTimeoutMs = DEFAULT_LIVE_EVENT_TIMEOUT_MS,
   ): Promise<AgentRuntimeTurnResult> {
@@ -526,6 +541,13 @@ export class ConversationRouter {
     if (!accepted) {
       await this.sessionManager.closeCurrentTurn(conversation.id)
       error = "Agent session ended before message could be sent."
+    } else if (nativeSlashPassthrough) {
+      const event = nativeSlashPassthroughEvent(nativeSlashPassthrough, liveSession.currentSessionId(), this.isoNow())
+      events.push(event)
+      this.emitEvent(message, conversation.id, event)
+      await this.persistAgentEvent(conversation.id, turnId, events.length, event)
+      await this.saveEventSdkSession(conversation.id, event, liveSession)
+      await this.saveEventHistory(conversation.id, event)
     }
 
     while (!error && liveSession.alive()) {
@@ -1243,6 +1265,34 @@ function isPromptCommandRoute(
   return "kind" in result && result.kind === "prompt"
 }
 
+function isNativeSlashRoute(
+  result: AgentCommandRouterResult,
+): result is Extract<AgentCommandRouterResult, { kind: "nativeSlash" }> {
+  return "kind" in result && result.kind === "nativeSlash"
+}
+
+function nativeSlashPassthroughEvent(
+  route: Extract<AgentCommandRouterResult, { kind: "nativeSlash" }>,
+  sdkSessionId: string | undefined,
+  timestamp: string,
+): AgentEvent {
+  const command = `/${route.name}`
+  return {
+    type: "sdkEvent",
+    sdkType: "nativeSlashPassthrough",
+    sdkSubtype: command,
+    payload: { command },
+    ...(sdkSessionId ? { sdkSessionId } : {}),
+    timestamp,
+  }
+}
+
+function nativeSlashCommandFromEvent(event: Extract<AgentEvent, { type: "sdkEvent" }>): string {
+  const payloadCommand = typeof event.payload.command === "string" ? event.payload.command : undefined
+  const command = payloadCommand ?? event.sdkSubtype ?? ""
+  return command.startsWith("/") ? command : `/${command}`
+}
+
 function historyEntryForAgentEvent(event: AgentEvent): Pick<
   ConversationEntryV1["history"][number],
   "role" | "content" | "metadata"
@@ -1263,7 +1313,10 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
     case "toolResult":
       return {
         role: "tool",
-        content: truncateString(event.content?.trim(), MAX_HISTORY_CONTENT_LENGTH) || event.toolName,
+        content: truncateString(
+          event.content ? redactSensitiveText(event.content.trim()) : undefined,
+          MAX_HISTORY_CONTENT_LENGTH,
+        ) || event.toolName,
         metadata: compactMetadata({
           agentEventType: event.type,
           sdkSessionId: event.sdkSessionId,
@@ -1312,7 +1365,21 @@ function historyEntryForAgentEvent(event: AgentEvent): Pick<
     case "stream":
     case "status":
     case "compactBoundary":
+      return null
     case "sdkEvent":
+      if (event.sdkType === "nativeSlashPassthrough") {
+        const command = nativeSlashCommandFromEvent(event)
+        return {
+          role: "system",
+          content: `SDK nativeSlashPassthrough ${command}`,
+          metadata: compactMetadata({
+            agentEventType: event.type,
+            sdkSessionId: event.sdkSessionId,
+            sdkType: event.sdkType,
+            sdkSubtype: command,
+          }),
+        }
+      }
       return null
     default: {
       const exhaustive: never = event

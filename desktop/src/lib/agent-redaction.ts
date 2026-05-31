@@ -4,6 +4,8 @@ const SENSITIVE_KEY_PATTERN = /api[-_]?key|authorization|cookie|password|credent
 const TEXT_ASSIGNMENT_PATTERN = /\b([A-Za-z_][A-Za-z0-9_-]*)(\s*[:=]\s*)(?:(Bearer)\s+)?(?:"[^"]*"|'[^']*'|[^\s,;'"`]+)/gi
 const JSON_ASSIGNMENT_PATTERN = /(["'])([A-Za-z_][A-Za-z0-9_-]*)\1(\s*:\s*)(["'])([^"']*)\4/gi
 const BEARER_TOKEN_PATTERN = /\bBearer\s+[A-Za-z0-9._~+/=-]+/gi
+const AUTHORIZATION_HEADER_PATTERN = /\b(authorization)(\s*:\s*)([^\r\n]+)/gi
+const COOKIE_HEADER_PATTERN = /\b((?:set-)?cookie)(\s*:\s*)([^\r\n]+)/gi
 
 function isSensitiveKey(key: string): boolean {
   const normalized = key.toLowerCase().replace(/[-_]/g, "")
@@ -24,6 +26,16 @@ function redactSensitiveText(value: string): string {
         isSensitiveKey(key) ? `${keyQuote}${key}${keyQuote}${separator}${valueQuote}${REDACTED}${valueQuote}` : match,
     )
     .replace(
+      AUTHORIZATION_HEADER_PATTERN,
+      (_match, key: string, separator: string, rawValue: string) =>
+        `${key}${separator}${redactAuthorizationHeaderValue(rawValue)}`,
+    )
+    .replace(
+      COOKIE_HEADER_PATTERN,
+      (_match, key: string, separator: string, rawValue: string) =>
+        `${key}${separator}${redactCookieHeaderValue(rawValue)}`,
+    )
+    .replace(
       TEXT_ASSIGNMENT_PATTERN,
       (match, key: string, separator: string, bearer: string | undefined) =>
         isSensitiveKey(key) ? `${key}${separator}${bearer ? `${bearer} ` : ""}${REDACTED}` : match,
@@ -32,9 +44,38 @@ function redactSensitiveText(value: string): string {
     .replace(BEARER_TOKEN_PATTERN, `Bearer ${REDACTED}`)
 }
 
+function redactAuthorizationHeaderValue(value: string): string {
+  const schemeRedacted = value.replace(/\b(Bearer|Basic|Token)\s+[A-Za-z0-9._~+/=-]+/gi, `$1 ${REDACTED}`)
+  if (schemeRedacted !== value) return schemeRedacted
+  return value.replace(/^\s*(?:"[^"]*"|'[^']*'|[^\s,;'"`]+)/, REDACTED)
+}
+
+function redactCookieHeaderValue(value: string): string {
+  return value.replace(/\b([^=;\s'"]+)=([^;\s'"]+)/g, `$1=${REDACTED}`)
+}
+
+function redactSensitiveValue(value: unknown, key = ""): unknown {
+  if (isSensitiveKey(key)) return REDACTED
+  if (typeof value === "string") return redactSensitiveText(value)
+  if (Array.isArray(value)) return value.map((item) => redactSensitiveValue(item))
+  if (!value || typeof value !== "object") return value
+
+  const output: Record<string, unknown> = {}
+  for (const [childKey, childValue] of Object.entries(value)) {
+    output[childKey] = redactSensitiveValue(childValue, childKey)
+  }
+  return output
+}
+
+function isSensitiveTextKey(key: string): boolean {
+  return SENSITIVE_KEY_PATTERN.test(key)
+}
+
 export {
   isSensitiveKey,
+  isSensitiveTextKey,
   redactSensitiveText,
+  redactSensitiveValue,
   REDACTED,
   SENSITIVE_KEY_PATTERN,
 }

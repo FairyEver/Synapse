@@ -198,12 +198,12 @@ function toolUseEventsFromBlocks(
 ): readonly AgentEvent[] {
   if (!blocks) return []
   return blocks.flatMap((block): readonly AgentEvent[] => {
-    const record = recordValue(block)
+    const record = isRecord(block) ? block : undefined
     if (record?.type !== "tool_use") return []
     const toolName = stringValue(record.name)
     const toolUseId = stringValue(record.id)
     if (!toolName) return []
-    const sanitizedToolInput = sanitizeToolInputValue(record.input)
+    const sanitizedToolInput = record.input
     const toolInputRaw = isRecord(sanitizedToolInput) ? sanitizedToolInput : undefined
     return [{
       type: "toolUse",
@@ -224,7 +224,7 @@ function toolResultEventsFromBlocks(
 ): readonly AgentEvent[] {
   if (!blocks) return []
   return blocks.flatMap((block): readonly AgentEvent[] => {
-    const record = recordValue(block)
+    const record = isRecord(block) ? block : undefined
     if (record?.type !== "tool_result") return []
     const isError = record.is_error === true
     const toolUseId = stringValue(record.tool_use_id)
@@ -268,7 +268,7 @@ function toolResultContent(value: unknown): string | undefined {
   if (!Array.isArray(value)) return undefined
   const text = value.map((item) => {
     if (typeof item === "string") return item
-    const record = recordValue(item)
+    const record = isRecord(item) ? item : undefined
     return stringValue(record?.text) ?? ""
   }).join("")
   return text.length > 0 ? redactDiagnosticText(text) : undefined
@@ -281,7 +281,7 @@ function streamDeltaFields(event: Record<string, unknown>): {
   readonly thinking?: string
   readonly partialJson?: string
 } {
-  const delta = recordValue(event.delta)
+  const delta = isRecord(event.delta) ? event.delta : undefined
   const deltaType = stringValue(delta?.type)
   return {
     blockIndex: numberValue(event.index),

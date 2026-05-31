@@ -431,6 +431,21 @@ describe("AgentTimeline", () => {
     expect(html).toContain("init")
   })
 
+  it("renders native slash passthrough events as compact annotations", () => {
+    const items = appendAgentTimelineEvent([], {
+      type: "sdkEvent",
+      sdkType: "nativeSlashPassthrough",
+      sdkSubtype: "/wiki-ingest",
+      payload: { command: "/wiki-ingest" },
+    }, "2026-05-31T00:00:00.000Z", "claude")
+
+    const html = renderTimeline({ items })
+
+    expect(html).toContain("Native slash")
+    expect(html).toContain("/wiki-ingest")
+    expect(html).not.toContain("ingest all")
+  })
+
   it("preserves result model, usage, and cost metadata", () => {
     const items = appendAgentTimelineEvent([], {
       type: "result",

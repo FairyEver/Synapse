@@ -51,6 +51,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip"
+import { redactSensitiveValue } from "@/lib/agent-redaction"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { CcSwitchImportDialog } from "./cc-switch-import-dialog"
 import { ProviderDeleteDialog } from "./provider-delete-dialog"
@@ -698,29 +699,7 @@ function providerCategoryLabel(category: SynapseAgentProviderCategory): string {
 
 function safeProviderConfigJson(provider: SynapseAgentProvider): string {
   const config = JSON.parse(formFromProvider(provider).configJson)
-  return JSON.stringify(redactSensitiveValues(config), null, 2)
-}
-
-function redactSensitiveValues(value: unknown, key = ""): unknown {
-  if (Array.isArray(value)) {
-    return value.map((item) => redactSensitiveValues(item, key))
-  }
-  if (isRecord(value)) {
-    return Object.fromEntries(
-      Object.entries(value).map(([entryKey, entryValue]) => [
-        entryKey,
-        redactSensitiveValues(entryValue, entryKey),
-      ]),
-    )
-  }
-  if (typeof value === "string" && isSensitiveConfigKey(key)) {
-    return value ? "[redacted]" : value
-  }
-  return value
-}
-
-function isSensitiveConfigKey(key: string): boolean {
-  return /(?:api[-_]?key|auth[-_]?token|token|secret|password|credential|authorization)/i.test(key)
+  return JSON.stringify(redactSensitiveValue(config), null, 2)
 }
 
 function ProviderFormDialog({

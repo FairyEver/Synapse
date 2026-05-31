@@ -66,6 +66,39 @@ describe("CcConversationDetailWindowPage", () => {
     expect(document.body.textContent).toContain("第 2 行")
     expect(document.body.textContent).toContain("Unexpected token")
   })
+
+  it("redacts secret values in the event stream and inspector", async () => {
+    mocks.getConversation.mockResolvedValue(createDetail({
+      events: [{
+        id: "secret-1",
+        type: "user",
+        timestamp: "2026-05-27T01:00:00.000Z",
+        timestampMs: 1779843600000,
+        lineNumber: 1,
+        byteOffset: 0,
+        role: "user",
+        contentBlocks: [{
+          type: "string",
+          text: "ANTHROPIC_AUTH_TOKEN=sk-window-secret /Users/liyang/project/file.ts",
+        }],
+        raw: {
+          type: "user",
+          message: {
+            content: "Authorization: Bearer sk-window-bearer",
+            token: "data-server-token",
+          },
+        },
+      }],
+    }))
+
+    await renderWindow()
+
+    expect(document.body.textContent).toContain("[redacted]")
+    expect(document.body.textContent).toContain("/Users/liyang/project/file.ts")
+    expect(document.body.textContent).not.toContain("sk-window-secret")
+    expect(document.body.textContent).not.toContain("sk-window-bearer")
+    expect(document.body.textContent).not.toContain("data-server-token")
+  })
 })
 
 async function renderWindow(): Promise<void> {

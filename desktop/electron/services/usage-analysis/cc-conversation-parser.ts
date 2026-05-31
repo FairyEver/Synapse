@@ -4,6 +4,10 @@ import type {
   CcConversationParseError,
   CcRawConversationEvent,
 } from "../../../src/types/usage-analysis-conversations"
+import {
+  redactSensitiveText,
+  redactSensitiveValue,
+} from "../../../src/lib/agent-redaction"
 
 export type ParsedCcConversationFile = {
   readonly events: readonly CcRawConversationEvent[]
@@ -58,20 +62,21 @@ function toConversationEvent(
   lineNumber: number,
   byteOffset: number,
 ): CcRawConversationEvent {
-  const message = asRecord(raw.message)
+  const sanitizedRaw = asRecord(redactSensitiveValue(raw)) ?? raw
+  const message = asRecord(sanitizedRaw.message)
   const contentBlocks = normalizeContentBlocks(message)
   const tool = firstToolUse(contentBlocks)
-  const timestamp = asString(raw.timestamp)
+  const timestamp = asString(sanitizedRaw.timestamp)
   const timestampMs = parseTimestampMs(timestamp)
-  const uuid = asString(raw.uuid)
-  const parentUuid = raw.parentUuid === null ? null : asString(raw.parentUuid)
+  const uuid = asString(sanitizedRaw.uuid)
+  const parentUuid = sanitizedRaw.parentUuid === null ? null : asString(sanitizedRaw.parentUuid)
   const role = asString(message?.role)
   const model = asString(message?.model)
   const usage = asRecord(message?.usage)
 
   return {
     id: createEventId(raw, lineNumber, byteOffset),
-    type: asString(raw.type) ?? "unknown",
+    type: asString(sanitizedRaw.type) ?? "unknown",
     ...(timestamp ? { timestamp } : {}),
     ...(timestampMs !== undefined ? { timestampMs } : {}),
     lineNumber,
@@ -84,7 +89,7 @@ function toConversationEvent(
     ...(usage ? { usage } : {}),
     ...(tool.toolName ? { toolName: tool.toolName } : {}),
     ...(tool.toolUseId ? { toolUseId: tool.toolUseId } : {}),
-    raw,
+    raw: sanitizedRaw,
   }
 }
 
@@ -125,7 +130,7 @@ export async function parseCcConversationFile(filePath: string): Promise<ParsedC
         lineNumber,
         byteOffset: currentOffset,
         message: error instanceof Error ? error.message : "Invalid JSONL line.",
-        rawLine: line,
+        rawLine: redactSensitiveText(line),
       })
     }
   }

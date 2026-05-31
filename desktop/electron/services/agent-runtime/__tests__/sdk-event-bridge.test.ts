@@ -527,7 +527,12 @@ describe("SDK event bridge", () => {
             content: [
               {
                 type: "text",
-                text: "ANTHROPIC_AUTH_TOKEN=sk-auth ANTHROPIC_API_KEY=sk-api SYNAPSE_SIDE_CHANNEL_TOKEN=side-token {\"token\":\"data-server-token\"}",
+                text: [
+                  "ANTHROPIC_AUTH_TOKEN=sk-auth ANTHROPIC_API_KEY=sk-api SYNAPSE_SIDE_CHANNEL_TOKEN=side-token",
+                  "{\"token\":\"data-server-token\"}",
+                  "node --env ANTHROPIC_AUTH_TOKEN=ps-auth --env SYNAPSE_SIDE_CHANNEL_TOKEN=ps-side /Users/liyang/project/app.js",
+                  "Cookie: sid=session-secret; theme=light",
+                ].join("\n"),
               },
             ],
             is_error: true,
@@ -542,6 +547,10 @@ describe("SDK event bridge", () => {
     expect(serialized).not.toContain("sk-api")
     expect(serialized).not.toContain("side-token")
     expect(serialized).not.toContain("data-server-token")
+    expect(serialized).not.toContain("ps-auth")
+    expect(serialized).not.toContain("ps-side")
+    expect(serialized).not.toContain("session-secret")
+    expect(serialized).toContain("/Users/liyang/project/app.js")
   })
 
   it("bridges SDK result error messages to error events", () => {
