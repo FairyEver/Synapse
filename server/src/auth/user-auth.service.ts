@@ -1,4 +1,4 @@
-import { timingSafeEqual } from "node:crypto"
+import { createHash, timingSafeEqual } from "node:crypto"
 import { BadRequestException, Inject, Injectable, Optional, UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { Cron } from "@nestjs/schedule"
@@ -54,10 +54,13 @@ function addDays(date: Date, days: number): Date {
 const revokedSessionRetentionMs = 7 * 24 * 60 * 60 * 1000
 const desktopLoginCodeTtlMs = 5 * 60 * 1000
 const passwordResetTokenTtlMs = 30 * 60 * 1000
+const desktopClientId = "synapse-desktop"
+const desktopRedirectUri = "synapse://auth/desktop/callback"
+const pkceS256Method = "S256"
 
 function buildDesktopDeepLink(code: string, state: string): string {
   const query = new URLSearchParams({ code, state })
-  return `synapse://auth/callback?${query.toString()}`
+  return `${desktopRedirectUri}?${query.toString()}`
 }
 
 function buildPasswordResetUrl(publicAppUrl: string, token: string): string {
@@ -70,6 +73,10 @@ function timingSafeEqualText(left: string, right: string): boolean {
   const leftBuffer = Buffer.from(hashToken(left), "hex")
   const rightBuffer = Buffer.from(hashToken(right), "hex")
   return timingSafeEqual(leftBuffer, rightBuffer)
+}
+
+function createPkceS256Challenge(codeVerifier: string): string {
+  return createHash("sha256").update(codeVerifier).digest("base64url")
 }
 
 function tokenIssuedBeforePasswordChange(payload: { readonly iat?: number }, passwordChangedAt?: Date | null): boolean {
@@ -278,14 +285,28 @@ export class UserAuthService {
     return tokens
   }
 
-  async issueDesktopLoginCode(input: {
+  async authorizeDesktopLogin(input: {
     readonly userId: string
+    readonly clientId: string
+    readonly redirectUri: string
     readonly state: string
+    readonly codeChallenge: string
+    readonly codeChallengeMethod: string
     readonly ipAddress: string
     readonly userAgent?: string
   }): Promise<{ code: string; deepLinkUrl: string; expiresAt: Date }> {
     const state = input.state.trim()
-    if (!state) {
+    const clientId = input.clientId.trim()
+    const redirectUri = input.redirectUri.trim()
+    const codeChallenge = input.codeChallenge.trim()
+    const codeChallengeMethod = input.codeChallengeMethod.trim()
+    if (
+      !state ||
+      !codeChallenge ||
+      clientId !== desktopClientId ||
+      redirectUri !== desktopRedirectUri ||
+      codeChallengeMethod !== pkceS256Method
+    ) {
       throw new BadRequestException("登录状态无效。")
     }
     const user = await this.prisma.user.findUnique({
@@ -302,7 +323,11 @@ export class UserAuthService {
       data: {
         codeHash: hashToken(code),
         userId: user.id,
+        clientId,
+        redirectUri,
         state,
+        codeChallenge,
+        codeChallengeMethod,
         expiresAt,
         ipAddress: input.ipAddress,
         userAgent: input.userAgent,
@@ -319,14 +344,16 @@ export class UserAuthService {
     return { code, deepLinkUrl: buildDesktopDeepLink(code, state), expiresAt }
   }
 
-  async exchangeDesktopLoginCode(input: {
+  async exchangeDesktopLoginToken(input: {
     readonly code: string
     readonly state: string
+    readonly codeVerifier: string
     readonly ipAddress: string
   }): Promise<UserTokenPair> {
     const code = input.code.trim()
     const state = input.state.trim()
-    if (!code || !state) {
+    const codeVerifier = input.codeVerifier.trim()
+    if (!code || !state || !codeVerifier) {
       throw new UnauthorizedException("登录凭证无效或已过期。")
     }
 
@@ -339,7 +366,11 @@ export class UserAuthService {
       !record ||
       record.usedAt ||
       record.expiresAt <= now ||
+      record.clientId !== desktopClientId ||
+      record.redirectUri !== desktopRedirectUri ||
+      record.codeChallengeMethod !== pkceS256Method ||
       !timingSafeEqualText(record.state, state) ||
+      !timingSafeEqualText(record.codeChallenge, createPkceS256Challenge(codeVerifier)) ||
       record.user.status !== "active"
     ) {
       await this.recordDesktopLoginExchangeFailure(record, input.ipAddress)

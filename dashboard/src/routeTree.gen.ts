@@ -24,6 +24,7 @@ import { Route as AuthenticatedLogsIndexRouteImport } from './routes/_authentica
 import { Route as AuthenticatedInvitationsIndexRouteImport } from './routes/_authenticated/invitations/index'
 import { Route as AuthenticatedBackupIndexRouteImport } from './routes/_authenticated/backup/index'
 import { Route as AuthenticatedAuditLogsIndexRouteImport } from './routes/_authenticated/audit-logs/index'
+import { Route as authAuthDesktopRouteImport } from './routes/(auth)/auth/desktop'
 
 const AuthenticatedRouteRoute = AuthenticatedRouteRouteImport.update({
   id: '/_authenticated',
@@ -104,6 +105,11 @@ const AuthenticatedAuditLogsIndexRoute =
     path: '/audit-logs/',
     getParentRoute: () => AuthenticatedRouteRoute,
   } as any)
+const authAuthDesktopRoute = authAuthDesktopRouteImport.update({
+  id: '/(auth)/auth/desktop',
+  path: '/auth/desktop',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
@@ -111,6 +117,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof authResetPasswordRoute
   '/sign-in': typeof authSignInRoute
   '/sign-up': typeof authSignUpRoute
+  '/auth/desktop': typeof authAuthDesktopRoute
   '/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
   '/backup/': typeof AuthenticatedBackupIndexRoute
   '/invitations/': typeof AuthenticatedInvitationsIndexRoute
@@ -127,6 +134,7 @@ export interface FileRoutesByTo {
   '/sign-in': typeof authSignInRoute
   '/sign-up': typeof authSignUpRoute
   '/': typeof AuthenticatedIndexRoute
+  '/auth/desktop': typeof authAuthDesktopRoute
   '/audit-logs': typeof AuthenticatedAuditLogsIndexRoute
   '/backup': typeof AuthenticatedBackupIndexRoute
   '/invitations': typeof AuthenticatedInvitationsIndexRoute
@@ -145,6 +153,7 @@ export interface FileRoutesById {
   '/(auth)/sign-in': typeof authSignInRoute
   '/(auth)/sign-up': typeof authSignUpRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
+  '/(auth)/auth/desktop': typeof authAuthDesktopRoute
   '/_authenticated/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
   '/_authenticated/backup/': typeof AuthenticatedBackupIndexRoute
   '/_authenticated/invitations/': typeof AuthenticatedInvitationsIndexRoute
@@ -163,6 +172,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/sign-in'
     | '/sign-up'
+    | '/auth/desktop'
     | '/audit-logs/'
     | '/backup/'
     | '/invitations/'
@@ -179,6 +189,7 @@ export interface FileRouteTypes {
     | '/sign-in'
     | '/sign-up'
     | '/'
+    | '/auth/desktop'
     | '/audit-logs'
     | '/backup'
     | '/invitations'
@@ -196,6 +207,7 @@ export interface FileRouteTypes {
     | '/(auth)/sign-in'
     | '/(auth)/sign-up'
     | '/_authenticated/'
+    | '/(auth)/auth/desktop'
     | '/_authenticated/audit-logs/'
     | '/_authenticated/backup/'
     | '/_authenticated/invitations/'
@@ -213,6 +225,7 @@ export interface RootRouteChildren {
   authResetPasswordRoute: typeof authResetPasswordRoute
   authSignInRoute: typeof authSignInRoute
   authSignUpRoute: typeof authSignUpRoute
+  authAuthDesktopRoute: typeof authAuthDesktopRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -322,6 +335,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthenticatedAuditLogsIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
     }
+    '/(auth)/auth/desktop': {
+      id: '/(auth)/auth/desktop'
+      path: '/auth/desktop'
+      fullPath: '/auth/desktop'
+      preLoaderRoute: typeof authAuthDesktopRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -360,6 +380,7 @@ const rootRouteChildren: RootRouteChildren = {
   authResetPasswordRoute: authResetPasswordRoute,
   authSignInRoute: authSignInRoute,
   authSignUpRoute: authSignUpRoute,
+  authAuthDesktopRoute: authAuthDesktopRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

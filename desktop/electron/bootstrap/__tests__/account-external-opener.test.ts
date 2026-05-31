@@ -33,19 +33,19 @@ describe("createAccountExternalUrlOpener", () => {
     const deps = createDeps()
     const openExternal = createAccountExternalUrlOpener(deps)
 
-    await openExternal("https://synapse.d2.pub/dashboard/login?state=secret-state")
+    await openExternal("https://synapse.d2.pub/dashboard/auth/desktop?state=secret-state")
 
     expect(deps.permissionGuard.check).toHaveBeenCalledWith({
       action: "shell.exec",
       actor: { kind: "user" },
-      resource: "https://synapse.d2.pub/dashboard/login?state=secret-state",
+      resource: "https://synapse.d2.pub/dashboard/auth/desktop?state=secret-state",
       context: { source: "account.startLogin" },
     })
-    expect(deps.openExternal).toHaveBeenCalledWith("https://synapse.d2.pub/dashboard/login?state=secret-state")
+    expect(deps.openExternal).toHaveBeenCalledWith("https://synapse.d2.pub/dashboard/auth/desktop?state=secret-state")
     expect(deps.auditSink.record).toHaveBeenCalledWith({
       action: "shell.exec",
       actor: { kind: "user" },
-      resource: "https://synapse.d2.pub/dashboard/login?state=secret-state",
+      resource: "https://synapse.d2.pub/dashboard/auth/desktop?state=secret-state",
       outcome: "allowed",
       metadata: { source: "account.startLogin" },
     })
@@ -55,7 +55,7 @@ describe("createAccountExternalUrlOpener", () => {
     const deps = createDeps({ allowed: false, reason: "blocked" })
     const openExternal = createAccountExternalUrlOpener(deps)
 
-    await expect(openExternal("https://synapse.d2.pub/dashboard/login"))
+    await expect(openExternal("https://synapse.d2.pub/dashboard/auth/desktop"))
       .rejects
       .toThrow("blocked")
 
@@ -63,7 +63,7 @@ describe("createAccountExternalUrlOpener", () => {
     expect(deps.auditSink.record).toHaveBeenCalledWith({
       action: "shell.exec",
       actor: { kind: "user" },
-      resource: "https://synapse.d2.pub/dashboard/login",
+      resource: "https://synapse.d2.pub/dashboard/auth/desktop",
       outcome: "denied",
       metadata: {
         source: "account.startLogin",

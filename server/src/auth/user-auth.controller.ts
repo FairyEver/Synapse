@@ -30,13 +30,18 @@ const refreshSchema = z.object({
   refreshToken: z.string().min(1),
 }).strict()
 
-const desktopIssueCodeSchema = z.object({
+const desktopAuthorizeSchema = z.object({
+  clientId: z.literal("synapse-desktop"),
+  redirectUri: z.literal("synapse://auth/desktop/callback"),
   state: z.string().trim().min(16),
+  codeChallenge: z.string().trim().min(16),
+  codeChallengeMethod: z.literal("S256"),
 }).strict()
 
-const desktopExchangeSchema = z.object({
+const desktopTokenSchema = z.object({
   code: z.string().trim().min(1),
   state: z.string().trim().min(16),
+  codeVerifier: z.string().trim().min(16),
 }).strict()
 
 @Controller("/api/auth")
@@ -91,24 +96,29 @@ export class UserAuthController {
 
   @UseGuards(UserAuthGuard)
   @Throttle({ default: { ttl: 60000, limit: 10 } })
-  @Post("/desktop/issue-code")
-  issueDesktopCode(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
-    const input = parseBody(desktopIssueCodeSchema, body, "登录请求无效。")
-    return this.auth.issueDesktopLoginCode({
+  @Post("/desktop/authorize")
+  authorizeDesktop(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const input = parseBody(desktopAuthorizeSchema, body, "登录请求无效。")
+    return this.auth.authorizeDesktopLogin({
       userId: request.user!.id,
+      clientId: input.clientId,
+      redirectUri: input.redirectUri,
       state: input.state,
+      codeChallenge: input.codeChallenge,
+      codeChallengeMethod: input.codeChallengeMethod,
       ipAddress: readRequestIp(request),
       userAgent: readHeaderText(request.headers["user-agent"]),
     })
   }
 
   @Throttle({ default: { ttl: 60000, limit: 10 } })
-  @Post("/desktop/exchange")
-  exchangeDesktopCode(@Body() body: unknown, @Req() request: Request) {
-    const input = parseBody(desktopExchangeSchema, body, "登录请求无效。")
-    return this.auth.exchangeDesktopLoginCode({
+  @Post("/desktop/token")
+  issueDesktopToken(@Body() body: unknown, @Req() request: Request) {
+    const input = parseBody(desktopTokenSchema, body, "登录请求无效。")
+    return this.auth.exchangeDesktopLoginToken({
       code: input.code,
       state: input.state,
+      codeVerifier: input.codeVerifier,
       ipAddress: readRequestIp(request),
     })
   }

@@ -153,7 +153,15 @@ export type PasswordResetRequestResult = {
   expiresAt?: string
 }
 
-export type DesktopLoginCodeIssueResult = {
+export type DesktopAuthorizeInput = {
+  clientId: string
+  redirectUri: string
+  state: string
+  codeChallenge: string
+  codeChallengeMethod: 'S256'
+}
+
+export type DesktopAuthorizationResult = {
   code: string
   deepLinkUrl: string
   expiresAt: string
@@ -163,7 +171,7 @@ type RequestOptions = RequestInit
 
 const dashboardApiBasePath = '/api/dashboard'
 const adminApiBasePath = '/api/admin'
-const desktopLoginIssueCodePath = '/api/auth/desktop/issue-code'
+const desktopAuthorizePath = '/api/auth/desktop/authorize'
 const authExpiredListeners = new Set<() => void>()
 
 export class ApiError extends Error {
@@ -239,7 +247,7 @@ function notifyAuthExpired() {
 }
 
 function shouldNotifyAuthExpired(path: string, status: number) {
-  if (path === desktopLoginIssueCodePath) {
+  if (path === desktopAuthorizePath) {
     return status === 401 || status === 403
   }
   if (status !== 401) return false
@@ -319,8 +327,8 @@ export const dashboardApi = {
   logout: () =>
     request<{ ok: true }>(`${dashboardApiBasePath}/logout`, { method: 'POST' }),
   getMe: () => request<DashboardMe>(`${dashboardApiBasePath}/me`),
-  issueDesktopLoginCode: (input: { state: string }) =>
-    request<DesktopLoginCodeIssueResult>(desktopLoginIssueCodePath, {
+  authorizeDesktopLogin: (input: DesktopAuthorizeInput) =>
+    request<DesktopAuthorizationResult>(desktopAuthorizePath, {
       method: 'POST',
       body: JSON.stringify(input),
     }),

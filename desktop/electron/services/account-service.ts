@@ -1,4 +1,4 @@
-import { randomBytes } from "node:crypto"
+import { createHash, randomBytes } from "node:crypto"
 import path from "node:path"
 import { app, safeStorage } from "electron"
 
@@ -12,6 +12,9 @@ const CORE_ACCOUNT_NAMESPACE = "core.account"
 const ATTEMPT_TTL_MS = 10 * 60 * 1000
 const PROD_API_BASE_URL = "https://synapse.d2.pub/api"
 const DEV_API_BASE_URL = "http://localhost:3000/api"
+const DESKTOP_CLIENT_ID = "synapse-desktop"
+const DESKTOP_REDIRECT_URI = "synapse://auth/desktop/callback"
+const PKCE_CHALLENGE_METHOD = "S256"
 
 type PersistedAccount = Record<string, unknown> & {
   refreshToken?: string
@@ -19,6 +22,7 @@ type PersistedAccount = Record<string, unknown> & {
   lastProfile?: SynapseAccountProfile
   activeAttempt?: {
     state: string
+    codeVerifier: string
     apiBaseUrl: string
     createdAt: string
     expiresAt: string
@@ -38,14 +42,29 @@ function createState(): string {
   return randomBytes(32).toString("base64url")
 }
 
+function createCodeVerifier(): string {
+  return randomBytes(32).toString("base64url")
+}
+
+function createCodeChallenge(codeVerifier: string): string {
+  return createHash("sha256").update(codeVerifier).digest("base64url")
+}
+
 function apiBaseUrl(isPackaged: boolean): string {
   return isPackaged ? PROD_API_BASE_URL : DEV_API_BASE_URL
 }
 
-function dashboardLoginUrl(baseUrl: string, state: string): string {
+function dashboardLoginUrl(baseUrl: string, state: string, codeChallenge: string): string {
   const origin = baseUrl.replace(/\/api\/?$/u, "")
-  const query = new URLSearchParams({ client: "desktop", state })
-  return `${origin}/dashboard/login?${query.toString()}`
+  const query = new URLSearchParams({
+    client_id: DESKTOP_CLIENT_ID,
+    redirect_uri: DESKTOP_REDIRECT_URI,
+    response_type: "code",
+    state,
+    code_challenge: codeChallenge,
+    code_challenge_method: PKCE_CHALLENGE_METHOD,
+  })
+  return `${origin}/dashboard/auth/desktop?${query.toString()}`
 }
 
 function authCallbackErrorMessage(errorCode: string): string {
@@ -110,14 +129,17 @@ export class AccountService {
   async startLogin(): Promise<{ state: SynapseAccountState; loginUrl: string }> {
     const baseUrl = apiBaseUrl(this.isPackaged)
     const state = createState()
+    const codeVerifier = createCodeVerifier()
+    const codeChallenge = createCodeChallenge(codeVerifier)
     const now = new Date()
     const attempt = {
       state,
+      codeVerifier,
       apiBaseUrl: baseUrl,
       createdAt: now.toISOString(),
       expiresAt: new Date(now.getTime() + ATTEMPT_TTL_MS).toISOString(),
     }
-    const loginUrl = dashboardLoginUrl(baseUrl, state)
+    const loginUrl = dashboardLoginUrl(baseUrl, state, codeChallenge)
     const revision = this.bumpAuthRevision()
 
     try {
@@ -149,7 +171,7 @@ export class AccountService {
       return this.state
     }
 
-    if (parsed.protocol !== "synapse:" || parsed.hostname !== "auth" || parsed.pathname !== "/callback") {
+    if (parsed.protocol !== "synapse:" || parsed.hostname !== "auth" || parsed.pathname !== "/desktop/callback") {
       logger.warn("Ignored unknown account auth callback.", {
         protocol: parsed.protocol,
         host: parsed.hostname,
@@ -201,8 +223,8 @@ export class AccountService {
     let tokens: { accessToken: string; refreshToken: string }
     try {
       tokens = await this.postJson<{ accessToken: string; refreshToken: string }>(
-        `${attempt.apiBaseUrl}/auth/desktop/exchange`,
-        { code, state: callbackState },
+        `${attempt.apiBaseUrl}/auth/desktop/token`,
+        { code, state: callbackState, codeVerifier: attempt.codeVerifier },
       )
     } catch (error) {
       logger.warn("Desktop account callback exchange failed.", { error })
