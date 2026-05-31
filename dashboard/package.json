@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Synapse admin dashboard",
   "scripts": {
-    "dev": "vite --port 3000 --host 0.0.0.0",
+    "dev": "vite --port 3000 --host 0.0.0.0 --open /dashboard/",
     "build": "tsc -b && vite build",
     "preview": "vite preview --port 3000",
     "tsc": "tsc --noEmit"
