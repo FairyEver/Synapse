@@ -61,12 +61,12 @@ function handleProtocolUrl(url: string): void {
 function isAccountAuthCallbackUrl(rawUrl: string): boolean {
   try {
     const parsed = new URL(rawUrl)
-    return parsed.protocol === "synapse:" && parsed.hostname === "auth" && parsed.pathname === "/callback"
+    return parsed.protocol === "synapse:" && parsed.hostname === "auth" && parsed.pathname === "/desktop/callback"
   } catch {
     return (
-      rawUrl === "synapse://auth/callback" ||
-      rawUrl.startsWith("synapse://auth/callback?") ||
-      rawUrl.startsWith("synapse://auth/callback#")
+      rawUrl === "synapse://auth/desktop/callback" ||
+      rawUrl.startsWith("synapse://auth/desktop/callback?") ||
+      rawUrl.startsWith("synapse://auth/desktop/callback#")
     )
   }
 }

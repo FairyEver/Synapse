@@ -75,7 +75,6 @@ import { prepareContentIconImageBytes } from "../services/content-icon-image-ser
 import { readSkillDraftFromDirectory } from "../services/content-skill-source-service"
 import { getUsageAnalysisDb } from "../services/usage-analysis"
 import { userIdentityService } from "../services/user-identity-service"
-import { clearDeprecatedStores } from "./deprecated-store-cleanup"
 import {
   ScheduledTaskRepository,
   ScheduledTaskRunRepository,
@@ -904,22 +903,6 @@ export const coreDiagnosticsDescriptor: ServiceDescriptor<DiagnosticsService> = 
       }),
       createConfigBackupPayload,
     })
-  },
-}
-
-export const deprecatedStoreCleanupDescriptor: ServiceDescriptor<{ clear: () => Promise<void> }> = {
-  id: "core.deprecated-store-cleanup",
-  criticality: "fatal",
-  create(ctx) {
-    return {
-      clear: () => clearDeprecatedStores(
-        app.getPath("userData"),
-        ctx.logger.child("deprecated-store-cleanup"),
-      ),
-    }
-  },
-  start(service) {
-    void service.clear()
   },
 }
 

@@ -83,7 +83,6 @@ describe("buildServiceRegistry (T1.8)", () => {
         "core.diagnostics",
         "core.event-bus",
         "core.execution-isolation",
-        "core.deprecated-store-cleanup",
         "core.http-test",
         "core.logging",
         "core.network-registry",
@@ -173,7 +172,6 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.permission-guard",
       "core.audit-sink",
     ])
-    expect(byId.get("core.deprecated-store-cleanup")?.dependsOn).toEqual([])
     expect(byId.get("core.relay")?.dependsOn).toEqual([
       "core.project-containers",
       "core.side-channel",
@@ -270,7 +268,6 @@ describe("buildServiceRegistry (T1.8)", () => {
       "core.audit-sink",
       "core.config",
       "core.data-repository",
-      "core.deprecated-store-cleanup",
       "core.event-bus",
       "core.logging",
       "core.network-registry",

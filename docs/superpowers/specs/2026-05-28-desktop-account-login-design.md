@@ -2,7 +2,7 @@
 
 ## Summary
 
-Synapse Desktop will add an optional global account login module backed by the existing Synapse server user authentication system. Login opens the user's system browser, completes authentication on the dashboard, and returns to the desktop app through a custom `synapse://auth/callback` protocol. The callback carries only a short-lived one-time code and `state`; Desktop exchanges that code for tokens through the server, then separately calls `/api/auth/me` to load user information.
+Synapse Desktop will add an optional global account login module backed by the existing Synapse server user authentication system. Login opens the user's system browser, completes authentication on the dashboard, and returns to the desktop app through a custom `synapse://auth/desktop/callback` protocol. The callback carries only a short-lived one-time code and `state`; Desktop exchanges that code plus its PKCE verifier for tokens through the server, then separately calls `/api/auth/me` to load user information.
 
 The feature is optional. Existing local repositories, Agent workflows, content browsing, and the current local identity ID continue to work without a remote account.
 
@@ -13,7 +13,9 @@ The feature is optional. Existing local repositories, Agent workflows, content b
 - Development Desktop connects to `http://localhost:3000/api`.
 - Packaged Desktop connects to `https://synapse.d2.pub/api`.
 - Login uses the system browser, not an Electron embedded login page.
-- Browser callback uses `synapse://auth/callback`.
+- Browser callback uses `synapse://auth/desktop/callback`.
+- Browser login starts at the dedicated dashboard authorization route `/dashboard/auth/desktop`, not the ordinary sign-in route.
+- Desktop authorization uses PKCE with `code_challenge_method=S256`.
 - Cold-start callback is supported.
 - Remote account and local identity are not automatically bound.
 - Login/exchange only obtains credentials; user information always comes from a separate `/api/auth/me` request.
@@ -48,7 +50,11 @@ Add a `DesktopLoginCode` model with these fields:
 - `id`
 - `codeHash`
 - `userId`
+- `clientId`
+- `redirectUri`
 - `state`
+- `codeChallenge`
+- `codeChallengeMethod`
 - `expiresAt`
 - `usedAt`
 - `createdAt`
@@ -57,21 +63,22 @@ Add a `DesktopLoginCode` model with these fields:
 
 Add endpoints:
 
-`POST /api/auth/desktop/issue-code`
+`POST /api/auth/desktop/authorize`
 
-- Called by the dashboard after the user is authenticated.
+- Called by the dedicated dashboard desktop auth route after the user is authenticated.
 - Requires an authenticated user session.
-- Accepts `state`.
+- Accepts `clientId`, `redirectUri`, `state`, `codeChallenge`, and `codeChallengeMethod`.
 - Creates a high-entropy one-time code.
 - Stores only `codeHash`.
 - Returns the plain code once and the deep link URL.
 
-`POST /api/auth/desktop/exchange`
+`POST /api/auth/desktop/token`
 
 - Called by Desktop main process.
-- Accepts `code` and `state`.
+- Accepts `code`, `state`, and `codeVerifier`.
 - Hashes and looks up the code.
 - Requires exact state match.
+- Requires `S256(codeVerifier)` to match the stored `codeChallenge`.
 - Rejects expired, missing, or already used codes.
 - Marks the code used atomically.
 - Returns `accessToken` and `refreshToken`.
@@ -92,25 +99,27 @@ Security requirements:
 
 ### Dashboard
 
-The dashboard login page detects:
+The dashboard exposes a dedicated desktop authorization route:
 
 ```text
-client=desktop&state=<state>
+/dashboard/auth/desktop?client_id=synapse-desktop&redirect_uri=synapse://auth/desktop/callback&response_type=code&state=<state>&code_challenge=<challenge>&code_challenge_method=S256
 ```
 
 After the user completes browser login:
 
-1. Dashboard calls `POST /api/auth/desktop/issue-code`.
+1. If unauthenticated, dashboard redirects to `/dashboard/sign-in` with a safe internal return path back to `/auth/desktop`.
+2. Dashboard calls `POST /api/auth/desktop/authorize`.
 2. Dashboard renders a minimal handoff page.
 3. The page automatically navigates to:
 
 ```text
-synapse://auth/callback?code=<code>&state=<state>
+synapse://auth/desktop/callback?code=<code>&state=<state>
 ```
 
 4. The page also keeps an "打开 Synapse" retry button using the same deep link.
+5. Admin dashboard sessions are rejected for desktop login and return `unsupported_account` to Desktop.
 
-Plain dashboard login remains unchanged when `client=desktop` is absent.
+Plain dashboard login remains unchanged.
 
 ### Desktop Main Process
 
@@ -161,25 +170,25 @@ Protocol handling:
 Login flow:
 
 1. Renderer asks main to start login.
-2. Main generates high-entropy `state`.
-3. Main persists the active attempt with expiration.
+2. Main generates high-entropy `state` and PKCE `codeVerifier`.
+3. Main persists the active attempt with expiration and `codeVerifier`.
 4. Main opens the system browser:
 
 Development:
 
 ```text
-http://localhost:3000/dashboard/login?client=desktop&state=<state>
+http://localhost:3000/dashboard/auth/desktop?client_id=synapse-desktop&redirect_uri=synapse://auth/desktop/callback&response_type=code&state=<state>&code_challenge=<challenge>&code_challenge_method=S256
 ```
 
 Production:
 
 ```text
-https://synapse.d2.pub/dashboard/login?client=desktop&state=<state>
+https://synapse.d2.pub/dashboard/auth/desktop?client_id=synapse-desktop&redirect_uri=synapse://auth/desktop/callback&response_type=code&state=<state>&code_challenge=<challenge>&code_challenge_method=S256
 ```
 
-5. Main handles `synapse://auth/callback`.
+5. Main handles `synapse://auth/desktop/callback`.
 6. Main validates the current state and expiration.
-7. Main exchanges the code.
+7. Main exchanges the code and `codeVerifier`.
 8. Main persists refresh token and stores access token in memory.
 9. Main calls `/api/auth/me`.
 10. Main emits the authenticated account state and focuses the main window.
@@ -271,19 +280,20 @@ All Desktop UI follows the current shadcn/Radix baseline:
 
 Server tests:
 
-- `issue-code` requires authenticated user.
-- `exchange` consumes code exactly once.
+- `authorize` requires authenticated normal user.
+- `token` consumes code exactly once.
 - Expired code fails.
 - State mismatch fails.
+- PKCE mismatch fails.
 - Replayed code fails.
 - Exchange response contains tokens but not user profile.
 - Audit/log output does not contain code or token values.
 
 Dashboard tests:
 
-- Desktop login query parameters are preserved through login.
-- After desktop login success, dashboard calls `issue-code`.
-- Handoff page builds the expected `synapse://auth/callback` URL.
+- Desktop authorization query parameters are preserved through login.
+- After desktop login success, dashboard calls `authorize`.
+- Handoff page builds the expected `synapse://auth/desktop/callback` URL.
 - Retry button uses the same generated deep link.
 - Normal dashboard login remains unchanged.
 

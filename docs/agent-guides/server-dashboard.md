@@ -10,7 +10,7 @@ Do not add new React pages under `server/admin`; that Vite/shadcn admin frontend
 The default deployment remains single-domain for simple Docker installation:
 
 - `/dashboard/*` serves the dashboard static bundle.
-- `/api/*` and `/v1/*` proxy to the NestJS API.
+- `/api/*` proxies to the NestJS API.
 - `/healthz` proxies to the NestJS health endpoint.
 
 Authentication uses the existing `synapse_admin` HttpOnly cookie. Dashboard requests must include credentials and must not store dashboard session tokens in `localStorage`.

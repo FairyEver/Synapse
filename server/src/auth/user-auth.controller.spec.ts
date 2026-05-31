@@ -21,10 +21,10 @@ describe("UserAuthController", () => {
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.refresh)).toBe(60000)
     expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.logout)).toBe(5)
     expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.logout)).toBe(60000)
-    expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.issueDesktopCode)).toBe(10)
-    expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.issueDesktopCode)).toBe(60000)
-    expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.exchangeDesktopCode)).toBe(10)
-    expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.exchangeDesktopCode)).toBe(60000)
+    expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.authorizeDesktop)).toBe(10)
+    expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.authorizeDesktop)).toBe(60000)
+    expect(Reflect.getMetadata(throttleLimitMetadata, UserAuthController.prototype.issueDesktopToken)).toBe(10)
+    expect(Reflect.getMetadata(throttleTtlMetadata, UserAuthController.prototype.issueDesktopToken)).toBe(60000)
   })
 
   it("passes valid login requests to the service", () => {
@@ -164,18 +164,24 @@ describe("UserAuthController", () => {
     expect(auth.logout).toHaveBeenCalledWith({ refreshToken: "refresh-token" }, "203.0.113.23")
   })
 
-  it("passes valid desktop issue-code requests to the service", () => {
+  it("passes valid desktop authorize requests to the service", () => {
     const auth = {
-      issueDesktopLoginCode: vi.fn().mockResolvedValue({
+      authorizeDesktopLogin: vi.fn().mockResolvedValue({
         code: "desktop-code",
-        deepLinkUrl: "synapse://auth/callback?code=desktop-code&state=state-1234567890",
+        deepLinkUrl: "synapse://auth/desktop/callback?code=desktop-code&state=state-1234567890",
         expiresAt: new Date("2999-01-01T00:00:00.000Z"),
       }),
     }
     const controller = new UserAuthController(auth as unknown as UserAuthService)
 
-    controller.issueDesktopCode(
-      { state: "state-1234567890" },
+    controller.authorizeDesktop(
+      {
+        clientId: "synapse-desktop",
+        redirectUri: "synapse://auth/desktop/callback",
+        state: "state-1234567890",
+        codeChallenge: "challenge-1234567890",
+        codeChallengeMethod: "S256",
+      },
       {
         ip: "203.0.113.24",
         headers: { "user-agent": "vitest" },
@@ -183,40 +189,55 @@ describe("UserAuthController", () => {
       } as never,
     )
 
-    expect(auth.issueDesktopLoginCode).toHaveBeenCalledWith({
+    expect(auth.authorizeDesktopLogin).toHaveBeenCalledWith({
       userId: "user-1",
+      clientId: "synapse-desktop",
+      redirectUri: "synapse://auth/desktop/callback",
       state: "state-1234567890",
+      codeChallenge: "challenge-1234567890",
+      codeChallengeMethod: "S256",
       ipAddress: "203.0.113.24",
       userAgent: "vitest",
     })
   })
 
-  it("passes valid desktop exchange requests to the service", () => {
+  it("passes valid desktop token requests to the service", () => {
     const auth = {
-      exchangeDesktopLoginCode: vi.fn().mockResolvedValue({ accessToken: "access", refreshToken: "refresh" }),
+      exchangeDesktopLoginToken: vi.fn().mockResolvedValue({ accessToken: "access", refreshToken: "refresh" }),
     }
     const controller = new UserAuthController(auth as unknown as UserAuthService)
 
-    controller.exchangeDesktopCode(
-      { code: "desktop-code", state: "state-1234567890" },
+    controller.issueDesktopToken(
+      {
+        code: "desktop-code",
+        state: "state-1234567890",
+        codeVerifier: "desktop-code-verifier-1234567890",
+      },
       { ip: "203.0.113.25" } as never,
     )
 
-    expect(auth.exchangeDesktopLoginCode).toHaveBeenCalledWith({
+    expect(auth.exchangeDesktopLoginToken).toHaveBeenCalledWith({
       code: "desktop-code",
       state: "state-1234567890",
+      codeVerifier: "desktop-code-verifier-1234567890",
       ipAddress: "203.0.113.25",
     })
   })
 
-  it("rejects invalid desktop issue-code state before calling the service", () => {
+  it("rejects invalid desktop authorize state before calling the service", () => {
     const auth = {
-      issueDesktopLoginCode: vi.fn(),
+      authorizeDesktopLogin: vi.fn(),
     }
     const controller = new UserAuthController(auth as unknown as UserAuthService)
 
-    expect(() => controller.issueDesktopCode(
-      { state: "short" },
+    expect(() => controller.authorizeDesktop(
+      {
+        clientId: "synapse-desktop",
+        redirectUri: "synapse://auth/desktop/callback",
+        state: "short",
+        codeChallenge: "challenge-1234567890",
+        codeChallengeMethod: "S256",
+      },
       {
         ip: "203.0.113.24",
         headers: { "user-agent": "vitest" },
@@ -224,6 +245,6 @@ describe("UserAuthController", () => {
       } as never,
     ))
       .toThrow(BadRequestException)
-    expect(auth.issueDesktopLoginCode).not.toHaveBeenCalled()
+    expect(auth.authorizeDesktopLogin).not.toHaveBeenCalled()
   })
 })

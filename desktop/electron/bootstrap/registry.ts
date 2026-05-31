@@ -36,7 +36,6 @@ import {
   corePermissionGuardDescriptor,
   coreProcessRuntimeDescriptor,
   coreProjectContainerRegistryDescriptor,
-  deprecatedStoreCleanupDescriptor,
   coreRelayDescriptor,
   coreSideChannelDescriptor,
   coreTaskSchedulerDescriptor,
@@ -82,7 +81,6 @@ export function buildServiceRegistry(
   registry.register(corePermissionGuardDescriptor)
   registry.register(coreAuditSinkDescriptor)
   registry.register(providerServiceDescriptor)
-  registry.register(deprecatedStoreCleanupDescriptor)
   registry.register(coreProcessRuntimeDescriptor)
   registry.register(coreNetworkRegistryDescriptor)
   registry.register(coreAppIconDescriptor)

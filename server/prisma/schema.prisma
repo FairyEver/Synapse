@@ -141,16 +141,20 @@ model UserSession {
 }
 
 model DesktopLoginCode {
-  id        String    @id @default(cuid())
-  codeHash  String    @unique
-  userId    String
-  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  state     String
-  expiresAt DateTime
-  usedAt    DateTime?
-  ipAddress String
-  userAgent String?
-  createdAt DateTime  @default(now())
+  id                  String    @id @default(cuid())
+  codeHash            String    @unique
+  userId              String
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  clientId            String
+  redirectUri         String
+  state               String
+  codeChallenge       String
+  codeChallengeMethod String
+  expiresAt           DateTime
+  usedAt              DateTime?
+  ipAddress           String
+  userAgent           String?
+  createdAt           DateTime  @default(now())
 
   @@index([userId])
   @@index([expiresAt])

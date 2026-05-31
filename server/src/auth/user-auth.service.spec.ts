@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto"
 import { UnauthorizedException } from "@nestjs/common"
 import { JwtService } from "@nestjs/jwt"
 import { Prisma } from "@prisma/client"
@@ -63,6 +64,10 @@ function createUniqueConstraintError() {
     code: "P2002",
     clientVersion: "6.0.0",
   })
+}
+
+function pkceChallenge(verifier: string): string {
+  return createHash("sha256").update(verifier).digest("base64url")
 }
 
 function createService(
@@ -157,15 +162,21 @@ describe("UserAuthService", () => {
     })
   })
 
-  it("issues and exchanges a desktop login code without returning user profile", async () => {
+  it("authorizes and exchanges a desktop login code with PKCE without returning user profile", async () => {
     const prisma = createPrismaMock()
     prisma.user.findUnique.mockResolvedValue({ id: "user-1", email: "desktop@example.com", status: "active" })
     prisma.desktopLoginCode.create.mockResolvedValue({ id: "code-1" })
+    const codeVerifier = "desktop-code-verifier-1234567890"
+    const codeChallenge = pkceChallenge(codeVerifier)
     prisma.desktopLoginCode.findUnique.mockResolvedValue({
       id: "code-1",
       userId: "user-1",
       codeHash: "hash",
+      clientId: "synapse-desktop",
+      redirectUri: "synapse://auth/desktop/callback",
       state: "state-1234567890",
+      codeChallenge,
+      codeChallengeMethod: "S256",
       usedAt: null,
       expiresAt: new Date("2999-01-01T00:00:00.000Z"),
       user: { id: "user-1", email: "desktop@example.com", status: "active" },
@@ -175,20 +186,28 @@ describe("UserAuthService", () => {
     const service = createService(prisma, auditLog)
     const issuedAt = Date.now()
 
-    const issued = await service.issueDesktopLoginCode({
+    const issued = await service.authorizeDesktopLogin({
       userId: "user-1",
+      clientId: "synapse-desktop",
+      redirectUri: "synapse://auth/desktop/callback",
       state: "state-1234567890",
+      codeChallenge,
+      codeChallengeMethod: "S256",
       ipAddress: "127.0.0.1",
       userAgent: "vitest",
     })
 
     expect(issued.code).toHaveLength(43)
-    expect(issued.deepLinkUrl).toBe(`synapse://auth/callback?code=${encodeURIComponent(issued.code)}&state=state-1234567890`)
+    expect(issued.deepLinkUrl).toBe(`synapse://auth/desktop/callback?code=${encodeURIComponent(issued.code)}&state=state-1234567890`)
     expect(prisma.desktopLoginCode.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         codeHash: hashToken(issued.code),
         userId: "user-1",
+        clientId: "synapse-desktop",
+        redirectUri: "synapse://auth/desktop/callback",
         state: "state-1234567890",
+        codeChallenge,
+        codeChallengeMethod: "S256",
         ipAddress: "127.0.0.1",
         userAgent: "vitest",
       }),
@@ -198,9 +217,10 @@ describe("UserAuthService", () => {
     expect(persistedExpiresAt.getTime()).toBeGreaterThanOrEqual(issuedAt + 5 * 60 * 1000)
     expect(persistedExpiresAt.getTime()).toBeLessThanOrEqual(Date.now() + 5 * 60 * 1000)
 
-    const exchanged = await service.exchangeDesktopLoginCode({
+    const exchanged = await service.exchangeDesktopLoginToken({
       code: issued.code,
       state: "state-1234567890",
+      codeVerifier,
       ipAddress: "127.0.0.1",
     })
 
@@ -240,16 +260,21 @@ describe("UserAuthService", () => {
       id: "code-1",
       userId: "user-1",
       codeHash: "hash",
+      clientId: "synapse-desktop",
+      redirectUri: "synapse://auth/desktop/callback",
       state: "state-1234567890",
+      codeChallenge: pkceChallenge("desktop-code-verifier-1234567890"),
+      codeChallengeMethod: "S256",
       usedAt: new Date("2026-05-28T00:00:00.000Z"),
       expiresAt: new Date("2999-01-01T00:00:00.000Z"),
       user: { id: "user-1", email: "desktop@example.com", status: "active" },
     })
     const service = createService(prisma)
 
-    await expect(service.exchangeDesktopLoginCode({
+    await expect(service.exchangeDesktopLoginToken({
       code: "desktop-code",
       state: "state-1234567890",
+      codeVerifier: "desktop-code-verifier-1234567890",
       ipAddress: "127.0.0.1",
     }))
       .rejects
@@ -257,22 +282,27 @@ describe("UserAuthService", () => {
     expect(prisma.desktopLoginCode.updateMany).not.toHaveBeenCalled()
   })
 
-  it("rejects desktop login code state mismatch", async () => {
+  it("rejects desktop login token requests when PKCE verification fails", async () => {
     const prisma = createPrismaMock()
     prisma.desktopLoginCode.findUnique.mockResolvedValue({
       id: "code-1",
       userId: "user-1",
       codeHash: "hash",
+      clientId: "synapse-desktop",
+      redirectUri: "synapse://auth/desktop/callback",
       state: "state-1234567890",
+      codeChallenge: pkceChallenge("desktop-code-verifier-1234567890"),
+      codeChallengeMethod: "S256",
       usedAt: null,
       expiresAt: new Date("2999-01-01T00:00:00.000Z"),
       user: { id: "user-1", email: "desktop@example.com", status: "active" },
     })
     const service = createService(prisma)
 
-    await expect(service.exchangeDesktopLoginCode({
+    await expect(service.exchangeDesktopLoginToken({
       code: "desktop-code",
-      state: "state-0000000000",
+      state: "state-1234567890",
+      codeVerifier: "wrong-code-verifier-1234567890",
       ipAddress: "127.0.0.1",
     }))
       .rejects

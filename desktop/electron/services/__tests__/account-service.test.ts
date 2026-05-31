@@ -34,6 +34,7 @@ type PersistedAccountForTest = Record<string, unknown> & {
   lastProfile?: SynapseAccountProfile
   activeAttempt?: {
     state: string
+    codeVerifier: string
     apiBaseUrl: string
     createdAt: string
     expiresAt: string
@@ -90,19 +91,34 @@ describe("AccountService", () => {
     const result = await service.startLogin()
 
     expect(result.state.status).toBe("authenticating")
-    expect(result.loginUrl).toContain("client=desktop")
-    expect(result.loginUrl).toContain("state=")
+    const loginUrl = new URL(result.loginUrl)
+    expect(loginUrl.pathname).toBe("/dashboard/auth/desktop")
+    expect(loginUrl.searchParams.get("client_id")).toBe("synapse-desktop")
+    expect(loginUrl.searchParams.get("redirect_uri")).toBe("synapse://auth/desktop/callback")
+    expect(loginUrl.searchParams.get("response_type")).toBe("code")
+    expect(loginUrl.searchParams.get("state")).toBeTruthy()
+    expect(loginUrl.searchParams.get("code_challenge")).toBeTruthy()
+    expect(loginUrl.searchParams.get("code_challenge_method")).toBe("S256")
     expect(openExternal).toHaveBeenCalledWith(result.loginUrl)
     expect(await namespace.getSingleton()).toMatchObject({
-      activeAttempt: { state: expect.any(String), apiBaseUrl: "http://localhost:3000/api" },
+      activeAttempt: {
+        state: expect.any(String),
+        codeVerifier: expect.any(String),
+        apiBaseUrl: "http://localhost:3000/api",
+      },
     })
   })
 
   it("exchanges protocol callback, stores refresh token, and loads me", async () => {
     const { namespace, service } = await createTestAccountService({
       fetch: (async (url, init) => {
-        if (String(url).endsWith("/auth/desktop/exchange")) {
+        if (String(url).endsWith("/auth/desktop/token")) {
           expect(init?.method).toBe("POST")
+          expect(JSON.parse(String(init?.body))).toMatchObject({
+            code: "code-1",
+            state: expect.any(String),
+            codeVerifier: expect.any(String),
+          })
           return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
         }
         if (String(url).endsWith("/auth/me")) {
@@ -116,7 +132,7 @@ describe("AccountService", () => {
     const attempt = (await namespace.getSingleton())?.activeAttempt
     expect(attempt).toBeTruthy()
 
-    const state = await service.handleAuthCallback(`synapse://auth/callback?code=code-1&state=${attempt!.state}`)
+    const state = await service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
 
     if (state.status !== "authenticated") {
       throw new Error("expected authenticated account state")
@@ -131,7 +147,7 @@ describe("AccountService", () => {
     const { service } = await createTestAccountService({ fetch: fetch as typeof fetch })
     await service.startLogin()
 
-    const state = await service.handleAuthCallback("synapse://auth/callback?code=code-1&state=wrong")
+    const state = await service.handleAuthCallback("synapse://auth/desktop/callback?code=code-1&state=wrong")
 
     expect(state.status).toBe("authenticating")
     expect(fetch).not.toHaveBeenCalled()
@@ -145,7 +161,7 @@ describe("AccountService", () => {
     expect(attempt).toBeTruthy()
 
     const state = await service.handleAuthCallback(
-      `synapse://auth/callback?error=unsupported_account&state=${attempt!.state}`,
+      `synapse://auth/desktop/callback?error=unsupported_account&state=${attempt!.state}`,
     )
 
     expect(state).toMatchObject({
@@ -158,7 +174,7 @@ describe("AccountService", () => {
 
   it("preserves newer login attempts when an older callback arrives", async () => {
     const fetch = vi.fn(async (url, init) => {
-      if (String(url).endsWith("/auth/desktop/exchange")) {
+      if (String(url).endsWith("/auth/desktop/token")) {
         expect(init?.method).toBe("POST")
         return jsonResponse({ accessToken: "access-2", refreshToken: "refresh-2" })
       }
@@ -178,7 +194,7 @@ describe("AccountService", () => {
     expect(secondAttempt!.state).not.toBe(firstAttempt!.state)
 
     const firstState = await service.handleAuthCallback(
-      `synapse://auth/callback?code=code-1&state=${firstAttempt!.state}`,
+      `synapse://auth/desktop/callback?code=code-1&state=${firstAttempt!.state}`,
     )
 
     expect(firstState.status).toBe("authenticating")
@@ -186,7 +202,7 @@ describe("AccountService", () => {
     expect((await namespace.getSingleton())?.activeAttempt?.state).toBe(secondAttempt!.state)
 
     const secondState = await service.handleAuthCallback(
-      `synapse://auth/callback?code=code-2&state=${secondAttempt!.state}`,
+      `synapse://auth/desktop/callback?code=code-2&state=${secondAttempt!.state}`,
     )
 
     expect(secondState.status).toBe("authenticated")
@@ -238,7 +254,7 @@ describe("AccountService", () => {
     const { namespace, service } = await createTestAccountService({
       fetch: (async (url, init) => {
         calls.push(String(url))
-        if (String(url).endsWith("/auth/desktop/exchange")) {
+        if (String(url).endsWith("/auth/desktop/token")) {
           return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
         }
         if (String(url).endsWith("/auth/me") && calls.filter((item) => item.endsWith("/auth/me")).length === 1) {
@@ -260,11 +276,11 @@ describe("AccountService", () => {
     const attempt = (await namespace.getSingleton())?.activeAttempt
     expect(attempt).toBeTruthy()
 
-    const state = await service.handleAuthCallback(`synapse://auth/callback?code=code-1&state=${attempt!.state}`)
+    const state = await service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
 
     expect(state.status).toBe("authenticated")
     expect(calls).toEqual([
-      "http://localhost:3000/api/auth/desktop/exchange",
+      "http://localhost:3000/api/auth/desktop/token",
       "http://localhost:3000/api/auth/me",
       "http://localhost:3000/api/auth/refresh",
       "http://localhost:3000/api/auth/me",
@@ -362,6 +378,7 @@ describe("AccountService", () => {
     await namespace.setSingleton({
       activeAttempt: {
         state: "expired-state",
+        codeVerifier: "expired-code-verifier",
         apiBaseUrl: "http://localhost:3000/api",
         createdAt: "2026-05-28T00:00:00.000Z",
         expiresAt: "2026-05-28T00:00:01.000Z",
@@ -375,7 +392,7 @@ describe("AccountService", () => {
       return originalSetSingleton(value)
     })
 
-    const expiredCallback = service.handleAuthCallback("synapse://auth/callback?code=code-1&state=expired-state")
+    const expiredCallback = service.handleAuthCallback("synapse://auth/desktop/callback?code=code-1&state=expired-state")
     await clearStarted
     const started = service.startLogin()
     resolveClear?.()
@@ -464,7 +481,7 @@ describe("AccountService", () => {
       resolveExchange = resolve
     })
     const fetch = vi.fn(async (url) => {
-      if (String(url).endsWith("/auth/desktop/exchange")) return exchangeResponse
+      if (String(url).endsWith("/auth/desktop/token")) return exchangeResponse
       if (String(url).endsWith("/auth/me")) {
         return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
       }
@@ -475,9 +492,9 @@ describe("AccountService", () => {
     const attempt = (await namespace.getSingleton())?.activeAttempt
     expect(attempt).toBeTruthy()
 
-    const callback = service.handleAuthCallback(`synapse://auth/callback?code=code-1&state=${attempt!.state}`)
+    const callback = service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith(
-      "http://localhost:3000/api/auth/desktop/exchange",
+      "http://localhost:3000/api/auth/desktop/token",
       expect.any(Object),
     ))
     await service.logout()
@@ -491,7 +508,7 @@ describe("AccountService", () => {
 
   it("does not restore credentials when logout happens during the callback commit", async () => {
     const fetch = vi.fn(async (url) => {
-      if (String(url).endsWith("/auth/desktop/exchange")) {
+      if (String(url).endsWith("/auth/desktop/token")) {
         return jsonResponse({ accessToken: "access-new", refreshToken: "refresh-new" })
       }
       if (String(url).endsWith("/auth/logout")) return jsonResponse({})
@@ -521,7 +538,7 @@ describe("AccountService", () => {
     const attempt = (await namespace.getSingleton())?.activeAttempt
     expect(attempt).toBeTruthy()
 
-    const callback = service.handleAuthCallback(`synapse://auth/callback?code=code-1&state=${attempt!.state}`)
+    const callback = service.handleAuthCallback(`synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`)
     await commitStarted
     const logout = service.logout()
     resolveCommit?.()
@@ -545,6 +562,7 @@ describe("AccountService", () => {
               refreshToken: "refresh-old",
               activeAttempt: {
                 state: "newer-state",
+                codeVerifier: "newer-code-verifier",
                 apiBaseUrl: "http://localhost:3000/api",
                 createdAt: "2026-05-28T00:00:00.000Z",
                 expiresAt: "2026-05-28T00:10:00.000Z",
