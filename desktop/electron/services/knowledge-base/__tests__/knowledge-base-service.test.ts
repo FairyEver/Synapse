@@ -332,13 +332,25 @@ describe("KnowledgeBaseService", () => {
       .resolves.toBe("binary")
   })
 
-  it("renames and moves raw entries without changing manifest or wiki files", async () => {
+  it("renames and moves manifest-tracked raw entries without changing wiki files", async () => {
     const { projectId, projectPath, service } = await managedFixture()
     await mkdir(path.join(projectPath, ".raw", "client-a"), { recursive: true })
     await mkdir(path.join(projectPath, ".raw", "archive"), { recursive: true })
     await mkdir(path.join(projectPath, "wiki"), { recursive: true })
     await writeFile(path.join(projectPath, ".raw", "client-a", "brief.md"), "alpha\n")
-    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), "{\"version\":1,\"sources\":{\".raw/client-a/brief.md\":{}}}\n")
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), JSON.stringify({
+      version: 1,
+      sources: {
+        ".raw/client-a/brief.md": {
+          hash: "hash-brief",
+          ingested_at: "2026-05-24T00:00:00.000Z",
+          pages_created: ["wiki/brief.md"],
+        },
+      },
+      address_map: {
+        "wiki/brief.md": "c-000001",
+      },
+    }, null, 2) + "\n")
     await writeFile(path.join(projectPath, "wiki", "brief.md"), "# Brief\n")
 
     const renamed = await service.renameRawEntry({
@@ -362,8 +374,17 @@ describe("KnowledgeBaseService", () => {
     })])
     await expect(readFile(path.join(projectPath, ".raw", "archive", "brief-renamed.md"), "utf8"))
       .resolves.toBe("alpha\n")
-    await expect(readFile(path.join(projectPath, ".raw", ".manifest.json"), "utf8"))
-      .resolves.toBe("{\"version\":1,\"sources\":{\".raw/client-a/brief.md\":{}}}\n")
+    const manifest = JSON.parse(await readFile(path.join(projectPath, ".raw", ".manifest.json"), "utf8")) as {
+      sources: Record<string, unknown>
+      address_map: Record<string, string>
+    }
+    expect(manifest.sources).not.toHaveProperty(".raw/client-a/brief.md")
+    expect(manifest.sources).toHaveProperty(".raw/archive/brief-renamed.md", {
+      hash: "hash-brief",
+      ingested_at: "2026-05-24T00:00:00.000Z",
+      pages_created: ["wiki/brief.md"],
+    })
+    expect(manifest.address_map).toEqual({ "wiki/brief.md": "c-000001" })
     await expect(readFile(path.join(projectPath, "wiki", "brief.md"), "utf8"))
       .resolves.toBe("# Brief\n")
   })
@@ -375,6 +396,14 @@ describe("KnowledgeBaseService", () => {
     })
     await mkdir(path.join(projectPath, ".raw", "folder"), { recursive: true })
     await writeFile(path.join(projectPath, ".raw", "folder", "brief.md"), "alpha\n")
+    await writeFile(path.join(projectPath, ".raw", ".manifest.json"), JSON.stringify({
+      version: 1,
+      sources: {
+        ".raw/folder/brief.md": { hash: "hash-brief" },
+        ".raw/keep.md": { hash: "hash-keep" },
+      },
+      address_map: {},
+    }, null, 2) + "\n")
 
     const result = await service.trashRawEntries({
       projectId,
@@ -386,6 +415,12 @@ describe("KnowledgeBaseService", () => {
       kind: "file",
     })])
     expect(trashItem).toHaveBeenCalledWith(path.join(projectPath, ".raw", "folder", "brief.md"))
+    const manifest = JSON.parse(await readFile(path.join(projectPath, ".raw", ".manifest.json"), "utf8")) as {
+      sources: Record<string, unknown>
+    }
+    expect(manifest.sources).toEqual({
+      ".raw/keep.md": { hash: "hash-keep" },
+    })
   })
 
   it("logs raw mutation summaries without full external upload paths", async () => {

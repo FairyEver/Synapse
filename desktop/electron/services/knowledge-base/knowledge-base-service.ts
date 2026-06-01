@@ -37,6 +37,7 @@ import {
 } from "./managed-path"
 import { knowledgeBaseErrorMeta, knowledgeBaseLogger as logger } from "./logging"
 import { KnowledgeBaseRawFileManager } from "./raw-file-manager"
+import { readKnowledgeBaseManifest, writeKnowledgeBaseManifest, type KnowledgeBaseManifest } from "./manifest"
 
 export const KNOWLEDGE_BASE_TEMPLATE_VERSION = "2026-05-21"
 
@@ -230,6 +231,11 @@ export class KnowledgeBaseService {
     const rawRoot = await this.ensureRawRoot(projectPath)
     const entry = await this.rawFileManager.renameEntry(rawRoot, payload.relativePath, payload.newName)
     const result = { entries: [entry], skipped: [] }
+    await this.syncManifestAfterRawMutation(projectPath, payload.projectId, "renameRawEntry", [{
+      from: payload.relativePath,
+      to: entry.relativePath,
+      kind: entry.kind,
+    }])
     this.recordRawMutation("renameRawEntry", payload.projectId, result)
     return { projectId: payload.projectId, ...result }
   }
@@ -238,6 +244,13 @@ export class KnowledgeBaseService {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
     const result = await this.rawFileManager.moveEntries(rawRoot, payload.relativePaths, payload.targetDirectoryPath)
+    const movedEntriesByPath = new Map(result.entries.map((entry) => [entry.relativePath, entry]))
+    const changes = payload.relativePaths.flatMap((relativePath) => {
+      const targetRelativePath = joinRawPath(payload.targetDirectoryPath, path.posix.basename(normalizeRawRelativePath(relativePath)))
+      const entry = movedEntriesByPath.get(targetRelativePath)
+      return entry ? [{ from: relativePath, to: entry.relativePath, kind: entry.kind }] : []
+    })
+    await this.syncManifestAfterRawMutation(projectPath, payload.projectId, "moveRawEntries", changes)
     this.recordRawMutation("moveRawEntries", payload.projectId, result)
     return { projectId: payload.projectId, ...result }
   }
@@ -246,6 +259,10 @@ export class KnowledgeBaseService {
     const projectPath = await this.resolveProjectPath(payload.projectId)
     const rawRoot = await this.ensureRawRoot(projectPath)
     const result = await this.rawFileManager.trashEntries(rawRoot, payload.relativePaths)
+    await this.syncManifestAfterRawMutation(projectPath, payload.projectId, "trashRawEntries", result.entries.map((entry) => ({
+      from: entry.relativePath,
+      kind: entry.kind,
+    })))
     this.recordRawMutation("trashRawEntries", payload.projectId, result)
     return { projectId: payload.projectId, ...result }
   }
@@ -261,6 +278,34 @@ export class KnowledgeBaseService {
       projectId,
       skippedCount: result.skipped.length,
       skippedReasons: skippedReasonCounts(result.skipped),
+    })
+  }
+
+  private async syncManifestAfterRawMutation(
+    projectPath: string,
+    projectId: string,
+    operation: string,
+    changes: readonly RawManifestChange[],
+  ): Promise<void> {
+    if (changes.length === 0) return
+    const manifestResult = await readKnowledgeBaseManifest(projectPath)
+    if (manifestResult.status === "missing") return
+    if (manifestResult.status === "invalid") {
+      logger.warn("Knowledge Base raw mutation skipped manifest sync because manifest is invalid.", {
+        operation,
+        projectId,
+        ...knowledgeBaseErrorMeta(manifestResult.error),
+      })
+      return
+    }
+
+    const updated = applyRawManifestChanges(manifestResult.manifest, changes)
+    if (!updated.changed) return
+    await writeKnowledgeBaseManifest(projectPath, updated.manifest)
+    logger.info("Knowledge Base raw mutation synced manifest sources.", {
+      changedSourceCount: updated.changedSourceCount,
+      operation,
+      projectId,
     })
   }
 
@@ -382,6 +427,64 @@ function skippedReasonCounts(
     counts[item.reason] = (counts[item.reason] ?? 0) + 1
     return counts
   }, {})
+}
+
+type RawManifestChange = {
+  readonly from: string
+  readonly to?: string
+  readonly kind: "file" | "directory"
+}
+
+function applyRawManifestChanges(
+  manifest: KnowledgeBaseManifest,
+  changes: readonly RawManifestChange[],
+): { readonly changed: boolean; readonly changedSourceCount: number; readonly manifest: KnowledgeBaseManifest } {
+  const sources = { ...manifest.sources }
+  let changedSourceCount = 0
+
+  for (const change of changes) {
+    const fromKey = rawManifestKey(change.from)
+    const toKey = change.to ? rawManifestKey(change.to) : undefined
+    const affectedEntries = Object.entries(sources).filter(([sourcePath]) => {
+      if (sourcePath === fromKey) return true
+      return change.kind === "directory" && sourcePath.startsWith(`${fromKey}/`)
+    })
+
+    for (const [sourcePath, entry] of affectedEntries) {
+      delete sources[sourcePath]
+      if (toKey) {
+        const suffix = sourcePath === fromKey ? "" : sourcePath.slice(fromKey.length)
+        sources[`${toKey}${suffix}`] = entry
+      }
+      changedSourceCount += 1
+    }
+  }
+
+  if (changedSourceCount === 0) {
+    return { changed: false, changedSourceCount: 0, manifest }
+  }
+  return {
+    changed: true,
+    changedSourceCount,
+    manifest: {
+      ...manifest,
+      sources,
+    },
+  }
+}
+
+function rawManifestKey(rawRelativePath: string): string {
+  const normalized = normalizeRawRelativePath(rawRelativePath)
+  return normalized ? `.raw/${normalized}` : ".raw"
+}
+
+function normalizeRawRelativePath(value: string): string {
+  return value.split("\\").join("/").replace(/^\/+/, "").replace(/\/+$/g, "")
+}
+
+function joinRawPath(parent: string, name: string): string {
+  const normalizedParent = normalizeRawRelativePath(parent)
+  return normalizedParent && normalizedParent !== "." ? `${normalizedParent}/${name}` : name
 }
 
 function resolveManagedTemplateRoot(): string {
