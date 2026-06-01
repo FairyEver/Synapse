@@ -39,7 +39,8 @@ An open issue with `bug` and no `状态:*` label is unclaimed.
 ### 1. Prepare
 
 - Work from the local Synapse repository.
-- Check `git status` first. Do not overwrite, revert, stage, or commit user changes. If the tree is dirty with changes not made by this run, stop or ask the user before modifying code unless the user explicitly allowed working in the dirty tree.
+- Check `git status` first. Do not overwrite, revert, stage, or commit user changes.
+- If the tree is dirty with changes outside the target issue scope, continue without asking when the unrelated files can be avoided. Treat those files as user-owned, do not edit them, and stage/commit only files changed for the current issue. Stop and ask only when the existing dirty files overlap the files that must be changed for the issue or make safe validation impossible.
 - Pull the latest code only when it is safe for the current worktree. Do not force-reset or discard local changes.
 - Confirm the GitHub status labels exist: `状态:处理中`, `状态:误判`, `状态:需要决策`. Create missing labels before processing issues.
 - Parse the supplied GitHub issues search URL and preserve its filters, including labels, search text, assignee, milestone, and priority filters.
@@ -172,6 +173,7 @@ End with a concise Chinese summary:
 ## Safety Rules
 
 - Never run destructive git commands such as `git reset --hard`, forced checkout, or force-push unless the user explicitly requests them.
+- A dirty worktree is not by itself a blocker. When unrelated user changes exist, keep a clear boundary, avoid those files, and stage/commit only this run's issue fix files.
 - Never close an issue unless its fix has been committed or it was explicitly handled according to the close requirements above.
 - Never close `状态:误判` or `状态:需要决策` issues.
 - Never modify classification labels.
