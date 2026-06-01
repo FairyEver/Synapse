@@ -4,7 +4,7 @@
   "concurrency": 6,
   "timeoutMinutes": 60,
   "maxLogs": 200,
-  "provider": "claude-code",
+  "provider": "codex",
   "codex": {
     "command": "codex",
     "model": "gpt-5.5",
