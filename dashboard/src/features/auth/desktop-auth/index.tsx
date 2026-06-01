@@ -33,6 +33,7 @@ type DesktopAuthProps = {
 type AuthorizeState =
   | { status: 'idle' }
   | { status: 'opening'; deepLinkUrl?: string }
+  | { status: 'opened'; deepLinkUrl: string }
   | { status: 'error'; message: string; deepLinkUrl?: string }
 
 function buildDesktopAuthErrorCallbackUrl(state: string, error: string) {
@@ -84,7 +85,9 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
   const input = useMemo(() => validateDesktopAuthSearch(search), [search])
   const redirect = useMemo(() => buildDesktopAuthRedirect(search), [search])
   const deepLinkUrl =
-    authorizeState.status === 'opening' || authorizeState.status === 'error'
+    authorizeState.status === 'opening' ||
+    authorizeState.status === 'opened' ||
+    authorizeState.status === 'error'
       ? authorizeState.deepLinkUrl
       : undefined
 
@@ -102,8 +105,8 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
       .authorizeDesktopLogin(input)
       .then((result) => {
         if (cancelled) return
-        setAuthorizeState({ status: 'opening', deepLinkUrl: result.deepLinkUrl })
         window.location.href = result.deepLinkUrl
+        setAuthorizeState({ status: 'opened', deepLinkUrl: result.deepLinkUrl })
       })
       .catch((error: unknown) => {
         if (cancelled) return
@@ -179,11 +182,7 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
     <AuthLayout>
       <DesktopAuthCard title='打开 Synapse'>
         <div className='flex flex-col gap-4'>
-          {authorizeState.status === 'error' ? (
-            <p className='text-sm text-destructive'>{authorizeState.message}</p>
-          ) : (
-            <p className='text-sm text-muted-foreground'>正在打开客户端。</p>
-          )}
+          <DesktopAuthStatus state={authorizeState} />
           <Button
             disabled={authorizeState.status === 'opening' && !deepLinkUrl}
             onClick={() => {
@@ -199,11 +198,27 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
             {authorizeState.status === 'opening' ? (
               <Loader2 className='animate-spin' />
             ) : null}
-            {authorizeState.status === 'error' ? '重试' : '打开'}
+            {authorizeState.status === 'error'
+              ? '重试'
+              : authorizeState.status === 'opened'
+                ? '再次打开'
+                : '打开'}
           </Button>
         </div>
       </DesktopAuthCard>
     </AuthLayout>
+  )
+}
+
+function DesktopAuthStatus({ state }: { state: AuthorizeState }) {
+  if (state.status === 'error') {
+    return <p className='text-sm text-destructive'>{state.message}</p>
+  }
+
+  return (
+    <p className='text-sm text-muted-foreground'>
+      {state.status === 'opened' ? '已发送到 Synapse。' : '正在打开 Synapse。'}
+    </p>
   )
 }
 
