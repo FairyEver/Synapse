@@ -49,6 +49,7 @@ model DashboardRevokedToken {
 model User {
   id                  String                 @id @default(cuid())
   email               String                 @unique
+  displayName         String?                @db.VarChar(40)
   passwordHash        String
   passwordChangedAt   DateTime?
   status              UserStatus             @default(active)

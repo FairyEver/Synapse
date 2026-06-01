@@ -29,7 +29,7 @@ export interface UserMeTeam {
 }
 
 export interface UserMeResponse {
-  readonly user: Pick<User, "id" | "email" | "status">
+  readonly user: Pick<User, "id" | "email" | "status" | "displayName">
   readonly teams: readonly UserMeTeam[]
 }
 
@@ -83,6 +83,42 @@ function tokenIssuedBeforePasswordChange(payload: { readonly iat?: number }, pas
   if (!passwordChangedAt) return false
   if (!payload.iat) return true
   return payload.iat < Math.floor(passwordChangedAt.getTime() / 1000)
+}
+
+function normalizeDisplayName(value: string): string {
+  const displayName = value.trim()
+  if (!displayName) throw new BadRequestException("displayName is required.")
+  if (displayName.length > 40) {
+    throw new BadRequestException("displayName must be at most 40 characters.")
+  }
+  return displayName
+}
+
+function toUserMeResponse(user: {
+  readonly id: string
+  readonly email: string
+  readonly status: User["status"]
+  readonly displayName: string | null
+  readonly memberships: ReadonlyArray<{
+    readonly id: string
+    readonly role: TeamRole
+    readonly team: { readonly id: string; readonly name: string }
+  }>
+}): UserMeResponse {
+  return {
+    user: {
+      id: user.id,
+      email: user.email,
+      status: user.status,
+      displayName: user.displayName,
+    },
+    teams: user.memberships.map((membership) => ({
+      id: membership.team.id,
+      name: membership.team.name,
+      membershipId: membership.id,
+      membershipRole: membership.role,
+    })),
+  }
 }
 
 @Injectable()
@@ -539,6 +575,7 @@ export class UserAuthService {
         id: true,
         email: true,
         status: true,
+        displayName: true,
         memberships: {
           select: {
             id: true,
@@ -550,17 +587,44 @@ export class UserAuthService {
       },
     })
 
-    const teams = user.memberships.map((membership) => ({
-      id: membership.team.id,
-      name: membership.team.name,
-      membershipId: membership.id,
-      membershipRole: membership.role,
-    }))
+    return toUserMeResponse(user)
+  }
 
-    return {
-      user: { id: user.id, email: user.email, status: user.status },
-      teams,
-    }
+  async updateMyProfile(
+    userId: string,
+    input: { readonly displayName: string },
+    ipAddress = "system",
+  ): Promise<UserMeResponse> {
+    const displayName = normalizeDisplayName(input.displayName)
+    const user = await this.prisma.user.update({
+      where: { id: userId },
+      data: { displayName },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        displayName: true,
+        memberships: {
+          select: {
+            id: true,
+            role: true,
+            team: { select: { id: true, name: true } },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    })
+
+    await this.auditLog?.record({
+      adminEmail: user.email,
+      action: "user.profile.update",
+      targetType: "user",
+      targetId: user.id,
+      detail: { fields: ["displayName"] },
+      ipAddress,
+    })
+
+    return toUserMeResponse(user)
   }
 
   async verifyAccessToken(token: string): Promise<{ userId: string }> {

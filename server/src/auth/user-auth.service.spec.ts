@@ -37,6 +37,7 @@ function createPrismaMock() {
     user: {
       findUnique: vi.fn(),
       findUniqueOrThrow: vi.fn(),
+      update: vi.fn(),
     },
     userSession: {
       create: vi.fn().mockResolvedValue({ id: "session-1" }),
@@ -775,6 +776,7 @@ describe("UserAuthService", () => {
       id: "user-1",
       email: "u@example.com",
       status: "active",
+      displayName: "Ada",
       memberships: [
         {
           id: "membership-1",
@@ -791,7 +793,7 @@ describe("UserAuthService", () => {
     const service = createService(prisma)
 
     const expected: UserMeResponse = {
-      user: { id: "user-1", email: "u@example.com", status: "active" },
+      user: { id: "user-1", email: "u@example.com", status: "active", displayName: "Ada" },
       teams: [
         {
           id: "team-1",
@@ -816,6 +818,7 @@ describe("UserAuthService", () => {
         id: true,
         email: true,
         status: true,
+        displayName: true,
         memberships: {
           select: {
             id: true,
@@ -826,6 +829,80 @@ describe("UserAuthService", () => {
         },
       },
     })
+  })
+
+  it("updates the current user display name", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.update.mockResolvedValue({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      displayName: "Grace Hopper",
+      memberships: [],
+    })
+    const auditLog = { record: vi.fn() }
+    const service = createService(prisma, auditLog)
+
+    await expect(service.updateMyProfile("user-1", {
+      displayName: "  Grace Hopper  ",
+    }, "203.0.113.80")).resolves.toEqual({
+      user: {
+        id: "user-1",
+        email: "u@example.com",
+        status: "active",
+        displayName: "Grace Hopper",
+      },
+      teams: [],
+    })
+
+    expect(prisma.user.update).toHaveBeenCalledWith({
+      where: { id: "user-1" },
+      data: { displayName: "Grace Hopper" },
+      select: {
+        id: true,
+        email: true,
+        status: true,
+        displayName: true,
+        memberships: {
+          select: {
+            id: true,
+            role: true,
+            team: { select: { id: true, name: true } },
+          },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "u@example.com",
+      action: "user.profile.update",
+      targetType: "user",
+      targetId: "user-1",
+      detail: { fields: ["displayName"] },
+      ipAddress: "203.0.113.80",
+    })
+  })
+
+  it("rejects empty current user display names", async () => {
+    const prisma = createPrismaMock()
+    const service = createService(prisma)
+
+    await expect(service.updateMyProfile("user-1", {
+      displayName: "   ",
+    })).rejects.toThrow("displayName is required.")
+
+    expect(prisma.user.update).not.toHaveBeenCalled()
+  })
+
+  it("rejects over length current user display names", async () => {
+    const prisma = createPrismaMock()
+    const service = createService(prisma)
+
+    await expect(service.updateMyProfile("user-1", {
+      displayName: "a".repeat(41),
+    })).rejects.toThrow("displayName must be at most 40 characters.")
+
+    expect(prisma.user.update).not.toHaveBeenCalled()
   })
 
   it("rejects access tokens issued before a password change", async () => {
@@ -841,7 +918,7 @@ describe("UserAuthService", () => {
         id: "user-1",
         email: "u@example.com",
         status: "active",
-        passwordChangedAt: new Date(Date.now() + 1000),
+        passwordChangedAt: new Date(Date.now() + 2000),
       })
     const service = createService(prisma)
 
