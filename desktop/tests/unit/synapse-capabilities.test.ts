@@ -292,17 +292,27 @@ describe("Content capability domain", () => {
     }
   })
 
-  it("allows Skill create and update schemas to use sourceDirectoryPath instead of inline fields", () => {
+  it("keeps Skill create and update schemas compatible with strict MCP clients", () => {
     const tools = buildContentTools()
     const create = tools.find((tool) => tool.name === "content_skill_create")
     const update = tools.find((tool) => tool.name === "content_skill_update")
 
     expect(create?.inputSchema.required).toBeUndefined()
-    expect(create?.inputSchema.anyOf).toEqual([
-      { required: ["name", "title", "description", "category", "content"] },
-      { required: ["sourceDirectoryPath"] },
-    ])
+    expect(create?.inputSchema).not.toHaveProperty("anyOf")
+    expect(create?.inputSchema).not.toHaveProperty("oneOf")
+    expect(create?.inputSchema).not.toHaveProperty("allOf")
+    expect(create?.description).toContain("inline")
+    expect(create?.description).toContain("name/title/description/category/content")
+    expect(create?.description).toContain("sourceDirectoryPath")
+    expect(create?.description).toContain("files and sourceDirectoryPath are mutually exclusive")
     expect(update?.inputSchema.required).toEqual(["id", "baseHistoryDirname"])
-    expect(update?.inputSchema.anyOf).toEqual(create?.inputSchema.anyOf)
+    expect(update?.inputSchema).not.toHaveProperty("anyOf")
+    expect(update?.inputSchema).not.toHaveProperty("oneOf")
+    expect(update?.inputSchema).not.toHaveProperty("allOf")
+    expect(update?.description).toContain("content_skill_get")
+    expect(update?.description).toContain("complete payload")
+    expect(update?.description).toContain("name/title/description/category/content")
+    expect(update?.description).toContain("sourceDirectoryPath")
+    expect(update?.description).toContain("files and sourceDirectoryPath are mutually exclusive")
   })
 })

@@ -180,6 +180,41 @@ describe("content capability validator", () => {
     })).toThrow(ContentCapabilityError)
   })
 
+  it("keeps sourceDirectoryPath skill creates valid after inline fields are merged", () => {
+    const payload = normalizeCreateContentParams("skill", {
+      name: "test-skill",
+      title: "Test Skill",
+      description: "Skill description.",
+      category: "development",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+      content: "# Skill",
+      sourceDirectoryPath: "/tmp/skill",
+    })
+
+    expect(payload.name).toBe("test-skill")
+    expect(payload.files).toEqual([])
+  })
+
+  it("explains Skill create alternatives when inline fields and sourceDirectoryPath are missing", () => {
+    expect(() => normalizeCreateContentParams("skill", {
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+    })).toThrowError("创建 Skill 请提供完整字段 name/title/description/category/content，或提供 sourceDirectoryPath。")
+  })
+
+  it("explains Skill update alternatives when inline fields and sourceDirectoryPath are missing", () => {
+    expect(() => normalizeUpdateContentParams("skill", {
+      id: "skill-1",
+      baseHistoryDirname: "20260521000000Z__user__abc123",
+      iconType: "icon",
+      icon: "wrench",
+      iconBg: "graphite",
+    })).toThrowError("更新 Skill 请提供完整字段 name/title/description/category/content，或提供 sourceDirectoryPath。")
+  })
+
   it("normalizes update and delete version tokens", () => {
     const updatePayload = normalizeUpdateContentParams("rule", {
       ...validRuleParams,

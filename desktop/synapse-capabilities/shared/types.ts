@@ -20,9 +20,6 @@ export type McpToolDefinition = {
     readonly type: "object"
     readonly properties: Record<string, unknown>
     readonly required?: readonly string[]
-    readonly anyOf?: readonly {
-      readonly required: readonly string[]
-    }[]
   }
 }
 

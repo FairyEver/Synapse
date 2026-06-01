@@ -8,4 +8,6 @@
 
 ## 问题修复
 
+- 修复 Codex 加载 Synapse MCP 工具时，Skill 创建/更新工具 schema 不兼容导致初始化报错的问题。
+
 ## 技术调整

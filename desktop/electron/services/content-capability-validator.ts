@@ -63,6 +63,8 @@ type NormalizedDeleteContentParams = {
 const CONTENT_ICON_IMAGE_MAX_BYTES = 5 * 1024 * 1024
 const VALID_ICON_TYPES = new Set<SynapseContentIconType>(["icon", "image"])
 const VALID_CONTENT_TYPES = new Set<SynapseContentType>(getAllContentTypeIds())
+const SKILL_INLINE_REQUIRED_FIELDS = ["name", "title", "description", "category", "content"] as const
+const SKILL_INLINE_FIELDS_TEXT = SKILL_INLINE_REQUIRED_FIELDS.join("/")
 
 function describeContentTypes(contentType?: unknown): ContentTypeDescription {
   const selectedTypes = isNonEmptyString(contentType)
@@ -134,12 +136,33 @@ function assertNoForce(params: ContentToolParams): void {
   }
 }
 
+function assertSkillInlineFieldsOrSource(
+  contentType: SynapseContentType,
+  params: ContentToolParams,
+  isUpdate: boolean,
+): void {
+  if (contentType !== "skill" || optionalTrimmedString(params.sourceDirectoryPath)) {
+    return
+  }
+
+  const missingFields = SKILL_INLINE_REQUIRED_FIELDS.filter((field) => !optionalTrimmedString(params[field]))
+  if (missingFields.length === 0) {
+    return
+  }
+
+  const message = `${isUpdate ? "更新" : "创建"} Skill 请提供完整字段 ${SKILL_INLINE_FIELDS_TEXT}，或提供 sourceDirectoryPath。`
+  throw new ContentCapabilityError("CONTENT_INVALID_INPUT", message, {
+    fields: Object.fromEntries(missingFields.map((field) => [field, message])),
+  })
+}
+
 function normalizeContentPayload(
   contentType: SynapseContentType,
   params: ContentToolParams,
   isUpdate: boolean,
 ): SynapseCreateContentPayload | SynapseUpdateContentPayload {
   assertContentType(contentType)
+  assertSkillInlineFieldsOrSource(contentType, params, isUpdate)
 
   const basePayload = {
     ...(isUpdate ? {

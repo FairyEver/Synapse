@@ -69,6 +69,8 @@ const skillFileSchema = {
   required: ["path"],
 }
 
+const skillInlineFields = "name/title/description/category/content"
+
 function listTool(type: ContentResourceType): McpToolDefinition {
   return {
     name: `content_${type}_list`,
@@ -119,13 +121,14 @@ function createTool(type: ContentResourceType): McpToolDefinition {
 
   return {
     name: `content_${type}_create`,
-    description: `Create a Synapse ${type}. Call content_type_describe first for categories, icons, backgrounds, and constraints.`,
+    description:
+      type === "skill"
+        ? `Create a Synapse skill. Call content_type_describe first for categories, icons, backgrounds, and constraints. Use one of two modes: inline with ${skillInlineFields}, or sourceDirectoryPath to import a local Skill directory. files and sourceDirectoryPath are mutually exclusive.`
+        : `Create a Synapse ${type}. Call content_type_describe first for categories, icons, backgrounds, and constraints.`,
     inputSchema: {
       type: "object",
       properties,
-      ...(type === "skill"
-        ? { anyOf: [{ required }, { required: ["sourceDirectoryPath"] }] }
-        : { required }),
+      ...(type === "skill" ? {} : { required }),
     },
   }
 }
@@ -135,7 +138,10 @@ function updateTool(type: ContentResourceType): McpToolDefinition {
 
   return {
     name: `content_${type}_update`,
-    description: `Update a Synapse ${type} created by the current repo profile. First call content_${type}_get and pass latestHistoryDirname as baseHistoryDirname. Force update is not supported.`,
+    description:
+      type === "skill"
+        ? `Update a Synapse skill created by the current repo profile. First call content_skill_get, pass latestHistoryDirname as baseHistoryDirname, and use the current detail to submit a complete payload. Use one of two modes: inline with ${skillInlineFields}, or sourceDirectoryPath to import a local Skill directory. files and sourceDirectoryPath are mutually exclusive. Force update is not supported.`
+        : `Update a Synapse ${type} created by the current repo profile. First call content_${type}_get and pass latestHistoryDirname as baseHistoryDirname. Force update is not supported.`,
     inputSchema: {
       type: "object",
       properties: {
@@ -146,9 +152,6 @@ function updateTool(type: ContentResourceType): McpToolDefinition {
       required: type === "skill"
         ? ["id", "baseHistoryDirname"]
         : ["id", "baseHistoryDirname", ...(create.inputSchema.required ?? [])],
-      ...(type === "skill" && create.inputSchema.anyOf
-        ? { anyOf: create.inputSchema.anyOf }
-        : {}),
     },
   }
 }
