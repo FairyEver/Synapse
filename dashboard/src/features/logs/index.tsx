@@ -5,6 +5,11 @@ import { toast } from 'sonner'
 import { adminApi } from '@/lib/api'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -16,6 +21,7 @@ import {
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
 import { getCleanupBeforeDate } from './cleanup-date'
+import { getLogsQueryErrorMessage } from './logs-error'
 
 const allLogLevelsValue = 'all'
 
@@ -23,7 +29,7 @@ export default function LogsPage() {
   const [level, setLevel] = useState(allLogLevelsValue)
   const [limit, setLimit] = useState(100)
 
-  const { data, isLoading } = useQuery({
+  const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['admin-logs-recent', level, limit],
     queryFn: () =>
       adminApi.fetchRecentLogs({
@@ -96,6 +102,21 @@ export default function LogsPage() {
         </div>
         {isLoading ? (
           <div className='text-muted-foreground'>加载中...</div>
+        ) : isError ? (
+          <Alert variant='destructive'>
+            <AlertTitle>加载失败</AlertTitle>
+            <AlertDescription>
+              <p>{getLogsQueryErrorMessage(error)}</p>
+              <Button
+                type='button'
+                variant='outline'
+                size='sm'
+                onClick={() => void refetch()}
+              >
+                重试
+              </Button>
+            </AlertDescription>
+          </Alert>
         ) : (
           <div className='space-y-1 rounded-md border p-3 font-mono text-xs'>
             {data?.map((entry, i) => (
