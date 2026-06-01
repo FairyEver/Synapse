@@ -99,6 +99,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
     ],
     latestEntryId: latestEntry?.id,
   })
+  const showJumpToBottom = !stick.isPinned && stick.hasUnread
+  const showIdleJumpToBottom = !stick.isPinned && !stick.hasUnread && !chat.sending
 
   const projectOptions: ProjectOption[] = useMemo(() =>
     config.global.projects.map((project) => ({
@@ -626,7 +628,8 @@ function AgentModule({ pendingAgentSession, onPendingAgentSessionConsumed }: Age
               onSubmit={handleSubmit}
               onCancelTurn={() => void chat.cancelTurn()}
               onForceKillTurn={() => void chat.forceKillTurn()}
-              showJumpToBottom={!stick.isPinned && stick.hasUnread}
+              showJumpToBottom={showJumpToBottom}
+              showIdleJumpToBottom={showIdleJumpToBottom}
               onJumpToBottom={() => stick.scrollToBottom({ behavior: "smooth" })}
               pendingMessages={selectedPendingMessages}
               onRemovePendingMessage={handleRemovePendingMessage}
