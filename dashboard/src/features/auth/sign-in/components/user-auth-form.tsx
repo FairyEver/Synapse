@@ -6,6 +6,7 @@ import { toast } from 'sonner'
 import { z } from 'zod'
 import { useAuthStore } from '@/stores/auth-store'
 import { dashboardApi } from '@/lib/api'
+import { resolveDashboardRedirectForRole } from '@/lib/dashboard-role'
 import { cn } from '@/lib/utils'
 import { PasswordInput } from '@/components/password-input'
 import { Button } from '@/components/ui/button'
@@ -49,7 +50,10 @@ export function UserAuthForm({
       const session = await dashboardApi.login(data)
       auth.setUser(session)
       toast.success(`欢迎回来，${session.email}`)
-      await navigate({ to: redirectTo || '/', replace: true })
+      await navigate({
+        to: resolveDashboardRedirectForRole(session.role, redirectTo),
+        replace: true,
+      })
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : '登录失败'
       toast.error(message)

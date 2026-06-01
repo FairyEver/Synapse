@@ -10,76 +10,84 @@ import {
   Settings,
   Command,
 } from 'lucide-react'
+import type { AuthUser } from '@/stores/auth-store'
 import { type SidebarData } from '../types'
 
-export const sidebarData: SidebarData = {
-  user: {
-    name: 'Admin',
-    email: 'admin@synapse.dev',
-    avatar: '',
-  },
-  teams: [
+const adminNavGroup = {
+  title: '管理',
+  items: [
     {
-      name: 'Synapse Admin',
-      logo: Command,
-      plan: '管理后台',
+      title: '系统概览',
+      url: '/system',
+      icon: LayoutDashboard,
+    },
+    {
+      title: '用户管理',
+      url: '/users',
+      icon: Users,
+    },
+    {
+      title: '团队管理',
+      url: '/teams',
+      icon: Shield,
+    },
+    {
+      title: '邀请管理',
+      url: '/invitations',
+      icon: Mail,
+    },
+    {
+      title: '审计日志',
+      url: '/audit-logs',
+      icon: FileText,
+    },
+    {
+      title: '备份',
+      url: '/backup',
+      icon: HardDrive,
+    },
+    {
+      title: '系统日志',
+      url: '/logs',
+      icon: ScrollText,
     },
   ],
-  navGroups: [
+} satisfies SidebarData['navGroups'][number]
+
+const accountNavGroup = {
+  title: '账户',
+  items: [
     {
-      title: '管理',
-      items: [
-        {
-          title: '系统概览',
-          url: '/system',
-          icon: LayoutDashboard,
-        },
-        {
-          title: '用户管理',
-          url: '/users',
-          icon: Users,
-        },
-        {
-          title: '团队管理',
-          url: '/teams',
-          icon: Shield,
-        },
-        {
-          title: '邀请管理',
-          url: '/invitations',
-          icon: Mail,
-        },
-        {
-          title: '审计日志',
-          url: '/audit-logs',
-          icon: FileText,
-        },
-        {
-          title: '备份',
-          url: '/backup',
-          icon: HardDrive,
-        },
-        {
-          title: '系统日志',
-          url: '/logs',
-          icon: ScrollText,
-        },
-      ],
+      title: '个人中心',
+      url: '/me',
+      icon: UserCircle,
     },
     {
-      title: '账户',
-      items: [
-        {
-          title: '个人中心',
-          url: '/me',
-          icon: UserCircle,
-        },
-        {
-          title: '设置',
-          url: '/settings',
-          icon: Settings,
-        },
-      ],
+      title: '设置',
+      url: '/settings',
+      icon: Settings,
     },
   ],
+} satisfies SidebarData['navGroups'][number]
+
+export function getSidebarData(user: Pick<AuthUser, 'email' | 'role'> | null): SidebarData {
+  const isAdmin = user?.role !== 'user'
+
+  return {
+    user: {
+      name: isAdmin ? 'Admin' : 'User',
+      email: user?.email ?? '',
+      avatar: '',
+    },
+    teams: [
+      {
+        name: isAdmin ? 'Synapse Admin' : 'Synapse',
+        logo: Command,
+        plan: isAdmin ? '管理后台' : '个人中心',
+      },
+    ],
+    navGroups: isAdmin ? [adminNavGroup, accountNavGroup] : [accountNavGroup],
+  }
 }
+
+export const sidebarData: SidebarData = getSidebarData(null)
