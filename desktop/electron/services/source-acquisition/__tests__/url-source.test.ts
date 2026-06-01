@@ -58,6 +58,23 @@ describe("acquireUrlSource", () => {
     expect(result.source.markdown).toContain('source_final_url: "https://www.example.com/b"')
   })
 
+  it("redacts sensitive URL query values in source metadata and markdown", async () => {
+    const result = await acquireUrlSource({
+      url: "https://example.com/a?token=secret-token&title=kept",
+      fetchUrl: async () => response({ url: "https://www.example.com/b?signature=secret-signature&page=1" }),
+      now: () => new Date("2026-05-24T00:00:00.000Z"),
+    })
+
+    expect(result).toMatchObject({ ok: true })
+    if (!result.ok) throw new Error(result.message)
+    expect(result.source.originalUrl).toBe("https://example.com/a?token=%5Bredacted%5D&title=kept")
+    expect(result.source.finalUrl).toBe("https://www.example.com/b?signature=%5Bredacted%5D&page=1")
+    expect(result.source.markdown).toContain('source_url: "https://example.com/a?token=%5Bredacted%5D&title=kept"')
+    expect(result.source.markdown).toContain('source_final_url: "https://www.example.com/b?signature=%5Bredacted%5D&page=1"')
+    expect(result.source.markdown).not.toContain("secret-token")
+    expect(result.source.markdown).not.toContain("secret-signature")
+  })
+
   it("rejects unsupported protocols before fetching", async () => {
     const fetchUrl = vi.fn<FetchUrl>()
 
@@ -198,8 +215,22 @@ describe("acquireUrlSource", () => {
       contentType: 'text/html"; charset="utf-8',
     })
 
-    expect(frontmatter).toContain('source_url: "https://example.com/a?title=\\"quoted\\""')
+    expect(frontmatter).toContain('source_url: "https://example.com/a?title=%22quoted%22"')
     expect(frontmatter).toContain('content_type: "text/html\\"; charset=\\"utf-8"')
+  })
+
+  it("redacts sensitive URL query values when serializing frontmatter directly", async () => {
+    const frontmatter = sourceUrlFrontmatter({
+      sourceUrl: "https://example.com/a?code=secret-code&title=kept",
+      sourceFinalUrl: "https://example.com/a?signature=secret-signature",
+      fetchedAt: "2026-05-24T00:00:00.000Z",
+      contentType: "text/html",
+    })
+
+    expect(frontmatter).toContain('source_url: "https://example.com/a?code=%5Bredacted%5D&title=kept"')
+    expect(frontmatter).toContain('source_final_url: "https://example.com/a?signature=%5Bredacted%5D"')
+    expect(frontmatter).not.toContain("secret-code")
+    expect(frontmatter).not.toContain("secret-signature")
   })
 
   it("returns a structured error on network failure", async () => {

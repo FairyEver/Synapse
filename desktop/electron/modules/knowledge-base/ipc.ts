@@ -4,6 +4,7 @@ import type { IpcHandlerContext, IpcModule } from "../../runtime/ipc/types"
 import type { AuditSink, PermissionAction, PermissionGuard } from "../../runtime/security"
 import type { KnowledgeBaseService } from "../../services/knowledge-base"
 import { knowledgeBaseSourceManagerWindowService } from "../../services/knowledge-base/source-manager-window-service"
+import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 
 const createManagedPayloadSchema = z.object({
   projectId: z.string().min(1),
@@ -366,7 +367,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       handler: (ctx, request: { projectId: string; url: string }) => runGuardedKnowledgeBaseOperation({
         ctx,
         action: "network.connect",
-        resource: request.url,
+        resource: sanitizeUrl(request.url),
         source: "knowledgeBase.addUrlSource.fetch",
         run: () => runGuardedKnowledgeBaseOperation({
           ctx,

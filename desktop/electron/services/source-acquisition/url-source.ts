@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto"
 import { isIP } from "node:net"
 
+import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import { htmlToSourceMarkdown, sourceUrlFrontmatter } from "./html-to-source-markdown"
 
 /**
@@ -120,11 +121,15 @@ export async function acquireUrlSource(input: AcquireUrlSourceInput): Promise<Ac
     }
   }
 
+  const originalUrlString = originalUrl.url.toString()
+  const finalUrlString = finalUrl.url.toString()
+  const safeOriginalUrl = sanitizeUrl(originalUrlString)
+  const safeFinalUrl = sanitizeUrl(finalUrlString)
   const fetchedAt = input.now().toISOString()
   const markdown = sourceMarkdownForContent({
     text,
-    originalUrl: originalUrl.url.toString(),
-    finalUrl: finalUrl.url.toString(),
+    originalUrl: safeOriginalUrl,
+    finalUrl: safeFinalUrl,
     fetchedAt,
     contentType,
   })
@@ -133,8 +138,8 @@ export async function acquireUrlSource(input: AcquireUrlSourceInput): Promise<Ac
   return {
     ok: true,
     source: {
-      originalUrl: originalUrl.url.toString(),
-      finalUrl: finalUrl.url.toString(),
+      originalUrl: safeOriginalUrl,
+      finalUrl: safeFinalUrl,
       contentType,
       fetchedAt,
       markdown: markdown.markdown,

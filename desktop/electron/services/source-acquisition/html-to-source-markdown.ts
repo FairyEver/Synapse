@@ -1,6 +1,7 @@
 import { createRequire } from "node:module"
 
 import TurndownService from "turndown"
+import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 
 const requireFromHere = createRequire(__filename)
 const { gfm } = requireFromHere("turndown-plugin-gfm") as { readonly gfm: TurndownService.Plugin }
@@ -31,10 +32,12 @@ export function htmlToSourceMarkdown(input: HtmlSourceMarkdownInput): string {
 }
 
 export function sourceUrlFrontmatter(input: Omit<HtmlSourceMarkdownInput, "html">): string {
+  const sourceUrl = sanitizeUrl(input.sourceUrl)
+  const sourceFinalUrl = sanitizeUrl(input.sourceFinalUrl)
   return [
     "---",
-    `source_url: "${escapeYamlString(input.sourceUrl)}"`,
-    `source_final_url: "${escapeYamlString(input.sourceFinalUrl)}"`,
+    `source_url: "${escapeYamlString(sourceUrl)}"`,
+    `source_final_url: "${escapeYamlString(sourceFinalUrl)}"`,
     'source_format: "url"',
     `fetched_at: "${escapeYamlString(input.fetchedAt)}"`,
     `content_type: "${escapeYamlString(input.contentType)}"`,

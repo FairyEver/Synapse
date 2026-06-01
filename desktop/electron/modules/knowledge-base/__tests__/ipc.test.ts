@@ -236,18 +236,18 @@ describe("knowledgeBaseIpcModule", () => {
 
     const result = await harness.invoke("synapse:knowledge-base:add-url-source", {
       projectId: "kb-1",
-      url: "https://example.com/article",
+      url: "https://example.com/article?token=secret-token",
     }) as { uploaded: unknown[] }
 
     expect(addUrlSource).toHaveBeenCalledWith({
       projectId: "kb-1",
-      url: "https://example.com/article",
+      url: "https://example.com/article?token=secret-token",
     })
     expect(result.uploaded).toHaveLength(1)
     expect(permissionGuard.check).toHaveBeenNthCalledWith(1, {
       action: "network.connect",
       actor: { kind: "user" },
-      resource: "https://example.com/article",
+      resource: "https://example.com/article?token=%5Bredacted%5D",
       context: { source: "knowledgeBase.addUrlSource.fetch" },
     })
     expect(permissionGuard.check).toHaveBeenNthCalledWith(2, {

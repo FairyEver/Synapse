@@ -3,6 +3,7 @@ import { copyFile, lstat, mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { SynapseKnowledgeBaseUploadSourcesResult } from "../../../src/types/knowledge-base"
+import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import type { FileConversionInput, FileConversionResult } from "../file-conversion"
 import { sourceFrontmatter } from "../file-conversion/markdown"
 import { acquireUrlSource, type FetchUrl } from "../source-acquisition/url-source"
@@ -244,7 +245,7 @@ function hasOcrUnavailableWarning(result: FileConversionResult): boolean {
 function urlAcquisitionFailure(url: string): SynapseKnowledgeBaseUploadSourcesResult["skipped"][number] {
   // Public upload result types currently expose only not-file/read-error/conversion-error.
   // Keep URL acquisition failures centralized here so the API can gain URL-specific reasons later.
-  return { path: url, reason: "read-error" }
+  return { path: sanitizeUrl(url), reason: "read-error" }
 }
 
 function imageIntakeMarkdown(input: {

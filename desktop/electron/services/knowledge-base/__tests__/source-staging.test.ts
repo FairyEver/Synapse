@@ -155,7 +155,7 @@ describe("knowledge base source staging", () => {
   it("stages URL sources into the dated raw web directory", async () => {
     const projectPath = await tempDir()
     const fetchUrl: FetchUrl = async () => ({
-      url: "https://example.com/articles/alpha?utm_source=test",
+      url: "https://example.com/articles/alpha?signature=final-secret&utm_source=test",
       status: 200,
       headers: {
         get: (name: string) => name.toLowerCase() === "content-type" ? "text/html" : null,
@@ -165,20 +165,44 @@ describe("knowledge base source staging", () => {
 
     const result = await stageKnowledgeBaseUrlSource({
       projectPath,
-      url: "https://example.com/articles/alpha?utm_source=test",
+      url: "https://example.com/articles/alpha?token=input-secret&utm_source=test",
       fetchUrl,
       now: () => new Date("2026-05-24T00:00:00.000Z"),
     })
 
     expect(result.uploaded).toEqual([expect.objectContaining({
-      originalPath: "https://example.com/articles/alpha?utm_source=test",
+      originalPath: "https://example.com/articles/alpha?token=%5Bredacted%5D&utm_source=test",
       relativePath: ".raw/web/2026/05/24/alpha.md",
       name: "alpha.md",
+      sourceUrl: "https://example.com/articles/alpha?token=%5Bredacted%5D&utm_source=test",
     })])
     expect(result.skipped).toEqual([])
     await expect(readFile(path.join(projectPath, ".raw", "web", "2026", "05", "24", "alpha.md"), "utf8"))
       .resolves.toContain('source_format: "url"')
+    const rawMarkdown = await readFile(path.join(projectPath, ".raw", "web", "2026", "05", "24", "alpha.md"), "utf8")
+    expect(rawMarkdown).not.toContain("input-secret")
+    expect(rawMarkdown).not.toContain("final-secret")
     await expect(access(path.join(projectPath, "wiki"))).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
+  it("redacts URL source skipped paths after acquisition failure", async () => {
+    const projectPath = await tempDir()
+    const fetchUrl: FetchUrl = async () => {
+      throw new Error("fetch failed")
+    }
+
+    const result = await stageKnowledgeBaseUrlSource({
+      projectPath,
+      url: "https://example.com/articles/alpha?token=input-secret",
+      fetchUrl,
+      now: () => new Date("2026-05-24T00:00:00.000Z"),
+    })
+
+    expect(result).toEqual({
+      uploaded: [],
+      skipped: [{ path: "https://example.com/articles/alpha?token=%5Bredacted%5D", reason: "read-error" }],
+    })
+    expect(JSON.stringify(result)).not.toContain("input-secret")
   })
 
   it("keeps URL acquisition failures visible as skipped read errors", async () => {
