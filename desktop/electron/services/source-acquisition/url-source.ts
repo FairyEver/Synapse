@@ -15,7 +15,7 @@ export type FetchUrl = (url: string, init: { readonly signal: AbortSignal }) => 
   readonly url: string
   readonly status: number
   readonly headers: { get(name: string): string | null }
-  text(): Promise<string>
+  text(options?: { readonly maxBytes?: number }): Promise<string>
 }>
 
 export interface AcquireUrlSourceInput {
@@ -52,6 +52,16 @@ export type AcquireUrlSourceResult =
 
 const DEFAULT_MAX_BYTES = 5 * 1024 * 1024
 const ALLOWED_PROTOCOLS = new Set(["http:", "https:"])
+
+export class UrlResponseSizeLimitError extends Error {
+  readonly maxBytes: number
+
+  constructor(maxBytes: number) {
+    super(`URL response exceeds the ${maxBytes} byte limit.`)
+    this.name = "UrlResponseSizeLimitError"
+    this.maxBytes = maxBytes
+  }
+}
 
 export async function acquireUrlSource(input: AcquireUrlSourceInput): Promise<AcquireUrlSourceResult> {
   const originalUrl = normalizeUrl(input.url)
@@ -104,8 +114,15 @@ export async function acquireUrlSource(input: AcquireUrlSourceInput): Promise<Ac
 
   let text: string
   try {
-    text = await response.text()
+    text = await response.text({ maxBytes })
   } catch (error) {
+    if (error instanceof UrlResponseSizeLimitError) {
+      return {
+        ok: false,
+        code: "size_limit_exceeded",
+        message: error.message,
+      }
+    }
     return {
       ok: false,
       code: "network_error",

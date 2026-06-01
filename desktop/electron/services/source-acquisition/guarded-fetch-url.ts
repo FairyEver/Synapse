@@ -3,7 +3,7 @@ import http from "node:http"
 import https from "node:https"
 import type { IncomingMessage, RequestOptions } from "node:http"
 
-import { isLocalOrPrivateHost, type FetchUrl } from "./url-source"
+import { isLocalOrPrivateHost, UrlResponseSizeLimitError, type FetchUrl } from "./url-source"
 
 const MAX_REDIRECTS = 5
 const DEFAULT_TIMEOUT_MS = 30_000
@@ -126,7 +126,7 @@ function responseFromMessage(url: string, message: IncomingMessage): Awaited<Ret
         return headers.get(name.toLowerCase()) ?? null
       },
     },
-    text: () => readResponseText(message),
+    text: (options) => readResponseText(message, options?.maxBytes),
   }
 }
 
@@ -142,14 +142,30 @@ function normalizeHeaders(headers: IncomingMessage["headers"]): Map<string, stri
   return normalized
 }
 
-function readResponseText(message: IncomingMessage): Promise<string> {
+function readResponseText(message: IncomingMessage, maxBytes?: number): Promise<string> {
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = []
+    let totalBytes = 0
+    let rejected = false
     message.on("data", (chunk: Buffer | string) => {
-      chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+      if (rejected) return
+      const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)
+      totalBytes += buffer.byteLength
+      if (maxBytes !== undefined && totalBytes > maxBytes) {
+        rejected = true
+        const error = new UrlResponseSizeLimitError(maxBytes)
+        message.destroy(error)
+        reject(error)
+        return
+      }
+      chunks.push(buffer)
     })
-    message.on("error", reject)
-    message.on("end", () => resolve(Buffer.concat(chunks).toString("utf8")))
+    message.on("error", (error) => {
+      if (!rejected) reject(error)
+    })
+    message.on("end", () => {
+      if (!rejected) resolve(Buffer.concat(chunks).toString("utf8"))
+    })
   })
 }
 
