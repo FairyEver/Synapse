@@ -148,7 +148,7 @@ describe("usage analysis ipc handlers", () => {
       fs.mkdirSync(unreadableRoot, { recursive: true })
       const originalReaddirSync = fs.readdirSync
       vi.spyOn(fs, "readdirSync").mockImplementation(((target: fs.PathLike, options?: fs.ObjectEncodingOptions) => {
-        if (target === unreadableRoot) {
+        if (path.normalize(String(target)) === path.normalize(unreadableRoot)) {
           const error = new Error(`EACCES: permission denied, scandir '${unreadableRoot}'`) as NodeJS.ErrnoException
           error.code = "EACCES"
           throw error
