@@ -51,6 +51,7 @@ import type {
   SynapseKnowledgeBaseOpenSourceManagerPayload,
   SynapseKnowledgeBaseRawEntry,
   SynapseKnowledgeBaseRawMutationResult,
+  SynapseKnowledgeBaseUploadSourcesResult,
 } from "@/types/knowledge-base"
 
 const logger = createRendererLogger("knowledge-base.source-manager")
@@ -154,21 +155,21 @@ function directoriesOnly(entries: SynapseKnowledgeBaseRawEntry[]): SynapseKnowle
   return entries.filter((entry) => entry.kind === "directory")
 }
 
-function rawUploadSuccessMessage(
-  result: SynapseKnowledgeBaseRawMutationResult,
+function sourceUploadSuccessMessage(
+  result: SynapseKnowledgeBaseUploadSourcesResult,
   emptyMessage: string | null,
 ): string | null {
   if (result.skipped.length > 0) {
     const skippedSummary = skippedReasonSummary(result.skipped)
-    if (result.entries.length > 0) {
-      return `已上传 ${result.entries.length} 项，跳过 ${result.skipped.length} 项${skippedSummary}`
+    if (result.uploaded.length > 0) {
+      return `已上传 ${result.uploaded.length} 项，跳过 ${result.skipped.length} 项${skippedSummary}`
     }
     return `跳过 ${result.skipped.length} 项${skippedSummary}`
   }
-  return result.entries.length > 0 ? "已上传" : emptyMessage
+  return result.uploaded.length > 0 ? "已上传" : emptyMessage
 }
 
-function skippedReasonSummary(result: SynapseKnowledgeBaseRawMutationResult["skipped"]): string {
+function skippedReasonSummary(result: readonly { reason: string }[]): string {
   const counts = result.reduce<Record<string, number>>((next, item) => {
     next[item.reason] = (next[item.reason] ?? 0) + 1
     return next
@@ -185,6 +186,8 @@ function skippedReasonLabel(reason: string): string {
       return "不是文件夹"
     case "read-error":
       return "读取失败"
+    case "conversion-error":
+      return "转换失败"
     case "invalid-path":
       return "路径无效"
     case "collision":
@@ -547,9 +550,8 @@ function KnowledgeBaseSourceManagerWindow() {
     if (!payload || !bridge || filePaths.length === 0) return
     await promise(
       async () => {
-        const result = await bridge.knowledgeBase.uploadRawFiles({
+        const result = await bridge.knowledgeBase.uploadSources({
           projectId: payload.projectId,
-          targetDirectoryPath: currentDirectory,
           filePaths,
         })
         await refreshDirectory()
@@ -557,30 +559,27 @@ function KnowledgeBaseSourceManagerWindow() {
       },
       {
         loading: "正在上传",
-        success: (result) => rawUploadSuccessMessage(result, "没有可上传的文件"),
+        success: (result) => sourceUploadSuccessMessage(result, "没有可上传的文件"),
         error: "上传失败",
       },
     )
-  }, [bridge, currentDirectory, payload, promise, refreshDirectory])
+  }, [bridge, payload, promise, refreshDirectory])
 
   const chooseFiles = useCallback(async () => {
     if (!payload || !bridge) return
     await promise(
       async () => {
-        const result = await bridge.knowledgeBase.selectAndUploadRawFiles({
-          projectId: payload.projectId,
-          targetDirectoryPath: currentDirectory,
-        })
+        const result = await bridge.knowledgeBase.selectAndUploadSources(payload.projectId)
         await refreshDirectory()
         return result
       },
       {
         loading: "正在上传",
-        success: (result) => rawUploadSuccessMessage(result, null),
+        success: (result) => sourceUploadSuccessMessage(result, null),
         error: "上传失败",
       },
     )
-  }, [bridge, currentDirectory, payload, promise, refreshDirectory])
+  }, [bridge, payload, promise, refreshDirectory])
 
   const createFolder = useCallback(async () => {
     if (!payload || !bridge) return

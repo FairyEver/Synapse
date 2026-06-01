@@ -8,6 +8,7 @@ import { KnowledgeBaseSourceManagerWindow } from "../source-manager-window"
 import type {
   SynapseKnowledgeBaseListRawDirectoryResult,
   SynapseKnowledgeBaseRawMutationResult,
+  SynapseKnowledgeBaseUploadSourcesResult,
 } from "@/types/knowledge-base"
 
 const rendererLogger = vi.hoisted(() => ({
@@ -70,6 +71,11 @@ function createBridgeMocks() {
     entries: [],
     skipped: [],
   }
+  const emptyUpload: SynapseKnowledgeBaseUploadSourcesResult = {
+    projectId: "project-1",
+    uploaded: [],
+    skipped: [],
+  }
   return {
     knowledgeBase: {
       listRawDirectory: vi.fn<(payload: { projectId: string; directoryPath: string }) => Promise<SynapseKnowledgeBaseListRawDirectoryResult>>()
@@ -118,8 +124,12 @@ function createBridgeMocks() {
         })),
       uploadRawFiles: vi.fn<(payload: { projectId: string; targetDirectoryPath: string; filePaths: string[] }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
         .mockResolvedValue(emptyMutation),
+      uploadSources: vi.fn<(payload: { projectId: string; filePaths: string[] }) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
+        .mockResolvedValue(emptyUpload),
       selectAndUploadRawFiles: vi.fn<(payload: { projectId: string; targetDirectoryPath: string }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
         .mockResolvedValue(emptyMutation),
+      selectAndUploadSources: vi.fn<(projectId: string) => Promise<SynapseKnowledgeBaseUploadSourcesResult>>()
+        .mockResolvedValue(emptyUpload),
       createRawFolder: vi.fn<(payload: { projectId: string; parentDirectoryPath: string; name: string }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
         .mockResolvedValue(emptyMutation),
       renameRawEntry: vi.fn<(payload: { projectId: string; relativePath: string; newName: string }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
@@ -176,9 +186,9 @@ function buttonByText(text: string): HTMLButtonElement {
   return button
 }
 
-function lastUploadSuccessMessage(result: SynapseKnowledgeBaseRawMutationResult): string | null {
+function lastSourceUploadSuccessMessage(result: SynapseKnowledgeBaseUploadSourcesResult): string | null {
   const options = notifications.promise.mock.calls.at(-1)?.[1] as {
-    success?: string | null | ((value: SynapseKnowledgeBaseRawMutationResult) => string | null)
+    success?: string | null | ((value: SynapseKnowledgeBaseUploadSourcesResult) => string | null)
   } | undefined
   if (!options) throw new Error("Promise notification options not found.")
   if (typeof options.success === "function") return options.success(result)
@@ -280,7 +290,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
   })
 
-  it("uploads dropped files to the current folder", async () => {
+  it("uploads dropped files through source staging", async () => {
     renderWindow()
     bridgeMocks.knowledgeBase.filePathForDroppedFile.mockReturnValue("/tmp/diagram.png")
 
@@ -321,27 +331,42 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
 
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.uploadRawFiles).toHaveBeenCalledWith({
+      expect(bridgeMocks.knowledgeBase.uploadSources).toHaveBeenCalledWith({
         projectId: "project-1",
-        targetDirectoryPath: "客户",
         filePaths: ["/tmp/diagram.png"],
       })
     })
+    expect(bridgeMocks.knowledgeBase.uploadRawFiles).not.toHaveBeenCalled()
+  })
+
+  it("selects files through source staging", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("上传").click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.selectAndUploadSources).toHaveBeenCalledWith("project-1")
+    expect(bridgeMocks.knowledgeBase.selectAndUploadRawFiles).not.toHaveBeenCalled()
   })
 
   it("reports skipped files in the upload success message", async () => {
-    const uploadResult: SynapseKnowledgeBaseRawMutationResult = {
+    const uploadResult: SynapseKnowledgeBaseUploadSourcesResult = {
       projectId: "project-1",
-      entries: [{
+      uploaded: [{
+        originalPath: "/tmp/good.md",
         relativePath: "客户/good.md",
         name: "good.md",
-        kind: "file",
         size: 12,
-        modifiedAt: "2026-05-26T00:00:00.000Z",
       }],
       skipped: [{ path: "/tmp/locked.pdf", reason: "read-error" }],
     }
-    bridgeMocks.knowledgeBase.uploadRawFiles.mockResolvedValueOnce(uploadResult)
+    bridgeMocks.knowledgeBase.uploadSources.mockResolvedValueOnce(uploadResult)
     bridgeMocks.knowledgeBase.filePathForDroppedFile.mockReturnValue("/tmp/good.md")
     renderWindow()
 
@@ -364,13 +389,12 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
 
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.uploadRawFiles).toHaveBeenCalledWith({
+      expect(bridgeMocks.knowledgeBase.uploadSources).toHaveBeenCalledWith({
         projectId: "project-1",
-        targetDirectoryPath: "",
         filePaths: ["/tmp/good.md"],
       })
     })
-    expect(lastUploadSuccessMessage(uploadResult)).toBe("已上传 1 项，跳过 1 项（读取失败 1）")
+    expect(lastSourceUploadSuccessMessage(uploadResult)).toBe("已上传 1 项，跳过 1 项（读取失败 1）")
   })
 
   it("creates folders and batch mutates selected entries", async () => {
