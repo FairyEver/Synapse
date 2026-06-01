@@ -12,6 +12,8 @@ export interface ClaudeSdkUsageSummary {
   readonly totalTokens: number
 }
 
+type ClaudeSdkUsageSummaryInput = Omit<ClaudeSdkUsageSummary, "totalTokens">
+
 export interface TokenUsageFieldsOptions {
   readonly prefix?: string
 }
@@ -74,7 +76,7 @@ export function normalizeClaudeSdkUsage(
     outputTokens: outputTokens ?? 0,
     cacheReadInputTokens: cacheReadInputTokens ?? 0,
     cacheCreationInputTokens: cacheCreationInputTokens ?? 0,
-    reasoningOutputTokens,
+    ...(reasoningOutputTokens !== undefined ? { reasoningOutputTokens } : {}),
   })
 }
 
@@ -91,18 +93,19 @@ export function sumClaudeSdkUsageSummaries(
   summaries: readonly ClaudeSdkUsageSummary[],
 ): ClaudeSdkUsageSummary | undefined {
   if (summaries.length === 0) return undefined
-  return usageSummary(summaries.reduce((total, summary) => ({
+  const emptySummary: ClaudeSdkUsageSummaryInput = {
+    inputTokens: 0,
+    outputTokens: 0,
+    cacheReadInputTokens: 0,
+    cacheCreationInputTokens: 0,
+  }
+  return usageSummary(summaries.reduce<ClaudeSdkUsageSummaryInput>((total, summary) => ({
     inputTokens: total.inputTokens + summary.inputTokens,
     outputTokens: total.outputTokens + summary.outputTokens,
     cacheReadInputTokens: total.cacheReadInputTokens + summary.cacheReadInputTokens,
     cacheCreationInputTokens: total.cacheCreationInputTokens + summary.cacheCreationInputTokens,
     reasoningOutputTokens: sumOptionalTokens(total.reasoningOutputTokens, summary.reasoningOutputTokens),
-  }), {
-    inputTokens: 0,
-    outputTokens: 0,
-    cacheReadInputTokens: 0,
-    cacheCreationInputTokens: 0,
-  }))
+  }), emptySummary))
 }
 
 export function formatTokenUsageValue(value: number): string {
@@ -122,7 +125,7 @@ function sumOptionalTokens(a: number | undefined, b: number | undefined): number
   return (a ?? 0) + (b ?? 0)
 }
 
-function usageSummary(input: Omit<ClaudeSdkUsageSummary, "totalTokens">): ClaudeSdkUsageSummary {
+function usageSummary(input: ClaudeSdkUsageSummaryInput): ClaudeSdkUsageSummary {
   return {
     ...input,
     totalTokens: input.inputTokens
