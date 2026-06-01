@@ -46,14 +46,6 @@ export default function BackupPage() {
     onError: (err: Error) => toast.error(err.message),
   })
 
-  async function handleDownload(filename: string) {
-    try {
-      await adminApi.downloadBackup(filename)
-    } catch (err: unknown) {
-      toast.error(err instanceof Error ? err.message : '下载失败')
-    }
-  }
-
   return (
     <>
       <Header>
@@ -88,8 +80,14 @@ export default function BackupPage() {
                       {new Date(backup.createdAt).toLocaleString('zh-CN')}
                     </TableCell>
                     <TableCell className='flex gap-1'>
-                      <Button variant='ghost' size='icon' onClick={() => handleDownload(backup.filename)}>
-                        <Download className='h-4 w-4' />
+                      <Button variant='ghost' size='icon' asChild>
+                        <a
+                          href={adminApi.getBackupDownloadUrl(backup.filename)}
+                          download={backup.filename}
+                          aria-label={`下载 ${backup.filename}`}
+                        >
+                          <Download className='h-4 w-4' />
+                        </a>
                       </Button>
                       <Button variant='ghost' size='icon' onClick={() => deleteBackup.mutate(backup.filename)}>
                         <Trash2 className='h-4 w-4' />
