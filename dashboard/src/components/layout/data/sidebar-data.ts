@@ -6,8 +6,8 @@ import {
   FileText,
   HardDrive,
   ScrollText,
-  UserCircle,
   Settings,
+  UserCircle,
   Command,
 } from 'lucide-react'
 import type { AuthUser } from '@/stores/auth-store'
@@ -54,7 +54,7 @@ const adminNavGroup = {
   ],
 } satisfies SidebarData['navGroups'][number]
 
-const accountNavGroup = {
+const userAccountNavGroup = {
   title: '账户',
   items: [
     {
@@ -62,6 +62,17 @@ const accountNavGroup = {
       url: '/me',
       icon: UserCircle,
     },
+    {
+      title: '设置',
+      url: '/settings',
+      icon: Settings,
+    },
+  ],
+} satisfies SidebarData['navGroups'][number]
+
+const adminAccountNavGroup = {
+  title: '账户',
+  items: [
     {
       title: '设置',
       url: '/settings',
@@ -78,6 +89,7 @@ export function getSidebarData(user: Pick<AuthUser, 'email' | 'role'> | null): S
       name: isAdmin ? 'Admin' : 'User',
       email: user?.email ?? '',
       avatar: '',
+      profileUrl: isAdmin ? undefined : '/me',
     },
     teams: [
       {
@@ -86,7 +98,7 @@ export function getSidebarData(user: Pick<AuthUser, 'email' | 'role'> | null): S
         plan: isAdmin ? '管理后台' : '个人中心',
       },
     ],
-    navGroups: isAdmin ? [adminNavGroup, accountNavGroup] : [accountNavGroup],
+    navGroups: isAdmin ? [adminNavGroup, adminAccountNavGroup] : [userAccountNavGroup],
   }
 }
 

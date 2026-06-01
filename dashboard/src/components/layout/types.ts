@@ -4,6 +4,7 @@ type User = {
   name: string
   email: string
   avatar: string
+  profileUrl?: LinkProps['to']
 }
 
 type Team = {

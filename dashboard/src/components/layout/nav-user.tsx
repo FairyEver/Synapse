@@ -23,13 +23,10 @@ import {
   useSidebar,
 } from '@/components/ui/sidebar'
 import { SignOutDialog } from '@/components/sign-out-dialog'
+import type { SidebarData } from './types'
 
 type NavUserProps = {
-  user: {
-    name: string
-    email: string
-    avatar: string
-  }
+  user: SidebarData['user']
 }
 
 export function NavUser({ user }: NavUserProps) {
@@ -77,12 +74,14 @@ export function NavUser({ user }: NavUserProps) {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
-                <DropdownMenuItem asChild>
-                  <Link to='/me'>
-                    <UserCircle />
-                    个人中心
-                  </Link>
-                </DropdownMenuItem>
+                {user.profileUrl ? (
+                  <DropdownMenuItem asChild>
+                    <Link to={user.profileUrl}>
+                      <UserCircle />
+                      个人中心
+                    </Link>
+                  </DropdownMenuItem>
+                ) : null}
                 <DropdownMenuItem asChild>
                   <Link to='/settings'>
                     <Settings />
