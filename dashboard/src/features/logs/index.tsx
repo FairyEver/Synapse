@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
+import { getCleanupBeforeDate } from './cleanup-date'
 
 export default function LogsPage() {
   const [level, setLevel] = useState('')
@@ -35,7 +36,7 @@ export default function LogsPage() {
   }
 
   async function handleCleanup() {
-    const before = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const before = getCleanupBeforeDate()
     try {
       const result = await adminApi.cleanupLogs(before)
       toast.success(`已清理 ${result.deleted} 条日志`)
