@@ -321,6 +321,14 @@ export class SideChannelService implements ReplyTargetRuntime {
       return jsonResponse(200, true, result)
     } catch (error) {
       const response = responseForError(error)
+      this.recordIngressAudit("failed", url.pathname, {
+        ...sideChannelRequestShape(body),
+        errorCode: sideChannelErrorCode(error),
+        errorLength: errorMessage(error).length,
+        errorName: error instanceof Error ? error.name : typeof error,
+        method: request.method,
+        status: response.status,
+      })
       this.logHttpFailure(url.pathname, request.method, body, response.status, error)
       return response
     }
@@ -431,7 +439,7 @@ export class SideChannelService implements ReplyTargetRuntime {
   }
 
   private recordIngressAudit(
-    outcome: "allowed" | "denied",
+    outcome: "allowed" | "denied" | "failed",
     path: string,
     metadata: Record<string, unknown>,
   ): void {
@@ -465,6 +473,18 @@ export class SideChannelService implements ReplyTargetRuntime {
       errorName: error instanceof Error ? error.name : typeof error,
       errorLength: errorMessage(error).length,
     })
+  }
+}
+
+function sideChannelRequestShape(
+  request: (SideChannelSendRequest & SideChannelRelaySendRequest) | undefined,
+): Record<string, unknown> {
+  if (!request) return {}
+  return {
+    fileCount: arrayLength(request.files),
+    imageCount: arrayLength(request.images),
+    messageLength: typeof request.message === "string" ? request.message.length : 0,
+    projectId: stringValue(request.projectId ?? request.project ?? request.sourceProjectId ?? request.source_project),
   }
 }
 

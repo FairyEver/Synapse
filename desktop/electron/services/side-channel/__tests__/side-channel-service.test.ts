@@ -130,6 +130,52 @@ describe("SideChannelService", () => {
     await service.stop()
   })
 
+  it("records failed ingress audit for authenticated HTTP business failures", async () => {
+    const auditSink = new InMemoryAuditSink()
+    const service = new SideChannelService({
+      projectContainers: fakeProjectContainers(),
+      networkRegistry: createNetworkServiceRegistry(),
+      dataRepository: fakeDataRepository(new MemoryNamespace<OutboxEntryV1>("outbox")),
+      listProjects: async () => [{ projectId: "project-1", workspacePath: "/repo" }],
+      auditSink,
+      token: "tok",
+    })
+    await service.start()
+    const env = service.getAgentEnv("project-1", "bridge:s1")
+
+    const response = await fetch(env?.SYNAPSE_SIDE_CHANNEL_URL ?? "", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${env?.SYNAPSE_SIDE_CHANNEL_TOKEN ?? ""}`,
+        Connection: "close",
+        "Content-Type": "application/json",
+      },
+      body: "{",
+    })
+
+    expect(response.status).toBe(400)
+    await response.text()
+    const ingressEvents = auditSink.list().filter((event) => event.resource === "side-channel:/send")
+    expect(ingressEvents).toEqual([
+      expect.objectContaining({
+        outcome: "allowed",
+        metadata: expect.objectContaining({ method: "POST" }),
+      }),
+      expect.objectContaining({
+        outcome: "failed",
+        metadata: expect.objectContaining({
+          errorCode: "invalid_json",
+          errorName: "Error",
+          method: "POST",
+          status: 400,
+        }),
+      }),
+    ])
+    expect(JSON.stringify(ingressEvents)).not.toContain("tok")
+    expect(JSON.stringify(ingressEvents)).not.toContain("bridge:s1")
+    await service.stop()
+  })
+
   it("uses the socket address instead of x-forwarded-for for rate limiting", async () => {
     const outbox = new MemoryNamespace<OutboxEntryV1>("outbox")
     const service = new SideChannelService({
