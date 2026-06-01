@@ -305,6 +305,10 @@ function querySuffix(options: Record<string, string | number | undefined>) {
   return value ? `?${value}` : ''
 }
 
+function dateQueryValue(value: Date) {
+  return value.toISOString().slice(0, 10)
+}
+
 async function downloadFile(path: string, filename: string) {
   const response = await fetch(path, { credentials: 'include' })
 
@@ -453,9 +457,9 @@ export const adminApi = {
       `${adminApiBasePath}/logs/download${querySuffix(options)}`,
       'logs.zip'
     ),
-  cleanupLogs: (before: string) =>
+  cleanupLogs: (before: Date) =>
     request<{ deleted: number }>(
-      `${adminApiBasePath}/logs/cleanup?${new URLSearchParams({ before }).toString()}`,
+      `${adminApiBasePath}/logs/cleanup?${new URLSearchParams({ before: dateQueryValue(before) }).toString()}`,
       { method: 'DELETE' }
     ),
 }
