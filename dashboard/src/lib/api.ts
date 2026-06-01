@@ -92,6 +92,7 @@ export type DashboardMe = {
     id: string
     email: string
     status: 'active' | 'disabled'
+    displayName: string | null
   }
   teams: Array<{
     id: string
@@ -327,6 +328,11 @@ export const dashboardApi = {
   logout: () =>
     request<{ ok: true }>(`${dashboardApiBasePath}/logout`, { method: 'POST' }),
   getMe: () => request<DashboardMe>(`${dashboardApiBasePath}/me`),
+  updateMe: (input: { displayName: string }) =>
+    request<DashboardMe>(`${dashboardApiBasePath}/me`, {
+      method: 'PATCH',
+      body: JSON.stringify(input),
+    }),
   authorizeDesktopLogin: (input: DesktopAuthorizeInput) =>
     request<DesktopAuthorizationResult>(desktopAuthorizePath, {
       method: 'POST',
