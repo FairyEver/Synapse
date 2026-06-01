@@ -169,6 +169,7 @@ describe("AdminAuthService", () => {
     prisma.user.findUnique.mockResolvedValueOnce({
       id: "user-1",
       email: "user@example.com",
+      displayName: "Ada",
       passwordHash: await hashPassword("user-password"),
       status: "active",
     })
@@ -176,6 +177,7 @@ describe("AdminAuthService", () => {
     const result = await service.login("user@example.com", "user-password")
 
     expect(result.email).toBe("user@example.com")
+    expect(result.displayName).toBe("Ada")
     expect(result.role).toBe("user")
     expect(result.modulePermissions).toEqual([])
     expect(result.token.length).toBeGreaterThan(20)
@@ -265,6 +267,7 @@ describe("AdminAuthService", () => {
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
       email: "user@example.com",
+      displayName: "Ada",
       passwordHash: await hashPassword("user-password"),
       status: "active",
     })
@@ -279,6 +282,7 @@ describe("AdminAuthService", () => {
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
       email: "user@example.com",
+      displayName: "Ada",
       passwordHash: await hashPassword("user-password"),
       status: "active",
     })
@@ -288,6 +292,7 @@ describe("AdminAuthService", () => {
     await expect(service.verifyDashboardSession(result.token)).resolves.toEqual({
       id: "user-1",
       email: "user@example.com",
+      displayName: "Ada",
       role: "user",
       modulePermissions: [],
     })
@@ -342,6 +347,7 @@ describe("AdminAuthService", () => {
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
       email: "user@example.com",
+      displayName: "Ada",
       passwordHash: await hashPassword("user-password"),
       status: "active",
       modulePermissions: [{ permissionKey: "module.workflow" }],
@@ -352,6 +358,7 @@ describe("AdminAuthService", () => {
     await expect(service.verifyDashboardSession(result.token)).resolves.toEqual({
       id: "user-1",
       email: "user@example.com",
+      displayName: "Ada",
       role: "user",
       modulePermissions: ["module.workflow"],
     })
@@ -362,6 +369,7 @@ describe("AdminAuthService", () => {
     prisma.user.findUnique.mockResolvedValue({
       id: "user-1",
       email: "user@example.com",
+      displayName: "Ada",
       passwordHash: await hashPassword("user-password"),
       status: "active",
       modulePermissions: [
@@ -375,6 +383,7 @@ describe("AdminAuthService", () => {
     await expect(service.verifyDashboardSession(result.token)).resolves.toEqual({
       id: "user-1",
       email: "user@example.com",
+      displayName: "Ada",
       role: "user",
       modulePermissions: ["module.workflow"],
     })

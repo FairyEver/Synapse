@@ -42,6 +42,7 @@ export class AdminAuthController {
     response.cookie(adminCookieName, session.token, adminCookieOptions())
     return {
       email: session.email,
+      displayName: session.displayName,
       role: session.role,
       modulePermissions: session.modulePermissions,
       sessionId: hashToken(session.token),
@@ -81,6 +82,7 @@ export class AdminAuthController {
     }
     return {
       email: session.email,
+      displayName: session.displayName,
       role: session.role,
       modulePermissions: session.modulePermissions,
       sessionId: hashToken(token),

@@ -20,6 +20,7 @@ export type DashboardRole = "admin" | "user"
 export interface DashboardSession {
   readonly id: string
   readonly email: string
+  readonly displayName: string | null
   readonly role: DashboardRole
   readonly modulePermissions: readonly string[]
 }
@@ -52,7 +53,7 @@ export class AdminAuthService {
     return admin?.email ?? ""
   }
 
-  async login(email: string, password: string, ipAddress = "system"): Promise<{ email: string; token: string; role: DashboardRole; modulePermissions: readonly string[] }> {
+  async login(email: string, password: string, ipAddress = "system"): Promise<{ email: string; displayName: string | null; token: string; role: DashboardRole; modulePermissions: readonly string[] }> {
     const normalizedEmail = email.trim().toLowerCase()
     const admin = await this.prisma.adminUser.findFirst({ orderBy: { createdAt: "asc" } })
     const matchedAdmin = admin && normalizedEmail === admin.email ? admin : null
@@ -66,7 +67,7 @@ export class AdminAuthService {
         targetId: matchedAdmin.id,
         ipAddress,
       })
-      return { email: matchedAdmin.email, token, role: "admin", modulePermissions: [] }
+      return { email: matchedAdmin.email, displayName: null, token, role: "admin", modulePermissions: [] }
     }
     if (matchedAdmin) {
       const adminLoginFailureAction = matchedAdmin.status === "active"
@@ -100,6 +101,7 @@ export class AdminAuthService {
       })
       return {
         email: user.email,
+        displayName: user.displayName,
         token,
         role: "user",
         modulePermissions,
@@ -154,13 +156,14 @@ export class AdminAuthService {
         return {
           id: user.id,
           email: user.email,
+          displayName: user.displayName,
           role: "user",
           modulePermissions: getDashboardModulePermissions(user),
         }
       }
       const admin = await this.prisma.adminUser.findUnique({ where: { id: payload.sub } })
       if (!admin || admin.status !== "active" || admin.email !== payload.email) return null
-      return { id: admin.id, email: admin.email, role: "admin", modulePermissions: [] }
+      return { id: admin.id, email: admin.email, displayName: null, role: "admin", modulePermissions: [] }
     } catch {
       return null
     }

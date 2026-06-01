@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { dashboardApi } from '@/lib/api'
+import { useAuthStore } from '@/stores/auth-store'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Badge } from '@/components/ui/badge'
@@ -14,6 +15,8 @@ const maxDisplayNameLength = 40
 
 export default function MePage() {
   const queryClient = useQueryClient()
+  const authUser = useAuthStore((state) => state.auth.user)
+  const setAuthUser = useAuthStore((state) => state.auth.setUser)
   const [displayName, setDisplayName] = useState('')
   const { data, isLoading } = useQuery({
     queryKey: ['dashboard-me'],
@@ -23,6 +26,13 @@ export default function MePage() {
     mutationFn: dashboardApi.updateMe,
     onSuccess: (nextData) => {
       queryClient.setQueryData(['dashboard-me'], nextData)
+      if (authUser?.role === 'user') {
+        setAuthUser({
+          ...authUser,
+          email: nextData.user.email,
+          displayName: nextData.user.displayName,
+        })
+      }
       toast.success('已保存')
     },
     onError: (error: Error) => toast.error(error.message),

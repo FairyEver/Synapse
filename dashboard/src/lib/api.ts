@@ -1,5 +1,6 @@
 export type AdminSession = {
   email: string
+  displayName: string | null
   modulePermissions: string[]
   role: 'admin' | 'user'
   sessionId: string

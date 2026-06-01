@@ -2,6 +2,7 @@ import { create } from 'zustand'
 
 export interface AuthUser {
   email: string
+  displayName: string | null
   role: 'admin' | 'user'
   modulePermissions: string[]
   sessionId: string

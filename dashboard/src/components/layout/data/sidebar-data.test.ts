@@ -14,24 +14,28 @@ describe('getSidebarData', () => {
   it('keeps personal center available for normal users', () => {
     const data = getSidebarData({
       email: 'user@example.com',
+      displayName: 'Ada Lovelace',
       modulePermissions: [],
       role: 'user',
       sessionId: 'session-1',
     })
 
     expect(data.user.profileUrl).toBe('/me')
+    expect(data.user.name).toBe('Ada Lovelace')
     expect(collectUrls(data)).toContain('/me')
   })
 
   it('does not expose normal-user profile entry to admins', () => {
     const data = getSidebarData({
       email: 'admin@example.com',
+      displayName: null,
       modulePermissions: [],
       role: 'admin',
       sessionId: 'session-1',
     })
 
     expect(data.user.profileUrl).toBeUndefined()
+    expect(data.user.name).toBe('admin@example.com')
     expect(collectUrls(data)).not.toContain('/me')
   })
 })
