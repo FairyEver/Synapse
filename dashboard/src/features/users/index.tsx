@@ -12,6 +12,9 @@ import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { formatModulePermissionSummary } from './module-permissions'
+import { UserModulePermissionsSheet } from './user-module-permissions-sheet'
+import { useUserModulePermissionsEditor } from './use-user-module-permissions-editor'
 
 const pageSizeOptions = {
   initial: 20,
@@ -25,10 +28,16 @@ export default function UsersPage() {
   ])
   const queryClient = useQueryClient()
   const sortQuery = getServerTableSortQuery(sorting)
+  const permissionEditor = useUserModulePermissionsEditor()
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-users', page, pageSize, sortQuery],
     queryFn: () => adminApi.listUsers({ page, pageSize, ...sortQuery }),
+  })
+
+  const { data: modulePermissionDefinitions = [] } = useQuery({
+    queryKey: ['admin-module-permissions'],
+    queryFn: () => adminApi.listModulePermissions(),
   })
 
   const toggleStatus = useMutation({
@@ -79,6 +88,18 @@ export default function UsersPage() {
       enableSorting: false,
     },
     {
+      id: 'modulePermissions',
+      header: ({ column }) => (
+        <DataTableColumnHeader column={column} title='模块' />
+      ),
+      cell: ({ row }) =>
+        formatModulePermissionSummary(
+          row.original.modulePermissions.map((item) => item.permissionKey),
+          modulePermissionDefinitions
+        ),
+      enableSorting: false,
+    },
+    {
       accessorKey: 'createdAt',
       header: ({ column }) => (
         <DataTableColumnHeader column={column} title='创建时间' />
@@ -89,14 +110,27 @@ export default function UsersPage() {
     {
       id: 'actions',
       cell: ({ row }) => (
-        <Button
-          variant='ghost'
-          className='h-8 px-2'
-          onClick={() => handleToggle(row.original)}
-        >
-          {row.original.status === 'active' ? '禁用' : '启用'}
-        </Button>
+        <div className='flex justify-end gap-2'>
+          <Button
+            variant='ghost'
+            className='h-8 px-2'
+            onClick={() => void permissionEditor.open(row.original)}
+          >
+            模块权限
+          </Button>
+          <Button
+            variant='ghost'
+            className='h-8 px-2'
+            onClick={() => handleToggle(row.original)}
+          >
+            {row.original.status === 'active' ? '禁用' : '启用'}
+          </Button>
+        </div>
       ),
+      meta: {
+        thClassName: 'text-right',
+        tdClassName: 'text-right',
+      },
       enableSorting: false,
       enableHiding: false,
     },
@@ -123,6 +157,23 @@ export default function UsersPage() {
             onSortingChange={setSorting}
           />
         )}
+        <UserModulePermissionsSheet
+          open={permissionEditor.isOpen}
+          user={permissionEditor.user}
+          definitions={
+            permissionEditor.definitions.length > 0
+              ? permissionEditor.definitions
+              : modulePermissionDefinitions
+          }
+          permissionKeys={permissionEditor.permissionKeys}
+          isLoading={permissionEditor.isLoading}
+          isSaving={permissionEditor.isSaving}
+          error={permissionEditor.error}
+          onClose={permissionEditor.close}
+          onRetry={permissionEditor.retry}
+          onSave={() => void permissionEditor.save()}
+          onToggle={permissionEditor.toggle}
+        />
       </Main>
     </>
   )
