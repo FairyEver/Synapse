@@ -53,6 +53,7 @@ function AgentComposer({
   onCreatePermissionModeSession,
   pendingMessages = [],
   showJumpToBottom = false,
+  showIdleJumpToBottom = false,
   onRemovePendingMessage,
   onRetryPendingMessage,
   onJumpToBottom,
@@ -70,6 +71,7 @@ function AgentComposer({
   readonly permissionMode?: SynapseAgentPermissionMode
   readonly pendingMessages?: readonly PendingMessage[]
   readonly showJumpToBottom?: boolean
+  readonly showIdleJumpToBottom?: boolean
   readonly slashCandidates?: readonly AgentSlashCandidate[]
   readonly quickInputs?: readonly SynapseQuickInput[]
   readonly knowledgeBaseActions?: readonly KnowledgeBaseComposerAction[]
@@ -286,6 +288,18 @@ function AgentComposer({
             className="absolute -top-11 right-0 rounded-full shadow-md"
           >
             ↓ 新消息
+          </Button>
+        ) : showIdleJumpToBottom ? (
+          <Button
+            type="button"
+            variant="secondary"
+            size="icon-sm"
+            onClick={onJumpToBottom}
+            aria-label="滚动到底部"
+            data-track="agent-timeline-idle-jump-to-bottom"
+            className="absolute -top-11 left-1/2 -translate-x-1/2 rounded-full shadow-md"
+          >
+            <ChevronDown />
           </Button>
         ) : null}
         <AgentComposerInputBox

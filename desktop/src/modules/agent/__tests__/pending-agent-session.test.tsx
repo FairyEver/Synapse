@@ -17,6 +17,16 @@ const mocks = vi.hoisted(() => {
     chat: null as unknown,
     useAgentChat: vi.fn(),
     forcePin: vi.fn(),
+    stickState: {
+      isPinned: true,
+      hasUnread: false,
+    },
+    scrollToBottom: vi.fn(),
+    composerProps: null as {
+      showJumpToBottom?: boolean
+      showIdleJumpToBottom?: boolean
+      onJumpToBottom?: () => void
+    } | null,
     timelineProps: null as {
       onOpenReference?: (reference: string) => void
     } | null,
@@ -85,9 +95,9 @@ vi.mock("../hooks/use-stick-to-bottom", () => ({
   useStickToBottom: () => ({
     forcePin: mocks.forcePin,
     viewportRef: { current: null },
-    isPinned: true,
-    hasUnread: false,
-    scrollToBottom: vi.fn(),
+    isPinned: mocks.stickState.isPinned,
+    hasUnread: mocks.stickState.hasUnread,
+    scrollToBottom: mocks.scrollToBottom,
   }),
 }))
 
@@ -120,7 +130,14 @@ vi.mock("../components/agent-timeline", () => ({
 }))
 
 vi.mock("../components/agent-composer", () => ({
-  AgentComposer: () => <form />,
+  AgentComposer: (props: {
+    showJumpToBottom?: boolean
+    showIdleJumpToBottom?: boolean
+    onJumpToBottom?: () => void
+  }) => {
+    mocks.composerProps = props
+    return <form />
+  },
 }))
 
 const targetSession: SynapseAgentSessionSummary = {
@@ -149,6 +166,12 @@ afterEach(() => {
   document.body.innerHTML = ""
   vi.clearAllMocks()
   mocks.chat = null
+  mocks.stickState = {
+    isPinned: true,
+    hasUnread: false,
+  }
+  mocks.scrollToBottom.mockClear()
+  mocks.composerProps = null
   mocks.timelineProps = null
   mocks.sidebarProps = null
   mocks.configProjects = [{ id: "project-1", name: "Project One", path: "/repo" }]
@@ -677,6 +700,102 @@ describe("AgentModule pending prompt sessions", () => {
       },
     )
     expect(mocks.toast).toHaveBeenCalledWith("打开失败")
+  })
+
+  it("shows the idle jump button only when the selected conversation is off bottom and idle", async () => {
+    mocks.stickState = {
+      isPinned: false,
+      hasUnread: false,
+    }
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+      timeline: [{
+        id: "message-1",
+        kind: "message",
+        role: "assistant",
+        content: "Older answer",
+        timestamp: "2026-06-01T00:00:00.000Z",
+      }],
+      sending: false,
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    expect(mocks.composerProps?.showJumpToBottom).toBe(false)
+    expect(mocks.composerProps?.showIdleJumpToBottom).toBe(true)
+  })
+
+  it("keeps the unread jump button when off-bottom unread content exists after output stops", async () => {
+    mocks.stickState = {
+      isPinned: false,
+      hasUnread: true,
+    }
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+      timeline: [{
+        id: "message-1",
+        kind: "message",
+        role: "assistant",
+        content: "New answer",
+        timestamp: "2026-06-01T00:00:00.000Z",
+      }],
+      sending: false,
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    expect(mocks.composerProps?.showJumpToBottom).toBe(true)
+    expect(mocks.composerProps?.showIdleJumpToBottom).toBe(false)
+  })
+
+  it("does not show the idle jump button while Agent output is active", async () => {
+    mocks.stickState = {
+      isPinned: false,
+      hasUnread: false,
+    }
+    mocks.chat = createChatState({
+      sessions: [targetSession],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+      timeline: [{
+        id: "message-1",
+        kind: "message",
+        role: "assistant",
+        content: "Streaming answer",
+        timestamp: "2026-06-01T00:00:00.000Z",
+      }],
+      sending: true,
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    expect(mocks.composerProps?.showJumpToBottom).toBe(false)
+    expect(mocks.composerProps?.showIdleJumpToBottom).toBe(false)
   })
 })
 

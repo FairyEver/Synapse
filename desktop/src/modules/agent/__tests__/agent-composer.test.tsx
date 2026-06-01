@@ -141,6 +141,54 @@ describe("AgentComposer", () => {
     expect(html).toContain("right-0")
   })
 
+  it("renders the idle jump-to-bottom icon centered above the composer", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        showIdleJumpToBottom
+        onJumpToBottom={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain('aria-label="滚动到底部"')
+    expect(html).toContain("absolute -top-11 left-1/2")
+    expect(html).toContain("-translate-x-1/2")
+    expect(html).not.toContain("↓ 新消息")
+  })
+
+  it("keeps the unread jump button ahead of the idle jump icon", () => {
+    const html = renderToStaticMarkup(
+      <AgentComposer
+        draft=""
+        disabled={false}
+        canSend={false}
+        sending={false}
+        cancelPhase="idle"
+        showJumpToBottom
+        showIdleJumpToBottom
+        onJumpToBottom={vi.fn()}
+        onDraftChange={vi.fn()}
+        onInputKeyDown={vi.fn()}
+        onSubmit={vi.fn()}
+        onCancelTurn={vi.fn()}
+        onForceKillTurn={vi.fn()}
+      />,
+    )
+
+    expect(html).toContain("↓ 新消息")
+    expect(html).toContain('aria-label="跳到最新消息"')
+    expect(html).not.toContain('aria-label="滚动到底部"')
+  })
+
   it("tracks the jump-to-bottom action from the composer", async () => {
     const onJumpToBottom = vi.fn()
     const container = document.createElement("div")
@@ -177,6 +225,46 @@ describe("AgentComposer", () => {
     expect(track).toHaveBeenCalledWith({
       component: "button",
       name: "agent-timeline-jump-to-bottom",
+      action: "click",
+    })
+  })
+
+  it("uses the same jump action for the idle jump icon", async () => {
+    const onJumpToBottom = vi.fn()
+    const container = document.createElement("div")
+    const root = createRoot(container)
+    roots.push(root)
+    track.mockClear()
+
+    await act(async () => {
+      root.render(
+        <AgentComposer
+          draft=""
+          disabled={false}
+          canSend={false}
+          sending={false}
+          cancelPhase="idle"
+          showIdleJumpToBottom
+          onJumpToBottom={onJumpToBottom}
+          onDraftChange={vi.fn()}
+          onInputKeyDown={vi.fn()}
+          onSubmit={vi.fn()}
+          onCancelTurn={vi.fn()}
+          onForceKillTurn={vi.fn()}
+        />,
+      )
+    })
+
+    const button = container.querySelector('button[aria-label="滚动到底部"]')
+    expect(button).toBeTruthy()
+    await act(async () => {
+      button?.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+    })
+
+    expect(onJumpToBottom).toHaveBeenCalledTimes(1)
+    expect(track).toHaveBeenCalledWith({
+      component: "button",
+      name: "agent-timeline-idle-jump-to-bottom",
       action: "click",
     })
   })
