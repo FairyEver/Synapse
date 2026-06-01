@@ -19,7 +19,7 @@ describe('performDashboardSignOut', () => {
     expect(reset).toHaveBeenCalledOnce()
     expect(navigate).toHaveBeenCalledWith({
       to: '/sign-in',
-      search: { redirect: '/dashboard/users?page=2' },
+      search: { redirect: '/users?page=2' },
       replace: true,
     })
     expect(logout.mock.invocationCallOrder[0]).toBeLessThan(
@@ -42,7 +42,7 @@ describe('performDashboardSignOut', () => {
     expect(reset).toHaveBeenCalledOnce()
     expect(navigate).toHaveBeenCalledWith({
       to: '/sign-in',
-      search: { redirect: '/dashboard/settings' },
+      search: { redirect: '/settings' },
       replace: true,
     })
   })

@@ -1,3 +1,5 @@
+import { normalizeDashboardRedirect } from './dashboard-redirect'
+
 type NavigateToSignIn = (options: {
   to: '/sign-in'
   search: { redirect: string }
@@ -23,7 +25,7 @@ export async function performDashboardSignOut(options: {
   options.reset()
   await options.navigate({
     to: '/sign-in',
-    search: { redirect: options.currentPath },
+    search: { redirect: normalizeDashboardRedirect(options.currentPath) ?? '/' },
     replace: true,
   })
 }
