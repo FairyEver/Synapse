@@ -146,7 +146,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
   })
 
-  it("uploads selected source files through guarded write permission", async () => {
+  it("uploads selected source files through guarded read and write permissions", async () => {
     const uploadSources = vi.fn().mockResolvedValue({
       projectId: "kb-1",
       uploaded: [{
@@ -173,7 +173,13 @@ describe("knowledgeBaseIpcModule", () => {
       filePaths: ["/tmp/source.md"],
     })
     expect(result.uploaded).toHaveLength(1)
-    expect(permissionGuard.check).toHaveBeenCalledWith({
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(1, {
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/source.md",
+      context: { source: "knowledgeBase.selectAndUploadSources.read" },
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(2, {
       action: "fs.write",
       actor: { kind: "user" },
       resource: "managed-knowledge-base:kb-1",
@@ -181,13 +187,13 @@ describe("knowledgeBaseIpcModule", () => {
     })
   })
 
-  it("uploads dropped source files through guarded write permission", async () => {
+  it("uploads dropped source files through guarded read and write permissions", async () => {
     const uploadSources = vi.fn().mockResolvedValue({
       projectId: "kb-1",
       uploaded: [],
       skipped: [],
     })
-    const { harness } = createHarness({ service: { uploadSources } })
+    const { harness, permissionGuard } = createHarness({ service: { uploadSources } })
 
     await harness.invoke("synapse:knowledge-base:upload-sources", {
       projectId: "kb-1",
@@ -197,6 +203,18 @@ describe("knowledgeBaseIpcModule", () => {
     expect(uploadSources).toHaveBeenCalledWith({
       projectId: "kb-1",
       filePaths: ["/tmp/source.md"],
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(1, {
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/source.md",
+      context: { source: "knowledgeBase.uploadSources.read" },
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(2, {
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base:kb-1",
+      context: { source: "knowledgeBase.uploadSources" },
     })
   })
 
@@ -352,7 +370,7 @@ describe("knowledgeBaseIpcModule", () => {
     })
   })
 
-  it("uploads raw files through guarded write permission", async () => {
+  it("uploads raw files through guarded read and write permissions", async () => {
     const uploadRawFiles = vi.fn().mockResolvedValue({
       projectId: "kb-1",
       entries: [{
@@ -377,7 +395,13 @@ describe("knowledgeBaseIpcModule", () => {
       targetDirectoryPath: "client-a",
       filePaths: ["/tmp/brief.md"],
     })
-    expect(permissionGuard.check).toHaveBeenCalledWith({
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(1, {
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/brief.md",
+      context: { source: "knowledgeBase.uploadRawFiles.read" },
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(2, {
       action: "fs.write",
       actor: { kind: "user" },
       resource: "managed-knowledge-base:kb-1",
@@ -385,13 +409,13 @@ describe("knowledgeBaseIpcModule", () => {
     })
   })
 
-  it("selects raw files into the requested folder", async () => {
+  it("selects raw files into the requested folder through guarded read and write permissions", async () => {
     const uploadRawFiles = vi.fn().mockResolvedValue({
       projectId: "kb-1",
       entries: [],
       skipped: [],
     })
-    const { harness } = createHarness({ service: { uploadRawFiles } })
+    const { harness, permissionGuard } = createHarness({ service: { uploadRawFiles } })
 
     await harness.invoke("synapse:knowledge-base:select-and-upload-raw-files", {
       projectId: "kb-1",
@@ -405,6 +429,50 @@ describe("knowledgeBaseIpcModule", () => {
       projectId: "kb-1",
       targetDirectoryPath: "client-a",
       filePaths: ["/tmp/source.md"],
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(1, {
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/source.md",
+      context: { source: "knowledgeBase.selectAndUploadRawFiles.read" },
+    })
+    expect(permissionGuard.check).toHaveBeenNthCalledWith(2, {
+      action: "fs.write",
+      actor: { kind: "user" },
+      resource: "managed-knowledge-base:kb-1",
+      context: { source: "knowledgeBase.selectAndUploadRawFiles" },
+    })
+  })
+
+  it("does not upload raw files when external file read permission is denied", async () => {
+    const uploadRawFiles = vi.fn().mockResolvedValue({
+      projectId: "kb-1",
+      entries: [],
+      skipped: [],
+    })
+    const { auditSink, harness, permissionGuard } = createHarness({
+      permissions: [{ allowed: false, reason: "denied by test", policyId: "test-policy" }],
+      service: { uploadRawFiles },
+    })
+
+    await expect(harness.invoke("synapse:knowledge-base:upload-raw-files", {
+      projectId: "kb-1",
+      targetDirectoryPath: "client-a",
+      filePaths: ["/tmp/brief.md"],
+    })).rejects.toThrow("denied by test")
+
+    expect(uploadRawFiles).not.toHaveBeenCalled()
+    expect(permissionGuard.check).toHaveBeenCalledOnce()
+    expect(auditSink.record).toHaveBeenCalledWith({
+      action: "fs.read.outside-userdata",
+      actor: { kind: "user" },
+      resource: "/tmp/brief.md",
+      outcome: "denied",
+      metadata: {
+        source: "knowledgeBase.uploadRawFiles.read",
+        reason: "denied by test",
+        policyId: "test-policy",
+      },
     })
   })
 

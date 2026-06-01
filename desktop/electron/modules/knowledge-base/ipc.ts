@@ -196,6 +196,32 @@ async function runGuardedKnowledgeBaseOperation<T>(options: {
   }
 }
 
+async function runGuardedKnowledgeBaseFileUpload<T>(options: {
+  ctx: IpcHandlerContext
+  projectId: string
+  filePaths: readonly string[]
+  readSource: string
+  writeSource: string
+  run(): Promise<T>
+}): Promise<T> {
+  for (const filePath of options.filePaths) {
+    await runGuardedKnowledgeBaseOperation({
+      ctx: options.ctx,
+      action: "fs.read.outside-userdata",
+      resource: filePath,
+      source: options.readSource,
+      run: async () => undefined,
+    })
+  }
+  return runGuardedKnowledgeBaseOperation({
+    ctx: options.ctx,
+    action: "fs.write",
+    resource: `managed-knowledge-base:${options.projectId}`,
+    source: options.writeSource,
+    run: options.run,
+  })
+}
+
 export const knowledgeBaseIpcModule: IpcModule = {
   id: "knowledge-base",
   methods: {
@@ -256,11 +282,12 @@ export const knowledgeBaseIpcModule: IpcModule = {
       channel: "synapse:knowledge-base:upload-sources",
       request: uploadSourcesPayloadSchema,
       response: uploadSourcesResultSchema,
-      handler: (ctx, request: { projectId: string; filePaths: string[] }) => runGuardedKnowledgeBaseOperation({
+      handler: (ctx, request: { projectId: string; filePaths: string[] }) => runGuardedKnowledgeBaseFileUpload({
         ctx,
-        action: "fs.write",
-        resource: `managed-knowledge-base:${request.projectId}`,
-        source: "knowledgeBase.uploadSources",
+        projectId: request.projectId,
+        filePaths: request.filePaths,
+        readSource: "knowledgeBase.uploadSources.read",
+        writeSource: "knowledgeBase.uploadSources",
         run: () => service(ctx).uploadSources(request),
       }),
     },
@@ -269,11 +296,12 @@ export const knowledgeBaseIpcModule: IpcModule = {
       channel: "synapse:knowledge-base:upload-raw-files",
       request: uploadRawFilesPayloadSchema,
       response: rawMutationResultSchema,
-      handler: (ctx, request: { projectId: string; targetDirectoryPath: string; filePaths: string[] }) => runGuardedKnowledgeBaseOperation({
+      handler: (ctx, request: { projectId: string; targetDirectoryPath: string; filePaths: string[] }) => runGuardedKnowledgeBaseFileUpload({
         ctx,
-        action: "fs.write",
-        resource: `managed-knowledge-base:${request.projectId}`,
-        source: "knowledgeBase.uploadRawFiles",
+        projectId: request.projectId,
+        filePaths: request.filePaths,
+        readSource: "knowledgeBase.uploadRawFiles.read",
+        writeSource: "knowledgeBase.uploadRawFiles",
         run: () => service(ctx).uploadRawFiles(request),
       }),
     },
@@ -353,24 +381,25 @@ export const knowledgeBaseIpcModule: IpcModule = {
       channel: "synapse:knowledge-base:select-and-upload-sources",
       request: z.object({ projectId: z.string().min(1) }),
       response: uploadSourcesResultSchema,
-      handler: (ctx, request: { projectId: string }) => runGuardedKnowledgeBaseOperation({
-        ctx,
-        action: "fs.write",
-        resource: `managed-knowledge-base:${request.projectId}`,
-        source: "knowledgeBase.selectAndUploadSources",
-        run: async () => {
-          const result = await dialog.showOpenDialog({
-            properties: ["openFile", "multiSelections"],
-          })
-          if (result.canceled || result.filePaths.length === 0) {
-            return { projectId: request.projectId, uploaded: [], skipped: [] }
-          }
-          return service(ctx).uploadSources({
+      handler: async (ctx, request: { projectId: string }) => {
+        const result = await dialog.showOpenDialog({
+          properties: ["openFile", "multiSelections"],
+        })
+        if (result.canceled || result.filePaths.length === 0) {
+          return { projectId: request.projectId, uploaded: [], skipped: [] }
+        }
+        return runGuardedKnowledgeBaseFileUpload({
+          ctx,
+          projectId: request.projectId,
+          filePaths: result.filePaths,
+          readSource: "knowledgeBase.selectAndUploadSources.read",
+          writeSource: "knowledgeBase.selectAndUploadSources",
+          run: () => service(ctx).uploadSources({
             projectId: request.projectId,
             filePaths: result.filePaths,
-          })
-        },
-      }),
+          }),
+        })
+      },
     },
     selectAndUploadRawFiles: {
       kind: "invoke",
@@ -380,25 +409,26 @@ export const knowledgeBaseIpcModule: IpcModule = {
         targetDirectoryPath: z.string(),
       }),
       response: rawMutationResultSchema,
-      handler: (ctx, request: { projectId: string; targetDirectoryPath: string }) => runGuardedKnowledgeBaseOperation({
-        ctx,
-        action: "fs.write",
-        resource: `managed-knowledge-base:${request.projectId}`,
-        source: "knowledgeBase.selectAndUploadRawFiles",
-        run: async () => {
-          const result = await dialog.showOpenDialog({
-            properties: ["openFile", "multiSelections"],
-          })
-          if (result.canceled || result.filePaths.length === 0) {
-            return { projectId: request.projectId, entries: [], skipped: [] }
-          }
-          return service(ctx).uploadRawFiles({
+      handler: async (ctx, request: { projectId: string; targetDirectoryPath: string }) => {
+        const result = await dialog.showOpenDialog({
+          properties: ["openFile", "multiSelections"],
+        })
+        if (result.canceled || result.filePaths.length === 0) {
+          return { projectId: request.projectId, entries: [], skipped: [] }
+        }
+        return runGuardedKnowledgeBaseFileUpload({
+          ctx,
+          projectId: request.projectId,
+          filePaths: result.filePaths,
+          readSource: "knowledgeBase.selectAndUploadRawFiles.read",
+          writeSource: "knowledgeBase.selectAndUploadRawFiles",
+          run: () => service(ctx).uploadRawFiles({
             projectId: request.projectId,
             targetDirectoryPath: request.targetDirectoryPath,
             filePaths: result.filePaths,
-          })
-        },
-      }),
+          }),
+        })
+      },
     },
     openSourceManager: {
       kind: "invoke",
