@@ -215,6 +215,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       logger.info("Project removed.", { projectId: project.id })
     } catch (error) {
       logger.error("Failed to remove project.", { projectId: project.id, error })
+      toast("删除项目失败。")
     }
   }
 

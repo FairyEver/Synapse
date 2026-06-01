@@ -325,6 +325,7 @@ describe("ProjectListEditor knowledge base actions", () => {
         projectId: "project-1",
         error: expect.any(Error),
       })
+      expect(toast).toHaveBeenCalledWith("删除项目失败。")
     })
     expect(onSave).not.toHaveBeenCalled()
   })
