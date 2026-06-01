@@ -149,17 +149,19 @@ async function runPendingPushFlow(deps: BeforeQuitDeps): Promise<void> {
     if (result.response === 0) {
       const config = await configStore.load()
 
-      for (const repository of config.repositories) {
-        try {
-          await withTimeout(
-            coordinator.requestPush(repository, "quit"),
-            QUIT_PUSH_TIMEOUT_MS,
-            `Repository push timed out during quit: ${repository.uuid}`,
-          )
-        } catch (error) {
-          logger.error(`Failed to push repository ${repository.uuid} during quit.`, error)
-        }
-      }
+      await Promise.allSettled(
+        config.repositories.map(async (repository) => {
+          try {
+            await withTimeout(
+              coordinator.requestPush(repository, "quit"),
+              QUIT_PUSH_TIMEOUT_MS,
+              `Repository push timed out during quit: ${repository.uuid}`,
+            )
+          } catch (error) {
+            logger.error(`Failed to push repository ${repository.uuid} during quit.`, error)
+          }
+        }),
+      )
     }
 
     requestQuit()

@@ -6,6 +6,7 @@ import { DatabaseSync } from "node:sqlite"
 import { closeUsageAnalysisDbForTests, getUsageAnalysisDb } from "../db"
 import { initUsageAnalysisSchema } from "../db-schema"
 import { CcUsageAnalysisService, runWithUsageDatabaseLockRetry } from "../cc-service"
+import { CodexUsageAnalysisService } from "../codex-service"
 
 const tempDirs: string[] = []
 
@@ -35,6 +36,33 @@ describe("usage analysis reports", () => {
       sessionId: "session-1",
       timestampMs: 1779843600000,
     }))
+  })
+
+  it("counts detail row tools inside each usage event interval", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const db = getUsageAnalysisDb(dir)
+    const service = new CcUsageAnalysisService({ db, roots: [] })
+    db.exec(`
+      INSERT INTO cc_usage_events (
+        id, session_id, timestamp_ms, date, hour, workspace_key, workspace_label, model, provider,
+        input_tokens, output_tokens
+      ) VALUES
+        ('usage-1', 'session-1', 1779843600000, '2026-05-27', '2026-05-27 09', '-repo', '/repo', 'claude-opus-4.6', 'anthropic', 10, 5),
+        ('usage-2', 'session-1', 1779847200000, '2026-05-27', '2026-05-27 10', '-repo', '/repo', 'claude-opus-4.6', 'anthropic', 20, 5)
+    `)
+    db.exec(`
+      INSERT INTO cc_tool_events (
+        id, session_id, timestamp_ms, date, hour, workspace_key, tool_name, category
+      ) VALUES
+        ('tool-1', 'session-1', 1779845400000, '2026-05-27', '2026-05-27 09', '-repo', 'Read', 'tool_use'),
+        ('tool-2', 'session-1', 1779849000000, '2026-05-27', '2026-05-27 10', '-repo', 'Bash', 'tool_use')
+    `)
+
+    expect(service.getDetails({ preset: "all", limit: 10 }).map((row) => [row.id, row.toolCalls])).toEqual([
+      ["usage-2", 1],
+      ["usage-1", 1],
+    ])
   })
 
   it("retries transient database write locks during refresh writes", async () => {
@@ -134,6 +162,69 @@ describe("usage analysis reports", () => {
 
     expect(db.prepare("SELECT SUM(tool_calls) AS toolCalls FROM cc_daily_usage").get()).toEqual({ toolCalls: 1 })
     expect(db.prepare("SELECT SUM(tool_calls) AS toolCalls FROM cc_hourly_usage").get()).toEqual({ toolCalls: 1 })
+  })
+
+  it("removes CC usage rows for source files deleted before refresh", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const projectDir = path.join(dir, ".claude", "projects", "-tmp-project")
+    fs.mkdirSync(projectDir, { recursive: true })
+    const file = path.join(projectDir, "session.jsonl")
+    fs.writeFileSync(file, JSON.stringify({
+      type: "assistant",
+      sessionId: "session",
+      timestamp: "2026-05-19T01:00:01.000Z",
+      message: {
+        id: "msg-1",
+        role: "assistant",
+        model: "claude-opus-4.6",
+        usage: { input_tokens: 100, output_tokens: 20 },
+      },
+    }))
+
+    const db = getUsageAnalysisDb(dir)
+    const service = new CcUsageAnalysisService({ db, roots: [path.join(dir, ".claude", "projects")] })
+    await service.refresh()
+
+    fs.rmSync(file)
+    const refresh = await service.refresh()
+
+    expect(refresh.scannedFiles).toBe(0)
+    expect(service.getOverview({ preset: "all" }).totals.tokens).toBe(0)
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cc_scan_files WHERE file_path = ?").get(file)).toEqual({ count: 0 })
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cc_sessions WHERE file_path = ?").get(file)).toEqual({ count: 0 })
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cc_usage_events").get()).toEqual({ count: 0 })
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cc_daily_usage").get()).toEqual({ count: 0 })
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cc_hourly_usage").get()).toEqual({ count: 0 })
+  })
+
+  it("removes Codex usage rows for source files deleted before refresh", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const projectDir = path.join(dir, ".codex", "sessions")
+    fs.mkdirSync(projectDir, { recursive: true })
+    const file = path.join(projectDir, "rollout-test.jsonl")
+    fs.writeFileSync(file, [
+      JSON.stringify({ type: "session_meta", timestamp: "2026-05-19T01:00:00.000Z", payload: { type: "session_meta", id: "s1", cwd: "/tmp/project", model_provider: "openai", source: "cli", cli_version: "1.0.0" } }),
+      JSON.stringify({ type: "turn_context", timestamp: "2026-05-19T01:00:01.000Z", payload: { type: "turn_context", model: "gpt-5.5" } }),
+      JSON.stringify({ type: "event_msg", timestamp: "2026-05-19T01:00:03.000Z", payload: { type: "token_count", info: { last_token_usage: { input_tokens: 100, cached_input_tokens: 20, output_tokens: 30, reasoning_output_tokens: 10 } } } }),
+    ].join("\n"))
+
+    const db = getUsageAnalysisDb(dir)
+    const service = new CodexUsageAnalysisService({ db, roots: [path.join(dir, ".codex", "sessions")] })
+    await service.refresh()
+
+    fs.rmSync(file)
+    const refresh = await service.refresh()
+
+    expect(refresh.scannedFiles).toBe(0)
+    expect(service.getOverview({ preset: "all" }).totals.tokens).toBe(0)
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cx_scan_files WHERE file_path = ?").get(file)).toEqual({ count: 0 })
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cx_sessions WHERE file_path = ?").get(file)).toEqual({ count: 0 })
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cx_usage_events").get()).toEqual({ count: 0 })
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cx_task_events").get()).toEqual({ count: 0 })
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cx_daily_usage").get()).toEqual({ count: 0 })
+    expect(db.prepare("SELECT COUNT(*) AS count FROM cx_hourly_usage").get()).toEqual({ count: 0 })
   })
 
   it("keeps historical event costs stable after saving model-only price rules", async () => {

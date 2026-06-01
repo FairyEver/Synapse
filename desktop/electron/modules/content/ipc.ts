@@ -649,10 +649,26 @@ export const contentIpcModule: IpcModule = {
         })
 
         logger.info(`Content download started. contentType: ${args.contentType}, contentId: ${args.id}, targetPath: ${path.basename(result.filePath)}`)
-        await contentDownloadService.download(args.contentType, args.id, result.filePath, {
-          actor: { kind: "user" },
-          processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
-        })
+        try {
+          await contentDownloadService.download(args.contentType, args.id, result.filePath, {
+            actor: { kind: "user" },
+            processRunner: createControlledProcessRunner({ permissionGuard, auditSink }),
+          })
+        } catch (error) {
+          auditSink.record({
+            action: "fs.write",
+            actor: { kind: "user" },
+            resource: result.filePath,
+            outcome: "failed",
+            metadata: {
+              ...downloadMetadata,
+              errorLength: String(error).length,
+              errorName: error instanceof Error ? error.name : typeof error,
+              fileName: sanitizedFileName,
+            },
+          })
+          throw error
+        }
 
         return {
           canceled: false,

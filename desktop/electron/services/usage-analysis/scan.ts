@@ -12,8 +12,9 @@ function collectJsonlFilesFromDir(dir: string, out: string[], maxDepth: number):
   let entries: fs.Dirent[]
   try {
     entries = fs.readdirSync(dir, { withFileTypes: true })
-  } catch {
-    return
+  } catch (error) {
+    if (isMissingDirectoryError(error)) return
+    throw new Error(`Unable to read usage analysis directory: ${dir}`, { cause: error })
   }
 
   for (const entry of entries) {
@@ -26,6 +27,13 @@ function collectJsonlFilesFromDir(dir: string, out: string[], maxDepth: number):
       out.push(fullPath)
     }
   }
+}
+
+function isMissingDirectoryError(error: unknown): boolean {
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? String((error as NodeJS.ErrnoException).code)
+    : ""
+  return code === "ENOENT" || code === "ENOTDIR"
 }
 
 export function collectJsonlFiles(roots: string[], maxDepth = 8): string[] {

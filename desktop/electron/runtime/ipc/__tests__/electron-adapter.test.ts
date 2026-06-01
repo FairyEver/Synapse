@@ -42,8 +42,12 @@ describe("createElectronTransportInstall", () => {
     await expect(handler?.({ senderFrame: { url: "http://localhost:5173/" } }, {
       token: "secret",
       value: "ok",
+      body: "raw HTTP body with bearer sample",
       content: "deploy private branch with customer secret",
       prompt: "summarize private customer outage",
+      requestBody: "request body with customer data",
+      responseBody: "response body with customer data",
+      text: "freeform text with customer data",
       metadata: {
         message: "approval says include customer names",
       },
@@ -64,8 +68,12 @@ describe("createElectronTransportInstall", () => {
         request: expect.objectContaining({
           token: "[redacted]",
           value: "ok",
+          body: "[redacted text 32 chars]",
           content: "[redacted text 42 chars]",
           prompt: "[redacted text 33 chars]",
+          requestBody: "[redacted text 31 chars]",
+          responseBody: "[redacted text 32 chars]",
+          text: "[redacted text 32 chars]",
           metadata: expect.objectContaining({
             message: "[redacted text 36 chars]",
           }),
@@ -75,6 +83,8 @@ describe("createElectronTransportInstall", () => {
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("secret prompt text")
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("deploy private branch")
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("private customer outage")
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("customer data")
+    expect(JSON.stringify(logger.error.mock.calls)).not.toContain("raw HTTP body")
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("customer names")
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("sk-live")
     expect(JSON.stringify(logger.error.mock.calls)).not.toContain("/Users/liyang")

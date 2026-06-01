@@ -138,6 +138,88 @@ describe("attachBeforeQuitHandler", () => {
     expect(allowQuit).toBe(true)
   })
 
+  it("starts all pending repository pushes before waiting for slow pushes during quit", async () => {
+    const { configStore } = await import("../../services/config-store")
+    const { attachBeforeQuitHandler } = await import("../before-quit")
+    const repositories = [
+      {
+        uuid: "repo-1",
+        name: "Repo 1",
+        localPath: "/repo-1",
+        contentDirs: {},
+      },
+      {
+        uuid: "repo-2",
+        name: "Repo 2",
+        localPath: "/repo-2",
+        contentDirs: {},
+      },
+    ]
+    let resolveSlowPush: () => void = () => {}
+    const slowPush = new Promise<void>((resolve) => {
+      resolveSlowPush = resolve
+    })
+    const coordinator = {
+      countAllPending: vi.fn(async () => 2),
+      requestPush: vi.fn((repository: { uuid: string }) => {
+        if (repository.uuid === "repo-1") {
+          return slowPush
+        }
+        return Promise.resolve()
+      }),
+    }
+    vi.mocked(configStore.load).mockResolvedValueOnce({
+      activeRepoUuid: "repo-1",
+      repositories,
+      global: {},
+    } as never)
+    electronMock.showMessageBox.mockResolvedValueOnce({ response: 0 } as never)
+    let allowQuit = false
+
+    attachBeforeQuitHandler({
+      state: { current: null },
+      registry: {
+        get: vi.fn((id: string) => {
+          if (id === "repo.sync-coordinator") {
+            return coordinator
+          }
+          throw new Error(`Unexpected service id: ${id}`)
+        }),
+        stopAll: vi.fn(async () => {}),
+      } as never,
+      setAllowQuit: (value) => {
+        allowQuit = value
+      },
+      isAllowedToQuit: () => allowQuit,
+    })
+    const beforeQuitHandler = electronMock.app.on.mock.calls.find(
+      ([eventName]) => eventName === "before-quit",
+    )?.[1] as (event: { preventDefault: () => void }) => Promise<void>
+
+    await beforeQuitHandler({ preventDefault: vi.fn() })
+    await new Promise((resolve) => setImmediate(resolve))
+
+    try {
+      expect(coordinator.requestPush).toHaveBeenCalledTimes(2)
+      expect(coordinator.requestPush).toHaveBeenNthCalledWith(
+        1,
+        expect.objectContaining({ uuid: "repo-1" }),
+        "quit",
+      )
+      expect(coordinator.requestPush).toHaveBeenNthCalledWith(
+        2,
+        expect.objectContaining({ uuid: "repo-2" }),
+        "quit",
+      )
+      expect(allowQuit).toBe(false)
+    } finally {
+      resolveSlowPush()
+      await new Promise((resolve) => setImmediate(resolve))
+    }
+
+    expect(allowQuit).toBe(true)
+  })
+
   it("does not call quit twice when the timeout fires before the flow settles", async () => {
     vi.useFakeTimers()
     const { attachBeforeQuitHandler } = await import("../before-quit")

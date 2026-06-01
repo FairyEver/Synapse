@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -17,6 +17,30 @@ describe("usage analysis scan utilities", () => {
     } finally {
       fs.rmSync(dir, { recursive: true, force: true })
     }
+  })
+
+  it("does not silently ignore unreadable scan directories", () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-scan-"))
+    try {
+      const originalReaddirSync = fs.readdirSync
+      vi.spyOn(fs, "readdirSync").mockImplementation(((target: fs.PathLike, options?: fs.ObjectEncodingOptions) => {
+        if (target === dir) {
+          const error = new Error(`EACCES: permission denied, scandir '${dir}'`) as NodeJS.ErrnoException
+          error.code = "EACCES"
+          throw error
+        }
+        return originalReaddirSync(target, options as never)
+      }) as typeof fs.readdirSync)
+
+      expect(() => collectJsonlFiles([dir])).toThrow("Unable to read usage analysis directory")
+    } finally {
+      vi.restoreAllMocks()
+      fs.rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it("keeps missing scan directories empty", () => {
+    expect(collectJsonlFiles([path.join(os.tmpdir(), "synapse-missing-usage-root")])).toEqual([])
   })
 
   it("creates file fingerprints", () => {
