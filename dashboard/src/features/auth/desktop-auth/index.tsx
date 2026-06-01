@@ -16,6 +16,8 @@ import { AuthLayout } from '../auth-layout'
 const desktopClientId = 'synapse-desktop'
 const desktopRedirectUri = 'synapse://auth/desktop/callback'
 const pkceChallengeMethod = 'S256' as const
+const protocolFallbackDelayMs = 3500
+const protocolFallbackMessage = '未检测到 Synapse 桌面应用。请确认已安装并允许浏览器打开。'
 
 type DesktopAuthSearch = {
   client_id?: string
@@ -82,6 +84,7 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
   const [isSwitchingAccount, setIsSwitchingAccount] = useState(false)
   const issuedKeyRef = useRef('')
   const unsupportedAccountRef = useRef('')
+  const protocolFallbackCleanupRef = useRef<(() => void) | null>(null)
   const input = useMemo(() => validateDesktopAuthSearch(search), [search])
   const redirect = useMemo(() => buildDesktopAuthRedirect(search), [search])
   const deepLinkUrl =
@@ -90,6 +93,44 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
     authorizeState.status === 'error'
       ? authorizeState.deepLinkUrl
       : undefined
+
+  function clearProtocolFallback() {
+    protocolFallbackCleanupRef.current?.()
+    protocolFallbackCleanupRef.current = null
+  }
+
+  function openDeepLink(deepLinkUrl: string) {
+    clearProtocolFallback()
+
+    let didLeavePage = false
+    const markLeavePage = () => {
+      didLeavePage = true
+    }
+    const markHidden = () => {
+      if (document.visibilityState === 'hidden') didLeavePage = true
+    }
+    const timer = window.setTimeout(() => {
+      cleanup()
+      if (!didLeavePage) {
+        setAuthorizeState({
+          status: 'error',
+          message: protocolFallbackMessage,
+          deepLinkUrl,
+        })
+      }
+    }, protocolFallbackDelayMs)
+
+    function cleanup() {
+      window.clearTimeout(timer)
+      window.removeEventListener('blur', markLeavePage)
+      document.removeEventListener('visibilitychange', markHidden)
+    }
+
+    window.addEventListener('blur', markLeavePage)
+    document.addEventListener('visibilitychange', markHidden)
+    window.location.href = deepLinkUrl
+    protocolFallbackCleanupRef.current = cleanup
+  }
 
   useEffect(() => {
     if (!input || !auth.isAuthenticated || !auth.user) return
@@ -105,8 +146,8 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
       .authorizeDesktopLogin(input)
       .then((result) => {
         if (cancelled) return
-        window.location.href = result.deepLinkUrl
         setAuthorizeState({ status: 'opened', deepLinkUrl: result.deepLinkUrl })
+        openDeepLink(result.deepLinkUrl)
       })
       .catch((error: unknown) => {
         if (cancelled) return
@@ -116,6 +157,7 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
 
     return () => {
       cancelled = true
+      clearProtocolFallback()
       if (issuedKeyRef.current === issueKey) {
         issuedKeyRef.current = ''
       }
@@ -191,7 +233,8 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
                 return
               }
               if (deepLinkUrl) {
-                window.location.href = deepLinkUrl
+                setAuthorizeState({ status: 'opened', deepLinkUrl })
+                openDeepLink(deepLinkUrl)
               }
             }}
           >
@@ -203,6 +246,13 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
               : authorizeState.status === 'opened'
                 ? '再次打开'
                 : '打开'}
+          </Button>
+          <Button
+            type='button'
+            variant='outline'
+            onClick={() => navigate({ to: '/me', replace: true })}
+          >
+            返回首页
           </Button>
         </div>
       </DesktopAuthCard>
