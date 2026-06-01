@@ -283,6 +283,7 @@ describe("ProjectListEditor knowledge base actions", () => {
       })
       expect(bridgeMocks.knowledgeBase.deleteManaged).toHaveBeenCalledWith({
         projectId: "new-project-id",
+        runtimeId: "new-project-id",
       })
     })
     expect(document.body.textContent).toContain("创建知识库失败。")

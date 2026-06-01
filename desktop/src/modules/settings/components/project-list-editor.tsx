@@ -191,7 +191,7 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
       resetKnowledgeBaseForm()
     } catch (error) {
       if (shouldCleanupRuntime) {
-        await window.synapse.knowledgeBase.deleteManaged?.({ projectId }).catch((cleanupError) => {
+        await window.synapse.knowledgeBase.deleteManaged?.({ projectId, runtimeId: projectId }).catch((cleanupError) => {
           logger.error("Failed to clean up managed knowledge base runtime after create failure.", { cleanupError, projectId })
         })
       }
