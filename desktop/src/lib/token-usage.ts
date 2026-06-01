@@ -8,7 +8,12 @@ export interface ClaudeSdkUsageSummary {
   readonly outputTokens: number
   readonly cacheReadInputTokens: number
   readonly cacheCreationInputTokens: number
+  readonly reasoningOutputTokens?: number
   readonly totalTokens: number
+}
+
+export interface TokenUsageFieldsOptions {
+  readonly prefix?: string
 }
 
 const TOKEN_USAGE_DEFINITIONS: readonly {
@@ -27,7 +32,10 @@ const tokenNumberFormatter = new Intl.NumberFormat("en-US", {
   maximumFractionDigits: 0,
 })
 
-export function tokenUsageFields(usage: Record<string, unknown> | undefined): readonly TokenUsageField[] | undefined {
+export function tokenUsageFields(
+  usage: Record<string, unknown> | undefined,
+  options: TokenUsageFieldsOptions = {},
+): readonly TokenUsageField[] | undefined {
   if (!usage) return undefined
   const fields = TOKEN_USAGE_DEFINITIONS.map((definition) => ({
     label: definition.label,
@@ -35,10 +43,12 @@ export function tokenUsageFields(usage: Record<string, unknown> | undefined): re
     optional: definition.optional,
   }))
   if (!fields.some((field) => field.value !== undefined)) return undefined
-  return fields.flatMap((field) => {
+  const usageFields = fields.flatMap((field) => {
     if (field.optional && field.value === undefined) return []
     return [{ label: field.label, value: field.value ?? 0 }]
   })
+  if (!options.prefix) return usageFields
+  return [{ label: options.prefix, value: Number.NaN }, ...usageFields]
 }
 
 export function normalizeClaudeSdkUsage(
@@ -49,11 +59,13 @@ export function normalizeClaudeSdkUsage(
   const outputTokens = tokenNumber(usage, ["output_tokens"])
   const cacheReadInputTokens = tokenNumber(usage, ["cache_read_input_tokens"])
   const cacheCreationInputTokens = tokenNumber(usage, ["cache_creation_input_tokens"])
+  const reasoningOutputTokens = tokenNumber(usage, ["reasoning_output_tokens", "reasoning_tokens"])
   if (
     inputTokens === undefined
     && outputTokens === undefined
     && cacheReadInputTokens === undefined
     && cacheCreationInputTokens === undefined
+    && reasoningOutputTokens === undefined
   ) {
     return undefined
   }
@@ -62,6 +74,7 @@ export function normalizeClaudeSdkUsage(
     outputTokens: outputTokens ?? 0,
     cacheReadInputTokens: cacheReadInputTokens ?? 0,
     cacheCreationInputTokens: cacheCreationInputTokens ?? 0,
+    reasoningOutputTokens,
   })
 }
 
@@ -83,6 +96,7 @@ export function sumClaudeSdkUsageSummaries(
     outputTokens: total.outputTokens + summary.outputTokens,
     cacheReadInputTokens: total.cacheReadInputTokens + summary.cacheReadInputTokens,
     cacheCreationInputTokens: total.cacheCreationInputTokens + summary.cacheCreationInputTokens,
+    reasoningOutputTokens: sumOptionalTokens(total.reasoningOutputTokens, summary.reasoningOutputTokens),
   }), {
     inputTokens: 0,
     outputTokens: 0,
@@ -103,12 +117,18 @@ function tokenNumber(usage: Record<string, unknown>, keys: readonly string[]): n
   return undefined
 }
 
+function sumOptionalTokens(a: number | undefined, b: number | undefined): number | undefined {
+  if (a === undefined && b === undefined) return undefined
+  return (a ?? 0) + (b ?? 0)
+}
+
 function usageSummary(input: Omit<ClaudeSdkUsageSummary, "totalTokens">): ClaudeSdkUsageSummary {
   return {
     ...input,
     totalTokens: input.inputTokens
       + input.outputTokens
       + input.cacheReadInputTokens
-      + input.cacheCreationInputTokens,
+      + input.cacheCreationInputTokens
+      + (input.reasoningOutputTokens ?? 0),
   }
 }
