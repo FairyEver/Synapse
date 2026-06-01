@@ -315,6 +315,28 @@ describe("AdminAuthService", () => {
     await expect(service.verifyDashboardSession(result.token)).resolves.toBeNull()
   })
 
+  it("rejects normal user dashboard sessions issued in the same second as password changes", async () => {
+    const { service, prisma } = await createTestService()
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: "user-1",
+      email: "user@example.com",
+      passwordHash: await hashPassword("user-password"),
+      status: "active",
+    })
+
+    const result = await service.login("user@example.com", "user-password")
+    const payload = new JwtService().decode(result.token) as { iat: number }
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: "user-1",
+      email: "user@example.com",
+      status: "active",
+      passwordChangedAt: new Date((payload.iat * 1000) + 900),
+      modulePermissions: [],
+    })
+
+    await expect(service.verifyDashboardSession(result.token)).resolves.toBeNull()
+  })
+
   it("returns dashboard module permissions for verified normal user sessions", async () => {
     const { service, prisma } = await createTestService()
     prisma.user.findUnique.mockResolvedValue({

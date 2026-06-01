@@ -82,7 +82,7 @@ function createPkceS256Challenge(codeVerifier: string): string {
 function tokenIssuedBeforePasswordChange(payload: { readonly iat?: number }, passwordChangedAt?: Date | null): boolean {
   if (!passwordChangedAt) return false
   if (!payload.iat) return true
-  return payload.iat < Math.floor(passwordChangedAt.getTime() / 1000)
+  return payload.iat <= Math.floor(passwordChangedAt.getTime() / 1000)
 }
 
 function normalizeDisplayName(value: string): string {

@@ -931,4 +931,31 @@ describe("UserAuthService", () => {
       .rejects
       .toThrow("未登录或登录已过期。")
   })
+
+  it("rejects access tokens issued in the same second as a password change", async () => {
+    const prisma = createPrismaMock()
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: "user-1",
+      email: "u@example.com",
+      passwordHash: await hashPassword("StrongPassword123!"),
+      status: "active",
+    })
+    const service = createService(prisma)
+
+    const tokens = await service.login({
+      email: "u@example.com",
+      password: "StrongPassword123!",
+    })
+    const payload = new JwtService().decode(tokens.accessToken) as { iat: number }
+    prisma.user.findUnique.mockResolvedValueOnce({
+      id: "user-1",
+      email: "u@example.com",
+      status: "active",
+      passwordChangedAt: new Date((payload.iat * 1000) + 900),
+    })
+
+    await expect(service.verifyAccessToken(tokens.accessToken))
+      .rejects
+      .toThrow("未登录或登录已过期。")
+  })
 })

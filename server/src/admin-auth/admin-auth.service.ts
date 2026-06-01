@@ -36,7 +36,7 @@ function getDashboardModulePermissions(user: { modulePermissions?: readonly { pe
 function tokenIssuedBeforePasswordChange(payload: { readonly iat?: number }, passwordChangedAt?: Date | null): boolean {
   if (!passwordChangedAt) return false
   if (!payload.iat) return true
-  return payload.iat < Math.floor(passwordChangedAt.getTime() / 1000)
+  return payload.iat <= Math.floor(passwordChangedAt.getTime() / 1000)
 }
 
 @Injectable()
