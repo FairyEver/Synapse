@@ -8,6 +8,7 @@ import { FontProvider } from '@/context/font-provider'
 import { ThemeProvider } from '@/context/theme-provider'
 import { useAuthStore } from '@/stores/auth-store'
 import { dashboardApi, subscribeAuthExpired } from '@/lib/api'
+import { normalizeDashboardRedirect } from '@/lib/dashboard-redirect'
 import { routeTree } from './routeTree.gen'
 
 const queryClient = new QueryClient({
@@ -33,8 +34,13 @@ declare module '@tanstack/react-router' {
 }
 
 subscribeAuthExpired(() => {
+  const redirect = normalizeDashboardRedirect(router.state.location.href)
   useAuthStore.getState().auth.reset()
-  router.navigate({ to: '/sign-in', replace: true })
+  router.navigate({
+    to: '/sign-in',
+    search: redirect ? { redirect } : {},
+    replace: true,
+  })
 })
 
 async function bootstrap() {
