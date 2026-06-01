@@ -35,7 +35,7 @@ export default function LogsPage() {
   }
 
   async function handleCleanup() {
-    const before = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
+    const before = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)
     try {
       const result = await adminApi.cleanupLogs(before)
       toast.success(`已清理 ${result.deleted} 条日志`)
