@@ -288,7 +288,7 @@ describe("ProjectListEditor knowledge base actions", () => {
     expect(document.body.textContent).toContain("创建知识库失败。")
   })
 
-  it("deletes managed knowledge base runtime before removing the project", async () => {
+  it("removes managed knowledge base project before deleting its runtime", async () => {
     const onSave = vi.fn().mockResolvedValue(undefined)
     renderEditor([kbProject], onSave)
 
@@ -299,10 +299,14 @@ describe("ProjectListEditor knowledge base actions", () => {
     })
 
     await waitForExpectation(() => {
+      expect(onSave).toHaveBeenCalledWith([])
       expect(bridgeMocks.knowledgeBase.deleteManaged).toHaveBeenCalledWith({
         projectId: "project-1",
+        runtimeId: "project-1",
       })
-      expect(onSave).toHaveBeenCalledWith([])
+      expect(onSave.mock.invocationCallOrder[0]).toBeLessThan(
+        bridgeMocks.knowledgeBase.deleteManaged.mock.invocationCallOrder[0],
+      )
     })
   })
 
@@ -320,6 +324,7 @@ describe("ProjectListEditor knowledge base actions", () => {
     await waitForExpectation(() => {
       expect(bridgeMocks.knowledgeBase.deleteManaged).toHaveBeenCalledWith({
         projectId: "project-1",
+        runtimeId: "project-1",
       })
       expect(rendererLogger.error).toHaveBeenCalledWith("Failed to remove project.", {
         projectId: "project-1",
@@ -327,7 +332,29 @@ describe("ProjectListEditor knowledge base actions", () => {
       })
       expect(toast).toHaveBeenCalledWith("删除项目失败。")
     })
-    expect(onSave).not.toHaveBeenCalled()
+    expect(onSave).toHaveBeenNthCalledWith(1, [])
+    expect(onSave).toHaveBeenNthCalledWith(2, [kbProject])
+  })
+
+  it("does not delete managed knowledge base runtime when project removal save fails", async () => {
+    const onSave = vi.fn().mockRejectedValue(new Error("config save failed"))
+    renderEditor([kbProject], onSave)
+
+    await act(async () => {
+      buttonByText("删除").click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    await waitForExpectation(() => {
+      expect(onSave).toHaveBeenCalledWith([])
+      expect(rendererLogger.error).toHaveBeenCalledWith("Failed to remove project.", {
+        projectId: "project-1",
+        error: expect.any(Error),
+      })
+      expect(toast).toHaveBeenCalledWith("删除项目失败。")
+    })
+    expect(bridgeMocks.knowledgeBase.deleteManaged).not.toHaveBeenCalled()
   })
 
   it("clears stale knowledge base dialog fields and errors after closing", async () => {

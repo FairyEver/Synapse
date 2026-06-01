@@ -94,6 +94,7 @@ describe("knowledgeBaseIpcModule", () => {
 
     const result = await harness.invoke("synapse:knowledge-base:delete-managed", {
       projectId: "kb-1",
+      runtimeId: "kb-1",
     })
 
     expect(result).toEqual({
@@ -101,7 +102,7 @@ describe("knowledgeBaseIpcModule", () => {
       runtimePath: "/UserData/knowledge-bases/kb-1",
       deleted: true,
     })
-    expect(deleteManaged).toHaveBeenCalledWith({ projectId: "kb-1" })
+    expect(deleteManaged).toHaveBeenCalledWith({ projectId: "kb-1", runtimeId: "kb-1" })
     expect(permissionGuard.check).toHaveBeenCalledWith({
       action: "fs.write",
       actor: { kind: "user" },

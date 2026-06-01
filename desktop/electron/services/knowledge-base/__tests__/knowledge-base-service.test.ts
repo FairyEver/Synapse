@@ -167,6 +167,40 @@ describe("KnowledgeBaseService", () => {
     })
   })
 
+  it("trashes managed knowledge base runtime by runtime id after project config is removed", async () => {
+    const projectId = "kb-removed"
+    const userDataPath = await tempDir()
+    const projectPath = path.join(userDataPath, "knowledge-bases", projectId)
+    await mkdir(projectPath, { recursive: true })
+    await writeFile(path.join(projectPath, "CLAUDE.md"), "# Knowledge\n", "utf8")
+    const service = new KnowledgeBaseService({
+      userDataPath,
+      loadConfig: async () => ({
+        activeRepoUuid: null,
+        repositories: [],
+        global: {
+          themeMode: "system",
+          favorites: { rule: [], skill: [], prompt: [] },
+          recentlyViewed: { rule: [], skill: [], prompt: [] },
+          contentSortOrder: "modified-desc",
+          quickInputs: [],
+          projects: [],
+        },
+        agent: { defaultPermissionMode: "default", defaultProviderModel: null },
+      }),
+      trashItem: (targetPath) => rm(targetPath, { recursive: true, force: true }),
+    })
+
+    const result = await service.deleteManaged({ projectId, runtimeId: projectId })
+
+    expect(result).toEqual({
+      projectId,
+      runtimePath: projectPath,
+      deleted: true,
+    })
+    await expect(readFile(path.join(projectPath, "CLAUDE.md"), "utf8")).rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("lists raw source files with user-facing import statuses", async () => {
     const { projectId, projectPath, service } = await managedFixture()
     await mkdir(path.join(projectPath, ".raw"), { recursive: true })
