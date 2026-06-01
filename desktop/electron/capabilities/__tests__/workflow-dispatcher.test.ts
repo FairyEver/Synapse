@@ -1,6 +1,19 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const logStoreMock = vi.hoisted(() => ({
+  logger: {
+    error: vi.fn(),
+    info: vi.fn(),
+    warn: vi.fn(),
+  },
+}))
+
 import { createWorkflowDispatcher, type WorkflowDispatchDeps } from "../workflow-dispatcher"
 import type { WorkflowDefinition } from "../../../src/types/workflow"
+
+vi.mock("../../services/log-store", () => ({
+  createMainLogger: vi.fn(() => logStoreMock.logger),
+}))
 
 function makeDeps(overrides: Partial<WorkflowDispatchDeps> = {}): WorkflowDispatchDeps {
   return {
@@ -56,6 +69,12 @@ function deferred<T>() {
 }
 
 describe("createWorkflowDispatcher", () => {
+  beforeEach(() => {
+    logStoreMock.logger.error.mockClear()
+    logStoreMock.logger.info.mockClear()
+    logStoreMock.logger.warn.mockClear()
+  })
+
   it("workflow.definition.list dispatches correctly", async () => {
     const deps = makeDeps()
     const dispatcher = createWorkflowDispatcher(deps)
@@ -308,7 +327,7 @@ describe("createWorkflowDispatcher", () => {
       workflowService: {
         ...makeDeps().workflowService,
         create: vi.fn(async () => {
-          throw new Error("create failed with secret prompt")
+          throw new Error("create failed with token=secret-prompt at /Users/liyang/secret-workspace")
         }),
       } as unknown as WorkflowDispatchDeps["workflowService"],
     })
@@ -316,7 +335,7 @@ describe("createWorkflowDispatcher", () => {
 
     await expect(dispatcher.dispatch("workflow.definition.create", {}, { source: "mcp-http" }))
       .rejects
-      .toThrow("create failed with secret prompt")
+      .toThrow("create failed with token=secret-prompt at /Users/liyang/secret-workspace")
 
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "workflow.mutate",
@@ -326,10 +345,17 @@ describe("createWorkflowDispatcher", () => {
         source: "mcp-http",
         workflowAction: "workflow.definition.create",
         errorName: "Error",
-        errorLength: "Error: create failed with secret prompt".length,
+        errorLength: "Error: create failed with token=secret-prompt at /Users/liyang/secret-workspace".length,
       }),
     }))
-    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("secret prompt")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("secret-prompt")
+    expect(JSON.stringify(auditSink.record.mock.calls)).not.toContain("/Users/liyang/secret-workspace")
+
+    const failedLog = logStoreMock.logger.warn.mock.calls.find(([message]) => message === "workflow mcp dispatch failed")
+    expect(failedLog).toBeDefined()
+    const serializedLog = JSON.stringify(failedLog)
+    expect(serializedLog).not.toContain("secret-prompt")
+    expect(serializedLog).not.toContain("/Users/liyang/secret-workspace")
   })
 
   it("workflow.definition.create accepts workflow default project, provider, model tier, and timeout", async () => {

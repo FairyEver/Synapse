@@ -8,6 +8,7 @@ import type { WorkflowDefinition, WorkflowRunStatus, ValidationError } from "../
 import { validateWorkflow } from "../services/workflow/workflow-validator"
 import type { DispatchContext, DispatchResult } from "../../synapse-capabilities/shared/types"
 import { createMainLogger } from "../services/log-store"
+import { sanitizeError } from "../services/error-sanitize"
 import { layoutWorkflowNodes } from "../../src/lib/workflow-auto-layout"
 import type { AuditSink, PermissionGuard } from "../runtime/security"
 
@@ -437,7 +438,8 @@ function dispatchErrorDiagnostic(error: unknown): {
   readonly errorMessage: string
 } {
   const message = error instanceof Error ? error.message : String(error)
-  const truncated = message.length <= 200 ? message : message.slice(0, 200) + "..."
+  const sanitized = sanitizeError(message)
+  const truncated = sanitized.length <= 200 ? sanitized : sanitized.slice(0, 200) + "..."
   return {
     errorName: error instanceof Error ? error.name : typeof error,
     errorMessage: truncated,
