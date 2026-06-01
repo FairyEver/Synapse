@@ -62,8 +62,8 @@ export function useUserModulePermissionsEditor() {
         [...permissionKeys]
       )
       setPermissionKeys(new Set(result.permissionKeys))
-      await queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       toast.success('模块权限已保存')
+      void queryClient.invalidateQueries({ queryKey: ['admin-users'] })
       setUser(null)
     } catch (nextError) {
       setError(nextError instanceof Error ? nextError.message : '保存失败')
