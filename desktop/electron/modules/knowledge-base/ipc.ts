@@ -24,6 +24,7 @@ const createManagedResultSchema = z.object({
 
 const deleteManagedPayloadSchema = z.object({
   projectId: z.string().min(1),
+  runtimeId: z.string().min(1).optional(),
 })
 
 const deleteManagedResultSchema = z.object({
@@ -243,7 +244,7 @@ export const knowledgeBaseIpcModule: IpcModule = {
       channel: "synapse:knowledge-base:delete-managed",
       request: deleteManagedPayloadSchema,
       response: deleteManagedResultSchema,
-      handler: (ctx, request: { projectId: string }) => runGuardedKnowledgeBaseOperation({
+      handler: (ctx, request: { projectId: string; runtimeId?: string }) => runGuardedKnowledgeBaseOperation({
         ctx,
         action: "fs.write",
         resource: `managed-knowledge-base:${request.projectId}`,

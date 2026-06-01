@@ -118,7 +118,9 @@ export class KnowledgeBaseService {
   }
 
   async deleteManaged(payload: SynapseKnowledgeBaseDeleteManagedPayload): Promise<SynapseKnowledgeBaseDeleteManagedResult> {
-    const runtimePath = await this.resolveProjectPath(payload.projectId)
+    const runtimePath = payload.runtimeId
+      ? await this.resolveRuntimePath(payload.runtimeId)
+      : await this.resolveProjectPath(payload.projectId)
     if (!await pathExists(runtimePath)) {
       return { projectId: payload.projectId, runtimePath, deleted: false }
     }
@@ -272,6 +274,25 @@ export class KnowledgeBaseService {
       throw new Error("当前项目不是托管知识库。")
     }
     const projectPath = resolveManagedKnowledgeBasePath(project, this.userDataPath)
+    await assertKnowledgeBaseRootNotSymlink(projectPath)
+    return projectPath
+  }
+
+  private async resolveRuntimePath(runtimeId: string): Promise<string> {
+    const projectPath = resolveManagedKnowledgeBasePath({
+      id: runtimeId,
+      name: runtimeId,
+      path: knowledgeBaseVirtualPath(runtimeId),
+      capabilities: {
+        knowledgeBase: {
+          enabled: true,
+          schemaVersion: 1,
+          templateVersion: KNOWLEDGE_BASE_TEMPLATE_VERSION,
+          managed: true,
+          runtimeId,
+        },
+      },
+    }, this.userDataPath)
     await assertKnowledgeBaseRootNotSymlink(projectPath)
     return projectPath
   }

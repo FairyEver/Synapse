@@ -203,17 +203,34 @@ function ProjectListEditor({ projects, onSave }: ProjectListEditorProps) {
   }
 
   const handleRemoveProject = async (project: SynapseProjectConfig) => {
+    let shouldRestoreProject = false
     try {
+      const nextProjects = projects.filter((item) => item.id !== project.id)
       if (isKnowledgeBaseProject(project)) {
         const bridge = window.synapse?.knowledgeBase
         if (!bridge?.deleteManaged) {
           throw new Error("知识库服务不可用。")
         }
-        await bridge.deleteManaged({ projectId: project.id })
+        const runtimeId = project.capabilities?.knowledgeBase?.runtimeId
+        if (!runtimeId) {
+          throw new Error("知识库运行时不可用。")
+        }
+        await onSave(nextProjects)
+        shouldRestoreProject = true
+        await bridge.deleteManaged({ projectId: project.id, runtimeId })
+      } else {
+        await onSave(nextProjects)
       }
-      await onSave(projects.filter((item) => item.id !== project.id))
       logger.info("Project removed.", { projectId: project.id })
     } catch (error) {
+      if (shouldRestoreProject) {
+        await onSave(projects).catch((rollbackError) => {
+          logger.error("Failed to restore project list after managed knowledge base deletion failure.", {
+            error: rollbackError,
+            projectId: project.id,
+          })
+        })
+      }
       logger.error("Failed to remove project.", { projectId: project.id, error })
       toast("删除项目失败。")
     }

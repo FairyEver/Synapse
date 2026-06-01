@@ -17,6 +17,7 @@ export type SynapseKnowledgeBaseCreateManagedResult = {
 
 export type SynapseKnowledgeBaseDeleteManagedPayload = {
   projectId: string
+  runtimeId?: string
 }
 
 export type SynapseKnowledgeBaseDeleteManagedResult = {
