@@ -1,3 +1,4 @@
+import fs from "node:fs"
 import type { DatabaseSync } from "node:sqlite"
 import {
   parseClaudeUsageFile,
@@ -918,6 +919,7 @@ async function refreshClaudeUsageNamespace(options: {
 }): Promise<UsageRefreshResult> {
   const startedAt = Date.now()
   const files = collectJsonlFiles(options.roots)
+  const scanResultCanPrune = canPruneFromScanResult(options.roots)
   const priceRules = listUsagePriceRules(options.db)
   const pricingRulesHash = hashUsagePriceRules(priceRules)
   const pricedAt = new Date().toISOString()
@@ -928,6 +930,11 @@ async function refreshClaudeUsageNamespace(options: {
   let toolEvents = 0
   const affectedDates: string[] = []
   const affectedHours: string[] = []
+  const prunedBuckets = await runWithUsageDatabaseLockRetry(() => {
+    return pruneMissingSourceFiles(options.db, options.prefix, files, scanResultCanPrune)
+  })
+  affectedDates.push(...prunedBuckets.dates)
+  affectedHours.push(...prunedBuckets.hours)
 
   for (const file of files) {
     let fp: ReturnType<typeof fingerprintFile> | null = null
@@ -1027,6 +1034,7 @@ async function refreshLegacyUsageNamespace(options: {
 }): Promise<UsageRefreshResult> {
   const startedAt = Date.now()
   const files = collectJsonlFiles(options.roots)
+  const scanResultCanPrune = canPruneFromScanResult(options.roots)
   const priceRules = listUsagePriceRules(options.db)
   const pricedAt = new Date().toISOString()
   let parsedFiles = 0
@@ -1034,6 +1042,10 @@ async function refreshLegacyUsageNamespace(options: {
   let failedFiles = 0
   let usageEvents = 0
   let toolEvents = 0
+
+  await runWithUsageDatabaseLockRetry(() => {
+    pruneMissingSourceFiles(options.db, options.prefix, files, scanResultCanPrune)
+  })
 
   for (const file of files) {
     let fp: ReturnType<typeof fingerprintFile> | null = null
@@ -1094,9 +1106,7 @@ function persistParsedFile(
   pricedAt: string,
   scanOptions: PersistScanStateOptions = {},
 ): void {
-  let transactionStarted = false
   db.exec("BEGIN IMMEDIATE")
-  transactionStarted = true
   try {
     const oldSessions = db.prepare(`SELECT session_id FROM ${prefix}_sessions WHERE file_path = ?`).all(filePath) as { session_id: string }[]
     const sessionIds = new Set([...oldSessions.map((row) => row.session_id), ...parsed.sessions.map((session) => session.sessionId)])
@@ -1234,9 +1244,8 @@ function persistParsedFile(
       markScanFile(db, prefix, filePath, size, mtimeMs, parsed.lineCount)
     }
     db.exec("COMMIT")
-    transactionStarted = false
   } catch (error) {
-    if (transactionStarted) db.exec("ROLLBACK")
+    db.exec("ROLLBACK")
     throw error
   }
 }
@@ -1371,6 +1380,75 @@ function queryBucketsForFile(db: DatabaseSync, prefix: "cc" | "cx", filePath: st
   }
 }
 
+function canPruneFromScanResult(roots: readonly string[]): boolean {
+  if (roots.length === 0) return false
+  return roots.every((root) => {
+    try {
+      fs.accessSync(root, fs.constants.R_OK)
+      return true
+    } catch {
+      return false
+    }
+  })
+}
+
+function shouldPruneMissingSource(filePath: string, currentFiles: ReadonlySet<string>, scanResultCanPrune: boolean): boolean {
+  if (currentFiles.has(filePath)) return false
+  if (scanResultCanPrune) return true
+  return !fs.existsSync(filePath)
+}
+
+function pruneMissingSourceFiles(
+  db: DatabaseSync,
+  prefix: "cc" | "cx",
+  currentFiles: readonly string[],
+  scanResultCanPrune: boolean,
+): { dates: string[]; hours: string[] } {
+  const currentFileSet = new Set(currentFiles)
+  const rows = db.prepare(`SELECT file_path FROM ${prefix}_scan_files`).all() as { file_path: string }[]
+  const missingFiles = rows
+    .map((row) => row.file_path)
+    .filter((filePath) => shouldPruneMissingSource(filePath, currentFileSet, scanResultCanPrune))
+
+  if (missingFiles.length === 0) return { dates: [], hours: [] }
+
+  const affectedDates: string[] = []
+  const affectedHours: string[] = []
+  db.exec("BEGIN IMMEDIATE")
+  try {
+    for (const filePath of missingFiles) {
+      const buckets = queryBucketsForFile(db, prefix, filePath)
+      affectedDates.push(...buckets.dates)
+      affectedHours.push(...buckets.hours)
+
+      const sessionRows = db.prepare(`SELECT session_id FROM ${prefix}_sessions WHERE file_path = ?`).all(filePath) as { session_id: string }[]
+      const sessionIds = sessionRows.map((row) => row.session_id)
+      if (sessionIds.length > 0) {
+        const bindList = sqlBindList(sessionIds)
+        db.prepare(`DELETE FROM ${prefix}_usage_events WHERE session_id IN (${bindList})`).run(...sessionIds)
+        db.prepare(`DELETE FROM ${prefix}_tool_events WHERE session_id IN (${bindList})`).run(...sessionIds)
+        db.prepare(`DELETE FROM ${prefix}_sessions WHERE session_id IN (${bindList})`).run(...sessionIds)
+        if (prefix === "cx") {
+          db.prepare(`DELETE FROM cx_task_events WHERE session_id IN (${bindList})`).run(...sessionIds)
+        }
+      }
+      db.prepare(`DELETE FROM ${prefix}_scan_files WHERE file_path = ?`).run(filePath)
+      if (prefix === "cc") {
+        db.prepare("DELETE FROM cc_scan_file_state WHERE file_path = ?").run(filePath)
+      }
+    }
+    db.exec("COMMIT")
+  } catch (error) {
+    db.exec("ROLLBACK")
+    throw error
+  }
+
+  return {
+    dates: mergeUniqueBuckets(affectedDates),
+    hours: mergeUniqueBuckets(affectedHours),
+  }
+}
+
 function sqlBindList(values: readonly string[]): string {
   return values.map(() => "?").join(", ")
 }
@@ -1387,9 +1465,7 @@ function rebuildAffectedAggregates(
 ): void {
   const dates = mergeUniqueBuckets(affected.dates)
   const hours = mergeUniqueBuckets(affected.hours)
-  let transactionStarted = false
   db.exec("BEGIN IMMEDIATE")
-  transactionStarted = true
   try {
     runIfValues(dates, (values) => {
       db.prepare(`DELETE FROM ${prefix}_daily_usage WHERE date IN (${sqlBindList(values)})`).run(...values)
@@ -1532,17 +1608,14 @@ function rebuildAffectedAggregates(
     })
 
     db.exec("COMMIT")
-    transactionStarted = false
   } catch (error) {
-    if (transactionStarted) db.exec("ROLLBACK")
+    db.exec("ROLLBACK")
     throw error
   }
 }
 
 function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
-  let transactionStarted = false
   db.exec("BEGIN IMMEDIATE")
-  transactionStarted = true
   try {
     db.exec(`DELETE FROM ${prefix}_daily_usage`)
     db.exec(`DELETE FROM ${prefix}_hourly_usage`)
@@ -1675,9 +1748,8 @@ function rebuildAggregates(db: DatabaseSync, prefix: "cc" | "cx"): void {
       GROUP BY hour, workspace_key
     `)
     db.exec("COMMIT")
-    transactionStarted = false
   } catch (error) {
-    if (transactionStarted) db.exec("ROLLBACK")
+    db.exec("ROLLBACK")
     throw error
   }
 }
