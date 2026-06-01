@@ -57,7 +57,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 }
 
 const storedProfile: SynapseAccountProfile = {
-  user: { id: "u1", email: "u@example.com", status: "active" },
+  user: { id: "u1", email: "u@example.com", displayName: null, status: "active" },
   teams: [],
   syncedAt: "2026-05-28T00:00:00.000Z",
 }

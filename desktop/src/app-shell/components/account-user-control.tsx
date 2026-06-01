@@ -17,16 +17,20 @@ type AccountUserControlProps = {
   onOpenSettings?: () => void
 }
 
+function getDisplayName(state: SynapseAccountState): string | null {
+  if (state.status !== "authenticated") return null
+  const displayName = state.profile.user.displayName?.trim()
+  return displayName ? displayName : null
+}
+
 function getAccountTitle(state: SynapseAccountState): string {
-  if (state.status === "authenticated") return state.profile.user.email
+  if (state.status === "authenticated") return getDisplayName(state) ?? state.profile.user.email
   if (state.status === "authenticating") return "登录中"
   return "未登录"
 }
 
 function getAccountDetail(state: SynapseAccountState): string {
-  if (state.status === "authenticated") {
-    return state.profile.teams.length > 0 ? `${state.profile.teams.length} 个团队` : "Synapse 账号"
-  }
+  if (state.status === "authenticated") return state.profile.user.email
   if (state.status === "authenticating") return "正在等待浏览器登录"
   if (state.status === "error") return state.message
   return "可选"
@@ -120,12 +124,19 @@ function AccountUserControl({
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" className="max-w-48">
           <CircleUserRound data-icon="inline-start" />
-          <span className="truncate">{state.profile.user.email}</span>
+          <span className="truncate">{getAccountTitle(state)}</span>
           <ChevronDown data-icon="inline-end" />
         </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="truncate">{state.profile.user.email}</DropdownMenuLabel>
+        <DropdownMenuLabel className="font-normal">
+          <div className="flex min-w-0 flex-col gap-1">
+            <span className="truncate text-sm font-medium">{getAccountTitle(state)}</span>
+            {getDisplayName(state) ? (
+              <span className="truncate text-xs text-muted-foreground">{state.profile.user.email}</span>
+            ) : null}
+          </div>
+        </DropdownMenuLabel>
         <DropdownMenuSeparator />
         {onOpenSettings ? (
           <DropdownMenuItem onSelect={onOpenSettings}>

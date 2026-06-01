@@ -6,6 +6,7 @@ import { accountService } from "../../services/account-service"
 const accountUserSchema = z.object({
   id: z.string(),
   email: z.string(),
+  displayName: z.string().nullable(),
   status: z.enum(["active", "disabled"]),
 })
 

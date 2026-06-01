@@ -40,7 +40,7 @@ describe("accountIpcModule", () => {
         state: {
           status: "authenticated",
           profile: {
-            user: { id: "u1", email: "u@example.com", status: "active" },
+            user: { id: "u1", email: "u@example.com", displayName: "Ada", status: "active" },
             teams: [],
             syncedAt: "2026-05-28T00:00:00.000Z",
           },
@@ -50,7 +50,16 @@ describe("accountIpcModule", () => {
     })
 
     expect(parsed).toMatchObject({
-      payload: { state: { status: "authenticated" } },
+      payload: {
+        state: {
+          status: "authenticated",
+          profile: {
+            user: {
+              displayName: "Ada",
+            },
+          },
+        },
+      },
     })
   })
 })
