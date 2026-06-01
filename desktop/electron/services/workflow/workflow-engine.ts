@@ -17,7 +17,7 @@ const DEFAULT_WORKFLOW_MAX_CONCURRENCY = 5
 function stringDiagnostic(text: string | undefined, errorName: string): { readonly errorName: string; readonly errorMessage?: string; readonly errorLength: number } {
   return {
     errorName,
-    errorMessage: text ?? undefined,
+    errorMessage: text ? sanitizeError(text) : undefined,
     errorLength: text?.length ?? 0,
   }
 }
@@ -26,7 +26,7 @@ function errorDiagnostic(error: unknown): { readonly errorName: string; readonly
   if (error instanceof Error) {
     return {
       errorName: error.name,
-      errorMessage: error.message,
+      errorMessage: sanitizeError(error.message),
       errorLength: error.message.length,
       stackLength: error.stack?.length,
     }
@@ -35,7 +35,7 @@ function errorDiagnostic(error: unknown): { readonly errorName: string; readonly
   const str = String(error)
   return {
     errorName: "Error",
-    errorMessage: str,
+    errorMessage: sanitizeError(str),
     errorLength: str.length,
   }
 }

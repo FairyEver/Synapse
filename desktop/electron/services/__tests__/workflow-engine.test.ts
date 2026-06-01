@@ -252,7 +252,7 @@ describe("WorkflowEngine", () => {
     const secretParam = "sk-secret-workflow-param"
     const secretPrompt = `ask with ${secretParam}`
     const secretOutput = "model output with token=raw-output"
-    const secretError = "agent failed with authorization=Bearer-secret"
+    const secretError = "agent failed at /Users/liyang/private/source.txt with token=raw-error"
     const def: WorkflowDefinition = {
       id: "wf-logs",
       name: "WF",
@@ -306,6 +306,8 @@ describe("WorkflowEngine", () => {
     expect(logPayload).not.toContain(secretPrompt)
     expect(logPayload).not.toContain(secretOutput)
     expect(logPayload).not.toContain(secretError)
+    expect(logPayload).not.toContain("/Users/liyang/private/source.txt")
+    expect(logPayload).not.toContain("raw-error")
     expect(logger.info).toHaveBeenCalledWith("workflow run started", expect.objectContaining({
       paramKeys: ["apiToken"],
       paramCount: 1,
@@ -347,7 +349,7 @@ describe("WorkflowEngine", () => {
   })
 
   it("summarizes executor exceptions before storing and emitting workflow failure results", async () => {
-    const rawError = "SDK error authorization=Bearer-secret prompt=raw-user-prompt"
+    const rawError = "SDK error at /Users/liyang/private/source.txt with token=raw-throw"
     nodeTypeRegistry.register(
       { ...promptNodeManifest, type: "throwing-prompt" },
       { execute: vi.fn().mockRejectedValue(new Error(rawError)) },
@@ -386,6 +388,10 @@ describe("WorkflowEngine", () => {
       errorLength: rawError.length,
       triggerSource: "scheduler",
     }))
+    const throwLog = logger.warn.mock.calls.find(([message]) => message === "node threw exception")
+    const serializedThrowLog = JSON.stringify(throwLog)
+    expect(serializedThrowLog).not.toContain("/Users/liyang/private/source.txt")
+    expect(serializedThrowLog).not.toContain("raw-throw")
   })
 
   it("runs parallel roots A,B simultaneously before C (end node)", async () => {
