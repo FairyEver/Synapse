@@ -30,13 +30,18 @@ const mocks = vi.hoisted(() => ({
     installToEditor: vi.fn(),
   },
   contentService: {
+    getDetail: vi.fn(),
     getAttachmentFile: vi.fn(),
   },
   installStatusCacheService: {
     refresh: vi.fn(),
   },
-  auditSink: {},
-  permissionGuard: {},
+  auditSink: {
+    record: vi.fn(),
+  },
+  permissionGuard: {
+    check: vi.fn(),
+  },
 }))
 
 vi.mock("electron", () => ({
@@ -80,7 +85,7 @@ vi.mock("../../../services/install-status-cache-service", () => ({
 vi.mock("../../../services/content-service", () => ({
   contentService: {
     getContent: vi.fn(),
-    getDetail: vi.fn(),
+    getDetail: mocks.contentService.getDetail,
     getAttachmentFile: mocks.contentService.getAttachmentFile,
     listContent: vi.fn(),
     listDeletedContent: vi.fn(),
@@ -186,6 +191,11 @@ describe("contentIpcModule sync ownership", () => {
       relativePath: "scripts/audit.ts",
       size: 17,
     })
+    mocks.contentService.getDetail.mockResolvedValue({
+      id: "rule-1",
+      title: "Rule",
+    })
+    mocks.permissionGuard.check.mockResolvedValue({ allowed: true })
     mocks.installStatusCacheService.refresh.mockResolvedValue([{
       editorId: "codex",
       projectName: "Project",
@@ -216,6 +226,43 @@ describe("contentIpcModule sync ownership", () => {
       kind: "text",
       relativePath: "scripts/audit.ts",
     })
+  })
+
+  it("records failed audit when content download write fails after permission is allowed", async () => {
+    const { dialog } = await import("electron")
+    const { contentDownloadService } = await import("../../../services/content-download-service")
+    const { contentIpcModule } = await import("../ipc")
+    vi.mocked(dialog.showSaveDialog).mockResolvedValueOnce({
+      canceled: false,
+      filePath: "/tmp/rule.md",
+    })
+    vi.mocked(contentDownloadService.download).mockRejectedValueOnce(new Error("disk full"))
+
+    await expect(contentIpcModule.methods.download.handler(createContext() as never, {
+      contentType: "rule",
+      id: "rule-1",
+    })).rejects.toThrow("disk full")
+
+    expect(mocks.permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      resource: "/tmp/rule.md",
+    }))
+    expect(mocks.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "allowed",
+      resource: "/tmp/rule.md",
+    }))
+    expect(mocks.auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "fs.write",
+      outcome: "failed",
+      resource: "/tmp/rule.md",
+      metadata: expect.objectContaining({
+        contentId: "rule-1",
+        contentType: "rule",
+        errorLength: "Error: disk full".length,
+        errorName: "Error",
+      }),
+    }))
   })
 
   it.each([
