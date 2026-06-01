@@ -1,5 +1,5 @@
 import { constants } from "node:fs"
-import { access, copyFile, lstat, mkdir, writeFile } from "node:fs/promises"
+import { copyFile, lstat, mkdir, writeFile } from "node:fs/promises"
 import path from "node:path"
 
 import type { SynapseKnowledgeBaseUploadSourcesResult } from "../../../src/types/knowledge-base"
@@ -66,22 +66,20 @@ export async function stageKnowledgeBaseSources(
         const imageDir = assertInside(projectPath, path.join(projectPath, imageRelativeDir))
         await assertNoSymlinkInRelativePath(projectPath, imageRelativeDir)
         await mkdir(imageDir, { recursive: true })
-        const imageTargetPath = await resolveCollisionPath(imageDir, path.basename(sourcePath))
-        await copyFile(sourcePath, imageTargetPath)
+        const imageTargetPath = await copyFileToAvailablePath(sourcePath, imageDir, path.basename(sourcePath))
         const imageRelativePath = normalizeRelativePath(path.relative(projectPath, imageTargetPath))
 
         const rawRelativeDir = path.join(".raw", "images", ...datePathSegments(input.now()))
         const rawDir = assertInside(projectPath, path.join(projectPath, rawRelativeDir))
         await assertNoSymlinkInRelativePath(projectPath, rawRelativeDir)
         await mkdir(rawDir, { recursive: true })
-        const intakePath = await resolveCollisionPath(rawDir, `${path.parse(sourcePath).name}.md`)
-        await writeFile(intakePath, imageIntakeMarkdown({
+        const intakePath = await writeUtf8FileToAvailablePath(rawDir, `${path.parse(sourcePath).name}.md`, imageIntakeMarkdown({
           title: path.parse(sourcePath).name,
           originalPath: filePath,
           attachment: imageRelativePath,
           format: extension.slice(1),
           stagedAt: input.now().toISOString(),
-        }), "utf8")
+        }))
         uploaded.push({
           originalPath: filePath,
           relativePath: normalizeRelativePath(path.relative(projectPath, intakePath)),
@@ -96,8 +94,7 @@ export async function stageKnowledgeBaseSources(
         const targetDir = assertInside(projectPath, path.join(projectPath, targetRelativeDir))
         await assertNoSymlinkInRelativePath(projectPath, targetRelativeDir)
         await mkdir(targetDir, { recursive: true })
-        const targetPath = await resolveCollisionPath(targetDir, path.basename(sourcePath))
-        await copyFile(sourcePath, targetPath)
+        const targetPath = await copyFileToAvailablePath(sourcePath, targetDir, path.basename(sourcePath))
         uploaded.push({
           originalPath: filePath,
           relativePath: normalizeRelativePath(path.relative(projectPath, targetPath)),
@@ -113,8 +110,7 @@ export async function stageKnowledgeBaseSources(
         const targetDir = assertInside(projectPath, path.join(projectPath, targetRelativeDir))
         await assertNoSymlinkInRelativePath(projectPath, targetRelativeDir)
         await mkdir(targetDir, { recursive: true })
-        const targetPath = await resolveCollisionPath(targetDir, path.basename(sourcePath))
-        await copyFile(sourcePath, targetPath)
+        const targetPath = await copyFileToAvailablePath(sourcePath, targetDir, path.basename(sourcePath))
         uploaded.push({
           originalPath: filePath,
           relativePath: normalizeRelativePath(path.relative(projectPath, targetPath)),
@@ -129,8 +125,7 @@ export async function stageKnowledgeBaseSources(
       const originalDir = assertInside(projectPath, path.join(projectPath, originalRelativeDir))
       await assertNoSymlinkInRelativePath(projectPath, originalRelativeDir)
       await mkdir(originalDir, { recursive: true })
-      const originalPath = await resolveCollisionPath(originalDir, path.basename(sourcePath))
-      await copyFile(sourcePath, originalPath)
+      const originalPath = await copyFileToAvailablePath(sourcePath, originalDir, path.basename(sourcePath))
       const originalRelativePath = normalizeRelativePath(path.relative(projectPath, originalPath))
 
       let converted: FileConversionResult
@@ -160,7 +155,6 @@ export async function stageKnowledgeBaseSources(
       const rawDir = assertInside(projectPath, path.join(projectPath, rawRelativeDir))
       await assertNoSymlinkInRelativePath(projectPath, rawRelativeDir)
       await mkdir(rawDir, { recursive: true })
-      const markdownPath = await resolveCollisionPath(rawDir, `${path.parse(sourcePath).name}.md`)
       const markdown = [
         sourceFrontmatter({
           sourceOriginal: originalRelativePath,
@@ -170,7 +164,7 @@ export async function stageKnowledgeBaseSources(
         converted.markdown.trim(),
         "",
       ].join("\n")
-      await writeFile(markdownPath, markdown, "utf8")
+      const markdownPath = await writeUtf8FileToAvailablePath(rawDir, `${path.parse(sourcePath).name}.md`, markdown)
       uploaded.push({
         originalPath: filePath,
         relativePath: normalizeRelativePath(path.relative(projectPath, markdownPath)),
@@ -220,8 +214,7 @@ export async function stageKnowledgeBaseUrlSource(
   await mkdir(rawDir, { recursive: true })
 
   const fileName = `${slugFromUrl(result.source.finalUrl)}.md`
-  const targetPath = await resolveCollisionPath(rawDir, fileName)
-  await writeFile(targetPath, result.source.markdown, "utf8")
+  const targetPath = await writeUtf8FileToAvailablePath(rawDir, fileName, result.source.markdown)
 
   return {
     uploaded: [{
@@ -292,15 +285,36 @@ function datePathSegments(date: Date): string[] {
   ]
 }
 
-async function resolveCollisionPath(directoryPath: string, fileName: string): Promise<string> {
+async function copyFileToAvailablePath(sourcePath: string, directoryPath: string, fileName: string): Promise<string> {
+  return writeToAvailablePath(directoryPath, fileName, async (candidate) => {
+    await copyFile(sourcePath, candidate, constants.COPYFILE_EXCL)
+  })
+}
+
+async function writeUtf8FileToAvailablePath(directoryPath: string, fileName: string, content: string): Promise<string> {
+  return writeToAvailablePath(directoryPath, fileName, async (candidate) => {
+    await writeFile(candidate, content, { encoding: "utf8", flag: "wx" })
+  })
+}
+
+async function writeToAvailablePath(
+  directoryPath: string,
+  fileName: string,
+  writeCandidate: (candidate: string) => Promise<void>,
+): Promise<string> {
   const parsed = path.parse(fileName)
   let candidate = path.join(directoryPath, fileName)
   let index = 2
-  while (await pathExists(candidate)) {
-    candidate = path.join(directoryPath, `${parsed.name}-${index}${parsed.ext}`)
-    index += 1
+  while (true) {
+    try {
+      await writeCandidate(candidate)
+      return candidate
+    } catch (error) {
+      if (!isFileExistsError(error)) throw error
+      candidate = path.join(directoryPath, `${parsed.name}-${index}${parsed.ext}`)
+      index += 1
+    }
   }
-  return candidate
 }
 
 function slugFromUrl(rawUrl: string): string {
@@ -333,15 +347,6 @@ function assertInside(rootPath: string, targetPath: string): string {
   return target
 }
 
-async function pathExists(targetPath: string): Promise<boolean> {
-  try {
-    await access(targetPath, constants.F_OK)
-    return true
-  } catch {
-    return false
-  }
-}
-
 async function assertNoSymlinkInRelativePath(projectPath: string, relativePath: string): Promise<void> {
   let currentPath = projectPath
   for (const segment of relativePath.split(/[\\/]/)) {
@@ -358,4 +363,11 @@ async function assertNoSymlinkInRelativePath(projectPath: string, relativePath: 
       throw error
     }
   }
+}
+
+function isFileExistsError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && (error as { readonly code?: unknown }).code === "EEXIST"
 }

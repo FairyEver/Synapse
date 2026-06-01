@@ -75,8 +75,7 @@ export class KnowledgeBaseRawFileManager {
           skipped.push({ path: filePath, reason: "not-file" })
           continue
         }
-        const targetPath = await resolveCollisionPath(targetDirectory, path.basename(sourcePath))
-        await copyFile(sourcePath, targetPath)
+        const targetPath = await copyFileToAvailablePath(sourcePath, targetDirectory, path.basename(sourcePath))
         entries.push(await entryForPath(rawRoot, targetPath, "file"))
       } catch (error) {
         knowledgeBaseLogger.warn("Knowledge Base raw file upload skipped.", {
@@ -240,15 +239,20 @@ function sortEntries(entries: SynapseKnowledgeBaseRawEntry[]): SynapseKnowledgeB
   })
 }
 
-async function resolveCollisionPath(directoryPath: string, fileName: string): Promise<string> {
+async function copyFileToAvailablePath(sourcePath: string, directoryPath: string, fileName: string): Promise<string> {
   const parsed = path.parse(fileName)
   let candidate = path.join(directoryPath, fileName)
   let index = 2
-  while (await pathExists(candidate)) {
-    candidate = path.join(directoryPath, `${parsed.name}-${index}${parsed.ext}`)
-    index += 1
+  while (true) {
+    try {
+      await copyFile(sourcePath, candidate, constants.COPYFILE_EXCL)
+      return candidate
+    } catch (error) {
+      if (!isFileExistsError(error)) throw error
+      candidate = path.join(directoryPath, `${parsed.name}-${index}${parsed.ext}`)
+      index += 1
+    }
   }
-  return candidate
 }
 
 async function pathExists(targetPath: string): Promise<boolean> {
@@ -284,6 +288,13 @@ function isMissingPathError(error: unknown): boolean {
     && "code" in error
     && ((error as { readonly code?: unknown }).code === "ENOENT"
       || (error as { readonly code?: unknown }).code === "ENOTDIR")
+}
+
+function isFileExistsError(error: unknown): boolean {
+  return typeof error === "object"
+    && error !== null
+    && "code" in error
+    && (error as { readonly code?: unknown }).code === "EEXIST"
 }
 
 function normalizeRelativePath(value: string): string {

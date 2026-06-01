@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises"
+import { readFile, mkdtemp, rm, writeFile } from "node:fs/promises"
 import os from "node:os"
 import path from "node:path"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -40,5 +40,29 @@ describe("KnowledgeBaseRawFileManager", () => {
       reason: "read-error",
     }))
     expect(String((warn.mock.calls[0]?.[1] as { error?: unknown } | undefined)?.error)).not.toContain(inputDir)
+  })
+
+  it("keeps concurrent uploads with the same basename as separate files", async () => {
+    const rawRoot = await tempDir()
+    const firstInputDir = await tempDir()
+    const secondInputDir = await tempDir()
+    const firstSource = path.join(firstInputDir, "brief.md")
+    const secondSource = path.join(secondInputDir, "brief.md")
+    await writeFile(firstSource, "alpha\n", "utf8")
+    await writeFile(secondSource, "bravo\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({
+      trashItem: async () => undefined,
+    })
+
+    const [firstResult, secondResult] = await Promise.all([
+      manager.uploadFiles(rawRoot, "", [firstSource]),
+      manager.uploadFiles(rawRoot, "", [secondSource]),
+    ])
+
+    const uploaded = [...firstResult.entries, ...secondResult.entries]
+    expect(uploaded.map((entry) => entry.name).sort()).toEqual(["brief-2.md", "brief.md"])
+    await expect(Promise.all(uploaded.map((entry) =>
+      readFile(path.join(rawRoot, entry.relativePath), "utf8")
+    ))).resolves.toEqual(expect.arrayContaining(["alpha\n", "bravo\n"]))
   })
 })

@@ -90,6 +90,39 @@ describe("knowledge base source staging", () => {
       .resolves.toBe("alpha\n")
   })
 
+  it("keeps concurrent text uploads with the same basename as separate sources", async () => {
+    const projectPath = await tempDir()
+    const firstInputDir = await tempDir()
+    const secondInputDir = await tempDir()
+    const firstSource = path.join(firstInputDir, "note.md")
+    const secondSource = path.join(secondInputDir, "note.md")
+    await writeFile(firstSource, "alpha\n")
+    await writeFile(secondSource, "bravo\n")
+    const input = {
+      projectPath,
+      now: () => new Date("2026-05-23T13:00:00.000Z"),
+      converter: {
+        convert: async () => {
+          throw new Error("converter should not handle text sources")
+        },
+      },
+    }
+
+    const [first, second] = await Promise.all([
+      stageKnowledgeBaseSources({ ...input, filePaths: [firstSource] }),
+      stageKnowledgeBaseSources({ ...input, filePaths: [secondSource] }),
+    ])
+
+    const uploaded = [...first.uploaded, ...second.uploaded]
+    expect(uploaded.map((entry) => entry.relativePath).sort()).toEqual([
+      ".raw/2026/05/23/note-2.md",
+      ".raw/2026/05/23/note.md",
+    ])
+    await expect(Promise.all(uploaded.map((entry) =>
+      readFile(path.join(projectPath, entry.relativePath), "utf8")
+    ))).resolves.toEqual(expect.arrayContaining(["alpha\n", "bravo\n"]))
+  })
+
   it("logs conversion failures without raw absolute paths", async () => {
     const warn = vi.spyOn(knowledgeBaseLogger, "warn").mockImplementation(() => undefined)
     const projectPath = await tempDir()
