@@ -22,6 +22,7 @@ import { adminApi, type SystemOverview } from '@/lib/api'
 import { Header } from '@/components/layout/header'
 import { Main } from '@/components/layout/main'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Card,
   CardContent,
@@ -31,6 +32,7 @@ import {
 } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { getSystemOverviewErrorMessage } from './system-error'
 
 type StatCard = {
   title: string
@@ -40,7 +42,7 @@ type StatCard = {
 }
 
 export default function SystemPage() {
-  const { data, isLoading } = useQuery({
+  const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['system-overview'],
     queryFn: adminApi.getSystemOverview,
   })
@@ -64,11 +66,37 @@ export default function SystemPage() {
 
         {isLoading ? (
           <SystemSkeleton />
+        ) : isError ? (
+          <SystemErrorState error={error} onRetry={() => void refetch()} />
         ) : (
           <SystemDashboard data={data} stats={stats} />
         )}
       </Main>
     </>
+  )
+}
+
+function SystemErrorState({
+  error,
+  onRetry,
+}: {
+  error: unknown
+  onRetry: () => void
+}) {
+  return (
+    <Card>
+      <CardContent className='flex flex-col items-start gap-3 py-6'>
+        <div className='space-y-1'>
+          <div className='font-medium'>加载失败</div>
+          <p className='text-sm text-muted-foreground'>
+            {getSystemOverviewErrorMessage(error)}
+          </p>
+        </div>
+        <Button variant='outline' size='sm' onClick={onRetry}>
+          重试
+        </Button>
+      </CardContent>
+    </Card>
   )
 }
 
