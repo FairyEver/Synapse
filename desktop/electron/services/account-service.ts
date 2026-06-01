@@ -187,8 +187,13 @@ export class AccountService {
     const attempt = persisted?.activeAttempt
 
     if (callbackError && callbackState && attempt?.state === callbackState) {
-      await this.clearActiveAttemptIfState(callbackState)
-      const latest = await this.readPersisted("Failed to read stored account after account callback error.")
+      const keepActiveAttempt = callbackError === "unsupported_account"
+      if (!keepActiveAttempt) {
+        await this.clearActiveAttemptIfState(callbackState)
+      }
+      const latest = keepActiveAttempt
+        ? persisted
+        : await this.readPersisted("Failed to read stored account after account callback error.")
       if (this.hasDifferentActiveAttempt(latest, callbackState)) return this.state
       this.setState({
         status: "error",

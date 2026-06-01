@@ -153,9 +153,19 @@ describe("AccountService", () => {
     expect(fetch).not.toHaveBeenCalled()
   })
 
-  it("clears active login state when the browser reports an unsupported account", async () => {
-    const fetch = vi.fn()
-    const { namespace, service } = await createTestAccountService({ fetch: fetch as typeof fetch })
+  it("keeps active login state when the browser reports an unsupported account so switch-account can recover", async () => {
+    const fetchMock = vi.fn(async (url, init) => {
+      if (String(url).endsWith("/auth/desktop/token")) {
+        expect(init?.method).toBe("POST")
+        return jsonResponse({ accessToken: "access-1", refreshToken: "refresh-1" })
+      }
+      if (String(url).endsWith("/auth/me")) {
+        expect(init?.headers).toMatchObject({ Authorization: "Bearer access-1" })
+        return jsonResponse({ user: { id: "u1", email: "u@example.com", status: "active" }, teams: [] })
+      }
+      throw new Error(`unexpected url ${String(url)}`)
+    }) as typeof fetch
+    const { namespace, service } = await createTestAccountService({ fetch: fetchMock })
     await service.startLogin()
     const attempt = (await namespace.getSingleton())?.activeAttempt
     expect(attempt).toBeTruthy()
@@ -168,8 +178,17 @@ describe("AccountService", () => {
       status: "error",
       message: "请使用普通用户账号登录。",
     })
+    expect((await namespace.getSingleton())?.activeAttempt?.state).toBe(attempt!.state)
+    expect(fetchMock).not.toHaveBeenCalled()
+
+    const recoveredState = await service.handleAuthCallback(
+      `synapse://auth/desktop/callback?code=code-1&state=${attempt!.state}`,
+    )
+
+    expect(recoveredState.status).toBe("authenticated")
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect((await namespace.getSingleton())?.refreshToken).toBe("refresh-1")
     expect((await namespace.getSingleton())?.activeAttempt).toBeUndefined()
-    expect(fetch).not.toHaveBeenCalled()
   })
 
   it("preserves newer login attempts when an older callback arrives", async () => {
