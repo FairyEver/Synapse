@@ -123,6 +123,38 @@ describe("AdminController", () => {
     }))
   })
 
+  it("creates team invitations for administrators", async () => {
+    vi.stubEnv("APP_PUBLIC_URL", "https://app.example.com")
+    const createInvitation = vi.fn().mockResolvedValue({
+      id: "invite-1",
+      inviteUrl: "https://app.example.com/dashboard/team-invite?token=token-1",
+    })
+    const controller = createController({ createInvitation } as never)
+    const request = {
+      admin: { id: "admin-1", email: "admin@example.com" },
+      ip: "203.0.113.44",
+    } as never
+
+    await expect(controller.createInvitation({ teamId: "team-1" }, request))
+      .resolves
+      .toMatchObject({ id: "invite-1" })
+    expect(createInvitation).toHaveBeenCalledWith(
+      { teamId: "team-1" },
+      { id: "admin-1", email: "admin@example.com" },
+      "https://app.example.com",
+      "203.0.113.44",
+    )
+  })
+
+  it("rejects invalid team invitation creation fields", () => {
+    const createInvitation = vi.fn()
+    const controller = createController({ createInvitation } as never)
+
+    expect(() => controller.createInvitation({ teamId: "" }, {} as never))
+      .toThrow("邀请创建请求无效：teamId 至少 1 个字符")
+    expect(createInvitation).not.toHaveBeenCalled()
+  })
+
   it("exports audit logs without list pagination", async () => {
     const listForExport = vi.fn().mockResolvedValue([
       {

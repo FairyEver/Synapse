@@ -75,7 +75,7 @@ function createPrismaMock(counts: {
       findUnique: vi.fn().mockResolvedValue({ id: "team-1" }),
     },
     userModulePermission: { count: vi.fn() },
-    invitation: { count: vi.fn(), findMany: vi.fn(), delete: vi.fn(), deleteMany: vi.fn() },
+    invitation: { count: vi.fn(), create: vi.fn(), findMany: vi.fn(), delete: vi.fn(), deleteMany: vi.fn() },
   }
   return prisma
 }
@@ -301,6 +301,46 @@ describe("AdminService", () => {
     }))
     expect(prisma.invitation.findMany.mock.calls[0]?.[0].select).not.toHaveProperty("tokenHash")
     expect(prisma.invitation.count).toHaveBeenCalledWith()
+  })
+
+  it("creates admin team invitations and records an audit log", async () => {
+    const prisma = createPrismaMock()
+    prisma.invitation.create.mockResolvedValue({
+      id: "invite-1",
+      inviteUrl: "https://app.example.com/dashboard/team-invite?token=token-1",
+      expiresAt: new Date("2026-06-08T00:00:00.000Z"),
+    })
+    const auditLog = { record: vi.fn() }
+    const service = new AdminService(prisma as unknown as PrismaService, createPermissionsMock() as never, auditLog as never)
+
+    await expect(service.createInvitation(
+      { teamId: "team-1" },
+      { id: "admin-1", email: "admin@example.com" },
+      "https://app.example.com",
+      "203.0.113.44",
+    )).resolves.toMatchObject({
+      id: "invite-1",
+      inviteUrl: expect.stringMatching(/^https:\/\/app\.example\.com\/dashboard\/team-invite\?token=.+/),
+    })
+    expect(prisma.team.findUnique).toHaveBeenCalledWith({
+      where: { id: "team-1" },
+      select: { id: true },
+    })
+    expect(prisma.invitation.create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        type: "team_join",
+        createdByAdminId: "admin-1",
+        teamId: "team-1",
+      }),
+    })
+    expect(auditLog.record).toHaveBeenCalledWith({
+      adminEmail: "admin@example.com",
+      action: "admin.invitation.create",
+      targetType: "invitation",
+      targetId: "invite-1",
+      detail: { teamId: "team-1" },
+      ipAddress: "203.0.113.44",
+    })
   })
 
   it("deletes an invitation and records an audit log", async () => {

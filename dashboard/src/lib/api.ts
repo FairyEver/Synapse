@@ -115,6 +115,13 @@ export type AdminInvitationRow = {
   createdAt: string
 }
 
+export type AdminInvitationCreateResult = {
+  id: string
+  token: string
+  inviteUrl: string
+  expiresAt: string
+}
+
 export type BackupFile = {
   filename: string
   size: number
@@ -347,6 +354,11 @@ export const adminApi = {
     request<PaginatedResponse<AdminInvitationRow>>(
       `${adminApiBasePath}/invitations${paginationSuffix(options)}`
     ),
+  createInvitation: (input: { teamId: string }) =>
+    request<AdminInvitationCreateResult>(`${adminApiBasePath}/invitations`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
   deleteInvitation: (id: string) =>
     request<{ ok: true }>(
       `${adminApiBasePath}/invitations/${encodeURIComponent(id)}`,

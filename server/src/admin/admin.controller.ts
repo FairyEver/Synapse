@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
+import { BadRequestException, Body, Controller, Delete, Get, Param, Patch, Post, Put, Query, Req, Res, UseGuards } from "@nestjs/common"
 import type { Response } from "express"
 import { z } from "zod"
 import { AdminAuthGuard, type AdminRequest } from "../admin-auth/admin-auth.guard"
@@ -6,6 +6,7 @@ import { AuditLogService, auditLogExportLimit } from "../common/audit-log.servic
 import { toCsv } from "../common/csv-export"
 import { parsePagination } from "../common/pagination"
 import { badRequestFromZodError } from "../common/zod-validation"
+import { resolvePublicAppUrl } from "../invitations/invitation-url"
 import { isActiveModulePermissionKey } from "../permissions/permission-registry"
 import { AdminService } from "./admin.service"
 
@@ -15,6 +16,10 @@ const userStatusSchema = z.object({
 
 const bulkInvitationDeleteSchema = z.object({
   ids: z.array(z.string().min(1)).min(1),
+}).strict()
+
+const createInvitationSchema = z.object({
+  teamId: z.string().trim().min(1),
 }).strict()
 
 const modulePermissionKeysSchema = z.array(
@@ -79,6 +84,21 @@ export class AdminController {
       detail: { page: pagination.page, pageSize: pagination.pageSize },
     })
     return result
+  }
+
+  @Post("/invitations")
+  createInvitation(@Body() body: unknown, @Req() request: AdminRequest) {
+    const result = createInvitationSchema.safeParse(body)
+    if (!result.success) throw badRequestFromZodError(result.error, "邀请创建请求无效。")
+    return this.admin.createInvitation(
+      result.data,
+      request.admin!,
+      resolvePublicAppUrl({
+        configuredPublicAppUrl: process.env.APP_PUBLIC_URL,
+        request,
+      }),
+      request.ip,
+    )
   }
 
   @Delete("/invitations")

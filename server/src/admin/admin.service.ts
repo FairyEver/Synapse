@@ -1,11 +1,14 @@
 import { BadRequestException, Injectable, NotFoundException, Optional } from "@nestjs/common"
 import { Prisma, type UserStatus } from "@prisma/client"
+import { createOpaqueToken, hashToken } from "../auth/token"
 import { AuditLogService } from "../common/audit-log.service"
 import { parsePagination, toPrismaArgs, type PaginatedResponse, type PaginationQuery } from "../common/pagination"
+import { buildTeamInviteUrl } from "../invitations/invitation-url"
 import { PermissionsService } from "../permissions/permissions.service"
 import { PrismaService } from "../prisma/prisma.service"
 
 type AdminPrismaClient = PrismaService | Prisma.TransactionClient
+const invitationDays = 7
 
 const adminUserSelect = {
   id: true,
@@ -341,6 +344,46 @@ export class AdminService {
       select: { id: true },
     })
     if (!user) throw new NotFoundException("用户不存在。")
+  }
+
+  async createInvitation(
+    input: { readonly teamId: string },
+    admin: { readonly id: string; readonly email: string },
+    publicAppUrl: string,
+    ipAddress = "system",
+  ) {
+    const team = await this.prisma.team.findUnique({
+      where: { id: input.teamId },
+      select: { id: true },
+    })
+    if (!team) throw new NotFoundException("团队不存在。")
+
+    const token = createOpaqueToken()
+    const inviteUrl = buildTeamInviteUrl({ publicAppUrl, token })
+    const invitation = await this.prisma.invitation.create({
+      data: {
+        type: "team_join",
+        tokenHash: hashToken(token),
+        inviteUrl,
+        expiresAt: addDays(new Date(), invitationDays),
+        createdByAdminId: admin.id,
+        teamId: input.teamId,
+      },
+    })
+    await this.auditLog?.record({
+      adminEmail: admin.email,
+      action: "admin.invitation.create",
+      targetType: "invitation",
+      targetId: invitation.id,
+      detail: { teamId: input.teamId },
+      ipAddress,
+    })
+    return {
+      id: invitation.id,
+      token,
+      inviteUrl,
+      expiresAt: invitation.expiresAt,
+    }
   }
 
   async listInvitations(pagination?: PaginationQuery): Promise<PaginatedResponse<unknown>> {
