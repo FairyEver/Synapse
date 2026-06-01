@@ -5,16 +5,74 @@ describe("DashboardController", () => {
   it("returns the normal user dashboard profile", async () => {
     const auth = {
       getMe: vi.fn().mockResolvedValue({
-        user: { id: "user-1", email: "user@example.com", status: "active" },
+        user: {
+          id: "user-1",
+          email: "user@example.com",
+          status: "active",
+          displayName: "Ada",
+        },
         teams: [{ id: "team-1", name: "Team", membershipId: "membership-1", membershipRole: "owner" }],
       }),
     }
     const controller = new DashboardController(auth as never)
 
     await expect(controller.me({ user: { id: "user-1" } } as never)).resolves.toEqual({
-      user: { id: "user-1", email: "user@example.com", status: "active" },
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        status: "active",
+        displayName: "Ada",
+      },
       teams: [{ id: "team-1", name: "Team", membershipId: "membership-1", membershipRole: "owner" }],
     })
     expect(auth.getMe).toHaveBeenCalledWith("user-1")
+  })
+
+  it("updates the normal user dashboard profile", async () => {
+    const auth = {
+      updateMyProfile: vi.fn().mockResolvedValue({
+        user: {
+          id: "user-1",
+          email: "user@example.com",
+          status: "active",
+          displayName: "Ada Lovelace",
+        },
+        teams: [],
+      }),
+    }
+    const controller = new DashboardController(auth as never)
+
+    await expect(controller.updateMe({
+      displayName: "Ada Lovelace",
+    }, {
+      ip: "203.0.113.90",
+      user: { id: "user-1" },
+    } as never)).resolves.toEqual({
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        status: "active",
+        displayName: "Ada Lovelace",
+      },
+      teams: [],
+    })
+    expect(auth.updateMyProfile).toHaveBeenCalledWith(
+      "user-1",
+      { displayName: "Ada Lovelace" },
+      "203.0.113.90",
+    )
+  })
+
+  it("rejects invalid profile update bodies", async () => {
+    const auth = { updateMyProfile: vi.fn() }
+    const controller = new DashboardController(auth as never)
+
+    await expect(controller.updateMe({
+      displayName: "",
+      extra: "no",
+    }, {
+      user: { id: "user-1" },
+    } as never)).rejects.toThrow("Profile update request is invalid")
+    expect(auth.updateMyProfile).not.toHaveBeenCalled()
   })
 })

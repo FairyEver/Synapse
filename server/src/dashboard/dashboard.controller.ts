@@ -1,6 +1,12 @@
-import { Controller, Get, Req, UseGuards } from "@nestjs/common"
+import { Body, Controller, Get, Patch, Req, UseGuards } from "@nestjs/common"
+import { z } from "zod"
 import { AuthenticatedUserRequest, UserAuthGuard } from "../auth/user-auth.guard"
 import { UserAuthService } from "../auth/user-auth.service"
+import { badRequestFromZodError } from "../common/zod-validation"
+
+const updateMeSchema = z.object({
+  displayName: z.string().trim().min(1).max(40),
+}).strict()
 
 @UseGuards(UserAuthGuard)
 @Controller("/api/dashboard")
@@ -10,5 +16,14 @@ export class DashboardController {
   @Get("/me")
   me(@Req() request: AuthenticatedUserRequest) {
     return this.auth.getMe(request.user!.id)
+  }
+
+  @Patch("/me")
+  async updateMe(@Body() body: unknown, @Req() request: AuthenticatedUserRequest) {
+    const result = updateMeSchema.safeParse(body)
+    if (!result.success) {
+      throw badRequestFromZodError(result.error, "Profile update request is invalid.")
+    }
+    return this.auth.updateMyProfile(request.user!.id, result.data, request.ip)
   }
 }
