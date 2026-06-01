@@ -61,7 +61,7 @@ export default function TeamsPage() {
   ])
   const sortQuery = getServerTableSortQuery(sorting)
 
-  const { data, isLoading } = useQuery({
+  const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['admin-teams', page, pageSize, sortQuery],
     queryFn: () => adminApi.listTeams({ page, pageSize, ...sortQuery }),
   })
@@ -81,6 +81,8 @@ export default function TeamsPage() {
             page={page}
             pageSize={pageSize}
             total={data?.total ?? 0}
+            error={isError ? error : null}
+            onRetry={() => void refetch()}
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
             sorting={sorting}

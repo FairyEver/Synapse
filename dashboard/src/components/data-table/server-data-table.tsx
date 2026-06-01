@@ -16,6 +16,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Button } from '@/components/ui/button'
 import { DataTablePagination } from './pagination'
 
 type ServerDataTableProps<TData, TValue> = {
@@ -29,7 +30,19 @@ type ServerDataTableProps<TData, TValue> = {
   sorting?: SortingState
   onSortingChange?: (sorting: SortingState) => void
   toolbar?: ReactNode
+  error?: unknown
+  onRetry?: () => void
   className?: string
+}
+
+export function getServerDataTableErrorMessage(error: unknown) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message
+  }
+  if (typeof error === 'string' && error.trim()) {
+    return error
+  }
+  return '列表加载失败'
 }
 
 export function getServerTableSortQuery(sorting: SortingState) {
@@ -52,6 +65,8 @@ export function ServerDataTable<TData, TValue>({
   sorting = [],
   onSortingChange,
   toolbar,
+  error,
+  onRetry,
   className,
 }: ServerDataTableProps<TData, TValue>) {
   const pageCount = Math.max(1, Math.ceil(total / pageSize))
@@ -91,6 +106,7 @@ export function ServerDataTable<TData, TValue>({
       onPageChange(1)
     },
   })
+  const errorMessage = error ? getServerDataTableErrorMessage(error) : null
 
   return (
     <div className={cn('flex flex-1 flex-col gap-4', className)}>
@@ -121,7 +137,21 @@ export function ServerDataTable<TData, TValue>({
             ))}
           </TableHeader>
           <TableBody>
-            {table.getRowModel().rows.length ? (
+            {errorMessage ? (
+              <TableRow>
+                <TableCell colSpan={columns.length} className='h-24 text-center'>
+                  <div className='flex flex-col items-center gap-2'>
+                    <span className='font-medium'>加载失败</span>
+                    <span className='text-muted-foreground'>{errorMessage}</span>
+                    {onRetry ? (
+                      <Button variant='outline' size='sm' onClick={onRetry}>
+                        重试
+                      </Button>
+                    ) : null}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ) : table.getRowModel().rows.length ? (
               table.getRowModel().rows.map((row) => (
                 <TableRow key={row.id}>
                   {row.getVisibleCells().map((cell) => (
@@ -150,7 +180,9 @@ export function ServerDataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      <DataTablePagination table={table} className='mt-auto' />
+      {errorMessage ? null : (
+        <DataTablePagination table={table} className='mt-auto' />
+      )}
     </div>
   )
 }

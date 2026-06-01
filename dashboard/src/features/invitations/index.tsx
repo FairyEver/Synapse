@@ -42,7 +42,7 @@ export default function InvitationsPage() {
   const queryClient = useQueryClient()
   const sortQuery = getServerTableSortQuery(sorting)
 
-  const { data, isLoading } = useQuery({
+  const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['admin-invitations', page, pageSize, sortQuery],
     queryFn: () => adminApi.listInvitations({ page, pageSize, ...sortQuery }),
   })
@@ -190,6 +190,8 @@ export default function InvitationsPage() {
             page={page}
             pageSize={pageSize}
             total={data?.total ?? 0}
+            error={isError ? error : null}
+            onRetry={() => void refetch()}
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
             sorting={sorting}

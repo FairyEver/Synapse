@@ -30,7 +30,7 @@ export default function UsersPage() {
   const sortQuery = getServerTableSortQuery(sorting)
   const permissionEditor = useUserModulePermissionsEditor()
 
-  const { data, isLoading } = useQuery({
+  const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['admin-users', page, pageSize, sortQuery],
     queryFn: () => adminApi.listUsers({ page, pageSize, ...sortQuery }),
   })
@@ -151,6 +151,8 @@ export default function UsersPage() {
             page={page}
             pageSize={pageSize}
             total={data?.total ?? 0}
+            error={isError ? error : null}
+            onRetry={() => void refetch()}
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
             sorting={sorting}

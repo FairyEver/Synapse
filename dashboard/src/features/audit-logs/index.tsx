@@ -66,7 +66,7 @@ export default function AuditLogsPage() {
   ])
   const sortQuery = getServerTableSortQuery(sorting)
 
-  const { data, isLoading } = useQuery({
+  const { data, error, isError, isLoading, refetch } = useQuery({
     queryKey: ['admin-audit-logs', page, pageSize, action, sortQuery],
     queryFn: () =>
       adminApi.listAuditLogs({
@@ -101,6 +101,8 @@ export default function AuditLogsPage() {
             page={page}
             pageSize={pageSize}
             total={data?.total ?? 0}
+            error={isError ? error : null}
+            onRetry={() => void refetch()}
             onPageChange={setPage}
             onPageSizeChange={setPageSize}
             sorting={sorting}
