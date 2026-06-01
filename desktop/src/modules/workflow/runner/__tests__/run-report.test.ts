@@ -163,6 +163,43 @@ describe("workflow run reports", () => {
     expect(report).toContain('"count": "1"')
     expect(report).toContain('"self": "[Circular]"')
   })
+
+  it("does not include agent conversation session keys in copied reports", () => {
+    const result = nodeResult("node-1", {
+      outputs: {
+        agentConversation: {
+          projectId: "project-1",
+          conversationId: "conversation-1",
+          sessionKey: "raw-agent-session-key",
+          platform: "workflow",
+        },
+        nested: { sessionKey: "nested-session-key" },
+        status: "ok",
+      },
+    })
+
+    const nodeReport = formatNodeRunReport({
+      definition: workflowDefinition(),
+      node: workflowDefinition().nodes[0],
+      result,
+      orderIndex: 1,
+    })
+    const workflowReport = formatWorkflowRunReport({
+      definition: workflowDefinition(),
+      runId: "run-1",
+      runState: "completed",
+      runParams: {},
+      nodeResults: { "node-1": result },
+    })
+
+    for (const report of [nodeReport, workflowReport]) {
+      expect(report).not.toContain("agentConversation")
+      expect(report).not.toContain("raw-agent-session-key")
+      expect(report).not.toContain("nested-session-key")
+      expect(report).toContain('"sessionKey": "[redacted]"')
+      expect(report).toContain('"status": "ok"')
+    }
+  })
 })
 
 function workflowDefinition(): WorkflowDefinition {

@@ -103,8 +103,9 @@ export function formatNodeRunReport(input: NodeRunReportInput): string {
     sections.push(["## 输出", codeBlock("text", formatTextValue(result.output))].join("\n"))
   }
 
-  if (result.outputs && Object.keys(result.outputs).length > 0) {
-    sections.push(["## 结构化输出", codeBlock("json", formatJson(sanitizeReportValue(result.outputs)))].join("\n"))
+  const structuredOutputs = resolveReportStructuredOutputs(result)
+  if (structuredOutputs && Object.keys(structuredOutputs).length > 0) {
+    sections.push(["## 结构化输出", codeBlock("json", formatJson(sanitizeReportValue(structuredOutputs)))].join("\n"))
   }
 
   const usageFields = tokenUsageFields(result.usage)
@@ -250,8 +251,14 @@ function sanitizeReportValue(value: unknown, seen = new WeakMap<object, unknown>
   return next
 }
 
+function resolveReportStructuredOutputs(result: NodeRunResult): Record<string, unknown> | undefined {
+  if (!result.outputs || Object.keys(result.outputs).length === 0) return undefined
+  const entries = Object.entries(result.outputs).filter(([key]) => key !== "agentConversation")
+  return entries.length > 0 ? Object.fromEntries(entries) : undefined
+}
+
 function isSensitiveKey(key: string): boolean {
-  return /^(authorization|cookie|.*(?:secret|token|password|credential).*|api[-_]?key)$/i.test(key)
+  return /^(authorization|cookie|.*(?:secret|token|password|credential).*|api[-_]?key|session[-_]?key)$/i.test(key)
 }
 
 function codeBlock(language: string, content: string): string {
