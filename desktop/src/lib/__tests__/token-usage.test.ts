@@ -51,10 +51,13 @@ describe("token usage helpers", () => {
   })
 
   it("supports an optional summary prefix", () => {
-    expect(tokenUsageFields({
+    const fields = tokenUsageFields({
       inputTokens: 1,
       outputTokens: 2,
-    }, { prefix: "总计" })?.map((field) => field.label)).toEqual([
+    }, { prefix: "总计" })
+
+    expect(fields?.[0]).toEqual({ label: "总计" })
+    expect(fields?.map((field) => field.label)).toEqual([
       "总计",
       "输入",
       "输出",

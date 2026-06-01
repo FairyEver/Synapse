@@ -111,7 +111,9 @@ export function formatNodeRunReport(input: NodeRunReportInput): string {
   if (usageFields) {
     sections.push([
       "## Token 消耗",
-      ...(usageFields?.map((field) => `- ${field.label}：${formatTokenUsageValue(field.value)}`) ?? []),
+      ...(usageFields?.map((field) => (
+        field.value !== undefined ? `- ${field.label}：${formatTokenUsageValue(field.value)}` : `- ${field.label}`
+      )) ?? []),
     ].join("\n"))
   }
 

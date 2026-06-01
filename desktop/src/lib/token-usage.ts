@@ -1,6 +1,6 @@
 export interface TokenUsageField {
   readonly label: string
-  readonly value: number
+  readonly value?: number
 }
 
 export interface ClaudeSdkUsageSummary {
@@ -48,7 +48,7 @@ export function tokenUsageFields(
     return [{ label: field.label, value: field.value ?? 0 }]
   })
   if (!options.prefix) return usageFields
-  return [{ label: options.prefix, value: Number.NaN }, ...usageFields]
+  return [{ label: options.prefix }, ...usageFields]
 }
 
 export function normalizeClaudeSdkUsage(

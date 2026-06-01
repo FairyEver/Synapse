@@ -15,7 +15,7 @@ function TokenUsageSummary({ usage, className, itemClassName }: TokenUsageSummar
     <span aria-label="Token 消耗" className={cn("flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground", className)}>
       {fields?.map((field) => (
         <span key={field.label} className={cn("whitespace-nowrap", itemClassName)}>
-          {field.label} {formatTokenUsageValue(field.value)}
+          {field.label}{field.value !== undefined ? ` ${formatTokenUsageValue(field.value)}` : null}
         </span>
       ))}
     </span>
