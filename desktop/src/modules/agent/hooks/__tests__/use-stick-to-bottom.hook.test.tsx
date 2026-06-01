@@ -184,7 +184,7 @@ describe("useStickToBottom", () => {
     scrollTo.mockClear()
 
     await act(async () => {
-      viewport?.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: 120 }))
+      viewport?.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -120 }))
       rerender({ signal: "message:assistant:20", latestEntryId: "assistant-1" })
     })
 
@@ -265,6 +265,7 @@ describe("useStickToBottom", () => {
     })
     await act(async () => {
       viewport?.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -120 }))
+      setScrollMetrics(viewport, { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 })
       viewport?.dispatchEvent(new Event("scroll", { bubbles: true }))
     })
     scrollTo.mockClear()
@@ -276,6 +277,48 @@ describe("useStickToBottom", () => {
     expect(scrollTo).not.toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
     expect(controls.current?.isPinned).toBe(false)
     expect(controls.current?.hasUnread).toBe(true)
+  })
+
+  it("re-enables following when the user manually scrolls back to the bottom", async () => {
+    const { controls, rerender, scrollTo } = await renderStickHarness({
+      signal: "message:assistant:4",
+      latestEntryId: "assistant-1",
+    })
+    const viewport = document.querySelector<HTMLDivElement>("[data-testid='viewport']")
+    expect(viewport).not.toBeNull()
+    setScrollMetrics(viewport, { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 })
+
+    await act(async () => {
+      rerender({ signal: "message:assistant:12", latestEntryId: "assistant-1" })
+    })
+    scrollTo.mockClear()
+
+    await act(async () => {
+      setScrollMetrics(viewport, { scrollTop: 1000, scrollHeight: 2000, clientHeight: 600 })
+      viewport?.dispatchEvent(new Event("scroll", { bubbles: true }))
+    })
+
+    expect(controls.current?.isPinned).toBe(false)
+
+    await act(async () => {
+      rerender({ signal: "message:assistant:20", latestEntryId: "assistant-1" })
+    })
+
+    expect(controls.current?.hasUnread).toBe(true)
+
+    await act(async () => {
+      setScrollMetrics(viewport, { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 })
+      viewport?.dispatchEvent(new Event("scroll", { bubbles: true }))
+    })
+
+    expect(controls.current?.isPinned).toBe(true)
+    expect(controls.current?.hasUnread).toBe(false)
+
+    await act(async () => {
+      rerender({ signal: "message:assistant:24", latestEntryId: "assistant-1" })
+    })
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
   })
 
   it("pauses following when wheel input is captured on window inside the timeline area", async () => {
@@ -309,7 +352,37 @@ describe("useStickToBottom", () => {
     expect(controls.current?.hasUnread).toBe(true)
   })
 
-  it("pauses following when global wheel input lands outside the viewport bounds", async () => {
+  it("stays pinned when wheel input at bottom does not move the viewport away", async () => {
+    const { controls, rerender, scrollTo } = await renderStickHarness({
+      signal: "message:assistant:4",
+      latestEntryId: "assistant-1",
+    })
+    const viewport = document.querySelector<HTMLDivElement>("[data-testid='viewport']")
+    expect(viewport).not.toBeNull()
+    setScrollMetrics(viewport, { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 })
+    setViewportRect(viewport, { bottom: 700, left: 100, right: 900, top: 100 })
+    scrollTo.mockClear()
+
+    await act(async () => {
+      window.dispatchEvent(new WheelEvent("wheel", {
+        bubbles: true,
+        clientX: 500,
+        clientY: 300,
+        deltaY: 120,
+      }))
+    })
+
+    expect(controls.current?.isPinned).toBe(true)
+
+    await act(async () => {
+      rerender({ signal: "message:assistant:20", latestEntryId: "assistant-1" })
+    })
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
+    expect(controls.current?.hasUnread).toBe(false)
+  })
+
+  it("ignores global wheel input outside the viewport bounds", async () => {
     const { controls, rerender, scrollTo } = await renderStickHarness({
       signal: "message:assistant:4",
       latestEntryId: "assistant-1",
@@ -329,15 +402,14 @@ describe("useStickToBottom", () => {
       }))
     })
 
-    expect(controls.current?.isPinned).toBe(false)
+    expect(controls.current?.isPinned).toBe(true)
 
     await act(async () => {
       rerender({ signal: "message:assistant:20", latestEntryId: "assistant-1" })
     })
 
-    expect(scrollTo).not.toHaveBeenCalled()
-    expect(scrollTo).not.toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
-    expect(controls.current?.hasUnread).toBe(true)
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
+    expect(controls.current?.hasUnread).toBe(false)
   })
 
   it("attaches wheel handling when the viewport mounts after the hook", async () => {

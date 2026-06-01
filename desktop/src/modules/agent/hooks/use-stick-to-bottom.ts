@@ -18,6 +18,25 @@ export function computeIsPinned(metrics: {
   return distanceFromBottom <= PINNED_THRESHOLD_PX
 }
 
+function isEventInsideViewport(event: WheelEvent, viewport: HTMLElement): boolean {
+  const rect = viewport.getBoundingClientRect()
+  if (rect.width === 0 && rect.height === 0) {
+    return true
+  }
+  return event.clientX >= rect.left
+    && event.clientX <= rect.right
+    && event.clientY >= rect.top
+    && event.clientY <= rect.bottom
+}
+
+function isViewportPinned(viewport: HTMLElement): boolean {
+  return computeIsPinned({
+    scrollTop: viewport.scrollTop,
+    scrollHeight: viewport.scrollHeight,
+    clientHeight: viewport.clientHeight,
+  })
+}
+
 export function isLatestEntryNew(input: {
   previousId: string | undefined
   latestId: string | undefined
@@ -141,7 +160,11 @@ export function useStickToBottom(input: {
 
     let frame: number | null = null
     const onWheel = (event: WheelEvent) => {
-      if (event.deltaY !== 0) {
+      if (
+        event.deltaY !== 0
+        && isEventInsideViewport(event, viewport)
+        && (event.deltaY < 0 || !isViewportPinned(viewport))
+      ) {
         pauseFollowing()
       }
     }
@@ -178,7 +201,9 @@ export function useStickToBottom(input: {
       frame = window.requestAnimationFrame(() => {
         frame = null
         const now = Date.now()
-        const scrollingUp = viewport.scrollTop < lastScrollTopRef.current
+        const previousScrollTop = lastScrollTopRef.current
+        const scrollingUp = viewport.scrollTop < previousScrollTop
+        const scrollPositionChanged = viewport.scrollTop !== previousScrollTop
         lastScrollTopRef.current = viewport.scrollTop
         if (scrollingUp) {
           pauseFollowing()
@@ -193,6 +218,13 @@ export function useStickToBottom(input: {
           clientHeight: viewport.clientHeight,
         })
         if (!autoFollowRef.current) {
+          if (next && scrollPositionChanged) {
+            autoFollowRef.current = true
+            isPinnedRef.current = true
+            setIsPinned(true)
+            setHasUnread(false)
+            return
+          }
           if (isPinnedRef.current) {
             isPinnedRef.current = false
             setIsPinned(false)
