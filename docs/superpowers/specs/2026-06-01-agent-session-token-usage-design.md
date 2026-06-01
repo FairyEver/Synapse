@@ -33,10 +33,10 @@ Example:
 Agent assistant messages should show a compact usage summary like:
 
 ```text
-总计：输入 12,345 输出 678 缓存读 90,000 缓存写 1,234 思考 567
+总计 输入 12,345 输出 678 缓存读 90,000 缓存写 1,234 思考 567
 ```
 
-The prefix `总计：` means the following token fields are cumulative for the current conversation up to this assistant message.
+The leading label `总计` means the following token fields are cumulative for the current conversation up to this assistant message.
 
 Fields remain separated:
 
@@ -77,7 +77,7 @@ SDK result usage
   -> getUsageSummary(conversationId)
   -> assistant history metadata.usage = cumulative summary
   -> renderer timeline item metadata.usage
-  -> TokenUsageSummary renders "总计：" plus separated fields
+  -> TokenUsageSummary renders "总计" plus separated fields
 ```
 
 For an SDK error result that contains usage:
@@ -88,15 +88,35 @@ For an SDK error result that contains usage:
 
 ## UI
 
-The shared `TokenUsageSummary` component is used outside Agent conversations, so the `总计：` wording should be opt-in.
+Use the recommended Agent conversation presentation: each completed assistant reply gets its own compact cumulative usage summary row below the assistant content. The row should feel like metadata attached to that reply, not a card, badge group, or page-level counter.
 
-Recommended shape:
+Recommended layout:
+
+```text
+总计 输入 12,345  输出 678  缓存读 90,000  缓存写 1,234  思考 567
+```
+
+Placement:
+
+- Keep it below the assistant response body so it represents the cumulative snapshot at that turn.
+- Keep the copy button available in the same footer area, but do not make token usage look like a hover-only toolbar detail.
+- Do not move the primary display to the page header or composer, because those locations only communicate the latest session total and lose the per-turn historical snapshot meaning.
+
+Visual treatment:
+
+- Use existing muted metadata styling, such as the current small muted text treatment.
+- Do not use cards, nested cards, custom colors, gradients, shadows, or badge-like decorative containers.
+- Let the row wrap naturally on narrow widths while keeping each label/value pair together.
+
+The shared `TokenUsageSummary` component is used outside Agent conversations, so the cumulative wording should be opt-in.
+
+Implementation shape:
 
 - Add a small prop such as `prefix`.
-- Agent conversation messages pass `prefix="总计："`.
-- Workflow, scheduler, and Action result callers keep the current display without the cumulative wording.
+- Agent conversation messages pass `prefix="总计"`.
+- Workflow, scheduler, and Action result callers keep the current display without the cumulative label.
 
-No custom colors, inline styles, or visual redesign are needed. The current compact muted text treatment can remain.
+No custom colors, inline styles, or visual redesign are needed.
 
 ## Testing
 
@@ -107,7 +127,7 @@ Add focused tests around the changed behavior:
   - turn 2 assistant metadata usage equals turn 1 plus turn 2 usage.
   - raw `agent.usage` rows remain per-result, not cumulative.
 - Deduplication test continues to prove aggregation deduplicates by SDK result UUID.
-- Agent message toolbar or message event test verifies `总计：` appears for Agent conversation usage.
+- Agent message toolbar or message event test verifies `总计` appears for Agent conversation usage.
 - Token summary tests keep non-Agent callers without the prefix.
 
 ## Release Notes
@@ -115,5 +135,5 @@ Add focused tests around the changed behavior:
 This is user-visible and should update `RELEASE_NOTES_PENDING.md` during implementation:
 
 ```text
-- Agent 对话里的 token 用量改为显示当前会话截至该回复的累计分项统计，并用“总计”标明口径，避免误看成单轮消耗。
+- Agent 对话里的 token 用量改为在回复底部显示当前会话截至该回复的累计分项统计，并用“总计”标明口径，避免误看成单轮消耗。
 ```
