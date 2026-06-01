@@ -155,6 +155,10 @@ export type UserTokenPair = {
   refreshToken: string
 }
 
+export type UserRegistrationResult = {
+  ok: true
+}
+
 export type PasswordResetRequestResult = {
   ok: true
   resetUrl?: string
@@ -445,7 +449,7 @@ export const adminApi = {
 
 export const userAuthApi = {
   register: (input: { email: string; password: string }) =>
-    request<UserTokenPair>('/api/auth/register', {
+    request<UserRegistrationResult>('/api/auth/register', {
       method: 'POST',
       body: JSON.stringify(input),
     }),

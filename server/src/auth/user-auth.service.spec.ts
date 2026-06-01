@@ -343,15 +343,15 @@ describe("UserAuthService", () => {
     })
   })
 
-  it("registers users without an invitation and records success audits with the request ip", async () => {
+  it("registers users without issuing refresh sessions and records success audits with the request ip", async () => {
     const prisma = createPrismaMock()
     const auditLog = { record: vi.fn() }
     const service = createService(prisma, auditLog)
 
-    await service.register({
+    await expect(service.register({
       email: "U@example.com",
       password: "StrongPassword123!",
-    }, "203.0.113.25")
+    }, "203.0.113.25")).resolves.toEqual({ ok: true })
 
     expect(prisma.__tx.$executeRaw).toHaveBeenCalledTimes(1)
     expect(prisma.__tx.adminUser.findUnique).toHaveBeenCalledWith({
@@ -364,13 +364,7 @@ describe("UserAuthService", () => {
         passwordHash: expect.any(String),
       },
     })
-    expect(prisma.__tx.userSession.create).toHaveBeenCalledWith({
-      data: {
-        userId: "user-1",
-        refreshTokenHash: expect.any(String),
-        expiresAt: expect.any(Date),
-      },
-    })
+    expect(prisma.__tx.userSession.create).not.toHaveBeenCalled()
     expect(auditLog.record).toHaveBeenCalledWith({
       adminEmail: "u@example.com",
       action: "user.register.success",

@@ -40,7 +40,7 @@ describe("UserAuthController", () => {
 
   it("passes valid register requests with the request ip to the service", () => {
     const auth = {
-      register: vi.fn().mockResolvedValue({ accessToken: "access", refreshToken: "refresh" }),
+      register: vi.fn().mockResolvedValue({ ok: true }),
     }
     const controller = new UserAuthController(auth as unknown as UserAuthService)
 

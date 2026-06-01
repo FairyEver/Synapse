@@ -21,6 +21,10 @@ export interface UserTokenPair {
   readonly refreshToken: string
 }
 
+export interface UserRegistrationResult {
+  readonly ok: true
+}
+
 export interface UserMeTeam {
   readonly id: string
   readonly name: string
@@ -130,7 +134,7 @@ export class UserAuthService {
     @Optional() private readonly auditLog?: AuditLogService,
   ) {}
 
-  async register(input: { email: string; password: string }, ipAddress = "system"): Promise<UserTokenPair> {
+  async register(input: { email: string; password: string }, ipAddress = "system"): Promise<UserRegistrationResult> {
     const email = input.email.trim().toLowerCase()
     try {
       const result = await this.prisma.$transaction(async (tx) => {
@@ -147,8 +151,7 @@ export class UserAuthService {
             passwordHash: await hashPassword(input.password),
           },
         })
-        const tokens = await this.issueTokenPair(user, tx)
-        return { registered: true as const, tokens, user }
+        return { registered: true as const, user }
       })
       if (!result.registered) {
         await this.recordUserRegistrationFailure({
@@ -165,7 +168,7 @@ export class UserAuthService {
         targetId: result.user.id,
         ipAddress,
       })
-      return result.tokens
+      return { ok: true }
     } catch (error) {
       if (isUniqueConstraintError(error)) {
         await this.recordUserRegistrationFailure({
