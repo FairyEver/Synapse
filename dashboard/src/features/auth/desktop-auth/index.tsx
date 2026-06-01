@@ -18,6 +18,7 @@ const desktopRedirectUri = 'synapse://auth/desktop/callback'
 const pkceChallengeMethod = 'S256' as const
 const protocolFallbackDelayMs = 3500
 const protocolFallbackMessage = '未检测到 Synapse 桌面应用。请确认已安装并允许浏览器打开。'
+const invalidRequestError = 'invalid_request'
 
 type DesktopAuthSearch = {
   client_id?: string
@@ -41,6 +42,12 @@ type AuthorizeState =
 function buildDesktopAuthErrorCallbackUrl(state: string, error: string) {
   const query = new URLSearchParams({ error, state })
   return `${desktopRedirectUri}?${query.toString()}`
+}
+
+export function buildInvalidDesktopAuthCallbackUrl(search: DesktopAuthSearch) {
+  const state = search.state?.trim()
+  if (!state || state.length < 16) return null
+  return buildDesktopAuthErrorCallbackUrl(state, invalidRequestError)
 }
 
 function buildDesktopAuthRedirect(search: DesktopAuthSearch) {
@@ -86,6 +93,10 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
   const unsupportedAccountRef = useRef('')
   const protocolFallbackCleanupRef = useRef<(() => void) | null>(null)
   const input = useMemo(() => validateDesktopAuthSearch(search), [search])
+  const invalidCallbackUrl = useMemo(
+    () => (input ? null : buildInvalidDesktopAuthCallbackUrl(search)),
+    [input, search]
+  )
   const redirect = useMemo(() => buildDesktopAuthRedirect(search), [search])
   const deepLinkUrl =
     authorizeState.status === 'opening' ||
@@ -163,6 +174,11 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
       }
     }
   }, [auth.isAuthenticated, auth.user, input, retryKey])
+
+  useEffect(() => {
+    if (input || !invalidCallbackUrl) return
+    window.location.href = invalidCallbackUrl
+  }, [input, invalidCallbackUrl])
 
   useEffect(() => {
     if (!input || !auth.isAuthenticated || !auth.user) return
