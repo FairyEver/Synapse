@@ -33,10 +33,10 @@ Example:
 Agent assistant messages should show a compact usage summary like:
 
 ```text
-总计 输入 12,345 输出 678 缓存读 90,000 缓存写 1,234 思考 567
+累计 输入 12,345 输出 678 缓存读 90,000 缓存写 1,234 思考 567
 ```
 
-The leading label `总计` means the following token fields are cumulative for the current conversation up to this assistant message.
+The leading label `累计` means the following token fields are cumulative for the current conversation up to this assistant message.
 
 Fields remain separated:
 
@@ -77,7 +77,7 @@ SDK result usage
   -> getUsageSummary(conversationId)
   -> assistant history metadata.usage = cumulative summary
   -> renderer timeline item metadata.usage
-  -> TokenUsageSummary renders "总计" plus separated fields
+  -> TokenUsageSummary renders "累计" plus separated fields
 ```
 
 For an SDK error result that contains usage:
@@ -93,7 +93,7 @@ Use the recommended Agent conversation presentation: each completed assistant re
 Recommended layout:
 
 ```text
-总计 输入 12,345  输出 678  缓存读 90,000  缓存写 1,234  思考 567
+累计 输入 12,345  输出 678  缓存读 90,000  缓存写 1,234  思考 567
 ```
 
 Placement:
@@ -113,7 +113,7 @@ The shared `TokenUsageSummary` component is used outside Agent conversations, so
 Implementation shape:
 
 - Add a small prop such as `prefix`.
-- Agent conversation messages pass `prefix="总计"`.
+- Agent conversation messages pass `prefix="累计"`.
 - Workflow, scheduler, and Action result callers keep the current display without the cumulative label.
 
 No custom colors, inline styles, or visual redesign are needed.
@@ -127,7 +127,7 @@ Add focused tests around the changed behavior:
   - turn 2 assistant metadata usage equals turn 1 plus turn 2 usage.
   - raw `agent.usage` rows remain per-result, not cumulative.
 - Deduplication test continues to prove aggregation deduplicates by SDK result UUID.
-- Agent message toolbar or message event test verifies `总计` appears for Agent conversation usage.
+- Agent message toolbar or message event test verifies `累计` appears for Agent conversation usage.
 - Token summary tests keep non-Agent callers without the prefix.
 
 ## Release Notes
@@ -135,5 +135,5 @@ Add focused tests around the changed behavior:
 This is user-visible and should update `RELEASE_NOTES_PENDING.md` during implementation:
 
 ```text
-- Agent 对话里的 token 用量改为在回复底部显示当前会话截至该回复的累计分项统计，并用“总计”标明口径，避免误看成单轮消耗。
+- Agent 对话里的 token 用量改为在回复底部显示当前会话截至该回复的累计分项统计，并用“累计”标明口径，避免误看成单轮消耗。
 ```

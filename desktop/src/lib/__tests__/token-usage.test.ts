@@ -54,11 +54,11 @@ describe("token usage helpers", () => {
     const fields = tokenUsageFields({
       inputTokens: 1,
       outputTokens: 2,
-    }, { prefix: "总计" })
+    }, { prefix: "累计" })
 
-    expect(fields?.[0]).toEqual({ label: "总计" })
+    expect(fields?.[0]).toEqual({ label: "累计" })
     expect(fields?.map((field) => field.label)).toEqual([
-      "总计",
+      "累计",
       "输入",
       "输出",
       "缓存读",

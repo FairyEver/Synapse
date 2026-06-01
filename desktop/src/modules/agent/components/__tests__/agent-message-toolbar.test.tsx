@@ -65,7 +65,7 @@ describe("AgentMessageToolbar", () => {
         <AgentMessageToolbar
           content="agent response"
           timestamp="2026-05-14T00:00:00.000Z"
-          usagePrefix="总计"
+          usagePrefix="累计"
           usage={{
             input_tokens: 1234,
             output_tokens: 56,
@@ -76,7 +76,7 @@ describe("AgentMessageToolbar", () => {
       )
     })
 
-    expect(container.textContent).toContain("总计")
+    expect(container.textContent).toContain("累计")
     expect(container.textContent).toContain("输入 1,234")
     expect(container.textContent).toContain("输出 56")
     expect(container.textContent).toContain("缓存读 7,890")
@@ -103,7 +103,7 @@ describe("AgentMessageToolbar", () => {
       )
     })
 
-    expect(container.textContent).not.toContain("总计")
+    expect(container.textContent).not.toContain("累计")
     expect(container.textContent).toContain("输入 1,234")
     expect(container.textContent).toContain("输出 56")
     expect(container.textContent).toContain("缓存读 7,890")

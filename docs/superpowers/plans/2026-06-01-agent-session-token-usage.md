@@ -4,7 +4,7 @@
 
 **Goal:** Agent conversation replies display a bottom metadata row with cumulative per-field token usage for the current Synapse conversation.
 
-**Architecture:** Keep the existing `agent.usage` raw per-result ledger. After each SDK result is recorded, aggregate the current conversation usage and persist that cumulative snapshot on the assistant history entry. Renderer usage display remains shared, but Agent messages opt into a `总计` prefix and keep the copy control separate from the cumulative usage row.
+**Architecture:** Keep the existing `agent.usage` raw per-result ledger. After each SDK result is recorded, aggregate the current conversation usage and persist that cumulative snapshot on the assistant history entry. Renderer usage display remains shared, but Agent messages opt into a `累计` prefix and keep the copy control separate from the cumulative usage row.
 
 **Tech Stack:** Electron main process TypeScript, React, shadcn/Radix baseline, Vitest, pnpm monorepo.
 
@@ -20,7 +20,7 @@
 - Modify `desktop/electron/services/agent-runtime/__tests__/conversation-router.test.ts`: cover two-turn cumulative snapshots and raw per-result ledger behavior.
 - Modify `desktop/src/modules/agent/components/agent-message-toolbar.tsx`: allow Agent messages to render cumulative usage as an always-visible bottom metadata row.
 - Modify `desktop/src/modules/agent/components/agent-message-event.tsx`: pass the cumulative prefix for assistant messages.
-- Modify `desktop/src/modules/agent/components/__tests__/agent-message-toolbar.test.tsx`: verify `总计` display and non-prefixed defaults.
+- Modify `desktop/src/modules/agent/components/__tests__/agent-message-toolbar.test.tsx`: verify `累计` display and non-prefixed defaults.
 - Modify `RELEASE_NOTES_PENDING.md`: add the user-visible behavior change.
 
 ## Task 1: Usage Helper Supports Cumulative Reasoning And Prefix
@@ -81,8 +81,8 @@ it("supports an optional summary prefix", () => {
   expect(tokenUsageFields({
     inputTokens: 1,
     outputTokens: 2,
-  }, { prefix: "总计" })?.map((field) => field.label)).toEqual([
-    "总计",
+  }, { prefix: "累计" })?.map((field) => field.label)).toEqual([
+    "累计",
     "输入",
     "输出",
     "缓存读",
@@ -434,13 +434,13 @@ git commit -m "feat(agent): persist cumulative token usage snapshots"
 In `desktop/src/modules/agent/components/__tests__/agent-message-toolbar.test.tsx`, add a new assertion to the token usage test render:
 
 ```ts
-usagePrefix="总计"
+usagePrefix="累计"
 ```
 
 Then assert:
 
 ```ts
-expect(container.textContent).toContain("总计")
+expect(container.textContent).toContain("累计")
 expect(container.textContent).toContain("输入 1,234")
 expect(container.textContent).toContain("输出 56")
 expect(container.textContent).toContain("缓存读 7,890")
@@ -450,7 +450,7 @@ expect(container.textContent).toContain("缓存写 12")
 Also add a small default case:
 
 ```ts
-expect(container.textContent).not.toContain("总计")
+expect(container.textContent).not.toContain("累计")
 ```
 
 for a toolbar rendered with `usage` but no `usagePrefix`.
@@ -515,7 +515,7 @@ Destructure it and pass it:
 In `desktop/src/modules/agent/components/agent-message-event.tsx`, pass the prefix only for assistant usage:
 
 ```tsx
-usagePrefix={hasUsage ? "总计" : undefined}
+usagePrefix={hasUsage ? "累计" : undefined}
 ```
 
 Keep user message toolbar unchanged.
@@ -557,7 +557,7 @@ git commit -m "feat(agent): show cumulative usage in reply footer"
 Add under `## 功能优化`:
 
 ```md
-- Agent 对话里的 token 用量改为在回复底部显示当前会话截至该回复的累计分项统计，并用“总计”标明口径，避免误看成单轮消耗。
+- Agent 对话里的 token 用量改为在回复底部显示当前会话截至该回复的累计分项统计，并用“累计”标明口径，避免误看成单轮消耗。
 ```
 
 - [ ] **Step 2: Run focused tests**
