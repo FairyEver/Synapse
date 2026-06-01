@@ -195,6 +195,19 @@ describe("DragonScaleTilingService", () => {
     await expect(readFile(path.join(root, ".vault-meta", "tiling-cache.json"), "utf8")).resolves.toBe("{ bad json")
   })
 
+  it("rejects a symlinked metadata directory before writing the tiling cache", async () => {
+    const root = await tempDir()
+    const outside = await tempDir()
+    await writePage(root, "wiki/concepts/Alpha.md", "---\ntype: concept\n---\n\nAlpha body\n")
+    await symlink(outside, path.join(root, ".vault-meta"))
+
+    await expect(new DragonScaleTilingService({
+      embeddingProvider: new FakeEmbeddingProvider(),
+    }).check(root)).rejects.toThrow("Knowledge base path must not contain symlinks: .vault-meta")
+
+    await expect(pathExists(path.join(outside, "tiling-cache.json"))).resolves.toBe(false)
+  })
+
   it("splits similarity pairs into error and review bands", async () => {
     const root = await tempDir()
     const provider = new FakeEmbeddingProvider()

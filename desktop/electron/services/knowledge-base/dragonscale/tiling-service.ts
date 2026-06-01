@@ -498,6 +498,7 @@ async function loadCache(root: string, model: string, rebuild: boolean): Promise
 }
 
 async function saveCache(root: string, cache: DragonScaleTilingCache): Promise<void> {
+  await assertNoSymlinkInPath(root, ".vault-meta/tiling-cache.json")
   const metaPath = path.join(root, ".vault-meta")
   await mkdir(metaPath, { recursive: true })
   const cachePath = path.join(metaPath, "tiling-cache.json")
