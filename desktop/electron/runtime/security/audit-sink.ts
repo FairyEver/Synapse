@@ -20,6 +20,7 @@ const MAX_MEMORY_EVENTS = 10_000
 const SENSITIVE_TEXT_VALUE_PATTERN = /\b(token|secret|authorization|api[_-]?key|password|auth)\b(\s*[:=]\s*)(Bearer\s+[^\s"'`<>),;]+|"[^"]*"|'[^']*'|[^\s"'`<>),;]+)/gi
 const BEARER_TEXT_VALUE_PATTERN = /\bBearer\s+[^\s"'`<>),;]+/gi
 const POSIX_PATH_PATTERN = /(?:\/Users|\/home|\/Volumes|\/private|\/tmp)\/[^\s"'`<>),;]+/g
+const SENSITIVE_URL_PARAM_PATTERN = /(^|[-_])(token|secret|signature|sig|password|auth|key|credential|api[-_]?key|access[-_]?token|security[-_]?token|session[-_]?token)([-_]|$)/i
 
 export class DataRepositoryAuditSink implements AuditSink {
   private readonly audit: DataNamespace<AuditEntryV1>
@@ -147,15 +148,36 @@ function sanitizeValue(value: unknown): unknown {
 
 function sanitizeText(value: string): string {
   return sanitizePathText(
-    value
-      .replace(SENSITIVE_TEXT_VALUE_PATTERN, (_match, key: string, separator: string) =>
-        `${key}${separator}[redacted]`)
-      .replace(BEARER_TEXT_VALUE_PATTERN, "Bearer [redacted]"),
+    sanitizeUrlText(
+      value
+        .replace(SENSITIVE_TEXT_VALUE_PATTERN, (_match, key: string, separator: string) =>
+          `${key}${separator}[redacted]`)
+        .replace(BEARER_TEXT_VALUE_PATTERN, "Bearer [redacted]"),
+    ),
   )
 }
 
 function sanitizePathText(value: string): string {
   return value.replace(POSIX_PATH_PATTERN, "[path]")
+}
+
+function sanitizeUrlText(value: string): string {
+  try {
+    const url = new URL(value)
+    if (url.protocol !== "http:" && url.protocol !== "https:") {
+      return value
+    }
+    url.username = ""
+    url.password = ""
+    for (const key of url.searchParams.keys()) {
+      if (SENSITIVE_URL_PARAM_PATTERN.test(key)) {
+        url.searchParams.set(key, "[redacted]")
+      }
+    }
+    return url.toString()
+  } catch {
+    return value
+  }
 }
 
 function isSensitiveKey(key: string): boolean {

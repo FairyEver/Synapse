@@ -94,6 +94,34 @@ describe("DataRepositoryAuditSink metadata redaction", () => {
     expect(JSON.stringify(namespace.items)).not.toContain("sk-test-secret")
   })
 
+  it("redacts sensitive URL query parameters in resources before caching and persistence", async () => {
+    const namespace = new FakeAuditNamespace()
+    const sink = new DataRepositoryAuditSink({
+      audit: namespace,
+      idFactory: () => "audit-resource-url",
+      now: () => new Date("2026-06-01T00:00:00.000Z"),
+    })
+
+    sink.record({
+      action: "network.connect",
+      actor: { kind: "user" },
+      resource: "https://docs.example.test/source.pdf?access_token=raw-token&X-Amz-Signature=raw-signature&sig=raw-sig&safe=visible",
+      outcome: "allowed",
+    })
+    await sink.flushForTests()
+
+    expect(sink.list()[0]?.resource).toContain("safe=visible")
+    expect(sink.list()[0]?.resource).toContain("access_token=%5Bredacted%5D")
+    expect(sink.list()[0]?.resource).toContain("X-Amz-Signature=%5Bredacted%5D")
+    expect(namespace.items[0]?.resource.id).toBe(sink.list()[0]?.resource)
+    expect(JSON.stringify(sink.list())).not.toContain("raw-token")
+    expect(JSON.stringify(sink.list())).not.toContain("raw-signature")
+    expect(JSON.stringify(sink.list())).not.toContain("raw-sig")
+    expect(JSON.stringify(namespace.items)).not.toContain("raw-token")
+    expect(JSON.stringify(namespace.items)).not.toContain("raw-signature")
+    expect(JSON.stringify(namespace.items)).not.toContain("raw-sig")
+  })
+
   it("redacts command args and sensitive string values before persistence", async () => {
     const namespace = new FakeAuditNamespace()
     const sink = new DataRepositoryAuditSink({
