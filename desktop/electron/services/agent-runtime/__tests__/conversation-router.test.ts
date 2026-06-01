@@ -488,10 +488,11 @@ describe("ConversationRouter", () => {
         content: "usage answer",
         metadata: expect.objectContaining({
           usage: {
-            input_tokens: 10,
-            output_tokens: 2,
-            cache_read_input_tokens: 30,
-            cache_creation_input_tokens: 4,
+            inputTokens: 10,
+            outputTokens: 2,
+            cacheReadInputTokens: 30,
+            cacheCreationInputTokens: 4,
+            totalTokens: 46,
           },
           costUsd: 0.01,
         }),
@@ -528,6 +529,117 @@ describe("ConversationRouter", () => {
       cacheCreationInputTokens: 4,
       totalTokens: 46,
     })
+  })
+
+  it("persists cumulative usage snapshots on assistant history entries", async () => {
+    const agentUsage = new MemoryNamespace<AgentUsageEntryV1>("agent.usage")
+    const session = new ScriptedSession([
+      {
+        type: "result",
+        content: "first usage answer",
+        done: true,
+        sdkResultUuid: "result-1",
+        sdkSessionId: "sdk-1",
+        usage: {
+          input_tokens: 10,
+          output_tokens: 2,
+          cache_read_input_tokens: 30,
+          cache_creation_input_tokens: 4,
+          reasoning_output_tokens: 1,
+        },
+      },
+      {
+        type: "result",
+        content: "second usage answer",
+        done: true,
+        sdkResultUuid: "result-2",
+        sdkSessionId: "sdk-1",
+        usage: {
+          input_tokens: 5,
+          output_tokens: 3,
+          cache_read_input_tokens: 70,
+          cache_creation_input_tokens: 6,
+          reasoning_output_tokens: 2,
+        },
+      },
+    ], "sdk-1")
+    const { conversations, router } = createRouter({ agentUsage, session })
+
+    const first = await router.send(baseMessage("hello"))
+    const second = await router.send(baseMessage("again"))
+    const savedConversation = await conversations.get(second.conversationId)
+    const assistantEntries = savedConversation?.history.filter((entry) => entry.role === "assistant")
+    const usageRows = await agentUsage.list()
+
+    expect(first.conversationId).toBe(second.conversationId)
+    expect(assistantEntries).toEqual([
+      expect.objectContaining({
+        content: "first usage answer",
+        metadata: expect.objectContaining({
+          usage: {
+            inputTokens: 10,
+            outputTokens: 2,
+            cacheReadInputTokens: 30,
+            cacheCreationInputTokens: 4,
+            reasoningOutputTokens: 1,
+            totalTokens: 47,
+          },
+        }),
+      }),
+      expect.objectContaining({
+        content: "second usage answer",
+        metadata: expect.objectContaining({
+          usage: {
+            inputTokens: 15,
+            outputTokens: 5,
+            cacheReadInputTokens: 100,
+            cacheCreationInputTokens: 10,
+            reasoningOutputTokens: 3,
+            totalTokens: 133,
+          },
+        }),
+      }),
+    ])
+    expect(usageRows).toEqual([
+      expect.objectContaining({
+        id: "result-1",
+        conversationId: first.conversationId,
+        usage: {
+          input_tokens: 10,
+          output_tokens: 2,
+          cache_read_input_tokens: 30,
+          cache_creation_input_tokens: 4,
+          reasoning_output_tokens: 1,
+        },
+        usageSummary: {
+          inputTokens: 10,
+          outputTokens: 2,
+          cacheReadInputTokens: 30,
+          cacheCreationInputTokens: 4,
+          reasoningOutputTokens: 1,
+          totalTokens: 47,
+        },
+      }),
+      expect.objectContaining({
+        id: "result-2",
+        conversationId: second.conversationId,
+        usage: {
+          input_tokens: 5,
+          output_tokens: 3,
+          cache_read_input_tokens: 70,
+          cache_creation_input_tokens: 6,
+          reasoning_output_tokens: 2,
+        },
+        usageSummary: {
+          inputTokens: 5,
+          outputTokens: 3,
+          cacheReadInputTokens: 70,
+          cacheCreationInputTokens: 6,
+          reasoningOutputTokens: 2,
+          totalTokens: 86,
+        },
+      }),
+    ])
   })
 
   it("deduplicates SDK result usage by result uuid when aggregating a conversation", async () => {

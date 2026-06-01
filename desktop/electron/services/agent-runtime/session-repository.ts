@@ -328,6 +328,9 @@ export class AgentSessionRepository {
         outputTokens: summary.outputTokens,
         cacheReadInputTokens: summary.cacheReadInputTokens,
         cacheCreationInputTokens: summary.cacheCreationInputTokens,
+        ...(summary.reasoningOutputTokens === undefined ? {} : {
+          reasoningOutputTokens: summary.reasoningOutputTokens,
+        }),
         totalTokens: summary.totalTokens,
       },
       modelUsage: input.modelUsage,

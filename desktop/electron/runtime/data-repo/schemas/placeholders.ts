@@ -285,6 +285,7 @@ export interface AgentUsageSummaryV1 extends Record<string, unknown> {
   outputTokens: number
   cacheReadInputTokens: number
   cacheCreationInputTokens: number
+  reasoningOutputTokens?: number
   totalTokens: number
 }
 
@@ -1075,6 +1076,7 @@ function isAgentUsageSummary(value: unknown): value is AgentUsageSummaryV1 {
     && isRequiredNonNegativeInteger(value.outputTokens)
     && isRequiredNonNegativeInteger(value.cacheReadInputTokens)
     && isRequiredNonNegativeInteger(value.cacheCreationInputTokens)
+    && isOptionalNonNegativeInteger(value.reasoningOutputTokens)
     && isRequiredNonNegativeInteger(value.totalTokens)
 }
 

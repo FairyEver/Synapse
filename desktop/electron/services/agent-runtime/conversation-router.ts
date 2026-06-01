@@ -589,6 +589,7 @@ export class ConversationRouter {
           modelUsage: resultModelUsageFromEvent(event),
           userMeta: message.userMeta ?? conversation.userMeta,
         })
+        resultMetadata = await this.cumulativeUsageMetadata(conversation.id, resultMetadata)
         await this.repository.saveUsage({
           conversationId: conversation.id,
           usage: resultUsage as ConversationEntryV1["usage"] | undefined,
@@ -794,6 +795,7 @@ export class ConversationRouter {
             modelUsage: resultModelUsageFromEvent(event),
             userMeta: message.userMeta ?? conversation.userMeta,
           })
+          resultMetadata = await this.cumulativeUsageMetadata(conversation.id, resultMetadata)
           await this.repository.saveUsage({
             conversationId: conversation.id,
             usage: resultUsage as ConversationEntryV1["usage"] | undefined,
@@ -1017,6 +1019,18 @@ export class ConversationRouter {
       this.emitConversationUpdated(saved)
     }
     return saved
+  }
+
+  private async cumulativeUsageMetadata(
+    conversationId: string,
+    metadata: ConversationEntryV1["history"][number]["metadata"] | undefined,
+  ): Promise<ConversationEntryV1["history"][number]["metadata"] | undefined> {
+    const usage = await this.repository.getUsageSummary(conversationId)
+    if (!usage) return metadata
+    return compactMetadata({
+      ...(metadata ?? {}),
+      usage,
+    })
   }
 
   private async saveEventHistory(
