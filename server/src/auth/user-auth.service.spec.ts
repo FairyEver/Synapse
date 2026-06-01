@@ -467,7 +467,7 @@ describe("UserAuthService", () => {
     }, "203.0.113.41")
 
     expect(result.ok).toBe(true)
-    expect(result.resetUrl).toMatch(/^https:\/\/app\.example\.com\/dashboard\/reset-password\?token=/)
+    expect(result.resetUrl).toMatch(/^https:\/\/app\.example\.com\/reset-password\?token=/)
     expect(result.expiresAt).toEqual(expect.any(Date))
     const token = new URL(result.resetUrl!).searchParams.get("token")
     expect(prisma.userPasswordResetToken.create).toHaveBeenCalledWith({

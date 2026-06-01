@@ -64,7 +64,7 @@ function buildDesktopDeepLink(code: string, state: string): string {
 }
 
 function buildPasswordResetUrl(publicAppUrl: string, token: string): string {
-  const url = new URL("/dashboard/reset-password", `${publicAppUrl.replace(/\/+$/, "")}/`)
+  const url = new URL("/reset-password", `${publicAppUrl.replace(/\/+$/, "")}/`)
   url.searchParams.set("token", token)
   return url.toString()
 }
