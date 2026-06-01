@@ -20,7 +20,7 @@ type ElectronTransportInstallOptions = {
 
 const SENSITIVE_FIELD_PATTERN =
   /(password|token|secret|credential|api[-_]?key|app[-_]?secret|private[-_ ]?key|cookie|authorization)/i
-const BODY_FIELD_PATTERN = /^(prompt|message|content)$/
+const BODY_FIELD_PATTERN = /^(prompt|message|content|body|text|requestbody|responsebody|requesttext|responsetext)$/
 const MAX_STRING_LENGTH = 300
 const MAX_STACK_LENGTH = 1200
 const MAX_ARRAY_LENGTH = 20
