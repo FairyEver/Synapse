@@ -38,6 +38,33 @@ describe("usage analysis reports", () => {
     }))
   })
 
+  it("counts detail row tools inside each usage event interval", async () => {
+    const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
+    tempDirs.push(dir)
+    const db = getUsageAnalysisDb(dir)
+    const service = new CcUsageAnalysisService({ db, roots: [] })
+    db.exec(`
+      INSERT INTO cc_usage_events (
+        id, session_id, timestamp_ms, date, hour, workspace_key, workspace_label, model, provider,
+        input_tokens, output_tokens
+      ) VALUES
+        ('usage-1', 'session-1', 1779843600000, '2026-05-27', '2026-05-27 09', '-repo', '/repo', 'claude-opus-4.6', 'anthropic', 10, 5),
+        ('usage-2', 'session-1', 1779847200000, '2026-05-27', '2026-05-27 10', '-repo', '/repo', 'claude-opus-4.6', 'anthropic', 20, 5)
+    `)
+    db.exec(`
+      INSERT INTO cc_tool_events (
+        id, session_id, timestamp_ms, date, hour, workspace_key, tool_name, category
+      ) VALUES
+        ('tool-1', 'session-1', 1779845400000, '2026-05-27', '2026-05-27 09', '-repo', 'Read', 'tool_use'),
+        ('tool-2', 'session-1', 1779849000000, '2026-05-27', '2026-05-27 10', '-repo', 'Bash', 'tool_use')
+    `)
+
+    expect(service.getDetails({ preset: "all", limit: 10 }).map((row) => [row.id, row.toolCalls])).toEqual([
+      ["usage-2", 1],
+      ["usage-1", 1],
+    ])
+  })
+
   it("retries transient database write locks during refresh writes", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-reports-"))
     tempDirs.push(dir)

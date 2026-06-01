@@ -589,16 +589,25 @@ export class CcUsageAnalysisService {
     const limit = Math.min(Math.max(Math.trunc(range.limit ?? 200), 1), 1000)
     const offset = Math.max(Math.trunc(range.offset ?? 0), 0)
     const usageFilter = this.createEventRangeWhere(range, "u.date", "u.timestamp_ms")
-    const toolFilter = this.createEventRangeWhere(range)
+    const toolFilter = this.createEventRangeWhere(range, "t.date", "t.timestamp_ms")
+    const toolRangeSql = toolFilter.whereSql.replace(/^WHERE /, "AND ")
     const rows = this.db.prepare(`
-      SELECT u.*, COALESCE(t.tool_calls, 0) AS tool_calls
+      SELECT
+        u.*,
+        (
+          SELECT COUNT(*)
+          FROM ${this.prefix}_tool_events t
+          WHERE t.session_id = u.session_id
+            AND t.timestamp_ms >= u.timestamp_ms
+            AND t.timestamp_ms < COALESCE((
+              SELECT MIN(next_usage.timestamp_ms)
+              FROM ${this.prefix}_usage_events next_usage
+              WHERE next_usage.session_id = u.session_id
+                AND next_usage.timestamp_ms > u.timestamp_ms
+            ), 9223372036854775807)
+            ${toolRangeSql}
+        ) AS tool_calls
       FROM ${this.prefix}_usage_events u
-      LEFT JOIN (
-        SELECT session_id, COUNT(*) AS tool_calls
-        FROM ${this.prefix}_tool_events
-        ${toolFilter.whereSql}
-        GROUP BY session_id
-      ) t ON t.session_id = u.session_id
       ${usageFilter.whereSql}
       ORDER BY u.timestamp_ms DESC
       LIMIT ? OFFSET ?
