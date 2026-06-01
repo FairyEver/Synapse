@@ -17,13 +17,19 @@ import {
 import { Badge } from '@/components/ui/badge'
 import { getCleanupBeforeDate } from './cleanup-date'
 
+const allLogLevelsValue = 'all'
+
 export default function LogsPage() {
-  const [level, setLevel] = useState('')
+  const [level, setLevel] = useState(allLogLevelsValue)
   const [limit, setLimit] = useState(100)
 
   const { data, isLoading } = useQuery({
     queryKey: ['admin-logs-recent', level, limit],
-    queryFn: () => adminApi.fetchRecentLogs({ level: level || undefined, limit }),
+    queryFn: () =>
+      adminApi.fetchRecentLogs({
+        level: level === allLogLevelsValue ? undefined : level,
+        limit,
+      }),
   })
 
   async function handleDownload() {
@@ -65,7 +71,7 @@ export default function LogsPage() {
               <SelectValue placeholder='级别' />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value=''>全部</SelectItem>
+              <SelectItem value={allLogLevelsValue}>全部</SelectItem>
               <SelectItem value='error'>error</SelectItem>
               <SelectItem value='warn'>warn</SelectItem>
               <SelectItem value='info'>info</SelectItem>
