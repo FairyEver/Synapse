@@ -410,6 +410,13 @@ const MUTATING_WORKFLOW_ACTIONS = new Set([
 function dispatchCorrelation(params: Record<string, unknown>): Record<string, unknown> {
   const correlation: Record<string, unknown> = {}
   if (typeof params.workflowId === "string") correlation.workflowId = params.workflowId
+  if (typeof correlation.workflowId !== "string") {
+    const definition = params.definition
+    if (definition && typeof definition === "object" && !Array.isArray(definition)) {
+      const workflowId = (definition as Record<string, unknown>).id
+      if (typeof workflowId === "string" && workflowId) correlation.workflowId = workflowId
+    }
+  }
   if (typeof params.runId === "string") correlation.runId = params.runId
   if (typeof params.nodeId === "string") correlation.nodeId = params.nodeId
   if (typeof params.nodeType === "string") correlation.nodeType = params.nodeType

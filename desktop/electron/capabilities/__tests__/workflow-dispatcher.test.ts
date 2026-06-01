@@ -214,6 +214,53 @@ describe("createWorkflowDispatcher", () => {
     }))
   })
 
+  it("checks permission and audits workflow.definition.update against the nested definition id", async () => {
+    const auditSink = {
+      record: vi.fn(),
+      list: () => [],
+      clearForTests: vi.fn(),
+    }
+    const permissionGuard = {
+      registerPolicy: vi.fn(),
+      check: vi.fn(async () => ({ allowed: true as const })),
+    }
+    const definition: WorkflowDefinition = {
+      id: "wf-1", name: "Updated", description: "", version: "v1",
+      createdAt: 1, updatedAt: 2, params: [],
+      nodes: [{ id: "n1", name: "End", type: "end", position: { x: 600, y: 200 }, config: {} }],
+      edges: [],
+    }
+    const deps = makeDeps({ permissionGuard, auditSink })
+    const dispatcher = createWorkflowDispatcher(deps)
+
+    const result = await dispatcher.dispatch("workflow.definition.update", { definition }, { source: "mcp-http" })
+
+    expect(result.ok).toBe(true)
+    expect(permissionGuard.check).toHaveBeenCalledWith({
+      action: "workflow.mutate",
+      actor: { kind: "user", id: "workflow-dispatch:mcp-http" },
+      resource: "workflow:wf-1",
+      context: expect.objectContaining({
+        source: "mcp-http",
+        workflowAction: "workflow.definition.update",
+        workflowId: "wf-1",
+        hasDefinition: true,
+      }),
+    })
+    expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
+      action: "workflow.mutate",
+      actor: { kind: "user", id: "workflow-dispatch:mcp-http" },
+      resource: "workflow:wf-1",
+      outcome: "allowed",
+      metadata: expect.objectContaining({
+        source: "mcp-http",
+        workflowAction: "workflow.definition.update",
+        workflowId: "wf-1",
+        hasDefinition: true,
+      }),
+    }))
+  })
+
   it("denies workflow mutations before calling the workflow service", async () => {
     const auditSink = {
       record: vi.fn(),
