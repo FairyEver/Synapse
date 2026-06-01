@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as AuthenticatedRouteRouteImport } from './routes/_authenticated/route'
 import { Route as AuthenticatedIndexRouteImport } from './routes/_authenticated/index'
+import { Route as authTeamInviteRouteImport } from './routes/(auth)/team-invite'
 import { Route as authSignUpRouteImport } from './routes/(auth)/sign-up'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
 import { Route as authResetPasswordRouteImport } from './routes/(auth)/reset-password'
@@ -34,6 +35,11 @@ const AuthenticatedIndexRoute = AuthenticatedIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthenticatedRouteRoute,
+} as any)
+const authTeamInviteRoute = authTeamInviteRouteImport.update({
+  id: '/(auth)/team-invite',
+  path: '/team-invite',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const authSignUpRoute = authSignUpRouteImport.update({
   id: '/(auth)/sign-up',
@@ -117,6 +123,7 @@ export interface FileRoutesByFullPath {
   '/reset-password': typeof authResetPasswordRoute
   '/sign-in': typeof authSignInRoute
   '/sign-up': typeof authSignUpRoute
+  '/team-invite': typeof authTeamInviteRoute
   '/auth/desktop': typeof authAuthDesktopRoute
   '/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
   '/backup/': typeof AuthenticatedBackupIndexRoute
@@ -133,6 +140,7 @@ export interface FileRoutesByTo {
   '/reset-password': typeof authResetPasswordRoute
   '/sign-in': typeof authSignInRoute
   '/sign-up': typeof authSignUpRoute
+  '/team-invite': typeof authTeamInviteRoute
   '/': typeof AuthenticatedIndexRoute
   '/auth/desktop': typeof authAuthDesktopRoute
   '/audit-logs': typeof AuthenticatedAuditLogsIndexRoute
@@ -152,6 +160,7 @@ export interface FileRoutesById {
   '/(auth)/reset-password': typeof authResetPasswordRoute
   '/(auth)/sign-in': typeof authSignInRoute
   '/(auth)/sign-up': typeof authSignUpRoute
+  '/(auth)/team-invite': typeof authTeamInviteRoute
   '/_authenticated/': typeof AuthenticatedIndexRoute
   '/(auth)/auth/desktop': typeof authAuthDesktopRoute
   '/_authenticated/audit-logs/': typeof AuthenticatedAuditLogsIndexRoute
@@ -172,6 +181,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/sign-in'
     | '/sign-up'
+    | '/team-invite'
     | '/auth/desktop'
     | '/audit-logs/'
     | '/backup/'
@@ -188,6 +198,7 @@ export interface FileRouteTypes {
     | '/reset-password'
     | '/sign-in'
     | '/sign-up'
+    | '/team-invite'
     | '/'
     | '/auth/desktop'
     | '/audit-logs'
@@ -206,6 +217,7 @@ export interface FileRouteTypes {
     | '/(auth)/reset-password'
     | '/(auth)/sign-in'
     | '/(auth)/sign-up'
+    | '/(auth)/team-invite'
     | '/_authenticated/'
     | '/(auth)/auth/desktop'
     | '/_authenticated/audit-logs/'
@@ -225,6 +237,7 @@ export interface RootRouteChildren {
   authResetPasswordRoute: typeof authResetPasswordRoute
   authSignInRoute: typeof authSignInRoute
   authSignUpRoute: typeof authSignUpRoute
+  authTeamInviteRoute: typeof authTeamInviteRoute
   authAuthDesktopRoute: typeof authAuthDesktopRoute
 }
 
@@ -243,6 +256,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof AuthenticatedIndexRouteImport
       parentRoute: typeof AuthenticatedRouteRoute
+    }
+    '/(auth)/team-invite': {
+      id: '/(auth)/team-invite'
+      path: '/team-invite'
+      fullPath: '/team-invite'
+      preLoaderRoute: typeof authTeamInviteRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/(auth)/sign-up': {
       id: '/(auth)/sign-up'
@@ -380,6 +400,7 @@ const rootRouteChildren: RootRouteChildren = {
   authResetPasswordRoute: authResetPasswordRoute,
   authSignInRoute: authSignInRoute,
   authSignUpRoute: authSignUpRoute,
+  authTeamInviteRoute: authTeamInviteRoute,
   authAuthDesktopRoute: authAuthDesktopRoute,
 }
 export const routeTree = rootRouteImport
