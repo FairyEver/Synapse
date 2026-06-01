@@ -127,8 +127,9 @@ function collectProjectsDirs(root: string, maxDepth = 5): string[] {
   let entries: fs.Dirent[]
   try {
     entries = fs.readdirSync(root, { withFileTypes: true })
-  } catch {
-    return []
+  } catch (error) {
+    if (isMissingDirectoryError(error)) return []
+    throw new Error(`Unable to read Claude usage directory: ${root}`, { cause: error })
   }
 
   const roots: string[] = []
@@ -142,6 +143,13 @@ function collectProjectsDirs(root: string, maxDepth = 5): string[] {
     roots.push(...collectProjectsDirs(fullPath, maxDepth - 1))
   }
   return roots
+}
+
+function isMissingDirectoryError(error: unknown): boolean {
+  const code = typeof error === "object" && error !== null && "code" in error
+    ? String((error as NodeJS.ErrnoException).code)
+    : ""
+  return code === "ENOENT" || code === "ENOTDIR"
 }
 
 function claudeDesktopDataRoots(home: string, env: NodeJS.ProcessEnv, platform: NodeJS.Platform): string[] {

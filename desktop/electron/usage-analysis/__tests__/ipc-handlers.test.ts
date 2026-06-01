@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 import fs from "node:fs"
 import os from "node:os"
 import path from "node:path"
@@ -131,6 +131,36 @@ describe("usage analysis ipc handlers", () => {
         projectsDir,
       ])
     } finally {
+      fs.rmSync(home, { recursive: true, force: true })
+    }
+  })
+
+  it("does not silently ignore unreadable Claude desktop session roots", () => {
+    const home = fs.mkdtempSync(path.join(os.tmpdir(), "usage-analysis-home-"))
+    try {
+      const unreadableRoot = path.join(
+        home,
+        "Library",
+        "Application Support",
+        "Claude",
+        "local-agent-mode-sessions",
+      )
+      fs.mkdirSync(unreadableRoot, { recursive: true })
+      const originalReaddirSync = fs.readdirSync
+      vi.spyOn(fs, "readdirSync").mockImplementation(((target: fs.PathLike, options?: fs.ObjectEncodingOptions) => {
+        if (target === unreadableRoot) {
+          const error = new Error(`EACCES: permission denied, scandir '${unreadableRoot}'`) as NodeJS.ErrnoException
+          error.code = "EACCES"
+          throw error
+        }
+        return originalReaddirSync(target, options as never)
+      }) as typeof fs.readdirSync)
+
+      expect(() => resolveClaudeUsageRoots({ home, env: {}, platform: "darwin" })).toThrow(
+        "Unable to read Claude usage directory",
+      )
+    } finally {
+      vi.restoreAllMocks()
       fs.rmSync(home, { recursive: true, force: true })
     }
   })
