@@ -3,12 +3,13 @@ import { formatTokenUsageValue, tokenUsageFields } from "@/lib/token-usage"
 
 interface TokenUsageSummaryProps {
   readonly usage?: Record<string, unknown>
+  readonly prefix?: string
   readonly className?: string
   readonly itemClassName?: string
 }
 
-function TokenUsageSummary({ usage, className, itemClassName }: TokenUsageSummaryProps) {
-  const fields = tokenUsageFields(usage)
+function TokenUsageSummary({ usage, prefix, className, itemClassName }: TokenUsageSummaryProps) {
+  const fields = tokenUsageFields(usage, { prefix })
   if (!fields) return null
 
   return (
