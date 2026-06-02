@@ -4,26 +4,11 @@ import type {
 } from "../../../electron/runtime/network"
 import { sendOutboundHttpRequest } from "../../../electron/runtime/network"
 import type { MainActionDefinition } from "../../../electron/action-runtime/action-registry"
+import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 import { httpRequestActionManifest } from "./manifest"
 import type { HttpRequestActionConfig } from "./schema"
 
 const MAX_RESPONSE_BODY_BYTES = 5 * 1024 * 1024
-
-function sanitizeUrl(urlStr: string): string {
-  try {
-    const url = new URL(urlStr)
-    url.username = ""
-    url.password = ""
-    for (const [key] of url.searchParams) {
-      if (/token|secret|authorization|api[_-]?key|password|bearer|auth/i.test(key)) {
-        url.searchParams.set(key, "[redacted]")
-      }
-    }
-    return url.toString()
-  } catch {
-    return urlStr
-  }
-}
 
 function buildHeaders(config: HttpRequestActionConfig): Record<string, string> | undefined {
   const headers = config.headers ? { ...config.headers } : {} as Record<string, string>

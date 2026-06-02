@@ -53,7 +53,7 @@ describe("sendOutboundHttpRequest", () => {
         method: "GET",
         status: 503,
         statusText: "Service Unavailable",
-        url: "https://example.com/api?token=%5BREDACTED%5D&query=ok",
+        url: "https://example.com/api?token=%5Bredacted%5D&query=ok",
         requestHeaders: { Authorization: "[redacted]", Accept: "application/json" },
       }),
     )

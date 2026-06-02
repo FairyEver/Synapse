@@ -47,6 +47,7 @@ import { toolWindowService, type ToolWindowService } from "../services/tools/too
 import { initDatabase, shutdownDatabase } from "../database"
 import { dispatchDatabaseAction } from "../database/dispatcher"
 import { getActiveRepositoryConfig } from "../../src/lib/config"
+import { sanitizeUrl } from "../../src/lib/url-sanitize"
 import { repositoryStore } from "../services/repository-store"
 import { repositoryMaintenanceService } from "../services/repository-maintenance-service"
 import { repositoryLockManager } from "../services/repository-lock-manager"
@@ -1424,7 +1425,7 @@ function createHttpSendHandler(deps: {
   auditSink: AuditSink
 }): typeof sendOutboundHttpRequest {
   return async (request) => {
-    const resource = sanitizeWorkflowHttpAuditResource(request.url)
+    const resource = sanitizeUrl(request.url)
     const permission = await deps.permissionGuard.check({
       action: "network.connect",
       actor: { kind: "system" },
@@ -1465,24 +1466,6 @@ function createHttpSendHandler(deps: {
       })
       throw error
     }
-  }
-}
-
-const SENSITIVE_WORKFLOW_HTTP_PARAM_PATTERN = /token|secret|authorization|api[_-]?key|password|bearer|auth/i
-
-function sanitizeWorkflowHttpAuditResource(raw: string): string {
-  try {
-    const url = new URL(raw)
-    url.username = ""
-    url.password = ""
-    for (const param of url.searchParams.keys()) {
-      if (SENSITIVE_WORKFLOW_HTTP_PARAM_PATTERN.test(param)) {
-        url.searchParams.set(param, "[REDACTED]")
-      }
-    }
-    return url.toString()
-  } catch {
-    return sanitizeError(raw)
   }
 }
 

@@ -43,14 +43,14 @@ describe("sendHttpTestRequest", () => {
     expect(guard.check).toHaveBeenCalledWith({
       action: "network.connect",
       actor: { kind: "user" },
-      resource: "https://example.com/api?token=%5BREDACTED%5D",
+      resource: "https://example.com/api?token=%5Bredacted%5D",
       context: { source: "http-test" },
     })
     expect(sendRequest).not.toHaveBeenCalled()
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "network.connect",
       actor: { kind: "user" },
-      resource: "https://example.com/api?token=%5BREDACTED%5D",
+      resource: "https://example.com/api?token=%5Bredacted%5D",
       outcome: "denied",
       metadata: expect.objectContaining({
         source: "http-test",
@@ -80,7 +80,7 @@ describe("sendHttpTestRequest", () => {
     expect(result.status).toBe(200)
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "network.connect",
-      resource: "https://example.com/api?token=%5BREDACTED%5D",
+      resource: "https://example.com/api?token=%5Bredacted%5D",
       outcome: "allowed",
       metadata: expect.objectContaining({
         source: "http-test",
@@ -96,7 +96,7 @@ describe("sendHttpTestRequest", () => {
 
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
       action: "network.connect",
-      resource: "https://example.com/api?token=%5BREDACTED%5D",
+      resource: "https://example.com/api?token=%5Bredacted%5D",
       outcome: "failed",
       metadata: expect.objectContaining({
         source: "http-test",
@@ -146,10 +146,10 @@ describe("sendHttpTestRequest", () => {
     })
 
     expect(guard.check).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "https://example.com/api?token=%5BREDACTED%5D",
+      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.com/api?token=%5Bredacted%5D",
     }))
     expect(audit.record).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "https://example.com/api?token=%5BREDACTED%5D",
+      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.com/api?token=%5Bredacted%5D",
       outcome: "allowed",
     }))
     expect(JSON.stringify(vi.mocked(guard.check).mock.calls)).not.toContain("user:secret")

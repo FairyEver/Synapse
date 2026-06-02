@@ -3,6 +3,7 @@ import { sendOutboundHttpRequest, type OutboundHttpResponse } from "../../runtim
 import { sanitizeError } from "../../services/error-sanitize"
 import type { AuditSink, PermissionGuard } from "../../runtime/security"
 import type { HttpRequestActionConfig } from "../../../action-packages/builtin/http-request/schema"
+import { sanitizeUrl } from "../../../src/lib/url-sanitize"
 
 export const HTTP_TEST_CHANNEL = "synapse:http:test-request"
 const MAX_RESPONSE_BODY_BYTES = 5 * 1024 * 1024
@@ -57,7 +58,7 @@ export async function sendHttpTestRequest(
 ): Promise<HttpTestResponse> {
   const startedAt = performance.now()
   const url = buildUrl(config)
-  const resource = sanitizeUrlForAudit(url)
+  const resource = sanitizeUrl(url)
   const permission = await deps.permissionGuard.check({
     action: "network.connect",
     actor: { kind: "user" },
@@ -129,23 +130,5 @@ function toHttpTestResponse(response: OutboundHttpResponse, startedAt: number): 
     headers: response.headers ?? {},
     body: response.body ?? "",
     durationMs: Math.round(performance.now() - startedAt),
-  }
-}
-
-const SENSITIVE_PARAM_NAMES = new Set(["token", "key", "secret", "password", "auth", "api_key", "apikey", "access_token"])
-
-function sanitizeUrlForAudit(raw: string): string {
-  try {
-    const url = new URL(raw)
-    url.username = ""
-    url.password = ""
-    for (const param of url.searchParams.keys()) {
-      if (SENSITIVE_PARAM_NAMES.has(param.toLowerCase())) {
-        url.searchParams.set(param, "[REDACTED]")
-      }
-    }
-    return url.toString()
-  } catch {
-    return sanitizeError(raw)
   }
 }

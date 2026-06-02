@@ -1,3 +1,5 @@
+import { sanitizeUrl } from "../../../src/lib/url-sanitize"
+
 export type OutboundHttpRequest = {
   readonly method: string
   readonly url: string
@@ -105,24 +107,7 @@ async function readBodyWithLimit(response: Response, maxBytes?: number): Promise
   return result + decoder.decode()
 }
 
-const SENSITIVE_PARAM_NAMES = new Set(["token", "key", "secret", "password", "auth", "api_key", "apikey", "access_token"])
 const SENSITIVE_HEADER_PATTERN = /^(authorization|cookie|set-cookie|x-api-key|x-auth-token)$/i
-
-function sanitizeUrl(raw: string): string {
-  try {
-    const url = new URL(raw)
-    if (url.username) url.username = "[REDACTED]"
-    if (url.password) url.password = "[REDACTED]"
-    for (const param of url.searchParams.keys()) {
-      if (SENSITIVE_PARAM_NAMES.has(param.toLowerCase())) {
-        url.searchParams.set(param, "[REDACTED]")
-      }
-    }
-    return url.toString()
-  } catch {
-    return raw
-  }
-}
 
 function sanitizeHeaders(headers: Record<string, string> | undefined): Record<string, string> | undefined {
   if (!headers) return undefined

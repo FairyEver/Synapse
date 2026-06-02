@@ -404,12 +404,12 @@ describe("bootstrap descriptors (T1.5)", () => {
     })).rejects.toThrow("HTTP request denied by workflow engine: blocked by policy")
 
     expect(permissionGuard.check).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "https://example.test/hook?client_secret=%5BREDACTED%5D&refresh_token=%5BREDACTED%5D&id_token=%5BREDACTED%5D&ok=1",
+      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.test/hook?client_secret=%5Bredacted%5D&refresh_token=%5Bredacted%5D&id_token=%5Bredacted%5D&ok=1",
     }))
     expect(auditSink.record).toHaveBeenCalledWith({
       action: "network.connect",
       actor: { kind: "system" },
-      resource: "https://example.test/hook?client_secret=%5BREDACTED%5D&refresh_token=%5BREDACTED%5D&id_token=%5BREDACTED%5D&ok=1",
+      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.test/hook?client_secret=%5Bredacted%5D&refresh_token=%5Bredacted%5D&id_token=%5Bredacted%5D&ok=1",
       outcome: "denied",
       metadata: {
         source: "workflow",
@@ -453,7 +453,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     })
 
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "https://example.test/hook?api_key=%5BREDACTED%5D&ok=1",
+      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.test/hook?api_key=%5Bredacted%5D&ok=1",
       outcome: "allowed",
       metadata: { source: "workflow", status: 200 },
     }))
@@ -491,7 +491,7 @@ describe("bootstrap descriptors (T1.5)", () => {
     })).rejects.toThrow("request failed")
 
     expect(auditSink.record).toHaveBeenCalledWith(expect.objectContaining({
-      resource: "https://example.test/hook?access_token=%5BREDACTED%5D&ok=1",
+      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.test/hook?access_token=%5Bredacted%5D&ok=1",
       outcome: "failed",
       metadata: { source: "workflow", error: "request failed" },
     }))
@@ -792,6 +792,7 @@ describe("bootstrap descriptors (T1.5)", () => {
       "core.permission-guard",
       "core.audit-sink",
       "core.action-runtime",
+      "core.event-bus",
     ])
   })
 

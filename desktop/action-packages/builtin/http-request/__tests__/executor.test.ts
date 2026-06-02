@@ -57,7 +57,7 @@ describe("builtin.http-request executor", () => {
     const request = action.buildPermissionRequest({
       config: {
         method: "POST",
-        url: "https://example.com/api",
+        url: "https://user:secret@example.com/api?token=sk-secret&query=ok",
         headers: { Authorization: "Bearer token" },
         bodyType: "json",
         body: "{\"ok\":true}",
@@ -75,14 +75,17 @@ describe("builtin.http-request executor", () => {
 
     expect(request).toEqual(expect.objectContaining({
       action: "network.connect",
-      resource: "https://example.com/api",
+      resource: "https://%5Bredacted%5D:%5Bredacted%5D@example.com/api?token=%5Bredacted%5D&query=ok",
       context: expect.objectContaining({
         actionType: "builtin.http-request",
         method: "POST",
+        url: "https://%5Bredacted%5D:%5Bredacted%5D@example.com/api?token=%5Bredacted%5D&query=ok",
         headerKeys: ["Authorization"],
         timeoutMins: 2,
       }),
     }))
+    expect(JSON.stringify(request)).not.toContain("user:secret")
+    expect(JSON.stringify(request)).not.toContain("sk-secret")
   })
 
   it("fails before sending when selected auth credentials are empty", async () => {
