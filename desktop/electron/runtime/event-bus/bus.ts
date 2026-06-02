@@ -5,7 +5,7 @@
  * In-process pub/sub with:
  *   - per-domain listeners (`on(domain)`)
  *   - per-(domain,type) listeners (`onType(domain, type)`)
- *   - coalesce backpressure (T4.3)
+ *   - coalesce and queued backpressure (T4.3)
  *   - optional WindowManager broadcaster injection (T4.2)
  *   - listener-error isolation: throwing listeners don't poison siblings
  *
@@ -27,6 +27,7 @@ import { buildKey, makeUnrefTimeout } from "../lib"
 import { ConsoleSink, createLogger } from "../logging"
 
 const DEFAULT_COALESCE_WINDOW_MS = 16
+const DEFAULT_QUEUE_SIZE = 100
 const listenerLogger = createLogger({ module: "runtime.event-bus", sink: new ConsoleSink() })
 
 export interface EventBusOptions {
@@ -42,6 +43,11 @@ interface ListenerEntry {
   readonly typeFilter?: string
 }
 
+interface QueueSlot {
+  queue: DomainEvent[]
+  cancel: (() => void) | null
+}
+
 export class EventBusImpl implements EventBus {
   private readonly listenersByDomain = new Map<EventDomain, ListenerEntry[]>()
   private nextListenerId = 1
@@ -52,6 +58,7 @@ export class EventBusImpl implements EventBus {
     string,
     { cancel: () => void; latestEvent: DomainEvent; options: EventBusEmitOptions }
   >()
+  private readonly backpressureQueues = new Map<string, QueueSlot>()
 
   constructor(options: EventBusOptions = {}) {
     this.broadcaster = options.broadcaster ?? null
@@ -72,11 +79,16 @@ export class EventBusImpl implements EventBus {
 
   emit<D extends EventDomain>(event: DomainEvent<D>, options: EventBusEmitOptions = {}): void {
     const policy = options.backpressure ?? this.defaultBackpressure
-    if (policy === "coalesce") {
-      this.coalesce(event, options)
-      return
+    switch (policy) {
+      case "coalesce":
+        this.coalesce(event, options)
+        return
+      case "block":
+      case "drop-newest":
+      case "drop-oldest":
+        this.enqueue(event, policy, options)
+        return
     }
-    this.dispatch(event)
   }
 
   emitInternal<D extends EventDomain>(event: DomainEvent<D>): void {
@@ -153,9 +165,43 @@ export class EventBusImpl implements EventBus {
     this.coalesceTimers.set(key, { cancel, latestEvent: event, options })
   }
 
+  private enqueue(event: DomainEvent, policy: Exclude<BackpressurePolicy, "coalesce">, options: EventBusEmitOptions): void {
+    const key = coalesceKey(event)
+    const slot = this.backpressureQueues.get(key) ?? { queue: [], cancel: null }
+    const maxQueueSize = normalizeQueueSize(options.maxQueueSize)
+
+    if (slot.queue.length >= maxQueueSize) {
+      if (policy === "drop-newest") return
+      if (policy === "drop-oldest") {
+        slot.queue.shift()
+      } else {
+        const next = slot.queue.shift()
+        if (next) this.dispatch(next)
+      }
+    }
+
+    slot.queue.push(event)
+    this.backpressureQueues.set(key, slot)
+    this.scheduleQueuedDispatch(key, slot)
+  }
+
+  private scheduleQueuedDispatch(key: string, slot: QueueSlot): void {
+    if (slot.cancel) return
+    slot.cancel = makeUnrefTimeout(0, () => {
+      slot.cancel = null
+      const next = slot.queue.shift()
+      if (next) this.dispatch(next)
+      if (slot.queue.length > 0) {
+        this.scheduleQueuedDispatch(key, slot)
+      } else {
+        this.backpressureQueues.delete(key)
+      }
+    })
+  }
+
   /**
-   * Test helper: cancel all pending coalesced timers and synchronously
-   * dispatch their latest events. Snapshot the slots first so a listener
+   * Test helper: cancel all pending timers and synchronously dispatch their
+   * latest/queued events. Snapshot the slots first so a listener
    * that re-emits during dispatch can't observe a half-cleared map.
    */
   flushAllForTests(): void {
@@ -164,6 +210,15 @@ export class EventBusImpl implements EventBus {
     for (const slot of slots) {
       slot.cancel()
       this.dispatch(slot.latestEvent)
+    }
+    const queuedSlots = [...this.backpressureQueues.values()]
+    this.backpressureQueues.clear()
+    for (const slot of queuedSlots) {
+      slot.cancel?.()
+      slot.cancel = null
+      for (const event of slot.queue.splice(0)) {
+        this.dispatch(event)
+      }
     }
   }
 }
@@ -180,6 +235,10 @@ function coalesceKey(event: DomainEvent): string {
     event.scope?.sessionId,
     event.scope?.repositoryId,
   ])
+}
+
+function normalizeQueueSize(value: number | undefined): number {
+  return typeof value === "number" && Number.isInteger(value) && value > 0 ? value : DEFAULT_QUEUE_SIZE
 }
 
 export function createEventBus(options?: EventBusOptions): EventBusImpl {

@@ -27,3 +27,4 @@
 - 修复 MCP Server 注册后刷新列表失败会让设置页一直停在加载状态的问题。
 
 ## 技术调整
+- 补齐 EventBus 的 `block`、`drop-oldest`、`drop-newest` 背压策略，避免声明了策略却退回即时分发。

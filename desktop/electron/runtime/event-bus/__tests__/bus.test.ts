@@ -29,6 +29,7 @@ describe("EventBusImpl core (T4.1)", () => {
     bus.emit(eventOf("repository", "updated"))
     bus.emit(eventOf("repository", "progress"))
     bus.emit(eventOf("update", "state-changed"))
+    bus.flushAllForTests()
     expect(seen).toEqual(["updated", "progress"])
   })
 
@@ -38,6 +39,7 @@ describe("EventBusImpl core (T4.1)", () => {
     bus.onType("repository", "updated", () => seen.push("updated"))
     bus.emit(eventOf("repository", "updated"))
     bus.emit(eventOf("repository", "progress"))
+    bus.flushAllForTests()
     expect(seen).toEqual(["updated"])
   })
 
@@ -61,6 +63,7 @@ describe("EventBusImpl core (T4.1)", () => {
     const bus = new EventBusImpl({ broadcaster, defaultBackpressure: "drop-newest" })
     const event = eventOf("repository", "updated", { ok: true })
     bus.emit(event)
+    bus.flushAllForTests()
     expect(broadcasted).toHaveLength(1)
     expect(broadcasted[0]?.channel).toBe(channelForDomain("repository"))
     expect(broadcasted[0]?.event.payload).toEqual({ ok: true })
@@ -75,6 +78,7 @@ describe("EventBusImpl core (T4.1)", () => {
     })
     bus.on("repository", (e) => seen.push(e.type))
     bus.emit(eventOf("repository", "updated"))
+    bus.flushAllForTests()
     expect(seen).toEqual(["updated"])
     expect(consoleSpy).toHaveBeenCalled()
     consoleSpy.mockRestore()
@@ -85,9 +89,45 @@ describe("EventBusImpl core (T4.1)", () => {
     const seen: string[] = []
     const unsub = bus.on("repository", (e) => seen.push(e.type))
     bus.emit(eventOf("repository", "updated"))
+    bus.flushAllForTests()
     unsub()
     bus.emit(eventOf("repository", "updated"))
+    bus.flushAllForTests()
     expect(seen).toEqual(["updated"])
+  })
+
+  it("drop-newest drops new events after the queue cap", () => {
+    const bus = createEventBus({ defaultBackpressure: "drop-newest" })
+    const seen: number[] = []
+    bus.on("repository", (e) => seen.push((e.payload as { v: number }).v))
+    bus.emit(eventOf("repository", "progress", { v: 1 }), { maxQueueSize: 2 })
+    bus.emit(eventOf("repository", "progress", { v: 2 }), { maxQueueSize: 2 })
+    bus.emit(eventOf("repository", "progress", { v: 3 }), { maxQueueSize: 2 })
+    bus.flushAllForTests()
+    expect(seen).toEqual([1, 2])
+  })
+
+  it("drop-oldest keeps the newest events when the queue is full", () => {
+    const bus = createEventBus({ defaultBackpressure: "drop-oldest" })
+    const seen: number[] = []
+    bus.on("repository", (e) => seen.push((e.payload as { v: number }).v))
+    bus.emit(eventOf("repository", "progress", { v: 1 }), { maxQueueSize: 2 })
+    bus.emit(eventOf("repository", "progress", { v: 2 }), { maxQueueSize: 2 })
+    bus.emit(eventOf("repository", "progress", { v: 3 }), { maxQueueSize: 2 })
+    bus.flushAllForTests()
+    expect(seen).toEqual([2, 3])
+  })
+
+  it("block preserves events by draining the oldest event when the queue is full", () => {
+    const bus = createEventBus({ defaultBackpressure: "block" })
+    const seen: number[] = []
+    bus.on("repository", (e) => seen.push((e.payload as { v: number }).v))
+    bus.emit(eventOf("repository", "progress", { v: 1 }), { maxQueueSize: 2 })
+    bus.emit(eventOf("repository", "progress", { v: 2 }), { maxQueueSize: 2 })
+    bus.emit(eventOf("repository", "progress", { v: 3 }), { maxQueueSize: 2 })
+    expect(seen).toEqual([1])
+    bus.flushAllForTests()
+    expect(seen).toEqual([1, 2, 3])
   })
 
   it("coalesce backpressure folds rapid emits into a single dispatch", async () => {
