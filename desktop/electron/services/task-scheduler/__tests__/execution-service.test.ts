@@ -6,6 +6,7 @@ vi.mock("../../log-store", () => ({
 }))
 
 import { MainActionRegistry, type MainActionDefinition } from "../../../action-runtime/action-registry"
+import { ControlledProcessPermissionError } from "../../../runtime/process"
 import type { DataChangeListener, DataNamespace } from "../../../runtime/data-repo"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import { TaskSchedulerExecutionService } from "../execution-service"
@@ -92,6 +93,21 @@ describe("TaskSchedulerExecutionService", () => {
         outcome: "denied",
       }),
     ])
+  })
+
+  it("persists inner process permission denial reasons without raw secrets", async () => {
+    const harness = await createExecutionHarness({
+      action: innerPermissionDeniedAction,
+    })
+
+    const run = await harness.service.runTask(harness.task, "manual")
+
+    expect(run.status).toBe("failed")
+    expect(run.error).toBe("执行失败：blocked command [path] token=[redacted]")
+    expect(run.result?.error).toBe("执行失败：blocked command [path] token=[redacted]")
+    expect(run.error).not.toContain("ControlledProcessPermissionError")
+    expect(JSON.stringify(run)).not.toContain("/Users/example")
+    expect(JSON.stringify(run)).not.toContain("sk-secret")
   })
 
   it("logs permission guard exceptions before the action starts", async () => {
@@ -512,6 +528,17 @@ const failedResultAction: MainActionDefinition<TestActionConfig> = {
     error: "sdk failed for token=sk-secret at /Users/example/repo prompt",
     summary: "failed",
   }),
+}
+
+const innerPermissionDeniedAction: MainActionDefinition<TestActionConfig> = {
+  ...testAction,
+  execute: async () => {
+    throw new ControlledProcessPermissionError({
+      allowed: false,
+      reason: "blocked command /Users/example/repo token=sk-secret",
+      policyId: "inner-policy",
+    })
+  },
 }
 
 function permissionGuard(result: Awaited<ReturnType<PermissionGuard["check"]>>): PermissionGuard {

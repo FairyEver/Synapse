@@ -1,4 +1,5 @@
 import type { MainActionRegistry } from "../../action-runtime/action-registry"
+import { ControlledProcessPermissionError } from "../../runtime/process"
 import type { AuditSink, PermissionGuard, PermissionRequest } from "../../runtime/security"
 import { sanitizeError } from "../error-sanitize"
 import { createMainLogger } from "../log-store"
@@ -204,9 +205,10 @@ export class TaskSchedulerExecutionService {
           ...diagnostic,
         })
       }
+      const innerPermissionError = status === "failed" ? innerPermissionFailureMessage(error) : null
       const visibleError = permissionDenied
         ? message
-        : visibleFailureMessage(status, diagnostic.errorName)
+        : innerPermissionError ?? visibleFailureMessage(status, diagnostic.errorName)
       const finishInput: ScheduledTaskRunFinishInput = {
         status,
         error: visibleError,
@@ -362,6 +364,13 @@ function persistableActionError(error: string | undefined): string | undefined {
   if (!sanitized) return `执行失败（${error.length} 字）`
   const truncated = sanitized.length <= 120 ? sanitized : sanitized.slice(0, 120) + "..."
   return `执行失败：${truncated}`
+}
+
+function innerPermissionFailureMessage(error: unknown): string | null {
+  if (!(error instanceof ControlledProcessPermissionError) || error.result.allowed) {
+    return null
+  }
+  return persistableActionError(error.result.reason) ?? visibleFailureMessage("failed", error.name)
 }
 
 function sanitizePersistableError(value: string): string {
