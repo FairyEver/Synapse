@@ -305,6 +305,54 @@ describe("TaskSchedulerExecutionService", () => {
     expect(observedContext?.configVersion).toBe(0)
   })
 
+  it("passes the latest successful outputs after more than ten recent non-success runs", async () => {
+    const previousOutputs = { conversationId: "conversation-success" }
+    let observedPreviousOutputs: Record<string, unknown> | undefined
+    const spyAction: MainActionDefinition<TestActionConfig> = {
+      ...testAction,
+      execute: async ({ previousOutputs }) => {
+        observedPreviousOutputs = previousOutputs
+        return { status: "success", summary: "ok" }
+      },
+    }
+    const harness = await createExecutionHarness({ action: spyAction })
+    const recentFailures = Array.from({ length: 10 }, (_, index): ScheduledTaskRunEntry => ({
+      id: `run:failed:${index}`,
+      schemaVersion: 2,
+      taskId: harness.task.id,
+      startedAt: `2026-04-29T00:${String(59 - index).padStart(2, "0")}:00.000Z`,
+      status: "failed",
+      triggeredBy: "schedule",
+      result: {
+        status: "failed",
+        summary: "failed",
+      },
+    }))
+    const olderSuccess: ScheduledTaskRunEntry = {
+      id: "run:success",
+      schemaVersion: 2,
+      taskId: harness.task.id,
+      startedAt: "2026-04-29T00:40:00.000Z",
+      status: "success",
+      triggeredBy: "schedule",
+      result: {
+        status: "success",
+        summary: "ok",
+        outputs: previousOutputs,
+      },
+    }
+    const runHistory = [...recentFailures, olderSuccess]
+    const listByTask = vi.spyOn(harness.runs, "listByTask").mockImplementation(async (_taskId, options) => {
+      if (options?.limit === undefined) return runHistory
+      return runHistory.slice(0, options.limit)
+    })
+
+    await harness.service.runTask(harness.task, "manual")
+
+    expect(observedPreviousOutputs).toEqual(previousOutputs)
+    expect(listByTask).toHaveBeenCalledWith(harness.task.id)
+  })
+
   it("keeps stopped runs cancelled when an action resolves successfully after abort", async () => {
     const logger = { info: vi.fn(), warn: vi.fn() }
     let releaseAction: (() => void) | undefined

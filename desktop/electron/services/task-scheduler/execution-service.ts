@@ -256,7 +256,7 @@ export class TaskSchedulerExecutionService {
   }
 
   private async getLastSuccessOutputs(taskId: string): Promise<Record<string, unknown> | undefined> {
-    const runs = await this.deps.runs.listByTask(taskId, { limit: 10 })
+    const runs = await this.deps.runs.listByTask(taskId)
     const lastSuccess = runs.find((r) => r.status === "success" && r.result?.outputs)
     return lastSuccess?.result?.outputs
   }
