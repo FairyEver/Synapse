@@ -233,6 +233,20 @@ function dragEvent(type: string, dataTransfer: DataTransfer): Event {
   return event
 }
 
+function externalFileDragEvent(type: string, relatedTarget?: EventTarget | null): Event {
+  const event = new Event(type, { bubbles: true, cancelable: true })
+  Object.defineProperty(event, "dataTransfer", {
+    value: {
+      files: [],
+      types: ["Files"],
+    },
+  })
+  if (relatedTarget !== undefined) {
+    Object.defineProperty(event, "relatedTarget", { value: relatedTarget })
+  }
+  return event
+}
+
 describe("KnowledgeBaseSourceManagerWindow", () => {
   it("renders raw files as a lightweight file browser without import statuses", async () => {
     renderWindow()
@@ -453,6 +467,31 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
     expect(bridgeMocks.knowledgeBase.uploadRawFiles).not.toHaveBeenCalled()
     expect(bridgeMocks.knowledgeBase.uploadSources).not.toHaveBeenCalled()
+  })
+
+  it("keeps the upload hint visible when dragging over children inside the source manager", async () => {
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    const main = document.querySelector<HTMLElement>('[aria-label="资料文件"]')
+    const dropTarget = document.querySelector<HTMLElement>('[aria-label="拖拽上传资料"]')
+    const child = document.querySelector<HTMLElement>('[data-raw-path="brief.md"]')
+    if (!main || !dropTarget || !child) throw new Error("Drag fixtures missing")
+
+    await act(async () => {
+      dropTarget.dispatchEvent(externalFileDragEvent("dragover"))
+      await Promise.resolve()
+    })
+    expect(dropTarget.textContent).toContain("松开上传")
+
+    await act(async () => {
+      main.dispatchEvent(externalFileDragEvent("dragleave", child))
+      await Promise.resolve()
+    })
+
+    expect(dropTarget.textContent).toContain("松开上传")
   })
 
   it("selects files for raw upload in the current directory", async () => {

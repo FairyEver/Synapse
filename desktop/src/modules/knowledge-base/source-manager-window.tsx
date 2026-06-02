@@ -864,6 +864,12 @@ function KnowledgeBaseSourceManagerWindow() {
     setTrashPaths([])
   }, [runTrashRawEntries, trashPaths])
 
+  const handleDragLeave = useCallback((event: DragEvent<HTMLDivElement>) => {
+    const relatedTarget = event.relatedTarget
+    if (relatedTarget instanceof Node && event.currentTarget.contains(relatedTarget)) return
+    setIsDragging(false)
+  }, [])
+
   const handleDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
     event.preventDefault()
     setIsDragging(false)
@@ -1011,7 +1017,7 @@ function KnowledgeBaseSourceManagerWindow() {
         event.preventDefault()
         setIsDragging(true)
       }}
-      onDragLeave={() => setIsDragging(false)}
+      onDragLeave={handleDragLeave}
       onDrop={handleDrop}
     >
       <SourceManagerSidebar
