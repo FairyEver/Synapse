@@ -8,6 +8,7 @@ import type {
   SynapseKnowledgeBaseCreateManagedResult,
   SynapseKnowledgeBaseDeleteManagedPayload,
   SynapseKnowledgeBaseDeleteManagedResult,
+  SynapseKnowledgeBaseExportRawEntriesPayload,
   SynapseKnowledgeBaseAddUrlSourcePayload,
   SynapseKnowledgeBaseCreateRawFolderPayload,
   SynapseKnowledgeBaseListRawDirectoryPayload,
@@ -17,6 +18,7 @@ import type {
   SynapseKnowledgeBaseRenameRawEntryPayload,
   SynapseKnowledgeBaseTrashRawEntriesPayload,
   SynapseKnowledgeBaseUploadRawFilesPayload,
+  SynapseKnowledgeBaseUploadRawItemsPayload,
   SynapseKnowledgeBaseListSourcesResult,
   SynapseKnowledgeBaseSourceEntry,
   SynapseKnowledgeBaseUploadSourcesPayload,
@@ -223,6 +225,22 @@ export class KnowledgeBaseService {
     const rawRoot = await this.ensureRawRoot(projectPath)
     const result = await this.rawFileManager.uploadFiles(rawRoot, payload.targetDirectoryPath, payload.filePaths)
     this.recordRawMutation("uploadRawFiles", payload.projectId, result)
+    return { projectId: payload.projectId, ...result }
+  }
+
+  async uploadRawItems(payload: SynapseKnowledgeBaseUploadRawItemsPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
+    const projectPath = await this.resolveProjectPath(payload.projectId)
+    const rawRoot = await this.ensureRawRoot(projectPath)
+    const result = await this.rawFileManager.uploadItems(rawRoot, payload.targetDirectoryPath, payload.itemPaths)
+    this.recordRawMutation("uploadRawItems", payload.projectId, result)
+    return { projectId: payload.projectId, ...result }
+  }
+
+  async exportRawEntries(payload: SynapseKnowledgeBaseExportRawEntriesPayload): Promise<SynapseKnowledgeBaseRawMutationResult> {
+    const projectPath = await this.resolveProjectPath(payload.projectId)
+    const rawRoot = await this.ensureRawRoot(projectPath)
+    const result = await this.rawFileManager.exportEntries(rawRoot, payload.relativePaths, payload.targetDirectoryPath)
+    this.recordRawMutation("exportRawEntries", payload.projectId, result)
     return { projectId: payload.projectId, ...result }
   }
 

@@ -121,6 +121,23 @@ export type SynapseKnowledgeBaseUploadRawFilesPayload = {
   filePaths: string[]
 }
 
+export type SynapseKnowledgeBaseUploadRawItemsPayload = {
+  projectId: string
+  targetDirectoryPath: string
+  itemPaths: string[]
+}
+
+export type SynapseKnowledgeBaseSelectAndUploadRawDirectoryPayload = {
+  projectId: string
+  targetDirectoryPath: string
+}
+
+export type SynapseKnowledgeBaseExportRawEntriesPayload = {
+  projectId: string
+  relativePaths: string[]
+  targetDirectoryPath: string
+}
+
 export type SynapseKnowledgeBaseRawSkipReason =
   | "not-file"
   | "not-directory"

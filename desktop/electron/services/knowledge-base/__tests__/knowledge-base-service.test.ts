@@ -332,6 +332,57 @@ describe("KnowledgeBaseService", () => {
       .resolves.toBe("binary")
   })
 
+  it("uploads raw items without invoking source conversion", async () => {
+    const sourceRoot = await tempDir()
+    const folder = path.join(sourceRoot, "会议资料")
+    await mkdir(folder, { recursive: true })
+    await writeFile(path.join(folder, "01.pdf"), "pdf\n", "utf8")
+    const convert = vi.fn(async (): Promise<FileConversionResult> => ({
+      sourcePath: path.join(folder, "01.pdf"),
+      format: "pdf",
+      kind: "document",
+      title: "01.pdf",
+      markdown: "# 01\n",
+      text: "01",
+      metadata: {},
+      warnings: [],
+    }))
+    const { projectId, projectPath, service } = await managedFixture({
+      fileConversionService: { convert },
+    })
+
+    const result = await service.uploadRawItems({
+      projectId,
+      targetDirectoryPath: "",
+      itemPaths: [folder],
+    })
+
+    expect(result.projectId).toBe(projectId)
+    expect(result.entries.map((entry) => entry.relativePath)).toContain("会议资料/01.pdf")
+    expect(convert).not.toHaveBeenCalled()
+    await expect(readFile(path.join(projectPath, ".raw", "会议资料", "01.pdf"), "utf8"))
+      .resolves.toBe("pdf\n")
+  })
+
+  it("exports raw entries through the raw file manager", async () => {
+    const exportRoot = await tempDir()
+    const { projectId, projectPath, service } = await managedFixture()
+    await mkdir(path.join(projectPath, ".raw"), { recursive: true })
+    await writeFile(path.join(projectPath, ".raw", "brief.md"), "brief\n", "utf8")
+
+    const result = await service.exportRawEntries({
+      projectId,
+      relativePaths: ["brief.md"],
+      targetDirectoryPath: exportRoot,
+    })
+
+    expect(result).toEqual(expect.objectContaining({
+      projectId,
+      skipped: [],
+    }))
+    await expect(readFile(path.join(exportRoot, "brief.md"), "utf8")).resolves.toBe("brief\n")
+  })
+
   it("renames and moves manifest-tracked raw entries without changing wiki files", async () => {
     const { projectId, projectPath, service } = await managedFixture()
     await mkdir(path.join(projectPath, ".raw", "client-a"), { recursive: true })
