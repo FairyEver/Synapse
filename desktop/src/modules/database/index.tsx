@@ -16,6 +16,7 @@ import { useAppNotifications } from "@/app-shell/notifications"
 import { getSynapseBridge } from "@/lib/electron-bridge"
 import { sanitizeTrackRecord, sanitizeTrackValue } from "@/lib/ui-tracking"
 import { DatabaseSidebar } from "./components/database-sidebar"
+import type { DatabaseFolderOperationAction } from "./components/database-sidebar"
 import { DataTableView } from "./components/data-table-view"
 import type { DataTableViewHandle } from "./components/data-table-view"
 import { CreateTableDialog } from "./components/create-table-dialog"
@@ -115,6 +116,11 @@ function DatabaseModule() {
     setDisplayMode(mode)
     localStorage.setItem("synapse:database:displayMode", mode)
   }, [])
+
+  const handleFolderOperationError = useCallback((action: DatabaseFolderOperationAction, error: unknown) => {
+    logger.error("Database folder operation failed.", { action, error })
+    showError(error instanceof Error ? error.message : "操作失败，请稍后重试。")
+  }, [showError])
 
   const handleOpenCreateDialog = useCallback(async () => {
     await dataTableViewRef.current?.commitPendingChanges()
@@ -426,6 +432,7 @@ function DatabaseModule() {
       onRenameFolder={renameFolder}
       onDeleteFolder={deleteFolder}
       onMoveTable={moveTable}
+      onFolderOperationError={handleFolderOperationError}
     />
   )
 

@@ -1,3 +1,5 @@
+import { readFileSync } from "node:fs"
+import { fileURLToPath } from "node:url"
 import { renderToStaticMarkup } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
@@ -32,6 +34,8 @@ const tables: DatabaseTableInfo[] = [
   },
 ]
 
+const sidebarSourcePath = fileURLToPath(new URL("../components/database-sidebar.tsx", import.meta.url))
+
 describe("DatabaseSidebar", () => {
   it("renders table names and descriptions", () => {
     const html = renderToStaticMarkup(
@@ -49,6 +53,7 @@ describe("DatabaseSidebar", () => {
           onRenameFolder={vi.fn()}
           onDeleteFolder={vi.fn()}
           onMoveTable={vi.fn()}
+          onFolderOperationError={vi.fn()}
         />
       </TooltipProvider>,
     )
@@ -68,5 +73,14 @@ describe("DatabaseSidebar", () => {
     expect(filterDatabaseTables(tables, "missing")).toEqual([])
     expect(filterDatabaseTables(tables, "   ").map((table) => table.name))
       .toEqual(["customer_orders", "product_sku", "audit_log"])
+  })
+
+  it("awaits folder creation and only closes the input after success", () => {
+    const source = readFileSync(sidebarSourcePath, "utf8")
+
+    expect(source).toContain("async function handleCreateFolderConfirm()")
+    expect(source).toContain("await runFolderOperation(\"create\", () => onCreateFolder(trimmed))")
+    expect(source).toContain("if (succeeded) {\n      setCreatingFolder(false)")
+    expect(source).toContain("onFolderOperationError(action, error)")
   })
 })
