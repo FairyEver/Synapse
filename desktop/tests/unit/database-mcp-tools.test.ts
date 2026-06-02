@@ -66,4 +66,12 @@ describe("Database MCP tool descriptions", () => {
       expect(where.anyOf[2]?.properties?.conditions?.minItems).toBe(1)
     }
   })
+
+  it("requires at least one update field in update tool schemas", () => {
+    for (const toolName of ["database_row_update", "database_rows_update"]) {
+      const data = getTool(toolName).inputSchema.properties.data as { minProperties?: number; description?: string }
+      expect(data.minProperties).toBe(1)
+      expect(data.description).toContain("at least one")
+    }
+  })
 })

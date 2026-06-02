@@ -314,7 +314,8 @@ function buildTools(): McpTool[] {
           rowId: { type: "number", description: "Row id" },
           data: {
             type: "object",
-            description: "Partial update object keyed by column name. Omit updated_at; multi_choice values should be arrays, and json values may be objects or arrays.",
+            minProperties: 1,
+            description: "Partial update object keyed by column name. Include at least one non-system column; omit created_at and updated_at. multi_choice values should be arrays, and json values may be objects or arrays.",
           },
         },
         required: ["tableName", "rowId", "data"],
@@ -345,7 +346,8 @@ function buildTools(): McpTool[] {
           },
           data: {
             type: "object",
-            description: "Partial update object keyed by column name. Omit updated_at; multi_choice values should be arrays, and json values may be objects or arrays.",
+            minProperties: 1,
+            description: "Partial update object keyed by column name. Include at least one non-system column; omit created_at and updated_at. multi_choice values should be arrays, and json values may be objects or arrays.",
           },
           dryRun: {
             type: "boolean",

@@ -270,6 +270,28 @@ describe("DatabaseService table descriptions", () => {
     ])
   })
 
+  it("rejects empty update payloads without touching row timestamps", () => {
+    service.databaseTableCreate("tasks", [
+      { name: "title", kind: "text" },
+      { name: "state_note", kind: "text" },
+    ])
+    const { id } = service.databaseRowCreate("tasks", { title: "First", state_note: "open" })
+    const before = service.databaseRowList({ table: "tasks" }).rows[0]
+
+    expect(() => service.databaseRowUpdate("tasks", id, {}))
+      .toThrow("database.row.update requires at least one non-system field to update")
+    expect(() => service.databaseRowUpdate("tasks", id, { updated_at: "2026-01-02T00:00:00.000Z" }))
+      .toThrow("database.row.update requires at least one non-system field to update")
+    expect(() => service.databaseRowsUpdate("tasks", { id }, {}))
+      .toThrow("database.rows.update requires at least one non-system field to update")
+    expect(() => service.databaseRowsUpdate("tasks", { id }, { created_at: "2026-01-02T00:00:00.000Z" }))
+      .toThrow("database.rows.update requires at least one non-system field to update")
+
+    const after = service.databaseRowList({ table: "tasks" }).rows[0]
+    expect(after?.updated_at).toBe(before?.updated_at)
+    expect(after).toMatchObject({ title: "First", state_note: "open" })
+  })
+
   it("rejects bulk deletes with empty grouped where conditions", () => {
     service.databaseTableCreate("tasks", [
       { name: "title", kind: "text" },

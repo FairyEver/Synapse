@@ -956,9 +956,11 @@ class DatabaseService {
     const multiChoiceCols = this.getMultiChoiceColumnsForTable(table)
     const numericCols = this.getNumericColumnsForTable(table)
     const filtered = Object.fromEntries(Object.entries(data).filter(([k]) => k !== "created_at" && k !== "updated_at"))
+    if (Object.keys(filtered).length === 0) {
+      throw new Error("database.row.update requires at least one non-system field to update")
+    }
     const withTimestamp: Record<string, unknown> = { ...filtered, updated_at: new Date().toISOString() }
     const keys = Object.keys(withTimestamp)
-    if (keys.length === 0) return { affected: 0 }
     for (const k of keys) {
       if (k !== "updated_at") {
         validateColumnName(k)
@@ -1005,9 +1007,11 @@ class DatabaseService {
     const numericCols = getNumericColumns(tableMeta)
 
     const filtered = Object.fromEntries(Object.entries(data).filter(([k]) => k !== "created_at" && k !== "updated_at"))
+    if (Object.keys(filtered).length === 0) {
+      throw new Error("database.rows.update requires at least one non-system field to update")
+    }
     const withTimestamp: Record<string, unknown> = { ...filtered, updated_at: new Date().toISOString() }
     const keys = Object.keys(withTimestamp)
-    if (keys.length === 0) return { affected: 0, ids: [] }
     for (const k of keys) {
       if (k !== "updated_at") {
         validateColumnName(k)
