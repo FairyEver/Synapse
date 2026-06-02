@@ -18,6 +18,7 @@ const rendererLogger = vi.hoisted(() => ({
 const notifications = vi.hoisted(() => ({
   error: vi.fn(),
   success: vi.fn(),
+  warning: vi.fn(),
   promise: vi.fn(async <T,>(operation: () => Promise<T>, _options?: unknown) => operation()),
 }))
 
@@ -39,6 +40,7 @@ beforeEach(() => {
   rendererLogger.info.mockClear()
   notifications.error.mockClear()
   notifications.success.mockClear()
+  notifications.warning.mockClear()
   notifications.promise.mockClear()
   notifications.promise.mockImplementation(async <T,>(operation: () => Promise<T>, _options?: unknown) => operation())
   bridgeMocks = createBridgeMocks()
@@ -492,6 +494,41 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
 
     expect(dropTarget.textContent).toContain("松开上传")
+  })
+
+  it("reports dropped files whose local paths cannot be resolved", async () => {
+    renderWindow()
+    bridgeMocks.knowledgeBase.filePathForDroppedFile
+      .mockReturnValueOnce("/tmp/ready.md")
+      .mockReturnValueOnce(null)
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    const dropTarget = document.querySelector<HTMLElement>('[aria-label="拖拽上传资料"]')
+    if (!dropTarget) throw new Error("Drop target not found.")
+    const event = new Event("drop", { bubbles: true, cancelable: true })
+    Object.defineProperty(event, "dataTransfer", {
+      value: {
+        files: [
+          new File(["ready"], "ready.md", { type: "text/markdown" }),
+          new File(["virtual"], "virtual.md", { type: "text/markdown" }),
+        ],
+      },
+    })
+
+    await act(async () => {
+      dropTarget.dispatchEvent(event)
+      await Promise.resolve()
+    })
+
+    expect(notifications.warning).toHaveBeenCalledWith("跳过 1 个无法读取路径的文件")
+    expect(bridgeMocks.knowledgeBase.uploadRawItems).toHaveBeenCalledWith({
+      projectId: "project-1",
+      targetDirectoryPath: "",
+      itemPaths: ["/tmp/ready.md"],
+    })
   })
 
   it("selects files for raw upload in the current directory", async () => {

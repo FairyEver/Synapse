@@ -514,7 +514,7 @@ function SourceEntryList({
 
 function KnowledgeBaseSourceManagerWindow() {
   const payload = useMemo(readWindowPayload, [])
-  const { error: showError, promise } = useAppNotifications()
+  const { error: showError, promise, warning: showWarning } = useAppNotifications()
   const [entries, setEntries] = useState<SynapseKnowledgeBaseRawEntry[]>([])
   const [directoryTree, setDirectoryTree] = useState<DirectoryTree>({})
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(() => new Set([""]))
@@ -875,11 +875,21 @@ function KnowledgeBaseSourceManagerWindow() {
     setIsDragging(false)
     if (internalDragPathsRef.current.length > 0 || !hasExternalDraggedFiles(event.dataTransfer)) return
     if (!bridge) return
-    const itemPaths = Array.from(event.dataTransfer.files)
-      .map((file) => bridge.knowledgeBase.filePathForDroppedFile(file))
-      .filter((filePath): filePath is string => Boolean(filePath))
+    const itemPaths: string[] = []
+    let unresolvedCount = 0
+    for (const file of Array.from(event.dataTransfer.files)) {
+      const filePath = bridge.knowledgeBase.filePathForDroppedFile(file)
+      if (filePath) {
+        itemPaths.push(filePath)
+      } else {
+        unresolvedCount += 1
+      }
+    }
+    if (unresolvedCount > 0) {
+      showWarning(`跳过 ${unresolvedCount} 个无法读取路径的文件`)
+    }
     void uploadItems(itemPaths)
-  }, [bridge, uploadItems])
+  }, [bridge, showWarning, uploadItems])
 
   const toggleSelected = useCallback((relativePath: string, checked: boolean) => {
     setSelectedPaths((previous) => {
