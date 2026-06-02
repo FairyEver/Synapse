@@ -18,8 +18,10 @@ function useEditorScan() {
     error: null,
   })
   const hasFetched = useRef(false)
+  const currentReqRef = useRef(0)
 
   const scan = useCallback(async () => {
+    const reqId = ++currentReqRef.current
     setState((prev) => ({ ...prev, loading: true, error: null }))
     try {
       const bridge = getSynapseBridge()
@@ -27,8 +29,10 @@ function useEditorScan() {
         throw new Error("Bridge not available")
       }
       const result = await bridge.editorScan.scanAll()
+      if (reqId !== currentReqRef.current) return
       setState({ data: result, loading: false, error: null })
     } catch (error) {
+      if (reqId !== currentReqRef.current) return
       logger.error("Editor scan failed.", error)
       setState((prev) => ({
         ...prev,
