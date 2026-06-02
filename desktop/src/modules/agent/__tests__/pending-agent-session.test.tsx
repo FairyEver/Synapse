@@ -2,7 +2,7 @@
  * @vitest-environment jsdom
  */
 import { act } from "react"
-import type { ReactNode } from "react"
+import type { ReactNode, Ref } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -22,6 +22,7 @@ const mocks = vi.hoisted(() => {
       hasUnread: false,
     },
     scrollToBottom: vi.fn(),
+    viewportRef: vi.fn(),
     composerProps: null as {
       showJumpToBottom?: boolean
       showIdleJumpToBottom?: boolean
@@ -29,6 +30,7 @@ const mocks = vi.hoisted(() => {
     } | null,
     timelineProps: null as {
       onOpenReference?: (reference: string) => void
+      viewportRef?: Ref<HTMLDivElement>
     } | null,
     sidebarProps: null as {
       projects?: Array<{ id: string; name: string; path: string }>
@@ -94,7 +96,7 @@ vi.mock("../hooks/use-stick-to-bottom", () => ({
   latestTimelineContentSignal: () => "",
   useStickToBottom: () => ({
     forcePin: mocks.forcePin,
-    viewportRef: { current: null },
+    viewportRef: mocks.viewportRef,
     isPinned: mocks.stickState.isPinned,
     hasUnread: mocks.stickState.hasUnread,
     scrollToBottom: mocks.scrollToBottom,
@@ -123,9 +125,9 @@ vi.mock("../components/agent-session-sidebar", () => ({
 }))
 
 vi.mock("../components/agent-timeline", () => ({
-  AgentTimeline: (props: { onOpenReference?: (reference: string) => void }) => {
+  AgentTimeline: (props: { onOpenReference?: (reference: string) => void; viewportRef?: Ref<HTMLDivElement> }) => {
     mocks.timelineProps = props
-    return <section />
+    return <section ref={props.viewportRef} />
   },
 }))
 
@@ -171,6 +173,7 @@ afterEach(() => {
     hasUnread: false,
   }
   mocks.scrollToBottom.mockClear()
+  mocks.viewportRef.mockClear()
   mocks.composerProps = null
   mocks.timelineProps = null
   mocks.sidebarProps = null
@@ -409,6 +412,52 @@ describe("AgentModule pending prompt sessions", () => {
     expect(container.textContent).toContain("请创建新的会话")
     expect(container.textContent).not.toContain("Workflow Run")
     expect(container.textContent).not.toContain("stale content")
+  })
+
+  it("remounts the selected user timeline after returning from an empty source filter", async () => {
+    mocks.chat = createChatState({
+      sessions: [{
+        ...targetSession,
+        platform: "local-renderer",
+        name: "User Chat",
+      }],
+      selectedProjectId: "project-1",
+      selectedConversationId: "conversation-1",
+      timeline: [{
+        id: "message-1",
+        kind: "message",
+        role: "assistant",
+        content: "Latest answer",
+        timestamp: "2026-06-02T00:00:00.000Z",
+      }],
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<AgentModule />)
+    })
+
+    expect(mocks.timelineProps?.viewportRef).toBe(mocks.viewportRef)
+    expect(mocks.viewportRef.mock.calls.at(-1)?.[0]).toBeInstanceOf(HTMLElement)
+
+    await act(async () => {
+      mocks.sidebarProps?.onSourceFilterChange?.("workflow")
+    })
+
+    expect(container.textContent).toContain("请创建新的会话")
+    expect(mocks.viewportRef.mock.calls.at(-1)?.[0]).toBeNull()
+
+    await act(async () => {
+      mocks.sidebarProps?.onSourceFilterChange?.("user")
+    })
+
+    expect(container.textContent).not.toContain("请创建新的会话")
+    expect(mocks.timelineProps?.viewportRef).toBe(mocks.viewportRef)
+    expect(mocks.viewportRef.mock.calls.at(-1)?.[0]).toBeInstanceOf(HTMLElement)
   })
 
   it("switches source filter before selecting a pending workflow session", async () => {

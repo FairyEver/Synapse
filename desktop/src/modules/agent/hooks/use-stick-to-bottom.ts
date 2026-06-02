@@ -136,6 +136,14 @@ export function useStickToBottom(input: {
     })
   }, [])
 
+  const scheduleFollowScroll = useCallback(() => {
+    const handle = window.requestAnimationFrame(() => {
+      if (!autoFollowRef.current) return
+      performScrollToBottom({ behavior: "auto" })
+    })
+    return () => window.cancelAnimationFrame(handle)
+  }, [performScrollToBottom])
+
   const scrollToBottom = useCallback((options?: ScrollOptions) => {
     autoFollowRef.current = true
     isPinnedRef.current = true
@@ -183,15 +191,17 @@ export function useStickToBottom(input: {
     }
 
     const onKeyDown = (event: KeyboardEvent) => {
-      if (
+      const scrollsUp =
         event.key === "ArrowUp"
-        || event.key === "ArrowDown"
         || event.key === "PageUp"
-        || event.key === "PageDown"
         || event.key === "Home"
+        || (event.key === " " && event.shiftKey)
+      const scrollsDown =
+        event.key === "ArrowDown"
+        || event.key === "PageDown"
         || event.key === "End"
-        || event.key === " "
-      ) {
+        || (event.key === " " && !event.shiftKey)
+      if (scrollsUp || (scrollsDown && !isViewportPinned(viewport))) {
         pauseFollowing()
       }
     }
@@ -259,6 +269,33 @@ export function useStickToBottom(input: {
       if (frame !== null) window.cancelAnimationFrame(frame)
     }
   }, [pauseFollowing, viewportNode])
+
+  useEffect(() => {
+    const viewport = viewportNode
+    if (!viewport) return undefined
+
+    const cancelFollowScroll = autoFollowRef.current
+      ? scheduleFollowScroll()
+      : undefined
+
+    if (typeof ResizeObserver === "undefined") {
+      return cancelFollowScroll
+    }
+
+    let cancelResizeScroll: (() => void) | undefined
+    const observer = new ResizeObserver(() => {
+      if (!autoFollowRef.current || viewport.clientHeight <= 0) return
+      cancelResizeScroll?.()
+      cancelResizeScroll = scheduleFollowScroll()
+    })
+    observer.observe(viewport)
+
+    return () => {
+      cancelFollowScroll?.()
+      cancelResizeScroll?.()
+      observer.disconnect()
+    }
+  }, [scheduleFollowScroll, viewportNode])
 
   // React to content changes: auto-scroll if pinned, mark unread if latest content changed off-screen.
   useEffect(() => {

@@ -12,6 +12,7 @@ import { useStickToBottom } from "../use-stick-to-bottom"
 
 const roots: Root[] = []
 let rafId = 0
+let resizeObservers: TestResizeObserver[] = []
 
 beforeEach(() => {
   vi.spyOn(window, "requestAnimationFrame").mockImplementation((callback) => {
@@ -20,6 +21,29 @@ beforeEach(() => {
     return nextId
   })
   vi.spyOn(window, "cancelAnimationFrame").mockImplementation(() => {})
+  resizeObservers = []
+  class ResizeObserverMock {
+    readonly callback: ResizeObserverCallback
+    observed = new Set<Element>()
+
+    constructor(callback: ResizeObserverCallback) {
+      this.callback = callback
+      resizeObservers.push(this)
+    }
+
+    observe = (target: Element) => {
+      this.observed.add(target)
+    }
+
+    unobserve = (target: Element) => {
+      this.observed.delete(target)
+    }
+
+    disconnect = () => {
+      this.observed.clear()
+    }
+  }
+  vi.stubGlobal("ResizeObserver", ResizeObserverMock)
 })
 
 afterEach(() => {
@@ -32,6 +56,7 @@ afterEach(() => {
   rafId = 0
   document.body.innerHTML = ""
   vi.restoreAllMocks()
+  vi.unstubAllGlobals()
 })
 
 describe("useStickToBottom", () => {
@@ -382,6 +407,30 @@ describe("useStickToBottom", () => {
     expect(controls.current?.hasUnread).toBe(false)
   })
 
+  it("stays pinned when downward keyboard input at bottom cannot move the viewport away", async () => {
+    const { controls, rerender, scrollTo } = await renderStickHarness({
+      signal: "message:assistant:4",
+      latestEntryId: "assistant-1",
+    })
+    const viewport = document.querySelector<HTMLDivElement>("[data-testid='viewport']")
+    expect(viewport).not.toBeNull()
+    setScrollMetrics(viewport, { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 })
+    scrollTo.mockClear()
+
+    await act(async () => {
+      viewport?.dispatchEvent(new KeyboardEvent("keydown", { bubbles: true, key: "End" }))
+    })
+
+    expect(controls.current?.isPinned).toBe(true)
+
+    await act(async () => {
+      rerender({ signal: "message:assistant:20", latestEntryId: "assistant-1" })
+    })
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2000, behavior: "smooth" })
+    expect(controls.current?.hasUnread).toBe(false)
+  })
+
   it("ignores global wheel input outside the viewport bounds", async () => {
     const { controls, rerender, scrollTo } = await renderStickHarness({
       signal: "message:assistant:4",
@@ -454,30 +503,137 @@ describe("useStickToBottom", () => {
     expect(controls.current?.hasUnread).toBe(true)
   })
 
+  it("instantly follows to the bottom when a historical viewport remounts while auto-following", async () => {
+    const { rerender, scrollTo } = await renderStickHarness({
+      signal: "message:assistant:200",
+      latestEntryId: "assistant-history",
+      renderViewport: false,
+    })
+    scrollTo.mockClear()
+
+    await act(async () => {
+      rerender({
+        signal: "message:assistant:200",
+        latestEntryId: "assistant-history",
+        renderViewport: true,
+        viewportMetrics: { scrollTop: 0, scrollHeight: 2600, clientHeight: 600 },
+      })
+    })
+
+    const viewport = document.querySelector<HTMLDivElement>("[data-testid='viewport']")
+    expect(viewport).not.toBeNull()
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2600, behavior: "auto" })
+  })
+
+  it("instantly follows to the bottom when a hidden historical viewport becomes measurable", async () => {
+    const { scrollTo } = await renderStickHarness({
+      signal: "message:assistant:200",
+      latestEntryId: "assistant-history",
+    })
+    const viewport = document.querySelector<HTMLDivElement>("[data-testid='viewport']")
+    expect(viewport).not.toBeNull()
+    setScrollMetrics(viewport, { scrollTop: 0, scrollHeight: 2600, clientHeight: 0 })
+    scrollTo.mockClear()
+
+    setScrollMetrics(viewport, { scrollTop: 0, scrollHeight: 2600, clientHeight: 600 })
+    await triggerResize(viewport)
+
+    expect(scrollTo).toHaveBeenCalledWith({ top: 2600, behavior: "auto" })
+  })
+
+  it("does not force bottom on viewport remount or resize after user scrolling paused following", async () => {
+    const { controls, rerender, scrollTo } = await renderStickHarness({
+      signal: "message:assistant:4",
+      latestEntryId: "assistant-1",
+    })
+    const initialViewport = document.querySelector<HTMLDivElement>("[data-testid='viewport']")
+    expect(initialViewport).not.toBeNull()
+    setScrollMetrics(initialViewport, { scrollTop: 1400, scrollHeight: 2000, clientHeight: 600 })
+
+    await act(async () => {
+      initialViewport?.dispatchEvent(new WheelEvent("wheel", { bubbles: true, deltaY: -120 }))
+    })
+
+    expect(controls.current?.isPinned).toBe(false)
+    scrollTo.mockClear()
+
+    await act(async () => {
+      rerender({
+        signal: "message:assistant:4",
+        latestEntryId: "assistant-1",
+        renderViewport: false,
+      })
+    })
+    await act(async () => {
+      rerender({
+        signal: "message:assistant:4",
+        latestEntryId: "assistant-1",
+        renderViewport: true,
+      })
+    })
+
+    const remountedViewport = document.querySelector<HTMLDivElement>("[data-testid='viewport']")
+    expect(remountedViewport).not.toBeNull()
+    setScrollMetrics(remountedViewport, { scrollTop: 0, scrollHeight: 2600, clientHeight: 600 })
+    await act(async () => {
+      await Promise.resolve()
+    })
+    expect(scrollTo).not.toHaveBeenCalled()
+
+    setScrollMetrics(remountedViewport, { scrollTop: 0, scrollHeight: 2600, clientHeight: 700 })
+    await triggerResize(remountedViewport)
+
+    expect(scrollTo).not.toHaveBeenCalled()
+  })
+
 })
+
+type TestResizeObserver = {
+  readonly callback: ResizeObserverCallback
+  readonly observed: Set<Element>
+}
 
 function StickHarness({
   latestEntryId,
   onStick,
   renderViewport = true,
   signal,
+  viewportMetrics,
 }: {
   readonly latestEntryId: string | undefined
   readonly onStick: (stick: UseStickToBottomReturn) => void
   readonly renderViewport?: boolean
   readonly signal: string
+  readonly viewportMetrics?: ScrollMetrics
 }) {
   const stick = useStickToBottom({ contentSignal: [signal, latestEntryId], latestEntryId })
   useEffect(() => {
     onStick(stick)
   }, [onStick, stick])
-  return renderViewport ? <div ref={stick.viewportRef} data-testid="viewport" /> : null
+  return renderViewport ? (
+    <div
+      ref={(node) => {
+        if (node && viewportMetrics) {
+          setScrollMetrics(node, viewportMetrics)
+        }
+        if (typeof stick.viewportRef === "function") {
+          stick.viewportRef(node)
+        }
+      }}
+      data-testid="viewport"
+    />
+  ) : null
 }
 
 async function renderStickHarness(initialProps: {
   readonly latestEntryId: string | undefined
   readonly renderViewport?: boolean
   readonly signal: string
+  readonly viewportMetrics?: ScrollMetrics
 }) {
   const container = document.createElement("div")
   document.body.appendChild(container)
@@ -501,6 +657,7 @@ async function renderStickHarness(initialProps: {
         signal={props.signal}
         latestEntryId={props.latestEntryId}
         renderViewport={props.renderViewport}
+        viewportMetrics={props.viewportMetrics}
         onStick={(stick) => {
           controls.current = stick
         }}
@@ -521,11 +678,7 @@ async function renderStickHarness(initialProps: {
 
 function setScrollMetrics(
   element: HTMLElement | null,
-  metrics: {
-    readonly clientHeight: number
-    readonly scrollHeight: number
-    readonly scrollTop: number
-  },
+  metrics: ScrollMetrics,
 ) {
   if (!element) return
   element.scrollTop = metrics.scrollTop
@@ -533,6 +686,12 @@ function setScrollMetrics(
     clientHeight: { configurable: true, get: () => metrics.clientHeight },
     scrollHeight: { configurable: true, get: () => metrics.scrollHeight },
   })
+}
+
+type ScrollMetrics = {
+  readonly clientHeight: number
+  readonly scrollHeight: number
+  readonly scrollTop: number
 }
 
 function setViewportRect(
@@ -555,5 +714,16 @@ function setViewportRect(
     x: rect.left,
     y: rect.top,
     toJSON: () => ({}),
+  })
+}
+
+async function triggerResize(target: Element | null) {
+  if (!target) return
+  await act(async () => {
+    for (const observer of resizeObservers) {
+      if (!observer.observed.has(target)) continue
+      observer.callback([], observer as unknown as ResizeObserver)
+    }
+    await Promise.resolve()
   })
 }
