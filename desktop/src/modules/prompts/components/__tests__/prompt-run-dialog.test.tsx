@@ -11,6 +11,9 @@ import type { SynapseContentMeta } from "@/types/content"
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const runMock = vi.hoisted(() => vi.fn())
+const appConfig = vi.hoisted(() => ({
+  projects: [{ id: "project-1", name: "Project One", path: "/repo" }],
+}))
 const rendererLogger = vi.hoisted(() => ({
   error: vi.fn(),
   info: vi.fn(),
@@ -20,7 +23,7 @@ vi.mock("@/app-shell/config", () => ({
   useAppConfig: () => ({
     config: {
       global: {
-        projects: [{ id: "project-1", name: "Project One", path: "/repo" }],
+        projects: appConfig.projects,
       },
     },
   }),
@@ -51,6 +54,10 @@ afterEach(() => {
   }
   roots = []
   document.body.innerHTML = ""
+  appConfig.projects = [{ id: "project-1", name: "Project One", path: "/repo" }]
+  rendererLogger.error.mockReset()
+  rendererLogger.info.mockReset()
+  runMock.mockReset()
   vi.restoreAllMocks()
 })
 
@@ -112,6 +119,69 @@ describe("PromptRunDialog", () => {
       navigate: true,
     })
     expect(onOpenChange).toHaveBeenCalledWith(false)
+  })
+
+  it("disables sending after the selected project disappears", async () => {
+    const listProviders = vi.fn().mockResolvedValue([
+      {
+        id: "provider-1",
+        name: "Provider One",
+        model: "claude-test",
+        active: true,
+        archived: false,
+      },
+    ])
+    Object.defineProperty(window, "synapse", {
+      configurable: true,
+      value: {
+        agent: {
+          listProviders,
+        },
+      },
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(
+        <PromptRunDialog
+          open={true}
+          onOpenChange={vi.fn()}
+          item={promptItem}
+        />,
+      )
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    appConfig.projects = []
+    await act(async () => {
+      root.render(
+        <PromptRunDialog
+          open={true}
+          onOpenChange={vi.fn()}
+          item={promptItem}
+        />,
+      )
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(document.body.textContent).toContain("请先在设置中添加项目")
+    const sendAndNavigateButton = [...document.querySelectorAll<HTMLButtonElement>("button")]
+      .find((button) => button.textContent?.includes("发送并跳转"))
+    expect(sendAndNavigateButton?.disabled).toBe(true)
+
+    await act(async () => {
+      sendAndNavigateButton?.click()
+    })
+
+    expect(runMock).not.toHaveBeenCalled()
   })
 
   it("logs provider load failures with sanitized renderer boundary context", async () => {

@@ -50,6 +50,8 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
     () => providers.filter((provider) => !provider.archived),
     [providers],
   )
+  const selectedProjectExists = Boolean(selectedProjectId)
+    && projects.some((project) => project.id === selectedProjectId)
 
   const loadProviders = useCallback(async () => {
     const requestId = providerRequestIdRef.current + 1
@@ -83,12 +85,13 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
 
   useEffect(() => {
     if (!open) return
-    if (selectedProjectId && projects.some((p) => p.id === selectedProjectId)) return
-    const firstProject = projects[0]
-    if (firstProject) {
-      setSelectedProjectId(firstProject.id)
-    }
-  }, [open, projects, selectedProjectId])
+    setSelectedProjectId((currentProjectId) => {
+      if (currentProjectId && projects.some((project) => project.id === currentProjectId)) {
+        return currentProjectId
+      }
+      return projects[0]?.id ?? ""
+    })
+  }, [open, projects])
 
   useEffect(() => {
     if (!open) {
@@ -101,13 +104,13 @@ function PromptRunDialog({ open, onOpenChange, item }: PromptRunDialogProps) {
   }, [loadProviders, open])
 
   const canSubmit = Boolean(item)
-    && Boolean(selectedProjectId)
+    && selectedProjectExists
     && Boolean(selectedProviderId)
     && !providersLoading
     && !isRunning
 
   const handleRun = async (navigate: boolean) => {
-    if (!item || !selectedProjectId || !selectedProviderId) return
+    if (!item || !selectedProjectExists || !selectedProviderId) return
     const success = await run({
       item,
       projectId: selectedProjectId,
