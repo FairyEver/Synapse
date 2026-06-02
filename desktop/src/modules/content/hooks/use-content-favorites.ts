@@ -1,12 +1,14 @@
 import { useCallback, useMemo } from "react"
 import { useAppConfig } from "@/app-shell/config"
 import { createRendererLogger } from "@/app-shell/logging"
+import { useAppNotifications } from "@/app-shell/notifications"
 import type { SynapseContentType } from "@/types/content"
 
 const logger = createRendererLogger("content.favorite")
 
 export function useContentFavorites(contentType?: SynapseContentType) {
   const { config, updateConfig } = useAppConfig()
+  const { error: notifyError } = useAppNotifications()
 
   const favorites = config?.global.favorites ?? { rule: [], skill: [], prompt: [] }
 
@@ -66,10 +68,10 @@ export function useContentFavorites(contentType?: SynapseContentType) {
           isFavorite: nextFavoriteState,
           error,
         })
-        throw error
+        notifyError("收藏更新失败，请稍后重试。")
       }
     },
-    [favorites, updateConfig],
+    [favorites, notifyError, updateConfig],
   )
 
   return {
