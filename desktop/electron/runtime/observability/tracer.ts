@@ -44,6 +44,8 @@ function genId(): string {
   return (nextId++).toString(36)
 }
 
+const MAX_FINISHED_SPANS = 1000
+
 class SpanImpl implements Span {
   readonly name: string
   readonly context: SpanContext
@@ -101,6 +103,9 @@ export class TracerImpl implements Tracer {
       parentSpanId: parent?.spanId,
     }
     const impl = new SpanImpl(name, ctx, (span) => {
+      if (this.finished.length >= MAX_FINISHED_SPANS) {
+        this.finished.splice(0, this.finished.length - MAX_FINISHED_SPANS + 1)
+      }
       this.finished.push({
         name: span.name,
         context: span.context,

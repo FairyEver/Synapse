@@ -100,6 +100,19 @@ describe("Tracer (T6.3)", () => {
     expect(tracer.finishedSpans()[0]?.attributes.late).toBeUndefined()
     expect(tracer.finishedSpans()[0]?.status).toBe("unset")
   })
+
+  it("keeps only the most recent finished spans", () => {
+    const tracer = createTracer()
+
+    for (let index = 0; index < 1005; index += 1) {
+      tracer.startSpan(`span-${index}`).end()
+    }
+
+    const finished = tracer.finishedSpans()
+    expect(finished).toHaveLength(1000)
+    expect(finished[0]?.name).toBe("span-5")
+    expect(finished.at(-1)?.name).toBe("span-1004")
+  })
 })
 
 describe("HealthCheckAggregator (T6.4)", () => {
