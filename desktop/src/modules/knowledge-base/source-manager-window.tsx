@@ -200,6 +200,8 @@ function skippedReasonLabel(reason: string): string {
       return "读取失败"
     case "conversion-error":
       return "转换失败"
+    case "unsupported":
+      return "不支持"
     case "invalid-path":
       return "路径无效"
     case "collision":

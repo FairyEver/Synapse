@@ -107,18 +107,12 @@ export async function stageKnowledgeBaseSources(
       }
 
       if (!CONVERTIBLE_EXTENSIONS.has(extension)) {
-        const targetRelativeDir = path.join(".raw", ...datePathSegments(input.now()))
-        const targetDir = assertInside(projectPath, path.join(projectPath, targetRelativeDir))
-        await assertNoSymlinkInRelativePath(projectPath, targetRelativeDir)
-        await mkdir(targetDir, { recursive: true })
-        const targetPath = await copyFileToAvailablePath(sourcePath, targetDir, path.basename(sourcePath))
-        uploaded.push({
-          originalPath: filePath,
-          relativePath: normalizeRelativePath(path.relative(projectPath, targetPath)),
-          name: path.basename(targetPath),
-          size: sourceStat.size,
-          sourceKind: "file",
+        knowledgeBaseLogger.warn("Knowledge Base source upload skipped.", {
+          extension,
+          fileName: path.basename(sourcePath),
+          reason: "unsupported",
         })
+        skipped.push({ path: filePath, reason: "unsupported" })
         continue
       }
 

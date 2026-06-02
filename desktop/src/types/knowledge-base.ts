@@ -84,7 +84,7 @@ export type SynapseKnowledgeBaseUploadSourcesResult = {
   uploaded: SynapseKnowledgeBaseUploadedSource[]
   skipped: Array<{
     path: string
-    reason: "not-file" | "read-error" | "conversion-error"
+    reason: "not-file" | "read-error" | "conversion-error" | "unsupported"
   }>
 }
 

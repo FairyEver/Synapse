@@ -90,6 +90,29 @@ describe("knowledge base source staging", () => {
       .resolves.toBe("alpha\n")
   })
 
+  it("skips unsupported binary files instead of copying them into raw", async () => {
+    const projectPath = await tempDir()
+    const inputDir = await tempDir()
+    const sourcePath = path.join(inputDir, "archive.zip")
+    await writeFile(sourcePath, "binary")
+
+    const result = await stageKnowledgeBaseSources({
+      projectPath,
+      filePaths: [sourcePath],
+      now: () => new Date("2026-05-23T13:00:00.000Z"),
+      converter: {
+        convert: async () => {
+          throw new Error("converter should not handle unsupported sources")
+        },
+      },
+    })
+
+    expect(result.uploaded).toEqual([])
+    expect(result.skipped).toEqual([{ path: sourcePath, reason: "unsupported" }])
+    await expect(access(path.join(projectPath, ".raw", "2026", "05", "23", "archive.zip")))
+      .rejects.toMatchObject({ code: "ENOENT" })
+  })
+
   it("keeps concurrent text uploads with the same basename as separate sources", async () => {
     const projectPath = await tempDir()
     const firstInputDir = await tempDir()

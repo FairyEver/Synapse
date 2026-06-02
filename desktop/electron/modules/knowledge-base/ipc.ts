@@ -140,7 +140,7 @@ const uploadSourcesResultSchema = z.object({
   })),
   skipped: z.array(z.object({
     path: z.string(),
-    reason: z.enum(["not-file", "read-error", "conversion-error"]),
+    reason: z.enum(["not-file", "read-error", "conversion-error", "unsupported"]),
   })),
 })
 
