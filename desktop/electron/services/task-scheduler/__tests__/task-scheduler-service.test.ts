@@ -294,6 +294,38 @@ describe("TaskSchedulerService", () => {
     expect(await harness.taskItems.get("task:1")).toEqual(expect.objectContaining({ enabled: false }))
   })
 
+  it("rejects creating tasks with unknown actions", async () => {
+    const harness = createHarness()
+
+    await expect(harness.service.schedulerTaskCreate({
+      name: "Imported task",
+      scope: { type: "global" },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
+      action: { type: "builtin.missing", config: {} },
+    })).rejects.toThrow(/not registered/)
+    expect(await harness.tasks.list()).toEqual([])
+  })
+
+  it("rejects creating and updating tasks with invalid action config", async () => {
+    const harness = createHarness()
+
+    await expect(harness.service.schedulerTaskCreate({
+      name: "Imported task",
+      scope: { type: "global" },
+      trigger: { type: "builtin.interval", config: { everyMinutes: 10 } },
+      action: { type: "builtin.test", config: {} },
+    })).rejects.toThrow()
+    expect(await harness.tasks.list()).toEqual([])
+
+    await harness.taskItems.upsert(createTask({ id: "task:1" }))
+    await expect(harness.service.schedulerTaskUpdate("task:1", {
+      action: { type: "builtin.test", config: {} },
+    })).rejects.toThrow()
+    expect(await harness.tasks.get("task:1")).toEqual(expect.objectContaining({
+      action: { type: "builtin.test", config: { message: "ok" } },
+    }))
+  })
+
   it("marks tasks with unknown actions as needing update", async () => {
     const harness = createHarness()
     await harness.taskItems.upsert(createTask({

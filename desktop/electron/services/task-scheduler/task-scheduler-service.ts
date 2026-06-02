@@ -92,17 +92,18 @@ export class TaskSchedulerService {
   }
 
   async schedulerTaskCreate(input: ScheduledTaskCreateInput): Promise<ScheduledTaskEntry> {
-    const task = await this.deps.tasks.create(input)
+    const task = await this.deps.tasks.create(this.normalizeCreateInput(input))
     if (this.started && task.enabled && this.isTaskValid(task)) await this.schedule(task.id, task.nextRunAt)
     this.emitTaskChanged({ taskId: task.id, reason: "created" })
     return this.withRuntimeState(task)
   }
 
   async schedulerTaskUpdate(id: string, patch: ScheduledTaskUpdateInput): Promise<ScheduledTaskEntry> {
+    const normalizedPatch = this.normalizeUpdateInput(patch)
     const oldTask = await this.deps.tasks.get(id)
     this.cancel(id)
     try {
-      const task = await this.deps.tasks.update(id, patch)
+      const task = await this.deps.tasks.update(id, normalizedPatch)
       if (this.started && task.enabled && this.isTaskValid(task)) await this.schedule(task.id, task.nextRunAt)
       this.emitTaskChanged({ taskId: task.id, reason: "updated" })
       return this.withRuntimeState(task)
@@ -424,6 +425,22 @@ export class TaskSchedulerService {
 
   private validateTask(task: ScheduledTaskEntry): ScheduledTaskValidation {
     return this.deps.actions.validateStoredConfig(task.action.type, task.action.config)
+  }
+
+  private normalizeCreateInput(input: ScheduledTaskCreateInput): ScheduledTaskCreateInput {
+    return { ...input, action: this.normalizeAction(input.action) }
+  }
+
+  private normalizeUpdateInput(patch: ScheduledTaskUpdateInput): ScheduledTaskUpdateInput {
+    if (!patch.action) return patch
+    return { ...patch, action: this.normalizeAction(patch.action) }
+  }
+
+  private normalizeAction(action: ScheduledTaskCreateInput["action"]): ScheduledTaskCreateInput["action"] {
+    return {
+      type: action.type,
+      config: this.deps.actions.parseConfig(action.type, action.config),
+    }
   }
 }
 
