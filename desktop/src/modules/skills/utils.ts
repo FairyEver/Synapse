@@ -45,6 +45,25 @@ function normalizeSkillAttachmentCompareKey(originalName: string): string {
   return normalizePathForCompare(originalName, { platform: "win32" })
 }
 
+function createSkillFileDraftsFromFiles(
+  files: Iterable<File>,
+  limit = MAX_SKILL_ATTACHMENT_COUNT + 1,
+): SkillCreateFilePayloadDraft[] {
+  const drafts: SkillCreateFilePayloadDraft[] = []
+  const iterator = files[Symbol.iterator]()
+  while (drafts.length < limit) {
+    const next = iterator.next()
+    if (next.done) break
+    const file = next.value
+    drafts.push({
+      originalName: normalizeSkillAttachmentName(file.webkitRelativePath || file.name),
+      size: file.size,
+      file,
+    })
+  }
+  return drafts
+}
+
 function normalizeCreateSkillFilePayload(
   file: SkillCreateFilePayloadDraft,
 ): SkillCreateFilePayloadDraft {
@@ -244,8 +263,10 @@ async function serializeCreateSkillFiles(
 }
 
 export {
+  createSkillFileDraftsFromFiles,
   createEmptySkillPayload,
   formatSkillAttachmentSize,
+  MAX_SKILL_ATTACHMENT_COUNT,
   MAX_SKILL_ATTACHMENT_SIZE,
   mergeCreateSkillFiles,
   normalizeCreateSkillPayload,

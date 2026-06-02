@@ -24,9 +24,10 @@ import {
 } from "@/modules/content/components/skill-file-tree"
 import type { CreateSkillPayload, SkillCreateFilePayloadDraft } from "@/modules/skills/types"
 import {
+  createSkillFileDraftsFromFiles,
   formatSkillAttachmentSize,
+  MAX_SKILL_ATTACHMENT_COUNT,
   mergeCreateSkillFiles,
-  normalizeSkillAttachmentName,
 } from "@/modules/skills/utils"
 import type {
   SynapseContentIconType,
@@ -90,14 +91,6 @@ type SkillAttachmentManagerProps = {
   onFilesChange: (files: SkillCreateFilePayloadDraft[]) => void
   onSelectFile: (path: string) => void
   onSelectMain: () => void
-}
-
-function toCreateSkillFiles(files: Iterable<File>): SkillCreateFilePayloadDraft[] {
-  return Array.from(files, (file) => ({
-    originalName: normalizeSkillAttachmentName(file.webkitRelativePath || file.name),
-    size: file.size,
-    file,
-  }))
 }
 
 function SelectCategory({
@@ -394,7 +387,8 @@ function SkillAttachmentManager({
 
   const handleFiles = (fileList: FileList | null) => {
     if (!fileList || fileList.length === 0) return
-    addFiles(toCreateSkillFiles(fileList))
+    const remainingSlots = Math.max(0, MAX_SKILL_ATTACHMENT_COUNT - files.length)
+    addFiles(createSkillFileDraftsFromFiles(fileList, remainingSlots + 1))
   }
 
   const handleSelectPath = (path: string) => {

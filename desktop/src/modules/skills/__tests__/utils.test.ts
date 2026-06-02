@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  createSkillFileDraftsFromFiles,
+  MAX_SKILL_ATTACHMENT_COUNT,
   mergeCreateSkillFiles,
   serializeCreateSkillFiles,
   validateCreateSkillPayload,
@@ -14,6 +16,27 @@ function createFile(originalName: string, size: number): SkillCreateFilePayloadD
     size,
   }
 }
+
+describe("createSkillFileDraftsFromFiles", () => {
+  it("stops iterating after the requested file limit", () => {
+    let yielded = 0
+    function* createLargeFileList(): Iterable<File> {
+      for (let index = 0; index < MAX_SKILL_ATTACHMENT_COUNT + 50; index++) {
+        yielded += 1
+        yield {
+          name: `attachment-${index}.txt`,
+          size: 1,
+          webkitRelativePath: `large/attachment-${index}.txt`,
+        } as File
+      }
+    }
+
+    const drafts = createSkillFileDraftsFromFiles(createLargeFileList(), MAX_SKILL_ATTACHMENT_COUNT + 1)
+
+    expect(drafts).toHaveLength(MAX_SKILL_ATTACHMENT_COUNT + 1)
+    expect(yielded).toBe(MAX_SKILL_ATTACHMENT_COUNT + 1)
+  })
+})
 
 describe("mergeCreateSkillFiles", () => {
   it("allows attachment totals above the single-file limit when they stay within 50MB", () => {
