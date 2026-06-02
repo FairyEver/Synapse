@@ -92,7 +92,7 @@ import { WindowBroadcaster } from "../runtime/event-bus/broadcaster"
 import type { DataRepository } from "../runtime/data-repo"
 import { createFileBackedDataRepository } from "../runtime/data-repo"
 import type { PermissionGuard, AuditSink } from "../runtime/security"
-import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, systemAutomationPolicy } from "../runtime/security"
+import { DataRepositoryAuditSink, createPermissionGuard, userInitiatedAllowPolicy, systemShellExecPolicy, systemAutomationPolicy, systemMcpAutoRegisterPolicy } from "../runtime/security"
 import type { ProcessRuntime } from "../runtime/process"
 import {
   buildHostEnvironment,
@@ -944,6 +944,7 @@ export const corePermissionGuardDescriptor: ServiceDescriptor<PermissionGuard> =
     guard.registerPolicy(userInitiatedAllowPolicy)
     guard.registerPolicy(systemShellExecPolicy)
     guard.registerPolicy(systemAutomationPolicy)
+    guard.registerPolicy(systemMcpAutoRegisterPolicy)
     return guard
   },
 }

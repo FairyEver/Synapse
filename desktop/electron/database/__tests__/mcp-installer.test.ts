@@ -1,7 +1,15 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import path from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { AuditSink, PermissionGuard } from "../../runtime/security"
+import {
+  createPermissionGuard,
+  systemAutomationPolicy,
+  systemMcpAutoRegisterPolicy,
+  systemShellExecPolicy,
+  userInitiatedAllowPolicy,
+  type AuditSink,
+  type PermissionGuard,
+} from "../../runtime/security"
 
 const state = vi.hoisted(() => ({
   home: `${process.cwd()}/.tmp-mcp-installer-test`,
@@ -54,6 +62,15 @@ function createSecurity(decision: { allowed: true } | { allowed: false; reason: 
     },
     permissionGuard,
   }
+}
+
+function createDefaultPermissionGuard(): PermissionGuard {
+  const guard = createPermissionGuard()
+  guard.registerPolicy(userInitiatedAllowPolicy)
+  guard.registerPolicy(systemShellExecPolicy)
+  guard.registerPolicy(systemAutomationPolicy)
+  guard.registerPolicy(systemMcpAutoRegisterPolicy)
+  return guard
 }
 
 describe("mcp-installer", () => {
@@ -184,6 +201,29 @@ describe("mcp-installer", () => {
         target: "cursor",
       }),
     }))
+  })
+
+  it("auto-registers Claude MCP for first-run users with the default permission guard", async () => {
+    const { autoRegisterMcp } = await import("../mcp-installer")
+    const settingsPath = path.join(state.home, ".claude.json")
+
+    await autoRegisterMcp(51234, {
+      actor: { kind: "system", id: "database" },
+      source: "database.mcp.autoRegister",
+      permissionGuard: createDefaultPermissionGuard(),
+    })
+
+    expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({
+      mcpServers: {
+        "synapse-mcp": {
+          type: "http",
+          url: "http://127.0.0.1:51234/mcp",
+          headers: {
+            Authorization: "Bearer test-token",
+          },
+        },
+      },
+    })
   })
 
   it("detects Claude Code registration from ~/.claude.json", async () => {

@@ -4,6 +4,7 @@ import {
   DataRepositoryAuditSink,
   InMemoryAuditSink,
   createPermissionGuard,
+  systemMcpAutoRegisterPolicy,
   userInitiatedAllowPolicy,
   type PermissionPolicy,
   type PermissionRequest,
@@ -20,6 +21,17 @@ const agentReq: PermissionRequest = {
   actor: { kind: "agent", id: "claude" },
   resource: "/tmp/x",
   context: {},
+}
+const systemMcpAutoRegisterReq: PermissionRequest = {
+  action: "fs.write",
+  actor: { kind: "system", id: "database" },
+  resource: "/Users/test/.claude.json",
+  context: {
+    operation: "register",
+    settingsPath: "/Users/test/.claude.json",
+    source: "database.mcp.autoRegister",
+    target: "claude",
+  },
 }
 
 describe("PermissionGuard (T6.6)", () => {
@@ -73,6 +85,39 @@ describe("PermissionGuard (T6.6)", () => {
     expect((await guard.check(userReq)).allowed).toBe(true)
     // agent reaches the default-deny.
     expect((await guard.check(agentReq)).allowed).toBe(false)
+  })
+
+  it("systemMcpAutoRegisterPolicy allows only database MCP auto-registration writes", async () => {
+    const guard = createPermissionGuard()
+    guard.registerPolicy(systemMcpAutoRegisterPolicy)
+
+    expect((await guard.check(systemMcpAutoRegisterReq)).allowed).toBe(true)
+    expect((await guard.check({
+      ...systemMcpAutoRegisterReq,
+      context: { source: "database.mcp.register", target: "claude" },
+    })).allowed).toBe(false)
+    expect((await guard.check({
+      ...systemMcpAutoRegisterReq,
+      actor: { kind: "system", id: "task-scheduler" },
+    })).allowed).toBe(false)
+    expect((await guard.check({
+      ...systemMcpAutoRegisterReq,
+      action: "shell.exec",
+    })).allowed).toBe(false)
+    expect((await guard.check({
+      ...systemMcpAutoRegisterReq,
+      context: {
+        ...systemMcpAutoRegisterReq.context,
+        operation: "read",
+      },
+    })).allowed).toBe(false)
+    expect((await guard.check({
+      ...systemMcpAutoRegisterReq,
+      context: {
+        ...systemMcpAutoRegisterReq.context,
+        settingsPath: "/Users/test/.cursor/mcp.json",
+      },
+    })).allowed).toBe(false)
   })
 })
 

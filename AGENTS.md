@@ -56,6 +56,7 @@
 - Knowledge Base 专用逻辑必须隔离在知识库模块或知识库专属资源目录内，例如 `desktop/electron/services/knowledge-base/`、`desktop/resources/knowledge-base/` 和最小 renderer 项目能力 UI。不要把知识库专用逻辑散落到普通 Agent 对话、Scheduler、Workflow 或其它触发 Agent 的功能里；普通项目不应加载知识库 plugin、skill、hook、prompt 或快捷动作。
 - Agent 会话创建只能基于已配置项目；新会话必须绑定 `agentType`；运行时状态按 conversation 隔离，不要让同项目多会话共享队列、busy 状态或 live session。
 - Agent composer slash menu 只负责插入 `/<name>`，不得立即执行或发送；不得改成通用命令面板；不得新增 renderer 侧目录扫描器或改变后端 command/skill 解析语义。
+- Knowledge Base 资料管理窗口是 `.raw` 文件管理器；上传和拖拽上传必须把用户选择的文件原样复制到当前 `.raw` 文件夹，不得自动转换格式、生成 Markdown 替代文件、额外保留一份 originals 附件，或把普通上传变成 source staging 流程。
 - Workflow 必须保持外层 DAG 约束；MCP/agent 写操作必须走 get -> mutate -> validate -> save 的受控路径，校验失败不得保存；不得删除 end 节点。
 - Workflow loop 的退出条件必须由子图内真实节点和 Loop Output 的 continue/break 出口表达，不要退回到隐藏在配置面板里的表达式字符串。
 - Scheduler 子进程环境必须经过 allowlist；`PATH` 默认按用户配置和 login shell 环境 merge；运行诊断必须保留，失败时用于 UI 排查。
@@ -75,6 +76,7 @@
 - Knowledge Base renderer Agent 和普通 Agent 都应尽量与用户本机 Claude Code 看到同一套 MCP：Claude SDK `settingSources` 必须包含 `["user", "project", "local"]`。不要因为 `allowPluginHooks === true` 就移除 `user` settings。
 - 不要新增 SDK `mcpServers` 程序化注入来“修复”知识库 MCP。Synapse MCP 继续通过用户 Claude Code 配置读取，注册位置是 `~/.claude.json`，当前 server 名是 `synapse-mcp`。
 - Knowledge Base 不做 MCP 隔离。用户本机 Claude Code 能读到的 MCP，知识库 Agent 也应能读到；权限是否允许调用仍走现有工具权限流程。
+- 资料管理 UI 的上传语义是 raw file copy：按钮上传和拖拽上传都只写入当前 `.raw` 目录，保持文件名与内容原样；不要在这个入口自动解析 PDF/Office/图片、生成 intake Markdown、写 `_attachments/originals/` 或维护“原件 + 转换产物”两套资料。需要格式转换或摄入整理时，必须通过独立工具、显式命令或 `/wiki-ingest` 处理 `.raw` 中真实存在的原始文件。
 
 ### Native slash 与可观测性
 
@@ -103,7 +105,7 @@
 - 模板里不得把 `~/Desktop/claude-obsidian`、开发机绝对路径或上游作者本地路径写进新知识库默认 wiki/hot/log 内容。需要路径时基于当前 cwd/backing directory。
 - `/save`、`save` skill 和“记录到知识库”默认语义是保存当前对话、结论或洞察为结构化 wiki note；不要把它们改成一律创建 `.raw/` 原始资料文件。这个语义应尽量跟随上游 `claude-obsidian`。
 - “保存笔记”和“资料摄入”必须保持产品语义区分：只有用户明确要求摄入资料、处理 source、导入文件、写入 `.raw/`，或通过资料管理 UI 添加材料时，才把内容作为 raw source 落到 `.raw/`。
-- 如果新增“作为资料摄入”类入口，必须先通过 Knowledge Base source staging / raw file manager 写入 `.raw/` 中真实 source，再由 `/wiki-ingest` 处理；不要让 agent 凭空把已生成的 wiki 页面倒填为 source。
+- 如果新增“作为资料摄入”类入口，必须先通过 Knowledge Base raw file manager 写入 `.raw/` 中真实 source，再由 `/wiki-ingest` 处理；不要让资料管理上传入口自动做 source staging，也不要让 agent 凭空把已生成的 wiki 页面倒填为 source。
 - `/wiki-ingest` 只能处理 `.raw/` 中真实存在的新/变更 source。不要让 agent 凭空手写 source manifest；manifest 更新应保留既有 `sources` 和 `address_map`，代码侧优先使用既有 Knowledge Base manifest 写入能力。
 - 如果上游模板更新覆盖了 `skills/save/SKILL.md`、`commands/save.md` 或 `skills/wiki-ingest/SKILL.md`，必须重新检查本节的保存笔记语义、真实 source ingest、manifest 保留和路径约束是否仍然存在。
 

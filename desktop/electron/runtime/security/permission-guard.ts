@@ -122,6 +122,20 @@ export const systemAutomationPolicy: PermissionPolicy = {
       : "defer-to-next",
 }
 
+/** Allow Synapse startup to keep editor MCP settings registered. */
+export const systemMcpAutoRegisterPolicy: PermissionPolicy = {
+  id: "system-mcp-auto-register-allow",
+  decide: (req) =>
+    req.actor.kind === "system"
+      && req.actor.id === "database"
+      && req.action === "fs.write"
+      && req.context.source === "database.mcp.autoRegister"
+      && (req.context.operation === "register" || req.context.operation === "unregister")
+      && req.context.settingsPath === req.resource
+      ? "allow"
+      : "defer-to-next",
+}
+
 // ----- AuditSink ----------------------------------------------------
 
 export interface AuditEvent {
