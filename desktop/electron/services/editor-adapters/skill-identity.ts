@@ -5,15 +5,23 @@ import { isFileNotFoundError, pathExists } from "../fs-utils"
 const SYNAPSE_SKILL_ID_FILE_NAME = ".synapse.json"
 
 interface SynapseSkillMeta {
-  id: string
+  id?: unknown
 }
 const UNIQUE_SUFFIX_LIMIT = 999
+
+function parseSkillIdFile(raw: string): string | null {
+  try {
+    const meta = JSON.parse(raw) as SynapseSkillMeta
+    return typeof meta.id === "string" && meta.id.trim().length > 0 ? meta.id : null
+  } catch {
+    return null
+  }
+}
 
 async function readSkillIdFile(skillDirectoryPath: string): Promise<string | null> {
   try {
     const raw = await readFile(path.join(skillDirectoryPath, SYNAPSE_SKILL_ID_FILE_NAME), "utf8")
-    const meta: SynapseSkillMeta = JSON.parse(raw)
-    return meta.id ?? null
+    return parseSkillIdFile(raw)
   } catch (error) {
     if (isFileNotFoundError(error)) {
       return null
