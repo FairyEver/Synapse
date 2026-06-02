@@ -143,6 +143,32 @@ describe("NetworkServiceRegistry (T3.15)", () => {
     })
   })
 
+  it("retries the next available port when lifecycle start loses the listen race", async () => {
+    const stop = vi.fn()
+    const start = vi.fn((binding) => {
+      if (binding.port === 50001) {
+        const error = new Error("listen EADDRINUSE")
+        ;(error as NodeJS.ErrnoException).code = "EADDRINUSE"
+        throw error
+      }
+      return { stop }
+    })
+    const reg = createNetworkServiceRegistry({
+      probePort: async () => true,
+      conflictPolicy: "next-available",
+      portRangeStart: 50001,
+      portRangeEnd: 50003,
+    })
+
+    await expect(reg.register(desc({ id: "api", preferredPort: 50001, start }))).resolves.toEqual({
+      id: "api",
+      port: 50002,
+      bindAddress: "127.0.0.1",
+    })
+    expect(start).toHaveBeenCalledTimes(2)
+    expect(reg.list()).toEqual([{ id: "api", port: 50002, bindAddress: "127.0.0.1" }])
+  })
+
   it("emits descriptor audit events for register/start/unregister/stop", async () => {
     const audit = vi.fn()
     const reg = createNetworkServiceRegistry({ probePort: async () => true })

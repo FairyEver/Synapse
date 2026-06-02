@@ -128,41 +128,51 @@ export class NetworkServiceRegistryImpl implements NetworkServiceRegistry {
       throw new Error(`Network service "${descriptor.id}" already registered`)
     }
     const bindAddress = descriptor.bindAddress ?? "127.0.0.1"
-    const port = await this.allocatePort(descriptor, bindAddress)
+    const skippedPorts = new Set<number>()
 
-    const binding: ResolvedNetworkBinding = {
-      id: descriptor.id,
-      port,
-      bindAddress,
-    }
+    while (true) {
+      const port = await this.allocatePort(descriptor, bindAddress, skippedPorts)
 
-    const entry: InternalEntry = { descriptor, binding }
-    this.entries.set(descriptor.id, entry)
-    this.allocatedPorts.add(port)
-
-    try {
-      descriptor.onPortAssigned?.(port)
-      await this.emitAudit(entry, "registered")
-      const lifecycle = await descriptor.start?.(binding)
-      if (lifecycle) {
-        entry.lifecycle = lifecycle
-        await this.emitAudit(entry, "started")
+      const binding: ResolvedNetworkBinding = {
+        id: descriptor.id,
+        port,
+        bindAddress,
       }
-      return binding
-    } catch (error) {
-      if (entry.lifecycle) {
-        try { await entry.lifecycle.stop() } catch { /* best-effort cleanup */ }
-      }
-      this.entries.delete(descriptor.id)
-      this.allocatedPorts.delete(port)
+
+      const entry: InternalEntry = { descriptor, binding }
+      this.entries.set(descriptor.id, entry)
+      this.allocatedPorts.add(port)
+
       try {
-        await this.emitAudit(
-          entry,
-          "failed",
-          error instanceof Error ? error.message : String(error),
-        )
-      } catch { /* audit is best-effort during rollback */ }
-      throw error
+        descriptor.onPortAssigned?.(port)
+        await this.emitAudit(entry, "registered")
+        const lifecycle = await descriptor.start?.(binding)
+        if (lifecycle) {
+          entry.lifecycle = lifecycle
+          await this.emitAudit(entry, "started")
+        }
+        return binding
+      } catch (error) {
+        if (entry.lifecycle) {
+          try { await entry.lifecycle.stop() } catch { /* best-effort cleanup */ }
+        }
+        this.entries.delete(descriptor.id)
+        this.allocatedPorts.delete(port)
+        try {
+          await this.emitAudit(
+            entry,
+            "failed",
+            error instanceof Error ? error.message : String(error),
+          )
+        } catch { /* audit is best-effort during rollback */ }
+
+        if (this.conflictPolicy === "next-available" && isPortInUseError(error)) {
+          skippedPorts.add(port)
+          continue
+        }
+
+        throw error
+      }
     }
   }
 
@@ -198,9 +208,10 @@ export class NetworkServiceRegistryImpl implements NetworkServiceRegistry {
   private async allocatePort(
     descriptor: NetworkServiceDescriptor,
     bindAddress: string,
+    skippedPorts: ReadonlySet<number> = new Set(),
   ): Promise<number> {
     const preferred = descriptor.preferredPort
-    if (preferred !== undefined && !this.allocatedPorts.has(preferred)) {
+    if (preferred !== undefined && !this.allocatedPorts.has(preferred) && !skippedPorts.has(preferred)) {
       const free = await this.probePort(preferred, bindAddress)
       if (free) return preferred
       if (this.conflictPolicy === "fail") {
@@ -215,7 +226,7 @@ export class NetworkServiceRegistryImpl implements NetworkServiceRegistry {
       // consumer (MCP HTTP migration) needs it. For now treat as next-available.
     }
 
-    const taken = new Set(this.allocatedPorts)
+    const taken = new Set([...this.allocatedPorts, ...skippedPorts])
     return pickNextAvailablePort({
       from: this.portRangeStart,
       to: this.portRangeEnd,
@@ -239,6 +250,20 @@ export class NetworkServiceRegistryImpl implements NetworkServiceRegistry {
       error,
     })
   }
+}
+
+function isPortInUseError(error: unknown): boolean {
+  let current: unknown = error
+
+  while (current instanceof Error) {
+    const code = (current as NodeJS.ErrnoException).code
+    if (code === "EADDRINUSE" || current.message.includes("EADDRINUSE")) {
+      return true
+    }
+    current = current.cause
+  }
+
+  return false
 }
 
 export function createNetworkServiceRegistry(
