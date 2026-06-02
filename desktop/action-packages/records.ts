@@ -16,6 +16,16 @@ export function parseRecordText(value: string): Record<string, string> {
   return result
 }
 
+export function tryParseRecordText(value: string):
+  | { ok: true; value: Record<string, string> }
+  | { ok: false; error: Error } {
+  try {
+    return { ok: true, value: parseRecordText(value) }
+  } catch (error) {
+    return { ok: false, error: error instanceof Error ? error : new Error(String(error)) }
+  }
+}
+
 export function stringifyRecordText(record: Record<string, string> | undefined): string {
   if (!record) return ""
   return Object.entries(record)

@@ -9,7 +9,7 @@ import {
 import { Input } from "../../../src/components/ui/input"
 import { Textarea } from "../../../src/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "../../../src/components/ui/toggle-group"
-import { parseRecordText, stringifyRecordText } from "../../records"
+import { RecordTextarea } from "../../record-textarea.renderer"
 import type { ScriptActionConfig } from "./schema"
 
 const SHELL_OPTIONS: Array<{ label: string; value: ScriptActionConfig["shell"] }> = [
@@ -90,19 +90,12 @@ export function ScriptConfigForm({
       <Field>
         <FieldLabel htmlFor={`${idPrefix}-env`}>环境变量</FieldLabel>
         <FieldContent>
-          <Textarea
+          <RecordTextarea
             id={`${idPrefix}-env`}
             placeholder={"KEY=value\nANOTHER_KEY=value"}
             rows={3}
-            value={stringifyRecordText(value.env)}
-            onChange={(event) => {
-              try {
-                onChange({ ...value, env: parseRecordText(event.target.value) })
-              } catch {
-                // Ignore parse errors for intermediate input — user types character by
-                // character and hasn't completed a KEY=value line yet.
-              }
-            }}
+            value={value.env}
+            onValueChange={(env) => onChange({ ...value, env })}
           />
           <FieldDescription>每行一个 KEY=value，会与系统允许的环境变量合并</FieldDescription>
         </FieldContent>

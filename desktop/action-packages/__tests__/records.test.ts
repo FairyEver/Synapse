@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { parseRecordText, stringifyRecordText } from "../records"
+import { parseRecordText, stringifyRecordText, tryParseRecordText } from "../records"
 
 describe("action package record text utilities", () => {
   it("parses KEY=value lines and preserves values after the first equals sign", () => {
@@ -16,6 +16,15 @@ describe("action package record text utilities", () => {
 
   it("rejects lines without an equals sign", () => {
     expect(() => parseRecordText("TOKEN")).toThrow(/KEY=value/)
+  })
+
+  it("returns parse failures without throwing", () => {
+    const result = tryParseRecordText("TOKEN")
+
+    expect(result.ok).toBe(false)
+    if (!result.ok) {
+      expect(result.error.message).toMatch(/KEY=value/)
+    }
   })
 
   it("stringifies records as newline-delimited entries", () => {
