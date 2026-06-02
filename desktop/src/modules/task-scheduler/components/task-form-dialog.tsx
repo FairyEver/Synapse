@@ -50,6 +50,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Switch } from "@/components/ui/switch"
 import { Textarea } from "@/components/ui/textarea"
 import { ToggleGroup, ToggleGroupItem } from "@/components/ui/toggle-group"
+import { sanitizeError } from "@/lib/error-sanitize"
 import { track } from "@/lib/ui-tracking"
 import { cn } from "@/lib/utils"
 import type { SynapseProjectConfig } from "@/types/config"
@@ -191,7 +192,7 @@ function TaskFormDialog({
         ...(state.mode === "edit" ? { taskId: state.task.id } : {}),
         ...errorDiagnostic(submitError),
       })
-      setError("保存任务失败。")
+      setError(buildSubmitErrorMessage(submitError))
     }
   }
 
@@ -756,6 +757,14 @@ function errorDiagnostic(error: unknown): { readonly errorName: string; readonly
     errorName: error instanceof Error ? error.name : typeof error,
     errorLength: message.length,
   }
+}
+
+function buildSubmitErrorMessage(error: unknown): string {
+  if (!(error instanceof Error)) {
+    return "保存任务失败。"
+  }
+  const message = sanitizeError(error.message)
+  return message ? `保存任务失败：${message}` : "保存任务失败。"
 }
 
 function taskFormSubmitMetadata(

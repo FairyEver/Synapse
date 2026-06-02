@@ -522,8 +522,9 @@ describe("TaskFormDialog", () => {
         errorLength: "save failed for token=secret-agent-token in /Users/example/agent-task".length,
       }),
     )
-    expect(container.textContent).toContain("保存任务失败。")
+    expect(container.textContent).toContain("保存任务失败：save failed for token=[redacted] in [path]")
     expect(container.textContent).not.toContain("secret-agent-token")
+    expect(container.textContent).not.toContain("/Users/example")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("secret-agent-token")
     expect(JSON.stringify(rendererLogger.error.mock.calls)).not.toContain("/Users/example")
   })
