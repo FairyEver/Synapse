@@ -4,6 +4,7 @@
 import { readFile } from "node:fs/promises"
 import { join } from "node:path"
 import { act } from "react"
+import { useEffect } from "react"
 import type { ReactNode } from "react"
 import { createRoot, type Root } from "react-dom/client"
 import { afterEach, describe, expect, it, vi } from "vitest"
@@ -21,11 +22,38 @@ vi.mock("@/components/ui/resizable", () => ({
 }))
 
 import { ContentEditorWindowLayout } from "../components/content-editor-window-layout"
+import { useContentCreateForm, type ContentCreateFormConfig } from "../hooks/use-content-create-form"
 
 ;(globalThis as typeof globalThis & { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
 const editorWindowPageSourcePath = join(__dirname, "../components/content-editor-window-page.tsx")
 let roots: Root[] = []
+
+type TestEditorPayload = {
+  [key: string]: unknown
+  category: string
+  content: string
+  description: string
+  iconType: string
+  title: string
+  usage: string
+}
+
+const emptyTestEditorPayload: TestEditorPayload = {
+  category: "",
+  content: "",
+  description: "",
+  iconType: "icon",
+  title: "",
+  usage: "",
+}
+
+const testFormConfig: ContentCreateFormConfig<TestEditorPayload> = {
+  createEmpty: () => ({ ...emptyTestEditorPayload }),
+  normalize: (payload) => ({ ...payload }),
+  validate: () => ({}),
+  errorFallbackMessage: "保存失败。",
+}
 
 afterEach(() => {
   for (const root of roots) {
@@ -118,5 +146,82 @@ describe("ContentEditorWindowPage", () => {
     expect(source).toContain("readContentEditorInitPayload")
     expect(source).toContain("initPayload.initialValue")
     expect(source).toContain("initPayload.prefill")
+  })
+
+  it("keeps the category select controlled while edit details load", async () => {
+    const fieldsSource = await readFile(join(__dirname, "../components/content-editor-fields.tsx"), "utf8")
+    const source = await readFile(editorWindowPageSourcePath, "utf8")
+
+    expect(fieldsSource).toContain("value={value}")
+    expect(fieldsSource).not.toContain("value={value || undefined}")
+    expect(source).toContain("category: detail.category")
+    expect(source).toContain("usage: detail.usage ?? \"\"")
+    expect(source).toContain("description: detail.description")
+  })
+
+  it("keeps loaded category when a stale field callback updates another field", async () => {
+    let staleUpdateField: ((field: keyof TestEditorPayload, value: TestEditorPayload[keyof TestEditorPayload]) => void) | null = null
+
+    function TestForm({ initialValue }: { readonly initialValue: TestEditorPayload | null }) {
+      const formState = useContentCreateForm(testFormConfig, {
+        initialValue,
+        onOpenChange: () => {},
+        onSubmit: () => {},
+        open: true,
+      })
+
+      useEffect(() => {
+        if (!staleUpdateField) {
+          staleUpdateField = formState.updateField
+        }
+      }, [formState.updateField])
+
+      return (
+        <div>
+          <span data-testid="category">{formState.form.category}</span>
+          <span data-testid="usage">{formState.form.usage}</span>
+          <span data-testid="description">{formState.form.description}</span>
+          <span data-testid="content">{formState.form.content}</span>
+        </div>
+      )
+    }
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<TestForm initialValue={null} />)
+    })
+
+    await act(async () => {
+      root.render(
+        <TestForm
+          initialValue={{
+            category: "automation",
+            content: "主说明",
+            description: "简介",
+            iconType: "icon",
+            title: "Gitee API",
+            usage: "使用说明",
+          }}
+        />,
+      )
+    })
+
+    expect(document.querySelector('[data-testid="category"]')?.textContent).toBe("automation")
+    expect(document.querySelector('[data-testid="usage"]')?.textContent).toBe("使用说明")
+    expect(document.querySelector('[data-testid="description"]')?.textContent).toBe("简介")
+    expect(document.querySelector('[data-testid="content"]')?.textContent).toBe("主说明")
+
+    await act(async () => {
+      staleUpdateField?.("iconType", "image")
+    })
+
+    expect(document.querySelector('[data-testid="category"]')?.textContent).toBe("automation")
+    expect(document.querySelector('[data-testid="usage"]')?.textContent).toBe("使用说明")
+    expect(document.querySelector('[data-testid="description"]')?.textContent).toBe("简介")
+    expect(document.querySelector('[data-testid="content"]')?.textContent).toBe("主说明")
   })
 })

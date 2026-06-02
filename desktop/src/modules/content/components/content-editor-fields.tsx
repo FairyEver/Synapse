@@ -113,7 +113,7 @@ function SelectCategory({
       <FieldLabel htmlFor={`${contentType}-editor-category`}>分类</FieldLabel>
       <FieldContent>
         <Select
-          value={value || undefined}
+          value={value}
           onValueChange={onChange}
         >
           <SelectTrigger

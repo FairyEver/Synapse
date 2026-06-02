@@ -1,4 +1,4 @@
-import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from "react"
+import { type Dispatch, type SetStateAction, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createRendererLogger } from "@/app-shell/logging"
 import { isDeepEqual } from "@/lib/deep-equal"
 
@@ -55,7 +55,21 @@ function useContentCreateForm<T extends Record<string, unknown>>(
     baselineRef.current = normalizedValue
   }
   const baseline = baselineRef.current
-  const [form, setForm] = useState<T>(() => baseline)
+  const [formSnapshot, setFormSnapshot] = useState<T>(() => baseline)
+  const formRef = useRef(formSnapshot)
+  const appliedBaselineRef = useRef(baseline)
+  if (!isDeepEqual(appliedBaselineRef.current, baseline)) {
+    appliedBaselineRef.current = baseline
+    formRef.current = baseline
+  }
+  const form = formRef.current
+  const setForm = useCallback<Dispatch<SetStateAction<T>>>((nextValue) => {
+    const nextForm = typeof nextValue === "function"
+      ? (nextValue as (current: T) => T)(formRef.current)
+      : nextValue
+    formRef.current = nextForm
+    setFormSnapshot(nextForm)
+  }, [])
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({})
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isDiscardConfirmOpen, setIsDiscardConfirmOpen] = useState(false)
@@ -69,7 +83,7 @@ function useContentCreateForm<T extends Record<string, unknown>>(
     setIsSubmitting(false)
     setIsDiscardConfirmOpen(false)
     setSubmitError(null)
-  }, [baseline, open])
+  }, [baseline, open, setForm])
 
   useEffect(() => {
     if (previousOpenRef.current !== open) {
@@ -102,8 +116,8 @@ function useContentCreateForm<T extends Record<string, unknown>>(
   ])
 
   const updateField = <K extends keyof T>(field: K, value: T[K]) => {
-    const previousValue = form[field]
-    const nextForm = { ...form, [field]: value }
+    const previousValue = formRef.current[field]
+    const nextForm = { ...formRef.current, [field]: value }
     setForm(nextForm)
     setSubmitError(null)
 
@@ -125,8 +139,12 @@ function useContentCreateForm<T extends Record<string, unknown>>(
 
     if (field === "iconType") {
       setErrors({})
-    } else if (Object.keys(errors).length > 0) {
-      setErrors(validate(nextForm))
+    } else {
+      setErrors((currentErrors) => (
+        Object.keys(currentErrors).length > 0
+          ? validate(nextForm)
+          : currentErrors
+      ))
     }
   }
 
