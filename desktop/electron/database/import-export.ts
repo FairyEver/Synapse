@@ -51,6 +51,12 @@ type TableExportPayload = {
   rows: SerializedTableRow[]
 }
 
+type WalCheckpointResult = {
+  readonly busy?: number
+  readonly log?: number
+  readonly checkpointed?: number
+}
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -82,6 +88,25 @@ function createImportSnapshot(sourcePath: string): string {
 
 function removeImportSnapshot(snapshotPath: string): void {
   rmSync(path.dirname(snapshotPath), { recursive: true, force: true })
+}
+
+function checkpointWalBeforeExport(db: DatabaseSync): void {
+  let result: WalCheckpointResult | undefined
+  try {
+    result = db.prepare("PRAGMA wal_checkpoint(TRUNCATE)").get() as WalCheckpointResult | undefined
+  } catch (error) {
+    logger.warn("Failed to checkpoint database before export.", { error })
+    throw new Error("无法导出数据库：WAL checkpoint 失败，请稍后重试。")
+  }
+
+  if (Number(result?.busy ?? 0) > 0) {
+    logger.warn("WAL checkpoint was busy before database export.", {
+      busy: result?.busy,
+      log: result?.log,
+      checkpointed: result?.checkpointed,
+    })
+    throw new Error("无法导出数据库：数据库正在写入，请稍后重试。")
+  }
 }
 
 function sqlLiteral(value: unknown): string {
@@ -247,7 +272,7 @@ export class ImportExportManager {
 
   exportDatabase(targetPath: string): void {
     const db = this.getDb()
-    db.exec("PRAGMA wal_checkpoint(TRUNCATE)")
+    checkpointWalBeforeExport(db)
     copyFileSync(this.getDbPath(), targetPath)
   }
 
