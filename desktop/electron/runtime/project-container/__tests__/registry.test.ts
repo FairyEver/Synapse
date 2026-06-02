@@ -26,6 +26,7 @@ describe("ProjectContainerRegistry (T5.1 + T5.2)", () => {
       buildLogger: () => noopLogger(),
     })
     const container = await reg.open("p1", { name: "Demo" })
+    eventBus.flushAllForTests()
     expect(container.projectId).toBe("p1")
     expect(reg.list()).toHaveLength(1)
     expect(seen).toEqual([{ type: "activated", projectId: "p1" }])
@@ -128,6 +129,7 @@ describe("ProjectContainerRegistry (T5.1 + T5.2)", () => {
     reg.registerService(echoService)
     await reg.open("p1")
     await reg.open("p2")
+    eventBus.flushAllForTests()
     expect(seen.sort()).toEqual(["session.started@p1", "session.started@p2"])
   })
 
@@ -167,6 +169,30 @@ describe("ProjectContainerRegistry (T5.1 + T5.2)", () => {
     trace.length = 0
     await reg.close("p1")
     expect(trace).toEqual(["stop:main", "stop:dep"])
+  })
+
+  it("keeps the container registered when service disposal fails", async () => {
+    const reg = createProjectContainerRegistry({
+      globalRegistry: createServiceRegistry(),
+      globalEventBus: createEventBus({ defaultBackpressure: "drop-newest" }),
+      globalDataRepo: createDataRepository(),
+      buildLogger: () => noopLogger(),
+    })
+    reg.registerService({
+      id: "unstoppable",
+      create: () => ({ alive: true }),
+      stop: () => {
+        throw new Error("stop failed")
+      },
+    })
+
+    const container = await reg.open("p1")
+
+    await expect(reg.close("p1")).rejects.toThrow("1 project service(s) failed to stop: unstoppable")
+    expect(reg.peek("p1")).toBe(container)
+    expect(await reg.open("p1")).toBe(container)
+    expect(reg.list()).toHaveLength(1)
+    expect(container.inspect()).toEqual([{ id: "unstoppable", status: "failed" }])
   })
 
   it("two project containers stay isolated — one's services don't leak", async () => {

@@ -115,6 +115,7 @@ export class ProjectContainerRegistryImpl implements ProjectContainerRegistry {
       logger.error("Project container dispose encountered errors.", {
         error: err instanceof Error ? err.message : String(err),
       })
+      throw err
     }
     this.containers.delete(projectId)
   }
