@@ -2,9 +2,11 @@ import { type DragEvent, type ReactNode, useCallback, useEffect, useMemo, useSta
 import {
   ChevronDown,
   ChevronRight,
+  Download,
   FileText,
   Folder,
   FolderPlus,
+  FolderUp,
   MoreHorizontal,
   MoveRight,
   Pencil,
@@ -74,12 +76,14 @@ type SourceManagerToolbarProps = {
   onQueryChange: (query: string) => void
   onNavigate: (path: string) => void
   onCreateFolder: () => void
-  onUpload: () => void
+  onUploadFiles: () => void
+  onUploadFolder: () => void
 }
 
 type SourceSelectionBarProps = {
   selectedCount: number
   onMove: () => void
+  onExport: () => void
   onTrash: () => void
 }
 
@@ -92,6 +96,7 @@ type SourceEntryListProps = {
   onOpenDirectory: (relativePath: string) => void
   onRename: (entry: SynapseKnowledgeBaseRawEntry) => void
   onMoveEntry: (entry: SynapseKnowledgeBaseRawEntry) => void
+  onExportEntry: (entry: SynapseKnowledgeBaseRawEntry) => void
   onTrashEntry: (entry: SynapseKnowledgeBaseRawEntry) => void
 }
 
@@ -193,6 +198,12 @@ function skippedReasonLabel(reason: string): string {
       return "目标已存在"
     case "trash-error":
       return "删除失败"
+    case "symlink":
+      return "符号链接"
+    case "system-noise":
+      return "系统文件"
+    case "export-error":
+      return "导出失败"
     default:
       return "跳过"
   }
@@ -259,7 +270,8 @@ function SourceManagerToolbar({
   onQueryChange,
   onNavigate,
   onCreateFolder,
-  onUpload,
+  onUploadFiles,
+  onUploadFolder,
 }: SourceManagerToolbarProps) {
   return (
     <header className="flex shrink-0 items-center justify-between gap-3 border-b border-border px-4 py-3">
@@ -290,16 +302,20 @@ function SourceManagerToolbar({
           <FolderPlus data-icon="inline-start" />
           新建文件夹
         </Button>
-        <Button type="button" onClick={onUpload} aria-label="上传">
+        <Button type="button" variant="outline" onClick={onUploadFiles} aria-label="上传文件">
           <Upload data-icon="inline-start" />
-          上传
+          上传文件
+        </Button>
+        <Button type="button" variant="outline" onClick={onUploadFolder} aria-label="上传文件夹">
+          <FolderUp data-icon="inline-start" />
+          上传文件夹
         </Button>
       </div>
     </header>
   )
 }
 
-function SourceSelectionBar({ selectedCount, onMove, onTrash }: SourceSelectionBarProps) {
+function SourceSelectionBar({ selectedCount, onMove, onExport, onTrash }: SourceSelectionBarProps) {
   if (selectedCount === 0) return null
   return (
     <div className="flex items-center justify-between gap-3 rounded-md border border-border px-3 py-2">
@@ -308,6 +324,10 @@ function SourceSelectionBar({ selectedCount, onMove, onTrash }: SourceSelectionB
         <Button type="button" variant="outline" size="sm" onClick={onMove} aria-label="移动所选">
           <MoveRight data-icon="inline-start" />
           移动
+        </Button>
+        <Button type="button" variant="outline" size="sm" onClick={onExport} aria-label="导出所选">
+          <Download data-icon="inline-start" />
+          导出
         </Button>
         <Button type="button" variant="outline" size="sm" onClick={onTrash} aria-label="移到废纸篓">
           <Trash2 data-icon="inline-start" />
@@ -327,6 +347,7 @@ function SourceEntryList({
   onOpenDirectory,
   onRename,
   onMoveEntry,
+  onExportEntry,
   onTrashEntry,
 }: SourceEntryListProps) {
   if (entries.length === 0) {
@@ -397,6 +418,10 @@ function SourceEntryList({
                 <DropdownMenuItem onSelect={() => onMoveEntry(entry)}>
                   <MoveRight />
                   移动
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={() => onExportEntry(entry)}>
+                  <Download />
+                  导出
                 </DropdownMenuItem>
                 <DropdownMenuItem variant="destructive" onSelect={() => onTrashEntry(entry)}>
                   <Trash2 />
@@ -545,14 +570,14 @@ function KnowledgeBaseSourceManagerWindow() {
 
   const selectedList = useMemo(() => Array.from(selectedPaths), [selectedPaths])
 
-  const uploadFiles = useCallback(async (filePaths: string[]) => {
-    if (!payload || !bridge || filePaths.length === 0) return
+  const uploadItems = useCallback(async (itemPaths: string[]) => {
+    if (!payload || !bridge || itemPaths.length === 0) return
     await promise(
       async () => {
-        const result = await bridge.knowledgeBase.uploadRawFiles({
+        const result = await bridge.knowledgeBase.uploadRawItems({
           projectId: payload.projectId,
           targetDirectoryPath: currentDirectory,
-          filePaths,
+          itemPaths,
         })
         await refreshDirectory()
         return result
@@ -570,6 +595,25 @@ function KnowledgeBaseSourceManagerWindow() {
     await promise(
       async () => {
         const result = await bridge.knowledgeBase.selectAndUploadRawFiles({
+          projectId: payload.projectId,
+          targetDirectoryPath: currentDirectory,
+        })
+        await refreshDirectory()
+        return result
+      },
+      {
+        loading: "正在上传",
+        success: (result) => sourceUploadSuccessMessage(result, null),
+        error: "上传失败",
+      },
+    )
+  }, [bridge, currentDirectory, payload, promise, refreshDirectory])
+
+  const chooseFolder = useCallback(async () => {
+    if (!payload || !bridge) return
+    await promise(
+      async () => {
+        const result = await bridge.knowledgeBase.selectAndUploadRawDirectory({
           projectId: payload.projectId,
           targetDirectoryPath: currentDirectory,
         })
@@ -694,6 +738,21 @@ function KnowledgeBaseSourceManagerWindow() {
     )
   }, [bridge, payload, promise, pruneTreeDirectories, refreshDirectory])
 
+  const exportEntries = useCallback(async (relativePaths: string[]) => {
+    if (!payload || !bridge || relativePaths.length === 0) return
+    await promise(
+      async () => bridge.knowledgeBase.exportRawEntries({
+        projectId: payload.projectId,
+        relativePaths,
+      }),
+      {
+        loading: "正在导出",
+        success: "已导出",
+        error: "导出失败",
+      },
+    )
+  }, [bridge, payload, promise])
+
   const trashSelected = useCallback(async () => {
     await runTrashRawEntries(trashPaths)
     setTrashPaths([])
@@ -703,11 +762,11 @@ function KnowledgeBaseSourceManagerWindow() {
     event.preventDefault()
     setIsDragging(false)
     if (!bridge) return
-    const filePaths = Array.from(event.dataTransfer.files)
+    const itemPaths = Array.from(event.dataTransfer.files)
       .map((file) => bridge.knowledgeBase.filePathForDroppedFile(file))
       .filter((filePath): filePath is string => Boolean(filePath))
-    void uploadFiles(filePaths)
-  }, [bridge, uploadFiles])
+    void uploadItems(itemPaths)
+  }, [bridge, uploadItems])
 
   const toggleSelected = useCallback((relativePath: string, checked: boolean) => {
     setSelectedPaths((previous) => {
@@ -843,7 +902,8 @@ function KnowledgeBaseSourceManagerWindow() {
             setNewFolderName("")
             setCreateFolderOpen(true)
           }}
-          onUpload={chooseFiles}
+          onUploadFiles={chooseFiles}
+          onUploadFolder={chooseFolder}
         />
 
         <section
@@ -857,6 +917,7 @@ function KnowledgeBaseSourceManagerWindow() {
                 setMoveTargetPath("")
                 setMoveOpen(true)
               }}
+              onExport={() => void exportEntries(selectedList)}
               onTrash={() => setTrashPaths(selectedList)}
             />
             <SourceEntryList
@@ -872,6 +933,7 @@ function KnowledgeBaseSourceManagerWindow() {
                 setMoveTargetPath(parentPath(entry.relativePath))
                 setMoveOpen(true)
               }}
+              onExportEntry={(entry) => void exportEntries([entry.relativePath])}
               onTrashEntry={(entry) => setTrashPaths([entry.relativePath])}
             />
           </div>

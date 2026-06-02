@@ -118,8 +118,14 @@ function createBridgeMocks() {
         })),
       uploadRawFiles: vi.fn<(payload: { projectId: string; targetDirectoryPath: string; filePaths: string[] }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
         .mockResolvedValue(emptyMutation),
+      uploadRawItems: vi.fn<(payload: { projectId: string; targetDirectoryPath: string; itemPaths: string[] }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
+        .mockResolvedValue(emptyMutation),
       uploadSources: vi.fn(),
       selectAndUploadRawFiles: vi.fn<(payload: { projectId: string; targetDirectoryPath: string }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
+        .mockResolvedValue(emptyMutation),
+      selectAndUploadRawDirectory: vi.fn<(payload: { projectId: string; targetDirectoryPath: string }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
+        .mockResolvedValue(emptyMutation),
+      exportRawEntries: vi.fn<(payload: { projectId: string; relativePaths: string[] }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
         .mockResolvedValue(emptyMutation),
       selectAndUploadSources: vi.fn(),
       createRawFolder: vi.fn<(payload: { projectId: string; parentDirectoryPath: string; name: string }) => Promise<SynapseKnowledgeBaseRawMutationResult>>()
@@ -282,7 +288,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
   })
 
-  it("uploads dropped files as raw files in the current directory", async () => {
+  it("uploads dropped files and folders as raw items in the current directory", async () => {
     renderWindow()
     bridgeMocks.knowledgeBase.filePathForDroppedFile.mockReturnValue("/tmp/diagram.png")
 
@@ -323,12 +329,13 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
 
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.uploadRawFiles).toHaveBeenCalledWith({
+      expect(bridgeMocks.knowledgeBase.uploadRawItems).toHaveBeenCalledWith({
         projectId: "project-1",
         targetDirectoryPath: "客户",
-        filePaths: ["/tmp/diagram.png"],
+        itemPaths: ["/tmp/diagram.png"],
       })
     })
+    expect(bridgeMocks.knowledgeBase.uploadRawFiles).not.toHaveBeenCalled()
     expect(bridgeMocks.knowledgeBase.uploadSources).not.toHaveBeenCalled()
   })
 
@@ -340,7 +347,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
 
     await act(async () => {
-      buttonByLabel("上传").click()
+      buttonByLabel("上传文件").click()
       await Promise.resolve()
     })
 
@@ -349,6 +356,24 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       targetDirectoryPath: "",
     })
     expect(bridgeMocks.knowledgeBase.selectAndUploadSources).not.toHaveBeenCalled()
+  })
+
+  it("selects folders for raw upload in the current directory", async () => {
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("上传文件夹").click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.selectAndUploadRawDirectory).toHaveBeenCalledWith({
+      projectId: "project-1",
+      targetDirectoryPath: "",
+    })
   })
 
   it("reports skipped files in the upload success message", async () => {
@@ -363,7 +388,7 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
       }],
       skipped: [{ path: "/tmp/locked.pdf", reason: "read-error" }],
     }
-    bridgeMocks.knowledgeBase.uploadRawFiles.mockResolvedValueOnce(uploadResult)
+    bridgeMocks.knowledgeBase.uploadRawItems.mockResolvedValueOnce(uploadResult)
     bridgeMocks.knowledgeBase.filePathForDroppedFile.mockReturnValue("/tmp/good.md")
     renderWindow()
 
@@ -386,13 +411,60 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
 
     await waitForExpectation(() => {
-      expect(bridgeMocks.knowledgeBase.uploadRawFiles).toHaveBeenCalledWith({
+      expect(bridgeMocks.knowledgeBase.uploadRawItems).toHaveBeenCalledWith({
         projectId: "project-1",
         targetDirectoryPath: "",
-        filePaths: ["/tmp/good.md"],
+        itemPaths: ["/tmp/good.md"],
       })
     })
     expect(lastSourceUploadSuccessMessage(uploadResult)).toBe("已上传 1 项，跳过 1 项（读取失败 1）")
+  })
+
+  it("exports one entry from the row menu", async () => {
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+
+    await act(async () => {
+      buttonByLabel("更多 brief.md").dispatchEvent(new MouseEvent("pointerdown", { bubbles: true, cancelable: true }))
+      await Promise.resolve()
+    })
+    let exportItem: HTMLElement | undefined
+    await waitForExpectation(() => {
+      exportItem = Array.from(document.querySelectorAll<HTMLElement>('[role="menuitem"]'))
+        .find((item) => item.textContent?.includes("导出"))
+      expect(exportItem).toBeDefined()
+    })
+    await act(async () => {
+      exportItem!.dispatchEvent(new MouseEvent("click", { bubbles: true }))
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.exportRawEntries).toHaveBeenCalledWith({
+      projectId: "project-1",
+      relativePaths: ["brief.md"],
+    })
+  })
+
+  it("exports selected entries from the batch bar", async () => {
+    renderWindow()
+    await waitForExpectation(() => {
+      expect(document.body.textContent).toContain("brief.md")
+    })
+    await act(async () => {
+      buttonByLabel("选择 brief.md").click()
+    })
+
+    await act(async () => {
+      buttonByLabel("导出所选").click()
+      await Promise.resolve()
+    })
+
+    expect(bridgeMocks.knowledgeBase.exportRawEntries).toHaveBeenCalledWith({
+      projectId: "project-1",
+      relativePaths: ["brief.md"],
+    })
   })
 
   it("creates folders and batch mutates selected entries", async () => {
