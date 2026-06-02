@@ -1438,9 +1438,38 @@ class DatabaseService {
 
   folderReorderFolders(folderIds: number[]): void {
     const db = this.getDb()
+    for (const folderId of folderIds) {
+      if (!Number.isInteger(folderId)) {
+        throw new Error("Folder id must be an integer")
+      }
+    }
+
+    const currentFolders = db.prepare(`SELECT id FROM "_table_folders" ORDER BY id`).all() as {
+      id: number | bigint
+    }[]
+    const currentIds = new Set(currentFolders.map((folder) => toNumber(folder.id)))
+    const seenIds = new Set<number>()
+
+    if (folderIds.length !== currentIds.size) {
+      throw new Error("folderIds must contain every folder id exactly once")
+    }
+
+    for (const folderId of folderIds) {
+      if (seenIds.has(folderId)) {
+        throw new Error(`Duplicate folder id: ${folderId}`)
+      }
+      if (!currentIds.has(folderId)) {
+        throw new Error(`Unknown folder id: ${folderId}`)
+      }
+      seenIds.add(folderId)
+    }
+
     const update = db.prepare(`UPDATE "_table_folders" SET sort_order = ? WHERE id = ?`)
     for (let i = 0; i < folderIds.length; i++) {
-      update.run(i, folderIds[i])
+      const result = update.run(i, folderIds[i])
+      if (result.changes === 0) {
+        throw new Error(`Folder not found: ${folderIds[i]}`)
+      }
     }
   }
 

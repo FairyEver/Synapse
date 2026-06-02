@@ -277,6 +277,32 @@ describe("DatabaseService table descriptions", () => {
     ])
   })
 
+  it("requires folder reorder ids to match all current folders exactly once", () => {
+    const { id: firstFolderId } = service.folderCreate("First")
+    const { id: secondFolderId } = service.folderCreate("Second")
+    const { id: thirdFolderId } = service.folderCreate("Third")
+    const initialFolders = service.folderList()
+
+    expect(() => service.folderReorderFolders([thirdFolderId]))
+      .toThrow("folderIds must contain every folder id exactly once")
+    expect(() => service.folderReorderFolders([firstFolderId, firstFolderId, thirdFolderId]))
+      .toThrow(`Duplicate folder id: ${firstFolderId}`)
+    expect(() => service.folderReorderFolders([firstFolderId, secondFolderId, 9999]))
+      .toThrow("Unknown folder id: 9999")
+    expect(() => service.folderReorderFolders([firstFolderId, secondFolderId, 1.5]))
+      .toThrow("Folder id must be an integer")
+
+    expect(service.folderList()).toEqual(initialFolders)
+
+    service.folderReorderFolders([thirdFolderId, secondFolderId, firstFolderId])
+
+    expect(service.folderList().map((folder) => folder.id)).toEqual([
+      thirdFolderId,
+      secondFolderId,
+      firstFolderId,
+    ])
+  })
+
   it("rejects bulk updates with empty grouped where conditions", () => {
     service.databaseTableCreate("tasks", [
       { name: "title", kind: "text" },
