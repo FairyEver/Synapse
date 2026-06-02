@@ -71,9 +71,9 @@ describe("AuditLogInterceptor", () => {
     expect(auditLog.record).not.toHaveBeenCalled()
   })
 
-  it("records backup list reads because backups are sensitive admin data", async () => {
+  it("records unauthenticated backup list reads without attributing them to the first admin", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
-    const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
     const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
 
     await lastValueFrom(interceptor.intercept(
@@ -83,7 +83,7 @@ describe("AuditLogInterceptor", () => {
 
     await vi.waitFor(() => {
       expect(auditLog.record).toHaveBeenCalledWith({
-        adminEmail: "admin@example.com",
+        adminEmail: "unauthenticated",
         action: "backup.list",
         targetType: "backup",
         targetId: "list",
@@ -91,6 +91,7 @@ describe("AuditLogInterceptor", () => {
         ipAddress: "127.0.0.1",
       })
     })
+    expect(auth.getEmail).not.toHaveBeenCalled()
   })
 
   it("attributes backup audits to the current request admin", async () => {
@@ -328,9 +329,9 @@ describe("AuditLogInterceptor", () => {
     })
   })
 
-  it("records failed backup operations", async () => {
+  it("records failed unauthenticated backup operations without attributing them to the first admin", async () => {
     const auditLog = { record: vi.fn().mockResolvedValue(undefined) }
-    const auth = { getEmail: vi.fn().mockResolvedValue("admin@example.com") }
+    const auth = { getEmail: vi.fn().mockResolvedValue("first-admin@example.com") }
     const interceptor = new AuditLogInterceptor(auditLog as never, auth as never)
 
     await expect(lastValueFrom(interceptor.intercept(
@@ -344,6 +345,7 @@ describe("AuditLogInterceptor", () => {
 
     await vi.waitFor(() => {
       expect(auditLog.record).toHaveBeenCalledWith(expect.objectContaining({
+        adminEmail: "unauthenticated",
         action: "backup.delete.failed",
         targetType: "backup",
         targetId: "synapse-backup.tar.gz",
@@ -355,5 +357,6 @@ describe("AuditLogInterceptor", () => {
         },
       }))
     })
+    expect(auth.getEmail).not.toHaveBeenCalled()
   })
 })

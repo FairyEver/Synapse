@@ -14,6 +14,7 @@ const SENSITIVE_BODY_KEY_PATTERN = /password|token|secret|credential/i
 const REDACTED_VALUE = "[REDACTED]"
 const USER_STATUS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/status$/
 const USER_MODULE_PERMISSIONS_PATH_PATTERN = /^\/api\/admin\/users\/[^/]+\/module-permissions$/
+const UNAUTHENTICATED_ADMIN_EMAIL = "unauthenticated"
 
 interface AuditPolicy {
   readonly success: boolean
@@ -51,7 +52,7 @@ export class AuditLogInterceptor implements NestInterceptor {
       if (!action) return
 
       void this.auditLog.record({
-        adminEmail: request.admin?.email ?? await this.auth.getEmail(),
+        adminEmail: request.admin?.email ?? UNAUTHENTICATED_ADMIN_EMAIL,
         action: error ? `${action}.failed` : action,
         targetType,
         targetId,
