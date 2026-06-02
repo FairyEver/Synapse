@@ -6,6 +6,7 @@ import type { ActionStoredConfigValidation } from "../../types"
 const agentPermissionModes = SYNAPSE_AGENT_PERMISSION_MODES
 const agentPermissionModeSet = new Set<string>(agentPermissionModes)
 const modelTierSet = new Set<string>(["default", "haiku", "sonnet", "opus"])
+const sessionPolicySet = new Set<string>(["fresh", "resume"])
 
 export type AgentActionConfig = {
   projectId: string
@@ -44,6 +45,9 @@ export function validateAgentStoredConfig(config: Record<string, unknown>): Acti
   if (config.agentType !== "claude-code") {
     issues.push({ field: "action.config.agentType", message: "选择当前支持的 Agent" })
   }
+  if (typeof config.projectId !== "string" || config.projectId.trim().length === 0) {
+    issues.push({ field: "action.config.projectId", message: "选择项目" })
+  }
   if (typeof config.providerId !== "string" || config.providerId.trim().length === 0) {
     issues.push({ field: "action.config.providerId", message: "选择供应商" })
   }
@@ -52,6 +56,24 @@ export function validateAgentStoredConfig(config: Record<string, unknown>): Acti
   }
   if (typeof config.mode !== "string" || !agentPermissionModeSet.has(config.mode)) {
     issues.push({ field: "action.config.mode", message: "选择权限模式" })
+  }
+  if (typeof config.prompt !== "string" || config.prompt.trim().length === 0) {
+    issues.push({ field: "action.config.prompt", message: "填写提示词" })
+  }
+  if (typeof config.sessionPolicy !== "string" || !sessionPolicySet.has(config.sessionPolicy)) {
+    issues.push({ field: "action.config.sessionPolicy", message: "选择会话策略" })
+  }
+  if (
+    config.timeoutMins !== undefined
+    && config.timeoutMins !== null
+    && (
+      typeof config.timeoutMins !== "number"
+      || !Number.isInteger(config.timeoutMins)
+      || config.timeoutMins < 1
+      || config.timeoutMins > 120
+    )
+  ) {
+    issues.push({ field: "action.config.timeoutMins", message: "设置 1 到 120 分钟的超时时间" })
   }
 
   return {

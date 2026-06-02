@@ -42,6 +42,26 @@ describe("agent action config schema", () => {
     })
   })
 
+  it("reports actionable issues for missing Agent task content fields", () => {
+    const result = validateAgentStoredConfig({
+      agentType: "claude-code",
+      providerId: "anthropic",
+      modelTier: "sonnet",
+      mode: "bypassPermissions",
+      timeoutMins: 0,
+    })
+
+    expect(result).toEqual({
+      status: "needs_update",
+      issues: [
+        { field: "action.config.projectId", message: "选择项目" },
+        { field: "action.config.prompt", message: "填写提示词" },
+        { field: "action.config.sessionPolicy", message: "选择会话策略" },
+        { field: "action.config.timeoutMins", message: "设置 1 到 120 分钟的超时时间" },
+      ],
+    })
+  })
+
   it("reports unsupported legacy agent type and permission mode", () => {
     const result = validateAgentStoredConfig({
       projectId: "project-1",
