@@ -258,10 +258,10 @@ function imageIntakeMarkdown(input: {
   return [
     "---",
     "source_type: image",
-    `title: "${input.title.replaceAll("\"", "\\\"")}"`,
-    `original_file: "${input.originalPath.replaceAll("\"", "\\\"")}"`,
-    `attachment: ${input.attachment}`,
-    `source_format: ${input.format}`,
+    `title: ${yamlDoubleQuotedScalar(input.title)}`,
+    `original_file: ${yamlDoubleQuotedScalar(input.originalPath)}`,
+    `attachment: ${yamlDoubleQuotedScalar(input.attachment)}`,
+    `source_format: ${yamlDoubleQuotedScalar(input.format)}`,
     `staged_at: ${input.stagedAt}`,
     "---",
     "",
@@ -272,6 +272,10 @@ function imageIntakeMarkdown(input: {
     "Synapse image intake record. During `/wiki ingest`, read the attachment image and create the durable visual/OCR description under `wiki/sources/`.",
     "",
   ].join("\n")
+}
+
+function yamlDoubleQuotedScalar(value: string): string {
+  return `"${value.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"")}"`
 }
 
 function normalizeRelativePath(value: string): string {

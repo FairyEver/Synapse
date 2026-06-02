@@ -77,7 +77,7 @@ describe("knowledge base source staging for URL and OCR sources", () => {
     await expect(readFile(path.join(projectPath, "_attachments", "images", "2026", "05", "24", "receipt.png"), "utf8"))
       .resolves.toBe("png")
     await expect(readFile(path.join(projectPath, ".raw", "images", "2026", "05", "24", "receipt.md"), "utf8"))
-      .resolves.toContain("attachment: _attachments/images/2026/05/24/receipt.png")
+      .resolves.toContain('attachment: "_attachments/images/2026/05/24/receipt.png"')
     await expect(access(path.join(projectPath, "wiki"))).rejects.toMatchObject({ code: "ENOENT" })
   })
 
