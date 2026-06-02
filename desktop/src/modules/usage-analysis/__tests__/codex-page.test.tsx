@@ -5,6 +5,7 @@ import { CodexUsageAnalysisModule } from "../index"
 vi.mock("@/app-shell/notifications", () => ({
   useAppNotifications: () => ({
     error: vi.fn(),
+    warning: vi.fn(),
   }),
 }))
 

@@ -4,6 +4,7 @@ import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { PricingRulesDialog } from "../shared/components/pricing-rules-dialog"
 import { CC_USAGE_VIEWS, UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
 import { TodayReportView } from "../shared/components/today-report-view"
+import { getUsageRefreshWarning } from "../shared/refresh-result"
 import type { UsageRangePreset, UsageTrendBucketGranularity, UsageViewId } from "../shared/types"
 import { useCcModels, useCcOverview, useCcTime } from "./hooks"
 import { CcModelsPage } from "./pages/models"
@@ -14,7 +15,7 @@ import { CcTimePage } from "./pages/time"
 import { CcToolsPage } from "./pages/tools"
 
 export function CcUsagePage() {
-  const { error: showError } = useAppNotifications()
+  const { error: showError, warning: showWarning } = useAppNotifications()
   const [view, setView] = useState<UsageViewId>("today")
   const [range, setRange] = useState<UsageRangePreset>("30d")
   const [trendBucket, setTrendBucket] = useState<UsageTrendBucketGranularity>("day")
@@ -25,7 +26,9 @@ export function CcUsagePage() {
   const refresh = async () => {
     setRefreshing(true)
     try {
-      await requireSynapseBridge().usageAnalysis.cc.refresh()
+      const result = await requireSynapseBridge().usageAnalysis.cc.refresh()
+      const warning = getUsageRefreshWarning(result)
+      if (warning) showWarning(warning)
       setRefreshKey((current) => current + 1)
     } catch {
       showError("刷新失败")
