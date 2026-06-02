@@ -52,6 +52,7 @@ import { useDeletedContent } from "@/modules/content/hooks/use-deleted-content"
 import {
   countSavedContentMutations,
   isContentMutationSaved,
+  summarizeContentMutationConflictTitles,
 } from "@/modules/content/lib/content-mutation"
 import type { SynapseContentSortOrder } from "@/types/config"
 import type { SynapseContentMeta, SynapseContentMutationResult, SynapseContentType } from "@/types/content"
@@ -418,30 +419,35 @@ function ContentBrowserPage({
     logger.info("Batch action initiated.", { action, contentType, count: targets.length })
     setBusyBatchAction(action)
     const results: SynapseContentMutationResult[] = []
+    const conflictItems: SynapseContentMeta[] = []
     let successCount = 0
     try {
       for (const item of targets) {
         try {
           if (action === "restore") {
-            results.push(await restoreContent({ id: item.id, type: contentType, baseHistoryDirname: item.latestHistoryDirname }))
+            const result = await restoreContent({ id: item.id, type: contentType, baseHistoryDirname: item.latestHistoryDirname })
+            results.push(result)
+            if (result.status === "conflict") conflictItems.push(item)
           } else {
-            results.push(await purgeContent({
+            const result = await purgeContent({
               id: item.id,
               type: contentType,
               baseHistoryDirname: item.latestHistoryDirname,
-            }))
+            })
+            results.push(result)
+            if (result.status === "conflict") conflictItems.push(item)
           }
         } catch (err) {
           logger.error("Batch action item failed.", { action, contentId: item.id, contentType, error: err })
         }
       }
       successCount = countSavedContentMutations(results)
-      const conflictCount = results.length - successCount
+      const conflictCount = conflictItems.length
       logger.info("Batch action completed.", { action, contentType, successCount, total: targets.length, elapsedMs: Math.round(performance.now() - startedAt) })
       void Promise.all([deletedContent.refresh(), refresh()])
       const verb = action === "restore" ? "恢复" : "永久删除"
       if (successCount === targets.length) toast.success(`已${verb} ${successCount} 项内容`)
-      else if (conflictCount > 0) toast.warning(`已${verb} ${successCount}/${targets.length} 项，部分内容已变化`)
+      else if (conflictCount > 0) toast.warning(`已${verb} ${successCount}/${targets.length} 项，以下内容已变化：${summarizeContentMutationConflictTitles(conflictItems)}`)
       else toast.warning(`${verb}了 ${successCount}/${targets.length} 项，部分操作失败`)
     } finally {
       setBusyBatchAction(null)

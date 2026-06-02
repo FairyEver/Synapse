@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest"
 import {
   countSavedContentMutations,
   isContentMutationSaved,
+  summarizeContentMutationConflictTitles,
 } from "../content-mutation"
-import type { SynapseContentMutationResult } from "@/types/content"
+import type { SynapseContentMeta, SynapseContentMutationResult } from "@/types/content"
 
 const savedResult: SynapseContentMutationResult = {
   id: "rule-1",
@@ -27,6 +28,29 @@ const conflictResult: SynapseContentMutationResult = {
   latestModifiedByDisplayName: "User",
 }
 
+function contentItem(id: string, title: string): SynapseContentMeta {
+  return {
+    id,
+    type: "rule",
+    name: title,
+    title,
+    description: "",
+    category: "general",
+    icon: "FileText",
+    iconBg: "gray",
+    iconType: "icon",
+    createdAt: "2026-04-28T00:00:00.000Z",
+    createdBy: "user",
+    createdByDisplayName: "User",
+    deleted: false,
+    attachmentCount: 0,
+    latestHistoryDirname: "20260428000000",
+    modifiedAt: "2026-04-28T00:00:00.000Z",
+    modifiedBy: "user",
+    modifiedByDisplayName: "User",
+  }
+}
+
 describe("content mutation helpers", () => {
   it("treats conflict results as not saved", () => {
     expect(isContentMutationSaved(savedResult)).toBe(true)
@@ -35,5 +59,21 @@ describe("content mutation helpers", () => {
 
   it("counts only saved mutation results", () => {
     expect(countSavedContentMutations([savedResult, conflictResult])).toBe(1)
+  })
+
+  it("summarizes conflict item titles", () => {
+    expect(summarizeContentMutationConflictTitles([
+      contentItem("rule-1", "日报"),
+      contentItem("rule-2", "周报"),
+    ])).toBe("「日报」、「周报」")
+  })
+
+  it("limits long conflict title summaries", () => {
+    expect(summarizeContentMutationConflictTitles([
+      contentItem("rule-1", "一"),
+      contentItem("rule-2", "二"),
+      contentItem("rule-3", "三"),
+      contentItem("rule-4", "四"),
+    ])).toBe("「一」、「二」、「三」 等 4 项")
   })
 })

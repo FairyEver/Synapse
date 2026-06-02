@@ -1,4 +1,5 @@
 import type {
+  SynapseContentMeta,
   SynapseContentMutationResult,
   SynapseContentMutationSuccessResult,
 } from "@/types/content"
@@ -13,7 +14,16 @@ function countSavedContentMutations(results: SynapseContentMutationResult[]): nu
   return results.filter(isContentMutationSaved).length
 }
 
+function summarizeContentMutationConflictTitles(items: SynapseContentMeta[], limit = 3): string {
+  const titles = items.slice(0, limit).map((item) => `「${item.title}」`)
+  const remainingCount = items.length - titles.length
+  return remainingCount > 0
+    ? `${titles.join("、")} 等 ${items.length} 项`
+    : titles.join("、")
+}
+
 export {
   countSavedContentMutations,
   isContentMutationSaved,
+  summarizeContentMutationConflictTitles,
 }
