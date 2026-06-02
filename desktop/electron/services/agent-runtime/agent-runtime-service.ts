@@ -612,6 +612,14 @@ export class AgentRuntimeService {
     this.sessionLifecycle.stopIdleReclaim()
   }
 
+  async shutdown(): Promise<void> {
+    this.stopIdleReclaim()
+    const conversationIds = [...this.states.keys()]
+    for (const conversationId of conversationIds) {
+      await this.sessionManager.closeState(conversationId)
+    }
+  }
+
   async getActiveAgentType(): Promise<string> {
     return this.agentType()
   }

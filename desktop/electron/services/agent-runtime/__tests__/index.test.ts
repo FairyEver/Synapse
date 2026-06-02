@@ -153,6 +153,42 @@ describe("createAgentRuntimeProjectService", () => {
     }
   })
 
+  it("closes live sessions when the project-scoped service stops", async () => {
+    const serviceFactory = createAgentRuntimeProjectService()
+    const ctx = createRunnableProjectContext()
+    const service = await serviceFactory.create(ctx)
+    const close = vi.fn(async () => undefined)
+    const states = (service as unknown as {
+      states: Map<string, {
+        activeTurns: number
+        busy: boolean
+        lastActivity: number
+        liveSession?: {
+          alive: () => boolean
+          close: () => Promise<void>
+          currentSessionId: () => string
+        }
+        queue: unknown[]
+      }>
+    }).states
+    states.set("conversation-1", {
+      activeTurns: 0,
+      busy: false,
+      lastActivity: Date.now(),
+      liveSession: {
+        alive: () => true,
+        close,
+        currentSessionId: () => "sdk-1",
+      },
+      queue: [],
+    })
+
+    await serviceFactory.stop?.(service, ctx)
+
+    expect(close).toHaveBeenCalledOnce()
+    expect(states.has("conversation-1")).toBe(false)
+  })
+
   it("keeps ordinary project sessions isolated from knowledge base plugin runtime", async () => {
     createdSessionInputs.values = []
     const serviceFactory = createAgentRuntimeProjectService()
