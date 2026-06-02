@@ -172,11 +172,9 @@
     ],
     "publish": [
       {
-        "provider": "github",
-        "owner": "FairyEver",
-        "repo": "SynapseAppRelease",
-        "releaseType": "release",
-        "tagNamePrefix": "v"
+        "provider": "generic",
+        "url": "https://desktop.release.synapse.d2.pub/",
+        "channel": "latest"
       }
     ],
     "mac": {
