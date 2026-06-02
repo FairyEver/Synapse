@@ -150,6 +150,7 @@ describe("AgentMessageEvent", () => {
       />,
     )
 
+    expect(html).toContain("会话累计")
     expect(html).toContain("输入 100")
     expect(html).toContain("输出 20")
     expect(html).toContain("缓存读 300")

@@ -205,7 +205,7 @@ function AssistantMessageBody({
         messageId={item.id}
         role={item.role === "user" || item.role === "assistant" ? item.role : undefined}
         usage={item.metadata?.usage}
-        usagePrefix={hasUsage ? "累计" : undefined}
+        usagePrefix={hasUsage ? "会话累计" : undefined}
         className={hasUsage
           ? "mt-2 pt-1"
           : "mt-2 pt-1 opacity-0 transition-opacity group-hover/message:opacity-100"}
