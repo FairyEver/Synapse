@@ -251,8 +251,9 @@ export class KnowledgeBaseRawFileManager {
         const target = resolveRawPath(rawRoot, relativePath)
         await assertNoSymlinkInRawPath(rawRoot, relativePath)
         const stat = await lstat(target)
-        entries.push(await entryForPath(rawRoot, target, stat.isDirectory() ? "directory" : "file"))
+        const entry = await entryForPath(rawRoot, target, stat.isDirectory() ? "directory" : "file")
         await this.trashItem(target)
+        entries.push(entry)
       } catch (error) {
         const reason = isInvalidRawPathError(error) ? "invalid-path" : "trash-error"
         knowledgeBaseLogger.warn("Knowledge Base raw entry trash skipped.", {

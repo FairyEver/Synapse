@@ -180,4 +180,20 @@ describe("KnowledgeBaseRawFileManager", () => {
     expect(result.entries).toEqual([])
     expect(result.skipped).toEqual([{ path: "../secret.md", reason: "invalid-path" }])
   })
+
+  it("does not report a raw entry as trashed when trashing fails", async () => {
+    const rawRoot = await tempDir()
+    await writeFile(path.join(rawRoot, "locked.md"), "locked\n", "utf8")
+    const manager = new KnowledgeBaseRawFileManager({
+      trashItem: vi.fn(async () => {
+        throw new Error("trash failed")
+      }),
+    })
+
+    const result = await manager.trashEntries(rawRoot, ["locked.md"])
+
+    expect(result.entries).toEqual([])
+    expect(result.skipped).toEqual([{ path: "locked.md", reason: "trash-error" }])
+    await expect(readFile(path.join(rawRoot, "locked.md"), "utf8")).resolves.toBe("locked\n")
+  })
 })
