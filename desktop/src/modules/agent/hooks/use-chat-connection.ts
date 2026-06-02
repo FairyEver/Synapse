@@ -783,6 +783,7 @@ function useChatConnection(
         errorLength: errorMessage(rawError).length,
       })
       dispatch({ type: "CANCEL_RESET" })
+      dispatch({ type: "SET_ERROR", error: "停止失败" })
     }
   }, [dispatch, getDefaultProjectId, selectedConversationIdRef, selectedProjectIdRef])
 

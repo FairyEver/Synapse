@@ -977,6 +977,10 @@ describe("useAgentChat", () => {
 
     await act(async () => {
       await chat?.cancelTurn()
+    })
+    expect(chat?.error).toBe("停止失败")
+
+    await act(async () => {
       await chat?.forceKillTurn()
     })
 
