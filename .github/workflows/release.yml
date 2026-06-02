@@ -224,10 +224,8 @@ jobs:
           echo "$HOME/.local/bin" >> "$GITHUB_PATH"
           export PATH="$HOME/.local/bin:$PATH"
 
-          tccli cdn PurgeUrlsCache \
-            --Urls.0 "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest.yml" \
-            --Urls.1 "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-mac.yml" \
-            --Area mainland
+          CDN_REFRESH_URLS=$(node -e "console.log(JSON.stringify(['https://${TENCENT_CLOUD_CDN_DOMAIN}/latest.yml', 'https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-mac.yml']))")
+          tccli cdn PurgeUrlsCache --Urls "$CDN_REFRESH_URLS" --Area mainland
 
           curl --fail --silent --show-error --location --head "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest.yml"
           curl --fail --silent --show-error --location --head "https://${TENCENT_CLOUD_CDN_DOMAIN}/latest-mac.yml"
