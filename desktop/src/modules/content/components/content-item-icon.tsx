@@ -7,10 +7,29 @@ import type { SynapseContentIconType, SynapseContentType } from "@/types/content
 
 const logger = createRendererLogger("content.icon")
 
+const MAX_ICON_IMAGE_CACHE_ENTRIES = 200
 const iconImageCache = new Map<string, string>()
 
 function buildCacheKey(contentType: string, contentId: string): string {
   return `${contentType}:${contentId}`
+}
+
+function getCachedIconImage(key: string): string | undefined {
+  const cached = iconImageCache.get(key)
+  if (!cached) return undefined
+  iconImageCache.delete(key)
+  iconImageCache.set(key, cached)
+  return cached
+}
+
+function setCachedIconImage(key: string, dataUrl: string): void {
+  if (iconImageCache.has(key)) iconImageCache.delete(key)
+  iconImageCache.set(key, dataUrl)
+  while (iconImageCache.size > MAX_ICON_IMAGE_CACHE_ENTRIES) {
+    const oldestKey = iconImageCache.keys().next().value
+    if (!oldestKey) return
+    iconImageCache.delete(oldestKey)
+  }
 }
 
 function invalidateIconImageCache(contentType: string, contentId: string): void {
@@ -47,7 +66,7 @@ function ContentItemIcon({
     }
 
     const key = buildCacheKey(contentType, contentId)
-    const cached = iconImageCache.get(key)
+    const cached = getCachedIconImage(key)
     if (cached) {
       setImageDataUrl(cached)
       return
@@ -59,7 +78,7 @@ function ContentItemIcon({
       .readIconImage({ contentType, id: contentId })
       .then((dataUrl) => {
         if (!canceled && dataUrl) {
-          iconImageCache.set(key, dataUrl)
+          setCachedIconImage(key, dataUrl)
           setImageDataUrl(dataUrl)
         }
       })
