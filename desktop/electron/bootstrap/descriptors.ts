@@ -1203,11 +1203,13 @@ export const coreTaskSchedulerDescriptor: ServiceDescriptor<TaskSchedulerService
     "core.permission-guard",
     "core.audit-sink",
     "core.action-runtime",
+    "core.event-bus",
   ],
   create(ctx) {
     const dataRepository = ctx.registry.get<DataRepository>("core.data-repository")
     const permissionGuard = ctx.registry.get<PermissionGuard>("core.permission-guard")
     const auditSink = ctx.registry.get<AuditSink>("core.audit-sink")
+    const eventBus = ctx.registry.get<EventBus>("core.event-bus")
     const defaultCwd = app.getPath("userData")
     const tasks = new ScheduledTaskRepository({
       tasks: dataRepository.namespace("task-scheduler.tasks"),
@@ -1230,6 +1232,7 @@ export const coreTaskSchedulerDescriptor: ServiceDescriptor<TaskSchedulerService
       actions,
       execution,
       defaultCwd,
+      eventBus,
     })
   },
   start(service) {

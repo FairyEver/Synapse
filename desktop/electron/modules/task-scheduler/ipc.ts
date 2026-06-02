@@ -104,6 +104,18 @@ const taskActionSchema = z.object({
 const taskStatusSchema = z.enum(["success", "failed", "timeout", "cancelled", "skipped"])
 const runStatusSchema = z.enum(["running", "success", "failed", "timeout", "cancelled", "skipped"])
 const runTriggerSchema = z.enum(["schedule", "manual", "missed_run"])
+const taskChangedReasonSchema = z.enum([
+  "created",
+  "updated",
+  "deleted",
+  "enabled",
+  "disabled",
+  "scheduled",
+  "run-started",
+  "run-finished",
+  "run-skipped",
+  "run-stopped",
+])
 const activeDaysSchema = z.array(z.number().int().min(0).max(6)).min(1)
 const activeRunSchema = z.object({
   status: z.literal("running"),
@@ -172,6 +184,17 @@ const runSchema = z.object({
   result: actionRunResultSchema.optional(),
   error: z.string().optional(),
   triggeredBy: runTriggerSchema,
+})
+const taskChangedEventPayloadSchema = z.object({
+  taskId: z.string().optional(),
+  runId: z.string().optional(),
+  reason: taskChangedReasonSchema,
+})
+const taskChangedDomainEventSchema = z.object({
+  domain: z.literal("scheduler"),
+  type: z.literal("scheduler.taskChanged"),
+  payload: taskChangedEventPayloadSchema,
+  timestamp: z.string(),
 })
 
 const createTaskInputSchema = z.object({
@@ -381,7 +404,13 @@ export const taskSchedulerIpcModule: IpcModule = {
       },
     },
   },
-  events: {},
+  events: {
+    changed: {
+      kind: "event",
+      channel: "synapse:events:scheduler",
+      payload: taskChangedDomainEventSchema,
+    },
+  },
 }
 
 function errorDiagnostic(rawError: unknown): Record<string, unknown> {

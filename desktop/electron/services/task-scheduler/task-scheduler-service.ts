@@ -1,5 +1,6 @@
 import { computeNextRunAt, resolveStartupSchedule } from "./schedule-calculator"
 import type { MainActionRegistry } from "../../action-runtime/action-registry"
+import type { EventBus } from "../../runtime/event-bus"
 import type { TaskSchedulerExecutionService } from "./execution-service"
 import type { StructuredLogger } from "../../runtime/service-registry"
 import type { ScheduledTaskRunRepository } from "./run-repository"
@@ -23,8 +24,27 @@ export interface TaskSchedulerServiceDeps {
   readonly actions: MainActionRegistry
   readonly execution: TaskSchedulerExecutionService
   readonly defaultCwd: string
+  readonly eventBus?: Pick<EventBus, "emit">
   readonly logger?: StructuredLogger
   readonly now?: () => Date
+}
+
+type TaskSchedulerChangeReason =
+  | "created"
+  | "updated"
+  | "deleted"
+  | "enabled"
+  | "disabled"
+  | "scheduled"
+  | "run-started"
+  | "run-finished"
+  | "run-skipped"
+  | "run-stopped"
+
+type TaskSchedulerChangedPayload = {
+  readonly taskId?: string
+  readonly runId?: string
+  readonly reason: TaskSchedulerChangeReason
 }
 
 export class TaskSchedulerService {
@@ -74,6 +94,7 @@ export class TaskSchedulerService {
   async schedulerTaskCreate(input: ScheduledTaskCreateInput): Promise<ScheduledTaskEntry> {
     const task = await this.deps.tasks.create(input)
     if (this.started && task.enabled && this.isTaskValid(task)) await this.schedule(task.id, task.nextRunAt)
+    this.emitTaskChanged({ taskId: task.id, reason: "created" })
     return this.withRuntimeState(task)
   }
 
@@ -83,6 +104,7 @@ export class TaskSchedulerService {
     try {
       const task = await this.deps.tasks.update(id, patch)
       if (this.started && task.enabled && this.isTaskValid(task)) await this.schedule(task.id, task.nextRunAt)
+      this.emitTaskChanged({ taskId: task.id, reason: "updated" })
       return this.withRuntimeState(task)
     } catch (err) {
       if (this.started && oldTask?.enabled && oldTask.nextRunAt && this.isTaskValid(oldTask)) {
@@ -99,7 +121,9 @@ export class TaskSchedulerService {
     const oldTask = await this.deps.tasks.get(id)
     this.cancel(id)
     try {
-      return { deleted: await this.deps.tasks.delete(id) }
+      const deleted = await this.deps.tasks.delete(id)
+      if (deleted) this.emitTaskChanged({ taskId: id, reason: "deleted" })
+      return { deleted }
     } catch (err) {
       if (this.started && oldTask?.enabled && oldTask.nextRunAt && this.isTaskValid(oldTask)) {
         await this.schedule(oldTask.id, oldTask.nextRunAt)
@@ -125,6 +149,7 @@ export class TaskSchedulerService {
     try {
       const task = await this.deps.tasks.setEnabled(id, enabled)
       if (this.started && task.enabled && this.isTaskValid(task)) await this.schedule(task.id, task.nextRunAt)
+      this.emitTaskChanged({ taskId: task.id, reason: enabled ? "enabled" : "disabled" })
       return this.withRuntimeState(task)
     } catch (err) {
       if (this.started && oldTask?.enabled && oldTask.nextRunAt && this.isTaskValid(oldTask)) {
@@ -163,6 +188,9 @@ export class TaskSchedulerService {
       runFound: Boolean(run),
       boundary: "task-scheduler-stop-run",
     })
+    if (stopped || run) {
+      this.emitTaskChanged({ taskId: run?.taskId, runId, reason: "run-stopped" })
+    }
     return { stopped }
   }
 
@@ -245,6 +273,7 @@ export class TaskSchedulerService {
       this.runScheduledInBackground(id, "schedule")
     }, delayMs)
     this.timers.set(id, timer)
+    this.emitTaskChanged({ taskId: id, reason: "scheduled" })
     this.deps.logger?.info?.("Scheduled task timer set.", {
       taskId: id,
       nextRunAt: nextRunAt.toISOString(),
@@ -310,8 +339,11 @@ export class TaskSchedulerService {
       return this.recordSkipped(task.id, triggeredBy, "task is already running")
     }
     this.runningTaskIds.add(task.id)
+    this.emitTaskChanged({ taskId: task.id, reason: "run-started" })
     try {
-      return await this.deps.execution.runTask(task, triggeredBy)
+      const run = await this.deps.execution.runTask(task, triggeredBy)
+      this.emitTaskChanged({ taskId: task.id, runId: run.id, reason: "run-finished" })
+      return run
     } finally {
       this.runningTaskIds.delete(task.id)
     }
@@ -336,7 +368,17 @@ export class TaskSchedulerService {
       boundary: "task-scheduler-skip-run",
       reason: error,
     })
+    this.emitTaskChanged({ taskId, runId: finished.id, reason: "run-skipped" })
     return finished
+  }
+
+  private emitTaskChanged(payload: TaskSchedulerChangedPayload): void {
+    this.deps.eventBus?.emit({
+      domain: "scheduler",
+      type: "scheduler.taskChanged",
+      payload,
+      timestamp: this.now().toISOString(),
+    }, { backpressure: "coalesce" })
   }
 
   private resolveNextRunAt(task: ScheduledTaskEntry, preferredNextRunAt?: string): Date {

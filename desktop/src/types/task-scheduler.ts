@@ -80,3 +80,19 @@ export type ScheduledTaskRun = {
   error?: string
   triggeredBy: ScheduledTaskRunTrigger
 }
+
+export type ScheduledTaskChangedEvent = {
+  taskId?: string
+  runId?: string
+  reason:
+    | "created"
+    | "updated"
+    | "deleted"
+    | "enabled"
+    | "disabled"
+    | "scheduled"
+    | "run-started"
+    | "run-finished"
+    | "run-skipped"
+    | "run-stopped"
+}

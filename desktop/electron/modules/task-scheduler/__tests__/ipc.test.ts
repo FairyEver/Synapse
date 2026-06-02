@@ -14,6 +14,25 @@ vi.mock("../../../services/log-store", () => ({
 }))
 
 describe("taskSchedulerIpcModule", () => {
+  it("declares a scheduler task changed event", () => {
+    expect(taskSchedulerIpcModule.events.changed.channel).toBe("synapse:events:scheduler")
+    expect(taskSchedulerIpcModule.events.changed.payload.parse({
+      domain: "scheduler",
+      type: "scheduler.taskChanged",
+      payload: {
+        taskId: "task:1",
+        runId: "run:1",
+        reason: "run-finished",
+      },
+      timestamp: "2026-04-29T00:00:00.000Z",
+    })).toMatchObject({
+      payload: {
+        taskId: "task:1",
+        runId: "run:1",
+      },
+    })
+  })
+
   it("routes task CRUD and run calls", async () => {
     const service = {
       schedulerTaskList: vi.fn(async () => []),

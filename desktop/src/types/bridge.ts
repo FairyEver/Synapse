@@ -164,6 +164,7 @@ import type {
 import type { SynapseAppUpdateState } from "./update"
 import type {
   ScheduledTask,
+  ScheduledTaskChangedEvent,
   ScheduledTaskCreateInput,
   ScheduledTaskRun,
   ScheduledTaskUpdateInput,
@@ -828,6 +829,7 @@ export type SynapseBridge = {
     listRuns: (taskId: string, options?: { limit?: number }) => Promise<ScheduledTaskRun[]>
     exportTasksToFile: (json: string) => Promise<{ success: boolean; path?: string }>
     importTasksFromFile: () => Promise<{ success: boolean; content?: string }>
+    onChanged: (listener: (event: ScheduledTaskChangedEvent) => void) => () => void
   }
   tools: {
     listTools: () => Promise<{ tools: readonly SynapseToolDefinition[] }>

@@ -20,6 +20,7 @@ const rendererLogger = vi.hoisted(() => ({
 const bridge = vi.hoisted(() => ({
   taskScheduler: {
     listTasks: vi.fn(),
+    onChanged: vi.fn(),
   },
 }))
 
@@ -42,9 +43,50 @@ afterEach(() => {
   roots = []
   document.body.innerHTML = ""
   vi.clearAllMocks()
+  bridge.taskScheduler.listTasks.mockReset()
+  bridge.taskScheduler.onChanged.mockReset()
 })
 
 describe("useTaskSchedulerTasks", () => {
+  it("refreshes tasks when the scheduler emits a change event", async () => {
+    const initialTask = createTask({ id: "task-1", runCount: 0 })
+    const updatedTask = createTask({
+      id: "task-1",
+      lastRunAt: "2026-04-29T00:10:00.000Z",
+      lastStatus: "success",
+      runCount: 1,
+    })
+    let listener: (() => void) | null = null
+    const snapshots: Array<ReturnType<typeof useTaskSchedulerTasks>> = []
+    bridge.taskScheduler.listTasks
+      .mockResolvedValueOnce([initialTask])
+      .mockResolvedValueOnce([updatedTask])
+    bridge.taskScheduler.onChanged.mockImplementation((nextListener) => {
+      listener = nextListener
+      return vi.fn()
+    })
+
+    const container = document.createElement("div")
+    document.body.appendChild(container)
+    const root = createRoot(container)
+    roots.push(root)
+
+    await act(async () => {
+      root.render(<Probe onSnapshot={(state) => snapshots.push(state)} />)
+    })
+
+    expect(snapshots.at(-1)?.tasks).toEqual([initialTask])
+    expect(bridge.taskScheduler.onChanged).toHaveBeenCalledTimes(1)
+
+    await act(async () => {
+      listener?.()
+      await Promise.resolve()
+    })
+
+    expect(bridge.taskScheduler.listTasks).toHaveBeenCalledTimes(2)
+    expect(snapshots.at(-1)?.tasks).toEqual([updatedTask])
+  })
+
   it("keeps loaded tasks visible while a refresh is in flight", async () => {
     const task = createTask()
     let resolveRefresh: (tasks: ScheduledTask[]) => void = () => {}

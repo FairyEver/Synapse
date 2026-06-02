@@ -6,6 +6,7 @@ import {
   type ActionExecutionInput,
   type MainActionDefinition,
 } from "../../../action-runtime/action-registry"
+import type { EventBus } from "../../../runtime/event-bus"
 import type { DataChangeListener, DataNamespace } from "../../../runtime/data-repo"
 import type { AuditSink, PermissionGuard } from "../../../runtime/security"
 import type { StructuredLogger } from "../../../runtime/service-registry"
@@ -77,6 +78,29 @@ describe("TaskSchedulerService", () => {
     expect(running).toBeDefined()
     await harness.service.stopRun(running!.id)
     await runPromise
+  })
+
+  it("emits scheduler change events when a scheduled run finishes", async () => {
+    const emit = vi.fn()
+    const eventBus: Pick<EventBus, "emit"> = { emit: emit as unknown as EventBus["emit"] }
+    const harness = createHarness({ eventBus })
+    await harness.taskItems.upsert(createTask({ id: "task:1" }))
+
+    const result = await harness.service.triggerForTest("task:1", "schedule")
+
+    expect(result?.status).toBe("success")
+    expect(emit).toHaveBeenCalledWith(
+      expect.objectContaining({
+        domain: "scheduler",
+        type: "scheduler.taskChanged",
+        payload: expect.objectContaining({
+          taskId: "task:1",
+          runId: result?.id,
+          reason: "run-finished",
+        }),
+      }),
+      { backpressure: "coalesce" },
+    )
   })
 
   it("stops running task by run id", async () => {
@@ -292,6 +316,7 @@ describe("TaskSchedulerService", () => {
 
 function createHarness(options: {
   readonly action?: MainActionDefinition
+  readonly eventBus?: Pick<EventBus, "emit">
   readonly permissionGuard?: PermissionGuard
   readonly logger?: StructuredLogger
 } = {}) {
@@ -324,6 +349,7 @@ function createHarness(options: {
     execution,
     defaultCwd: "/tmp",
     now: () => new Date("2026-04-29T10:00:00.000Z"),
+    eventBus: options.eventBus,
     logger: options.logger,
   }
   return {

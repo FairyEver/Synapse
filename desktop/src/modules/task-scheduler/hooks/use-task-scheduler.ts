@@ -41,6 +41,12 @@ function useTaskSchedulerTasks() {
     void refresh()
   }, [refresh])
 
+  useEffect(() => {
+    return requireSynapseBridge().taskScheduler.onChanged(() => {
+      void refresh()
+    })
+  }, [refresh])
+
   return {
     tasks,
     loading,

@@ -19,6 +19,7 @@ import type {
   SynapseRepositoryUpdatedEvent,
 } from "../src/types/repository"
 import type { SynapseAppUpdateState } from "../src/types/update"
+import type { ScheduledTaskChangedEvent } from "../src/types/task-scheduler"
 import type { WorkflowEvent } from "../src/types/workflow"
 import type { SynapseCheatCodeStateChangedEvent } from "../src/types/cheat-code"
 import type { IpcChannelMap } from "./generated/ipc-channels.generated"
@@ -755,6 +756,11 @@ const synapseBridge: SynapseBridge = {
       invoke(IPC_CHANNELS["task-scheduler"].listRuns)({ taskId, limit: options?.limit }),
     exportTasksToFile: (json) => invoke(IPC_CHANNELS["task-scheduler"].exportTasksToFile)({ json }),
     importTasksFromFile: () => invoke(IPC_CHANNELS["task-scheduler"].importTasksFromFile)(),
+    onChanged: createDomainEventPayloadSubscription<ScheduledTaskChangedEvent>(
+      subscribe,
+      "scheduler",
+      "scheduler.taskChanged",
+    ),
   },
   tools: {
     listTools: () => invoke(IPC_CHANNELS.tools.listTools)({}),
