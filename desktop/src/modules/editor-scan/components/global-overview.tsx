@@ -41,6 +41,14 @@ function GlobalOverview({
   onSkillSelectionChange,
 }: GlobalOverviewProps) {
   if (contentTab === "skill") {
+    if (result.skillScanError) {
+      return (
+        <p className="text-sm text-destructive">
+          {result.skillScanError}
+        </p>
+      )
+    }
+
     if (result.skills.length === 0) {
       return (
         <p className="text-sm text-muted-foreground">

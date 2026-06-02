@@ -54,6 +54,7 @@ const editorScanEditorResultSchema = z.object({
   editorId: z.string(),
   editorLabel: z.string(),
   skills: z.array(editorScanSkillItemSchema),
+  skillScanError: z.string().optional(),
   rules: z.array(editorScanRuleItemSchema),
 })
 

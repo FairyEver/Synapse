@@ -66,7 +66,7 @@ function ProjectOverview({
       .filter(({ project, editorEntry }) => {
         if (!project.pathExists) return true
         if (!editorEntry) return false
-        if (contentTab === "skill") return editorEntry.skills.length > 0
+        if (contentTab === "skill") return editorEntry.skills.length > 0 || Boolean(editorEntry.skillScanError)
         return editorEntry.rules.length > 0
       })
   }, [projects, selectedEditorId, contentTab])
@@ -102,6 +102,11 @@ function ProjectOverview({
                 </Badge>
               )}
             </div>
+            {project.pathExists && contentTab === "skill" && editorEntry?.skillScanError ? (
+              <p className="text-sm text-destructive">
+                {editorEntry.skillScanError}
+              </p>
+            ) : null}
             {project.pathExists && items.length > 0 ? (
               <>
                 <div className="grid grid-cols-2 gap-2">

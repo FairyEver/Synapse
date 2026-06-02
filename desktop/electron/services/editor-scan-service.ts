@@ -365,14 +365,22 @@ async function readSynapseSkillMeta(
 
 // --- skill scanning ---
 
-async function scanSkillsDirectory(dirPath: string): Promise<EditorScanSkillItem[]> {
-  if (!(await pathExists(dirPath))) return []
+const SKILL_SCAN_READ_ERROR = "Skill 目录读取失败"
+
+type SkillDirectoryScanResult = {
+  items: EditorScanSkillItem[]
+  error?: string
+}
+
+async function scanSkillsDirectory(dirPath: string): Promise<SkillDirectoryScanResult> {
+  if (!(await pathExists(dirPath))) return { items: [] }
 
   let entries
   try {
     entries = await readdir(dirPath, { withFileTypes: true })
-  } catch {
-    return []
+  } catch (error) {
+    logger.warn("Failed to read skill scan root.", { dirPath, error })
+    return { items: [], error: SKILL_SCAN_READ_ERROR }
   }
 
   const items: EditorScanSkillItem[] = []
@@ -406,7 +414,7 @@ async function scanSkillsDirectory(dirPath: string): Promise<EditorScanSkillItem
     }
   }
 
-  return items
+  return { items }
 }
 
 // --- per-editor scan helpers ---
@@ -446,6 +454,7 @@ async function scanGlobalEditor(ep: EditorScanPaths): Promise<EditorScanGlobalRe
       editorLabel: ep.editorLabel,
       status: detected ? "detected" : "not-detected",
       skills: skillScan.skills,
+      skillScanError: skillScan.skillScanError,
       duplicateSkillNames: skillScan.duplicateSkillNames,
       rules,
       rulesSupported: ep.rulesSupported,
@@ -469,15 +478,17 @@ async function scanGlobalEditor(ep: EditorScanPaths): Promise<EditorScanGlobalRe
 
 async function scanSkillDirectories(
   dirPaths: readonly string[],
-): Promise<{ skills: EditorScanSkillItem[]; duplicateSkillNames: string[] }> {
+): Promise<{ skills: EditorScanSkillItem[]; duplicateSkillNames: string[]; skillScanError?: string }> {
   const skills: EditorScanSkillItem[] = []
   const seenNames = new Set<string>()
   const duplicateNames = new Set<string>()
+  const errors: string[] = []
 
   for (const dirPath of dirPaths) {
-    const items = await scanSkillsDirectory(dirPath)
+    const result = await scanSkillsDirectory(dirPath)
+    if (result.error) errors.push(result.error)
 
-    for (const item of items) {
+    for (const item of result.items) {
       if (seenNames.has(item.name)) {
         duplicateNames.add(item.name)
         continue
@@ -491,6 +502,7 @@ async function scanSkillDirectories(
   return {
     skills,
     duplicateSkillNames: Array.from(duplicateNames).sort((a, b) => a.localeCompare(b)),
+    skillScanError: errors[0],
   }
 }
 
@@ -535,14 +547,15 @@ async function scanProject(
     const editorPaths = getProjectEditorPaths(projectPath)
     const editorResults = await Promise.allSettled(
       editorPaths.map(async (ep): Promise<EditorScanProjectEntry> => {
-        const [skills, rules] = await Promise.all([
-          scanSkillsDirectory(ep.skillsPath),
+        const [skillScan, rules] = await Promise.all([
+          scanSkillDirectories([ep.skillsPath]),
           scanRulesForEditor(ep.editorId, ep.rulesPath),
         ])
         return {
           editorId: ep.editorId,
           editorLabel: ep.editorLabel,
-          skills,
+          skills: skillScan.skills,
+          skillScanError: skillScan.skillScanError,
           rules,
         }
       }),

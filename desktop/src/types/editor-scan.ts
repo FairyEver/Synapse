@@ -39,6 +39,7 @@ export type EditorScanGlobalResult = {
   editorLabel: string
   status: EditorScanEditorStatus
   skills: EditorScanSkillItem[]
+  skillScanError?: string
   duplicateSkillNames: string[]
   rules: EditorScanRuleItem[]
   rulesSupported: boolean
@@ -48,6 +49,7 @@ export type EditorScanProjectEntry = {
   editorId: SynapseEditorId
   editorLabel: string
   skills: EditorScanSkillItem[]
+  skillScanError?: string
   rules: EditorScanRuleItem[]
 }
 

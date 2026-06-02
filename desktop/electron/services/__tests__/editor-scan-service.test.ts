@@ -256,6 +256,22 @@ describe("editor scan quick publish", () => {
     expect(files.some((file) => file.name.includes("too-deep.txt"))).toBe(false)
   })
 
+  it("reports unreadable skill roots instead of returning an empty scan", async () => {
+    const root = await createTempDir()
+    const skillsPath = path.join(root, "skills")
+    await mkdir(skillsPath, { recursive: true })
+    await chmod(skillsPath, 0o000)
+
+    try {
+      const result = await scanSkillDirectories([skillsPath])
+
+      expect(result.skills).toEqual([])
+      expect(result.skillScanError).toBe("Skill 目录读取失败")
+    } finally {
+      await chmod(skillsPath, 0o700)
+    }
+  })
+
   it("creates a skill draft with nested binary attachments from the scan scope", async () => {
     const root = await createTempDir()
     const skillDir = path.join(root, "release-helper")
