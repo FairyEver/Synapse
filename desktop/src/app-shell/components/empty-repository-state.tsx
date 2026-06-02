@@ -18,6 +18,7 @@ import { Label } from "@/components/ui/label"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import { getRepositoryNameFromPath } from "@/lib/path-utils"
+import { getRepositoryInitializationDangerMessage } from "@/lib/repository-initialization"
 import { cn } from "@/lib/utils"
 import type { SynapseRepositoryInitializationPreview } from "@/types/repository"
 
@@ -117,6 +118,16 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
       const validationResult = await validateDirectory(selectedPath)
       if (!validationResult.isValid) {
         if (validationResult.missingDirectories.length === 5) {
+          const dangerMessage = getRepositoryInitializationDangerMessage(validationResult.initializationPreview)
+          if (dangerMessage) {
+            logger.warn("Chosen directory initialization blocked by danger flags.", {
+              dangerFlags: validationResult.initializationPreview.dangerFlags,
+              localPath: selectedPath,
+            })
+            showError(dangerMessage, { durationMs: 6000 })
+            return
+          }
+
           logger.info("Chosen directory can be initialized from empty state.", {
             isEmpty: validationResult.initializationPreview.isEmpty,
             localPath: selectedPath,
@@ -247,6 +258,18 @@ function EmptyRepositoryState({ reason }: EmptyRepositoryStateProps) {
     selectedPath: string,
     preview?: SynapseRepositoryInitializationPreview,
   ) => {
+    if (preview) {
+      const dangerMessage = getRepositoryInitializationDangerMessage(preview)
+      if (dangerMessage) {
+        logger.warn("Repository initialization blocked by danger flags from empty state.", {
+          dangerFlags: preview.dangerFlags,
+          localPath: selectedPath,
+        })
+        showError(dangerMessage, { durationMs: 6000 })
+        return
+      }
+    }
+
     setIsInitializing(true)
     const startedAt = performance.now()
     let persistedRepositoryUuid: string | null = null

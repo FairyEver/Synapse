@@ -29,6 +29,7 @@ import { Label } from "@/components/ui/label"
 import { DEFAULT_REPOSITORY_CONTENT_DIRECTORIES } from "@/constants/defaults"
 import { arePathsEqualForCompare } from "@/lib/path-compare"
 import { getRepositoryNameFromPath } from "@/lib/path-utils"
+import { getRepositoryInitializationDangerMessage } from "@/lib/repository-initialization"
 import { getRendererPlatform } from "@/lib/runtime-platform"
 import { RepositoryListItem } from "@/modules/settings/components/repository-list-item"
 import type { SynapseRepositoryConfig } from "@/types/config"
@@ -398,6 +399,18 @@ function RepositoryListEditor({
     repository: SynapseRepositoryConfig,
     preview?: SynapseRepositoryInitializationPreview,
   ) => {
+    if (preview) {
+      const dangerMessage = getRepositoryInitializationDangerMessage(preview)
+      if (dangerMessage) {
+        logger.warn("Repository initialization blocked by danger flags from settings.", {
+          dangerFlags: preview.dangerFlags,
+          repositoryUuid: repository.uuid,
+        })
+        setFormError(dangerMessage)
+        return
+      }
+    }
+
     setInitializingUuid(repository.uuid)
     logger.info("Repository initialization started.", { repositoryUuid: repository.uuid })
     const startedAt = performance.now()
@@ -430,6 +443,15 @@ function RepositoryListEditor({
   const handleInitializeRepository = async (repository: SynapseRepositoryConfig) => {
     try {
       const preview = await checkInitializationPreview(repository.uuid)
+      const dangerMessage = getRepositoryInitializationDangerMessage(preview)
+      if (dangerMessage) {
+        logger.warn("Repository initialization preview blocked by danger flags.", {
+          dangerFlags: preview.dangerFlags,
+          repositoryUuid: repository.uuid,
+        })
+        setFormError(dangerMessage)
+        return
+      }
 
       if (preview.isEmpty) {
         await runInitialization(repository)

@@ -99,6 +99,33 @@ function findButton(label: string): HTMLButtonElement {
 }
 
 describe("EmptyRepositoryState", () => {
+  it("blocks initialization preview danger flags before opening confirm dialog", async () => {
+    mocks.chooseDirectory.mockResolvedValue("/Users/me/Desktop")
+    mocks.validateDirectory.mockResolvedValue({
+      initializationPreview: {
+        dangerFlags: ["desktop"],
+        isEmpty: true,
+        nonGitEntries: [],
+        operationToken: "token-1",
+      },
+      isValid: false,
+      message: "该目录不是有效的 Synapse 仓库。",
+      missingDirectories: ["rules", "skills", "prompts", "system/users", "system/blobs"],
+    })
+    renderEmptyState()
+
+    await act(async () => {
+      findButton("选择已有目录").click()
+      await Promise.resolve()
+    })
+
+    expect(mocks.error).toHaveBeenCalledWith("该目录位置风险较高，不能直接初始化。请选择空目录或新建本地仓库。", { durationMs: 6000 })
+    expect(document.body.textContent).not.toContain("该目录尚未包含 Synapse 仓库结构")
+    expect(document.body.textContent).not.toContain("检测到目录中存在以下内容")
+    expect(mocks.initializeRepository).not.toHaveBeenCalled()
+    expect(mocks.updateConfig).not.toHaveBeenCalled()
+  })
+
   it("shows a destructive preview before initializing a non-empty non-Synapse directory", async () => {
     vi.useFakeTimers()
     mocks.chooseDirectory.mockResolvedValue("/repo")
