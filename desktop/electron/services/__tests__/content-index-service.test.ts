@@ -1,5 +1,6 @@
 import { EventEmitter } from "node:events"
 import { afterEach, describe, expect, it, vi } from "vitest"
+import type { SynapseContentMeta } from "../../../src/types/content"
 
 const spawnMock = vi.hoisted(() => vi.fn())
 
@@ -70,5 +71,60 @@ describe("content-index-service git helpers", () => {
     })).rejects.toThrow(failure)
 
     expect(exec.mock.calls.map(([sql]) => sql)).toEqual(["BEGIN IMMEDIATE", "ROLLBACK"])
+  })
+
+  it("preserves usage while mapping content summaries to database rows", async () => {
+    const {
+      _fromDatabaseRowForTests,
+      _toDatabaseRowForTests,
+    } = await import("../content-index-service")
+    const summary: SynapseContentMeta<"rule"> = {
+      attachmentCount: 0,
+      category: "General",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      createdBy: "user",
+      createdByDisplayName: "User",
+      deleted: false,
+      description: "Description",
+      icon: "file-text",
+      iconBg: "default",
+      id: "rule-1",
+      latestHistoryDirname: "20260101000000Z__user__abc123",
+      modifiedAt: "2026-01-02T00:00:00.000Z",
+      modifiedBy: "user",
+      modifiedByDisplayName: "User",
+      title: "Rule",
+      type: "rule",
+      usage: "Use this rule when triaging content.",
+    }
+
+    const row = _toDatabaseRowForTests(summary, new Map())
+
+    expect(row.usage).toBe("Use this rule when triaging content.")
+    expect(_fromDatabaseRowForTests({
+      attachment_count: row.attachmentCount,
+      category: row.category,
+      created_at: row.createdAt,
+      created_by: row.createdBy,
+      created_by_name: row.createdByDisplayName,
+      deleted: row.deleted,
+      description: row.description,
+      icon: row.icon,
+      icon_bg: row.iconBg,
+      icon_image: row.iconImage,
+      icon_type: row.iconType,
+      id: row.id,
+      latest_history_dirname: row.latestHistoryDirname,
+      modified_at: row.modifiedAt,
+      modified_by: row.modifiedBy,
+      modified_by_name: row.modifiedByDisplayName,
+      name: row.name,
+      title: row.title,
+      type: row.type,
+      usage: row.usage,
+    })).toMatchObject({
+      id: "rule-1",
+      usage: "Use this rule when triaging content.",
+    })
   })
 })

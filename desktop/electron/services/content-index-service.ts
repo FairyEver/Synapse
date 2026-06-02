@@ -52,6 +52,7 @@ function toDatabaseRow(
     ),
     deleted: summary.deleted ? 1 : 0,
     description: summary.description,
+    usage: summary.usage ?? null,
     icon: summary.icon,
     iconBg: summary.iconBg,
     iconType: summary.iconType ?? "icon",
@@ -94,6 +95,7 @@ function fromDatabaseRow(row: Record<string, unknown>): SynapseContentMeta | nul
 
   const rawName = row.name
   const trimmedName = typeof rawName === "string" ? rawName.trim() : ""
+  const rawUsage = row.usage
 
   return {
     id: row.id,
@@ -101,6 +103,7 @@ function fromDatabaseRow(row: Record<string, unknown>): SynapseContentMeta | nul
     title: row.title,
     ...(trimmedName.length > 0 ? { name: trimmedName } : {}),
     description: row.description,
+    ...(typeof rawUsage === "string" && rawUsage.length > 0 ? { usage: rawUsage } : {}),
     category: row.category,
     icon: row.icon,
     iconBg: row.icon_bg,
@@ -263,16 +266,17 @@ class ContentIndexService {
       database.exec("DELETE FROM content_index")
       const upsertStatement = database.prepare(`
         INSERT INTO content_index (
-          id, type, title, name, description, category, icon, icon_bg,
+          id, type, title, name, description, usage, category, icon, icon_bg,
           icon_type, icon_image,
           modified_by, modified_by_name, modified_at, created_by, created_by_name,
           created_at, deleted, latest_history_dirname, attachment_count
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
           type = excluded.type,
           title = excluded.title,
           name = excluded.name,
           description = excluded.description,
+          usage = excluded.usage,
           category = excluded.category,
           icon = excluded.icon,
           icon_bg = excluded.icon_bg,
@@ -298,6 +302,7 @@ class ContentIndexService {
           row.title,
           row.name,
           row.description,
+          row.usage,
           row.category,
           row.icon,
           row.iconBg,
@@ -422,16 +427,17 @@ class ContentIndexService {
       await runRepositoryCacheWriteTransaction(database, () => {
         const upsertStatement = database.prepare(`
           INSERT INTO content_index (
-            id, type, title, name, description, category, icon, icon_bg,
+            id, type, title, name, description, usage, category, icon, icon_bg,
             icon_type, icon_image,
             modified_by, modified_by_name, modified_at, created_by, created_by_name,
             created_at, deleted, latest_history_dirname, attachment_count
-          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
             type = excluded.type,
             title = excluded.title,
             name = excluded.name,
             description = excluded.description,
+            usage = excluded.usage,
             category = excluded.category,
             icon = excluded.icon,
             icon_bg = excluded.icon_bg,
@@ -464,6 +470,7 @@ class ContentIndexService {
             row.title,
             row.name,
             row.description,
+            row.usage,
             row.category,
             row.icon,
             row.iconBg,
@@ -513,6 +520,8 @@ const contentIndexService = new ContentIndexService()
 
 export {
   contentIndexService,
+  fromDatabaseRow as _fromDatabaseRowForTests,
   runGitText as _runGitTextForTests,
   runRepositoryCacheWriteTransaction as _runRepositoryCacheWriteTransactionForTests,
+  toDatabaseRow as _toDatabaseRowForTests,
 }

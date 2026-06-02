@@ -58,6 +58,7 @@ function ensureRepositoryCacheSchema(
       title TEXT,
       name TEXT,
       description TEXT,
+      usage TEXT,
       category TEXT,
       icon TEXT,
       icon_bg TEXT,
@@ -94,8 +95,9 @@ function ensureRepositoryCacheSchema(
     }
   }
 
-  // Migrate older DBs that predate icon image support.
+  // Migrate older DBs that predate newer content metadata columns.
   for (const stmt of [
+    `ALTER TABLE content_index ADD COLUMN usage TEXT`,
     `ALTER TABLE content_index ADD COLUMN icon_type TEXT DEFAULT 'icon'`,
     `ALTER TABLE content_index ADD COLUMN icon_image TEXT`,
   ]) {
