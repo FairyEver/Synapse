@@ -164,6 +164,45 @@ describe("ConversationRouter", () => {
     expect(session.sent).toEqual([])
   })
 
+  it("logs command event history persistence failures without interrupting command results", async () => {
+    const warn = vi.fn()
+    const logger = {
+      warn,
+    } as unknown as NonNullable<ConversationRouterDeps["logger"]>
+    const commandRouter = {
+      handle: vi.fn(async (): Promise<AgentRuntimeTurnResult> => ({
+        conversationId: conversationId("local", "s1", "active"),
+        events: [{ type: "error", message: "command failed" }],
+        resultText: "",
+        error: "command failed",
+      })),
+    } as unknown as AgentCommandRouter
+    const session = new ScriptedSession([
+      { type: "result", content: "should not run", done: true },
+    ])
+    const { repository, router } = createRouter({ commandRouter, logger, session })
+    vi.spyOn(repository, "appendHistory").mockImplementation(async () => {
+      throw new Error("history write failed token=sk-secret")
+    })
+
+    const result = await router.send(baseMessage("/status"))
+
+    expect(result.error).toBe("command failed")
+    expect(session.sent).toEqual([])
+    expect(warn).toHaveBeenCalledWith(
+      "AgentRuntime history persistence failed.",
+      expect.objectContaining({
+        boundary: "agent-runtime.history-persistence",
+        projectId: "project-1",
+        conversationId: conversationId("local", "s1", "active"),
+        eventType: "error",
+        errorName: "Error",
+        errorLength: "history write failed token=sk-secret".length,
+      }),
+    )
+    expect(JSON.stringify(warn.mock.calls)).not.toContain("sk-secret")
+  })
+
   it("annotates allowed native slash passthrough after SDK send accepts the original message", async () => {
     const agentEvents = new MemoryNamespace<AgentEventEntryV1>("agent.events")
     const commandRouter = {

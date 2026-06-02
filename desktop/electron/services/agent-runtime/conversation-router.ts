@@ -1108,7 +1108,17 @@ export class ConversationRouter {
   ): Promise<void> {
     const entry = historyEntryForAgentEvent(event)
     if (!entry) return
-    await this.repository.appendHistory(conversationId, entry.role, entry.content, entry.metadata)
+    try {
+      await this.repository.appendHistory(conversationId, entry.role, entry.content, entry.metadata)
+    } catch (error) {
+      this.deps.logger?.warn("AgentRuntime history persistence failed.", {
+        boundary: "agent-runtime.history-persistence",
+        projectId: this.deps.projectId,
+        conversationId,
+        eventType: event.type,
+        ...queuedTurnFailureMetadata(error),
+      })
+    }
   }
 
   private async persistAgentEvent(
