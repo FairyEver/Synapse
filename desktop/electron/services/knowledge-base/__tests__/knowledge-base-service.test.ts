@@ -133,6 +133,32 @@ describe("KnowledgeBaseService", () => {
     await expect(readFile(path.join(templateRoot, ".vault-meta", "address-counter.txt"), "utf8")).resolves.toBe("3\n")
   })
 
+  it("rejects concurrent managed knowledge base creation for the same project", async () => {
+    const templateRoot = await tempDir()
+    await mkdir(path.join(templateRoot, "wiki"), { recursive: true })
+    await mkdir(path.join(templateRoot, ".raw"), { recursive: true })
+    await mkdir(path.join(templateRoot, ".vault-meta"), { recursive: true })
+    await mkdir(path.join(templateRoot, ".claude-plugin"), { recursive: true })
+    await writeFile(path.join(templateRoot, "wiki", "index.md"), "# Example Index\n", "utf8")
+    await writeFile(path.join(templateRoot, ".vault-meta", "address-counter.txt"), "3\n", "utf8")
+    await writeFile(path.join(templateRoot, ".claude-plugin", "plugin.json"), "{\"name\":\"kb\"}\n", "utf8")
+
+    const userDataPath = await tempDir()
+    const service = new KnowledgeBaseService({ managedTemplateRoot: templateRoot, userDataPath })
+
+    const results = await Promise.allSettled([
+      service.createManaged({ projectId: "kb-1", name: "Knowledge" }),
+      service.createManaged({ projectId: "kb-1", name: "Knowledge" }),
+    ])
+
+    expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1)
+    const rejected = results.find((result) => result.status === "rejected")
+    expect(rejected).toBeDefined()
+    expect(rejected?.reason).toEqual(expect.objectContaining({
+      message: "知识库正在创建，请稍后重试。",
+    }))
+  })
+
   it("removes a partially created managed runtime when initialization fails", async () => {
     const userDataPath = await tempDir()
     const templateRoot = path.join(userDataPath, "missing-template")

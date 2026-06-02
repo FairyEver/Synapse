@@ -63,6 +63,7 @@ export class KnowledgeBaseService {
   private readonly fetchUrl: FetchUrl
   private readonly rawFileManager: KnowledgeBaseRawFileManager
   private readonly trashItem: (targetPath: string) => Promise<void>
+  private readonly activeManagedCreates = new Set<string>()
 
   constructor(deps: KnowledgeBaseServiceDeps = {}) {
     this.managedTemplateRoot = deps.managedTemplateRoot ?? resolveManagedTemplateRoot()
@@ -78,6 +79,18 @@ export class KnowledgeBaseService {
   }
 
   async createManaged(payload: SynapseKnowledgeBaseCreateManagedPayload): Promise<SynapseKnowledgeBaseCreateManagedResult> {
+    if (this.activeManagedCreates.has(payload.projectId)) {
+      throw new Error("知识库正在创建，请稍后重试。")
+    }
+    this.activeManagedCreates.add(payload.projectId)
+    try {
+      return await this.createManagedUnlocked(payload)
+    } finally {
+      this.activeManagedCreates.delete(payload.projectId)
+    }
+  }
+
+  private async createManagedUnlocked(payload: SynapseKnowledgeBaseCreateManagedPayload): Promise<SynapseKnowledgeBaseCreateManagedResult> {
     const project: SynapseProjectConfig = {
       id: payload.projectId,
       name: payload.name,
