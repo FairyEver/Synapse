@@ -3,7 +3,6 @@ import {
   ChevronsUpDown,
   LogOut,
   Settings,
-  UserCircle,
 } from 'lucide-react'
 import useDialogState from '@/hooks/use-dialog-state'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -76,14 +75,6 @@ export function NavUser({ user }: NavUserProps) {
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
               <DropdownMenuGroup>
-                {user.profileUrl ? (
-                  <DropdownMenuItem asChild>
-                    <Link to={user.profileUrl}>
-                      <UserCircle />
-                      个人中心
-                    </Link>
-                  </DropdownMenuItem>
-                ) : null}
                 <DropdownMenuItem asChild>
                   <Link to='/settings'>
                     <Settings />

@@ -266,7 +266,7 @@ export function DesktopAuth({ search }: DesktopAuthProps) {
           <Button
             type='button'
             variant='outline'
-            onClick={() => navigate({ to: '/me', replace: true })}
+            onClick={() => navigate({ to: '/settings', replace: true })}
           >
             返回首页
           </Button>

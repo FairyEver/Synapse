@@ -11,7 +11,7 @@ function collectUrls(data: ReturnType<typeof getSidebarData>) {
 }
 
 describe('getSidebarData', () => {
-  it('keeps personal center available for normal users', () => {
+  it('keeps settings available for normal users', () => {
     const data = getSidebarData({
       email: 'user@example.com',
       displayName: 'Ada Lovelace',
@@ -20,9 +20,10 @@ describe('getSidebarData', () => {
       sessionId: 'session-1',
     })
 
-    expect(data.user.profileUrl).toBe('/me')
+    expect(data.user.profileUrl).toBeUndefined()
     expect(data.user.name).toBe('Ada Lovelace')
-    expect(collectUrls(data)).toContain('/me')
+    expect(collectUrls(data)).toContain('/settings')
+    expect(collectUrls(data)).not.toContain('/me')
   })
 
   it('does not expose normal-user profile entry to admins', () => {

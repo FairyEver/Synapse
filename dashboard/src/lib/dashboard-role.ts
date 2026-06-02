@@ -11,7 +11,7 @@ const adminPaths = new Set([
 ])
 
 export function getDashboardHomePath(role: DashboardRole | null | undefined) {
-  return role === 'user' ? '/me' : '/system'
+  return role === 'user' ? '/settings' : '/system'
 }
 
 export function isDashboardAdminPath(path: string) {
@@ -24,6 +24,6 @@ export function resolveDashboardRedirectForRole(
   redirectTo: string | undefined
 ) {
   if (!redirectTo || redirectTo === '/') return getDashboardHomePath(role)
-  if (role === 'user' && isDashboardAdminPath(redirectTo)) return '/me'
+  if (role === 'user' && isDashboardAdminPath(redirectTo)) return '/settings'
   return redirectTo
 }

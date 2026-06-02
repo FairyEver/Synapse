@@ -1,5 +1,5 @@
 import { Link } from '@tanstack/react-router'
-import { LogOut, Settings, UserCircle } from 'lucide-react'
+import { LogOut, Settings } from 'lucide-react'
 import useDialogState from '@/hooks/use-dialog-state'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Button } from '@/components/ui/button'
@@ -39,12 +39,6 @@ export function ProfileDropdown() {
           </DropdownMenuLabel>
           <DropdownMenuSeparator />
           <DropdownMenuGroup>
-            <DropdownMenuItem asChild>
-              <Link to='/me'>
-                <UserCircle />
-                个人中心
-              </Link>
-            </DropdownMenuItem>
             <DropdownMenuItem asChild>
               <Link to='/settings'>
                 <Settings />

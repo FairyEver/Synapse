@@ -7,7 +7,6 @@ import {
   HardDrive,
   ScrollText,
   Settings,
-  UserCircle,
   Command,
 } from 'lucide-react'
 import type { AuthUser } from '@/stores/auth-store'
@@ -58,11 +57,6 @@ const userAccountNavGroup = {
   title: '账户',
   items: [
     {
-      title: '个人中心',
-      url: '/me',
-      icon: UserCircle,
-    },
-    {
       title: '设置',
       url: '/settings',
       icon: Settings,
@@ -91,13 +85,13 @@ export function getSidebarData(user: Pick<AuthUser, 'displayName' | 'email' | 'r
       name: displayName || fallbackName,
       email: user?.email ?? '',
       avatar: '',
-      profileUrl: isAdmin ? undefined : '/me',
+      profileUrl: undefined,
     },
     teams: [
       {
         name: isAdmin ? 'Synapse Admin' : 'Synapse',
         logo: Command,
-        plan: isAdmin ? '管理后台' : '个人中心',
+        plan: isAdmin ? '管理后台' : '用户后台',
       },
     ],
     navGroups: isAdmin ? [adminNavGroup, adminAccountNavGroup] : [userAccountNavGroup],

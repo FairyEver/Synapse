@@ -123,7 +123,7 @@ export function TeamInvite({ token }: TeamInviteProps) {
         <div className='flex pt-4'>
           {joinState.status === 'joined' ? (
             <Button asChild>
-              <Link to='/me'>查看团队</Link>
+              <Link to='/settings'>进入设置</Link>
             </Button>
           ) : joinState.status === 'error' ? (
             <Button onClick={() => setRetryKey((value) => value + 1)}>

@@ -16,11 +16,11 @@ import { Route as authSignUpRouteImport } from './routes/(auth)/sign-up'
 import { Route as authSignInRouteImport } from './routes/(auth)/sign-in'
 import { Route as authResetPasswordRouteImport } from './routes/(auth)/reset-password'
 import { Route as authForgotPasswordRouteImport } from './routes/(auth)/forgot-password'
+import { Route as AuthenticatedSettingsRouteRouteImport } from './routes/_authenticated/settings/route'
 import { Route as AuthenticatedUsersIndexRouteImport } from './routes/_authenticated/users/index'
 import { Route as AuthenticatedTeamsIndexRouteImport } from './routes/_authenticated/teams/index'
 import { Route as AuthenticatedSystemIndexRouteImport } from './routes/_authenticated/system/index'
 import { Route as AuthenticatedSettingsIndexRouteImport } from './routes/_authenticated/settings/index'
-import { Route as AuthenticatedMeIndexRouteImport } from './routes/_authenticated/me/index'
 import { Route as AuthenticatedLogsIndexRouteImport } from './routes/_authenticated/logs/index'
 import { Route as AuthenticatedInvitationsIndexRouteImport } from './routes/_authenticated/invitations/index'
 import { Route as AuthenticatedBackupIndexRouteImport } from './routes/_authenticated/backup/index'
@@ -61,6 +61,12 @@ const authForgotPasswordRoute = authForgotPasswordRouteImport.update({
   path: '/forgot-password',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AuthenticatedSettingsRouteRoute =
+  AuthenticatedSettingsRouteRouteImport.update({
+    id: '/settings',
+    path: '/settings',
+    getParentRoute: () => AuthenticatedRouteRoute,
+  } as any)
 const AuthenticatedUsersIndexRoute = AuthenticatedUsersIndexRouteImport.update({
   id: '/users/',
   path: '/users/',
@@ -79,15 +85,10 @@ const AuthenticatedSystemIndexRoute =
   } as any)
 const AuthenticatedSettingsIndexRoute =
   AuthenticatedSettingsIndexRouteImport.update({
-    id: '/settings/',
-    path: '/settings/',
-    getParentRoute: () => AuthenticatedRouteRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => AuthenticatedSettingsRouteRoute,
   } as any)
-const AuthenticatedMeIndexRoute = AuthenticatedMeIndexRouteImport.update({
-  id: '/me/',
-  path: '/me/',
-  getParentRoute: () => AuthenticatedRouteRoute,
-} as any)
 const AuthenticatedLogsIndexRoute = AuthenticatedLogsIndexRouteImport.update({
   id: '/logs/',
   path: '/logs/',
@@ -119,6 +120,7 @@ const authAuthDesktopRoute = authAuthDesktopRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof AuthenticatedIndexRoute
+  '/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/forgot-password': typeof authForgotPasswordRoute
   '/reset-password': typeof authResetPasswordRoute
   '/sign-in': typeof authSignInRoute
@@ -129,7 +131,6 @@ export interface FileRoutesByFullPath {
   '/backup/': typeof AuthenticatedBackupIndexRoute
   '/invitations/': typeof AuthenticatedInvitationsIndexRoute
   '/logs/': typeof AuthenticatedLogsIndexRoute
-  '/me/': typeof AuthenticatedMeIndexRoute
   '/settings/': typeof AuthenticatedSettingsIndexRoute
   '/system/': typeof AuthenticatedSystemIndexRoute
   '/teams/': typeof AuthenticatedTeamsIndexRoute
@@ -147,7 +148,6 @@ export interface FileRoutesByTo {
   '/backup': typeof AuthenticatedBackupIndexRoute
   '/invitations': typeof AuthenticatedInvitationsIndexRoute
   '/logs': typeof AuthenticatedLogsIndexRoute
-  '/me': typeof AuthenticatedMeIndexRoute
   '/settings': typeof AuthenticatedSettingsIndexRoute
   '/system': typeof AuthenticatedSystemIndexRoute
   '/teams': typeof AuthenticatedTeamsIndexRoute
@@ -156,6 +156,7 @@ export interface FileRoutesByTo {
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/_authenticated': typeof AuthenticatedRouteRouteWithChildren
+  '/_authenticated/settings': typeof AuthenticatedSettingsRouteRouteWithChildren
   '/(auth)/forgot-password': typeof authForgotPasswordRoute
   '/(auth)/reset-password': typeof authResetPasswordRoute
   '/(auth)/sign-in': typeof authSignInRoute
@@ -167,7 +168,6 @@ export interface FileRoutesById {
   '/_authenticated/backup/': typeof AuthenticatedBackupIndexRoute
   '/_authenticated/invitations/': typeof AuthenticatedInvitationsIndexRoute
   '/_authenticated/logs/': typeof AuthenticatedLogsIndexRoute
-  '/_authenticated/me/': typeof AuthenticatedMeIndexRoute
   '/_authenticated/settings/': typeof AuthenticatedSettingsIndexRoute
   '/_authenticated/system/': typeof AuthenticatedSystemIndexRoute
   '/_authenticated/teams/': typeof AuthenticatedTeamsIndexRoute
@@ -177,6 +177,7 @@ export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
     | '/'
+    | '/settings'
     | '/forgot-password'
     | '/reset-password'
     | '/sign-in'
@@ -187,7 +188,6 @@ export interface FileRouteTypes {
     | '/backup/'
     | '/invitations/'
     | '/logs/'
-    | '/me/'
     | '/settings/'
     | '/system/'
     | '/teams/'
@@ -205,7 +205,6 @@ export interface FileRouteTypes {
     | '/backup'
     | '/invitations'
     | '/logs'
-    | '/me'
     | '/settings'
     | '/system'
     | '/teams'
@@ -213,6 +212,7 @@ export interface FileRouteTypes {
   id:
     | '__root__'
     | '/_authenticated'
+    | '/_authenticated/settings'
     | '/(auth)/forgot-password'
     | '/(auth)/reset-password'
     | '/(auth)/sign-in'
@@ -224,7 +224,6 @@ export interface FileRouteTypes {
     | '/_authenticated/backup/'
     | '/_authenticated/invitations/'
     | '/_authenticated/logs/'
-    | '/_authenticated/me/'
     | '/_authenticated/settings/'
     | '/_authenticated/system/'
     | '/_authenticated/teams/'
@@ -292,6 +291,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof authForgotPasswordRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/_authenticated/settings': {
+      id: '/_authenticated/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthenticatedSettingsRouteRouteImport
+      parentRoute: typeof AuthenticatedRouteRoute
+    }
     '/_authenticated/users/': {
       id: '/_authenticated/users/'
       path: '/users'
@@ -315,17 +321,10 @@ declare module '@tanstack/react-router' {
     }
     '/_authenticated/settings/': {
       id: '/_authenticated/settings/'
-      path: '/settings'
+      path: '/'
       fullPath: '/settings/'
       preLoaderRoute: typeof AuthenticatedSettingsIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
-    }
-    '/_authenticated/me/': {
-      id: '/_authenticated/me/'
-      path: '/me'
-      fullPath: '/me/'
-      preLoaderRoute: typeof AuthenticatedMeIndexRouteImport
-      parentRoute: typeof AuthenticatedRouteRoute
+      parentRoute: typeof AuthenticatedSettingsRouteRoute
     }
     '/_authenticated/logs/': {
       id: '/_authenticated/logs/'
@@ -365,27 +364,39 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AuthenticatedSettingsRouteRouteChildren {
+  AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
+}
+
+const AuthenticatedSettingsRouteRouteChildren: AuthenticatedSettingsRouteRouteChildren =
+  {
+    AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
+  }
+
+const AuthenticatedSettingsRouteRouteWithChildren =
+  AuthenticatedSettingsRouteRoute._addFileChildren(
+    AuthenticatedSettingsRouteRouteChildren,
+  )
+
 interface AuthenticatedRouteRouteChildren {
+  AuthenticatedSettingsRouteRoute: typeof AuthenticatedSettingsRouteRouteWithChildren
   AuthenticatedIndexRoute: typeof AuthenticatedIndexRoute
   AuthenticatedAuditLogsIndexRoute: typeof AuthenticatedAuditLogsIndexRoute
   AuthenticatedBackupIndexRoute: typeof AuthenticatedBackupIndexRoute
   AuthenticatedInvitationsIndexRoute: typeof AuthenticatedInvitationsIndexRoute
   AuthenticatedLogsIndexRoute: typeof AuthenticatedLogsIndexRoute
-  AuthenticatedMeIndexRoute: typeof AuthenticatedMeIndexRoute
-  AuthenticatedSettingsIndexRoute: typeof AuthenticatedSettingsIndexRoute
   AuthenticatedSystemIndexRoute: typeof AuthenticatedSystemIndexRoute
   AuthenticatedTeamsIndexRoute: typeof AuthenticatedTeamsIndexRoute
   AuthenticatedUsersIndexRoute: typeof AuthenticatedUsersIndexRoute
 }
 
 const AuthenticatedRouteRouteChildren: AuthenticatedRouteRouteChildren = {
+  AuthenticatedSettingsRouteRoute: AuthenticatedSettingsRouteRouteWithChildren,
   AuthenticatedIndexRoute: AuthenticatedIndexRoute,
   AuthenticatedAuditLogsIndexRoute: AuthenticatedAuditLogsIndexRoute,
   AuthenticatedBackupIndexRoute: AuthenticatedBackupIndexRoute,
   AuthenticatedInvitationsIndexRoute: AuthenticatedInvitationsIndexRoute,
   AuthenticatedLogsIndexRoute: AuthenticatedLogsIndexRoute,
-  AuthenticatedMeIndexRoute: AuthenticatedMeIndexRoute,
-  AuthenticatedSettingsIndexRoute: AuthenticatedSettingsIndexRoute,
   AuthenticatedSystemIndexRoute: AuthenticatedSystemIndexRoute,
   AuthenticatedTeamsIndexRoute: AuthenticatedTeamsIndexRoute,
   AuthenticatedUsersIndexRoute: AuthenticatedUsersIndexRoute,
