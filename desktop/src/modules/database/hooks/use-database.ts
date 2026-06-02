@@ -28,18 +28,25 @@ function useDatabaseTables() {
   const [tables, setTables] = useState<DatabaseTableInfo[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<Error | null>(null)
+  const requestIdRef = useRef(0)
 
   const refresh = useCallback(async () => {
+    const requestId = ++requestIdRef.current
+
     setLoading(true)
     try {
       const result = await requireSynapseBridge().database.databaseTableList()
+      if (requestId !== requestIdRef.current) return
       setTables(result)
       setError(null)
     } catch (loadError) {
+      if (requestId !== requestIdRef.current) return
       setTables([])
       setError(toLoadError(loadError))
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [])
 

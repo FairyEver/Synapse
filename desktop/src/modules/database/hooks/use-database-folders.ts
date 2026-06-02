@@ -10,8 +10,10 @@ function useDatabaseFolders() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const bridgeRef = useRef(getSynapseBridge())
+  const requestIdRef = useRef(0)
 
   const refresh = useCallback(async () => {
+    const requestId = ++requestIdRef.current
     const bridge = bridgeRef.current
     if (!bridge) return
 
@@ -19,13 +21,17 @@ function useDatabaseFolders() {
     setError(null)
     try {
       const result = await bridge.database.databaseFolderList()
+      if (requestId !== requestIdRef.current) return
       setFolders(result)
     } catch (e) {
+      if (requestId !== requestIdRef.current) return
       folderLogger.error("Failed to load database folders", e)
       setError(e instanceof Error ? e.message : "Unknown error loading folders")
       setFolders([])
     } finally {
-      setLoading(false)
+      if (requestId === requestIdRef.current) {
+        setLoading(false)
+      }
     }
   }, [])
 
