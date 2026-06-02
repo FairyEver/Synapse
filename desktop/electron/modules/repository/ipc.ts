@@ -85,7 +85,7 @@ async function notifyInstallStatusChanges(eventBus: EventBus): Promise<void> {
       type: "install-status.changed",
       payload: { contentId, entries: after[contentId] ?? [] },
       timestamp: new Date().toISOString(),
-    })
+    }, { backpressure: "block" })
   }
 }
 

@@ -1,11 +1,24 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => {
-  let installStatus = {
+  type TestInstallStatusMap = Record<string, Array<{
+    editorId: string
+    scope: "global"
+    status: "installed" | "needs_update"
+  }>>
+
+  let installStatus: TestInstallStatusMap = {
     "skill-1": [{
       editorId: "codex",
       scope: "global",
       status: "installed",
+    }],
+  }
+  let nextInstallStatus: TestInstallStatusMap = {
+    "skill-1": [{
+      editorId: "codex",
+      scope: "global",
+      status: "needs_update",
     }],
   }
 
@@ -24,13 +37,7 @@ const mocks = vi.hoisted(() => {
     },
     installStatusCacheService: {
       buildCache: vi.fn(async () => {
-        installStatus = {
-          "skill-1": [{
-            editorId: "codex",
-            scope: "global",
-            status: "needs_update",
-          }],
-        }
+        installStatus = nextInstallStatus
       }),
       getAll: vi.fn(() => installStatus),
     },
@@ -68,6 +75,16 @@ const mocks = vi.hoisted(() => {
           status: "installed",
         }],
       }
+      nextInstallStatus = {
+        "skill-1": [{
+          editorId: "codex",
+          scope: "global",
+          status: "needs_update",
+        }],
+      }
+    },
+    setNextInstallStatus: (next: typeof installStatus) => {
+      nextInstallStatus = next
     },
   }
 })
@@ -225,6 +242,32 @@ describe("repositoryIpcModule", () => {
           status: "needs_update",
         }],
       },
-    }))
+    }), { backpressure: "block" })
+  })
+
+  it("does not coalesce multiple install status changes after repository sync", async () => {
+    const { repositoryIpcModule } = await import("../ipc")
+    mocks.setNextInstallStatus({
+      "skill-1": [{
+        editorId: "codex",
+        scope: "global",
+        status: "needs_update",
+      }],
+      "skill-2": [{
+        editorId: "cursor",
+        scope: "global",
+        status: "installed",
+      }],
+    })
+
+    await repositoryIpcModule.methods.sync.handler(createContext() as never, {
+      repositoryUuid: "repo-1",
+    })
+
+    const installStatusEmits = mocks.eventBus.emit.mock.calls.filter(([event]) =>
+      event.type === "install-status.changed",
+    )
+    expect(installStatusEmits).toHaveLength(2)
+    expect(installStatusEmits.every(([, options]) => options?.backpressure === "block")).toBe(true)
   })
 })
