@@ -96,6 +96,16 @@ describe("scan item detail dialog layout", () => {
     expect(cardSource).not.toContain("Trash2")
   })
 
+  it("warns when trash succeeds but list refresh fails", async () => {
+    const detailSource = await readFile(
+      new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),
+      "utf8",
+    )
+
+    expect(detailSource).toContain("Scan list refresh failed after trash.")
+    expect(detailSource).toContain("warning(\"已移到废纸篓，刷新失败\")")
+  })
+
   it("uses the scan trash bridge from the detail dialog", async () => {
     const source = await readFile(
       new URL("../components/scan-item-detail-dialog.tsx", import.meta.url),

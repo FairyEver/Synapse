@@ -95,7 +95,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
   )
   const activeRepository = useActiveRepository()
   const { currentRepoProfileState } = useCurrentRepoProfile()
-  const { success, error: notifyError } = useAppNotifications()
+  const { success, error: notifyError, warning } = useAppNotifications()
   const { config } = useAppConfig()
   const [viewMode, setViewMode] = useState<"rendered" | "source">("rendered")
   const [contentReady, setContentReady] = useState(false)
@@ -202,6 +202,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
           pathBasename: logSafeItemPath(item.path),
           error: refreshError,
         })
+        warning("已移到废纸篓，刷新失败")
       }
     } catch (error) {
       logger.error("Scan item trash failed.", { pathBasename: logSafeItemPath(item.path), error })
@@ -209,7 +210,7 @@ function ScanItemDetailDialog({ item, onChanged, open, onOpenChange }: ScanItemD
     } finally {
       setIsTrashBusy(false)
     }
-  }, [item, onChanged, onOpenChange, success, trashDisabledReason])
+  }, [item, onChanged, onOpenChange, success, trashDisabledReason, warning])
 
   const disabledReason =
     !activeRepository
