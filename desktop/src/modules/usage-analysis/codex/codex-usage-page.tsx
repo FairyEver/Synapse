@@ -2,11 +2,12 @@ import { useState } from "react"
 import { useAppNotifications } from "@/app-shell/notifications"
 import { requireSynapseBridge } from "@/lib/electron-bridge"
 import { PricingRulesDialog } from "../shared/components/pricing-rules-dialog"
-import { UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
+import { CODEX_USAGE_VIEWS, UsageAnalysisShell } from "../shared/components/usage-analysis-shell"
 import { TodayReportView } from "../shared/components/today-report-view"
 import { getUsageRefreshWarning } from "../shared/refresh-result"
 import type { UsageRangePreset, UsageTrendBucketGranularity, UsageViewId } from "../shared/types"
 import { useCodexModels, useCodexOverview, useCodexTime } from "./hooks"
+import { CodexDetailsPage } from "./pages/details"
 import { CodexModelsPage } from "./pages/models"
 import { CodexOverviewPage } from "./pages/overview"
 import { CodexProjectsPage } from "./pages/projects"
@@ -40,6 +41,7 @@ export function CodexUsagePage() {
     <UsageAnalysisShell
       title="Codex"
       view={view}
+      views={CODEX_USAGE_VIEWS}
       range={range}
       refreshing={refreshing}
       onViewChange={setView}
@@ -60,6 +62,7 @@ export function CodexUsagePage() {
       {view === "models" ? <CodexModelsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "projects" ? <CodexProjectsPage range={range} refreshKey={refreshKey} /> : null}
       {view === "tools" ? <CodexToolsPage range={range} refreshKey={refreshKey} /> : null}
+      {view === "details" ? <CodexDetailsPage range={range} refreshKey={refreshKey} /> : null}
     </UsageAnalysisShell>
   )
 }

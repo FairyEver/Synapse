@@ -35,6 +35,11 @@ const CC_USAGE_VIEWS: readonly UsageViewOption[] = [
   { id: "records", label: "记录" },
 ]
 
+const CODEX_USAGE_VIEWS: readonly UsageViewOption[] = [
+  ...BASE_USAGE_VIEWS,
+  { id: "details", label: "明细" },
+]
+
 export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
   const views = props.views ?? BASE_USAGE_VIEWS
 
@@ -88,4 +93,4 @@ export function UsageAnalysisShell(props: UsageAnalysisShellProps) {
   )
 }
 
-export { BASE_USAGE_VIEWS, CC_USAGE_VIEWS }
+export { BASE_USAGE_VIEWS, CC_USAGE_VIEWS, CODEX_USAGE_VIEWS }

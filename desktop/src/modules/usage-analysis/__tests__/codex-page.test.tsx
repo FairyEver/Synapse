@@ -16,4 +16,9 @@ describe("CodexUsageAnalysisModule", () => {
     expect(html).toContain("刷新")
     expect(html).not.toContain("7 天")
   })
+
+  it("exposes the implemented details view", () => {
+    const html = renderToStaticMarkup(<CodexUsageAnalysisModule />)
+    expect(html).toContain("明细")
+  })
 })
