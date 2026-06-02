@@ -74,15 +74,18 @@ function McpSettingsPanel() {
 
   const refreshMcpServers = useCallback(async () => {
     setMcpServersLoading(true)
-    const result = await databaseMcpServersGet()
-    setMcpServersByTarget(
-      result.reduce<Partial<Record<DatabaseMcpTarget, DatabaseMcpServerInfo>>>((servers, server) => {
-        servers[server.target] = server
-        return servers
-      }, {}),
-    )
-    setMcpServersLoading(false)
-    return result
+    try {
+      const result = await databaseMcpServersGet()
+      setMcpServersByTarget(
+        result.reduce<Partial<Record<DatabaseMcpTarget, DatabaseMcpServerInfo>>>((servers, server) => {
+          servers[server.target] = server
+          return servers
+        }, {}),
+      )
+      return result
+    } finally {
+      setMcpServersLoading(false)
+    }
   }, [])
 
   useEffect(() => {

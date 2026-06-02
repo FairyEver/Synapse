@@ -69,6 +69,28 @@ afterEach(() => {
 })
 
 describe("McpSettingsPanel", () => {
+  it("leaves server loading state after a post-register refresh failure", async () => {
+    mocks.databaseMcpServersGet
+      .mockResolvedValueOnce([])
+      .mockRejectedValueOnce(new Error("refresh failed"))
+
+    renderPanel()
+    await flush()
+
+    const registerButton = Array.from(document.querySelectorAll<HTMLButtonElement>("button"))
+      .find((button) => button.textContent === "注册")
+    expect(registerButton).toBeDefined()
+
+    await act(async () => {
+      registerButton?.click()
+    })
+    await flush()
+
+    expect(mocks.databaseMcpRegister).toHaveBeenCalled()
+    expect(mocks.databaseMcpServersGet).toHaveBeenCalledTimes(2)
+    expect(document.body.textContent).not.toContain("检测中...")
+  })
+
   it("shows a read failure instead of unregistered for damaged MCP settings", async () => {
     mocks.databaseMcpServersGet.mockResolvedValue([{
       target: "claude" as DatabaseMcpTarget,
