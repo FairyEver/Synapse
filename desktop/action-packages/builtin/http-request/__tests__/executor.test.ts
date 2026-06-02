@@ -84,4 +84,50 @@ describe("builtin.http-request executor", () => {
       }),
     }))
   })
+
+  it("fails before sending when selected auth credentials are empty", async () => {
+    const sendRequest = vi.fn(async () => ({
+      status: 200,
+      statusText: "OK",
+      headers: {},
+      body: "",
+    }))
+    const action = createHttpRequestAction({ sendRequest })
+    const context = {
+      taskId: "task:1",
+      runId: "run:1",
+      triggeredBy: "manual" as const,
+      cwd: "/tmp",
+      actor: { kind: "user" as const, id: "task-scheduler", display: "Task Scheduler" },
+      abortSignal: new AbortController().signal,
+    }
+
+    await expect(action.execute({
+      config: {
+        method: "GET",
+        url: "https://example.com/api",
+        bodyType: "none",
+        auth: { type: "bearer", bearerToken: "" },
+      },
+      context,
+    })).resolves.toEqual(expect.objectContaining({
+      status: "failed",
+      error: "请求失败：Bearer Token 不能为空",
+    }))
+
+    await expect(action.execute({
+      config: {
+        method: "GET",
+        url: "https://example.com/api",
+        bodyType: "none",
+        auth: { type: "basic", basicUsername: " " },
+      },
+      context,
+    })).resolves.toEqual(expect.objectContaining({
+      status: "failed",
+      error: "请求失败：Basic Auth 用户名不能为空",
+    }))
+
+    expect(sendRequest).not.toHaveBeenCalled()
+  })
 })

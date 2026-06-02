@@ -28,10 +28,14 @@ function sanitizeUrl(urlStr: string): string {
 function buildHeaders(config: HttpRequestActionConfig): Record<string, string> | undefined {
   const headers = config.headers ? { ...config.headers } : {} as Record<string, string>
 
-  if (config.auth?.type === "bearer" && config.auth.bearerToken) {
-    headers["Authorization"] = `Bearer ${config.auth.bearerToken}`
-  } else if (config.auth?.type === "basic" && config.auth.basicUsername) {
-    const encoded = Buffer.from(`${config.auth.basicUsername}:${config.auth.basicPassword ?? ""}`).toString("base64")
+  if (config.auth?.type === "bearer") {
+    const bearerToken = config.auth.bearerToken?.trim()
+    if (!bearerToken) throw new Error("Bearer Token 不能为空")
+    headers["Authorization"] = `Bearer ${bearerToken}`
+  } else if (config.auth?.type === "basic") {
+    const basicUsername = config.auth.basicUsername?.trim()
+    if (!basicUsername) throw new Error("Basic Auth 用户名不能为空")
+    const encoded = Buffer.from(`${basicUsername}:${config.auth.basicPassword ?? ""}`).toString("base64")
     headers["Authorization"] = `Basic ${encoded}`
   }
 

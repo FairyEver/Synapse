@@ -14,6 +14,21 @@ export const httpRequestActionConfigSchema = z.object({
     basicUsername: z.string().optional(),
     basicPassword: z.string().optional(),
   }).optional(),
+}).superRefine((config, ctx) => {
+  if (config.auth?.type === "bearer" && !config.auth.bearerToken?.trim()) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["auth", "bearerToken"],
+      message: "Bearer Token 不能为空",
+    })
+  }
+  if (config.auth?.type === "basic" && !config.auth.basicUsername?.trim()) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["auth", "basicUsername"],
+      message: "Basic Auth 用户名不能为空",
+    })
+  }
 })
 
 export type HttpRequestActionConfig = z.infer<typeof httpRequestActionConfigSchema>
