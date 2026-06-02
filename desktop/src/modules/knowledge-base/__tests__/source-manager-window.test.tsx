@@ -414,6 +414,60 @@ describe("KnowledgeBaseSourceManagerWindow", () => {
     })
   })
 
+  it("shows a loading state while expanding a tree directory", async () => {
+    let resolveChild: ((result: SynapseKnowledgeBaseListRawDirectoryResult) => void) | null = null
+    const childRequest = new Promise<SynapseKnowledgeBaseListRawDirectoryResult>((resolve) => {
+      resolveChild = resolve
+    })
+    bridgeMocks.knowledgeBase.listRawDirectory.mockImplementation(async ({ directoryPath }) => {
+      if (directoryPath === "2026") return childRequest
+      return {
+        projectId: "project-1",
+        directoryPath,
+        entries: [
+          {
+            relativePath: "2026",
+            name: "2026",
+            kind: "directory",
+            size: null,
+            modifiedAt: "2026-05-24T16:05:00.000Z",
+          },
+        ],
+      }
+    })
+    renderWindow()
+
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("2026")
+    })
+
+    await act(async () => {
+      buttonByLabel("展开 2026").click()
+      await Promise.resolve()
+    })
+
+    expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("读取中")
+
+    await act(async () => {
+      resolveChild?.({
+        projectId: "project-1",
+        directoryPath: "2026",
+        entries: [{
+          relativePath: "2026/05",
+          name: "05",
+          kind: "directory",
+          size: null,
+          modifiedAt: "2026-05-24T16:05:00.000Z",
+        }],
+      })
+      await childRequest
+    })
+
+    await waitForExpectation(() => {
+      expect(document.querySelector('[aria-label="文件夹树"]')?.textContent).toContain("05")
+    })
+  })
+
   it("uploads dropped files and folders as raw items in the current directory", async () => {
     renderWindow()
     bridgeMocks.knowledgeBase.filePathForDroppedFile.mockReturnValue("/tmp/diagram.png")

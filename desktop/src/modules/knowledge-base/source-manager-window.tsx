@@ -518,6 +518,7 @@ function KnowledgeBaseSourceManagerWindow() {
   const [entries, setEntries] = useState<SynapseKnowledgeBaseRawEntry[]>([])
   const [directoryTree, setDirectoryTree] = useState<DirectoryTree>({})
   const [expandedDirectories, setExpandedDirectories] = useState<Set<string>>(() => new Set([""]))
+  const [loadingDirectories, setLoadingDirectories] = useState<Set<string>>(() => new Set())
   const [currentDirectory, setCurrentDirectory] = useState("")
   const [query, setQuery] = useState("")
   const [selectedPaths, setSelectedPaths] = useState<Set<string>>(() => new Set())
@@ -534,7 +535,19 @@ function KnowledgeBaseSourceManagerWindow() {
   const [internalDragPaths, setInternalDragPaths] = useState<string[]>([])
   const [internalDropTarget, setInternalDropTarget] = useState<string | null>(null)
   const internalDragPathsRef = useRef<string[]>([])
+  const loadingDirectoriesRef = useRef<Set<string>>(new Set())
   const bridge = getSynapseBridge()
+
+  const setTreeDirectoryLoading = useCallback((directoryPath: string, loading: boolean) => {
+    const nextRef = new Set(loadingDirectoriesRef.current)
+    if (loading) {
+      nextRef.add(directoryPath)
+    } else {
+      nextRef.delete(directoryPath)
+    }
+    loadingDirectoriesRef.current = nextRef
+    setLoadingDirectories(nextRef)
+  }, [])
 
   const refreshDirectory = useCallback(async () => {
     if (!payload || !bridge) return
@@ -607,7 +620,13 @@ function KnowledgeBaseSourceManagerWindow() {
   }, [bridge, payload, showError])
 
   const loadTreeDirectory = useCallback(async (directoryPath: string) => {
-    if (!payload || !bridge || hasDirectoryCache(directoryTree, directoryPath)) return
+    if (
+      !payload
+      || !bridge
+      || hasDirectoryCache(directoryTree, directoryPath)
+      || loadingDirectoriesRef.current.has(directoryPath)
+    ) return
+    setTreeDirectoryLoading(directoryPath, true)
     try {
       const result = await bridge.knowledgeBase.listRawDirectory({
         projectId: payload.projectId,
@@ -620,8 +639,10 @@ function KnowledgeBaseSourceManagerWindow() {
     } catch (error) {
       logger.error("Failed to load knowledge base raw tree directory.", { error })
       showError("读取资料失败")
+    } finally {
+      setTreeDirectoryLoading(directoryPath, false)
     }
-  }, [bridge, directoryTree, payload, showError])
+  }, [bridge, directoryTree, payload, setTreeDirectoryLoading, showError])
 
   const openTreeDirectory = useCallback((directoryPath: string) => {
     setCurrentDirectory(directoryPath)
@@ -916,6 +937,7 @@ function KnowledgeBaseSourceManagerWindow() {
     <div className="ml-4 flex flex-col gap-1">
       {items.map((entry) => {
         const isExpanded = expandedDirectories.has(entry.relativePath)
+        const isLoadingDirectory = loadingDirectories.has(entry.relativePath)
         const childItems = directoryTree[entry.relativePath] ?? []
         return (
           <div key={entry.relativePath} className="flex flex-col gap-1">
@@ -955,17 +977,21 @@ function KnowledgeBaseSourceManagerWindow() {
                 <span className="truncate">{entry.name}</span>
               </Button>
             </div>
+            {isExpanded && isLoadingDirectory ? (
+              <div className="ml-8 px-2 py-1 text-xs text-muted-foreground">读取中</div>
+            ) : null}
             {isExpanded && childItems.length > 0 ? renderTreeItems(childItems) : null}
           </div>
         )
       })}
     </div>
-  ), [currentDirectory, directoryTree, dropInternalDrag, expandedDirectories, internalDragPaths.length, openTreeDirectory, toggleTreeDirectory])
+  ), [currentDirectory, directoryTree, dropInternalDrag, expandedDirectories, internalDragPaths.length, loadingDirectories, openTreeDirectory, toggleTreeDirectory])
 
   const renderMoveTreeItems = useCallback((items: SynapseKnowledgeBaseRawEntry[]) => (
     <div className="ml-4 flex flex-col gap-1">
       {items.map((entry) => {
         const isExpanded = expandedDirectories.has(entry.relativePath)
+        const isLoadingDirectory = loadingDirectories.has(entry.relativePath)
         const childItems = directoryTree[entry.relativePath] ?? []
         return (
           <div key={entry.relativePath} className="flex flex-col gap-1">
@@ -994,12 +1020,15 @@ function KnowledgeBaseSourceManagerWindow() {
                 <span className="truncate">{entry.name}</span>
               </Button>
             </div>
+            {isExpanded && isLoadingDirectory ? (
+              <div className="ml-8 px-2 py-1 text-xs text-muted-foreground">读取中</div>
+            ) : null}
             {isExpanded && childItems.length > 0 ? renderMoveTreeItems(childItems) : null}
           </div>
         )
       })}
     </div>
-  ), [directoryTree, expandedDirectories, loadTreeDirectory, moveTargetPath, toggleTreeDirectory])
+  ), [directoryTree, expandedDirectories, loadTreeDirectory, loadingDirectories, moveTargetPath, toggleTreeDirectory])
 
   if (!payload) {
     return (
