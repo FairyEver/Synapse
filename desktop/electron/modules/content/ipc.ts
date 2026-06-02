@@ -167,6 +167,7 @@ const resolveEditorTargetPayloadSchema = z.object({
 const installToEditorPayloadSchema = resolveEditorTargetPayloadSchema.extend({
   installFormValues: z.record(z.string(), z.unknown()).optional(),
   replaceConfirmed: z.boolean().optional(),
+  replacedContentId: z.string().optional(),
   variableSubstitutions: z.record(z.string(), z.string()).optional(),
 })
 const readEditorInstallFormValuesPayloadSchema = z.object({
@@ -745,6 +746,9 @@ export const contentIpcModule: IpcModule = {
 
         const eventBus = ctx.resolve<EventBus>("core.event-bus")
         await notifyInstallStatusChanged(eventBus, payload.contentId)
+        if (payload.replacedContentId && payload.replacedContentId !== payload.contentId) {
+          await notifyInstallStatusChanged(eventBus, payload.replacedContentId)
+        }
 
         return result
       },

@@ -681,6 +681,41 @@ describe("contentIpcModule sync ownership", () => {
     }))
   })
 
+  it("refreshes replaced Skill install status after conflict replacement succeeds", async () => {
+    const { contentIpcModule } = await import("../ipc")
+    mocks.installStatusCacheService.refresh.mockImplementation(async (contentId: string) => {
+      if (contentId === "old-skill") return []
+      return [{
+        editorId: "codex",
+        projectName: "Project",
+        projectPath: "/project",
+        scope: "project",
+        status: "installed",
+      }]
+    })
+
+    await contentIpcModule.methods.installToEditor.handler(createContext() as never, {
+      contentId: "skill-1",
+      contentType: "skill",
+      editorId: "codex",
+      projectPath: "/project",
+      replacedContentId: "old-skill",
+      replaceConfirmed: true,
+      scope: "project",
+    } as never)
+
+    expect(mocks.installStatusCacheService.refresh).toHaveBeenCalledWith("skill-1")
+    expect(mocks.installStatusCacheService.refresh).toHaveBeenCalledWith("old-skill")
+    expect(mocks.eventBus.emit).toHaveBeenCalledWith(expect.objectContaining({
+      domain: "install-status",
+      type: "install-status.changed",
+      payload: {
+        contentId: "old-skill",
+        entries: [],
+      },
+    }))
+  })
+
   it("keeps install success when install status refresh fails", async () => {
     const { contentIpcModule } = await import("../ipc")
     mocks.installStatusCacheService.refresh.mockRejectedValueOnce(new Error("scan failed"))

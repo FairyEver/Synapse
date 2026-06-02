@@ -210,6 +210,10 @@ function ContentInstallDialog({
       targetPath: activeTarget.targetPath,
     })
 
+    const replacedContentId = activeTarget.status === "conflict" && replaceConfirmed
+      ? activeTarget.conflictContentId
+      : undefined
+
     try {
       const result = await promise(
         () => installToEditor({
@@ -223,6 +227,7 @@ function ContentInstallDialog({
           ruleName: item.type === "rule" ? item.name : undefined,
           installFormValues,
           replaceConfirmed,
+          replacedContentId,
           variableSubstitutions: pendingSubstitutionsRef.current,
         }),
         {

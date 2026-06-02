@@ -249,6 +249,29 @@ describe("ContentInstallDialog", () => {
     expect(mocks.installToEditor).not.toHaveBeenCalled()
   })
 
+  it("passes the replaced Skill content id after confirming a conflict replacement", async () => {
+    mocks.readContent.mockResolvedValue({ content: "plain content" })
+    mocks.installToEditor.mockResolvedValue({ targetPath: "/tmp/codex/skills/demo" })
+
+    await renderInstallDialog()
+
+    await act(async () => {
+      clickButton("选择冲突目标")
+    })
+    await act(async () => {
+      clickButton("安装")
+    })
+    await act(async () => {
+      clickButton("替换")
+    })
+
+    expect(mocks.installToEditor).toHaveBeenCalledWith(expect.objectContaining({
+      contentId: "skill-1",
+      replaceConfirmed: true,
+      replacedContentId: "installed-skill",
+    }))
+  })
+
   it("keeps the footer cancel action disabled while installation is running", async () => {
     mocks.targetStatus = "ready"
     mocks.readContent.mockResolvedValue({ content: "plain content" })

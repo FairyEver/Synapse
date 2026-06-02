@@ -49,6 +49,11 @@ export type SynapseInstallToEditorPayload = SynapseResolveEditorTargetPayload & 
    * The existing Skill directory will be backed up before installation.
    */
   replaceConfirmed?: boolean
+  /**
+   * Content id of the Skill being replaced during a confirmed conflict install.
+   * Used to clear stale install-status badges after the target directory changes owner.
+   */
+  replacedContentId?: string
   variableSubstitutions?: Record<string, string>
 }
 
